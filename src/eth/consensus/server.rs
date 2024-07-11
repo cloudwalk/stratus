@@ -58,7 +58,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
 
-        if consensus.is_leader() {
+        if Consensus::is_leader() {
             tracing::error!(sender = request_inner.leader_id, "append_transaction_executions called on leader node");
             return Err(Status::new(
                 (StatusCode::NotLeader as i32).into(),
@@ -226,7 +226,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
 
-        if consensus.is_leader() {
+        if Consensus::is_leader() {
             tracing::error!(sender = request_inner.leader_id, "append_block_commit called on leader node");
             return Err(Status::new(
                 (StatusCode::NotLeader as i32).into(),

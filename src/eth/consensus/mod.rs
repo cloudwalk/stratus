@@ -72,6 +72,8 @@ enum Role {
     _Candidate = 3,
 }
 
+static ROLE: AtomicU8 = AtomicU8::new(Role::Follower as u8);
+
 #[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
 struct PeerAddress {
     address: String,
@@ -178,7 +180,6 @@ pub struct Consensus {
     last_arrived_block_number: AtomicU64, // kept for should_serve method check
     prev_log_index: AtomicU64,
     transaction_execution_queue: Arc<Mutex<Vec<TransactionExecutionEntry>>>,
-    role: AtomicU8,
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
     grpc_address: SocketAddr,
@@ -233,7 +234,6 @@ impl Consensus {
             last_arrived_block_number,
             transaction_execution_queue: Arc::new(Mutex::new(Vec::new())),
             importer_config,
-            role: AtomicU8::new(Role::Follower as u8),
             heartbeat_timeout: Duration::from_millis(rand::thread_rng().gen_range(300..400)), // Adjust as needed
             my_address: my_address.clone(),
             grpc_address,
@@ -289,7 +289,7 @@ impl Consensus {
                         return;
                     },
                     _ = traced_sleep(timeout, SleepReason::Interval) => {
-                        if !consensus.is_leader() {
+                        if !Self::is_leader() {
                             tracing::info!("starting election due to heartbeat timeout");
                             Self::start_election(Arc::clone(&consensus)).await;
                         } else {
@@ -493,7 +493,7 @@ impl Consensus {
 
                 tokio::time::sleep(interval).await;
 
-                if consensus.is_leader() {
+                if Self::is_leader() {
                     let mut queue = consensus.transaction_execution_queue.lock().await;
                     let executions = queue.drain(..).collect::<Vec<_>>();
                     drop(queue);
@@ -553,7 +553,7 @@ impl Consensus {
                     },
                     Ok(tx) = rx_pending_txs.recv() => {
                         tracing::debug!("Attempting to receive transaction execution");
-                        if consensus.is_leader() {
+                        if Self::is_leader() {
                             tracing::info!(tx_hash = %tx.hash(), "received transaction execution to send to followers");
                             if tx.is_local() {
                                 tracing::debug!(tx_hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
@@ -568,7 +568,7 @@ impl Consensus {
                         }
                     },
                     Ok(block) = rx_blocks.recv() => {
-                        if consensus.is_leader() {
+                        if Self::is_leader() {
                             tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
 
                             #[cfg(feature = "rocks")]
@@ -645,13 +645,13 @@ impl Consensus {
     }
 
     fn set_role(&self, role: Role) {
-        if self.role.load(Ordering::SeqCst) == role as u8 {
+        if ROLE.load(Ordering::SeqCst) == role as u8 {
             tracing::info!(role = ?role, "role remains the same");
             return;
         }
 
         tracing::info!(role = ?role, "setting role");
-        self.role.store(role as u8, Ordering::SeqCst);
+        ROLE.store(role as u8, Ordering::SeqCst);
 
         #[cfg(feature = "metrics")]
         {
@@ -665,12 +665,12 @@ impl Consensus {
     }
 
     //FIXME TODO automate the way we gather the leader, instead of using a env var
-    pub fn is_leader(&self) -> bool {
-        self.role.load(Ordering::SeqCst) == Role::Leader as u8
+    pub fn is_leader() -> bool {
+        ROLE.load(Ordering::SeqCst) == Role::Leader as u8
     }
 
-    pub async fn is_follower(&self) -> bool {
-        self.role.load(Ordering::SeqCst) == Role::Follower as u8
+    pub fn is_follower() -> bool {
+        ROLE.load(Ordering::SeqCst) == Role::Follower as u8
     }
 
     pub fn current_term(&self) -> u64 {
@@ -682,7 +682,7 @@ impl Consensus {
     }
 
     pub fn should_forward(&self) -> bool {
-        let is_leader = self.is_leader();
+        let is_leader = Self::is_leader();
         tracing::info!(
             is_leader = is_leader,
             sync_online_enabled = self.importer_config.is_some(),
@@ -713,7 +713,7 @@ impl Consensus {
     }
 
     pub async fn should_serve(&self) -> bool {
-        if self.is_leader() {
+        if Self::is_leader() {
             return true;
         }
 
@@ -767,7 +767,7 @@ impl Consensus {
             return Ok((importer_config.online.external_rpc, importer_config.online.external_rpc_ws));
         }
 
-        if self.is_follower().await {
+        if Self::is_follower() {
             if let Ok(leader_address) = self.leader_address().await {
                 return Ok((leader_address.full_jsonrpc_address(), None));
             }
@@ -862,7 +862,7 @@ impl Consensus {
     async fn append_entry_to_peer(&self, peer: &mut Peer, entry_data: &LogEntryData) -> Result<(), anyhow::Error> {
         #[cfg(feature = "rocks")]
         {
-            if !self.is_leader() {
+            if !Self::is_leader() {
                 tracing::error!("append_entry_to_peer called on non-leader node");
                 return Err(anyhow!("append_entry_to_peer called on non-leader node"));
             }
