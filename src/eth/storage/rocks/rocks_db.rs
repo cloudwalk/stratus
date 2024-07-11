@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::Context;
 use rocksdb::Options;
@@ -31,15 +32,16 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &HashMap<&'static s
     let open_db = || DB::open_cf_with_opts(&db_opts, path, cf_config_iter.clone());
 
     tracing::debug!("attempting to open RocksDB");
+    let instant = Instant::now();
     let db = match open_db() {
         Ok(db) => db,
-        Err(err) => {
-            tracing::error!(?err, "Failed to open RocksDB, trying to repair it to open again...");
+        Err(e) => {
+            tracing::error!(reason = ?e, "failed to open RocksDB, trying to repair it to open again...");
             DB::repair(&db_opts, path).context("attempting to repair RocksDB cause it failed to open")?;
             open_db().context("trying to open RocksDB a second time, after repairing")?
         }
     };
 
-    tracing::info!("Successfully opened RocksDB at {:?}", path);
+    tracing::info!(waited_for = ?instant.elapsed(), db_path = ?path, "successfully opened RocksDB");
     Ok((Arc::new(db), db_opts))
 }
