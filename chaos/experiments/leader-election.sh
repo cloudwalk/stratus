@@ -63,6 +63,23 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+send_transactions() {
+    echo "running transactions test"
+
+    export STRATUS_PORT=3001 #TODO implement roundrobin on all nodes
+    cd ./e2e/cloudwalk-contracts/integration
+    npx hardhat test test/simple.test.ts --network stratus --bail
+    test_exit_code=$?
+    cd ../../..
+
+    if [ $test_exit_code -eq 0 ]; then
+        echo "Test contracts executed successfully."
+    else
+        echo "Test contracts failed with exit code $test_exit_code."
+        exit 1
+    fi
+}
+
 # Function to start an instance
 start_instance() {
     local address=$1
@@ -241,7 +258,7 @@ run_test() {
         exit 1
     fi
 
-    sleep 20 # Wait for logs to be appended
+    send_transactions
 
     if [ "$enable_leader_restart" = true ]; then
         # Kill the leader instance
@@ -261,7 +278,7 @@ run_test() {
         echo "Restarting the killed instance..."
         for i in "${!instances[@]}"; do
             IFS=' ' read -r -a params <<< "${instances[i]}"
-            if [ "${params[1]}" == "$leader_port" ]; then
+            if [ "${params[4]}" == "$leader_port" ]; then
                 start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"
                 liveness[i]=false
                 break
