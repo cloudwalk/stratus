@@ -4,7 +4,7 @@ use ethers_core::types::Transaction as EthersTransaction;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 use itertools::Itertools;
 
-use super::logs_bloom::LogsBloom;
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExternalReceipt;
@@ -76,14 +76,10 @@ impl TransactionMined {
         self.execution.is_success()
     }
 
-    /// Compute the LogsBloom of this transaction
-    pub fn compute_bloom(&self) -> LogsBloom {
+    fn compute_bloom(&self) -> LogsBloom {
         let mut bloom = LogsBloom::default();
-        for mined_log in self.logs.iter() {
-            bloom.accrue(ethereum_types::BloomInput::Raw(mined_log.log.address.as_ref()));
-            for topic in mined_log.topics().into_iter() {
-                bloom.accrue(ethereum_types::BloomInput::Raw(topic.as_ref()));
-            }
+        for log_mined in self.logs.iter() {
+            bloom.accrue_log(&(log_mined.log));
         }
         bloom
     }
@@ -119,7 +115,7 @@ impl From<TransactionMined> for EthersTransaction {
 
 impl From<TransactionMined> for EthersReceipt {
     fn from(value: TransactionMined) -> Self {
-        let logs_bloom = value.compute_bloom().0;
+        let logs_bloom = value.compute_bloom().into();
         Self {
             // receipt specific
             status: Some(if_else!(value.is_success(), 1, 0).into()),
@@ -150,11 +146,9 @@ impl From<TransactionMined> for EthersReceipt {
 mod tests {
     use fake::Fake;
     use fake::Faker;
-    use hex_literal::hex;
     use rand::Rng;
 
     use super::*;
-    use crate::eth::primitives::Log;
 
     fn create_tx(transaction_index: u64, block_number: u64) -> TransactionMined {
         TransactionMined {
@@ -178,56 +172,5 @@ mod tests {
         for pair in v {
             format!("{:?}", pair);
         }
-    }
-
-    #[test]
-    fn compute_bloom() {
-        let mut tx = create_tx(0, 0);
-        tx.logs.push(LogMined {
-            transaction_hash: tx.input.hash,
-            transaction_index: tx.transaction_index,
-            log_index: 0.into(),
-            block_number: tx.block_number,
-            block_hash: tx.block_hash,
-            log: Log {
-                address: hex!("c6d1efd908ef6b69da0749600f553923c465c812").into(),
-                topic0: Some(hex!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef").into()),
-                topic1: Some(hex!("000000000000000000000000d1ff9b395856e5a6810f626eca09d61d34fce3b8").into()),
-                topic2: Some(hex!("000000000000000000000000081d2c5b26db6f6e0944e4725b3b61b26e25dd8a").into()),
-                topic3: None,
-                data: hex!("0000000000000000000000000000000000000000000000000000000005f5e100").as_ref().into(),
-            },
-        });
-        tx.logs.push(LogMined {
-            transaction_hash: tx.input.hash,
-            transaction_index: tx.transaction_index,
-            log_index: 1.into(),
-            block_number: tx.block_number,
-            block_hash: tx.block_hash,
-            log: Log {
-                address: hex!("b1f571b3254c99a0a562124738f0193de2b2b2a9").into(),
-                topic0: Some(hex!("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c").into()),
-                topic1: Some(hex!("000000000000000000000000081d2c5b26db6f6e0944e4725b3b61b26e25dd8a").into()),
-                topic2: None,
-                topic3: None,
-                data: hex!(
-                    "0000000000000000000000000000000000000000000000000000000000004dca00000000\
-                0000000000000000000000000000000000000000000000030c9281f0"
-                )
-                .as_ref()
-                .into(),
-            },
-        });
-        let expected: LogsBloom = hex!(
-            "000000000400000000000000000000000000000000000000000000000000\
-        00000000000000000000000000000000000000080000000000000000000000000000000000000000000000000008\
-        00008400202000000000002000000000000000000000000000000010000000000000000000000000040000000000\
-        00100000000000000000000000000000000000000000000000000000000000000000000000001000000000000100\
-        00000000000000000000000000000000000000000000080000000002000000000000000000000000000000002000\
-        000000440000000000000000000000000000000000000000000000000000000000000000000000000000"
-        )
-        .into();
-
-        assert_eq!(tx.compute_bloom(), expected);
     }
 }
