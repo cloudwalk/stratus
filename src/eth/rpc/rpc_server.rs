@@ -154,6 +154,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
         module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("debug_setHead", debug_set_head)?;
+        module.register_blocking_method("consensus_getLeadershipStatus", consensus_get_leadership_status)?;
     }
 
     // stratus status
@@ -223,6 +224,13 @@ fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> an
 fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
     ctx.miner.mine_local_and_commit()?;
     Ok(to_json_value(true))
+}
+
+#[cfg(feature = "dev")]
+fn consensus_get_leadership_status(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> anyhow::Result<JsonValue, RpcError> {
+    let is_leader = ctx.consensus.is_leader().await;
+    let current_term = ctx.consensus.current_term.load(Ordering::SeqCst);
+    Ok(json!({"is_leader": is_leader, "term": current_term}))
 }
 
 #[cfg(feature = "dev")]

@@ -408,20 +408,17 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let request = request.into_inner();
         let consensus = self.consensus.lock().await;
         let current_term = consensus.current_term.load(Ordering::SeqCst);
-        let is_leader = consensus.is_leader();
 
         if request.term <= current_term {
             tracing::info!(
                 vote_granted = false,
                 current_term = current_term,
                 request_term = request.term,
-                is_leader = is_leader,
                 "requestvote received with stale term on election"
             );
             return Ok(Response::new(RequestVoteResponse {
                 term: current_term,
                 vote_granted: false,
-                is_leader,
                 message: format!("stale term: current_term {}, request_term {}", current_term, request.term),
             }));
         }
@@ -443,7 +440,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 return Ok(Response::new(RequestVoteResponse {
                     term: request.term,
                     vote_granted: true,
-                    is_leader,
                     message: "success".to_string(),
                 }));
             }
@@ -454,7 +450,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
             Ok(Response::new(RequestVoteResponse {
                 term: request.term,
                 vote_granted: false,
-                is_leader,
                 message: format!(
                     "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
                     request.last_log_index, candidate_last_log_index
@@ -466,7 +461,6 @@ impl AppendEntryService for AppendEntryServiceImpl {
         Ok(Response::new(RequestVoteResponse {
             term: request.term,
             vote_granted: false,
-            is_leader,
             message: format!("index is bellow expectation: last_log_index {}", request.last_log_index),
         }))
     }

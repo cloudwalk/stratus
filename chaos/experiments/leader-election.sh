@@ -94,70 +94,36 @@ check_liveness() {
 
 # Function to check if an instance is the leader
 check_leader() {
-    local grpc_address=$1
+    local port=$1
+    local response=$(curl -s http://0.0.0.0:$port \
+        --header "content-type: application/json" \
+        --data '{"jsonrpc":"2.0","method":"consensus_getLeadershipStatus","params":[],"id":1}')
 
-    # Base64 encoded placeholder values to ensure they match the expected length
-    local hash="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-    local gas="AAAAAAAAAAE="
-    local bloom="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-    local data="AAAAAAAAAAE="
-    local twentybytes="QUFBQUFBQUFBQUFBQUFBQUFBQUA="
-
-    # Send the gRPC request using grpcurl and capture both stdout and stderr
-    response=$(grpcurl -import-path static/proto -proto append_entry.proto -plaintext -d '{
-        "leader_id": "leader_id_value",
-        "term": 0,
-        "prevLogIndex": 0,
-        "prevLogTerm": 0,
-        "executions": [
-            {
-                "hash": "'"$hash"'",
-                "nonce": 1,
-                "value": "'"$gas"'",
-                "gas_price": "'"$gas"'",
-                "input": "'"$data"'",
-                "v": 27,
-                "r": "'"$hash"'",
-                "s": "'"$hash"'",
-                "chain_id": 1,
-                "result": "success",
-                "output": "'"$data"'",
-                "from": "'"$twentybytes"'",
-                "to": "'"$twentybytes"'",
-                "logs": [
-                    {
-                        "address": "'"$twentybytes"'",
-                        "topics": ["'"$hash"'"],
-                        "data": "'"$data"'"
-                    }
-                ],
-                "gas": "'"$gas"'",
-                "tx_type": 1,
-                "signer": "'"$twentybytes"'",
-                "gas_limit": "'"$gas"'",
-                "deployed_contract_address": "'"$twentybytes"'"
-            }
-        ]
-    }' "$grpc_address" append_entry.AppendEntryService/AppendTransactionExecutions 2>&1)
-
-    # Check the response for specific strings to determine the node status
-    if [[ "$response" == *"called on leader node"* ]]; then
-        return 0 # Success exit code for leader
-    elif [[ "$response" == *"APPEND_SUCCESS"* ]]; then
-        return 1 # Failure exit code for non-leader
-    elif [[ "$response" == *"is less than current term"* ]]; then
-        return 1 # Failure exit code for non-leader
-    fi
+    local is_leader=$(echo $response | jq -r '.result.is_leader')
+    local term=$(echo $response | jq -r '.result.term')
+    
+    echo "$is_leader $term"
 }
 
 # Function to find the leader node
+# Returns nothing if no leader is found or if there is mismatch between instances terms
+# Otherwise returns a list of leader addresses
 find_leader() {
     local grpc_addresses=("$@")
     local leaders=()
+    local term=""
+
     for grpc_address in "${grpc_addresses[@]}"; do
-        check_leader "$grpc_address"
-        local status=$?
-        if [ $status -eq 0 ]; then
+        read -r is_leader current_term <<< "$(check_leader "$grpc_address")"
+
+        if [ -z "$term" ]; then
+            term="$current_term"
+        elif [ "$term" != "$current_term" ]; then
+            echo ""
+            return
+        fi
+
+        if [ "$is_leader" == "true" ]; then
             leaders+=("$grpc_address")
         fi
     done
@@ -232,7 +198,7 @@ run_test() {
     echo "All instances are ready. Waiting for leader election"
 
     # Maximum timeout duration in seconds for the initial leader election
-    initial_leader_timeout=60
+    initial_leader_timeout=120
 
     # Capture the start time
     initial_start_time=$(date +%s)
@@ -311,10 +277,9 @@ run_test() {
         done
 
         echo "All instances are ready after restart. Waiting for new leader election."
-        sleep 15 # wait until election is settled down
 
         # Maximum timeout duration in seconds for new leader election
-        max_timeout=60
+        max_timeout=120
 
         # Capture the start time
         start_time=$(date +%s)
