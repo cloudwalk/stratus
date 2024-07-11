@@ -576,7 +576,7 @@ impl Drop for RocksStorageState {
         // that the boot is fast
         options.set_timeout(15 * minute_in_micros);
 
-        tracing::info!("shutting down rocksdb database");
+        tracing::info!("starting rocksdb shutdown");
         let instant = Instant::now();
 
         // by waiting for compaction, we are also forcing logs to be processed in shutdown so that
