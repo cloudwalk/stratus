@@ -8,12 +8,14 @@ use futures::future::BoxFuture;
 use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
 use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
 use pin_project::pinned_drop;
 use tracing::field;
 use tracing::info_span;
+use tracing::Level;
 use tracing::Span;
 
 use crate::eth::primitives::Address;
@@ -27,7 +29,10 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
+use crate::event_with;
 use crate::ext::to_json_value;
+use crate::ext::JsonValue;
+use crate::ext::ResultExt;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -162,9 +167,9 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         let client = request.extensions.rpc_client();
         let method = request.method_name().to_owned();
         let tx = match method.as_str() {
-            "eth_call" | "eth_estimateGas" => TxTracingIdentifiers::from_call(request.params()).ok(),
-            "eth_sendRawTransaction" => TxTracingIdentifiers::from_transaction(request.params()).ok(),
-            "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TxTracingIdentifiers::from_transaction_query(request.params()).ok(),
+            "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(request.params()).ok(),
+            "eth_sendRawTransaction" => TransactionTracingIdentifiers::from_transaction(request.params()).ok(),
+            "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
             _ => None,
         };
 
@@ -222,7 +227,7 @@ pub struct RpcResponse<'a> {
     client: RpcClientApp,
     id: String,
     method: String,
-    tx: Option<TxTracingIdentifiers>,
+    tx: Option<TransactionTracingIdentifiers>,
 
     // data
     start: Instant,
@@ -245,8 +250,21 @@ impl<'a> Future for RpcResponse<'a> {
 
             // trace response
             let response_success = response.is_success();
-            let response_result = response.as_result();
-            tracing::info!(
+            let response_result: JsonValue = serde_json::from_str(response.as_result()).expect_infallible();
+            let level = match response_result
+                .get("error")
+                .and_then(|v| v.get("code"))
+                .and_then(|v| v.as_number())
+                .and_then(|v| v.as_i64())
+                .map(|v| v as i32)
+            {
+                Some(INTERNAL_ERROR_CODE) => Level::ERROR,
+                Some(_) => Level::WARN,
+                None => Level::INFO,
+            };
+
+            event_with!(
+                level,
                 rpc_client = %resp.client,
                 rpc_id = %resp.id,
                 rpc_method = %resp.method,
@@ -263,10 +281,10 @@ impl<'a> Future for RpcResponse<'a> {
             // metrify response
             #[cfg(feature = "metrics")]
             {
-                let mut rpc_result = "error";
-                if response_success {
-                    rpc_result = if_else!(response_result.contains("\"result\":null"), "missing", "present");
-                }
+                let rpc_result = match response_result.get("result") {
+                    Some(result) => if_else!(result.is_null(), "missing", "present"),
+                    None => "error",
+                };
 
                 metrics::inc_rpc_requests_finished(
                     elapsed,
@@ -297,7 +315,7 @@ impl PinnedDrop for RpcResponse<'_> {
 // Helpers
 // -----------------------------------------------------------------------------
 
-struct TxTracingIdentifiers {
+struct TransactionTracingIdentifiers {
     pub hash: Option<Hash>,
     pub function: Option<SoliditySignature>,
     pub from: Option<Address>,
@@ -305,7 +323,7 @@ struct TxTracingIdentifiers {
     pub nonce: Option<Nonce>,
 }
 
-impl TxTracingIdentifiers {
+impl TransactionTracingIdentifiers {
     fn from_transaction(params: Params) -> anyhow::Result<Self> {
         let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
         let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
