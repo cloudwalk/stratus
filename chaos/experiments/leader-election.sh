@@ -251,7 +251,7 @@ run_test() {
         echo "Restarting the killed instance..."
         for i in "${!instances[@]}"; do
             IFS=' ' read -r -a params <<< "${instances[i]}"
-            if [ "${params[1]}" == "$leader_port" ]; then
+            if [ "${params[0]}" == "$leader_port" ]; then
                 start_instance "${params[0]}" "${params[1]}" "${params[2]}" "${params[3]}" "${params[5]}" "${params[6]}" "${params[7]}"
                 liveness[i]=false
                 break
