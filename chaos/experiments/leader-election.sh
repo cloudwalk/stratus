@@ -283,9 +283,9 @@ run_test() {
         echo "################################"
         # test: get the leadership for each port
         for port in "${ports[@]}"; do
-
             echo testing port $port
-            echo check_leader $port
+            response=$(check_leader $port)
+            echo $response
         done
         echo "################################"
 
