@@ -205,6 +205,7 @@ run_test() {
     done
 
     echo "All instances are ready. Waiting for leader election"
+    sleep 20 # Wait for logs to be appended
 
     # Maximum timeout duration in seconds for the initial leader election
     initial_leader_timeout=120
@@ -240,7 +241,7 @@ run_test() {
         exit 1
     fi
 
-    sleep 20 # wait for logs to be appended
+    sleep 20 # Wait for logs to be appended
 
     if [ "$enable_leader_restart" = true ]; then
         # Kill the leader instance
