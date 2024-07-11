@@ -61,7 +61,6 @@ mod tests {
     use hex_literal::hex;
 
     use super::*;
-    use crate::eth::primitives::Log;
 
     #[test]
     fn compute_bloom() {
