@@ -515,6 +515,7 @@ impl Consensus {
                             true,
                         ) {
                             Ok(_) => {
+                                consensus.prev_log_index.store(last_index + 1, Ordering::SeqCst);
                                 tracing::debug!("Transaction execution entry saved successfully");
                             }
                             Err(e) => {
@@ -589,6 +590,7 @@ impl Consensus {
                                     true
                                 ) {
                                     Ok(_) => {
+                                        consensus.prev_log_index.store(last_index + 1, Ordering::SeqCst);
                                         tracing::debug!("Block entry saved successfully");
                                         let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
                                         if consensus.broadcast_sender.send(block_entry).is_err() {
@@ -670,7 +672,7 @@ impl Consensus {
     }
 
     pub fn last_index(&self) -> u64 {
-        self.log_entries_storage.get_last_index().unwrap_or(0)
+        self.prev_log_index.load(Ordering::SeqCst)
     }
 
     pub fn should_forward(&self) -> bool {
