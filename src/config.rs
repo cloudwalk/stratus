@@ -619,6 +619,10 @@ pub struct RunWithImporterConfig {
     #[clap(flatten)]
     pub miner: MinerConfig,
 
+    #[cfg(feature = "request-replication-test-sender")]
+    #[arg(long = "replicate-request-to", env = "REPLICATE_REQUEST_TO")]
+    pub replicate_request_to: String,
+
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,

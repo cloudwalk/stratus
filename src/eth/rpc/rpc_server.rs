@@ -68,6 +68,7 @@ use crate::GlobalState;
 // -----------------------------------------------------------------------------
 
 /// Starts JSON-RPC server.
+#[allow(clippy::too_many_arguments)]
 pub async fn serve_rpc(
     // services
     storage: Arc<StratusStorage>,
