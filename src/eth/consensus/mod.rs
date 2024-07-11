@@ -669,6 +669,10 @@ impl Consensus {
         self.current_term.load(Ordering::SeqCst)
     }
 
+    pub fn last_index(&self) -> u64 {
+        self.prev_log_index.load(Ordering::SeqCst)
+    }
+
     pub fn should_forward(&self) -> bool {
         let is_leader = self.is_leader();
         tracing::info!(
