@@ -100,7 +100,7 @@ check_leader() {
         --data '{"jsonrpc":"2.0","method":"stratus_version","params":[],"id":1}')
 
     local is_leader=$(echo $response | jq -r '.result.consensus.is_leader')
-    local term=$(echo $response | jq -r '.result.consensus.term')
+    local term=$(echo $response | jq -r '.result.consensus.current_term')
 
     echo "$is_leader $term"
 }
