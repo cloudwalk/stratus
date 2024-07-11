@@ -439,6 +439,7 @@ mod interval_miner {
 
     use crate::channel_read_sync;
     use crate::eth::BlockMiner;
+    use crate::eth::Consensus;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
@@ -448,6 +449,11 @@ mod interval_miner {
         while let Ok(tick) = channel_read_sync!(ticks_rx) {
             if GlobalState::warn_if_shutdown(TASK_NAME) {
                 return;
+            }
+
+            if !Consensus::is_leader() {
+                tracing::info!("skipping mining block because node is not a leader");
+                continue;
             }
 
             // mine
