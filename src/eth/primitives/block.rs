@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use super::LogMined;
 use super::TransactionInput;
-use crate::eth::evm::EvmExecutionResult;
+use crate::eth::executor::EvmExecutionResult;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;

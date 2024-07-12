@@ -9,7 +9,7 @@ use futures::StreamExt;
 use serde::Deserialize;
 use stratus::channel_read;
 use stratus::config::ImporterOnlineConfig;
-use stratus::eth::evm::Executor;
+use stratus::eth::executor::Executor;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;

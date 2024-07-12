@@ -25,10 +25,10 @@ use revm::Database;
 use revm::Evm as RevmEvm;
 use revm::Handler;
 
-use crate::eth::evm::evm::EvmExecutionResult;
-use crate::eth::evm::Evm;
-use crate::eth::evm::EvmError;
-use crate::eth::evm::EvmInput;
+use crate::eth::executor::evm::EvmExecutionResult;
+use crate::eth::executor::Evm;
+use crate::eth::executor::EvmError;
+use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;

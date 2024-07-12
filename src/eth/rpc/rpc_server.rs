@@ -27,7 +27,7 @@ use tracing::info_span;
 use tracing::Instrument;
 use tracing::Span;
 
-use crate::eth::evm::Executor;
+use crate::eth::executor::Executor;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 #[cfg(feature = "dev")]

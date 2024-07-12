@@ -3,7 +3,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use crate::eth::evm::Executor;
+use crate::eth::executor::Executor;
 use crate::eth::primitives::ChainId;
 use crate::eth::rpc::rpc_client_app::RpcClientApp;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;

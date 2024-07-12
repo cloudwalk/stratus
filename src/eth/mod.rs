@@ -1,7 +1,7 @@
 mod block_miner;
 pub mod codegen;
 pub mod consensus;
-pub mod evm;
+pub mod executor;
 pub mod primitives;
 pub mod relayer;
 pub mod rpc;
