@@ -28,8 +28,7 @@ use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
-use crate::ext::spawn_blocking_named_or_thread;
-use crate::ext::spawn_named;
+use crate::ext::spawn_thread;
 use crate::ext::DisplayExt;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
@@ -89,9 +88,8 @@ impl Miner {
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::channel();
-        spawn_blocking_named_or_thread("miner::miner", move || interval_miner::run(Arc::clone(&self), ticks_rx));
-        spawn_named("miner::ticker", interval_miner_ticker::run(block_time, ticks_tx));
-
+        spawn_thread("miner-miner", move || interval_miner::run(Arc::clone(&self), ticks_rx));
+        spawn_thread("miner-ticker", move || interval_miner_ticker::run(block_time, ticks_tx));
         Ok(())
     }
 
@@ -523,12 +521,13 @@ mod interval_miner_ticker {
 
     use chrono::Timelike;
     use chrono::Utc;
+    use tokio::runtime::Handle;
     use tokio::time::Instant;
 
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
-    pub async fn run(block_time: Duration, ticks_tx: mpsc::Sender<Instant>) {
+    pub fn run(block_time: Duration, ticks_tx: mpsc::Sender<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         // sync to next second
@@ -540,18 +539,22 @@ mod interval_miner_ticker {
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Burst);
 
         // keep ticking
-        ticker.tick().await;
-        loop {
-            if GlobalState::warn_if_shutdown(TASK_NAME) {
-                return;
-            }
+        let runtime = Handle::current();
+        runtime.block_on(async {
+            ticker.tick().await;
+            loop {
+                if GlobalState::warn_if_shutdown(TASK_NAME) {
+                    println!("e");
+                    return;
+                }
 
-            let tick = ticker.tick().await;
-            if ticks_tx.send(tick).is_err() {
-                warn_task_rx_closed(TASK_NAME);
-                break;
-            };
-        }
+                let tick = ticker.tick().await;
+                if ticks_tx.send(tick).is_err() {
+                    warn_task_rx_closed(TASK_NAME);
+                    break;
+                };
+            }
+        });
     }
 }
 
