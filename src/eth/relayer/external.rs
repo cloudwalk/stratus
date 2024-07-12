@@ -460,7 +460,7 @@ impl ExternalRelayer {
         Span::with(|s| s.rec_str("tx_hash", &tx_hash));
 
         let mut substrate_receipt = substrate_pending_transaction;
-        let _res = {
+        let result = {
             let receipt = loop {
                 match substrate_receipt.await {
                     Ok(r) => break r,
@@ -490,7 +490,7 @@ impl ExternalRelayer {
         #[cfg(feature = "metrics")]
         metrics::inc_compare_receipts(start_metric.elapsed());
 
-        _res
+        result
     }
 
     /// Save a transaction mismatch to postgres, if it fails, save it to a file.
