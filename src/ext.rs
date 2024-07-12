@@ -294,7 +294,7 @@ where
         .expect("spawning named blocking task should not fail")
 }
 
-/// Spawns a thread with the given name. Automatically enters Tokio context.
+/// Spawns a thread with the given name. Thread has access to Tokio current runtime.
 #[track_caller]
 pub fn spawn_thread<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> std::thread::JoinHandle<T>
 where
@@ -302,31 +302,14 @@ where
 {
     info_task_spawn(name);
 
-    let tokio = tokio::runtime::Handle::current();
+    let runtime = tokio::runtime::Handle::current();
     std::thread::Builder::new()
         .name(name.into())
         .spawn(move || {
-            let _tokio_guard = tokio.enter();
+            let _runtime_guard = runtime.enter();
             task()
         })
         .expect("spawning background thread should not fail")
-}
-
-/// Spawns a blocking Tokio task or a thread according to the compilation feature-flag.
-#[track_caller]
-pub fn spawn_blocking_named_or_thread<T>(name: &str, task: impl FnOnce() -> T + Send + 'static)
-where
-    T: Send + 'static,
-{
-    #[cfg(feature = "bg-threads")]
-    {
-        spawn_thread(name, task);
-    }
-
-    #[cfg(not(feature = "bg-threads"))]
-    {
-        spawn_blocking_named(name, task);
-    }
 }
 
 /// Spawns a handler that listens to system signals.
