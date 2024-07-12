@@ -387,7 +387,7 @@ impl ExternalRelayer {
         }
 
         let block_numbers: HashSet<BlockNumber> = blocks.iter().map(|block| block.number()).collect();
-        let max_number = block_numbers.iter().max().cloned().unwrap();
+        let max_number = block_numbers.iter().max().copied().unwrap();
 
         // fill span
         Span::with(|s| s.rec_str("block_number", &max_number));
@@ -414,7 +414,7 @@ impl ExternalRelayer {
             return Err(anyhow!("relay timedout, updated out of sync wallets and will try again"));
         };
 
-        let ok_blocks: Vec<BlockNumber> = block_numbers.difference(&mismatched_blocks).cloned().collect();
+        let ok_blocks: Vec<BlockNumber> = block_numbers.difference(&mismatched_blocks).copied().collect();
 
         if !mismatched_blocks.is_empty() {
             tracing::warn!(?mismatched_blocks, "some transactions mismatched");
@@ -423,7 +423,7 @@ impl ExternalRelayer {
                 r#"UPDATE relayer_blocks
                 SET finished = true, mismatched = true
                 WHERE number = ANY($1)"#,
-                &mismatched_blocks.iter().cloned().collect_vec()[..] as _
+                &mismatched_blocks.iter().copied().collect_vec()[..] as _
             )
             .execute(&self.pool)
             .await?;

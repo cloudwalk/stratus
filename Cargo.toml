@@ -202,6 +202,7 @@ request-replication-test-receiver = []
 # ------------------------------------------------------------------------------
 
 [lints.clippy]
+cloned_instead_of_copied = "warn"
 clone_on_ref_ptr = "warn"
 disallowed_names = "warn"
 manual_let_else = "warn"
