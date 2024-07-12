@@ -119,9 +119,9 @@ pub async fn create_mock_consensus() -> Arc<Consensus> {
     let tmpdir_log_entries_path = tmpdir_log_entries.path().to_str().map(|s| s.to_owned());
     let storage = Arc::new(storage);
 
-    let miner = BlockMiner::new(
+    let miner = Miner::new(
         Arc::clone(&storage),
-        crate::eth::BlockMinerMode::External, //XXX this should be passed as an argument, leaders start with interval, followers with the soon to be implemented follower mode
+        crate::eth::miner::MinerMode::External, //XXX this should be passed as an argument, leaders start with interval, followers with the soon to be implemented follower mode
         None,
     );
 
@@ -139,8 +139,8 @@ pub async fn create_mock_consensus() -> Arc<Consensus> {
 
 use tonic::service::Interceptor;
 
-use super::BlockMiner;
 use super::Hash;
+use super::Miner;
 
 // Define a simple interceptor that does nothing
 #[allow(dead_code)] // HACK to avoid unused code warning

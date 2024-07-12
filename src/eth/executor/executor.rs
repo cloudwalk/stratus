@@ -11,6 +11,7 @@ use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::Revm;
+use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
@@ -26,7 +27,6 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
-use crate::eth::BlockMiner;
 use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
 #[cfg(feature = "metrics")]
@@ -182,7 +182,7 @@ pub struct Executor {
     evms: Evms,
 
     /// Mutex-wrapped miner for creating new blockchain blocks.
-    miner: Arc<BlockMiner>,
+    miner: Arc<Miner>,
 
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
@@ -190,7 +190,7 @@ pub struct Executor {
 
 impl Executor {
     /// Creates a new [`Executor`].
-    pub fn new(storage: Arc<StratusStorage>, miner: Arc<BlockMiner>, config: ExecutorConfig) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating executor");
         let evms = Evms::spawn(Arc::clone(&storage), &config);
         Self { evms, config, miner, storage }

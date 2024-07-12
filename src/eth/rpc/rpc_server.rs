@@ -28,6 +28,7 @@ use tracing::Instrument;
 use tracing::Span;
 
 use crate::eth::executor::Executor;
+use crate::eth::miner::Miner;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 #[cfg(feature = "dev")]
@@ -51,7 +52,6 @@ use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
-use crate::eth::BlockMiner;
 use crate::eth::Consensus;
 use crate::ext::not;
 use crate::ext::to_json_string;
@@ -72,7 +72,7 @@ pub async fn serve_rpc(
     // services
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
-    miner: Arc<BlockMiner>,
+    miner: Arc<Miner>,
     consensus: Arc<Consensus>,
     // config
     address: SocketAddr,
