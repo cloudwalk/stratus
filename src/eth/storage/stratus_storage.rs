@@ -342,8 +342,9 @@ impl StratusStorage {
     }
 
     pub fn save_block(&self, block: Block) -> anyhow::Result<()> {
-        #[cfg(feature = "tracing")]
         let block_number = block.number();
+
+        #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
         tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), "saving block");
 
