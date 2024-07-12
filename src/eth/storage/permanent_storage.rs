@@ -18,7 +18,6 @@ use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::InMemoryPermanentStorage;
-#[cfg(feature = "rocks")]
 use crate::eth::storage::RocksPermanentStorage;
 
 /// Permanent (committed) storage operations.
@@ -95,7 +94,6 @@ pub struct PermanentStorageConfig {
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum PermanentStorageKind {
     InMemory,
-    #[cfg(feature = "rocks")]
     Rocks,
 }
 
@@ -106,7 +104,6 @@ impl PermanentStorageConfig {
 
         let perm: Box<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Box::<InMemoryPermanentStorage>::default(),
-            #[cfg(feature = "rocks")]
             PermanentStorageKind::Rocks => {
                 let prefix = self.rocks_path_prefix.clone();
                 Box::new(RocksPermanentStorage::new(prefix)?)
@@ -122,7 +119,6 @@ impl FromStr for PermanentStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
-            #[cfg(feature = "rocks")]
             "rocks" => Ok(Self::Rocks),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
