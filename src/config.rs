@@ -20,9 +20,7 @@ use crate::eth::primitives::Address;
 use crate::eth::relayer::ExternalRelayer;
 use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::ExternalRpcStorageConfig;
-use crate::eth::storage::PermanentStorageConfig;
-use crate::eth::storage::StratusStorage;
-use crate::eth::storage::TemporaryStorageConfig;
+use crate::eth::storage::StratusStorageConfig;
 use crate::eth::TransactionRelayer;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
@@ -153,31 +151,6 @@ impl CommonConfig {
                 Err(e.into())
             }
         }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config: StratusStorage
-// -----------------------------------------------------------------------------
-
-/// Configuration that can be used by any binary that interacts with Stratus storage.
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct StratusStorageConfig {
-    #[clap(flatten)]
-    pub temp_storage: TemporaryStorageConfig,
-
-    #[clap(flatten)]
-    pub perm_storage: PermanentStorageConfig,
-}
-
-impl StratusStorageConfig {
-    /// Initializes Stratus storage.
-    pub fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let temp_storage = self.temp_storage.init()?;
-        let perm_storage = self.perm_storage.init()?;
-        let storage = StratusStorage::new(temp_storage, perm_storage);
-
-        Ok(Arc::new(storage))
     }
 }
 

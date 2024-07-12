@@ -1,4 +1,8 @@
+use std::sync::Arc;
+
 use anyhow::anyhow;
+use clap::Parser;
+use display_json::DebugAsJson;
 use tracing::Span;
 
 use crate::eth::primitives::Account;
@@ -20,7 +24,9 @@ use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::PermanentStorageConfig;
 use crate::eth::storage::TemporaryStorage;
+use crate::eth::storage::TemporaryStorageConfig;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
@@ -455,5 +461,30 @@ impl StratusStorage {
 
     pub fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
         self.perm.read_slots_sample(start, end, max_samples, seed)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config
+// -----------------------------------------------------------------------------
+
+/// Configuration that can be used by any binary that interacts with Stratus storage.
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+pub struct StratusStorageConfig {
+    #[clap(flatten)]
+    pub temp_storage: TemporaryStorageConfig,
+
+    #[clap(flatten)]
+    pub perm_storage: PermanentStorageConfig,
+}
+
+impl StratusStorageConfig {
+    /// Initializes Stratus storage.
+    pub fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
+        let temp_storage = self.temp_storage.init()?;
+        let perm_storage = self.perm_storage.init()?;
+        let storage = StratusStorage::new(temp_storage, perm_storage);
+
+        Ok(Arc::new(storage))
     }
 }
