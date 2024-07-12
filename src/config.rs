@@ -14,7 +14,7 @@ use strum::VariantNames;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
-use crate::eth::evm::ExecutorConfig;
+use crate::eth::executor::ExecutorConfig;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;

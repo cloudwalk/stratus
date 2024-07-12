@@ -9,7 +9,7 @@ use ethereum_types::U64;
 use super::Gas;
 use crate::eth::consensus::append_entry;
 use crate::eth::consensus::utils::*;
-use crate::eth::evm::EvmExecutionResult;
+use crate::eth::executor::EvmExecutionResult;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;

@@ -4,8 +4,8 @@ use std::sync::Arc;
 use clap::Parser;
 use display_json::DebugAsJson;
 
-use crate::eth::evm::Executor;
-use crate::eth::evm::ExecutorStrategy;
+use crate::eth::executor::Executor;
+use crate::eth::executor::ExecutorStrategy;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 

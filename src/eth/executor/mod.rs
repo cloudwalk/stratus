@@ -1,6 +1,6 @@
-#[allow(clippy::module_inception)]
 mod evm;
 mod evm_error;
+#[allow(clippy::module_inception)]
 mod executor;
 mod executor_config;
 mod revm;

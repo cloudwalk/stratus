@@ -17,7 +17,7 @@ use futures::try_join;
 use futures::StreamExt;
 use itertools::Itertools;
 use stratus::config::ImporterOfflineConfig;
-use stratus::eth::evm::Executor;
+use stratus::eth::executor::Executor;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
