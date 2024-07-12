@@ -629,7 +629,7 @@ mod tests {
             .filter(|key| !extra_slots.contains_key(key) && !slots.contains_key(key))
             .collect();
 
-        let keys: Vec<SlotIndex> = slots.keys().cloned().chain(extra_keys).collect();
+        let keys: Vec<SlotIndex> = slots.keys().copied().chain(extra_keys).collect();
         let result = account_slots.multi_get(keys).expect("this should not fail");
 
         assert_eq!(result.len(), slots.keys().len());
