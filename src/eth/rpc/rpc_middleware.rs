@@ -133,21 +133,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
     type Future = RpcResponse<'a>;
 
     fn call(&self, mut request: jsonrpsee::types::Request<'a>) -> Self::Future {
-        #[cfg(feature = "request-replication-test-sender")]
-        tokio::task::spawn({
-            let request = serde_json::to_value(request.clone());
-            let client = self.client.clone().post(&self.replicate_request_to);
-            async move {
-                if let Ok(request) = request {
-                    tracing::info!("replicating request");
-                    let res = client.json(&request).send().await;
-                    if let Err(err) = res {
-                        tracing::warn!(?err, "error replicating the request");
-                    }
-                }
-            }
-        });
-
         // track request
         let span = info_span!(
             "rpc::request",
@@ -172,6 +157,23 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
             _ => None,
         };
+
+        #[cfg(feature = "request-replication-test-sender")]
+        if method != "eth_subscribe" && method != "eth_unsubscribe" && method != "eth_subscription" {
+            tokio::task::spawn({
+                let request = serde_json::to_value(request.clone());
+                let client = self.client.clone().post(&self.replicate_request_to);
+                async move {
+                    if let Ok(request) = request {
+                        tracing::info!("replicating request");
+                        let res = client.json(&request).send().await;
+                        if let Err(err) = res {
+                            tracing::warn!(?err, "error replicating the request");
+                        }
+                    }
+                }
+            });
+        }
 
         // trace request
         Span::with(|s| {
