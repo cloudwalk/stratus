@@ -358,7 +358,7 @@ impl StratusStorage {
         // check pending number
         if let Some(pending_number) = self.temp.read_pending_block_number()? {
             if block_number >= pending_number {
-                tracing::error!(%pending_number, %mined_number, "failed to save block because mismatch with pending block number");
+                tracing::error!(%block_number, %pending_number, "failed to save block because mismatch with pending block number");
                 return Err(StorageError::new_pending_number_mismatch(block_number, mined_number).into());
             }
         }
