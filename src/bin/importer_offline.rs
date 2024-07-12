@@ -18,6 +18,7 @@ use futures::StreamExt;
 use itertools::Itertools;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
+use stratus::eth::miner::Miner;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
@@ -25,7 +26,6 @@ use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::InMemoryPermanentStorage;
-use stratus::eth::BlockMiner;
 use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
 use stratus::ext::to_json_string_pretty;
@@ -102,7 +102,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 fn execute_block_importer(
     // services
     executor: Arc<Executor>,
-    miner: Arc<BlockMiner>,
+    miner: Arc<Miner>,
     // data
     mut backlog_rx: mpsc::Receiver<BacklogTask>,
     blocks_to_export_snapshot: Vec<BlockNumber>,

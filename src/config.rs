@@ -15,12 +15,10 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::miner::MinerConfig;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::relayer::ExternalRelayer;
 use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::ExternalRpcStorage;
@@ -33,8 +31,6 @@ use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TemporaryStorage;
-use crate::eth::BlockMiner;
-use crate::eth::BlockMinerMode;
 use crate::eth::TransactionRelayer;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
@@ -206,72 +202,6 @@ impl StratusStorageConfig {
         let storage = StratusStorage::new(temp_storage, perm_storage);
 
         Ok(Arc::new(storage))
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config: Miner
-// -----------------------------------------------------------------------------
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct MinerConfig {
-    /// Target block time.
-    #[arg(long = "block-mode", env = "BLOCK_MODE", default_value = "automine")]
-    pub block_mode: BlockMinerMode,
-
-    /// Generates genesis block on startup when it does not exist.
-    #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
-    pub enable_genesis: bool,
-
-    /// Enables test accounts with max wei on startup.
-    #[cfg(feature = "dev")]
-    #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
-    pub enable_test_accounts: bool,
-}
-
-impl MinerConfig {
-    /// Inits [`BlockMiner`] with external mining mode, ignoring the configured value.
-    pub fn init_external_mode(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(BlockMinerMode::External, storage, relayer)
-    }
-
-    /// Inits [`BlockMiner`] with the configured mining mode.
-    pub fn init(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
-        self.init_with_mode(self.block_mode, storage, relayer)
-    }
-
-    fn init_with_mode(&self, mode: BlockMinerMode, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<BlockMiner>> {
-        tracing::info!(config = ?self, "creating block miner");
-
-        // create miner
-        let miner = BlockMiner::new(Arc::clone(&storage), mode, relayer);
-        let miner = Arc::new(miner);
-
-        // enable genesis block
-        if self.enable_genesis {
-            let genesis = storage.read_block(&BlockFilter::Number(BlockNumber::ZERO))?;
-            if genesis.is_none() {
-                tracing::info!("enabling genesis block");
-                miner.commit(Block::genesis())?;
-            }
-        }
-
-        // enable test accounts
-        #[cfg(feature = "dev")]
-        if self.enable_test_accounts {
-            let test_accounts = test_accounts();
-            tracing::info!(accounts = ?test_accounts, "enabling test accounts");
-            storage.save_accounts(test_accounts)?;
-        }
-
-        // set block number
-        storage.set_pending_block_number_as_next_if_not_set()?;
-
-        // enable interval miner
-        if miner.mode().is_interval() {
-            Arc::clone(&miner).spawn_interval_miner()?;
-        }
-
-        Ok(miner)
     }
 }
 

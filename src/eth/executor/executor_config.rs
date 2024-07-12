@@ -6,8 +6,8 @@ use display_json::DebugAsJson;
 
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorStrategy;
+use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
-use crate::eth::BlockMiner;
 
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct ExecutorConfig {
@@ -28,7 +28,7 @@ impl ExecutorConfig {
     /// Initializes Executor.
     ///
     /// Note: Should be called only after async runtime is initialized.
-    pub fn init(&self, storage: Arc<StratusStorage>, miner: Arc<BlockMiner>) -> Arc<Executor> {
+    pub fn init(&self, storage: Arc<StratusStorage>, miner: Arc<Miner>) -> Arc<Executor> {
         let mut config = self.clone();
         config.num_evms = max(config.num_evms, 1);
         tracing::info!(?config, "creating executor");
