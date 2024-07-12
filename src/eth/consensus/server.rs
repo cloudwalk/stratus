@@ -85,88 +85,85 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let term = request_inner.term;
         let data = LogEntryData::TransactionExecutionEntries(executions.clone());
 
-        #[cfg(feature = "rocks")]
-        {
-            let last_entry = consensus.log_entries_storage.get_last_entry();
-            let (last_index, last_term) = match last_entry {
-                Ok(Some(entry)) => (entry.index, entry.term),
-                Ok(None) => (0, 0),
-                Err(e) => {
-                    tracing::error!("error getting last log entry: {:?}", e);
-                    (0, 0)
-                }
-            };
+        let last_entry = consensus.log_entries_storage.get_last_entry();
+        let (last_index, last_term) = match last_entry {
+            Ok(Some(entry)) => (entry.index, entry.term),
+            Ok(None) => (0, 0),
+            Err(e) => {
+                tracing::error!("error getting last log entry: {:?}", e);
+                (0, 0)
+            }
+        };
 
-            match request_inner.prev_log_index.cmp(&0) {
-                Greater => match consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
-                    Ok(Some(log_entry)) if log_entry.term != request_inner.prev_log_term => {
-                        let error_message = format!(
-                            "log entry term {} does not match request term {} at index {}",
-                            log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
-                        );
-                        tracing::error!(
-                            log_entry_term = log_entry.term,
-                            request_term = request_inner.prev_log_term,
-                            index = request_inner.prev_log_index,
-                            "{}",
-                            &error_message
-                        );
+        match request_inner.prev_log_index.cmp(&0) {
+            Greater => match consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
+                Ok(Some(log_entry)) if log_entry.term != request_inner.prev_log_term => {
+                    let error_message = format!(
+                        "log entry term {} does not match request term {} at index {}",
+                        log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
+                    );
+                    tracing::error!(
+                        log_entry_term = log_entry.term,
+                        request_term = request_inner.prev_log_term,
+                        index = request_inner.prev_log_index,
+                        "{}",
+                        &error_message
+                    );
 
-                        return Ok(Response::new(AppendTransactionExecutionsResponse {
-                            status: StatusCode::TermMismatch as i32,
-                            message: "transaction Executions append failed due to term mismatch".into(),
-                            match_log_index: last_index,
-                            last_log_index: last_index,
-                            last_log_term: last_term,
-                        }));
-                    }
-                    Ok(Some(_)) => {}
-                    _ => {
-                        let error_message = format!("no log entry found at index {}", request_inner.prev_log_index);
-                        tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
-                        return Ok(Response::new(AppendTransactionExecutionsResponse {
-                            status: StatusCode::LogMismatch as i32,
-                            message: "transaction Executions append failed due to log mismatch".into(),
-                            match_log_index: last_index,
-                            last_log_index: last_index,
-                            last_log_term: last_term,
-                        }));
-                    }
-                },
-                Equal => match consensus.log_entries_storage.get_entry(0) {
-                    Ok(Some(log_entry)) if log_entry.term != request_inner.prev_log_term => {
-                        return Ok(Response::new(AppendTransactionExecutionsResponse {
-                            status: StatusCode::LogMismatch as i32,
-                            message: "transaction Executions append failed due to log mismatch at index 0".into(),
-                            match_log_index: 0,
-                            last_log_index: last_index,
-                            last_log_term: last_term,
-                        }));
-                    }
-                    Ok(Some(_)) => {}
-                    Ok(None) => {
-                        tracing::info!("appending initial entry to empty log");
-                    }
-                    Err(e) => {
-                        tracing::error!("error checking first log entry: {:?}", e);
-                        return Err(Status::internal("error checking log entries"));
-                    }
-                },
-                Less => {
                     return Ok(Response::new(AppendTransactionExecutionsResponse {
-                        status: StatusCode::LogMismatch as i32,
-                        message: "invalid prev_log_index".into(),
+                        status: StatusCode::TermMismatch as i32,
+                        message: "transaction Executions append failed due to term mismatch".into(),
                         match_log_index: last_index,
                         last_log_index: last_index,
                         last_log_term: last_term,
                     }));
                 }
+                Ok(Some(_)) => {}
+                _ => {
+                    let error_message = format!("no log entry found at index {}", request_inner.prev_log_index);
+                    tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
+                    return Ok(Response::new(AppendTransactionExecutionsResponse {
+                        status: StatusCode::LogMismatch as i32,
+                        message: "transaction Executions append failed due to log mismatch".into(),
+                        match_log_index: last_index,
+                        last_log_index: last_index,
+                        last_log_term: last_term,
+                    }));
+                }
+            },
+            Equal => match consensus.log_entries_storage.get_entry(0) {
+                Ok(Some(log_entry)) if log_entry.term != request_inner.prev_log_term => {
+                    return Ok(Response::new(AppendTransactionExecutionsResponse {
+                        status: StatusCode::LogMismatch as i32,
+                        message: "transaction Executions append failed due to log mismatch at index 0".into(),
+                        match_log_index: 0,
+                        last_log_index: last_index,
+                        last_log_term: last_term,
+                    }));
+                }
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    tracing::info!("appending initial entry to empty log");
+                }
+                Err(e) => {
+                    tracing::error!("error checking first log entry: {:?}", e);
+                    return Err(Status::internal("error checking log entries"));
+                }
+            },
+            Less => {
+                return Ok(Response::new(AppendTransactionExecutionsResponse {
+                    status: StatusCode::LogMismatch as i32,
+                    message: "invalid prev_log_index".into(),
+                    match_log_index: last_index,
+                    last_log_index: last_index,
+                    last_log_term: last_term,
+                }));
             }
+        }
 
-            if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction", false) {
-                tracing::error!("failed to save log entry: {:?}", e);
-                return Err(Status::internal("failed to save log entry"));
-            }
+        if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "transaction", false) {
+            tracing::error!("failed to save log entry: {:?}", e);
+            return Err(Status::internal("failed to save log entry"));
         }
 
         consensus.prev_log_index.store(index, Ordering::SeqCst);
@@ -256,89 +253,86 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let term = request_inner.term;
         let data = LogEntryData::BlockEntry(block_entry.clone());
 
-        #[cfg(feature = "rocks")]
-        {
-            let last_entry = consensus.log_entries_storage.get_last_entry();
-            let (last_index, last_term) = match last_entry {
-                Ok(Some(entry)) => (entry.index, entry.term),
-                Ok(None) => (0, 0),
-                Err(e) => {
-                    tracing::error!("error getting last log entry: {:?}", e);
-                    (0, 0)
-                }
-            };
+        let last_entry = consensus.log_entries_storage.get_last_entry();
+        let (last_index, last_term) = match last_entry {
+            Ok(Some(entry)) => (entry.index, entry.term),
+            Ok(None) => (0, 0),
+            Err(e) => {
+                tracing::error!("error getting last log entry: {:?}", e);
+                (0, 0)
+            }
+        };
 
-            match request_inner.prev_log_index.cmp(&0) {
-                Greater => match consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
-                    Ok(Some(log_entry)) if log_entry.term != request_inner.prev_log_term => {
-                        let error_message = format!(
-                            "log entry term {} does not match request term {} at index {}",
-                            log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
-                        );
-                        tracing::error!(
-                            log_entry_term = log_entry.term,
-                            request_term = request_inner.prev_log_term,
-                            index = request_inner.prev_log_index,
-                            "{}",
-                            &error_message
-                        );
+        match request_inner.prev_log_index.cmp(&0) {
+            Greater => match consensus.log_entries_storage.get_entry(request_inner.prev_log_index) {
+                Ok(Some(log_entry)) if log_entry.term != request_inner.prev_log_term => {
+                    let error_message = format!(
+                        "log entry term {} does not match request term {} at index {}",
+                        log_entry.term, request_inner.prev_log_term, request_inner.prev_log_index
+                    );
+                    tracing::error!(
+                        log_entry_term = log_entry.term,
+                        request_term = request_inner.prev_log_term,
+                        index = request_inner.prev_log_index,
+                        "{}",
+                        &error_message
+                    );
 
-                        return Ok(Response::new(AppendBlockCommitResponse {
-                            status: StatusCode::TermMismatch as i32,
-                            message: "block commit append failed due to term mismatch".into(),
-                            match_log_index: last_index,
-                            last_log_index: last_index,
-                            last_log_term: last_term,
-                        }));
-                    }
-                    Ok(Some(_)) => {}
-                    _ => {
-                        let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
-                        tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
-                        return Ok(Response::new(AppendBlockCommitResponse {
-                            status: StatusCode::LogMismatch as i32,
-                            message: "block commit append failed due to log mismatch".into(),
-                            match_log_index: last_index,
-                            last_log_index: last_index,
-                            last_log_term: last_term,
-                        }));
-                    }
-                },
-                Equal => match consensus.log_entries_storage.get_entry(0) {
-                    Ok(Some(log_entry)) if log_entry.term != request_inner.prev_log_term => {
-                        return Ok(Response::new(AppendBlockCommitResponse {
-                            status: StatusCode::LogMismatch as i32,
-                            message: "block commit append failed due to log mismatch at index 0".into(),
-                            match_log_index: 0,
-                            last_log_index: last_index,
-                            last_log_term: last_term,
-                        }));
-                    }
-                    Ok(Some(_)) => {}
-                    Ok(None) => {
-                        tracing::info!("appending initial entry to empty log");
-                    }
-                    Err(e) => {
-                        tracing::error!("error checking first log entry: {:?}", e);
-                        return Err(Status::internal("error checking log entries"));
-                    }
-                },
-                Less => {
                     return Ok(Response::new(AppendBlockCommitResponse {
-                        status: StatusCode::LogMismatch as i32,
-                        message: "invalid prev_log_index".into(),
+                        status: StatusCode::TermMismatch as i32,
+                        message: "block commit append failed due to term mismatch".into(),
                         match_log_index: last_index,
                         last_log_index: last_index,
                         last_log_term: last_term,
                     }));
                 }
+                Ok(Some(_)) => {}
+                _ => {
+                    let error_message = format!("No log entry found at index {}", request_inner.prev_log_index);
+                    tracing::error!(index = request_inner.prev_log_index, "{}", &error_message);
+                    return Ok(Response::new(AppendBlockCommitResponse {
+                        status: StatusCode::LogMismatch as i32,
+                        message: "block commit append failed due to log mismatch".into(),
+                        match_log_index: last_index,
+                        last_log_index: last_index,
+                        last_log_term: last_term,
+                    }));
+                }
+            },
+            Equal => match consensus.log_entries_storage.get_entry(0) {
+                Ok(Some(log_entry)) if log_entry.term != request_inner.prev_log_term => {
+                    return Ok(Response::new(AppendBlockCommitResponse {
+                        status: StatusCode::LogMismatch as i32,
+                        message: "block commit append failed due to log mismatch at index 0".into(),
+                        match_log_index: 0,
+                        last_log_index: last_index,
+                        last_log_term: last_term,
+                    }));
+                }
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    tracing::info!("appending initial entry to empty log");
+                }
+                Err(e) => {
+                    tracing::error!("error checking first log entry: {:?}", e);
+                    return Err(Status::internal("error checking log entries"));
+                }
+            },
+            Less => {
+                return Ok(Response::new(AppendBlockCommitResponse {
+                    status: StatusCode::LogMismatch as i32,
+                    message: "invalid prev_log_index".into(),
+                    match_log_index: last_index,
+                    last_log_index: last_index,
+                    last_log_term: last_term,
+                }));
             }
-            tracing::info!(number = block_entry.number, "appending new block");
+        }
+        tracing::info!(number = block_entry.number, "appending new block");
 
-            if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block", false) {
-                tracing::error!("failed to save log entry: {:?}", e);
-                return Err(Status::internal("failed to save log entry"));
-            }
+        if let Err(e) = consensus.log_entries_storage.save_log_entry(index, term, data, "block", false) {
+            tracing::error!("failed to save log entry: {:?}", e);
+            return Err(Status::internal("failed to save log entry"));
         }
 
         //TODO FIXME move this code back when we have propagation: let Some(diff) = last_last_arrived_block_number.checked_sub(block_entry.number) else {
@@ -428,43 +422,33 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         let candidate_address = PeerAddress::from_string(request.candidate_id.clone()).unwrap(); //XXX FIXME replace with rpc error
 
-        #[cfg(feature = "rocks")]
-        {
-            let candidate_last_log_index = consensus.log_entries_storage.get_last_index().unwrap();
+        let candidate_last_log_index = consensus.log_entries_storage.get_last_index().unwrap();
 
-            if request.last_log_index >= candidate_last_log_index {
-                consensus.current_term.store(request.term, Ordering::SeqCst);
-                consensus.set_role(Role::Follower);
-                consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
+        if request.last_log_index >= candidate_last_log_index {
+            consensus.current_term.store(request.term, Ordering::SeqCst);
+            consensus.set_role(Role::Follower);
+            consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
 
-                *consensus.voted_for.lock().await = Some(candidate_address.clone());
+            *consensus.voted_for.lock().await = Some(candidate_address.clone());
 
-                tracing::info!(vote_granted = true, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "voted for candidate on election");
-                return Ok(Response::new(RequestVoteResponse {
-                    term: request.term,
-                    vote_granted: true,
-                    message: "success".to_string(),
-                }));
-            }
-
-            #[cfg(feature = "metrics")]
-            metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::REQUEST_VOTE);
-
-            Ok(Response::new(RequestVoteResponse {
+            tracing::info!(vote_granted = true, current_term = current_term, request_term = request.term, candidate_address = %candidate_address, "voted for candidate on election");
+            return Ok(Response::new(RequestVoteResponse {
                 term: request.term,
-                vote_granted: false,
-                message: format!(
-                    "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
-                    request.last_log_index, candidate_last_log_index
-                ),
-            }))
+                vote_granted: true,
+                message: "success".to_string(),
+            }));
         }
-        // TODO remove when rocksdb is not feature flag in consensus
-        #[cfg(not(feature = "rocks"))]
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_consensus_grpc_requests_finished(start.elapsed(), label::REQUEST_VOTE);
+
         Ok(Response::new(RequestVoteResponse {
             term: request.term,
             vote_granted: false,
-            message: format!("index is bellow expectation: last_log_index {}", request.last_log_index),
+            message: format!(
+                "index is bellow expectation: last_log_index {}, last_arrived_block_number {}",
+                request.last_log_index, candidate_last_log_index
+            ),
         }))
     }
 }

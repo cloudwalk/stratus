@@ -1,4 +1,3 @@
-#[cfg(feature = "rocks")]
 #[allow(dead_code)]
 mod append_log_entries_storage;
 mod discovery;
@@ -52,7 +51,6 @@ use append_entry::RequestVoteRequest;
 use append_entry::StatusCode;
 use append_entry::TransactionExecutionEntry;
 
-#[cfg(feature = "rocks")]
 use self::append_log_entries_storage::AppendLogEntriesStorage;
 use self::log_entry::LogEntryData;
 use super::primitives::Bytes;
@@ -171,7 +169,6 @@ pub struct Consensus {
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
     miner: Arc<Miner>,
-    #[cfg(feature = "rocks")]
     log_entries_storage: Arc<AppendLogEntriesStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
     #[allow(dead_code)]
@@ -204,28 +201,19 @@ impl Consensus {
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
 
-        #[cfg(feature = "rocks")]
         let log_entries_storage: Arc<AppendLogEntriesStorage>;
         let current_term: u64;
         let prev_log_index: u64;
-        #[cfg(feature = "rocks")]
         {
             log_entries_storage = Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap());
             current_term = log_entries_storage.get_last_term().unwrap_or(0);
             prev_log_index = log_entries_storage.get_last_index().unwrap_or(0);
         }
 
-        #[cfg(not(feature = "rocks"))]
-        {
-            current_term = 0;
-            prev_log_index = 0;
-        }
-
         let consensus = Self {
             broadcast_sender,
             miner: Arc::clone(&miner),
             storage,
-            #[cfg(feature = "rocks")]
             log_entries_storage,
             peers,
             direct_peers,
@@ -417,15 +405,7 @@ impl Consensus {
             *blockchain_client_lock = None; // clear the blockchain client for safety reasons when not running on importer-online mode
         }
 
-        let last_index: u64;
-        #[cfg(feature = "rocks")]
-        {
-            last_index = self.log_entries_storage.get_last_index().unwrap_or(0);
-        }
-        #[cfg(not(feature = "rocks"))]
-        {
-            last_index = 0;
-        }
+        let last_index: u64 = self.log_entries_storage.get_last_index().unwrap_or(0);
 
         let next_index = last_index + 1;
         // When a node becomes a leader, it should reset the match_index for all peers.
@@ -499,29 +479,26 @@ impl Consensus {
                     let executions = queue.drain(..).collect::<Vec<_>>();
                     drop(queue);
 
-                    #[cfg(feature = "rocks")]
-                    {
-                        tracing::debug!(executions_len = executions.len(), "Processing transaction executions");
-                        let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
-                        tracing::debug!(last_index, "Last index fetched");
+                    tracing::debug!(executions_len = executions.len(), "Processing transaction executions");
+                    let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
+                    tracing::debug!(last_index, "Last index fetched");
 
-                        let current_term = consensus.current_term.load(Ordering::SeqCst);
-                        tracing::debug!(current_term, "Current term loaded");
+                    let current_term = consensus.current_term.load(Ordering::SeqCst);
+                    tracing::debug!(current_term, "Current term loaded");
 
-                        match consensus.log_entries_storage.save_log_entry(
-                            last_index + 1,
-                            current_term,
-                            LogEntryData::TransactionExecutionEntries(executions.clone()),
-                            "transaction",
-                            true,
-                        ) {
-                            Ok(_) => {
-                                consensus.prev_log_index.store(last_index + 1, Ordering::SeqCst);
-                                tracing::debug!("Transaction execution entry saved successfully");
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to save transaction execution entry: {:?}", e);
-                            }
+                    match consensus.log_entries_storage.save_log_entry(
+                        last_index + 1,
+                        current_term,
+                        LogEntryData::TransactionExecutionEntries(executions.clone()),
+                        "transaction",
+                        true,
+                    ) {
+                        Ok(_) => {
+                            consensus.prev_log_index.store(last_index + 1, Ordering::SeqCst);
+                            tracing::debug!("Transaction execution entry saved successfully");
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to save transaction execution entry: {:?}", e);
                         }
                     }
 
@@ -572,43 +549,32 @@ impl Consensus {
                         if Self::is_leader() {
                             tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
 
-                            #[cfg(feature = "rocks")]
-                            {
-                                //TODO: before saving check if all transaction_hashes are already in the log
-                                let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
-                                tracing::debug!(last_index, "Last index fetched");
+                            //TODO: before saving check if all transaction_hashes are already in the log
+                            let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
+                            tracing::debug!(last_index, "Last index fetched");
 
-                                let current_term = consensus.current_term.load(Ordering::SeqCst);
-                                tracing::debug!(current_term, "Current term loaded");
+                            let current_term = consensus.current_term.load(Ordering::SeqCst);
+                            tracing::debug!(current_term, "Current term loaded");
 
-                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.as_fixed_bytes().to_vec()).collect();
+                            let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.as_fixed_bytes().to_vec()).collect();
 
-                                match consensus.log_entries_storage.save_log_entry(
-                                    last_index + 1,
-                                    current_term,
-                                    LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes.clone())),
-                                    "block",
-                                    true
-                                ) {
-                                    Ok(_) => {
-                                        consensus.prev_log_index.store(last_index + 1, Ordering::SeqCst);
-                                        tracing::debug!("Block entry saved successfully");
-                                        let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
-                                        if consensus.broadcast_sender.send(block_entry).is_err() {
-                                            tracing::error!("Failed to broadcast block");
-                                        }
-                                    }
-                                    Err(e) => {
-                                        tracing::error!("Failed to save block entry: {:?}", e);
+                            match consensus.log_entries_storage.save_log_entry(
+                                last_index + 1,
+                                current_term,
+                                LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes.clone())),
+                                "block",
+                                true
+                            ) {
+                                Ok(_) => {
+                                    consensus.prev_log_index.store(last_index + 1, Ordering::SeqCst);
+                                    tracing::debug!("Block entry saved successfully");
+                                    let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
+                                    if consensus.broadcast_sender.send(block_entry).is_err() {
+                                        tracing::error!("Failed to broadcast block");
                                     }
                                 }
-                            }
-                            #[cfg(not(feature = "rocks"))]
-                            {
-                                let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.as_fixed_bytes().to_vec()).collect();
-                                let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
-                                if consensus.broadcast_sender.send(block_entry).is_err() {
-                                    tracing::error!("Failed to broadcast block");
+                                Err(e) => {
+                                    tracing::error!("Failed to save block entry: {:?}", e);
                                 }
                             }
                         }
@@ -729,7 +695,6 @@ impl Consensus {
             tracing::warn!("no appendEntry has been received yet");
             false
         } else {
-            #[cfg(feature = "rocks")]
             {
                 let storage_block_number: u64 = self.storage.read_mined_block_number().unwrap_or_default().into();
 
@@ -748,8 +713,6 @@ impl Consensus {
                     false
                 }
             }
-            #[cfg(not(feature = "rocks"))] // TODO remove this branch when rocksdb is not optional in consensus
-            true
         }
     }
 
@@ -861,111 +824,104 @@ impl Consensus {
     }
 
     async fn append_entry_to_peer(&self, peer: &mut Peer, entry_data: &LogEntryData) -> Result<(), anyhow::Error> {
-        #[cfg(feature = "rocks")]
-        {
-            if !Self::is_leader() {
-                tracing::error!("append_entry_to_peer called on non-leader node");
-                return Err(anyhow!("append_entry_to_peer called on non-leader node"));
-            }
+        if !Self::is_leader() {
+            tracing::error!("append_entry_to_peer called on non-leader node");
+            return Err(anyhow!("append_entry_to_peer called on non-leader node"));
+        }
 
-            let current_term = self.current_term.load(Ordering::SeqCst);
-            let target_index = self.log_entries_storage.get_last_index().unwrap_or(0) + 1;
-            let mut next_index = peer.next_index;
+        let current_term = self.current_term.load(Ordering::SeqCst);
+        let target_index = self.log_entries_storage.get_last_index().unwrap_or(0) + 1;
+        let mut next_index = peer.next_index;
 
-            // Special case when follower has no entries and its next_index is defaulted to leader's last index + 1.
-            // This exists to handle the case of a follower with an empty log
-            if next_index == 0 {
-                next_index = self.log_entries_storage.get_last_index().unwrap_or(0);
-            }
+        // Special case when follower has no entries and its next_index is defaulted to leader's last index + 1.
+        // This exists to handle the case of a follower with an empty log
+        if next_index == 0 {
+            next_index = self.log_entries_storage.get_last_index().unwrap_or(0);
+        }
 
-            while next_index < target_index {
-                let prev_log_index = next_index.saturating_sub(1);
-                let prev_log_term = if prev_log_index == 0 {
-                    0
-                } else {
-                    match self.log_entries_storage.get_entry(prev_log_index) {
-                        Ok(Some(entry)) => entry.term,
-                        Ok(None) => {
-                            tracing::warn!("no log entry found at index {}", prev_log_index);
-                            0
-                        }
-                        Err(e) => {
-                            tracing::error!("error getting log entry at index {}: {:?}", prev_log_index, e);
-                            return Err(anyhow!("error getting log entry"));
-                        }
+        while next_index < target_index {
+            let prev_log_index = next_index.saturating_sub(1);
+            let prev_log_term = if prev_log_index == 0 {
+                0
+            } else {
+                match self.log_entries_storage.get_entry(prev_log_index) {
+                    Ok(Some(entry)) => entry.term,
+                    Ok(None) => {
+                        tracing::warn!("no log entry found at index {}", prev_log_index);
+                        0
                     }
-                };
-
-                let entry_to_send = if next_index < target_index {
-                    match self.log_entries_storage.get_entry(next_index) {
-                        Ok(Some(entry)) => entry.data.clone(),
-                        Ok(None) => {
-                            tracing::error!("no log entry found at index {}", next_index);
-                            return Err(anyhow!("missing log entry"));
-                        }
-                        Err(e) => {
-                            tracing::error!("error getting log entry at index {}: {:?}", next_index, e);
-                            return Err(anyhow!("error getting log entry"));
-                        }
-                    }
-                } else {
-                    entry_data.clone()
-                };
-
-                tracing::info!(
-                    "appending entry to peer: current_term: {}, prev_log_term: {}, prev_log_index: {}, target_index: {}, next_index: {}",
-                    current_term,
-                    prev_log_term,
-                    prev_log_index,
-                    target_index,
-                    next_index
-                );
-
-                let response = self
-                    .send_append_entry_request(peer, current_term, prev_log_index, prev_log_term, &entry_to_send)
-                    .await?;
-
-                let (response_status, _response_message, response_match_log_index, response_last_log_index, _response_last_log_term) = match response {
-                    AppendResponse::BlockCommitResponse(res) => {
-                        let inner: AppendBlockCommitResponse = res.into_inner();
-                        (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
-                    }
-                    AppendResponse::TransactionExecutionsResponse(res) => {
-                        let inner: AppendTransactionExecutionsResponse = res.into_inner();
-                        (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
-                    }
-                };
-
-                match StatusCode::try_from(response_status) {
-                    Ok(StatusCode::AppendSuccess) => {
-                        peer.match_index = response_match_log_index;
-                        peer.next_index = response_match_log_index + 1;
-                        tracing::info!(
-                            "successfully appended entry to peer: match_index: {}, next_index: {}",
-                            peer.match_index,
-                            peer.next_index
-                        );
-                        next_index += 1;
-                    }
-                    Ok(StatusCode::LogMismatch | StatusCode::TermMismatch) => {
-                        tracing::warn!(
-                            "failed to append entry due to log mismatch or term mismatch. Peer last log index: {}",
-                            response_last_log_index
-                        );
-                        next_index = response_last_log_index + 1;
-                    }
-                    _ => {
-                        tracing::error!("failed to append entry due to unexpected status code");
-                        return Err(anyhow!("failed to append entry due to unexpected status code"));
+                    Err(e) => {
+                        tracing::error!("error getting log entry at index {}: {:?}", prev_log_index, e);
+                        return Err(anyhow!("error getting log entry"));
                     }
                 }
+            };
+
+            let entry_to_send = if next_index < target_index {
+                match self.log_entries_storage.get_entry(next_index) {
+                    Ok(Some(entry)) => entry.data.clone(),
+                    Ok(None) => {
+                        tracing::error!("no log entry found at index {}", next_index);
+                        return Err(anyhow!("missing log entry"));
+                    }
+                    Err(e) => {
+                        tracing::error!("error getting log entry at index {}: {:?}", next_index, e);
+                        return Err(anyhow!("error getting log entry"));
+                    }
+                }
+            } else {
+                entry_data.clone()
+            };
+
+            tracing::info!(
+                "appending entry to peer: current_term: {}, prev_log_term: {}, prev_log_index: {}, target_index: {}, next_index: {}",
+                current_term,
+                prev_log_term,
+                prev_log_index,
+                target_index,
+                next_index
+            );
+
+            let response = self
+                .send_append_entry_request(peer, current_term, prev_log_index, prev_log_term, &entry_to_send)
+                .await?;
+
+            let (response_status, _response_message, response_match_log_index, response_last_log_index, _response_last_log_term) = match response {
+                AppendResponse::BlockCommitResponse(res) => {
+                    let inner: AppendBlockCommitResponse = res.into_inner();
+                    (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
+                }
+                AppendResponse::TransactionExecutionsResponse(res) => {
+                    let inner: AppendTransactionExecutionsResponse = res.into_inner();
+                    (inner.status, inner.message, inner.match_log_index, inner.last_log_index, inner.last_log_term)
+                }
+            };
+
+            match StatusCode::try_from(response_status) {
+                Ok(StatusCode::AppendSuccess) => {
+                    peer.match_index = response_match_log_index;
+                    peer.next_index = response_match_log_index + 1;
+                    tracing::info!(
+                        "successfully appended entry to peer: match_index: {}, next_index: {}",
+                        peer.match_index,
+                        peer.next_index
+                    );
+                    next_index += 1;
+                }
+                Ok(StatusCode::LogMismatch | StatusCode::TermMismatch) => {
+                    tracing::warn!(
+                        "failed to append entry due to log mismatch or term mismatch. Peer last log index: {}",
+                        response_last_log_index
+                    );
+                    next_index = response_last_log_index + 1;
+                }
+                _ => {
+                    tracing::error!("failed to append entry due to unexpected status code");
+                    return Err(anyhow!("failed to append entry due to unexpected status code"));
+                }
             }
-            Ok(())
         }
-        #[cfg(not(feature = "rocks"))]
-        {
-            Ok(())
-        }
+        Ok(())
     }
 
     async fn send_append_entry_request(
