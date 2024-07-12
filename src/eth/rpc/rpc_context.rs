@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use crate::eth::evm::Executor;
 use crate::eth::primitives::ChainId;
 use crate::eth::rpc::rpc_client_app::RpcClientApp;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
@@ -10,7 +11,6 @@ use crate::eth::rpc::RpcError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::BlockMiner;
 use crate::eth::Consensus;
-use crate::eth::Executor;
 
 pub struct RpcContext {
     // blockchain config
