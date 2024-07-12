@@ -26,8 +26,7 @@ use crate::eth::storage::TemporaryStorageConfig;
 use crate::eth::TransactionRelayer;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
-use crate::infra::tracing::TracingLogFormat;
-use crate::infra::tracing::TracingProtocol;
+use crate::infra::tracing::TracingConfig;
 use crate::infra::BlockchainClient;
 
 /// Loads .env files according to the binary and environment.
@@ -155,21 +154,6 @@ impl CommonConfig {
             }
         }
     }
-}
-
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
-pub struct TracingConfig {
-    #[arg(long = "tracing-log-format", env = "TRACING_LOG_FORMAT", default_value = "normal")]
-    pub tracing_log_format: TracingLogFormat,
-
-    #[arg(long = "tracing-url", alias = "tracing-collector-url", env = "TRACING_URL")]
-    pub tracing_url: Option<String>,
-
-    #[arg(long = "tracing-headers", env = "TRACING_HEADERS", value_delimiter = ',')]
-    pub tracing_headers: Vec<String>,
-
-    #[arg(long = "tracing-protocol", env = "TRACING_PROTOCOL", default_value = "grpc")]
-    pub tracing_protocol: TracingProtocol,
 }
 
 // -----------------------------------------------------------------------------

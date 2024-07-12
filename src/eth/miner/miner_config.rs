@@ -1,10 +1,11 @@
+use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use clap::Parser;
 use display_json::DebugAsJson;
 
 use crate::eth::miner::Miner;
-use crate::eth::miner::MinerMode;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Block;
@@ -12,6 +13,11 @@ use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::StratusStorage;
+use crate::ext::parse_duration;
+
+// -----------------------------------------------------------------------------
+// Config
+// -----------------------------------------------------------------------------
 
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct MinerConfig {
@@ -73,5 +79,37 @@ impl MinerConfig {
         }
 
         Ok(miner)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Mode
+// -----------------------------------------------------------------------------
+
+/// Indicates when the miner will mine new blocks.
+#[derive(Debug, Clone, Copy, strum::EnumIs, serde::Serialize)]
+pub enum MinerMode {
+    /// Mines a new block for each transaction execution.
+    Automine,
+
+    /// Mines a new block at specified interval.
+    Interval(Duration),
+
+    /// Does not automatically mines a new block. A call to `mine_*` must be executed to mine a new block.
+    External,
+}
+
+impl FromStr for MinerMode {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s {
+            "automine" => Ok(Self::Automine),
+            "external" => Ok(Self::External),
+            s => {
+                let block_time = parse_duration(s)?;
+                Ok(Self::Interval(block_time))
+            }
+        }
     }
 }
