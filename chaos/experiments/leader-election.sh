@@ -145,7 +145,9 @@ find_leader() {
         fi
     done
 
-    echo "${leaders[@]}"
+    if [ ${#leaders[@]} -gt 0 ]; then
+        echo "${leaders[@]}"
+    fi
 }
 
 # Function to run the election test
@@ -255,7 +257,7 @@ run_test() {
         echo "Killing the leader instance on address $leader_port..."
         for i in "${!leader_ports[@]}"; do
             if [ "${leader_ports[i]}" == "$leader_port" ]; then
-                killport --quiet ${ports[i]}
+                killport --quiet $leader_port
                 break
             fi
         done
