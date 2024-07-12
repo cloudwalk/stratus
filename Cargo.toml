@@ -202,10 +202,11 @@ request-replication-test-receiver = []
 # ------------------------------------------------------------------------------
 
 [lints.clippy]
-cloned_instead_of_copied = "warn"
 clone_on_ref_ptr = "warn"
+cloned_instead_of_copied = "warn"
 disallowed_names = "warn"
 manual_let_else = "warn"
 semicolon_if_nothing_returned = "warn"
-wildcard_imports = "warn"
 unused_async = "warn"
+used_underscore_binding = "warn"
+wildcard_imports = "warn"

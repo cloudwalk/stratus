@@ -839,7 +839,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty);
-    let _method_enter = method_span.enter();
+    let method_enter = method_span.enter();
 
     // parse params
     ctx.reject_unknown_client(ext.rpc_client())?;
@@ -847,7 +847,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     let (params, event) = match next_rpc_param::<String>(params.sequence()) {
         Ok((params, event)) => (params, event),
         Err(e) => {
-            drop(_method_enter);
+            drop(method_enter);
             pending.reject(e).instrument(method_span).await;
             return Ok(());
         }
@@ -860,25 +860,25 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     // execute
     match event.deref() {
         "newPendingTransactions" => {
-            drop(_method_enter);
+            drop(method_enter);
             ctx.subs.add_new_pending_txs(client, pending.accept().await?).instrument(method_span).await;
         }
 
         "newHeads" => {
-            drop(_method_enter);
+            drop(method_enter);
             ctx.subs.add_new_heads(client, pending.accept().await?).instrument(method_span).await;
         }
 
         "logs" => {
             let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
             let filter = filter.parse(&ctx.storage)?;
-            drop(_method_enter);
+            drop(method_enter);
             ctx.subs.add_logs(client, filter, pending.accept().await?).instrument(method_span).await;
         }
 
         // unsupported
         event => {
-            drop(_method_enter);
+            drop(method_enter);
             pending
                 .reject(RpcError::SubscriptionInvalid { event: event.to_string() })
                 .instrument(method_span)

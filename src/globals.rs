@@ -59,7 +59,7 @@ where
         infra::init_metrics(common.metrics_exporter_address).expect("failed to init metrics");
 
         // init sentry
-        let _sentry_guard = common
+        let sentry_guard = common
             .sentry_url
             .as_ref()
             .map(|sentry_url| infra::init_sentry(sentry_url, common.env).expect("failed to init sentry"));
@@ -70,7 +70,7 @@ where
         Self {
             config,
             runtime,
-            _sentry_guard,
+            _sentry_guard: sentry_guard,
         }
     }
 }
