@@ -3,14 +3,14 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use crate::eth::executor::Executor;
+use crate::eth::miner::Miner;
 use crate::eth::primitives::ChainId;
 use crate::eth::rpc::rpc_client_app::RpcClientApp;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
 use crate::eth::rpc::RpcError;
 use crate::eth::storage::StratusStorage;
-use crate::eth::BlockMiner;
 use crate::eth::Consensus;
-use crate::eth::Executor;
 
 pub struct RpcContext {
     // blockchain config
@@ -26,7 +26,7 @@ pub struct RpcContext {
     // services
     pub executor: Arc<Executor>,
     #[allow(dead_code)] // HACK this was triggered in Rust 1.79
-    pub miner: Arc<BlockMiner>,
+    pub miner: Arc<Miner>,
     pub storage: Arc<StratusStorage>,
     pub consensus: Arc<Consensus>,
     pub subs: Arc<RpcSubscriptionsConnected>,

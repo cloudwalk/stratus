@@ -29,6 +29,8 @@ use tracing::info_span;
 use tracing::Instrument;
 use tracing::Span;
 
+use crate::eth::executor::Executor;
+use crate::eth::miner::Miner;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 #[cfg(feature = "dev")]
@@ -52,9 +54,7 @@ use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
-use crate::eth::BlockMiner;
 use crate::eth::Consensus;
-use crate::eth::Executor;
 use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
@@ -74,7 +74,7 @@ pub async fn serve_rpc(
     // services
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
-    miner: Arc<BlockMiner>,
+    miner: Arc<Miner>,
     consensus: Arc<Consensus>,
     // config
     address: SocketAddr,
@@ -126,6 +126,7 @@ pub async fn serve_rpc(
         .layer(ProxyGetRequestLayer::new("/startup", "stratus_startup").unwrap())
         .layer(ProxyGetRequestLayer::new("/readiness", "stratus_readiness").unwrap())
         .layer(ProxyGetRequestLayer::new("/liveness", "stratus_liveness").unwrap())
+        .layer(ProxyGetRequestLayer::new("/health", "stratus_health").unwrap())
         .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap());
 
     // serve module
@@ -170,6 +171,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_startup", stratus_startup)?;
     module.register_async_method("stratus_readiness", stratus_readiness)?;
     module.register_method("stratus_liveness", stratus_liveness)?;
+    module.register_async_method("stratus_health", stratus_health)?;
     module.register_method("stratus_version", stratus_version)?;
 
     // stratus state
@@ -279,6 +281,26 @@ async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extension
 fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
     if GlobalState::is_shutdown() {
         tracing::warn!("liveness check failed because of shutdown");
+        return Err(RpcError::StratusShutdown);
+    }
+
+    Ok(json!(true))
+}
+
+/// If stratus is ready and able to receive traffic.
+///
+/// This is a mix of `readiness` and `liveness`, should be `true` when `readiness` would first
+/// return `true`, and false again when `liveness` would start to return `false`.
+async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, RpcError> {
+    let should_serve = context.consensus.should_serve().await;
+    if not(should_serve) {
+        tracing::warn!("health check failed because consensus is not ready");
+        metrics::set_consensus_is_ready(0_u64);
+        return Err(RpcError::StratusNotReady);
+    }
+
+    if GlobalState::is_shutdown() {
+        tracing::warn!("health check failed because of shutdown");
         return Err(RpcError::StratusShutdown);
     }
 

@@ -57,8 +57,8 @@ use self::log_entry::LogEntry;
 use self::log_entry::LogEntryData;
 use super::primitives::Bytes;
 use super::primitives::TransactionExecution;
-use super::BlockMiner;
 use crate::config::RunWithImporterConfig;
+use crate::eth::miner::Miner;
 use crate::eth::primitives::Block;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -170,7 +170,7 @@ pub struct Consensus {
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
     importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
-    miner: Arc<BlockMiner>,
+    miner: Arc<Miner>,
     #[cfg(feature = "rocks")]
     log_entries_storage: Arc<AppendLogEntriesStorage>,
     peers: Arc<RwLock<HashMap<PeerAddress, PeerTuple>>>,
@@ -192,7 +192,7 @@ impl Consensus {
     #[allow(clippy::too_many_arguments)] //TODO: refactor into consensus config
     pub async fn new(
         storage: Arc<StratusStorage>,
-        miner: Arc<BlockMiner>,
+        miner: Arc<Miner>,
         log_storage_path: Option<String>,
         direct_peers: Vec<String>,
         importer_config: Option<RunWithImporterConfig>,

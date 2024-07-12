@@ -16,11 +16,11 @@ use super::append_entry::AppendTransactionExecutionsResponse;
 use super::append_entry::RequestVoteRequest;
 use super::append_entry::RequestVoteResponse;
 use super::append_entry::StatusCode;
-use crate::eth::block_miner::block_from_propagation;
 use crate::eth::consensus::AppendEntryService;
 use crate::eth::consensus::LogEntryData;
 use crate::eth::consensus::PeerAddress;
 use crate::eth::consensus::Role;
+use crate::eth::miner::block_from_propagation;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::Consensus;
@@ -371,10 +371,13 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 Ok(_) => {
                     tracing::info!(block_number = %block.header.number, "block saved successfully");
                 }
-                Err(err) => {
-                    tracing::error!("failed to save block: {:?}", err);
-                    return Err(Status::internal("failed to save block"));
-                }
+                Err(err) =>
+                    if err.to_string() == "block to save is not on the correct order" {
+                        tracing::error!(block_number = %block.header.number, "failed to save block: block is not in the correct order. Skipping saving block because it has already been saved");
+                    } else {
+                        tracing::error!(block_number = %block.header.number, "failed to save block: {:?}", err);
+                        return Err(Status::internal("failed to save block"));
+                    },
             },
             Err(err) => {
                 tracing::error!("failed to parse block: {:?}", err);

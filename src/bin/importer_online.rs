@@ -9,14 +9,14 @@ use futures::StreamExt;
 use serde::Deserialize;
 use stratus::channel_read;
 use stratus::config::ImporterOnlineConfig;
+use stratus::eth::executor::Executor;
+use stratus::eth::miner::Miner;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::Hash;
 use stratus::eth::storage::StratusStorage;
-use stratus::eth::BlockMiner;
-use stratus::eth::Executor;
 use stratus::ext::spawn_named;
 use stratus::ext::traced_sleep;
 use stratus::ext::DisplayExt;
@@ -103,7 +103,7 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
 
 pub async fn run_importer_online(
     executor: Arc<Executor>,
-    miner: Arc<BlockMiner>,
+    miner: Arc<Miner>,
     storage: Arc<StratusStorage>,
     chain: Arc<BlockchainClient>,
     sync_interval: Duration,
@@ -143,7 +143,7 @@ pub async fn run_importer_online(
 // Executes external blocks and persist them to storage.
 async fn start_block_executor(
     executor: Arc<Executor>,
-    miner: Arc<BlockMiner>,
+    miner: Arc<Miner>,
     mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "block-executor";

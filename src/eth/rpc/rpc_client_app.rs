@@ -30,11 +30,15 @@ impl RpcClientApp {
             return RpcClientApp::Unknown;
         }
         let name = match name {
-            n if n.starts_with("banking") || n.starts_with("balance") => format!("banking::{}", n),
-            n if n.starts_with("issuing") || n.starts_with("infinitecard") => format!("issuing::{}", n),
-            n if n.starts_with("lending") => format!("lending::{}", n),
-            n if n == "blockscout" || n == "golani" || n == "tx-replayer" => format!("infra::{}", n),
-            n => format!("other::{}", n),
+            v if v.starts_with("banking") || v.starts_with("balance") => format!("banking::{}", v),
+            v if v.starts_with("issuing") || v.starts_with("infinitecard") => format!("issuing::{}", v),
+            v if v.starts_with("lending") => format!("lending::{}", v),
+            v if v == "blockscout" || v == "golani" || v == "tx-replayer" => format!("infra::{}", v),
+            v if v.starts_with("user-") => {
+                let v = v.trim_start_matches("user-");
+                format!("user::{}", v)
+            }
+            v => format!("other::{}", v),
         };
         RpcClientApp::Identified(name)
     }
