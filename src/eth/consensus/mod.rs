@@ -527,6 +527,11 @@ impl Consensus {
                     let peers = consensus.peers.read().await;
                     for (_, (peer, _)) in peers.iter() {
                         let mut peer_clone = peer.clone();
+                        tracing::info!(
+                            "sending transaction executions to peer: peer.match_index: {:?}, peer.next_index: {:?}",
+                            peer.match_index,
+                            peer.next_index
+                        );
                         let _ = consensus
                             .append_entry_to_peer(&mut peer_clone, &LogEntryData::TransactionExecutionEntries(executions.clone()))
                             .await;
@@ -876,6 +881,15 @@ impl Consensus {
             if next_index == 0 {
                 next_index = self.log_entries_storage.get_last_index().unwrap_or(0);
             }
+
+            tracing::info!(
+                "appending entry to peer: current_term: {}, target_index: {}, next_index: {}, peer.next_index: {}, peer.match_index: {}",
+                current_term,
+                target_index,
+                next_index,
+                peer.next_index,
+                peer.match_index
+            );
 
             while next_index < target_index {
                 let prev_log_index = next_index.saturating_sub(1);
