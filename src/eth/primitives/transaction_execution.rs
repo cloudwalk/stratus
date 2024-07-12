@@ -8,7 +8,8 @@ use ethereum_types::U64;
 
 use super::Gas;
 use crate::eth::consensus::append_entry;
-use crate::eth::consensus::utils::*;
+use crate::eth::consensus::utils::bytes_to_u256;
+use crate::eth::consensus::utils::u256_to_bytes;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
