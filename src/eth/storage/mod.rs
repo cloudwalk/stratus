@@ -4,7 +4,6 @@ mod external_rpc_storage;
 mod inmemory;
 mod permanent_storage;
 mod postgres_external_rpc;
-#[cfg(feature = "rocks")]
 pub mod rocks;
 
 mod storage_error;
@@ -22,7 +21,6 @@ pub use permanent_storage::PermanentStorageConfig;
 pub use permanent_storage::PermanentStorageKind;
 pub use postgres_external_rpc::PostgresExternalRpcStorage;
 pub use postgres_external_rpc::PostgresExternalRpcStorageConfig;
-#[cfg(feature = "rocks")]
 pub use rocks::rocks_permanent::RocksPermanentStorage;
 pub use storage_error::StorageError;
 pub use stratus_storage::StratusStorage;

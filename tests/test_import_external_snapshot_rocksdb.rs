@@ -1,6 +1,5 @@
 mod test_import_external_snapshot_common;
 
-#[cfg(feature = "rocks")]
 pub mod rocks_test {
     use stratus::eth::storage::PermanentStorage;
     use stratus::eth::storage::RocksPermanentStorage;
