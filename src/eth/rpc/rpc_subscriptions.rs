@@ -160,7 +160,7 @@ impl RpcSubscriptions {
                     subs_lock.values().map(|s| Arc::clone(&s.sink)).collect_vec()
                 };
 
-                Self::notify(interested_subs, tx.hash().to_string()).await;
+                Self::notify(interested_subs, tx.hash().to_string());
             }
             Ok(())
         })
@@ -185,7 +185,7 @@ impl RpcSubscriptions {
                     subs_lock.values().map(|s| Arc::clone(&s.sink)).collect_vec()
                 };
 
-                Self::notify(interested_subs, block.header).await;
+                Self::notify(interested_subs, block.header);
             }
             Ok(())
         })
@@ -214,7 +214,7 @@ impl RpcSubscriptions {
                         .collect_vec()
                 };
 
-                Self::notify(interested_subs, log).await;
+                Self::notify(interested_subs, log);
             }
             Ok(())
         })
@@ -224,7 +224,7 @@ impl RpcSubscriptions {
     // Helpers
     // -------------------------------------------------------------------------
 
-    async fn notify(subs: Vec<Arc<SubscriptionSink>>, msg: impl Into<SubscriptionMessage>) {
+    fn notify(subs: Vec<Arc<SubscriptionSink>>, msg: impl Into<SubscriptionMessage>) {
         if subs.is_empty() {
             return;
         }

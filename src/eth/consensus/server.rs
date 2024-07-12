@@ -477,7 +477,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_transaction_executions_insert() {
-        let consensus = create_mock_consensus().await;
+        let consensus = create_mock_consensus();
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -511,7 +511,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_transaction_executions_not_leader() {
-        let consensus = create_leader_consensus().await;
+        let consensus = create_leader_consensus();
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -538,7 +538,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_transaction_executions_leader() {
-        let consensus = create_leader_consensus().await;
+        let consensus = create_leader_consensus();
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -595,7 +595,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_append_block_commit_leader() {
-        let consensus = create_leader_consensus().await;
+        let consensus = create_leader_consensus();
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
@@ -624,7 +624,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_request_vote() {
-        let consensus = create_leader_consensus().await;
+        let consensus = create_leader_consensus();
         let service = AppendEntryServiceImpl {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };

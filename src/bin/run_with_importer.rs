@@ -30,8 +30,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         Some(config.clone()),
         config.address,
         config.grpc_server_address,
-    )
-    .await; // in development, with no leader configured, the current node ends up being the leader
+    ); // in development, with no leader configured, the current node ends up being the leader
     let (http_url, ws_url) = consensus.get_chain_url().await.expect("chain url not found");
     let chain = Arc::new(BlockchainClient::new_http_ws(&http_url, ws_url.as_deref(), config.online.external_rpc_timeout).await?);
 

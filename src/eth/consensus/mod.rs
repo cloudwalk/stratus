@@ -190,7 +190,7 @@ pub struct Consensus {
 
 impl Consensus {
     #[allow(clippy::too_many_arguments)] //TODO: refactor into consensus config
-    pub async fn new(
+    pub fn new(
         storage: Arc<StratusStorage>,
         miner: Arc<Miner>,
         log_storage_path: Option<String>,

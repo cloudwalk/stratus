@@ -107,7 +107,7 @@ pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEn
     LogEntry { index, term, data }
 }
 
-pub async fn create_mock_consensus() -> Arc<Consensus> {
+pub fn create_mock_consensus() -> Arc<Consensus> {
     let (storage, _tmpdir) = StratusStorage::mock_new_rocksdb();
     storage.set_pending_block_number_as_next_if_not_set().unwrap();
     let (_log_entries_storage, tmpdir_log_entries) = StratusStorage::mock_new_rocksdb();
@@ -134,7 +134,6 @@ pub async fn create_mock_consensus() -> Arc<Consensus> {
         jsonrpc_address,
         grpc_address,
     )
-    .await
 }
 
 use tonic::service::Interceptor;
@@ -151,7 +150,7 @@ impl Interceptor for MockInterceptor {
     }
 }
 
-async fn create_mock_leader_peer(consensus: Arc<Consensus>) -> (PeerAddress, Peer) {
+fn create_mock_leader_peer(consensus: Arc<Consensus>) -> (PeerAddress, Peer) {
     let leader_address = PeerAddress::from_string("http://127.0.0.1:3000;3777".to_string()).unwrap();
     let client = MockAppendEntryServiceClient::new();
     let leader_peer = Peer {
@@ -165,14 +164,14 @@ async fn create_mock_leader_peer(consensus: Arc<Consensus>) -> (PeerAddress, Pee
 }
 
 pub async fn create_follower_consensus_with_leader(term: Option<u64>) -> Arc<Consensus> {
-    let consensus = create_mock_consensus().await;
+    let consensus = create_mock_consensus();
     consensus.set_role(Role::Follower);
 
     if let Some(term) = term {
         consensus.current_term.store(term, Ordering::SeqCst);
     }
 
-    let (leader_address, leader_peer) = create_mock_leader_peer(Arc::clone(&consensus)).await;
+    let (leader_address, leader_peer) = create_mock_leader_peer(Arc::clone(&consensus));
 
     let mut peers = consensus.peers.write().await;
     peers.insert(leader_address, (leader_peer, tokio::spawn(async {})));
@@ -181,8 +180,8 @@ pub async fn create_follower_consensus_with_leader(term: Option<u64>) -> Arc<Con
     Arc::clone(&consensus)
 }
 
-pub async fn create_leader_consensus() -> Arc<Consensus> {
-    let consensus = create_mock_consensus().await;
+pub fn create_leader_consensus() -> Arc<Consensus> {
+    let consensus = create_mock_consensus();
     consensus.set_role(Role::Leader);
     zero_global_counter();
     consensus
@@ -198,6 +197,7 @@ impl MockAppendEntryServiceClient {
         MockAppendEntryServiceClient
     }
 
+    #[allow(clippy::unused_async)]
     pub async fn append_transaction_executions(
         &mut self,
         _request: impl tonic::IntoRequest<super::AppendTransactionExecutionsRequest>,
@@ -211,6 +211,7 @@ impl MockAppendEntryServiceClient {
         }))
     }
 
+    #[allow(clippy::unused_async)]
     pub async fn append_block_commit(
         &mut self,
         _request: impl tonic::IntoRequest<super::AppendBlockCommitRequest>,
@@ -224,6 +225,7 @@ impl MockAppendEntryServiceClient {
         }))
     }
 
+    #[allow(clippy::unused_async)]
     pub async fn request_vote(
         &mut self,
         _request: impl tonic::IntoRequest<super::RequestVoteRequest>,
