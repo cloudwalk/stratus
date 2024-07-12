@@ -25,8 +25,10 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::PermanentStorageConfig;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::storage::TemporaryStorageConfig;
+use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
@@ -341,27 +343,22 @@ impl StratusStorage {
 
     pub fn save_block(&self, block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "tracing")]
+        let block_number = block.number();
         let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
-        tracing::debug!(storage = %label::PERM, block_number = %block.number(), transactions_len = %block.transactions.len(), "saving block");
+        tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), "saving block");
 
-        let new_block_number = block.number();
-        let last_mined_block_number = self.perm.read_mined_block_number()?;
-
-        // check permanent storage block number
-        if new_block_number > BlockNumber::ZERO && new_block_number != last_mined_block_number + 1 {
-            let gap_size = new_block_number.as_i64() - last_mined_block_number.as_i64();
-            tracing::error!(?new_block_number, ?last_mined_block_number, gap_size);
-            return Err(anyhow!("block to save is not on the correct order"));
+        // check mined number
+        let mined_number = self.perm.read_mined_block_number()?;
+        if not(block_number.is_zero()) && block_number != mined_number.next() {
+            tracing::error!(%block_number, %mined_number, "failed to save block because of mismatch with mined block number");
+            return Err(StorageError::new_mined_number_mismatch(block_number, mined_number).into());
         }
 
-        // check temporary storage block number, if set
-        if let Some(pending_block_number) = self.temp.read_pending_block_number()? {
-            if new_block_number.as_i64() != pending_block_number.as_i64() - 1 {
-                tracing::warn!(
-                    ?new_block_number,
-                    ?pending_block_number,
-                    "block to save isn't predecessor of the pending block number in temporary storage, didn't it increment its number?",
-                );
+        // check pending number
+        if let Some(pending_number) = self.temp.read_pending_block_number()? {
+            if block_number >= pending_number {
+                tracing::error!(%pending_number, %mined_number, "failed to save block because of mismatch with pending block number");
+                return Err(StorageError::new_pending_number_mismatch(block_number, mined_number).into());
             }
         }
 
