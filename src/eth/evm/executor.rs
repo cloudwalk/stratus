@@ -6,11 +6,11 @@ use anyhow::anyhow;
 use tracing::info_span;
 use tracing::Span;
 
-use crate::config::ExecutorConfig;
-use crate::eth::evm::revm::Revm;
 use crate::eth::evm::Evm;
 use crate::eth::evm::EvmExecutionResult;
 use crate::eth::evm::EvmInput;
+use crate::eth::evm::ExecutorConfig;
+use crate::eth::evm::Revm;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
