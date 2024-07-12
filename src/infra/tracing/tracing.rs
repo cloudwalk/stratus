@@ -9,12 +9,10 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::thread::Thread;
 
-use anyhow::anyhow;
 use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
 use console_subscriber::ConsoleLayer;
-use display_json::DebugAsJson;
 use itertools::Itertools;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::Protocol;
@@ -48,13 +46,15 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
-use crate::config::TracingConfig;
 use crate::ext::not;
 use crate::ext::spawn_named;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
 use crate::infra::build_info;
+use crate::infra::tracing::TracingConfig;
+use crate::infra::tracing::TracingLogFormat;
+use crate::infra::tracing::TracingProtocol;
 
 /// Init application tracing.
 pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, tokio_console_address: SocketAddr) -> anyhow::Result<()> {
@@ -211,86 +211,6 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
         .with_batch_config(batch_config)
         .install_batch(runtime::Tokio)
         .unwrap()
-}
-
-// -----------------------------------------------------------------------------
-// Tracing config
-// -----------------------------------------------------------------------------
-
-/// Tracing event log format.
-#[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
-pub enum TracingLogFormat {
-    /// Minimal format: Time (no date), level, and message.
-    #[serde(rename = "minimal")]
-    #[strum(to_string = "minimal")]
-    Minimal,
-
-    /// Normal format: Default `tracing` crate configuration.
-    #[serde(rename = "normal")]
-    #[strum(to_string = "normal")]
-    Normal,
-
-    /// Verbose format: Full datetime, level, thread, target, and message.
-    #[serde(rename = "verbose")]
-    #[strum(to_string = "verbose")]
-    Verbose,
-
-    /// JSON format: Verbose information formatted as JSON.
-    #[serde(rename = "json")]
-    #[strum(to_string = "json")]
-    Json,
-}
-
-impl FromStr for TracingLogFormat {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s.to_lowercase().trim() {
-            "json" => Ok(Self::Json),
-            "minimal" => Ok(Self::Minimal),
-            "normal" => Ok(Self::Normal),
-            "verbose" | "full" => Ok(Self::Verbose),
-            s => Err(anyhow!("unknown log format: {}", s)),
-        }
-    }
-}
-
-#[derive(DebugAsJson, strum::Display, Clone, Copy, Eq, PartialEq, serde::Serialize)]
-pub enum TracingProtocol {
-    #[serde(rename = "grpc")]
-    #[strum(to_string = "grpc")]
-    Grpc,
-
-    #[serde(rename = "http-binary")]
-    #[strum(to_string = "http-binary")]
-    HttpBinary,
-
-    #[serde(rename = "http-json")]
-    #[strum(to_string = "http-json")]
-    HttpJson,
-}
-
-impl FromStr for TracingProtocol {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s.to_lowercase().trim() {
-            "grpc" => Ok(Self::Grpc),
-            "http-binary" => Ok(Self::HttpBinary),
-            "http-json" => Ok(Self::HttpJson),
-            s => Err(anyhow!("unknown tracing protocol: {}", s)),
-        }
-    }
-}
-
-impl From<TracingProtocol> for Protocol {
-    fn from(value: TracingProtocol) -> Self {
-        match value {
-            TracingProtocol::Grpc => Self::Grpc,
-            TracingProtocol::HttpBinary => Self::HttpBinary,
-            TracingProtocol::HttpJson => Self::HttpJson,
-        }
-    }
 }
 
 // -----------------------------------------------------------------------------
