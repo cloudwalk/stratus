@@ -19,16 +19,10 @@ use crate::eth::miner::MinerConfig;
 use crate::eth::primitives::Address;
 use crate::eth::relayer::ExternalRelayer;
 use crate::eth::relayer::ExternalRelayerClient;
-use crate::eth::storage::ExternalRpcStorage;
-use crate::eth::storage::InMemoryPermanentStorage;
-use crate::eth::storage::InMemoryTemporaryStorage;
-use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::PostgresExternalRpcStorage;
-use crate::eth::storage::PostgresExternalRpcStorageConfig;
-#[cfg(feature = "rocks")]
-use crate::eth::storage::RocksPermanentStorage;
+use crate::eth::storage::ExternalRpcStorageConfig;
+use crate::eth::storage::PermanentStorageConfig;
 use crate::eth::storage::StratusStorage;
-use crate::eth::storage::TemporaryStorage;
+use crate::eth::storage::TemporaryStorageConfig;
 use crate::eth::TransactionRelayer;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
@@ -604,60 +598,6 @@ impl WithCommonConfig for IntegrationTestConfig {
 }
 
 // -----------------------------------------------------------------------------
-// Config: ExternalRpcStorage
-// -----------------------------------------------------------------------------
-
-/// External RPC storage configuration.
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
-pub struct ExternalRpcStorageConfig {
-    /// External RPC storage implementation.
-    #[arg(long = "external-rpc-storage", env = "EXTERNAL_RPC_STORAGE")]
-    pub external_rpc_storage_kind: ExternalRpcStorageKind,
-
-    /// External RPC storage number of parallel open connections.
-    #[arg(long = "external-rpc-storage-connections", env = "EXTERNAL_RPC_STORAGE_CONNECTIONS")]
-    pub external_rpc_storage_connections: u32,
-
-    /// External RPC storage timeout when opening a connection.
-    #[arg(long = "external-rpc-storage-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_STORAGE_TIMEOUT")]
-    pub external_rpc_storage_timeout: Duration,
-}
-
-#[derive(DebugAsJson, Clone, serde::Serialize)]
-pub enum ExternalRpcStorageKind {
-    Postgres { url: String },
-}
-
-impl ExternalRpcStorageConfig {
-    /// Initializes external rpc storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpcStorage>> {
-        tracing::info!(config = ?self, "creating external rpc storage");
-
-        match self.external_rpc_storage_kind {
-            ExternalRpcStorageKind::Postgres { ref url } => {
-                let config = PostgresExternalRpcStorageConfig {
-                    url: url.to_owned(),
-                    connections: self.external_rpc_storage_connections,
-                    acquire_timeout: self.external_rpc_storage_timeout,
-                };
-                Ok(Arc::new(PostgresExternalRpcStorage::new(config).await?))
-            }
-        }
-    }
-}
-
-impl FromStr for ExternalRpcStorageKind {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s {
-            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
-            s => Err(anyhow!("unknown external rpc storage: {}", s)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
 // Config: ExternalRelayer
 // -----------------------------------------------------------------------------
 
@@ -702,98 +642,6 @@ impl FromStr for Environment {
             "staging" | "test" => Ok(Self::Staging),
             "production" | "prod" => Ok(Self::Production),
             s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enum: TemporaryStorageConfig
-// -----------------------------------------------------------------------------
-
-/// Temporary storage configuration.
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct TemporaryStorageConfig {
-    /// Temporary storage implementation.
-    #[arg(long = "temp-storage", env = "TEMP_STORAGE")]
-    pub temp_storage_kind: TemporaryStorageKind,
-}
-
-#[derive(DebugAsJson, Clone, serde::Serialize)]
-pub enum TemporaryStorageKind {
-    InMemory,
-}
-
-impl TemporaryStorageConfig {
-    /// Initializes temporary storage implementation.
-    pub fn init(&self) -> anyhow::Result<Box<dyn TemporaryStorage>> {
-        tracing::info!(config = ?self, "creating temporary storage");
-
-        match self.temp_storage_kind {
-            TemporaryStorageKind::InMemory => Ok(Box::<InMemoryTemporaryStorage>::default()),
-        }
-    }
-}
-
-impl FromStr for TemporaryStorageKind {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s {
-            "inmemory" => Ok(Self::InMemory),
-            s => Err(anyhow!("unknown temporary storage: {}", s)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enum: PermanentStorageConfig
-// -----------------------------------------------------------------------------
-
-/// Permanent storage configuration.
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
-pub struct PermanentStorageConfig {
-    /// Permamenent storage implementation.
-    #[arg(long = "perm-storage", env = "PERM_STORAGE")]
-    pub perm_storage_kind: PermanentStorageKind,
-
-    /// RocksDB storage path prefix to execute multiple local Stratus instances.
-    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
-    pub rocks_path_prefix: Option<String>,
-}
-
-#[derive(DebugAsJson, Clone, serde::Serialize)]
-pub enum PermanentStorageKind {
-    InMemory,
-    #[cfg(feature = "rocks")]
-    Rocks,
-}
-
-impl PermanentStorageConfig {
-    /// Initializes permanent storage implementation.
-    pub fn init(&self) -> anyhow::Result<Box<dyn PermanentStorage>> {
-        tracing::info!(config = ?self, "creating permanent storage");
-
-        let perm: Box<dyn PermanentStorage> = match self.perm_storage_kind {
-            PermanentStorageKind::InMemory => Box::<InMemoryPermanentStorage>::default(),
-            #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => {
-                let prefix = self.rocks_path_prefix.clone();
-                Box::new(RocksPermanentStorage::new(prefix)?)
-            }
-        };
-        Ok(perm)
-    }
-}
-
-impl FromStr for PermanentStorageKind {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s {
-            "inmemory" => Ok(Self::InMemory),
-            #[cfg(feature = "rocks")]
-            "rocks" => Ok(Self::Rocks),
-            s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
     }
 }
