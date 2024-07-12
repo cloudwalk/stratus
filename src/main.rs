@@ -28,8 +28,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         None,
         config.address,
         config.grpc_server_address,
-    )
-    .await; // for now, we force None to initiate with the current node being the leader
+    ); // for now, we force None to initiate with the current node being the leader
 
     // start rpc server
     serve_rpc(
