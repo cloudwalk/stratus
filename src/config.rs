@@ -16,8 +16,6 @@ use tokio::runtime::Runtime;
 
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::miner::MinerConfig;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Address;
 use crate::eth::relayer::ExternalRelayer;
 use crate::eth::relayer::ExternalRelayerClient;

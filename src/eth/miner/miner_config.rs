@@ -5,6 +5,8 @@ use display_json::DebugAsJson;
 
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
