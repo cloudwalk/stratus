@@ -26,6 +26,7 @@ pub use postgres_external_rpc::PostgresExternalRpcStorageConfig;
 pub use rocks::rocks_permanent::RocksPermanentStorage;
 pub use storage_error::StorageError;
 pub use stratus_storage::StratusStorage;
+pub use stratus_storage::StratusStorageConfig;
 pub use temporary_storage::TemporaryStorage;
 pub use temporary_storage::TemporaryStorageConfig;
 pub use temporary_storage::TemporaryStorageKind;
