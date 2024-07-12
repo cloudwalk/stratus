@@ -145,7 +145,9 @@ find_leader() {
         fi
     done
 
-    echo "${leaders[@]}"
+    if [ ${#leaders[@]} -gt 0 ]; then
+        echo "${leaders[@]}"
+    fi
 }
 
 # Function to run the election test
