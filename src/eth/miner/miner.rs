@@ -11,7 +11,7 @@ use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tracing::Span;
 
-use super::consensus::append_entry;
+use crate::eth::consensus::append_entry;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -34,7 +34,7 @@ use crate::ext::DisplayExt;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
 
-pub struct BlockMiner {
+pub struct Miner {
     /// Lock for mine and commit operations.
     mine_and_commit_lock: Mutex<()>,
 
@@ -47,7 +47,7 @@ pub struct BlockMiner {
     storage: Arc<StratusStorage>,
 
     /// Mode the block miner is running.
-    mode: BlockMinerMode,
+    mode: MinerMode,
 
     /// Broadcasts pending transactions events.
     pub notifier_pending_txs: broadcast::Sender<TransactionExecution>,
@@ -62,9 +62,9 @@ pub struct BlockMiner {
     relayer_client: Option<ExternalRelayerClient>,
 }
 
-impl BlockMiner {
+impl Miner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>, mode: BlockMinerMode, relayer_client: Option<ExternalRelayerClient>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, mode: MinerMode, relayer_client: Option<ExternalRelayerClient>) -> Self {
         tracing::info!(?mode, "creating block miner");
         Self {
             mine_and_commit_lock: Mutex::default(),
@@ -82,7 +82,7 @@ impl BlockMiner {
     /// Spawns a new thread that keep mining blocks in the specified interval.
     pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
         // validate
-        let BlockMinerMode::Interval(block_time) = self.mode else {
+        let MinerMode::Interval(block_time) = self.mode else {
             return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
         };
         tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
@@ -96,7 +96,7 @@ impl BlockMiner {
     }
 
     /// Returns the mode the miner is running.
-    pub fn mode(&self) -> &BlockMinerMode {
+    pub fn mode(&self) -> &MinerMode {
         &self.mode
     }
 
@@ -462,13 +462,13 @@ mod interval_miner {
     use tokio::time::Instant;
 
     use crate::channel_read_sync;
-    use crate::eth::BlockMiner;
+    use crate::eth::miner::Miner;
     use crate::eth::Consensus;
     use crate::ext::not;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
-    pub fn run(miner: Arc<BlockMiner>, ticks_rx: mpsc::Receiver<Instant>) {
+    pub fn run(miner: Arc<Miner>, ticks_rx: mpsc::Receiver<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         while let Ok(tick) = channel_read_sync!(ticks_rx) {
@@ -489,7 +489,7 @@ mod interval_miner {
     }
 
     #[inline(always)]
-    fn mine_and_commit(miner: &BlockMiner) {
+    fn mine_and_commit(miner: &Miner) {
         let _mine_and_commit_lock = miner.mine_and_commit_lock.lock().unwrap();
         tracing::debug!("acquired mine and commit lock for interval local block");
 
@@ -557,7 +557,7 @@ mod interval_miner_ticker {
 
 /// Indicates when the miner will mine new blocks.
 #[derive(Debug, Clone, Copy, strum::EnumIs, serde::Serialize)]
-pub enum BlockMinerMode {
+pub enum MinerMode {
     /// Mines a new block for each transaction execution.
     Automine,
 
@@ -568,7 +568,7 @@ pub enum BlockMinerMode {
     External,
 }
 
-impl FromStr for BlockMinerMode {
+impl FromStr for MinerMode {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
