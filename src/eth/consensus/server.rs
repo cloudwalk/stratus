@@ -371,10 +371,13 @@ impl AppendEntryService for AppendEntryServiceImpl {
                 Ok(_) => {
                     tracing::info!(block_number = %block.header.number, "block saved successfully");
                 }
-                Err(err) => {
-                    tracing::error!("failed to save block: {:?}", err);
-                    return Err(Status::internal("failed to save block"));
-                }
+                Err(err) =>
+                    if err.to_string() == "block to save is not on the correct order" {
+                        tracing::error!(block_number = %block.header.number, "failed to save block: block is not in the correct order. Skipping saving block because it has already been saved");
+                    } else {
+                        tracing::error!(block_number = %block.header.number, "failed to save block: {:?}", err);
+                        return Err(Status::internal("failed to save block"));
+                    },
             },
             Err(err) => {
                 tracing::error!("failed to parse block: {:?}", err);
