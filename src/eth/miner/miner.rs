@@ -1,8 +1,6 @@
-use std::str::FromStr;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::time::Duration;
 
 use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
@@ -12,6 +10,7 @@ use tokio::sync::broadcast;
 use tracing::Span;
 
 use crate::eth::consensus::append_entry;
+use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -27,7 +26,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
-use crate::ext::parse_duration;
 use crate::ext::spawn_thread;
 use crate::ext::DisplayExt;
 use crate::infra::tracing::SpanExt;
@@ -555,33 +553,5 @@ mod interval_miner_ticker {
                 };
             }
         });
-    }
-}
-
-/// Indicates when the miner will mine new blocks.
-#[derive(Debug, Clone, Copy, strum::EnumIs, serde::Serialize)]
-pub enum MinerMode {
-    /// Mines a new block for each transaction execution.
-    Automine,
-
-    /// Mines a new block at specified interval.
-    Interval(Duration),
-
-    /// Does not automatically mines a new block. A call to `mine_*` must be executed to mine a new block.
-    External,
-}
-
-impl FromStr for MinerMode {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s {
-            "automine" => Ok(Self::Automine),
-            "external" => Ok(Self::External),
-            s => {
-                let block_time = parse_duration(s)?;
-                Ok(Self::Interval(block_time))
-            }
-        }
     }
 }
