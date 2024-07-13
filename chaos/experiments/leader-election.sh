@@ -52,13 +52,20 @@ echo "Number of iterations: $iterations"
 echo "Enable leader restart: $enable_leader_restart"
 
 cleanup() {
+  exit_code=$?
   echo "Cleaning up..."
   for port in "${ports[@]}"; do
     killport --quiet $port || true
   done
-  rm instance_30* || true
+
+  sleep 2
+  if [ $exit_code -eq 0 ]; then
+    rm instance_*.log || true
+    find . -type d -name "instance_*" -print0 | xargs -0 rm -rf || true
+  fi
+  rm -rf tmp_rocks_* || true
   find . -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf || true
-  echo "Job is done."
+  echo "Job is done. With exit code $exit_code"
 }
 trap cleanup EXIT INT TERM
 
@@ -98,7 +105,7 @@ start_instance() {
         --rocks-path-prefix=$rocks_path_prefix \
         --tokio-console-address=$tokio_console_address \
         --perm-storage=rocks \
-        --metrics-exporter-address=$metrics_exporter_address > $log_file 2>&1 &
+        --metrics-exporter-address=$metrics_exporter_address >> $log_file 2>&1 &
 }
 
 # Function to check liveness of an instance
