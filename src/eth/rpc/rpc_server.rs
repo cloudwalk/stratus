@@ -589,7 +589,8 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
-            Ok(hex_num(result.gas.as_u64() + (result.gas.as_u64() / 10 + 1)))
+            let overestimated_gas = (result.gas.as_u64()) as f64 * 1.1;
+            Ok(hex_num(overestimated_gas as u64))
         }
 
         // result is failure
@@ -627,14 +628,16 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
     // execute
     let point_in_time = ctx.storage.translate_to_point_in_time(&filter)?;
     match ctx.executor.execute_local_call(call, point_in_time) {
-        // success or failure, does not matter
-        Ok(result) => {
-            if result.is_success() {
-                tracing::info!(tx_output = %result.output, "executed eth_call with success");
-            } else {
-                tracing::warn!(tx_output = %result.output, "executed eth_call with failure");
-            }
+        // result is success
+        Ok(result) if result.is_success() => {
+            tracing::info!(tx_output = %result.output, "executed eth_call with success");
             Ok(hex_data(result.output))
+        }
+
+        // result is failure
+        Ok(result) => {
+            tracing::warn!(tx_output = %result.output, "executed eth_call with failure");
+            Err(RpcError::TransactionReverted { output: result.output })
         }
 
         // internal error
