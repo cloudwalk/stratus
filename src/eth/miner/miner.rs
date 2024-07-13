@@ -103,7 +103,7 @@ impl Miner {
             s.rec_str("tx_hash", &tx_execution.hash());
         });
 
-        // if auotomine is enabled, only one transaction can enter the block at time.
+        // if automine is enabled, only one transaction can enter the block at time.
         let _save_execution_lock = if self.mode.is_automine() {
             Some(self.locks.save_execution.lock().unwrap())
         } else {
