@@ -92,6 +92,19 @@ describe("Relayer integration test", function () {
                     await new Promise((resolve) => setTimeout(resolve, transactionInterval));
                 }
             });
+
+            it(`${params.name}: Validate transaction mined delay between consensus nodes`, async function () {
+                // Get Stratus timestamps
+                updateProviderUrl("stratus");
+                await Promise.all(
+                    txHashList.map(async (txHash) => {
+                        const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
+                        const block = await sendWithRetry("eth_getBlockByNumber", [receipt.blockNumber, false]);
+                        //TODO check for info within getBlockByNumber
+                    }),
+                );
+            });
+
         });
     });
 });
