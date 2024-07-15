@@ -74,7 +74,7 @@ impl RpcSubscriptions {
         const TASK_NAME: &str = "rpc::sub::cleaner";
         spawn_named(TASK_NAME, async move {
             loop {
-                if GlobalState::warn_if_shutdown(TASK_NAME) {
+                if GlobalState::is_shutdown_warn(TASK_NAME) {
                     return Ok(());
                 }
 
@@ -146,7 +146,7 @@ impl RpcSubscriptions {
         const TASK_NAME: &str = "rpc::sub::newPendingTransactions";
         spawn_named(TASK_NAME, async move {
             loop {
-                if GlobalState::warn_if_shutdown(TASK_NAME) {
+                if GlobalState::is_shutdown_warn(TASK_NAME) {
                     return Ok(());
                 }
 
@@ -171,7 +171,7 @@ impl RpcSubscriptions {
         const TASK_NAME: &str = "rpc::sub::newHeads";
         spawn_named(TASK_NAME, async move {
             loop {
-                if GlobalState::warn_if_shutdown(TASK_NAME) {
+                if GlobalState::is_shutdown_warn(TASK_NAME) {
                     return Ok(());
                 }
 
@@ -196,7 +196,7 @@ impl RpcSubscriptions {
         const TASK_NAME: &str = "rpc::sub::logs";
         spawn_named(TASK_NAME, async move {
             loop {
-                if GlobalState::warn_if_shutdown(TASK_NAME) {
+                if GlobalState::is_shutdown_warn(TASK_NAME) {
                     return Ok(());
                 }
 
