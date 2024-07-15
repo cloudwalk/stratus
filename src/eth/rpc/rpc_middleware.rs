@@ -30,6 +30,7 @@ use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
 use crate::event_with;
+#[cfg(feature = "request-replication-test-sender")]
 use crate::ext::spawn_named;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
