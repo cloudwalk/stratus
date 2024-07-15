@@ -103,7 +103,6 @@ describe("Relayer integration test", function () {
                     }),
                 );
             });
-
         });
     });
 });
