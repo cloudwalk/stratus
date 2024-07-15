@@ -30,6 +30,7 @@ use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
 use crate::event_with;
+use crate::ext::spawn_named;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
 use crate::ext::ResultExt;
@@ -160,7 +161,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
         #[cfg(feature = "request-replication-test-sender")]
         if method != "eth_subscribe" && method != "eth_unsubscribe" && method != "eth_subscription" {
-            tokio::task::spawn({
+            spawn_named("rpc::replication::sender", {
                 let request = serde_json::to_value(request.clone());
                 let client = self.client.clone().post(&self.replicate_request_to);
                 async move {
