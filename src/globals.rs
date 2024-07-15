@@ -1,5 +1,7 @@
 use std::env;
 use std::fmt::Debug;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
 use sentry::ClientInitGuard;
@@ -8,6 +10,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::config::load_dotenv;
 use crate::config::WithCommonConfig;
+use crate::eth::Consensus;
 use crate::ext::spawn_signal_handler;
 use crate::infra;
 use crate::infra::tracing::warn_task_cancellation;
@@ -79,26 +82,38 @@ where
 // Global state
 // -----------------------------------------------------------------------------
 
-static CANCELLATION: Lazy<CancellationToken> = Lazy::new(CancellationToken::new);
+// Stratus is running or being shut-down?
+static STRATUS_SHUTDOWN: Lazy<CancellationToken> = Lazy::new(CancellationToken::new);
+
+/// Miner should mine new blocks?
+static MINER_ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Unknown clients can interact with the application?
+static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
+
 pub struct GlobalState;
 
 impl GlobalState {
+    // -------------------------------------------------------------------------
+    // Shutdown
+    // -------------------------------------------------------------------------
+
     /// Shutdown the application.
     ///
     /// Returns the formatted reason for shutdown.
     pub fn shutdown_from(caller: &str, reason: &str) -> String {
         tracing::warn!(%caller, %reason, "application is shutting down");
-        CANCELLATION.cancel();
+        STRATUS_SHUTDOWN.cancel();
         format!("{} {}", caller, reason)
     }
 
     /// Checks if the application is being shutdown.
     pub fn is_shutdown() -> bool {
-        CANCELLATION.is_cancelled()
+        STRATUS_SHUTDOWN.is_cancelled()
     }
 
     /// Checks if the application is being shutdown. Emits an warning with the task name in case it is.
-    pub fn warn_if_shutdown(task_name: &str) -> bool {
+    pub fn is_shutdown_warn(task_name: &str) -> bool {
         let shutdown = Self::is_shutdown();
         if shutdown {
             warn_task_cancellation(task_name);
@@ -106,15 +121,51 @@ impl GlobalState {
         shutdown
     }
 
-    /// Awaits until a shutdown is received.
-    #[allow(dead_code)]
-    async fn wait_shutdown() {
-        CANCELLATION.cancelled().await;
+    /// Waits until a shutdown is signalled.
+    pub async fn wait_shutdown() {
+        STRATUS_SHUTDOWN.cancelled().await;
     }
 
     /// Waits until a shutdown is signalled. Emits an warning with the task name when it is.
-    pub async fn wait_shutdown_and_warn(task_name: &str) {
-        CANCELLATION.cancelled().await;
+    pub async fn wait_shutdown_warn(task_name: &str) {
+        Self::wait_shutdown().await;
         warn_task_cancellation(task_name);
+    }
+
+    // -------------------------------------------------------------------------
+    // Leadership
+    // -------------------------------------------------------------------------
+
+    /// Checks if node is leader.
+    pub fn is_leader() -> bool {
+        Consensus::is_leader()
+    }
+
+    // -------------------------------------------------------------------------
+    // Miner
+    // -------------------------------------------------------------------------
+
+    /// Enables or disables the miner.
+    pub fn set_miner_enabled(enabled: bool) {
+        MINER_ENABLED.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Checks if the miner is enabled.
+    pub fn is_miner_enabled() -> bool {
+        MINER_ENABLED.load(Ordering::Relaxed)
+    }
+
+    // -------------------------------------------------------------------------
+    // Unknown Client
+    // -------------------------------------------------------------------------
+
+    /// Enables or disables the unknown client.
+    pub fn set_unknown_client_enabled(enabled: bool) {
+        UNKNOWN_CLIENT_ENABLED.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Checks if the unknown client is enabled.
+    pub fn is_unknown_client_enabled() -> bool {
+        UNKNOWN_CLIENT_ENABLED.load(Ordering::Relaxed)
     }
 }

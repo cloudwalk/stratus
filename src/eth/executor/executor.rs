@@ -89,7 +89,7 @@ impl Evms {
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
-                if GlobalState::warn_if_shutdown(task_name) {
+                if GlobalState::is_shutdown_warn(task_name) {
                     return;
                 }
 
