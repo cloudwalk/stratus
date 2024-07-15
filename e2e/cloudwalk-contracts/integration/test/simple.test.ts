@@ -93,15 +93,23 @@ describe("Relayer integration test", function () {
                 }
             });
 
-            it(`${params.name}: Validate transaction mined delay between consensus nodes`, async function () {
-                // Get Stratus timestamps
+            it(`${params.name}: Validate transactions are present on blocks`, async function () {
+                const allBlockTransactions = new Set();
+
                 await Promise.all(
                     txHashList.map(async (txHash) => {
                         const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
                         const block = await sendWithRetry("eth_getBlockByNumber", [receipt.blockNumber, false]);
-                        //TODO check for info within getBlockByNumber
+
+                        block.transactions.forEach((tx) => allBlockTransactions.add(tx));
                     }),
                 );
+
+                const missingTransactions = txHashList.filter((txHash) => !allBlockTransactions.has(txHash));
+
+                if (missingTransactions.length > 0) {
+                    throw new Error(`Missing transactions: ${missingTransactions.join(", ")}`);
+                }
             });
         });
     });
