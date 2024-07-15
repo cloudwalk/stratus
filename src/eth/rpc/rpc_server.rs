@@ -3,8 +3,6 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::ops::Deref;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use ethereum_types::U256;
@@ -46,6 +44,7 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
+use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcHttpMiddleware;
@@ -95,7 +94,6 @@ pub async fn serve_rpc(
         chain_id,
         client_version: "stratus",
         gas_price: 0,
-        reject_unknown_client_enabled: AtomicBool::new(false),
 
         // services
         executor,
@@ -144,7 +142,7 @@ pub async fn serve_rpc(
         _ = handle_rpc_server_watch.stopped() => {
             GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
         },
-        _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {
+        _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
             let _ = handle_rpc_server.stop();
         }
     }
@@ -172,8 +170,11 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_version", stratus_version)?;
 
     // stratus state
-    module.register_method("stratus_blockUnknownClients", stratus_block_unknown_clients)?;
-    module.register_method("stratus_unblockUnknownClients", stratus_unblock_unknown_clients)?;
+    module.register_method("stratus_enableMiner", stratus_enable_miner)?;
+    module.register_method("stratus_disableMiner", stratus_disable_miner)?;
+    module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
+    module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
+
     module.register_blocking_method("stratus_getSlots", stratus_get_slots)?;
     module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
 
@@ -301,12 +302,24 @@ fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<Js
     Ok(build_info::as_json(ctx))
 }
 
-fn stratus_block_unknown_clients(_: Params<'_>, ctx: &RpcContext, _: &Extensions) {
-    ctx.reject_unknown_client_enabled.store(true, Ordering::Release);
+fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+    GlobalState::set_unknown_client_enabled(true);
+    GlobalState::is_unknown_client_enabled()
 }
 
-fn stratus_unblock_unknown_clients(_: Params<'_>, ctx: &RpcContext, _: &Extensions) {
-    ctx.reject_unknown_client_enabled.store(false, Ordering::Release);
+fn stratus_disable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+    GlobalState::set_unknown_client_enabled(false);
+    GlobalState::is_unknown_client_enabled()
+}
+
+fn stratus_enable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+    GlobalState::set_miner_enabled(true);
+    GlobalState::is_miner_enabled()
+}
+
+fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+    GlobalState::set_miner_enabled(false);
+    GlobalState::is_miner_enabled()
 }
 
 fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<Vec<Slot>, RpcError> {
@@ -315,7 +328,7 @@ fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     let _method_enter = info_span!("rpc::stratus_getSlots", address = field::Empty, indexes = field::Empty).entered();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (params, indexes) = next_rpc_param_or_default::<Vec<SlotIndex>>(params)?;
     let (_, block_filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
@@ -350,7 +363,7 @@ fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
 }
 
 async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
 
     let (pending_txs, new_heads, logs) = join!(ctx.subs.new_heads.read(), ctx.subs.pending_txs.read(), ctx.subs.logs.read());
     let response = json!({
@@ -466,7 +479,7 @@ fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcC
     };
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
 
@@ -512,7 +525,7 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let _method_enter = info_span!("rpc::eth_getTransactionByHash", tx_hash = field::Empty, found = field::Empty).entered();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (_, tx_hash) = next_rpc_param::<Hash>(params.sequence())?;
 
     // track
@@ -543,7 +556,7 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let _method_enter = info_span!("rpc::eth_getTransactionReceipt", tx_hash = field::Empty, found = field::Empty).entered();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (_, tx_hash) = next_rpc_param::<Hash>(params.sequence())?;
 
     // track
@@ -574,7 +587,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     let _method_enter = info_span!("rpc::eth_estimateGas", tx_from = field::Empty, tx_to = field::Empty).entered();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
 
     // track
@@ -613,7 +626,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
     let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
 
@@ -661,7 +674,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     .entered();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
     let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
 
@@ -726,7 +739,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     .entered();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (_, filter_input) = next_rpc_param_or_default::<LogFilterInput>(params.sequence())?;
     let mut filter = filter_input.parse(&ctx.storage)?;
 
@@ -772,7 +785,7 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     let _method_enter = info_span!("rpc::eth_getTransactionCount", address = field::Empty, filter = field::Empty).entered();
 
     // pare params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
 
@@ -794,7 +807,7 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) ->
     let _method_enter = info_span!("rpc::eth_getBalance", address = field::Empty, filter = field::Empty).entered();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
 
@@ -817,7 +830,7 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     let _method_enter = info_span!("rpc::eth_getCode", address = field::Empty, filter = field::Empty).entered();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
 
@@ -845,7 +858,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     let method_enter = method_span.enter();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let client = ext.rpc_client();
     let (params, event) = match next_rpc_param::<String>(params.sequence()) {
         Ok((params, event)) => (params, event),
@@ -901,7 +914,7 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
     let _method_enter = info_span!("rpc::eth_getStorageAt", address = field::Empty, index = field::Empty).entered();
 
     // parse params
-    ctx.reject_unknown_client(ext.rpc_client())?;
+    reject_unknown_client(ext.rpc_client())?;
     let (params, address) = next_rpc_param::<Address>(params.sequence())?;
     let (params, index) = next_rpc_param::<SlotIndex>(params)?;
     let (_, block_filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
@@ -920,7 +933,19 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
 }
 
 // -----------------------------------------------------------------------------
-// Helpers
+// Request helpers
+// -----------------------------------------------------------------------------
+
+/// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
+fn reject_unknown_client(client: RpcClientApp) -> Result<(), RpcError> {
+    if client.is_unknown() && not(GlobalState::is_unknown_client_enabled()) {
+        return Err(RpcError::ClientMissing);
+    }
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// Response helpers
 // -----------------------------------------------------------------------------
 
 #[inline(always)]
@@ -939,6 +964,7 @@ fn hex_num_zero_padded(value: impl Into<U256>) -> String {
     format!("{:#0width$x}", value.into(), width = width)
 }
 
+/// TODO: remove
 #[inline(always)]
 fn error_with_source(e: anyhow::Error, context: &str) -> RpcError {
     let error_source = format!("{:?}", e.source());
