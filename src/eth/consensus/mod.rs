@@ -274,7 +274,7 @@ impl Consensus {
             let timeout = consensus.heartbeat_timeout;
             loop {
                 tokio::select! {
-                    _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {
+                    _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
                         return;
                     },
                     _ = traced_sleep(timeout, SleepReason::Interval) => {
@@ -448,7 +448,7 @@ impl Consensus {
             };
 
             tokio::select! {
-                _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {},
+                _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {},
                 _ = periodic_discover() => {
                     unreachable!("this infinite future doesn't end");
                 },
@@ -468,7 +468,7 @@ impl Consensus {
         spawn_named(TASK_NAME, async move {
             let interval = Duration::from_millis(40);
             loop {
-                if GlobalState::warn_if_shutdown(TASK_NAME) {
+                if GlobalState::is_shutdown_warn(TASK_NAME) {
                     return;
                 };
 
@@ -526,7 +526,7 @@ impl Consensus {
         spawn_named(TASK_NAME, async move {
             loop {
                 tokio::select! {
-                    _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => {
+                    _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
                         return;
                     },
                     Ok(tx) = rx_pending_txs.recv() => {
@@ -597,7 +597,7 @@ impl Consensus {
                 consensus: Mutex::new(consensus),
             };
 
-            let shutdown = GlobalState::wait_shutdown_and_warn(TASK_NAME);
+            let shutdown = GlobalState::wait_shutdown_warn(TASK_NAME);
 
             let server = Server::builder()
                 .add_service(AppendEntryServiceServer::new(append_entry_service))
@@ -768,7 +768,7 @@ impl Consensus {
 
         let mut log_entry_queue: Vec<LogEntryData> = Vec::new();
         loop {
-            if GlobalState::warn_if_shutdown(TASK_NAME) {
+            if GlobalState::is_shutdown_warn(TASK_NAME) {
                 return;
             };
 
@@ -786,7 +786,7 @@ impl Consensus {
 
             tokio::select! {
                 biased;
-                _ = GlobalState::wait_shutdown_and_warn(TASK_NAME) => return,
+                _ = GlobalState::wait_shutdown_warn(TASK_NAME) => return,
                 _ = receive_log_entry_from_peer => {},
             };
 

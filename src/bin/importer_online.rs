@@ -153,7 +153,7 @@ async fn start_block_executor(
     const TASK_NAME: &str = "block-executor";
 
     while let Some((block, receipts)) = channel_read!(backlog_rx) {
-        if GlobalState::warn_if_shutdown(TASK_NAME) {
+        if GlobalState::is_shutdown_warn(TASK_NAME) {
             return Ok(());
         }
 
@@ -228,7 +228,7 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
 
     // keep reading websocket subscription or polling via http.
     loop {
-        if GlobalState::warn_if_shutdown(TASK_NAME) {
+        if GlobalState::is_shutdown_warn(TASK_NAME) {
             return Ok(());
         }
 
@@ -304,7 +304,7 @@ async fn start_block_fetcher(
     const TASK_NAME: &str = "external-block-fetcher";
 
     loop {
-        if GlobalState::warn_if_shutdown(TASK_NAME) {
+        if GlobalState::is_shutdown_warn(TASK_NAME) {
             return Ok(());
         }
 

@@ -115,7 +115,7 @@ fn execute_block_importer(
 
     // receives blocks and receipts from the backlog to reexecute and import
     loop {
-        if GlobalState::warn_if_shutdown(TASK_NAME) {
+        if GlobalState::is_shutdown_warn(TASK_NAME) {
             return Ok(());
         };
 
@@ -136,7 +136,7 @@ fn execute_block_importer(
         let instant_before_execution = Instant::now();
 
         for block in blocks.into_iter() {
-            if GlobalState::warn_if_shutdown(TASK_NAME) {
+            if GlobalState::is_shutdown_warn(TASK_NAME) {
                 return Ok(());
             }
 
@@ -197,7 +197,7 @@ async fn execute_external_rpc_storage_loader(
     // execute loads in parallel
     let mut tasks = futures::stream::iter(tasks).buffered(paralellism);
     loop {
-        if GlobalState::warn_if_shutdown(TASK_NAME) {
+        if GlobalState::is_shutdown_warn(TASK_NAME) {
             return Ok(());
         };
 
