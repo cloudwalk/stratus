@@ -478,12 +478,12 @@ mod interval_miner {
             }
 
             if not(GlobalState::is_miner_enabled()) {
-                tracing::info!("skipping mining block because block mining is disabled");
+                tracing::warn!("skipping mining block because block mining is disabled");
                 continue;
             }
 
             if not(GlobalState::is_leader()) {
-                tracing::info!("skipping mining block because node is not a leader");
+                tracing::warn!("skipping mining block because node is not a leader");
                 continue;
             }
 

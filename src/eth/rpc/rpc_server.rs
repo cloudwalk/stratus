@@ -170,6 +170,8 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_version", stratus_version)?;
 
     // stratus state
+    module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
+    module.register_method("stratus_disableTransactions", stratus_disable_transactions)?;
     module.register_method("stratus_enableMiner", stratus_enable_miner)?;
     module.register_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
@@ -310,6 +312,16 @@ fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions)
 fn stratus_disable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
     GlobalState::set_unknown_client_enabled(false);
     GlobalState::is_unknown_client_enabled()
+}
+
+fn stratus_enable_transactions(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+    GlobalState::set_transactions_enabled(true);
+    GlobalState::is_transactions_enabled()
+}
+
+fn stratus_disable_transactions(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+    GlobalState::set_transactions_enabled(false);
+    GlobalState::is_transactions_enabled()
 }
 
 fn stratus_enable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
@@ -700,6 +712,12 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
                 Err(RpcError::TransactionForwardFailed)
             }
         };
+    }
+
+    // check feature
+    if not(GlobalState::is_transactions_enabled()) {
+        tracing::warn!(%tx_hash, "failed to execute eth_sendRawTransaction because transactions are disabled");
+        return Err(RpcError::TransactionDisabled);
     }
 
     // execute locally if leader

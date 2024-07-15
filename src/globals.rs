@@ -85,6 +85,9 @@ where
 // Stratus is running or being shut-down?
 static STRATUS_SHUTDOWN: Lazy<CancellationToken> = Lazy::new(CancellationToken::new);
 
+/// Transaction should be accepted?
+static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
+
 /// Miner should mine new blocks?
 static MINER_ENABLED: AtomicBool = AtomicBool::new(true);
 
@@ -139,6 +142,20 @@ impl GlobalState {
     /// Checks if node is leader.
     pub fn is_leader() -> bool {
         Consensus::is_leader()
+    }
+
+    // -------------------------------------------------------------------------
+    // Transaction
+    // -------------------------------------------------------------------------
+
+    /// Sets whether transactions should be accepted.
+    pub fn set_transactions_enabled(enabled: bool) {
+        TRANSACTIONS_ENABLED.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Checks if transactions are enabled.
+    pub fn is_transactions_enabled() -> bool {
+        TRANSACTIONS_ENABLED.load(Ordering::Relaxed)
     }
 
     // -------------------------------------------------------------------------

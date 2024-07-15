@@ -24,6 +24,7 @@ pub enum RpcError {
     TransactionInvalidRlp { decode_error: String },
 
     // Execution
+    TransactionDisabled,
     TransactionReverted { output: Bytes },
     TransactionForwardFailed,
 
@@ -50,6 +51,7 @@ impl RpcError {
             Self::TransactionInvalidRlp { .. } => INVALID_PARAMS_CODE,
 
             // Execution
+            Self::TransactionDisabled => INTERNAL_ERROR_CODE,
             Self::TransactionForwardFailed => INTERNAL_ERROR_CODE,
             Self::TransactionReverted { .. } => CALL_EXECUTION_FAILED_CODE,
 
@@ -76,6 +78,7 @@ impl RpcError {
             Self::TransactionInvalidRlp { .. } => "Failed to decode transaction RLP data.".into(),
 
             // Execution
+            Self::TransactionDisabled => "Transaction processing is temporarily disabled.".into(),
             Self::TransactionReverted { .. } => "Transaction reverted during execution.".into(),
             Self::TransactionForwardFailed => "Failed to forward transaction to leader node.".into(),
 
