@@ -95,7 +95,6 @@ describe("Relayer integration test", function () {
 
             it(`${params.name}: Validate transaction mined delay between consensus nodes`, async function () {
                 // Get Stratus timestamps
-                updateProviderUrl("stratus");
                 await Promise.all(
                     txHashList.map(async (txHash) => {
                         const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
