@@ -584,6 +584,12 @@ impl Drop for RocksStorageState {
         let result = self.db.wait_for_compact(&options);
         let waited_for = instant.elapsed();
 
+        #[cfg(feature = "metrics")]
+        {
+            let db_name = self.db.path().file_name().unwrap().to_str();
+            metrics::set_rocks_last_shutdown_delay_millis(waited_for.as_millis() as u64, db_name);
+        }
+
         if let Err(e) = result {
             tracing::error!(reason = ?e, ?waited_for, "rocksdb shutdown compaction didn't finish in time, shutting it down anyways");
         } else {

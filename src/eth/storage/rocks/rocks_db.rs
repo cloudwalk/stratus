@@ -9,6 +9,8 @@ use rocksdb::DB;
 
 use crate::eth::storage::rocks::rocks_config::CacheSetting;
 use crate::eth::storage::rocks::rocks_config::DbConfig;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 
 /// Open (or create) the Database with the configs applied to all column families.
 ///
@@ -42,6 +44,14 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &HashMap<&'static s
         }
     };
 
-    tracing::info!(waited_for = ?instant.elapsed(), db_path = ?path, "successfully opened RocksDB");
+    let waited_for = instant.elapsed();
+    tracing::info!(?waited_for, db_path = ?path, "successfully opened RocksDB");
+
+    #[cfg(feature = "metrics")]
+    {
+        let db_name = path.file_name().unwrap().to_str();
+        metrics::set_rocks_last_startup_delay_millis(waited_for.as_millis() as u64, db_name);
+    }
+
     Ok((Arc::new(db), db_opts))
 }
