@@ -9,7 +9,7 @@ mod rpc_parser;
 mod rpc_server;
 mod rpc_subscriptions;
 
-use rpc_client_app::RpcClientApp;
+pub use rpc_client_app::RpcClientApp;
 pub use rpc_context::RpcContext;
 pub use rpc_error::RpcError;
 use rpc_http_middleware::RpcHttpMiddleware;

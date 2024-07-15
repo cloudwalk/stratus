@@ -465,7 +465,6 @@ mod interval_miner {
 
     use crate::channel_read_sync;
     use crate::eth::miner::Miner;
-    use crate::eth::Consensus;
     use crate::ext::not;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
@@ -474,11 +473,16 @@ mod interval_miner {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         while let Ok(tick) = channel_read_sync!(ticks_rx) {
-            if GlobalState::warn_if_shutdown(TASK_NAME) {
+            if GlobalState::is_shutdown_warn(TASK_NAME) {
                 return;
             }
 
-            if not(Consensus::is_leader()) {
+            if not(GlobalState::is_miner_enabled()) {
+                tracing::info!("skipping mining block because block mining is disabled");
+                continue;
+            }
+
+            if not(GlobalState::is_leader()) {
                 tracing::info!("skipping mining block because node is not a leader");
                 continue;
             }
@@ -547,7 +551,7 @@ mod interval_miner_ticker {
         runtime.block_on(async {
             ticker.tick().await;
             loop {
-                if GlobalState::warn_if_shutdown(TASK_NAME) {
+                if GlobalState::is_shutdown_warn(TASK_NAME) {
                     println!("e");
                     return;
                 }
