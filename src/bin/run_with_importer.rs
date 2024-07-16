@@ -5,11 +5,9 @@ use std::sync::Arc;
 use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
 #[cfg(feature = "request-replication-test-sender")]
-use stratus::eth::rpc::replication_worker;
+use stratus::eth::rpc::create_replication_worker;
 use stratus::eth::rpc::serve_rpc;
 use stratus::eth::Consensus;
-#[cfg(feature = "request-replication-test-sender")]
-use stratus::ext::spawn_named;
 use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
 use stratus::GlobalState;
@@ -44,13 +42,6 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let rpc_executor = Arc::clone(&executor);
     let rpc_miner = Arc::clone(&miner);
 
-    #[cfg(feature = "request-replication-test-sender")]
-    let tx = {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        spawn_named("replication::sender", replication_worker(config.replicate_request_to, rx));
-        tx
-    };
-
     // run rpc and importer-online in parallel
     let rpc_task = async move {
         let res = serve_rpc(
@@ -62,7 +53,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
             config.executor.chain_id.into(),
             config.max_connections,
             #[cfg(feature = "request-replication-test-sender")]
-            tx,
+            create_replication_worker(config.replicate_request_to),
         )
         .await;
         GlobalState::shutdown_from(TASK_NAME, "rpc server finished unexpectedly");

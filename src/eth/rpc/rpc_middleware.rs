@@ -34,6 +34,8 @@ use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
 use crate::event_with;
+#[cfg(feature = "request-replication-test-sender")]
+use crate::ext::spawn_named;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
 use crate::ext::ResultExt;
@@ -111,7 +113,14 @@ mod active_requests {
 // -----------------------------------------------------------------------------
 
 #[cfg(feature = "request-replication-test-sender")]
-pub async fn replication_worker(replicate_request_to: String, mut rx: tokio::sync::mpsc::UnboundedReceiver<serde_json::Value>) {
+pub fn create_replication_worker(replicate_request_to: String) -> tokio::sync::mpsc::UnboundedSender<serde_json::Value> {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    spawn_named("replication::sender", replication_worker(replicate_request_to, rx));
+    tx
+}
+
+#[cfg(feature = "request-replication-test-sender")]
+async fn replication_worker(replicate_request_to: String, mut rx: tokio::sync::mpsc::UnboundedReceiver<serde_json::Value>) {
     let client = reqwest::Client::default();
     let stream = async_stream::stream! {
         while let Some(request) = rx.recv().await {

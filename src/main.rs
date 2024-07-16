@@ -2,11 +2,9 @@ use std::sync::Arc;
 
 use stratus::config::StratusConfig;
 #[cfg(feature = "request-replication-test-sender")]
-use stratus::eth::rpc::replication_worker;
+use stratus::eth::rpc::create_replication_worker;
 use stratus::eth::rpc::serve_rpc;
 use stratus::eth::Consensus;
-#[cfg(feature = "request-replication-test-sender")]
-use stratus::ext::spawn_named;
 use stratus::GlobalServices;
 
 fn main() -> anyhow::Result<()> {
@@ -34,13 +32,6 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.grpc_server_address,
     ); // for now, we force None to initiate with the current node being the leader
 
-    #[cfg(feature = "request-replication-test-sender")]
-    let tx = {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        spawn_named("replication::sender", replication_worker(config.replicate_request_to, rx));
-        tx
-    };
-
     // start rpc server
     serve_rpc(
         Arc::clone(&storage),
@@ -51,7 +42,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.executor.chain_id.into(),
         config.max_connections,
         #[cfg(feature = "request-replication-test-sender")]
-        tx,
+        create_replication_worker(config.replicate_request_to),
     )
     .await?;
 

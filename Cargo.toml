@@ -180,7 +180,7 @@ path = "src/bin/relayer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["metrics", "tracing"]
+default = ["metrics", "tracing", "request-replication-test-sender"]
 
 # Application is running in develoment mode.
 dev = []
