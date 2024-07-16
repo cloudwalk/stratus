@@ -541,7 +541,7 @@ impl Consensus {
                             let transaction = vec![tx.to_append_entry_transaction()];
                             let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
                             if consensus.broadcast_sender.send(transaction_entry).is_err() {
-                                tracing::error!("failed to broadcast transaction");
+                                tracing::debug!("failed to broadcast transaction");
                             }
                         }
                     },
@@ -570,7 +570,7 @@ impl Consensus {
                                     tracing::debug!("Block entry saved successfully");
                                     let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
                                     if consensus.broadcast_sender.send(block_entry).is_err() {
-                                        tracing::error!("Failed to broadcast block");
+                                        tracing::debug!("Failed to broadcast block");
                                     }
                                 }
                                 Err(e) => {
