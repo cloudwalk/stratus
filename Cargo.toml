@@ -107,6 +107,7 @@ fake = { version = "=2.9.2", features = ["derive"] }
 # relayer
 petgraph = "=0.6.5"
 ethers-signers = "2.0.14"
+async-stream = "0.3.5"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
@@ -179,7 +180,7 @@ path = "src/bin/relayer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["metrics", "tracing"]
+default = ["metrics", "tracing", "request-replication-test-sender"]
 
 # Application is running in develoment mode.
 dev = []

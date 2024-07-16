@@ -5,6 +5,8 @@ use std::task::Poll;
 use std::time::Instant;
 
 use futures::future::BoxFuture;
+use futures::pin_mut;
+use futures::StreamExt;
 use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
 use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
@@ -108,25 +110,35 @@ mod active_requests {
 // Request handling
 // -----------------------------------------------------------------------------
 
+async fn replication_worker(replicate_request_to: String, mut rx: tokio::sync::mpsc::UnboundedReceiver<serde_json::Value>) {
+    let client = reqwest::Client::default();
+    let stream = async_stream::stream! {
+        while let Some(request) = rx.recv().await {
+            let client = client.clone().post(&replicate_request_to);
+            yield client.json(&request).send();
+        }
+    };
+    pin_mut!(stream);
+    let mut buffer = stream.buffer_unordered(200);
+    while buffer.next().await.is_some() {}
+}
+
 #[derive(Debug)]
 pub struct RpcMiddleware {
     service: RpcService,
 
     #[cfg(feature = "request-replication-test-sender")]
-    client: reqwest::Client,
-
-    #[cfg(feature = "request-replication-test-sender")]
-    replicate_request_to: String,
+    replication_tx: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
 }
 
 impl RpcMiddleware {
     pub fn new(service: RpcService, #[cfg(feature = "request-replication-test-sender")] replicate_request_to: String) -> Self {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        spawn_named("replication::sender", replication_worker(replicate_request_to, rx));
         Self {
             service,
             #[cfg(feature = "request-replication-test-sender")]
-            client: reqwest::Client::default(),
-            #[cfg(feature = "request-replication-test-sender")]
-            replicate_request_to,
+            replication_tx: tx,
         }
     }
 }
@@ -162,19 +174,9 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
         #[cfg(feature = "request-replication-test-sender")]
         if method != "eth_subscribe" && method != "eth_unsubscribe" && method != "eth_subscription" {
-            spawn_named("rpc::replication::sender", {
-                let request = serde_json::to_value(request.clone());
-                let client = self.client.clone().post(&self.replicate_request_to);
-                async move {
-                    if let Ok(request) = request {
-                        tracing::info!("replicating request");
-                        let res = client.json(&request).send().await;
-                        if let Err(err) = res {
-                            tracing::warn!(?err, "error replicating the request");
-                        }
-                    }
-                }
-            });
+            if let Ok(req) = serde_json::to_value(&request) {
+                let _ = self.replication_tx.send(req);
+            }
         }
 
         // trace request
