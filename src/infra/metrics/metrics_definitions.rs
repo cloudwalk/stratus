@@ -161,11 +161,32 @@ metrics! {
     "Number of bytes read."
     gauge rocks_bytes_read{dbname},
 
+    "Number of times WAL sync is done."
+    gauge rocks_wal_file_synced{dbname},
+
     "Last startup delay."
     gauge rocks_last_startup_delay_millis{dbname},
 
     "Last shutdown delay."
-    gauge rocks_last_shutdown_delay_millis{dbname}
+    gauge rocks_last_shutdown_delay_millis{dbname},
+
+    "Approximate size of active memtable (bytes)."
+    gauge rocks_cur_size_active_mem_table{dbname},
+
+    "Approximate size of active and unflushed immutable memtables (bytes)."
+    gauge rocks_cur_size_all_mem_tables{dbname},
+
+    "Approximate of active, unflushed immutable, and pinned immutable memtables (bytes)."
+    gauge rocks_size_all_mem_tables{dbname},
+
+    "Memory size for the entries residing in block cache."
+    gauge rocks_block_cache_usage{dbname},
+
+    "Block cache capacity."
+    gauge rocks_block_cache_capacity{dbname},
+
+    "Accumulated number of background errors."
+    gauge rocks_background_errors{dbname}
 }
 
 metrics! {
