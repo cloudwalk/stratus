@@ -313,7 +313,7 @@ impl RpcSubscriptionsConnected {
             .flat_map(HashMap::values)
             .filter(|s| s.client == *client)
             .count();
-        tracing::info!(%pending_txs, %new_heads, %logs, "client subscriptions");
+        tracing::info!(%pending_txs, %new_heads, %logs, "current client subscriptions");
 
         if pending_txs + new_heads + logs >= max_subscriptions as usize {
             return Err(RpcError::SubscriptionInvalid {
