@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use stratus::config::StratusConfig;
+#[cfg(feature = "request-replication-test-sender")]
 use stratus::eth::rpc::replication_worker;
 use stratus::eth::rpc::serve_rpc;
 use stratus::eth::Consensus;
+#[cfg(feature = "request-replication-test-sender")]
 use stratus::ext::spawn_named;
 use stratus::GlobalServices;
 

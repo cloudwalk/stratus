@@ -5,7 +5,9 @@ use std::task::Poll;
 use std::time::Instant;
 
 use futures::future::BoxFuture;
+#[cfg(feature = "request-replication-test-sender")]
 use futures::pin_mut;
+#[cfg(feature = "request-replication-test-sender")]
 use futures::StreamExt;
 use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
 use jsonrpsee::server::middleware::rpc::RpcService;

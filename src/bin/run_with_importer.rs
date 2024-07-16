@@ -4,9 +4,11 @@ use std::sync::Arc;
 
 use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
+#[cfg(feature = "request-replication-test-sender")]
 use stratus::eth::rpc::replication_worker;
 use stratus::eth::rpc::serve_rpc;
 use stratus::eth::Consensus;
+#[cfg(feature = "request-replication-test-sender")]
 use stratus::ext::spawn_named;
 use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
