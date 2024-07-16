@@ -1,11 +1,31 @@
 import { expect } from "chai";
 import { TransactionReceipt, TransactionResponse, keccak256 } from "ethers";
+import { Block, Bytes } from "web3-types";
 
+import { TestContractBalances } from "../../typechain-types";
 import { ALICE, BOB } from "../helpers/account";
 import { BlockMode, currentBlockMode, isStratus } from "../helpers/network";
-import { CHAIN_ID, CHAIN_ID_DEC, deployTestContractBalances, ETHERJS, HASH_ZERO, HEX_PATTERN, ONE, prepareSignedTx, REVERSAL, send, sendEvmMine, sendExpect, sendGetNonce, sendRawTransaction, sendReset, SUCCESS, TEST_BALANCE, toHex, ZERO } from "../helpers/rpc";
-import { Block, Bytes } from "web3-types";
-import { TestContractBalances } from "../../typechain-types";
+import {
+    CHAIN_ID,
+    CHAIN_ID_DEC,
+    ETHERJS,
+    HASH_ZERO,
+    HEX_PATTERN,
+    ONE,
+    REVERSAL,
+    SUCCESS,
+    TEST_BALANCE,
+    ZERO,
+    deployTestContractBalances,
+    prepareSignedTx,
+    send,
+    sendEvmMine,
+    sendExpect,
+    sendGetNonce,
+    sendRawTransaction,
+    sendReset,
+    toHex,
+} from "../helpers/rpc";
 
 describe("JSON-RPC", () => {
     before(() => {
@@ -16,7 +36,7 @@ describe("JSON-RPC", () => {
         it("debug_setHead", async () => {
             if (isStratus) {
                 (await sendExpect("debug_setHead", [ZERO])).eq(ZERO);
-            } 
+            }
         });
     });
 
@@ -33,7 +53,7 @@ describe("JSON-RPC", () => {
         it("web3_clientVersion", async () => {
             let client = await send("web3_clientVersion");
             if (isStratus) {
-                expect(client).eq("stratus")
+                expect(client).eq("stratus");
             } else {
                 expect(client).to.not.be.undefined;
             }
@@ -134,10 +154,10 @@ describe("JSON-RPC", () => {
                 const txBlockNumber = safeTxReceipt.blockNumber as number;
                 const filter = { address: contract.target };
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber) }])).length(1); // last mined block
-                
+
                 sendEvmMine();
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber + 1) }])).length(0); // 1 after mined block
-                
+
                 sendEvmMine();
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber + 2) }])).length(0); // 2 after mined block
             });
