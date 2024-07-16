@@ -41,6 +41,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.address,
         config.executor.chain_id.into(),
         config.max_connections,
+        config.max_subscriptions,
         #[cfg(feature = "request-replication-test-sender")]
         create_replication_worker(config.replicate_request_to),
     )

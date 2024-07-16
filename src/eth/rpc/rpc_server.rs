@@ -77,6 +77,7 @@ pub async fn serve_rpc(
     address: SocketAddr,
     chain_id: ChainId,
     max_connections: u32,
+    max_subscriptions: u32,
     #[cfg(feature = "request-replication-test-sender")] replication_sender: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
@@ -94,6 +95,7 @@ pub async fn serve_rpc(
         chain_id,
         client_version: "stratus",
         gas_price: 0,
+        max_subscriptions,
 
         // services
         executor,
@@ -368,39 +370,9 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Ext
 
     let (pending_txs, new_heads, logs) = join!(ctx.subs.new_heads.read(), ctx.subs.pending_txs.read(), ctx.subs.logs.read());
     let response = json!({
-        "newPendingTransactions":
-            pending_txs.values().map(|s|
-                json!({
-                    "created_at": s.created_at,
-                    "client": s.client,
-                    "id": s.sink.subscription_id(),
-                    "active": not(s.sink.is_closed())
-                })
-            ).collect_vec()
-        ,
-        "newHeads":
-            new_heads.values().map(|s|
-                json!({
-                    "created_at": s.created_at,
-                    "client": s.client,
-                    "id": s.sink.subscription_id(),
-                    "active": not(s.sink.is_closed())
-                })
-            ).collect_vec()
-        ,
-        "logs":
-            logs.values().flat_map(HashMap::values).map(|s|
-                json!({
-                    "created_at": s.created_at,
-                    "client": s.client,
-                    "id": s.sink.subscription_id(),
-                    "active": not(s.sink.is_closed()),
-                    "filter": {
-                        "parsed": s.filter,
-                        "original": s.filter.original_input
-                    }
-                })
-            ).collect_vec()
+        "newPendingTransactions": pending_txs.values().collect_vec(),
+        "newHeads": new_heads.values().collect_vec(),
+        "logs": logs.values().flat_map(HashMap::values).collect_vec()
     });
     Ok(response)
 }
@@ -875,6 +847,13 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
             return Ok(());
         }
     };
+
+    // check subscription limits
+    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.max_subscriptions, &client).await {
+        drop(method_enter);
+        pending.reject(e).instrument(method_span).await;
+        return Ok(());
+    }
 
     // track
     Span::with(|s| s.rec_str("subscription", &event));

@@ -16,6 +16,9 @@ pub struct RpcContext {
     // gas config
     pub gas_price: usize,
 
+    // general config
+    pub max_subscriptions: u32,
+
     // services
     pub executor: Arc<Executor>,
     #[allow(dead_code)] // HACK this was triggered in Rust 1.79
