@@ -531,6 +531,14 @@ impl RocksStorageState {
         let bytes_written = self.db_options.get_ticker_count(Ticker::BytesWritten);
         let bytes_read = self.db_options.get_ticker_count(Ticker::BytesRead);
 
+        // NOTE: These metrics can be more granular by using `self.property_int_value_cf(cf, name)`.
+        let cur_size_active_mem_table = self.db.property_int_value(rocksdb::properties::CUR_SIZE_ACTIVE_MEM_TABLE).unwrap_or_default();
+        let cur_size_all_mem_tables = self.db.property_int_value(rocksdb::properties::CUR_SIZE_ALL_MEM_TABLES).unwrap_or_default();
+        let size_all_mem_tables = self.db.property_int_value(rocksdb::properties::SIZE_ALL_MEM_TABLES).unwrap_or_default();
+        let block_cache_usage = self.db.property_int_value(rocksdb::properties::BLOCK_CACHE_USAGE).unwrap_or_default();
+        let block_cache_capacity = self.db.property_int_value(rocksdb::properties::BLOCK_CACHE_CAPACITY).unwrap_or_default();
+        let background_errors = self.db.property_int_value(rocksdb::properties::BACKGROUND_ERRORS).unwrap_or_default();
+
         let db_name = self.db.path().file_name().unwrap().to_str();
 
         metrics::set_rocks_db_get(db_get.count(), db_name);
@@ -544,6 +552,37 @@ impl RocksStorageState {
         metrics::set_rocks_compaction_time(self.get_histogram_average_in_interval(Histogram::CompactionTime), db_name);
         metrics::set_rocks_compaction_cpu_time(self.get_histogram_average_in_interval(Histogram::CompactionCpuTime), db_name);
         metrics::set_rocks_flush_time(self.get_histogram_average_in_interval(Histogram::FlushTime), db_name);
+
+        if let Some(cur_size_active_mem_table) = cur_size_active_mem_table {
+            metrics::set_rocks_cur_size_active_mem_table(cur_size_active_mem_table, db_name);
+        }
+
+        if let Some(cur_size_all_mem_tables) = cur_size_all_mem_tables {
+            metrics::set_rocks_cur_size_all_mem_tables(cur_size_all_mem_tables, db_name);
+        }
+
+        if let Some(size_all_mem_tables) = size_all_mem_tables {
+            metrics::set_rocks_size_all_mem_tables(size_all_mem_tables, db_name);
+        }
+
+        if let Some(block_cache_usage) = block_cache_usage {
+            metrics::set_rocks_block_cache_usage(block_cache_usage, db_name);
+        }
+        if let Some(block_cache_capacity) = block_cache_capacity {
+            metrics::set_rocks_block_cache_capacity(block_cache_capacity, db_name);
+        }
+        if let Some(background_errors) = background_errors {
+            metrics::set_rocks_background_errors(background_errors, db_name);
+        }
+
+        self.account_slots.export_metrics();
+        self.account_slots_history.export_metrics();
+        self.accounts.export_metrics();
+        self.accounts_history.export_metrics();
+        self.blocks_by_hash.export_metrics();
+        self.blocks_by_number.export_metrics();
+        self.logs.export_metrics();
+        self.transactions.export_metrics();
     }
 
     fn get_histogram_average_in_interval(&self, hist: Histogram) -> u64 {
