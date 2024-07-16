@@ -77,7 +77,7 @@ pub async fn serve_rpc(
     address: SocketAddr,
     chain_id: ChainId,
     max_connections: u32,
-    #[cfg(feature = "request-replication-test-sender")] replicate_request_to: String,
+    #[cfg(feature = "request-replication-test-sender")] replication_sender: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
     tracing::info!(%address, %max_connections, "creating {}", TASK_NAME);
@@ -114,7 +114,7 @@ pub async fn serve_rpc(
         RpcMiddleware::new(
             service,
             #[cfg(feature = "request-replication-test-sender")]
-            replicate_request_to.clone(),
+            replication_sender.clone(),
         )
     });
     let http_middleware = tower::ServiceBuilder::new()

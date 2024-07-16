@@ -32,8 +32,6 @@ use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
 use crate::event_with;
-#[cfg(feature = "request-replication-test-sender")]
-use crate::ext::spawn_named;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
 use crate::ext::ResultExt;
@@ -111,7 +109,7 @@ mod active_requests {
 // -----------------------------------------------------------------------------
 
 #[cfg(feature = "request-replication-test-sender")]
-async fn replication_worker(replicate_request_to: String, mut rx: tokio::sync::mpsc::UnboundedReceiver<serde_json::Value>) {
+pub async fn replication_worker(replicate_request_to: String, mut rx: tokio::sync::mpsc::UnboundedReceiver<serde_json::Value>) {
     let client = reqwest::Client::default();
     let stream = async_stream::stream! {
         while let Some(request) = rx.recv().await {
@@ -133,17 +131,14 @@ pub struct RpcMiddleware {
 }
 
 impl RpcMiddleware {
-    pub fn new(service: RpcService, #[cfg(feature = "request-replication-test-sender")] replicate_request_to: String) -> Self {
-        #[cfg(feature = "request-replication-test-sender")]
-        let tx = {
-            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-            spawn_named("replication::sender", replication_worker(replicate_request_to, rx));
-            tx
-        };
+    pub fn new(
+        service: RpcService,
+        #[cfg(feature = "request-replication-test-sender")] replication_tx: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
+    ) -> Self {
         Self {
             service,
             #[cfg(feature = "request-replication-test-sender")]
-            replication_tx: tx,
+            replication_tx,
         }
     }
 }
