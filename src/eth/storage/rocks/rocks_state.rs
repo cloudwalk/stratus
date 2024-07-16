@@ -525,6 +525,7 @@ impl RocksStorageState {
         let db_get = self.db_options.get_histogram_data(Histogram::DbGet);
         let db_write = self.db_options.get_histogram_data(Histogram::DbWrite);
 
+        let wal_file_synced = self.db_options.get_ticker_count(Ticker::WalFileSynced);
         let block_cache_miss = self.db_options.get_ticker_count(Ticker::BlockCacheMiss);
         let block_cache_hit = self.db_options.get_ticker_count(Ticker::BlockCacheHit);
         let bytes_written = self.db_options.get_ticker_count(Ticker::BytesWritten);
@@ -538,6 +539,7 @@ impl RocksStorageState {
         metrics::set_rocks_block_cache_hit(block_cache_hit, db_name);
         metrics::set_rocks_bytes_written(bytes_written, db_name);
         metrics::set_rocks_bytes_read(bytes_read, db_name);
+        metrics::set_rocks_wal_file_synced(wal_file_synced, db_name);
 
         metrics::set_rocks_compaction_time(self.get_histogram_average_in_interval(Histogram::CompactionTime), db_name);
         metrics::set_rocks_compaction_cpu_time(self.get_histogram_average_in_interval(Histogram::CompactionCpuTime), db_name);
