@@ -370,39 +370,9 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Ext
 
     let (pending_txs, new_heads, logs) = join!(ctx.subs.new_heads.read(), ctx.subs.pending_txs.read(), ctx.subs.logs.read());
     let response = json!({
-        "newPendingTransactions":
-            pending_txs.values().map(|s|
-                json!({
-                    "created_at": s.created_at,
-                    "client": s.client,
-                    "id": s.sink.subscription_id(),
-                    "active": not(s.sink.is_closed())
-                })
-            ).collect_vec()
-        ,
-        "newHeads":
-            new_heads.values().map(|s|
-                json!({
-                    "created_at": s.created_at,
-                    "client": s.client,
-                    "id": s.sink.subscription_id(),
-                    "active": not(s.sink.is_closed())
-                })
-            ).collect_vec()
-        ,
-        "logs":
-            logs.values().flat_map(HashMap::values).map(|s|
-                json!({
-                    "created_at": s.created_at,
-                    "client": s.client,
-                    "id": s.sink.subscription_id(),
-                    "active": not(s.sink.is_closed()),
-                    "filter": {
-                        "parsed": s.filter,
-                        "original": s.filter.original_input
-                    }
-                })
-            ).collect_vec()
+        "newPendingTransactions": pending_txs.values().collect_vec(),
+        "newHeads": new_heads.values().collect_vec(),
+        "logs": logs.values().flat_map(HashMap::values).collect_vec()
     });
     Ok(response)
 }
