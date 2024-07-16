@@ -531,7 +531,6 @@ impl RocksStorageState {
         let bytes_written = self.db_options.get_ticker_count(Ticker::BytesWritten);
         let bytes_read = self.db_options.get_ticker_count(Ticker::BytesRead);
 
-        // NOTE: These metrics can be more granular by using `self.property_int_value_cf(cf, name)`.
         let cur_size_active_mem_table = self.db.property_int_value(rocksdb::properties::CUR_SIZE_ACTIVE_MEM_TABLE).unwrap_or_default();
         let cur_size_all_mem_tables = self.db.property_int_value(rocksdb::properties::CUR_SIZE_ALL_MEM_TABLES).unwrap_or_default();
         let size_all_mem_tables = self.db.property_int_value(rocksdb::properties::SIZE_ALL_MEM_TABLES).unwrap_or_default();
