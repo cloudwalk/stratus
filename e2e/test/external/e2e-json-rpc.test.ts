@@ -153,12 +153,12 @@ describe("JSON-RPC", () => {
                 const txHash = keccak256(signedTx);
                 await sendRawTransaction(signedTx);
                 const txResponseAfterSending: TransactionResponse | null = await ETHERJS.getTransaction(txHash);
+                expect(txResponseAfterSending).to.not.be.null;
 
                 await sendEvmMine();
                 const txResponseAfterMinting: TransactionResponse | null = await ETHERJS.getTransaction(txHash);
+                expect(txResponseAfterMinting).to.not.be.null;
 
-                expect(txResponseAfterSending).exist;
-                expect(txResponseAfterMinting).exist;
                 expect(txResponseAfterSending?.hash).eq(txHash);
                 expect(txResponseAfterMinting?.hash).eq(txHash);
             });
