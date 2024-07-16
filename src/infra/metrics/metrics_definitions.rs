@@ -159,7 +159,13 @@ metrics! {
     gauge rocks_bytes_written{dbname},
 
     "Number of bytes read."
-    gauge rocks_bytes_read{dbname}
+    gauge rocks_bytes_read{dbname},
+
+    "Last startup delay."
+    gauge rocks_last_startup_delay_millis{dbname},
+
+    "Last shutdown delay."
+    gauge rocks_last_shutdown_delay_millis{dbname}
 }
 
 metrics! {

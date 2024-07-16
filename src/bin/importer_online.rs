@@ -94,10 +94,14 @@ async fn run(config: ImporterOnlineConfig) -> anyhow::Result<()> {
         .await?,
     );
 
-    let result = run_importer_online(executor, miner, storage, chain, config.base.sync_interval).await;
+    let result = run_importer_online(executor, miner, Arc::clone(&storage), chain, config.base.sync_interval).await;
     if let Err(ref e) = result {
         tracing::error!(reason = ?e, "importer-online failed");
     }
+
+    // Explicitly block the `main` thread to drop the storage.
+    drop(storage);
+
     result
 }
 

@@ -32,7 +32,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
 
     // start rpc server
     serve_rpc(
-        storage,
+        Arc::clone(&storage),
         executor,
         miner,
         consensus,
@@ -43,6 +43,9 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.replicate_request_to,
     )
     .await?;
+
+    // Explicitly block the `main` thread to drop the storage.
+    drop(storage);
 
     Ok(())
 }

@@ -40,6 +40,7 @@ async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     // download balances and blocks
     download_balances(Arc::clone(&rpc_storage), &chain, config.initial_accounts).await?;
     download_blocks(rpc_storage, chain, config.paralellism, block_end).await?;
+
     Ok(())
 }
 

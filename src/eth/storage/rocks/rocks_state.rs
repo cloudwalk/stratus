@@ -572,17 +572,22 @@ impl Drop for RocksStorageState {
         options.set_abort_on_pause(true);
         // flush all write buffers before waiting
         options.set_flush(true);
-        // wait for 15 minutes at max, we're accepting that our shutdown might be slow to guarantee
-        // that the boot is fast
-        options.set_timeout(15 * minute_in_micros);
+        // wait for 4 minutes at max, sacrificing a long shutdown for a faster boot
+        options.set_timeout(4 * minute_in_micros);
 
         tracing::info!("starting rocksdb shutdown");
         let instant = Instant::now();
 
-        // by waiting for compaction, we are also forcing logs to be processed in shutdown so that
-        // they don't take long to process when booting up
+        // here, waiting for is done to force WAL logs to be processed, to skip replaying most of them when booting
+        // up, which was slowing things down
         let result = self.db.wait_for_compact(&options);
         let waited_for = instant.elapsed();
+
+        #[cfg(feature = "metrics")]
+        {
+            let db_name = self.db.path().file_name().unwrap().to_str();
+            metrics::set_rocks_last_shutdown_delay_millis(waited_for.as_millis() as u64, db_name);
+        }
 
         if let Err(e) = result {
             tracing::error!(reason = ?e, ?waited_for, "rocksdb shutdown compaction didn't finish in time, shutting it down anyways");
