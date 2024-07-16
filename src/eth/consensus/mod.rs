@@ -201,14 +201,9 @@ impl Consensus {
         let peers = Arc::new(RwLock::new(HashMap::new()));
         let my_address = Self::discover_my_address(jsonrpc_address.port(), grpc_address.port());
 
-        let log_entries_storage: Arc<AppendLogEntriesStorage>;
-        let current_term: u64;
-        let prev_log_index: u64;
-        {
-            log_entries_storage = Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap());
-            current_term = log_entries_storage.get_last_term().unwrap_or(0);
-            prev_log_index = log_entries_storage.get_last_index().unwrap_or(0);
-        }
+        let log_entries_storage: Arc<AppendLogEntriesStorage> = Arc::new(AppendLogEntriesStorage::new(log_storage_path).unwrap());
+        let current_term: u64 = log_entries_storage.get_last_term().unwrap_or(1);
+        let prev_log_index: u64 = log_entries_storage.get_last_index().unwrap_or(0);
 
         let consensus = Self {
             broadcast_sender,
@@ -457,11 +452,8 @@ impl Consensus {
     }
 
     fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
-        // TODO: add data to consensus-log-transactions
-        // TODO: rediscover followers on communication error
         // XXX FIXME: deal with the scenario where a transactionHash arrives after the block;
         // in this case, before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
-        // TODO: maybe check if I'm currently the leader?
 
         const TASK_NAME: &str = "consensus::transaction_execution_queue";
 
@@ -495,7 +487,7 @@ impl Consensus {
                     ) {
                         Ok(_) => {
                             consensus.prev_log_index.store(last_index + 1, Ordering::SeqCst);
-                            tracing::debug!("Transaction execution entry saved successfully");
+                            tracing::info!("Transaction execution entry saved successfully");
                         }
                         Err(e) => {
                             tracing::error!("Failed to save transaction execution entry: {:?}", e);
@@ -567,7 +559,7 @@ impl Consensus {
                             ) {
                                 Ok(_) => {
                                     consensus.prev_log_index.store(last_index + 1, Ordering::SeqCst);
-                                    tracing::debug!("Block entry saved successfully");
+                                    tracing::info!("Block entry saved successfully");
                                     let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
                                     if consensus.broadcast_sender.send(block_entry).is_err() {
                                         tracing::debug!("Failed to broadcast block");
@@ -746,16 +738,14 @@ impl Consensus {
             return;
         }
 
-        {
-            let mut peers = self.peers.write().await;
-            for (address, (peer, _)) in peers.iter_mut() {
-                if *address == leader_address {
-                    peer.role = Role::Leader;
+        let mut peers = self.peers.write().await;
+        for (address, (peer, _)) in peers.iter_mut() {
+            if *address == leader_address {
+                peer.role = Role::Leader;
 
-                    self.refresh_blockchain_client().await;
-                } else {
-                    peer.role = Role::Follower;
-                }
+                self.refresh_blockchain_client().await;
+            } else {
+                peer.role = Role::Follower;
             }
         }
 
