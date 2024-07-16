@@ -263,7 +263,7 @@ pub struct StratusConfig {
     pub max_connections: u32,
 
     /// JSON-RPC max active subscriptions per client.
-    #[arg(long = "max-subscriptions", env = "MAX_SUBSCRIPTIONS", default_value = "10")]
+    #[arg(long = "max-subscriptions", env = "MAX_SUBSCRIPTIONS", default_value = "15")]
     pub max_subscriptions: u32,
 
     #[clap(flatten)]
