@@ -38,6 +38,10 @@ export const TEST_BALANCE = "0xffffffffffffffff";
 export const TEST_TRANSFER = 12345678;
 export const NATIVE_TRANSFER_GAS = "0x5208"; // 21000
 
+// Receipt Statuses
+export const SUCCESS = 1;
+export const REVERSAL = 0;
+
 // Special hashes
 export const HASH_ZERO = ethers.ZeroHash;
 export const HASH_EMPTY_UNCLES = "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347";
