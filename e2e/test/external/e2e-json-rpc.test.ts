@@ -3,8 +3,9 @@ import { TransactionReceipt, TransactionResponse, keccak256 } from "ethers";
 
 import { ALICE, BOB } from "../helpers/account";
 import { BlockMode, currentBlockMode, isStratus } from "../helpers/network";
-import { CHAIN_ID, CHAIN_ID_DEC, deployTestContractBalances, ETHERJS, HASH_ZERO, HEX_PATTERN, ONE, send, sendEvmMine, sendExpect, sendGetNonce, sendRawTransaction, sendReset, SUCCESS, TEST_BALANCE, toHex, ZERO } from "../helpers/rpc";
+import { CHAIN_ID, CHAIN_ID_DEC, deployTestContractBalances, ETHERJS, HASH_ZERO, HEX_PATTERN, ONE, prepareSignedTx, REVERSAL, send, sendEvmMine, sendExpect, sendGetNonce, sendRawTransaction, sendReset, SUCCESS, TEST_BALANCE, toHex, ZERO } from "../helpers/rpc";
 import { Block, Bytes } from "web3-types";
+import { TestContractBalances } from "../../typechain-types";
 
 describe("JSON-RPC", () => {
     before(() => {
@@ -161,6 +162,32 @@ describe("JSON-RPC", () => {
 
                 expect(txResponseAfterSending?.hash).eq(txHash);
                 expect(txResponseAfterMinting?.hash).eq(txHash);
+            });
+        });
+
+        describe("eth_sendRawTransaction", () => {
+            it("Returns an expected result when a contract transaction fails", async () => {
+                // deploy
+                const contract = await deployTestContractBalances();
+                sendEvmMine();
+                contract.waitForDeployment();
+
+                // send a transaction that will fail
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "sub",
+                    methodParameters: [ALICE.address, 1],
+                });
+                const expectedTxHash = keccak256(signedTx);
+                const actualTxHash = await sendRawTransaction(signedTx);
+                sendEvmMine();
+
+                // validate
+                const txReceiptAfterMining = await ETHERJS.getTransactionReceipt(expectedTxHash);
+                expect(txReceiptAfterMining).to.not.be.null;
+                expect(txReceiptAfterMining?.status).eq(REVERSAL);
+                expect(actualTxHash).eq(expectedTxHash);
             });
         });
     });
