@@ -316,8 +316,8 @@ impl RpcSubscriptionsConnected {
         tracing::info!(%pending_txs, %new_heads, %logs, "current client subscriptions");
 
         if pending_txs + new_heads + logs >= max_subscriptions as usize {
-            return Err(RpcError::SubscriptionInvalid {
-                event: format!("max subscriptions per client is {}", max_subscriptions),
+            return Err(RpcError::SubscriptionLimit {
+                max_limit: max_subscriptions.to_string(),
             });
         }
 
