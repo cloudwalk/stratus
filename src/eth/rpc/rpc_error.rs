@@ -5,6 +5,7 @@ use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::error::INVALID_PARAMS_CODE;
 use jsonrpsee::types::error::INVALID_REQUEST_CODE;
 use jsonrpsee::types::error::SERVER_IS_BUSY_CODE;
+use jsonrpsee::types::error::TOO_MANY_SUBSCRIPTIONS_CODE;
 use jsonrpsee::types::ErrorObjectOwned;
 
 use crate::eth::primitives::Bytes;
@@ -21,6 +22,7 @@ pub enum RpcError {
     ParameterMissing { rust_type: &'static str },
     ParameterInvalid { rust_type: &'static str, decode_error: String },
     SubscriptionInvalid { event: String },
+    SubscriptionLimit { max_limit: String },
     TransactionInvalidRlp { decode_error: String },
 
     // Execution
@@ -48,6 +50,7 @@ impl RpcError {
             Self::ParameterInvalid { .. } => INVALID_PARAMS_CODE,
             Self::ParameterMissing { .. } => INVALID_PARAMS_CODE,
             Self::SubscriptionInvalid { .. } => INVALID_PARAMS_CODE,
+            Self::SubscriptionLimit { .. } => TOO_MANY_SUBSCRIPTIONS_CODE,
             Self::TransactionInvalidRlp { .. } => INVALID_PARAMS_CODE,
 
             // Execution
@@ -75,6 +78,7 @@ impl RpcError {
             Self::ParameterMissing { rust_type } => format!("Expected {rust_type} parameter, but received nothing."),
             Self::ParameterInvalid { rust_type, .. } => format!("Failed to decode {rust_type} parameter."),
             Self::SubscriptionInvalid { event } => format!("Invalid subscription event: {event}"),
+            Self::SubscriptionLimit { max_limit } => format!("Client has reached the maximum subscription limit of {max_limit}."),
             Self::TransactionInvalidRlp { .. } => "Failed to decode transaction RLP data.".into(),
 
             // Execution

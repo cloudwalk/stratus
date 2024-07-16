@@ -262,6 +262,10 @@ pub struct StratusConfig {
     #[arg(long = "max-connections", env = "MAX_CONNECTIONS", default_value = "200")]
     pub max_connections: u32,
 
+    /// JSON-RPC max active subscriptions per client.
+    #[arg(long = "max-subscriptions", env = "MAX_SUBSCRIPTIONS", default_value = "15")]
+    pub max_subscriptions: u32,
+
     #[clap(flatten)]
     pub storage: StratusStorageConfig,
 
@@ -443,6 +447,10 @@ pub struct RunWithImporterConfig {
     /// JSON-RPC max active connections
     #[arg(long = "max-connections", env = "MAX_CONNECTIONS", default_value = "200")]
     pub max_connections: u32,
+
+    /// JSON-RPC max active subscriptions per client.
+    #[arg(long = "max-subscriptions", env = "MAX_SUBSCRIPTIONS", default_value = "15")]
+    pub max_subscriptions: u32,
 
     #[arg(long = "leader-node", env = "LEADER_NODE")]
     pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
