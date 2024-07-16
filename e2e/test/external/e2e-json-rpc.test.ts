@@ -1,9 +1,9 @@
 import { expect } from "chai";
-import { TransactionResponse, keccak256 } from "ethers";
+import { TransactionReceipt, TransactionResponse, keccak256 } from "ethers";
 
 import { ALICE, BOB } from "../helpers/account";
 import { BlockMode, currentBlockMode, isStratus } from "../helpers/network";
-import { CHAIN_ID, CHAIN_ID_DEC, ETHERJS, HASH_ZERO, HEX_PATTERN, ONE, send, sendEvmMine, sendExpect, sendGetNonce, sendRawTransaction, sendReset, TEST_BALANCE, ZERO } from "../helpers/rpc";
+import { CHAIN_ID, CHAIN_ID_DEC, deployTestContractBalances, ETHERJS, HASH_ZERO, HEX_PATTERN, ONE, send, sendEvmMine, sendExpect, sendGetNonce, sendRawTransaction, sendReset, SUCCESS, TEST_BALANCE, toHex, ZERO } from "../helpers/rpc";
 import { Block, Bytes } from "web3-types";
 
 describe("JSON-RPC", () => {
@@ -111,6 +111,35 @@ describe("JSON-RPC", () => {
             if (isStratus) {
                 (await sendExpect("eth_getUncleByBlockHashAndIndex", [ZERO, ZERO])).to.be.null;
             }
+        });
+    });
+
+    describe("Logs", () => {
+        describe("eth_getLogs", () => {
+            it("returns no logs for queries after last mined block", async () => {
+                const contract = await deployTestContractBalances();
+                sendEvmMine();
+                await contract.waitForDeployment();
+
+                const txResponse = await contract.connect(ALICE.signer()).add(ALICE.address, 10);
+                sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txResponse.hash);
+                expect(txReceipt).to.not.be.null;
+
+                const safeTxReceipt = txReceipt as TransactionReceipt;
+                expect(safeTxReceipt.status).eq(SUCCESS);
+
+                // check log queries starting at the last mined block and starting after it
+                const txBlockNumber = safeTxReceipt.blockNumber as number;
+                const filter = { address: contract.target };
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber) }])).length(1); // last mined block
+                
+                sendEvmMine();
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber + 1) }])).length(0); // 1 after mined block
+                
+                sendEvmMine();
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber + 2) }])).length(0); // 2 after mined block
+            });
         });
     });
 
