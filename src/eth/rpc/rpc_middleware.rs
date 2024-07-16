@@ -110,6 +110,7 @@ mod active_requests {
 // Request handling
 // -----------------------------------------------------------------------------
 
+#[cfg(feature = "request-replication-test-sender")]
 async fn replication_worker(replicate_request_to: String, mut rx: tokio::sync::mpsc::UnboundedReceiver<serde_json::Value>) {
     let client = reqwest::Client::default();
     let stream = async_stream::stream! {
@@ -133,8 +134,12 @@ pub struct RpcMiddleware {
 
 impl RpcMiddleware {
     pub fn new(service: RpcService, #[cfg(feature = "request-replication-test-sender")] replicate_request_to: String) -> Self {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        spawn_named("replication::sender", replication_worker(replicate_request_to, rx));
+        #[cfg(feature = "request-replication-test-sender")]
+        let tx = {
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            spawn_named("replication::sender", replication_worker(replicate_request_to, rx));
+            tx
+        };
         Self {
             service,
             #[cfg(feature = "request-replication-test-sender")]
