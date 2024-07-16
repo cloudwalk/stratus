@@ -161,7 +161,7 @@ metrics! {
     "Number of bytes read."
     gauge rocks_bytes_read{dbname},
 
-    "Number of bytes read."
+    "Number of times WAL sync is done."
     gauge rocks_wal_file_synced{dbname},
 
     "Last startup delay."
