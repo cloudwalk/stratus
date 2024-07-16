@@ -59,8 +59,8 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         res
     };
 
-    let importer_task = async move {
-        let res = run_importer_online(executor, miner, storage, chain, config.online.sync_interval).await;
+    let importer_task = async {
+        let res = run_importer_online(executor, miner, Arc::clone(&storage), chain, config.online.sync_interval).await;
         GlobalState::shutdown_from(TASK_NAME, "importer online finished unexpectedly");
         res
     };
@@ -70,6 +70,9 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     tracing::debug!(?rpc_result, ?importer_result, "rpc and importer tasks finished");
     rpc_result?;
     importer_result?;
+
+    // Explicitly block the `main` thread to drop the storage.
+    drop(storage);
 
     Ok(())
 }

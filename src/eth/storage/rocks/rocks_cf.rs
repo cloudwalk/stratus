@@ -16,6 +16,9 @@ use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
+
 /// A RocksDB Column Family (CF) reference.
 ///
 /// Different CFs can hold data of different types, the main purpose of this struct is to help
@@ -237,6 +240,58 @@ where
             Some(key)
         } else {
             None
+        }
+    }
+
+    #[cfg(feature = "metrics")]
+    pub fn export_metrics(&self) {
+        let handle = self.handle();
+        let cur_size_active_mem_table = self
+            .db
+            .property_int_value_cf(&handle, rocksdb::properties::CUR_SIZE_ACTIVE_MEM_TABLE)
+            .unwrap_or_default();
+        let cur_size_all_mem_tables = self
+            .db
+            .property_int_value_cf(&handle, rocksdb::properties::CUR_SIZE_ALL_MEM_TABLES)
+            .unwrap_or_default();
+        let size_all_mem_tables = self
+            .db
+            .property_int_value_cf(&handle, rocksdb::properties::SIZE_ALL_MEM_TABLES)
+            .unwrap_or_default();
+        let block_cache_usage = self
+            .db
+            .property_int_value_cf(&handle, rocksdb::properties::BLOCK_CACHE_USAGE)
+            .unwrap_or_default();
+        let block_cache_capacity = self
+            .db
+            .property_int_value_cf(&handle, rocksdb::properties::BLOCK_CACHE_CAPACITY)
+            .unwrap_or_default();
+        let background_errors = self
+            .db
+            .property_int_value_cf(&handle, rocksdb::properties::BACKGROUND_ERRORS)
+            .unwrap_or_default();
+
+        let db_name = &self.column_family;
+        if let Some(cur_size_active_mem_table) = cur_size_active_mem_table {
+            metrics::set_rocks_cur_size_active_mem_table(cur_size_active_mem_table, db_name);
+        }
+
+        if let Some(cur_size_all_mem_tables) = cur_size_all_mem_tables {
+            metrics::set_rocks_cur_size_all_mem_tables(cur_size_all_mem_tables, db_name);
+        }
+
+        if let Some(size_all_mem_tables) = size_all_mem_tables {
+            metrics::set_rocks_size_all_mem_tables(size_all_mem_tables, db_name);
+        }
+
+        if let Some(block_cache_usage) = block_cache_usage {
+            metrics::set_rocks_block_cache_usage(block_cache_usage, db_name);
+        }
+        if let Some(block_cache_capacity) = block_cache_capacity {
+            metrics::set_rocks_block_cache_capacity(block_cache_capacity, db_name);
+        }
+        if let Some(background_errors) = background_errors {
+            metrics::set_rocks_background_errors(background_errors, db_name);
         }
     }
 }

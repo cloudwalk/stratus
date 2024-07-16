@@ -172,6 +172,8 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_version", stratus_version)?;
 
     // stratus state
+    module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
+    module.register_method("stratus_disableTransactions", stratus_disable_transactions)?;
     module.register_method("stratus_enableMiner", stratus_enable_miner)?;
     module.register_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
@@ -282,21 +284,10 @@ fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<Jso
 
 /// If stratus is ready and able to receive traffic.
 ///
-/// This is a mix of `readiness` and `liveness`, should be `true` when `readiness` would first
-/// return `true`, and false again when `liveness` would start to return `false`.
-async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, RpcError> {
-    let should_serve = context.consensus.should_serve().await;
-    if not(should_serve) {
-        tracing::warn!("health check failed because consensus is not ready");
-        metrics::set_consensus_is_ready(0_u64);
-        return Err(RpcError::StratusNotReady);
-    }
-
-    if GlobalState::is_shutdown() {
-        tracing::warn!("health check failed because of shutdown");
-        return Err(RpcError::StratusShutdown);
-    }
-
+/// This is an `AND` of `readiness` with `liveness`.
+async fn stratus_health(params: Params<'_>, context: Arc<RpcContext>, extensions: Extensions) -> Result<JsonValue, RpcError> {
+    stratus_liveness(params.clone(), &context, &extensions)?;
+    stratus_readiness(params, context, extensions).await?;
     Ok(json!(true))
 }
 
@@ -312,6 +303,16 @@ fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions)
 fn stratus_disable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
     GlobalState::set_unknown_client_enabled(false);
     GlobalState::is_unknown_client_enabled()
+}
+
+fn stratus_enable_transactions(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+    GlobalState::set_transactions_enabled(true);
+    GlobalState::is_transactions_enabled()
+}
+
+fn stratus_disable_transactions(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+    GlobalState::set_transactions_enabled(false);
+    GlobalState::is_transactions_enabled()
 }
 
 fn stratus_enable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
@@ -702,6 +703,12 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
                 Err(RpcError::TransactionForwardFailed)
             }
         };
+    }
+
+    // check feature
+    if not(GlobalState::is_transactions_enabled()) {
+        tracing::warn!(%tx_hash, "failed to execute eth_sendRawTransaction because transactions are disabled");
+        return Err(RpcError::TransactionDisabled);
     }
 
     // execute locally if leader
