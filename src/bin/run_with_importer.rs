@@ -50,6 +50,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
             config.address,
             config.executor.chain_id.into(),
             config.max_connections,
+            config.max_subscriptions,
             #[cfg(feature = "request-replication-test-sender")]
             config.replicate_request_to,
         )
