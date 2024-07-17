@@ -22,6 +22,7 @@ use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::rpc::RpcClientApp;
+use crate::eth::rpc::RpcError;
 use crate::ext::not;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -324,6 +325,29 @@ pub struct RpcSubscriptionsConnected {
 }
 
 impl RpcSubscriptionsConnected {
+    /// Checks the number of subscriptions for a given client.
+    pub async fn check_client_subscriptions(&self, max_subscriptions: u32, client: &RpcClientApp) -> Result<(), RpcError> {
+        let pending_txs = self.pending_txs.read().await.values().filter(|s| s.client == *client).count();
+        let new_heads = self.new_heads.read().await.values().filter(|s| s.client == *client).count();
+        let logs = self
+            .logs
+            .read()
+            .await
+            .values()
+            .flat_map(HashMap::values)
+            .filter(|s| s.client == *client)
+            .count();
+        tracing::info!(%pending_txs, %new_heads, %logs, "current client subscriptions");
+
+        if pending_txs + new_heads + logs >= max_subscriptions as usize {
+            return Err(RpcError::SubscriptionLimit {
+                max_limit: max_subscriptions.to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
     /// Adds a new subscriber to `newPendingTransactions` event.
     pub async fn add_new_pending_txs(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
         tracing::info!(

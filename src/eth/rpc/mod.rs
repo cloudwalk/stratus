@@ -13,6 +13,8 @@ pub use rpc_client_app::RpcClientApp;
 pub use rpc_context::RpcContext;
 pub use rpc_error::RpcError;
 use rpc_http_middleware::RpcHttpMiddleware;
+#[cfg(feature = "request-replication-test-sender")]
+pub use rpc_middleware::create_replication_worker;
 use rpc_middleware::RpcMiddleware;
 use rpc_parser::next_rpc_param;
 use rpc_parser::next_rpc_param_or_default;

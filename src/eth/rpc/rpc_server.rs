@@ -77,7 +77,8 @@ pub async fn serve_rpc(
     address: SocketAddr,
     chain_id: ChainId,
     max_connections: u32,
-    #[cfg(feature = "request-replication-test-sender")] replicate_request_to: String,
+    max_subscriptions: u32,
+    #[cfg(feature = "request-replication-test-sender")] replication_sender: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
     tracing::info!(%address, %max_connections, "creating {}", TASK_NAME);
@@ -94,6 +95,7 @@ pub async fn serve_rpc(
         chain_id,
         client_version: "stratus",
         gas_price: 0,
+        max_subscriptions,
 
         // services
         executor,
@@ -114,7 +116,7 @@ pub async fn serve_rpc(
         RpcMiddleware::new(
             service,
             #[cfg(feature = "request-replication-test-sender")]
-            replicate_request_to.clone(),
+            replication_sender.clone(),
         )
     });
     let http_middleware = tower::ServiceBuilder::new()
@@ -845,6 +847,13 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
             return Ok(());
         }
     };
+
+    // check subscription limits
+    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.max_subscriptions, &client).await {
+        drop(method_enter);
+        pending.reject(e).instrument(method_span).await;
+        return Ok(());
+    }
 
     // track
     Span::with(|s| s.rec_str("subscription", &event));
