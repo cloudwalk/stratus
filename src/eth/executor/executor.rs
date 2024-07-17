@@ -484,7 +484,10 @@ impl Executor {
 
 #[derive(Clone, Copy, serde::Serialize)]
 pub enum ExecutorStrategy {
+    #[serde(rename = "serial")]
     Serial,
+
+    #[serde(rename = "parallel")]
     Paralell,
 }
 

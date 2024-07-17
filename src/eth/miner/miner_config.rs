@@ -90,12 +90,15 @@ impl MinerConfig {
 #[derive(Debug, Clone, Copy, strum::EnumIs, serde::Serialize)]
 pub enum MinerMode {
     /// Mines a new block for each transaction execution.
+    #[serde(rename = "automine")]
     Automine,
 
     /// Mines a new block at specified interval.
+    #[serde(rename = "interval")]
     Interval(Duration),
 
     /// Does not automatically mines a new block. A call to `mine_*` must be executed to mine a new block.
+    #[serde(rename = "external")]
     External,
 }
 
