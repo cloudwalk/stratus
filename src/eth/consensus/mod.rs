@@ -607,7 +607,7 @@ impl Consensus {
     }
 
     pub async fn should_serve(&self) -> bool {
-        if self.importer_config.clone().is_some() {
+        if self.importer_config.is_some() {
             //gather the latest block number, check how far behind it is from current storage block
             //if its greater than 3 blocks of distance, it should not be served
             let blockchain_client_lock = self.blockchain_client.lock().await;
