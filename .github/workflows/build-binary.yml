@@ -59,7 +59,7 @@ jobs:
           CARGO_PROFILE_RELEASE_DEBUG: 1
           TRACING_LOG_FORMAT: json
           NO_COLOR: 1
-          FEATURES: ${{ github.event.inputs.features || 'default' }}
+          FEATURES: "${{ github.event.inputs.features || 'default' }}"
 
       - name: Upload run with importer
         uses: actions/upload-artifact@v4
