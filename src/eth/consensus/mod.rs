@@ -1,9 +1,10 @@
-#[allow(dead_code)]
+#[allow(dead_code)] //TODO remove this
 mod append_log_entries_storage;
 mod discovery;
 pub mod forward_to;
-#[allow(dead_code)]
+#[allow(dead_code)] //TODO remove this
 mod log_entry;
+mod propagation;
 pub mod utils;
 
 mod server;
@@ -466,42 +467,7 @@ impl Consensus {
 
                 tokio::time::sleep(interval).await;
 
-                if Self::is_leader() {
-                    let mut queue = consensus.transaction_execution_queue.lock().await;
-                    let executions = queue.drain(..).collect::<Vec<_>>();
-                    drop(queue);
-
-                    tracing::debug!(executions_len = executions.len(), "Processing transaction executions");
-                    let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
-                    tracing::debug!(last_index, "Last index fetched");
-
-                    let current_term = consensus.current_term.load(Ordering::SeqCst);
-                    tracing::debug!(current_term, "Current term loaded");
-
-                    match consensus.log_entries_storage.save_log_entry(
-                        last_index + 1,
-                        current_term,
-                        LogEntryData::TransactionExecutionEntries(executions.clone()),
-                        "transaction",
-                        true,
-                    ) {
-                        Ok(_) => {
-                            consensus.prev_log_index.store(last_index + 1, Ordering::SeqCst);
-                            tracing::info!("Transaction execution entry saved successfully");
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to save transaction execution entry: {:?}", e);
-                        }
-                    }
-
-                    let peers = consensus.peers.read().await;
-                    for (_, (peer, _)) in peers.iter() {
-                        let mut peer_clone = peer.clone();
-                        let _ = consensus
-                            .append_entry_to_peer(&mut peer_clone, &LogEntryData::TransactionExecutionEntries(executions.clone()))
-                            .await;
-                    }
-                }
+                propagation::handle_transaction_executions(&consensus).await;
             }
         });
     }
@@ -538,38 +504,7 @@ impl Consensus {
                         }
                     },
                     Ok(block) = rx_blocks.recv() => {
-                        if Self::is_leader() {
-                            tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
-
-                            //TODO: before saving check if all transaction_hashes are already in the log
-                            let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
-                            tracing::debug!(last_index, "Last index fetched");
-
-                            let current_term = consensus.current_term.load(Ordering::SeqCst);
-                            tracing::debug!(current_term, "Current term loaded");
-
-                            let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.as_fixed_bytes().to_vec()).collect();
-
-                            match consensus.log_entries_storage.save_log_entry(
-                                last_index + 1,
-                                current_term,
-                                LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes.clone())),
-                                "block",
-                                true
-                            ) {
-                                Ok(_) => {
-                                    consensus.prev_log_index.store(last_index + 1, Ordering::SeqCst);
-                                    tracing::info!("Block entry saved successfully");
-                                    let block_entry = LogEntryData::BlockEntry(block.header.to_append_entry_block_header(transaction_hashes));
-                                    if consensus.broadcast_sender.send(block_entry).is_err() {
-                                        tracing::debug!("Failed to broadcast block");
-                                    }
-                                }
-                                Err(e) => {
-                                    tracing::error!("Failed to save block entry: {:?}", e);
-                                }
-                            }
-                        }
+                        propagation::handle_block_entry(&consensus, block).await;
                     },
                     else => {
                         tokio::task::yield_now().await;
