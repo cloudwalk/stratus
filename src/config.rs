@@ -19,6 +19,7 @@ use crate::eth::miner::MinerConfig;
 use crate::eth::primitives::Address;
 use crate::eth::relayer::ExternalRelayer;
 use crate::eth::relayer::ExternalRelayerClient;
+use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::ExternalRpcStorageConfig;
 use crate::eth::storage::StratusStorageConfig;
 use crate::eth::TransactionRelayer;
@@ -254,17 +255,8 @@ impl ExternalRelayerServerConfig {
 /// Configuration for main Stratus service.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct StratusConfig {
-    /// JSON-RPC binding address.
-    #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
-    pub address: SocketAddr,
-
-    /// JSON-RPC max active connections
-    #[arg(long = "max-connections", env = "MAX_CONNECTIONS", default_value = "200")]
-    pub max_connections: u32,
-
-    /// JSON-RPC max active subscriptions per client.
-    #[arg(long = "max-subscriptions", env = "MAX_SUBSCRIPTIONS", default_value = "15")]
-    pub max_subscriptions: u32,
+    #[clap(flatten)]
+    pub rpc_server: RpcServerConfig,
 
     #[clap(flatten)]
     pub storage: StratusStorageConfig,
@@ -440,17 +432,8 @@ impl WithCommonConfig for ImporterOnlineConfig {
 
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct RunWithImporterConfig {
-    /// JSON-RPC binding address.
-    #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
-    pub address: SocketAddr,
-
-    /// JSON-RPC max active connections
-    #[arg(long = "max-connections", env = "MAX_CONNECTIONS", default_value = "200")]
-    pub max_connections: u32,
-
-    /// JSON-RPC max active subscriptions per client.
-    #[arg(long = "max-subscriptions", env = "MAX_SUBSCRIPTIONS", default_value = "15")]
-    pub max_subscriptions: u32,
+    #[clap(flatten)]
+    pub rpc_server: RpcServerConfig,
 
     #[arg(long = "leader-node", env = "LEADER_NODE")]
     pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname

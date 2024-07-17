@@ -1,7 +1,6 @@
 //! RPC server for HTTP and WS.
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -49,6 +48,7 @@ use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
+use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StratusStorage;
 use crate::eth::Consensus;
@@ -74,14 +74,12 @@ pub async fn serve_rpc(
     miner: Arc<Miner>,
     consensus: Arc<Consensus>,
     // config
-    address: SocketAddr,
+    rpc_server: RpcServerConfig,
     chain_id: ChainId,
-    max_connections: u32,
-    max_subscriptions: u32,
     #[cfg(feature = "request-replication-test-sender")] replication_sender: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
-    tracing::info!(%address, %max_connections, "creating {}", TASK_NAME);
+    tracing::info!(%rpc_server.address, %rpc_server.max_connections, "creating {}", TASK_NAME);
 
     // configure subscriptions
     let subs = RpcSubscriptions::spawn(
@@ -95,13 +93,13 @@ pub async fn serve_rpc(
         chain_id,
         client_version: "stratus",
         gas_price: 0,
-        max_subscriptions,
 
         // services
         executor,
         storage,
         miner,
         consensus,
+        rpc_server: rpc_server.clone(),
 
         // subscriptions
         subs: Arc::clone(&subs.connected),
@@ -132,8 +130,8 @@ pub async fn serve_rpc(
         .set_rpc_middleware(rpc_middleware)
         .set_http_middleware(http_middleware)
         .set_id_provider(RandomStringIdProvider::new(8))
-        .max_connections(max_connections)
-        .build(address)
+        .max_connections(rpc_server.max_connections)
+        .build(rpc_server.address)
         .await?;
 
     let handle_rpc_server = server.start(module);
@@ -849,7 +847,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     };
 
     // check subscription limits
-    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.max_subscriptions, &client).await {
+    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.max_subscriptions, &client).await {
         drop(method_enter);
         pending.reject(e).instrument(method_span).await;
         return Ok(());
