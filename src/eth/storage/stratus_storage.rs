@@ -135,6 +135,9 @@ impl StratusStorage {
 
         timed(|| self.temp.read_pending_block_number()).with(|m| {
             metrics::inc_storage_read_pending_block_number(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read pending block number");
+            }
         })
     }
 
@@ -145,6 +148,9 @@ impl StratusStorage {
 
         timed(|| self.perm.read_mined_block_number()).with(|m| {
             metrics::inc_storage_read_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read miner block number");
+            }
         })
     }
 
@@ -155,6 +161,9 @@ impl StratusStorage {
 
         timed(|| self.temp.set_pending_block_number(block_number)).with(|m| {
             metrics::inc_storage_set_pending_block_number(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to set pending block number");
+            }
         })
     }
 
@@ -182,6 +191,9 @@ impl StratusStorage {
 
         timed(|| self.perm.set_mined_block_number(block_number)).with(|m| {
             metrics::inc_storage_set_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to set miner block number");
+            }
         })
     }
 
@@ -194,6 +206,9 @@ impl StratusStorage {
 
         timed(|| self.temp.set_pending_external_block(block)).with(|m| {
             metrics::inc_storage_set_pending_external_block(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to set pending external block");
+            }
         })
     }
 
@@ -213,6 +228,9 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
         timed(|| self.perm.save_accounts(missing_accounts)).with(|m| {
             metrics::inc_storage_save_accounts(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to save accounts");
+            }
         })
     }
 
@@ -228,6 +246,9 @@ impl StratusStorage {
                 m.result.is_ok(),
                 m.result.as_ref().is_ok_and(|conflicts| conflicts.is_some()),
             );
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to check conflicts");
+            }
         })
     }
 
@@ -240,9 +261,12 @@ impl StratusStorage {
             tracing::debug!(storage = %label::TEMP, %address, "reading account");
             let temp_account = timed(|| self.temp.read_account(address)).with(|m| {
                 metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
+                if let Err(ref e) = m.result {
+                    tracing::error!(reason = ?e, "failed to read account from temporary storage");
+                }
             })?;
             if let Some(account) = temp_account {
-                tracing::debug!(storage = %label::TEMP, %address, "account found in temporary storage");
+                tracing::debug!(storage = %label::TEMP, %address, ?account, "account found in temporary storage");
                 return Ok(account);
             }
         }
@@ -251,14 +275,17 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, %address, "reading account");
         let perm_account = timed(|| self.perm.read_account(address, point_in_time)).with(|m| {
             metrics::inc_storage_read_account(m.elapsed, label::PERM, point_in_time, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read account from permanent storage");
+            }
         })?;
         match perm_account {
             Some(account) => {
-                tracing::debug!(%address, "account found in permanent storage");
+                tracing::debug!(storage = %label::PERM, %address, ?account, "account found in permanent storage");
                 Ok(account)
             }
             None => {
-                tracing::debug!(%address, "account not found, assuming default value");
+                tracing::debug!(storage = %label::PERM, %address, "account not found, assuming default value");
                 Ok(Account::new_empty(*address))
             }
         }
@@ -273,6 +300,9 @@ impl StratusStorage {
             tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
             let temp_slot = timed(|| self.temp.read_slot(address, index)).with(|m| {
                 metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
+                if let Err(ref e) = m.result {
+                    tracing::error!(reason = ?e, "failed to read slot from temporary storage");
+                }
             })?;
             if let Some(slot) = temp_slot {
                 tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
@@ -284,14 +314,17 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, %address, %index, %point_in_time, "reading slot");
         let perm_slot = timed(|| self.perm.read_slot(address, index, point_in_time)).with(|m| {
             metrics::inc_storage_read_slot(m.elapsed, label::PERM, point_in_time, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read slot from permanent storage");
+            }
         })?;
         match perm_slot {
             Some(slot) => {
-                tracing::debug!(%address, %index, value = %slot.value, "slot found in permanent storage");
+                tracing::debug!(storage = %label::PERM, %address, %index, value = %slot.value, "slot found in permanent storage");
                 Ok(slot)
             }
             None => {
-                tracing::debug!(%address, %index, "slot not found, assuming default value");
+                tracing::debug!(storage = %label::PERM, %address, %index, "slot not found, assuming default value");
                 Ok(Slot::new_empty(*index))
             }
         }
@@ -317,6 +350,9 @@ impl StratusStorage {
 
         timed(|| self.temp.save_execution(tx)).with(|m| {
             metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to save execution");
+            }
         })
     }
 
@@ -332,6 +368,9 @@ impl StratusStorage {
 
         let result = timed(|| self.temp.finish_pending_block()).with(|m| {
             metrics::inc_storage_finish_pending_block(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to finish pending block");
+            }
         });
 
         if let Ok(ref block) = result {
@@ -349,14 +388,14 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), "saving block");
 
         // check mined number
-        let mined_number = self.perm.read_mined_block_number()?;
+        let mined_number = self.read_mined_block_number()?;
         if not(block_number.is_zero()) && block_number != mined_number.next() {
             tracing::error!(%block_number, %mined_number, "failed to save block because mismatch with mined block number");
             return Err(StorageError::new_mined_number_mismatch(block_number, mined_number).into());
         }
 
         // check pending number
-        if let Some(pending_number) = self.temp.read_pending_block_number()? {
+        if let Some(pending_number) = self.read_pending_block_number()? {
             if block_number >= pending_number {
                 tracing::error!(%block_number, %pending_number, "failed to save block because mismatch with pending block number");
                 return Err(StorageError::new_pending_number_mismatch(block_number, mined_number).into());
@@ -364,7 +403,7 @@ impl StratusStorage {
         }
 
         // check mined block
-        let existing_block = self.perm.read_block(&BlockFilter::Number(block_number))?;
+        let existing_block = self.read_block(&BlockFilter::Number(block_number))?;
         if existing_block.is_some() {
             tracing::error!(%block_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
             return Err(StorageError::new_mined_block_exists(block_number).into());
@@ -373,6 +412,9 @@ impl StratusStorage {
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| self.perm.save_block(block)).with(|m| {
             metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, %block_number, "failed to save block");
+            }
         })
     }
 
@@ -383,6 +425,9 @@ impl StratusStorage {
 
         timed(|| self.perm.read_block(filter)).with(|m| {
             metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read block");
+            }
         })
     }
 
@@ -394,6 +439,9 @@ impl StratusStorage {
         tracing::debug!(storage = %label::TEMP, %tx_hash, "reading transaction");
         let temp_tx = timed(|| self.temp.read_transaction(tx_hash)).with(|m| {
             metrics::inc_storage_read_transaction(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read transaction from temporary storage");
+            }
         })?;
         if let Some(tx_temp) = temp_tx {
             return Ok(Some(TransactionStage::new_executed(tx_temp)));
@@ -403,6 +451,9 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, %tx_hash, "reading transaction");
         let perm_tx = timed(|| self.perm.read_transaction(tx_hash)).with(|m| {
             metrics::inc_storage_read_transaction(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read transaction from permanent storage");
+            }
         })?;
         match perm_tx {
             Some(tx) => Ok(Some(TransactionStage::new_mined(tx))),
@@ -417,6 +468,9 @@ impl StratusStorage {
 
         timed(|| self.perm.read_logs(filter)).with(|m| {
             metrics::inc_storage_read_logs(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read logs");
+            }
         })
     }
 
@@ -432,12 +486,18 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, "reseting storage");
         timed(|| self.perm.reset_at(number)).with(|m| {
             metrics::inc_storage_reset(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to reset permanent storage");
+            }
         })?;
 
         // reset temp
         tracing::debug!(storage = %label::TEMP, "reseting storage");
         timed(|| self.temp.reset()).with(|m| {
             metrics::inc_storage_reset(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to reset temporary storage");
+            }
         })?;
 
         self.set_pending_block_number_as_next()?;
