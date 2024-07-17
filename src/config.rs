@@ -256,7 +256,7 @@ impl ExternalRelayerServerConfig {
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct StratusConfig {
     #[clap(flatten)]
-    pub rpc: RpcServerConfig,
+    pub rpc_server: RpcServerConfig,
 
     #[clap(flatten)]
     pub storage: StratusStorageConfig,
@@ -433,7 +433,7 @@ impl WithCommonConfig for ImporterOnlineConfig {
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct RunWithImporterConfig {
     #[clap(flatten)]
-    pub rpc: RpcServerConfig,
+    pub rpc_server: RpcServerConfig,
 
     #[arg(long = "leader-node", env = "LEADER_NODE")]
     pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname

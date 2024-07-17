@@ -5,6 +5,7 @@ use crate::eth::executor::Executor;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::ChainId;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
+use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StratusStorage;
 use crate::eth::Consensus;
 
@@ -16,15 +17,13 @@ pub struct RpcContext {
     // gas config
     pub gas_price: usize,
 
-    // general config
-    pub max_subscriptions: u32,
-
     // services
     pub executor: Arc<Executor>,
     #[allow(dead_code)] // HACK this was triggered in Rust 1.79
     pub miner: Arc<Miner>,
     pub storage: Arc<StratusStorage>,
     pub consensus: Arc<Consensus>,
+    pub rpc_server: RpcServerConfig,
     pub subs: Arc<RpcSubscriptionsConnected>,
 }
 
