@@ -120,7 +120,10 @@ impl Evms {
             evm_tx
         };
 
-        let tx_parallel = spawn_evms("evm-tx-parallel", config.num_evms);
+        let tx_parallel = match config.strategy {
+            ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1), // should not really be used if strategy is serial, but keep 1 for fallback
+            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.num_evms),
+        };
         let tx_serial = spawn_evms("evm-tx-serial", 1);
         let tx_external = spawn_evms("evm-tx-external", 1);
         let call_present = spawn_evms("evm-call-present", max(config.num_evms / 2, 1));
@@ -484,7 +487,10 @@ impl Executor {
 
 #[derive(Clone, Copy, serde::Serialize)]
 pub enum ExecutorStrategy {
+    #[serde(rename = "serial")]
     Serial,
+
+    #[serde(rename = "parallel")]
     Paralell,
 }
 

@@ -93,7 +93,9 @@ pub struct PermanentStorageConfig {
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum PermanentStorageKind {
+    #[serde(rename = "inmemory")]
     InMemory,
+    #[serde(rename = "rocks")]
     Rocks,
 }
 

@@ -43,16 +43,20 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
     let rpc_miner = Arc::clone(&miner);
 
     // run rpc and importer-online in parallel
+    let rpc_config = config.clone();
     let rpc_task = async move {
         let res = serve_rpc(
+            // services
             rpc_storage,
             rpc_executor,
             rpc_miner,
             Arc::clone(&consensus),
-            config.rpc_server,
-            config.executor.chain_id.into(),
             #[cfg(feature = "request-replication-test-sender")]
-            create_replication_worker(config.replicate_request_to),
+            create_replication_worker(rpc_config.replicate_request_to.clone()),
+            // config
+            rpc_config.clone(),
+            rpc_config.rpc_server,
+            rpc_config.executor.chain_id.into(),
         )
         .await;
         GlobalState::shutdown_from(TASK_NAME, "rpc server finished unexpectedly");

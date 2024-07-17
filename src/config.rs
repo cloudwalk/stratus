@@ -570,12 +570,15 @@ impl WithCommonConfig for ExternalRelayerConfig {
 // -----------------------------------------------------------------------------
 #[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
 pub enum Environment {
+    #[serde(rename = "local")]
     #[strum(to_string = "local")]
     Local,
 
+    #[serde(rename = "staging")]
     #[strum(to_string = "staging")]
     Staging,
 
+    #[serde(rename = "production")]
     #[strum(to_string = "production")]
     Production,
 }

@@ -56,6 +56,7 @@ use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
+use crate::ext::ResultExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -73,13 +74,15 @@ pub async fn serve_rpc(
     executor: Arc<Executor>,
     miner: Arc<Miner>,
     consensus: Arc<Consensus>,
-    // config
-    rpc_server: RpcServerConfig,
-    chain_id: ChainId,
     #[cfg(feature = "request-replication-test-sender")] replication_sender: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
+
+    // config
+    app_config: impl serde::Serialize,
+    rpc_config: RpcServerConfig,
+    chain_id: ChainId,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
-    tracing::info!(%rpc_server.address, %rpc_server.max_connections, "creating {}", TASK_NAME);
+    tracing::info!(%rpc_config.address, %rpc_config.max_connections, "creating {}", TASK_NAME);
 
     // configure subscriptions
     let subs = RpcSubscriptions::spawn(
@@ -90,6 +93,7 @@ pub async fn serve_rpc(
 
     // configure context
     let ctx = RpcContext {
+        app_config: serde_json::to_value(app_config).expect_infallible(),
         chain_id,
         client_version: "stratus",
         gas_price: 0,
@@ -99,7 +103,7 @@ pub async fn serve_rpc(
         storage,
         miner,
         consensus,
-        rpc_server: rpc_server.clone(),
+        rpc_server: rpc_config.clone(),
 
         // subscriptions
         subs: Arc::clone(&subs.connected),
@@ -120,15 +124,16 @@ pub async fn serve_rpc(
     let http_middleware = tower::ServiceBuilder::new()
         .layer_fn(RpcHttpMiddleware::new)
         .layer(ProxyGetRequestLayer::new("/health", "stratus_health").unwrap())
-        .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap());
+        .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap())
+        .layer(ProxyGetRequestLayer::new("/config", "stratus_config").unwrap());
 
     // serve module
     let server = Server::builder()
         .set_rpc_middleware(rpc_middleware)
         .set_http_middleware(http_middleware)
         .set_id_provider(RandomStringIdProvider::new(8))
-        .max_connections(rpc_server.max_connections)
-        .build(rpc_server.address)
+        .max_connections(rpc_config.max_connections)
+        .build(rpc_config.address)
         .await?;
 
     let handle_rpc_server = server.start(module);
@@ -161,15 +166,18 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus status
     module.register_async_method("stratus_health", stratus_health)?;
-    module.register_method("stratus_version", stratus_version)?;
 
-    // stratus state
+    // stratus admin
     module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
     module.register_method("stratus_disableTransactions", stratus_disable_transactions)?;
     module.register_method("stratus_enableMiner", stratus_enable_miner)?;
     module.register_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
+
+    // stratus state
+    module.register_method("stratus_version", stratus_version)?;
+    module.register_method("stratus_config", stratus_config)?;
 
     module.register_blocking_method("stratus_getSlots", stratus_get_slots)?;
     module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
@@ -246,7 +254,7 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 }
 
 // -----------------------------------------------------------------------------
-// Status
+// Status - Health checks
 // -----------------------------------------------------------------------------
 
 /// If stratus is ready and able to receive traffic.
@@ -269,9 +277,9 @@ async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensio
     Ok(json!(true))
 }
 
-fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
-    Ok(build_info::as_json(ctx))
-}
+// -----------------------------------------------------------------------------
+// Stratus - Admin
+// -----------------------------------------------------------------------------
 
 fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
     GlobalState::set_unknown_client_enabled(true);
@@ -303,6 +311,18 @@ fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool 
     GlobalState::is_miner_enabled()
 }
 
+// -----------------------------------------------------------------------------
+// Stratus - State
+// -----------------------------------------------------------------------------
+
+fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
+    Ok(build_info::as_json(ctx))
+}
+
+fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
+    Ok(ctx.app_config.clone())
+}
+
 fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<Vec<Slot>, RpcError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
@@ -324,7 +344,7 @@ fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     // no indexes specified, read all slots
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_filter)?;
     match indexes.len() {
-        // no indexes specified, real all slots
+        // no indexes specified, read all slots
         0 => {
             tracing::info!(%address, ?indexes, indexes_len = %indexes.len(), %point_in_time, "reading all account slots");
             let all_slots = ctx.storage.read_all_slots(&address, &point_in_time)?;

@@ -11,6 +11,10 @@ pub enum StorageError {
     #[error("Storage conflict: {0:?}")]
     Conflict(ExecutionConflicts),
 
+    /// State conflict between block being saved and block in the permanent storage.
+    #[error("Block with number {number} already exists.")]
+    MinedBlockExists { number: BlockNumber },
+
     /// State conflict between block being saved and current mined block number.
     #[error("Mismatch between new block number ({new}) and mined block number ({mined}).")]
     MinedNumberMismatch { new: BlockNumber, mined: BlockNumber },
