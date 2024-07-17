@@ -8,12 +8,16 @@ use super::append_entry::BlockEntry;
 use super::append_entry::TransactionExecutionEntry;
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub enum LogEntryData {
     BlockEntry(BlockEntry),
     TransactionExecutionEntries(Vec<TransactionExecutionEntry>),
-    #[default]
-    EmptyData,
+}
+
+impl Default for LogEntryData {
+    fn default() -> Self {
+        LogEntryData::TransactionExecutionEntries(Vec::new())
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -36,7 +40,6 @@ impl Message for LogEntryData {
                 for execution in executions {
                     prost::encoding::message::encode(2, execution, buf);
                 },
-            LogEntryData::EmptyData => {}
         }
     }
 
@@ -79,7 +82,6 @@ impl Message for LogEntryData {
             LogEntryData::BlockEntry(header) => prost::encoding::message::encoded_len(1, header),
             LogEntryData::TransactionExecutionEntries(executions) =>
                 executions.iter().map(|execution| prost::encoding::message::encoded_len(2, execution)).sum(),
-            LogEntryData::EmptyData => 0,
         }
     }
 
@@ -87,7 +89,6 @@ impl Message for LogEntryData {
         match self {
             LogEntryData::BlockEntry(header) => header.clear(),
             LogEntryData::TransactionExecutionEntries(executions) => executions.clear(),
-            LogEntryData::EmptyData => {}
         }
     }
 }

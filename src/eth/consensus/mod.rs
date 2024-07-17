@@ -804,10 +804,6 @@ impl Consensus {
                         consensus.transaction_execution_queue.lock().await.extend(transaction_executions.clone());
                         log_entry_queue.remove(0);
                     }
-                    LogEntryData::EmptyData => {
-                        tracing::warn!("empty log entry received");
-                        log_entry_queue.remove(0);
-                    }
                 }
             }
         }
@@ -938,13 +934,6 @@ impl Consensus {
                     executions: executions.clone(),
                     leader_id: self.my_address.to_string(),
                 })),
-            LogEntryData::EmptyData => AppendRequest::TransactionExecutionsRequest(Request::new(AppendTransactionExecutionsRequest {
-                term: current_term,
-                prev_log_index,
-                prev_log_term,
-                executions: Vec::<TransactionExecutionEntry>::new(),
-                leader_id: self.my_address.to_string(),
-            })),
         };
 
         tracing::info!(
