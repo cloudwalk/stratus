@@ -129,7 +129,10 @@ where
     T: Sized,
 {
     fn expect_infallible(self) -> T {
-        self.expect("serialization should be infallible")
+        if let Err(ref e) = self {
+            tracing::error!(reason = ?e, "serde serialization/deserialization that should be infallible");
+        }
+        self.expect("serde serialization/deserialization that should be infallible")
     }
 }
 
@@ -358,6 +361,11 @@ pub fn to_json_string_pretty<V: serde::Serialize>(value: &V) -> String {
 /// Serializes any serializable value to [`serde_json::Value`] without having to check for errors.
 pub fn to_json_value<V: serde::Serialize>(value: V) -> serde_json::Value {
     serde_json::to_value(value).expect_infallible()
+}
+
+/// Deserializes any deserializable value from [`&str`] without having to check for errors.
+pub fn from_json_str<T: serde::de::DeserializeOwned>(s: &str) -> T {
+    serde_json::from_str::<T>(s).expect_infallible()
 }
 
 // -----------------------------------------------------------------------------
