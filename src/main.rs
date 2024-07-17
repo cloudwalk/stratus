@@ -28,7 +28,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.storage.perm_storage.rocks_path_prefix.clone(),
         config.clone().candidate_peers.clone(),
         None,
-        config.address,
+        config.rpc.address,
         config.grpc_server_address,
     ); // for now, we force None to initiate with the current node being the leader
 
@@ -38,10 +38,10 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         executor,
         miner,
         consensus,
-        config.address,
+        config.rpc.address,
         config.executor.chain_id.into(),
-        config.max_connections,
-        config.max_subscriptions,
+        config.rpc.max_connections,
+        config.rpc.max_subscriptions,
         #[cfg(feature = "request-replication-test-sender")]
         create_replication_worker(config.replicate_request_to),
     )

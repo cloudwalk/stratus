@@ -30,7 +30,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         config.storage.perm_storage.rocks_path_prefix.clone(),
         config.clone().candidate_peers.clone(),
         Some(config.clone()),
-        config.address,
+        config.rpc.address,
         config.grpc_server_address,
     ); // in development, with no leader configured, the current node ends up being the leader
     let (http_url, ws_url) = consensus.get_chain_url().await.expect("chain url not found");
@@ -49,10 +49,10 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
             rpc_executor,
             rpc_miner,
             Arc::clone(&consensus),
-            config.address,
+            config.rpc.address,
             config.executor.chain_id.into(),
-            config.max_connections,
-            config.max_subscriptions,
+            config.rpc.max_connections,
+            config.rpc.max_subscriptions,
             #[cfg(feature = "request-replication-test-sender")]
             create_replication_worker(config.replicate_request_to),
         )
