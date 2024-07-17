@@ -119,9 +119,6 @@ pub async fn serve_rpc(
     });
     let http_middleware = tower::ServiceBuilder::new()
         .layer_fn(RpcHttpMiddleware::new)
-        .layer(ProxyGetRequestLayer::new("/startup", "stratus_startup").unwrap())
-        .layer(ProxyGetRequestLayer::new("/readiness", "stratus_readiness").unwrap())
-        .layer(ProxyGetRequestLayer::new("/liveness", "stratus_liveness").unwrap())
         .layer(ProxyGetRequestLayer::new("/health", "stratus_health").unwrap())
         .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap());
 
@@ -163,9 +160,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     }
 
     // stratus status
-    module.register_method("stratus_startup", stratus_startup)?;
-    module.register_async_method("stratus_readiness", stratus_readiness)?;
-    module.register_method("stratus_liveness", stratus_liveness)?;
     module.register_async_method("stratus_health", stratus_health)?;
     module.register_method("stratus_version", stratus_version)?;
 
@@ -255,11 +249,15 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status
 // -----------------------------------------------------------------------------
 
-fn stratus_startup(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
-    Ok(json!(true))
-}
+/// If stratus is ready and able to receive traffic.
+///
+/// This is an `AND` of `readiness` with `liveness`.
+async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensions: Extensions) -> Result<JsonValue, RpcError> {
+    if GlobalState::is_shutdown() {
+        tracing::warn!("liveness check failed because of shutdown");
+        return Err(RpcError::StratusShutdown);
+    }
 
-async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, RpcError> {
     let should_serve = context.consensus.should_serve().await;
     if not(should_serve) {
         tracing::warn!("readiness check failed because consensus is not ready");
@@ -268,24 +266,6 @@ async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extension
     }
 
     metrics::set_consensus_is_ready(1_u64);
-    Ok(json!(true))
-}
-
-fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
-    if GlobalState::is_shutdown() {
-        tracing::warn!("liveness check failed because of shutdown");
-        return Err(RpcError::StratusShutdown);
-    }
-
-    Ok(json!(true))
-}
-
-/// If stratus is ready and able to receive traffic.
-///
-/// This is an `AND` of `readiness` with `liveness`.
-async fn stratus_health(params: Params<'_>, context: Arc<RpcContext>, extensions: Extensions) -> Result<JsonValue, RpcError> {
-    stratus_liveness(params.clone(), &context, &extensions)?;
-    stratus_readiness(params, context, extensions).await?;
     Ok(json!(true))
 }
 
@@ -380,7 +360,7 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Ext
 // -----------------------------------------------------------------------------
 
 async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
-    stratus_readiness(params, arc, ext).await
+    stratus_health(params, arc, ext).await
 }
 
 fn net_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> String {
