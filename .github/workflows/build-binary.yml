@@ -6,7 +6,7 @@ on:
       features:
         description: 'List of features to enable'
         required: false
-        default: 'default'
+        default: ''
   push:
     branches:
       - 'main'
@@ -54,11 +54,12 @@ jobs:
         run: |
           cargo build --release \
             --bin run-with-importer --bin stratus --bin importer-online --bin relayer \
-            --features "${{ github.event.inputs.features }}"
+            --features "$FEATURES"
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
           TRACING_LOG_FORMAT: json
           NO_COLOR: 1
+          FEATURES: ${{ github.event.inputs.features || 'default' }}
 
       - name: Upload run with importer
         uses: actions/upload-artifact@v4
