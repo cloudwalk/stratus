@@ -2,6 +2,11 @@ name: Build Binary
 
 on:
   workflow_dispatch:
+    inputs:
+      features:
+        description: 'List of features to enable'
+        required: false
+        default: ''
   push:
     branches:
       - 'main'
@@ -40,17 +45,21 @@ jobs:
           prefix-key: ${{ runner.os }}-v3-cargo
           shared-key: artifact
           cache-provider: "github"
-          save-if: ${{ github.ref_name == 'main' }}
+          save-if: ${{ github.ref_name == 'main' && github.event_name == 'push' }}
 
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
       - name: Build binaries
-        run: cargo build --release --bin run-with-importer --bin stratus --bin importer-online --bin relayer
+        run: |
+          cargo build --release \
+            --bin run-with-importer --bin stratus --bin importer-online --bin relayer \
+            --features "$FEATURES"
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
           TRACING_LOG_FORMAT: json
           NO_COLOR: 1
+          FEATURES: "${{ github.event.inputs.features || 'default' }}"
 
       - name: Upload run with importer
         uses: actions/upload-artifact@v4
