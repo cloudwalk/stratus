@@ -34,14 +34,17 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
 
     // start rpc server
     serve_rpc(
+        // services
         Arc::clone(&storage),
         executor,
         miner,
         consensus,
-        config.rpc_server,
-        config.executor.chain_id.into(),
         #[cfg(feature = "request-replication-test-sender")]
         create_replication_worker(config.replicate_request_to),
+        // config
+        config.clone(),
+        config.rpc_server,
+        config.executor.chain_id.into(),
     )
     .await?;
 
