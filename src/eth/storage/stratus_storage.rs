@@ -363,6 +363,13 @@ impl StratusStorage {
             }
         }
 
+        // check mined block
+        let existing_block = self.perm.read_block(&BlockFilter::Number(block_number))?;
+        if existing_block.is_some() {
+            tracing::error!(%block_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
+            return Err(StorageError::new_mined_block_exists(block_number).into());
+        }
+
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| self.perm.save_block(block)).with(|m| {
             metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
