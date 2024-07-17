@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use stratus::config::StratusConfig;
+#[cfg(feature = "request-replication-test-sender")]
+use stratus::eth::rpc::create_replication_worker;
 use stratus::eth::rpc::serve_rpc;
 use stratus::eth::Consensus;
 use stratus::GlobalServices;
@@ -41,7 +43,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.max_connections,
         config.max_subscriptions,
         #[cfg(feature = "request-replication-test-sender")]
-        config.replicate_request_to,
+        create_replication_worker(config.replicate_request_to),
     )
     .await?;
 
