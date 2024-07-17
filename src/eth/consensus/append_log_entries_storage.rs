@@ -99,10 +99,9 @@ impl AppendLogEntriesStorage {
         }
     }
 
-    pub fn save_log_entry(&self, index: u64, term: u64, data: LogEntryData, entry_type: &str, append_only: bool) -> Result<()> {
-        tracing::debug!(index, term, "Creating {} log entry", entry_type);
+    pub fn save_log_entry(&self, index: u64, term: u64, data: LogEntryData, append_only: bool) -> Result<()> {
         let log_entry = LogEntry { term, index, data };
-        tracing::debug!(index = log_entry.index, term = log_entry.term, "{} log entry created", entry_type);
+        tracing::debug!(index = log_entry.index, term = log_entry.term, "log entry created");
 
         match self.get_entry(log_entry.index) {
             Ok(Some(existing_entry)) => {
@@ -244,7 +243,7 @@ mod tests {
         let term = 1;
         let log_entry_data = create_mock_log_entry_data_block();
 
-        storage.save_log_entry(index, term, log_entry_data.clone(), "block", false).unwrap();
+        storage.save_log_entry(index, term, log_entry_data.clone(), false).unwrap();
         let retrieved_entry = storage.get_entry(index).unwrap().unwrap();
 
         assert_eq!(retrieved_entry.index, index);
@@ -285,10 +284,10 @@ mod tests {
         let log_entry_data = create_mock_log_entry_data_block();
 
         // Save initial log entry as follower (append_only = false)
-        storage.save_log_entry(index, term, log_entry_data.clone(), "block", false).unwrap();
+        storage.save_log_entry(index, term, log_entry_data.clone(), false).unwrap();
 
         // Save conflicting log entry at the same index but with a different term
-        storage.save_log_entry(index, conflicting_term, log_entry_data.clone(), "block", false).unwrap();
+        storage.save_log_entry(index, conflicting_term, log_entry_data.clone(), false).unwrap();
 
         // Assert no entries exist after the conflicting entry's index, confirming that the conflicting entry and all that follow it were deleted
         assert!(storage.get_entry(index + 1).unwrap().is_none());
@@ -333,10 +332,10 @@ mod tests {
         let log_entry_data = create_mock_log_entry_data_block();
 
         // Save initial log entry as leader (append_only = true)
-        storage.save_log_entry(index, term, log_entry_data.clone(), "block", true).unwrap();
+        storage.save_log_entry(index, term, log_entry_data.clone(), true).unwrap();
 
         // Attempt to save another entry at the same index with a different term
-        storage.save_log_entry(index, conflicting_term, log_entry_data.clone(), "block", true).unwrap();
+        storage.save_log_entry(index, conflicting_term, log_entry_data.clone(), true).unwrap();
 
         // Retrieve the entry and assert it still matches the original entry
         let retrieved_entry = storage.get_entry(index).unwrap().unwrap();
