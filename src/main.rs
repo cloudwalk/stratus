@@ -40,7 +40,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         miner,
         consensus,
         #[cfg(feature = "request-replication-test-sender")]
-        create_replication_worker(config.replicate_request_to),
+        create_replication_worker(config.replicate_request_to.clone()),
         // config
         config.clone(),
         config.rpc_server,

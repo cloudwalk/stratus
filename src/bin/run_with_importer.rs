@@ -52,7 +52,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
             rpc_miner,
             Arc::clone(&consensus),
             #[cfg(feature = "request-replication-test-sender")]
-            create_replication_worker(rpc_config.replicate_request_to),
+            create_replication_worker(rpc_config.replicate_request_to.clone()),
             // config
             rpc_config.clone(),
             rpc_config.rpc_server,
