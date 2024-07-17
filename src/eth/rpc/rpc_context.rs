@@ -8,8 +8,12 @@ use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StratusStorage;
 use crate::eth::Consensus;
+use crate::ext::JsonValue;
 
 pub struct RpcContext {
+    // app config
+    pub app_config: JsonValue,
+
     // blockchain config
     pub chain_id: ChainId,
     pub client_version: &'static str,

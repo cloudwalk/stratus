@@ -83,6 +83,7 @@ pub struct TemporaryStorageConfig {
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum TemporaryStorageKind {
+    #[serde(rename = "inmemory")]
     InMemory,
 }
 
