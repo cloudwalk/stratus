@@ -459,11 +459,12 @@ pub fn block_from_propagation(block_entry: append_entry::BlockEntry, temporary_t
 // -----------------------------------------------------------------------------
 mod interval_miner {
     use std::sync::mpsc;
+    use std::sync::mpsc::RecvTimeoutError;
     use std::sync::Arc;
+    use std::time::Duration;
 
     use tokio::time::Instant;
 
-    use crate::channel_read_sync;
     use crate::eth::miner::Miner;
     use crate::ext::not;
     use crate::infra::tracing::warn_task_rx_closed;
@@ -472,10 +473,23 @@ mod interval_miner {
     pub fn run(miner: Arc<Miner>, ticks_rx: mpsc::Receiver<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
 
-        while let Ok(tick) = channel_read_sync!(ticks_rx) {
+        loop {
             if GlobalState::is_shutdown_warn(TASK_NAME) {
-                return;
+                break;
             }
+
+            let tick = match ticks_rx.recv_timeout(Duration::from_secs(2)) {
+                Ok(tick) => tick,
+                Err(RecvTimeoutError::Disconnected) => break,
+                Err(RecvTimeoutError::Timeout) => {
+                    tracing::warn!(
+                        channel = stringify!(ticks_rx),
+                        timeout_s = 2,
+                        "timeout reading miner channel, expected 1 block per second",
+                    );
+                    continue;
+                }
+            };
 
             if not(GlobalState::is_miner_enabled()) {
                 tracing::warn!("skipping mining block because block mining is disabled");
