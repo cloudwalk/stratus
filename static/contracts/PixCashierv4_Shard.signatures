@@ -1,0 +1,10 @@
+Function signatures:
+610273fe: getCashIn(bytes32)
+7ddc85a0: getCashIns(bytes32[])
+eccd1f4e: getCashOut(bytes32)
+6aa67dbe: getCashOuts(bytes32[])
+73d4a932: processCashOut(bytes32,uint8)
+976c7dbc: registerCashIn(address,uint256,bytes32,uint8)
+b5114290: registerCashOut(address,uint256,bytes32)
+5f2bdb48: revokeCashIn(bytes32)
+3659cfe6: upgradeTo(address)
