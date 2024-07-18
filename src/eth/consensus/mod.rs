@@ -607,6 +607,30 @@ impl Consensus {
     }
 
     pub async fn should_serve(&self) -> bool {
+        if self.importer_config.is_some() {
+            //gather the latest block number, check how far behind it is from current storage block
+            //if its greater than 3 blocks of distance, it should not be served
+            let blockchain_client_lock = self.blockchain_client.lock().await;
+
+            let Some(ref blockchain_client) = *blockchain_client_lock else {
+                tracing::error!("blockchain client is not set at importer, cannot serve requests because they cant be forwarded");
+                return false;
+            };
+
+            let Ok(validator_block_number) = blockchain_client.fetch_block_number().await else {
+                tracing::error!("unable to fetch latest block number");
+                return false;
+            };
+
+            let Ok(current_block_number) = self.storage.read_mined_block_number() else {
+                tracing::error!("unable to fetch current block number");
+                return false;
+            };
+
+            return (validator_block_number.as_u64() - 3) <= current_block_number.as_u64();
+        }
+
+        // consensus
         if Self::is_leader() {
             return true;
         }
