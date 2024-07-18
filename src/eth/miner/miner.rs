@@ -10,7 +10,6 @@ use tokio::sync::broadcast;
 use tracing::Span;
 
 use crate::eth::consensus::append_entry;
-use crate::eth::miner::MinerError;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
@@ -22,6 +21,7 @@ use crate::eth::primitives::Index;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Size;
+use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::relayer::ExternalRelayerClient;
@@ -99,7 +99,7 @@ impl Miner {
 
     /// Persists a transaction execution.
     #[tracing::instrument(name = "miner::save_execution", skip_all, fields(tx_hash))]
-    pub fn save_execution(&self, tx_execution: TransactionExecution) -> Result<(), MinerError> {
+    pub fn save_execution(&self, tx_execution: TransactionExecution) -> Result<(), StratusError> {
         Span::with(|s| {
             s.rec_str("tx_hash", &tx_execution.hash());
         });

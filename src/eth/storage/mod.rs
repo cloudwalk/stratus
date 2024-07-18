@@ -6,7 +6,6 @@ mod permanent_storage;
 mod postgres_external_rpc;
 pub mod rocks;
 
-mod storage_error;
 mod storage_point_in_time;
 mod stratus_storage;
 mod temporary_storage;
@@ -23,7 +22,6 @@ pub use permanent_storage::PermanentStorageKind;
 pub use postgres_external_rpc::PostgresExternalRpcStorage;
 pub use postgres_external_rpc::PostgresExternalRpcStorageConfig;
 pub use rocks::rocks_permanent::RocksPermanentStorage;
-pub use storage_error::StorageError;
 pub use storage_point_in_time::StoragePointInTime;
 pub use stratus_storage::StratusStorage;
 pub use stratus_storage::StratusStorageConfig;

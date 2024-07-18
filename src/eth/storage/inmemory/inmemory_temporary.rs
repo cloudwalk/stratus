@@ -18,8 +18,8 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
 
@@ -145,11 +145,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    fn save_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
+    fn save_execution(&self, tx: TransactionExecution) -> Result<(), StratusError> {
         // check conflicts
         let mut states = self.lock_write();
         if let Some(conflicts) = check_conflicts(&states, tx.execution()) {
-            return Err(StorageError::ExecutionConflict(conflicts.into()));
+            return Err(StratusError::TransactionConflict(conflicts.into()));
         }
 
         // save account changes
