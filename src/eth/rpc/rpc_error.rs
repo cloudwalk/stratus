@@ -8,8 +8,10 @@ use jsonrpsee::types::error::SERVER_IS_BUSY_CODE;
 use jsonrpsee::types::error::TOO_MANY_SUBSCRIPTIONS_CODE;
 use jsonrpsee::types::ErrorObjectOwned;
 
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Bytes;
 use crate::eth::storage::StorageError;
+use crate::ext::to_json_string;
 use crate::infra::metrics::MetricLabelValue;
 
 #[derive(Debug, strum::Display, strum::EnumMessage)]
@@ -19,6 +21,7 @@ pub enum RpcError {
     ClientMissing,
 
     // Params
+    BlockFilterInvalid { filter: BlockFilter },
     BlockRangeInvalid { actual: u64, max: u64 },
     ParameterMissing { rust_type: &'static str },
     ParameterInvalid { rust_type: &'static str, decode_error: String },
@@ -48,6 +51,7 @@ impl RpcError {
             Self::ClientMissing => INVALID_REQUEST_CODE,
 
             // Params
+            Self::BlockFilterInvalid { .. } => INVALID_PARAMS_CODE,
             Self::BlockRangeInvalid { .. } => INVALID_PARAMS_CODE,
             Self::ParameterInvalid { .. } => INVALID_PARAMS_CODE,
             Self::ParameterMissing { .. } => INVALID_PARAMS_CODE,
@@ -77,6 +81,7 @@ impl RpcError {
             Self::ClientMissing => "Denied because client did not identify itself.".to_owned(),
 
             // Params
+            Self::BlockFilterInvalid { .. } => "Block filter does not point to a valid block.".into(),
             Self::BlockRangeInvalid { actual, max } => format!("Denied because will fetch data from {actual} blocks, but the max allowed is {max}."),
             Self::ParameterMissing { rust_type } => format!("Expected {rust_type} parameter, but received nothing."),
             Self::ParameterInvalid { rust_type, .. } => format!("Failed to decode {rust_type} parameter."),
@@ -102,6 +107,7 @@ impl RpcError {
     /// Error additional data to be used in the JSON-RPC response.
     pub fn data(&self) -> Option<String> {
         match self {
+            Self::BlockFilterInvalid { filter } => Some(to_json_string(filter)),
             Self::ParameterInvalid { decode_error, .. } => Some(decode_error.to_string()),
             Self::TransactionInvalidRlp { decode_error } => Some(decode_error.to_string()),
             Self::TransactionReverted { output } => Some(const_hex::encode_prefixed(output)),
