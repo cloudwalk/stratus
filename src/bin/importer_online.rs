@@ -159,7 +159,10 @@ async fn start_block_executor(
         let (block, receipts) = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
             Ok(Some(inner)) => inner,
             Ok(None) => break, // channel closed
-            Err(_timed_out) => continue,
+            Err(_timed_out) => {
+                tracing::warn!(timeout = "2s", "timeout reading block executor channel, expected around 1 block per second");
+                continue;
+            }
         };
 
         #[cfg(feature = "metrics")]

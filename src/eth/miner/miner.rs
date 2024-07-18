@@ -482,11 +482,7 @@ mod interval_miner {
                 Ok(tick) => tick,
                 Err(RecvTimeoutError::Disconnected) => break,
                 Err(RecvTimeoutError::Timeout) => {
-                    tracing::warn!(
-                        channel = stringify!(ticks_rx),
-                        timeout_s = 2,
-                        "timeout reading miner channel, expected 1 block per second",
-                    );
+                    tracing::warn!(timeout = "2s", "timeout reading miner channel, expected 1 block per second");
                     continue;
                 }
             };
