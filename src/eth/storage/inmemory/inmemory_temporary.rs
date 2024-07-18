@@ -5,8 +5,6 @@ use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
 
-use anyhow::Context;
-use anyhow::Ok;
 use nonempty::NonEmpty;
 
 use crate::eth::primitives::Account;
@@ -147,11 +145,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+    fn save_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
         // check conflicts
         let mut states = self.lock_write();
         if let Some(conflicts) = check_conflicts(&states, tx.execution()) {
-            return Err(StorageError::Conflict(conflicts)).context("execution conflicts with current state");
+            return Err(StorageError::ExecutionConflict(conflicts.into()));
         }
 
         // save account changes

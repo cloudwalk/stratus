@@ -1,25 +1,30 @@
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionConflicts;
 
-#[derive(Debug, thiserror::Error, strum::EnumIs, derive_new::new)]
+#[derive(Debug, thiserror::Error, strum::EnumIs)]
 pub enum StorageError {
-    /// Generic error interacting with the storage.
-    #[error("Storage error: {0}")]
-    Generic(#[from] anyhow::Error),
+    /// Failure to convert a block filter to a point in time.
+    #[error("Block filter {filter} points to a invalid block.")]
+    InvalidPointInTime { filter: BlockFilter },
 
-    /// State conflict between transaction execution and current storage state.
-    #[error("Storage conflict: {0:?}")]
-    Conflict(ExecutionConflicts),
+    /// Conflict between transaction execution being saved and current storage state.
+    #[error("Execution conflict: {0:?}")]
+    ExecutionConflict(Box<ExecutionConflicts>),
 
     /// State conflict between block being saved and block in the permanent storage.
-    #[error("Block with number {number} already exists.")]
-    MinedBlockExists { number: BlockNumber },
+    #[error("Block conflict: {number} already exists in the permanent storage.")]
+    BlockConflict { number: BlockNumber },
 
     /// State conflict between block being saved and current mined block number.
-    #[error("Mismatch between new block number ({new}) and mined block number ({mined}).")]
-    MinedNumberMismatch { new: BlockNumber, mined: BlockNumber },
+    #[error("Mined number conflict between new block number ({new}) and mined block number ({mined}).")]
+    MinedNumberConflict { new: BlockNumber, mined: BlockNumber },
 
     /// State conflict between block being saved and current pending block number.
-    #[error("Mismatch between new block number ({new}) and pending block number ({pending}).")]
-    PendingNumberMismatch { new: BlockNumber, pending: BlockNumber },
+    #[error("Pending number conflict between new block number ({new}) and pending block number ({pending}).")]
+    PendingNumberConflict { new: BlockNumber, pending: BlockNumber },
+
+    /// Generic error interacting with the storage.
+    #[error("Unexpected storage error: {0}")]
+    Unexpected(#[from] anyhow::Error),
 }
