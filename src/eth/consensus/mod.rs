@@ -229,7 +229,6 @@ impl Consensus {
         };
         let consensus = Arc::new(consensus);
 
-
         Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
         #[cfg(feature = "raft")]
         {
