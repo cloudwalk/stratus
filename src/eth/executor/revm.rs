@@ -1,15 +1,7 @@
-//! Concrete Implementation of the `Evm` Trait Using `revm`
-//!
-//! `Revm` is a concrete implementation of the Evm trait, utilizing the `revm` library.
-//! It translates the abstract requirements of Ethereum transaction execution into actionable logic,
-//! interacting with the project's storage backend to manage state. `Revm` embodies the practical application
-//! of the `Evm` trait, serving as a bridge between Ethereum's abstract operations and Stratus's storage mechanisms.
-
 use std::cmp::min;
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use anyhow::Context;
 use itertools::Itertools;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
@@ -27,7 +19,6 @@ use revm::Handler;
 
 use crate::eth::executor::evm::EvmExecutionResult;
 use crate::eth::executor::Evm;
-use crate::eth::executor::EvmError;
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -43,6 +34,7 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::StratusError;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
@@ -105,7 +97,7 @@ impl Revm {
 }
 
 impl Evm for Revm {
-    fn execute(&mut self, input: EvmInput) -> anyhow::Result<EvmExecutionResult> {
+    fn execute(&mut self, input: EvmInput) -> Result<EvmExecutionResult, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -157,7 +149,7 @@ impl Evm for Revm {
             Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
-                Err(EvmError::Revm(e)).context("Error executing EVM transaction.")
+                Err(StratusError::Evm(e))
             }
         };
 
