@@ -232,9 +232,9 @@ impl Consensus {
         let rx_blocks: broadcast::Receiver<Block> = miner.notifier_blocks.subscribe();
 
         Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
-        Self::initialize_transaction_execution_queue(Arc::clone(&consensus));
-        Self::initialize_append_entries_channel(Arc::clone(&consensus), rx_pending_txs, rx_blocks);
-        Self::initialize_server(Arc::clone(&consensus));
+        // Self::initialize_transaction_execution_queue(Arc::clone(&consensus));
+        // Self::initialize_append_entries_channel(Arc::clone(&consensus), rx_pending_txs, rx_blocks);
+        // Self::initialize_server(Arc::clone(&consensus));
         Self::initialize_heartbeat_timer(Arc::clone(&consensus));
 
         tracing::info!(my_address = %my_address, "consensus module initialized");
