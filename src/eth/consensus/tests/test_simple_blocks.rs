@@ -22,7 +22,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StoragePointInTime;
+use crate::eth::storage::StoragePointInTime;
 
 #[tokio::test]
 async fn test_append_entries_transaction_executions_and_block() {
