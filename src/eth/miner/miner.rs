@@ -10,6 +10,7 @@ use tokio::sync::broadcast;
 use tracing::Span;
 
 use crate::eth::consensus::append_entry;
+use crate::eth::miner::MinerError;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
@@ -98,7 +99,7 @@ impl Miner {
 
     /// Persists a transaction execution.
     #[tracing::instrument(name = "miner::save_execution", skip_all, fields(tx_hash))]
-    pub fn save_execution(&self, tx_execution: TransactionExecution) -> anyhow::Result<()> {
+    pub fn save_execution(&self, tx_execution: TransactionExecution) -> Result<(), MinerError> {
         Span::with(|s| {
             s.rec_str("tx_hash", &tx_execution.hash());
         });

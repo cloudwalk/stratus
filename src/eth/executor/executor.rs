@@ -12,6 +12,7 @@ use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::Revm;
 use crate::eth::miner::Miner;
+use crate::eth::miner::MinerError;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
@@ -25,7 +26,6 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
@@ -342,7 +342,7 @@ impl Executor {
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
                     Err(e) =>
-                        if let Some(StorageError::ExecutionConflict(_)) = e.downcast_ref::<StorageError>() {
+                        if let Some(MinerError::ExecutionConflict(_)) = e.downcast_ref::<MinerError>() {
                             self.execute_local_transaction_attempts(tx_input, EvmRoute::Serial, INFINITE_ATTEMPTS)
                         } else {
                             Err(e)
@@ -426,14 +426,14 @@ impl Executor {
                     return Ok(tx_execution);
                 }
                 Err(e) =>
-                    if let Some(StorageError::ExecutionConflict(conflicts)) = e.downcast_ref::<StorageError>() {
+                    if let MinerError::ExecutionConflict(ref conflicts) = e {
                         tracing::warn!(%attempt, ?conflicts, "temporary storage conflict detected when saving execution");
                         if attempt >= max_attempts {
-                            return Err(e);
+                            return Err(e.into());
                         }
                         continue;
                     } else {
-                        return Err(e);
+                        return Err(e.into());
                     },
             }
         }

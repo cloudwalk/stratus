@@ -16,6 +16,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::InMemoryTemporaryStorage;
+use crate::eth::storage::StorageError;
 
 /// Temporary storage (in-between blocks) operations.
 pub trait TemporaryStorage: Send + Sync + 'static {
@@ -37,7 +38,7 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
 
     /// Saves a re-executed transaction to the pending mined block.
-    fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()>;
+    fn save_execution(&self, tx: TransactionExecution) -> Result<(), StorageError>;
 
     /// Retrieves the pending transactions of the pending block.
     fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>>;
