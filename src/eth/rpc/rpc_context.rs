@@ -1,12 +1,19 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use crate::eth::executor::Executor;
+use crate::eth::miner::Miner;
 use crate::eth::primitives::ChainId;
-use crate::eth::rpc::RpcSubscriptions;
+use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
+use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StratusStorage;
-use crate::eth::EthExecutor;
+use crate::eth::Consensus;
+use crate::ext::JsonValue;
 
 pub struct RpcContext {
+    // app config
+    pub app_config: JsonValue,
+
     // blockchain config
     pub chain_id: ChainId,
     pub client_version: &'static str,
@@ -15,9 +22,13 @@ pub struct RpcContext {
     pub gas_price: usize,
 
     // services
-    pub executor: Arc<EthExecutor>,
+    pub executor: Arc<Executor>,
+    #[allow(dead_code)] // HACK this was triggered in Rust 1.79
+    pub miner: Arc<Miner>,
     pub storage: Arc<StratusStorage>,
-    pub subs: Arc<RpcSubscriptions>,
+    pub consensus: Arc<Consensus>,
+    pub rpc_server: RpcServerConfig,
+    pub subs: Arc<RpcSubscriptionsConnected>,
 }
 
 impl Debug for RpcContext {

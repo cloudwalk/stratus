@@ -1,0 +1,15 @@
+# Ignore everything
+**
+
+# Except these files and directories
+!.cargo/
+!.git
+!.sqlx/
+!build.rs
+!Cargo.lock
+!Cargo.toml
+!config/
+!docker/
+!docker/Dockerfile.run_with_importer
+!src/
+!static/

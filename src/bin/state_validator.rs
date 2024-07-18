@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use rand::Rng;
 use stratus::config::StateValidatorConfig;
@@ -6,17 +7,16 @@ use stratus::config::ValidatorMethodConfig;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::storage::StratusStorage;
 use stratus::infra::BlockchainClient;
-use stratus::init_global_services;
+use stratus::GlobalServices;
 use tokio::task::JoinSet;
 
 fn main() -> anyhow::Result<()> {
-    let config: StateValidatorConfig = init_global_services();
-    let runtime = config.init_runtime();
-    runtime.block_on(run(config))
+    let global_services = GlobalServices::<StateValidatorConfig>::init();
+    global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: StateValidatorConfig) -> anyhow::Result<()> {
-    let storage = config.stratus_storage.init().await?;
+    let storage = config.storage.init()?;
 
     let interval = BlockNumber::from(config.interval);
 
@@ -24,7 +24,7 @@ async fn run(config: StateValidatorConfig) -> anyhow::Result<()> {
 
     let mut futures = JoinSet::new();
     loop {
-        let current_block = storage.read_mined_block_number().await?;
+        let current_block = storage.read_mined_block_number()?;
         if current_block - latest_compared_block >= interval && futures.len() < config.concurrent_tasks as usize {
             let future = validate_state(
                 config.method.clone(),
@@ -54,7 +54,7 @@ async fn validate_state(
 ) -> anyhow::Result<()> {
     match method {
         ValidatorMethodConfig::Rpc { url } => {
-            let chain = BlockchainClient::new(&url).await?;
+            let chain = BlockchainClient::new_http(&url, Duration::from_secs(2)).await?;
             validate_state_rpc(&chain, storage, start, end, max_sample_size, seed).await
         }
         _ => todo!(),
@@ -77,13 +77,13 @@ async fn validate_state_rpc(
         }
         n => n,
     };
-    let slots = storage.read_slots_sample(start, end, max_sample_size, seed).await?;
+    let slots = storage.read_slots_sample(start, end, max_sample_size, seed)?;
     for sampled_slot in slots {
         let expected_value = chain
-            .get_storage_at(
+            .fetch_storage_at(
                 &sampled_slot.address,
                 &sampled_slot.index,
-                stratus::eth::primitives::StoragePointInTime::Past(sampled_slot.block_number),
+                stratus::eth::primitives::StoragePointInTime::MinedPast(sampled_slot.block_number),
             )
             .await?;
 

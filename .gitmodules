@@ -1,0 +1,4 @@
+[submodule "hive"]
+	path = hive
+	url = git@github.com:cloudwalk/hive.git
+	branch = add_stratus

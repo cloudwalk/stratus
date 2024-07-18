@@ -8,11 +8,15 @@ on:
       - '.github/workflows/deploy.yml'
       - '.github/workflows/docs-release.yml'
       - '.github/workflows/outdated.yml'
+      - '.github/workflows/comment-tag-report.yml'
+      - '.github/workflows/pr-agent.yml'
+      - '.github/workflows/build-binary.yml'
       - '.github/CODEOWNERS'
       - 'config/**'
       - 'README.md'
       - 'LICENSE'
       - 'CONTRIBUTING.md'
+      - 'utils/slack-notifiers/**'
   workflow_dispatch:
   push: # Rebuild cache policy
     branches:
@@ -22,33 +26,62 @@ on:
       - 'Cargo.toml'
 
 jobs:
-  e2e-stratus:
-    name: E2E Stratus in-memory
+  e2e-automine-stratus:
+    name: E2E Automine Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: 'e2e-stratus'
+      justfile_recipe: 'e2e-stratus automine'
 
     concurrency:
-      group: ${{ github.workflow }}-inmemory-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-automine-inmemory-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
-  e2e-stratus-postgres:
-    name: E2E Stratus Postgres
+  e2e-automine-stratus-rocks:
+    name: E2E Automine Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: 'e2e-stratus-postgres'
+      justfile_recipe: 'e2e-stratus-rocks automine'
 
     concurrency:
-      group: ${{ github.workflow }}-postgres-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-automine-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
-  e2e-stratus-rocks:
-    name: E2E Stratus Rocks
+  e2e-external-stratus:
+    name: E2E External Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: 'e2e-stratus-rocks'
-      cache_key: 'stable-release-rocks'
+      justfile_recipe: 'e2e-stratus external'
 
     concurrency:
-      group: ${{ github.workflow }}-rocks-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-external-inmemory-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-external-stratus-rocks:
+    name: E2E External Stratus Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: 'e2e-stratus-rocks external'
+
+    concurrency:
+      group: ${{ github.workflow }}-external-rocks-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-clock-stratus:
+    name: E2E Clock Stratus in-memory
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: 'e2e-clock-stratus'
+
+    concurrency:
+      group: ${{ github.workflow }}-clock-inmemory-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-clock-stratus-rocks:
+    name: E2E Clock Stratus Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: 'e2e-clock-stratus-rocks'
+
+    concurrency:
+      group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true

@@ -63,22 +63,22 @@ impl<'a> Debug for PendingTxState<'a> {
 
 #[pin_project]
 pub struct PendingTransaction<'a> {
+    pub tx_hash: Hash,
     state: PendingTxState<'a>,
     provider: &'a BlockchainClient,
-    tx_hash: Hash,
     interval: Box<dyn Stream<Item = ()> + Send + Unpin>,
     retries_remaining: i32,
 }
 
 impl<'a> PendingTransaction<'a> {
     pub fn new(tx_hash: Hash, provider: &'a BlockchainClient) -> Self {
-        let delay = Box::pin(Delay::new(Duration::from_secs(1)));
+        let delay = Box::pin(Delay::new(Duration::from_millis(100)));
         PendingTransaction {
             state: PendingTxState::InitialDelay(delay),
             provider,
             tx_hash,
-            interval: Box::new(interval(Duration::from_secs(1))),
-            retries_remaining: 3,
+            interval: Box::new(interval(Duration::from_millis(20))),
+            retries_remaining: 200,
         }
     }
 }
@@ -88,12 +88,12 @@ impl<'a> Future for PendingTransaction<'a> {
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         let this = self.project();
-        tracing::debug!(?this.state);
+        tracing::debug!(?this.state, ?this.retries_remaining);
 
         match this.state {
             PendingTxState::InitialDelay(fut) => {
                 futures_util::ready!(fut.as_mut().poll(ctx));
-                let fut = Box::pin(this.provider.get_transaction(*this.tx_hash));
+                let fut = Box::pin(this.provider.fetch_transaction(*this.tx_hash));
                 *this.state = PendingTxState::GettingTx(fut);
                 ctx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -102,7 +102,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 // Wait the polling period so that we do not spam the chain when no
                 // new block has been mined
                 let _ready = futures_util::ready!(this.interval.poll_next_unpin(ctx));
-                let fut = Box::pin(this.provider.get_transaction(*this.tx_hash));
+                let fut = Box::pin(this.provider.fetch_transaction(*this.tx_hash));
                 *this.state = PendingTxState::GettingTx(fut);
                 ctx.waker().wake_by_ref();
             }
@@ -119,7 +119,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 let tx_opt = tx_res.unwrap();
 
                 if tx_opt.is_none() {
-                    if *this.retries_remaining == 0 {
+                    if *this.retries_remaining <= 0 {
                         *this.state = PendingTxState::Completed;
                         return Poll::Ready(Ok(None));
                     }
@@ -139,7 +139,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 }
 
                 // Start polling for the receipt now
-                let fut = Box::pin(this.provider.get_transaction_receipt(*this.tx_hash));
+                let fut = Box::pin(this.provider.fetch_receipt(*this.tx_hash));
                 *this.state = PendingTxState::GettingReceipt(fut);
                 ctx.waker().wake_by_ref();
                 return Poll::Pending;
@@ -148,7 +148,7 @@ impl<'a> Future for PendingTransaction<'a> {
                 // Wait the polling period so that we do not spam the chain when no
                 // new block has been mined
                 let _ready = futures_util::ready!(this.interval.poll_next_unpin(ctx));
-                let fut = Box::pin(this.provider.get_transaction_receipt(*this.tx_hash));
+                let fut = Box::pin(this.provider.fetch_receipt(*this.tx_hash));
                 *this.state = PendingTxState::GettingReceipt(fut);
                 ctx.waker().wake_by_ref();
             }

@@ -8,11 +8,15 @@ on:
       - '.github/workflows/deploy.yml'
       - '.github/workflows/docs-release.yml'
       - '.github/workflows/outdated.yml'
+      - '.github/workflows/comment-tag-report.yml'
+      - '.github/workflows/pr-agent.yml'
+      - '.github/workflows/build-binary.yml'
       - '.github/CODEOWNERS'
       - 'config/**'
       - 'README.md'
       - 'LICENSE'
       - 'CONTRIBUTING.md'
+      - 'utils/slack-notifiers/**'
   workflow_dispatch:
   push: # Rebuild cache policy
     branches:
@@ -26,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        contract: [token, pix, periphery, compound, yield, multisig]
+        contract: [token, pix, periphery, compound, yield, multisig, pixv3, pixv4, cppv2]
     name: E2E InMemory on ${{ matrix.contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -37,36 +41,31 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Cache Cargo Registry and Target Directory
-        uses: actions/cache@v4.0.2
-        id: cache-cargo
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-            target
-          key: ${{ runner.os }}-cargo-stable-release-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-stable-release-
+        uses: actions/checkout@v4
 
       - name: Set up Rust
-        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.79
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: ${{ runner.os }}-v3-cargo
+          shared-key: stable-release
+          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          cache-provider: "github"
+          cache-directories: "~/.cargo/bin/"
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
 
       - name: Set up Just
-        uses: extractions/setup-just@v1
-
-      - name: Set up ASDF Version Manager
-        uses: asdf-vm/actions/setup@v3
+        uses: extractions/setup-just@v2
 
       - name: Install Node.js
-        run: |
-          asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
-          asdf install nodejs 20.10.0
-          asdf global nodejs 20.10.0
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
 
       - name: Set up dependencies
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
@@ -83,3 +82,4 @@ jobs:
           CARGO_PROFILE_RELEASE_DEBUG: 0 
           RUST_LOG: off 
           RELEASE: 1
+          RUST_BACKTRACE: 1

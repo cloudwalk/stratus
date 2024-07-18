@@ -1,33 +1,24 @@
-//! Block Module
-//!
-//! The Block module forms the backbone of Ethereum's blockchain structure.
-//! Each block in the blockchain contains a header, which holds vital
-//! information about the block, and a set of transactions that the block
-//! contains. This module facilitates the creation, manipulation, and
-//! serialization of blocks, enabling interactions with the blockchain data
-//! structure, such as querying block information or broadcasting newly mined
-//! blocks.
-
 use std::collections::HashMap;
 
 use ethereum_types::H256;
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
-use serde_json::Value as JsonValue;
+use serde::Deserialize;
 
-use super::Execution;
 use super::LogMined;
 use super::TransactionInput;
+use crate::eth::executor::EvmExecutionResult;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
+use crate::ext::to_json_value;
+use crate::ext::JsonValue;
+use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -36,33 +27,30 @@ pub struct Block {
 }
 
 impl Block {
-    /// Creates a new block with the given number and transactions capacity.
-    pub fn new_with_capacity(number: BlockNumber, timestamp: UnixTime, capacity: usize) -> Self {
+    /// Creates a new block with the given number assuming the current system timestamp as the block timestamp.
+    pub fn new_at_now(number: BlockNumber) -> Self {
+        Self::new(number, UnixTime::now())
+    }
+
+    /// Creates a new block with the given number and timestamp.
+    pub fn new(number: BlockNumber, timestamp: UnixTime) -> Self {
         Self {
             header: BlockHeader::new(number, timestamp),
-            transactions: Vec::with_capacity(capacity),
+            transactions: Vec::new(),
         }
     }
 
-    /// Creates a new block based on an external block and its local transactions re-execution.
-    ///
-    /// TODO: this kind of conversion should be infallibe.
-    pub fn from_external(block: ExternalBlock, executions: Vec<ExternalTransactionExecution>) -> anyhow::Result<Self> {
-        let mut transactions = Vec::with_capacity(executions.len());
-        for execution in executions {
-            transactions.push(TransactionMined::from_external(execution)?);
-        }
-        Ok(Self {
-            header: block.try_into()?,
-            transactions,
-        })
+    /// Constructs an empty genesis block.
+    pub fn genesis() -> Block {
+        Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
     }
 
-    /// Pushes a single transaction execution to the blocks transactions
-    pub fn push_execution(&mut self, input: TransactionInput, execution: Execution) {
+    /// Pushes a single transaction execution to the blocks transactions.
+    pub fn push_execution(&mut self, input: TransactionInput, evm_result: EvmExecutionResult) {
         let transaction_index = (self.transactions.len() as u64).into();
         self.transactions.push(TransactionMined {
-            logs: execution
+            logs: evm_result
+                .execution
                 .logs
                 .iter()
                 .cloned()
@@ -77,7 +65,7 @@ impl Block {
                 })
                 .collect(),
             input,
-            execution,
+            execution: evm_result.execution,
             transaction_index,
             block_number: self.header.number,
             block_hash: self.header.hash,
@@ -116,43 +104,47 @@ impl Block {
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
-        let json_rpc_format: EthersBlock<EthersTransaction> = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        let ethers_block: EthersBlock<EthersTransaction> = self.into();
+        to_json_value(ethers_block)
     }
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
     pub fn to_json_rpc_with_transactions_hashes(self) -> JsonValue {
-        let json_rpc_format: EthersBlock<H256> = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        let ethers_block: EthersBlock<H256> = self.into();
+        to_json_value(ethers_block)
     }
 
     /// Returns the block number.
-    pub fn number(&self) -> &BlockNumber {
-        &self.header.number
+    pub fn number(&self) -> BlockNumber {
+        self.header.number
     }
 
     /// Returns the block hash.
-    pub fn hash(&self) -> &Hash {
-        &self.header.hash
+    pub fn hash(&self) -> Hash {
+        self.header.hash
     }
 
     /// Compact accounts changes removing intermediate values, keeping only the last modified nonce, balance, bytecode and slots.
     pub fn compact_account_changes(&self) -> Vec<ExecutionAccountChanges> {
         let mut block_compacted_changes: HashMap<Address, ExecutionAccountChanges> = HashMap::new();
         for transaction in &self.transactions {
-            for transaction_changes in transaction.execution.changes.clone().into_iter() {
+            for transaction_changes in transaction.execution.changes.values().cloned() {
                 let account_compacted_changes = block_compacted_changes
-                    .entry(transaction_changes.address.clone())
+                    .entry(transaction_changes.address)
                     .or_insert(transaction_changes.clone());
+
                 if let Some(nonce) = transaction_changes.nonce.take_modified() {
                     account_compacted_changes.nonce.set_modified(nonce);
                 }
+
                 if let Some(balance) = transaction_changes.balance.take_modified() {
                     account_compacted_changes.balance.set_modified(balance);
                 }
+
                 if let Some(bytecode) = transaction_changes.bytecode.take_modified() {
                     account_compacted_changes.bytecode.set_modified(bytecode);
                 }
+
                 for (slot_index, slot) in transaction_changes.slots {
                     let slot_compacted_changes = account_compacted_changes.slots.entry(slot_index).or_insert(slot.clone());
                     if let Some(slot_value) = slot.take_modified() {
@@ -161,6 +153,7 @@ impl Block {
                 }
             }
         }
+
         block_compacted_changes.into_values().collect_vec()
     }
 }
@@ -186,6 +179,17 @@ impl From<Block> for EthersBlock<H256> {
         Self {
             transactions: ethers_block_transactions,
             ..ethers_block
+        }
+    }
+}
+
+impl TryFrom<JsonValue> for Block {
+    type Error = anyhow::Error;
+
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+        match Block::deserialize(&value) {
+            Ok(v) => Ok(v),
+            Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to Block"),
         }
     }
 }

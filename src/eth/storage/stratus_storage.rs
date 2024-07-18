@@ -1,392 +1,555 @@
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use clap::Parser;
+use display_json::DebugAsJson;
+use tracing::Span;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
-use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionConflicts;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StoragePointInTime;
-use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionStage;
 use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::PermanentStorageConfig;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::TemporaryStorage;
+use crate::eth::storage::TemporaryStorageConfig;
 use crate::ext::not;
-#[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::metrics::timed;
+use crate::infra::tracing::SpanExt;
 
-#[cfg(feature = "metrics")]
-const STORAGE_TEMP: &str = "temporary";
-#[cfg(feature = "metrics")]
-const STORAGE_PERM: &str = "permanent";
-#[cfg(feature = "metrics")]
-const DEFAULT_VALUE: &str = "default";
+cfg_if::cfg_if! {
+    if #[cfg(test)] {
+        use crate::eth::storage::InMemoryPermanentStorage;
+        use crate::eth::storage::InMemoryTemporaryStorage;
+        use crate::eth::storage::RocksPermanentStorage;
+    }
+}
 
+mod label {
+    pub(super) const TEMP: &str = "temporary";
+    pub(super) const PERM: &str = "permanent";
+}
+
+/// Proxy that simplifies interaction with permanent and temporary storages.
+///
+/// Additionaly it tracks metrics that are independent of the storage implementation.
 pub struct StratusStorage {
-    temp: Arc<dyn TemporaryStorage>,
-    perm: Arc<dyn PermanentStorage>,
+    temp: Box<dyn TemporaryStorage>,
+    perm: Box<dyn PermanentStorage>,
 }
 
 impl StratusStorage {
+    // -------------------------------------------------------------------------
+    // Initialization
+    // -------------------------------------------------------------------------
+
     /// Creates a new storage with the specified temporary and permanent implementations.
-    pub fn new(temp: Arc<dyn TemporaryStorage>, perm: Arc<dyn PermanentStorage>) -> Self {
+    pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
     }
 
-    pub async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()> {
-        self.perm.allocate_evm_thread_resources().await?;
+    /// Creates an inmemory stratus storage for testing.
+    #[cfg(test)]
+    pub fn mock_new() -> Self {
+        Self {
+            temp: Box::new(InMemoryTemporaryStorage::new()),
+            perm: Box::new(InMemoryPermanentStorage::new()),
+        }
+    }
+
+    /// Creates an inmemory stratus storage for testing.
+    #[cfg(test)]
+    pub fn mock_new_rocksdb() -> (Self, tempfile::TempDir) {
+        // Create a unique temporary directory within the ./data directory
+        let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+        let temp_path = temp_dir.path().to_str().expect("Failed to get temp path").to_string();
+
+        let rocks_permanent_storage = RocksPermanentStorage::new(Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
+
+        (
+            Self {
+                temp: Box::new(InMemoryTemporaryStorage::new()),
+                perm: Box::new(rocks_permanent_storage),
+            },
+            temp_dir,
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // Block number
+    // -------------------------------------------------------------------------
+
+    pub fn read_block_number_to_resume_import(&self) -> anyhow::Result<BlockNumber> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
+
+        // if does not have the zero block present, should resume from zero
+        let zero = self.read_block(&BlockFilter::Number(BlockNumber::ZERO))?;
+        if zero.is_none() {
+            tracing::info!(block_number = %0, reason = %"block ZERO does not exist", "resume from ZERO");
+            return Ok(BlockNumber::ZERO);
+        }
+
+        // try to resume from pending block number
+        let pending_block_number = self.read_pending_block_number()?;
+        if let Some(number) = pending_block_number {
+            tracing::info!(block_number = %number, reason = %"set in storage", "resume from PENDING");
+            return Ok(number);
+        }
+
+        // fallback to last mined block number
+        let mined_number = self.read_mined_block_number()?;
+        let mined_block = self.read_block(&BlockFilter::Number(mined_number))?;
+        match mined_block {
+            Some(_) => {
+                tracing::info!(block_number = %mined_number, reason = %"set in storage and block exist", "resume from MINED + 1");
+                Ok(mined_number.next())
+            }
+            None => {
+                tracing::info!(block_number = %mined_number, reason = %"set in storage but block does not exist", "resume from MINED");
+                Ok(mined_number)
+            }
+        }
+    }
+
+    pub fn read_pending_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_pending_block_number").entered();
+        tracing::debug!(storage = %label::TEMP, "reading pending block number");
+
+        timed(|| self.temp.read_pending_block_number()).with(|m| {
+            metrics::inc_storage_read_pending_block_number(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read pending block number");
+            }
+        })
+    }
+
+    pub fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_mined_block_number").entered();
+        tracing::debug!(storage = %label::PERM, "reading mined block number");
+
+        timed(|| self.perm.read_mined_block_number()).with(|m| {
+            metrics::inc_storage_read_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read miner block number");
+            }
+        })
+    }
+
+    pub fn set_pending_block_number(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::set_pending_block_number", %block_number).entered();
+        tracing::debug!(storage = &label::TEMP, %block_number, "setting pending block number");
+
+        timed(|| self.temp.set_pending_block_number(block_number)).with(|m| {
+            metrics::inc_storage_set_pending_block_number(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to set pending block number");
+            }
+        })
+    }
+
+    pub fn set_pending_block_number_as_next(&self) -> anyhow::Result<()> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::set_pending_block_number_as_next").entered();
+
+        let last_mined_block = self.read_mined_block_number()?;
+        self.set_pending_block_number(last_mined_block.next())?;
         Ok(())
     }
 
-    // -------------------------------------------------------------------------
-    // Block number operations
-    // -------------------------------------------------------------------------
-
-    // Retrieves the active block number.
-    #[allow(clippy::let_and_return)]
-    pub async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let result = self.temp.read_active_block_number().await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_read_active_block_number(start.elapsed(), result.is_ok());
-
-        result
+    pub fn set_pending_block_number_as_next_if_not_set(&self) -> anyhow::Result<()> {
+        let pending_block = self.read_pending_block_number()?;
+        if pending_block.is_none() {
+            self.set_pending_block_number_as_next()?;
+        }
+        Ok(())
     }
 
-    // Retrieves the last mined block number.
-    #[allow(clippy::let_and_return)]
-    pub async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+    pub fn set_mined_block_number(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::set_mined_block_number", %block_number).entered();
+        tracing::debug!(storage = %label::PERM, %block_number, "setting mined block number");
 
-        let result = self.perm.read_mined_block_number().await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_read_mined_block_number(start.elapsed(), result.is_ok());
-
-        result
-    }
-
-    /// Atomically increments the block number, returning the new value.
-    #[allow(clippy::let_and_return)]
-    pub async fn increment_block_number(&self) -> anyhow::Result<BlockNumber> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let result = self.perm.increment_block_number().await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_increment_block_number(start.elapsed(), result.is_ok());
-
-        result
-    }
-
-    /// Sets the active block number to a specific value.
-    #[allow(clippy::let_and_return)]
-    pub async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let result = self.temp.set_active_block_number(number).await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_set_active_block_number(start.elapsed(), result.is_ok());
-
-        result
-    }
-
-    /// Sets the mined block number to a specific value.
-    #[allow(clippy::let_and_return)]
-    pub async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let result = self.perm.set_mined_block_number(number).await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_set_mined_block_number(start.elapsed(), result.is_ok());
-
-        result
+        timed(|| self.perm.set_mined_block_number(block_number)).with(|m| {
+            metrics::inc_storage_set_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to set miner block number");
+            }
+        })
     }
 
     // -------------------------------------------------------------------------
-    // State queries
+    // Accounts and slots
     // -------------------------------------------------------------------------
 
-    /// Retrieves an account from the storage. Returns default value when not found.
-    pub async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+    pub fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
+        tracing::debug!(storage = %label::TEMP, block_number = %block.number(), "setting pending external block");
 
-        match self.temp.read_account(address).await? {
+        timed(|| self.temp.set_pending_external_block(block)).with(|m| {
+            metrics::inc_storage_set_pending_external_block(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to set pending external block");
+            }
+        })
+    }
+
+    pub fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::save_accounts").entered();
+
+        // keep only accounts that does not exist in permanent storage
+        let mut missing_accounts = Vec::new();
+        for account in accounts {
+            let perm_account = self.perm.read_account(&account.address, &StoragePointInTime::Mined)?;
+            if perm_account.is_none() {
+                missing_accounts.push(account);
+            }
+        }
+
+        tracing::debug!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
+        timed(|| self.perm.save_accounts(missing_accounts)).with(|m| {
+            metrics::inc_storage_save_accounts(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to save accounts");
+            }
+        })
+    }
+
+    pub fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::debug_span!("storage::check_conflicts").entered();
+        tracing::debug!(storage = %label::TEMP, "checking conflicts");
+
+        timed(|| self.temp.check_conflicts(execution)).with(|m| {
+            metrics::inc_storage_check_conflicts(
+                m.elapsed,
+                label::TEMP,
+                m.result.is_ok(),
+                m.result.as_ref().is_ok_and(|conflicts| conflicts.is_some()),
+            );
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to check conflicts");
+            }
+        })
+    }
+
+    pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Account> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
+
+        // read from temp only if requested
+        if point_in_time.is_pending() {
+            tracing::debug!(storage = %label::TEMP, %address, "reading account");
+            let temp_account = timed(|| self.temp.read_account(address)).with(|m| {
+                metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
+                if let Err(ref e) = m.result {
+                    tracing::error!(reason = ?e, "failed to read account from temporary storage");
+                }
+            })?;
+            if let Some(account) = temp_account {
+                tracing::debug!(storage = %label::TEMP, %address, ?account, "account found in temporary storage");
+                return Ok(account);
+            }
+        }
+
+        // always read from perm if necessary
+        tracing::debug!(storage = %label::PERM, %address, "reading account");
+        let perm_account = timed(|| self.perm.read_account(address, point_in_time)).with(|m| {
+            metrics::inc_storage_read_account(m.elapsed, label::PERM, point_in_time, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read account from permanent storage");
+            }
+        })?;
+        match perm_account {
             Some(account) => {
-                tracing::debug!("account found in the temporary storage");
-                #[cfg(feature = "metrics")]
-                metrics::inc_storage_read_account(start.elapsed(), STORAGE_TEMP, point_in_time, true);
+                tracing::debug!(storage = %label::PERM, %address, ?account, "account found in permanent storage");
                 Ok(account)
             }
-            None => match self.perm.read_account(address, point_in_time).await? {
-                Some(account) => {
-                    tracing::debug!("account found in the permanent storage");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_account(start.elapsed(), STORAGE_PERM, point_in_time, true);
-                    Ok(account)
-                }
-                None => {
-                    tracing::debug!("account not found, assuming default value");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_account(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
-                    Ok(Account::new_empty(address.clone()))
-                }
-            },
+            None => {
+                tracing::debug!(storage = %label::PERM, %address, "account not found, assuming default value");
+                Ok(Account::new_empty(*address))
+            }
         }
     }
 
-    /// Retrieves an slot from the storage. Returns default value when not found.
-    pub async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Slot> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
-        match self.temp.read_slot(address, index).await? {
+        // read from temp only if requested
+        if point_in_time.is_pending() {
+            tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
+            let temp_slot = timed(|| self.temp.read_slot(address, index)).with(|m| {
+                metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
+                if let Err(ref e) = m.result {
+                    tracing::error!(reason = ?e, "failed to read slot from temporary storage");
+                }
+            })?;
+            if let Some(slot) = temp_slot {
+                tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
+                return Ok(slot);
+            }
+        }
+
+        // always read from perm if necessary
+        tracing::debug!(storage = %label::PERM, %address, %index, %point_in_time, "reading slot");
+        let perm_slot = timed(|| self.perm.read_slot(address, index, point_in_time)).with(|m| {
+            metrics::inc_storage_read_slot(m.elapsed, label::PERM, point_in_time, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read slot from permanent storage");
+            }
+        })?;
+        match perm_slot {
             Some(slot) => {
-                tracing::debug!("slot found in the temporary storage");
-                #[cfg(feature = "metrics")]
-                metrics::inc_storage_read_slot(start.elapsed(), STORAGE_TEMP, point_in_time, true);
+                tracing::debug!(storage = %label::PERM, %address, %index, value = %slot.value, "slot found in permanent storage");
                 Ok(slot)
             }
-            None => match self.perm.read_slot(address, index, point_in_time).await? {
-                Some(slot) => {
-                    tracing::debug!("slot found in the permanent storage");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_slot(start.elapsed(), STORAGE_PERM, point_in_time, true);
-                    Ok(slot)
-                }
-                None => {
-                    tracing::debug!("slot not found, assuming default value");
-                    #[cfg(feature = "metrics")]
-                    metrics::inc_storage_read_slot(start.elapsed(), DEFAULT_VALUE, point_in_time, true);
-                    Ok(Slot::new_empty(index.clone()))
-                }
-            },
-        }
-    }
-
-    /// Retrieves multiple slots from the storage. Returns default values when not found.
-    pub async fn read_slots(&self, address: &Address, slot_indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let mut slots = Vec::with_capacity(slot_indexes.len());
-        let mut perm_indexes = SlotIndexes::with_capacity(slot_indexes.len());
-
-        // read slots from temporary storage
-        for index in slot_indexes.iter() {
-            match self.temp.read_slot(address, index).await? {
-                Some(slot) => {
-                    slots.push(slot);
-                }
-                None => {
-                    perm_indexes.insert(index.clone());
-                }
+            None => {
+                tracing::debug!(storage = %label::PERM, %address, %index, "slot not found, assuming default value");
+                Ok(Slot::new_empty(*index))
             }
         }
-
-        // read missing slots from permanent storage
-        if not(perm_indexes.is_empty()) {
-            let mut perm_slots = self.perm.read_slots(address, &perm_indexes, point_in_time).await?;
-            for index in perm_indexes.0.into_iter() {
-                match perm_slots.remove(&index) {
-                    Some(value) => slots.push(Slot { index, value }),
-                    None => slots.push(Slot::new_empty(index)),
-                }
-            }
-        }
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_read_slots(start.elapsed(), point_in_time, true);
-
-        Ok(slots)
     }
 
-    /// Retrieves a block from the storage.
-    #[allow(clippy::let_and_return)]
-    pub async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+    pub fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_all_slots").entered();
+        tracing::debug!(storage = %label::TEMP, "checking conflicts");
 
-        let result = self.perm.read_block(block_selection).await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_read_block(start.elapsed(), result.is_ok());
-
-        result
-    }
-
-    /// Retrieves a transaction from the storage.
-    #[allow(clippy::let_and_return)]
-    pub async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let result = self.perm.read_mined_transaction(hash).await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_read_mined_transaction(start.elapsed(), result.is_ok());
-
-        result
-    }
-
-    /// Retrieves logs from the storage.
-    #[allow(clippy::let_and_return)]
-    pub async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
-        let result = self.perm.read_logs(filter).await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_read_logs(start.elapsed(), result.is_ok());
-
-        result
+        tracing::info!(storage = %label::PERM, %address, %point_in_time, "reading all slots");
+        self.perm.read_all_slots(address, point_in_time)
     }
 
     // -------------------------------------------------------------------------
-    // State mutations
+    // Blocks
     // -------------------------------------------------------------------------
 
-    /// Persists accounts like pre-genesis accounts or test accounts.
-    #[allow(clippy::let_and_return)]
-    pub async fn save_accounts_to_perm(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+    pub fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.hash()).entered();
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.hash(), "saving execution");
 
-        let result = self.perm.save_accounts(accounts).await;
+        timed(|| self.temp.save_execution(tx)).with(|m| {
+            metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to save execution");
+            }
+        })
+    }
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_save_accounts(start.elapsed(), result.is_ok());
+    /// Retrieves pending transactions being mined.
+    pub fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
+        self.temp.pending_transactions()
+    }
+
+    pub fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::finish_pending_block", block_number = tracing::field::Empty).entered();
+        tracing::debug!(storage = %label::TEMP, "finishing pending block");
+
+        let result = timed(|| self.temp.finish_pending_block()).with(|m| {
+            metrics::inc_storage_finish_pending_block(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to finish pending block");
+            }
+        });
+
+        if let Ok(ref block) = result {
+            Span::with(|s| s.rec_str("block_number", &block.number));
+        }
 
         result
     }
 
-    /// Temporarily saves account's changes generated during block production.
-    #[allow(clippy::let_and_return)]
-    pub async fn save_account_changes_to_temp(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+    pub fn save_block(&self, block: Block) -> anyhow::Result<()> {
+        let block_number = block.number();
 
-        let result = self.temp.save_account_changes(changes).await;
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
+        tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), "saving block");
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_save_account_changes(start.elapsed(), result.is_ok());
+        // check mined number
+        let mined_number = self.read_mined_block_number()?;
+        if not(block_number.is_zero()) && block_number != mined_number.next() {
+            tracing::error!(%block_number, %mined_number, "failed to save block because mismatch with mined block number");
+            return Err(StorageError::new_mined_number_mismatch(block_number, mined_number).into());
+        }
 
-        result
+        // check pending number
+        if let Some(pending_number) = self.read_pending_block_number()? {
+            if block_number >= pending_number {
+                tracing::error!(%block_number, %pending_number, "failed to save block because mismatch with pending block number");
+                return Err(StorageError::new_pending_number_mismatch(block_number, mined_number).into());
+            }
+        }
+
+        // check mined block
+        let existing_block = self.read_block(&BlockFilter::Number(block_number))?;
+        if existing_block.is_some() {
+            tracing::error!(%block_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
+            return Err(StorageError::new_mined_block_exists(block_number).into());
+        }
+
+        let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
+        timed(|| self.perm.save_block(block)).with(|m| {
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, %block_number, "failed to save block");
+            }
+        })
     }
 
-    /// If necessary, flushes temporary state to durable storage.
-    #[allow(clippy::let_and_return)]
-    pub async fn flush_temp(&self) -> anyhow::Result<()> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+    pub fn read_block(&self, filter: &BlockFilter) -> anyhow::Result<Option<Block>> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_block", %filter).entered();
+        tracing::debug!(storage = %label::PERM, ?filter, "reading block");
 
-        let result = self.temp.flush().await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_flush_temp(start.elapsed(), result.is_ok());
-
-        result
+        timed(|| self.perm.read_block(filter)).with(|m| {
+            metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read block");
+            }
+        })
     }
 
-    /// Commits changes to permanent storage and prepares temporary storage for a new block to be produced.
-    pub async fn commit_to_perm(&self, block: Block) -> anyhow::Result<(), StorageError> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-        #[cfg(feature = "metrics")]
-        let label_size_by_tx = block.label_size_by_transactions();
-        #[cfg(feature = "metrics")]
-        let label_size_by_gas = block.label_size_by_gas();
-        #[cfg(feature = "metrics")]
-        let gas_used = block.header.gas_used.as_u64();
+    pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionStage>> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_transaction", %tx_hash).entered();
 
-        // save block to permanent storage and clears temporary storage
-        let next_number = block.number().next();
-        let result = self.perm.save_block(block).await;
-        self.reset_temp().await?;
-        self.set_active_block_number(next_number).await?;
+        // read from temp
+        tracing::debug!(storage = %label::TEMP, %tx_hash, "reading transaction");
+        let temp_tx = timed(|| self.temp.read_transaction(tx_hash)).with(|m| {
+            metrics::inc_storage_read_transaction(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read transaction from temporary storage");
+            }
+        })?;
+        if let Some(tx_temp) = temp_tx {
+            return Ok(Some(TransactionStage::new_executed(tx_temp)));
+        }
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_commit(start.elapsed(), label_size_by_tx, label_size_by_gas, result.is_ok());
-        #[cfg(feature = "metrics")]
-        metrics::inc_n_storage_gas_total(gas_used);
-
-        result
+        // read from perm
+        tracing::debug!(storage = %label::PERM, %tx_hash, "reading transaction");
+        let perm_tx = timed(|| self.perm.read_transaction(tx_hash)).with(|m| {
+            metrics::inc_storage_read_transaction(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read transaction from permanent storage");
+            }
+        })?;
+        match perm_tx {
+            Some(tx) => Ok(Some(TransactionStage::new_mined(tx))),
+            None => Ok(None),
+        }
     }
 
-    /// Resets temporary storage.
-    #[allow(clippy::let_and_return)]
-    pub async fn reset_temp(&self) -> anyhow::Result<()> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+    pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_logs", ?filter).entered();
+        tracing::debug!(storage = %label::PERM, ?filter, "reading logs");
 
-        let result = self.temp.reset().await;
-
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_reset(start.elapsed(), STORAGE_TEMP, result.is_ok());
-
-        result
+        timed(|| self.perm.read_logs(filter)).with(|m| {
+            metrics::inc_storage_read_logs(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read logs");
+            }
+        })
     }
 
-    /// Resets permanent storage down to specific block_number.
-    #[allow(clippy::let_and_return)]
-    pub async fn reset_perm(&self, block_number: BlockNumber) -> anyhow::Result<()> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+    // -------------------------------------------------------------------------
+    // General state
+    // -------------------------------------------------------------------------
 
-        let result = self.perm.reset_at(block_number).await;
+    pub fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::reset").entered();
 
-        #[cfg(feature = "metrics")]
-        metrics::inc_storage_reset(start.elapsed(), STORAGE_PERM, result.is_ok());
+        // reset perm
+        tracing::debug!(storage = %label::PERM, "reseting storage");
+        timed(|| self.perm.reset_at(number)).with(|m| {
+            metrics::inc_storage_reset(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to reset permanent storage");
+            }
+        })?;
 
-        result
+        // reset temp
+        tracing::debug!(storage = %label::TEMP, "reseting storage");
+        timed(|| self.temp.reset()).with(|m| {
+            metrics::inc_storage_reset(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to reset temporary storage");
+            }
+        })?;
+
+        self.set_pending_block_number_as_next()?;
+
+        Ok(())
     }
 
     // -------------------------------------------------------------------------
     // Utils
     // -------------------------------------------------------------------------
 
-    /// Translates a block selection to a specific storage point-in-time indicator.
-    pub async fn translate_to_point_in_time(&self, block_selection: &BlockSelection) -> anyhow::Result<StoragePointInTime> {
-        match block_selection {
-            BlockSelection::Latest => Ok(StoragePointInTime::Present),
-            BlockSelection::Number(number) => {
-                let current_block = self.perm.read_mined_block_number().await?;
-                if number <= &current_block {
-                    Ok(StoragePointInTime::Past(*number))
-                } else {
-                    Ok(StoragePointInTime::Past(current_block))
-                }
-            }
-            BlockSelection::Earliest | BlockSelection::Hash(_) => match self.read_block(block_selection).await? {
-                Some(block) => Ok(StoragePointInTime::Past(block.header.number)),
+    /// Translates a block filter to a specific storage point-in-time indicator.
+    pub fn translate_to_point_in_time(&self, block_filter: &BlockFilter) -> anyhow::Result<StoragePointInTime> {
+        match block_filter {
+            BlockFilter::Pending => Ok(StoragePointInTime::Pending),
+            BlockFilter::Latest => Ok(StoragePointInTime::Mined),
+            BlockFilter::Number(number) => Ok(StoragePointInTime::MinedPast(*number)),
+            BlockFilter::Earliest | BlockFilter::Hash(_) => match self.read_block(block_filter)? {
+                Some(block) => Ok(StoragePointInTime::MinedPast(block.header.number)),
                 None => Err(anyhow!(
-                    "failed to select block because it is greater than current block number or block hash is invalid."
+                    "failed to select block because it is greater than current block number or block hash is invalid"
                 )),
             },
         }
     }
 
-    pub async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
-        self.perm.read_slots_sample(start, end, max_samples, seed).await
+    pub fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
+        self.perm.read_slots_sample(start, end, max_samples, seed)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config
+// -----------------------------------------------------------------------------
+
+/// Configuration that can be used by any binary that interacts with Stratus storage.
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+pub struct StratusStorageConfig {
+    #[clap(flatten)]
+    pub temp_storage: TemporaryStorageConfig,
+
+    #[clap(flatten)]
+    pub perm_storage: PermanentStorageConfig,
+}
+
+impl StratusStorageConfig {
+    /// Initializes Stratus storage.
+    pub fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
+        let temp_storage = self.temp_storage.init()?;
+        let perm_storage = self.perm_storage.init()?;
+        let storage = StratusStorage::new(temp_storage, perm_storage);
+
+        Ok(Arc::new(storage))
     }
 }

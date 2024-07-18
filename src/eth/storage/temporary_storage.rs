@@ -1,33 +1,110 @@
-use async_trait::async_trait;
+use std::str::FromStr;
+
+use anyhow::anyhow;
+use clap::Parser;
+use display_json::DebugAsJson;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionConflicts;
+use crate::eth::primitives::ExternalBlock;
+use crate::eth::primitives::Hash;
+use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::TransactionExecution;
+use crate::eth::storage::InMemoryTemporaryStorage;
 
-/// Temporary storage (in-between blocks) operations
-#[async_trait]
-pub trait TemporaryStorage: Send + Sync {
-    /// Sets the block number activelly being mined.
-    async fn set_active_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+/// Temporary storage (in-between blocks) operations.
+pub trait TemporaryStorage: Send + Sync + 'static {
+    // -------------------------------------------------------------------------
+    // Block number
+    // -------------------------------------------------------------------------
 
-    // Retrieves the block number activelly being mined.
-    async fn read_active_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
+    /// Sets the block number being mined.
+    fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+
+    // Retrieves the block number being mined.
+    fn read_pending_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
+
+    // -------------------------------------------------------------------------
+    // Block and executions
+    // -------------------------------------------------------------------------
+
+    /// Sets the pending external block being re-executed.
+    fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
+
+    /// Saves a re-executed transaction to the pending mined block.
+    fn save_execution(&self, tx: TransactionExecution) -> anyhow::Result<()>;
+
+    /// Retrieves the pending transactions of the pending block.
+    fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>>;
+
+    /// Finishes the mining of the pending block and starts a new block.
+    fn finish_pending_block(&self) -> anyhow::Result<PendingBlock>;
+
+    /// Retrieves a transaction from the storage.
+    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>>;
+
+    // -------------------------------------------------------------------------
+    // Accounts and slots
+    // -------------------------------------------------------------------------
+
+    /// Checks if an execution conflicts with current storage state.
+    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    async fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>>;
+    fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>>;
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    async fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
+    fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
 
-    /// Temporarily stores account changes during block production.
-    async fn save_account_changes(&self, changes: Vec<ExecutionAccountChanges>) -> anyhow::Result<()>;
-
-    /// If necessary, flushes temporary state to durable storage.
-    async fn flush(&self) -> anyhow::Result<()>;
+    // -------------------------------------------------------------------------
+    // Global state
+    // -------------------------------------------------------------------------
 
     /// Resets to default empty state.
-    async fn reset(&self) -> anyhow::Result<()>;
+    fn reset(&self) -> anyhow::Result<()>;
+}
+
+// -----------------------------------------------------------------------------
+// Config
+// -----------------------------------------------------------------------------
+
+/// Temporary storage configuration.
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+pub struct TemporaryStorageConfig {
+    /// Temporary storage implementation.
+    #[arg(long = "temp-storage", env = "TEMP_STORAGE")]
+    pub temp_storage_kind: TemporaryStorageKind,
+}
+
+#[derive(DebugAsJson, Clone, serde::Serialize)]
+pub enum TemporaryStorageKind {
+    #[serde(rename = "inmemory")]
+    InMemory,
+}
+
+impl TemporaryStorageConfig {
+    /// Initializes temporary storage implementation.
+    pub fn init(&self) -> anyhow::Result<Box<dyn TemporaryStorage>> {
+        tracing::info!(config = ?self, "creating temporary storage");
+
+        match self.temp_storage_kind {
+            TemporaryStorageKind::InMemory => Ok(Box::<InMemoryTemporaryStorage>::default()),
+        }
+    }
+}
+
+impl FromStr for TemporaryStorageKind {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s {
+            "inmemory" => Ok(Self::InMemory),
+            s => Err(anyhow!("unknown temporary storage: {}", s)),
+        }
+    }
 }

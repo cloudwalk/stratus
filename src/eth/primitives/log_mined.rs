@@ -1,15 +1,6 @@
-//! Log Mined Module
-//!
-//! Manages Ethereum logs that have been included in mined blocks. This module
-//! extends the basic log structure to include context of the block and
-//! transaction in which the log was mined, such as the block number, block
-//! hash, and transaction index. It is essential for associating logs with
-//! their blockchain context.
-
 use ethers_core::types::Log as EthersLog;
 use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
-use serde_json::Value as JsonValue;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -17,6 +8,8 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogTopic;
+use crate::ext::to_json_value;
+use crate::ext::JsonValue;
 
 /// Log that was emitted by the EVM and added to a block.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -47,14 +40,14 @@ impl LogMined {
     }
 
     /// Returns the topics emitted in the log.
-    pub fn topics(&self) -> &[LogTopic] {
-        &self.log.topics
+    pub fn topics(&self) -> Vec<LogTopic> {
+        self.log.topics()
     }
 
     /// Serializes itself to JSON-RPC log format.
     pub fn to_json_rpc_log(self) -> JsonValue {
-        let json_rpc_format: EthersLog = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+        let ethers_log: EthersLog = self.into();
+        to_json_value(ethers_log)
     }
 }
 
@@ -83,7 +76,7 @@ impl From<LogMined> for EthersLog {
         Self {
             // log
             address: value.log.address.into(),
-            topics: value.log.topics.into_iter().map_into().collect(),
+            topics: value.topics().into_iter().map_into().collect_vec(),
             data: value.log.data.into(),
             log_index: Some(value.log_index.into()),
             removed: Some(false),

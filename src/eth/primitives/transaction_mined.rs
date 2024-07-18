@@ -1,19 +1,14 @@
-//! Transaction Mined Module
-//!
-//! Manages Ethereum transactions that have been executed and included in a
-//! mined block. This module extends transaction information to include
-//! blockchain context such as block number and hash. It is crucial for
-//! tracking transaction history and understanding the state of transactions in
-//! the blockchain.
+use std::hash::Hash as HashTrait;
 
 use ethers_core::types::Transaction as EthersTransaction;
 use ethers_core::types::TransactionReceipt as EthersReceipt;
 use itertools::Itertools;
-use serde_json::Value as JsonValue;
 
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Execution;
-use crate::eth::primitives::ExternalTransactionExecution;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExternalReceipt;
+use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
@@ -28,7 +23,7 @@ pub struct TransactionMined {
     pub input: TransactionInput,
 
     /// Transaction EVM execution result.
-    pub execution: Execution,
+    pub execution: EvmExecution,
 
     /// Logs added to the block.
     pub logs: Vec<LogMined>,
@@ -43,14 +38,31 @@ pub struct TransactionMined {
     pub block_hash: Hash,
 }
 
+impl PartialOrd for TransactionMined {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TransactionMined {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (self.block_number, self.transaction_index).cmp(&(other.block_number, other.transaction_index))
+    }
+}
+
+impl HashTrait for TransactionMined {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.input.hash.hash(state);
+    }
+}
+
 impl TransactionMined {
     /// Creates a new mined transaction from an external mined transaction that was re-executed locally.
     ///
     /// TODO: this kind of conversion should be infallibe.
-    pub fn from_external(execution: ExternalTransactionExecution) -> anyhow::Result<Self> {
-        let (tx, receipt, execution) = execution;
+    pub fn from_external(tx: ExternalTransaction, receipt: ExternalReceipt, execution: EvmExecution) -> anyhow::Result<Self> {
         Ok(Self {
-            input: tx.try_into()?,
+            input: tx.clone().try_into()?,
             execution,
             block_number: receipt.block_number(),
             block_hash: receipt.block_hash(),
@@ -64,16 +76,12 @@ impl TransactionMined {
         self.execution.is_success()
     }
 
-    /// Serializes itself to JSON-RPC transaction format.
-    pub fn to_json_rpc_transaction(self) -> JsonValue {
-        let json_rpc_format: EthersTransaction = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
-    }
-
-    /// Serializes itself to JSON-RPC receipt format.
-    pub fn to_json_rpc_receipt(self) -> JsonValue {
-        let json_rpc_format: EthersReceipt = self.into();
-        serde_json::to_value(json_rpc_format).unwrap()
+    fn compute_bloom(&self) -> LogsBloom {
+        let mut bloom = LogsBloom::default();
+        for log_mined in self.logs.iter() {
+            bloom.accrue_log(&(log_mined.log));
+        }
+        bloom
     }
 }
 
@@ -99,6 +107,7 @@ impl From<TransactionMined> for EthersTransaction {
             v: input.v,
             r: input.r,
             s: input.s,
+            transaction_type: input.tx_type,
             ..Default::default()
         }
     }
@@ -106,6 +115,7 @@ impl From<TransactionMined> for EthersTransaction {
 
 impl From<TransactionMined> for EthersReceipt {
     fn from(value: TransactionMined) -> Self {
+        let logs_bloom = value.compute_bloom().into();
         Self {
             // receipt specific
             status: Some(if_else!(value.is_success(), 1, 0).into()),
@@ -124,9 +134,43 @@ impl From<TransactionMined> for EthersReceipt {
 
             // logs
             logs: value.logs.into_iter().map_into().collect(),
+            logs_bloom, // TODO: save this to the database instead of computing it every time (could also be useful for eth_getLogs)
 
             // TODO: there are more fields to populate here
             ..Default::default()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fake::Fake;
+    use fake::Faker;
+    use rand::Rng;
+
+    use super::*;
+
+    fn create_tx(transaction_index: u64, block_number: u64) -> TransactionMined {
+        TransactionMined {
+            input: Faker.fake(),
+            execution: Faker.fake(),
+            logs: vec![],
+            transaction_index: transaction_index.into(),
+            block_number: block_number.into(),
+            block_hash: Hash::default(),
+        }
+    }
+
+    #[test]
+    fn sort_transactions() {
+        let mut rng = rand::thread_rng();
+        let v = (0..1000)
+            .map(|_| create_tx(rng.gen_range(0..100), rng.gen_range(0..100)))
+            .sorted()
+            .map(|tx| (tx.block_number.as_u64(), tx.transaction_index.inner_value()))
+            .collect_vec();
+        for pair in v {
+            format!("{:?}", pair);
         }
     }
 }

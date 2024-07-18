@@ -1,15 +1,7 @@
-//! Bytes Module
-//!
-//! The Bytes module handles the representation and manipulation of arbitrary
-//! byte arrays in Ethereum-related contexts. This module is fundamental for
-//! managing raw data, such as transaction payloads, contract bytecode, and
-//! cryptographic hashes. It provides functionality for converting between
-//! various byte formats and Ethereum-specific types, playing a key role in
-//! data serialization and processing.
-
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
+use std::ops::DerefMut;
 
 use ethers_core::types::Bytes as EthersBytes;
 use revm::interpreter::analysis::to_analysed;
@@ -19,8 +11,7 @@ use revm::primitives::Output as RevmOutput;
 
 use crate::gen_newtype_from;
 
-#[derive(Clone, Default, Eq, PartialEq, fake::Dummy, sqlx::Type)]
-#[sqlx(transparent)]
+#[derive(Clone, Default, Eq, PartialEq, fake::Dummy)]
 pub struct Bytes(pub Vec<u8>);
 
 impl Display for Bytes {
@@ -74,33 +65,33 @@ gen_newtype_from!(self = Bytes, other = Vec<u8>, &[u8], [u8; 32]);
 
 impl From<EthersBytes> for Bytes {
     fn from(value: EthersBytes) -> Self {
-        Self(value.into_iter().collect())
+        Self(value.0.into())
     }
 }
 
 impl From<RevmBytecode> for Bytes {
     fn from(value: RevmBytecode) -> Self {
-        Self(value.bytecode.0.into_iter().collect())
+        Self(value.bytecode().clone().into())
     }
 }
 
 impl From<RevmBytes> for Bytes {
     fn from(value: RevmBytes) -> Self {
-        Self(value.0.into_iter().collect())
+        Self(value.0.into())
     }
 }
 
 impl From<&RevmBytes> for Bytes {
     fn from(value: &RevmBytes) -> Self {
-        Self(value.to_vec())
+        Self(value.0.clone().into())
     }
 }
 
 impl From<RevmOutput> for Bytes {
     fn from(value: RevmOutput) -> Self {
         match value {
-            RevmOutput::Call(bytes) => bytes.into(),
-            RevmOutput::Create(bytes, _) => bytes.into(),
+            RevmOutput::Call(bytes) => Self(bytes.0.into()),
+            RevmOutput::Create(bytes, _) => Self(bytes.0.into()),
         }
     }
 }
@@ -119,6 +110,12 @@ impl Deref for Bytes {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DerefMut for Bytes {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

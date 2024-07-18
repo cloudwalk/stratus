@@ -11,7 +11,7 @@ pub struct InMemoryHistory<T>(NonEmpty<InMemoryHistoryValue<T>>)
 where
     T: Clone + Debug + serde::Serialize;
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, derive_new::new)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, derive_new::new)]
 pub struct InMemoryHistoryValue<T> {
     pub block_number: BlockNumber,
     pub value: T,
@@ -51,8 +51,8 @@ where
     /// Returns the value at the given point in time.
     pub fn get_at_point(&self, point_in_time: &StoragePointInTime) -> Option<T> {
         match point_in_time {
-            StoragePointInTime::Present => Some(self.get_current()),
-            StoragePointInTime::Past(block_number) => self.get_at_block(block_number),
+            StoragePointInTime::Mined | StoragePointInTime::Pending => Some(self.get_current()),
+            StoragePointInTime::MinedPast(block_number) => self.get_at_block(block_number),
         }
     }
 

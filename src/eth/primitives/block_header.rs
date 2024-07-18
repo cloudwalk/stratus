@@ -1,21 +1,16 @@
-//! Block Header Module
-//!
-//! The Block Header module defines the structure of a block's header in
-//! Ethereum's blockchain. A block header contains crucial data like the block
-//! number, a unique hash identifying the block, details about transactions
-//! included in the block, gas usage information, and logs bloom filters. These
-//! elements are essential for blockchain verification and consensus mechanisms,
-//! as well as for navigating and interpreting the blockchain.
-
+use ethereum_types::H160;
+use ethereum_types::H256;
 use ethereum_types::H64;
 use ethereum_types::U256;
 use ethers_core::types::Block as EthersBlock;
+use ethers_core::types::OtherFields;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
+use crate::eth::consensus::append_entry;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -80,6 +75,50 @@ impl BlockHeader {
             nonce: MinerNonce::default(),
         }
     }
+
+    pub fn to_append_entry_block_header(&self, transaction_hashes: Vec<Vec<u8>>) -> append_entry::BlockEntry {
+        append_entry::BlockEntry {
+            number: self.number.into(),
+            hash: self.hash.as_fixed_bytes().to_vec(),
+            transactions_root: self.transactions_root.as_fixed_bytes().to_vec(),
+            gas_used: self.gas_used.as_u64(),
+            gas_limit: self.gas_limit.as_u64(),
+            bloom: self.bloom.as_bytes().to_vec(),
+            timestamp: self.timestamp.as_u64(),
+            parent_hash: self.parent_hash.as_fixed_bytes().to_vec(),
+            author: self.author.to_fixed_bytes().to_vec(),
+            extra_data: self.extra_data.clone().0,
+            miner: self.miner.to_fixed_bytes().to_vec(),
+            receipts_root: self.receipts_root.as_fixed_bytes().to_vec(),
+            uncle_hash: self.uncle_hash.as_fixed_bytes().to_vec(),
+            size: self.size.into(),
+            state_root: self.state_root.as_fixed_bytes().to_vec(),
+            transaction_hashes,
+        }
+    }
+
+    pub fn from_append_entry_block(entry: append_entry::BlockEntry) -> anyhow::Result<Self> {
+        Ok(BlockHeader {
+            number: entry.number.into(),
+            hash: Hash::new_from_h256(H256::from_slice(&entry.hash)),
+            transactions_root: Hash::new_from_h256(H256::from_slice(&entry.transactions_root)),
+            gas_used: Gas::from(entry.gas_used),
+            gas_limit: Gas::from(entry.gas_limit),
+            bloom: LogsBloom::from_bytes(&entry.bloom),
+            timestamp: UnixTime::from(entry.timestamp),
+            parent_hash: Hash::new_from_h256(H256::from_slice(&entry.parent_hash)),
+            author: Address::new_from_h160(H160::from_slice(&entry.author)),
+            extra_data: Bytes(entry.extra_data),
+            miner: Address::new_from_h160(H160::from_slice(&entry.miner)),
+            difficulty: Difficulty::from(U256::zero()), // always 0x0
+            receipts_root: Hash::new_from_h256(H256::from_slice(&entry.receipts_root)),
+            uncle_hash: Hash::new_from_h256(H256::from_slice(&entry.uncle_hash)),
+            size: Size::from(entry.size),
+            state_root: Hash::new_from_h256(H256::from_slice(&entry.state_root)),
+            total_difficulty: Difficulty::from(U256::zero()), // always 0x0
+            nonce: MinerNonce::default(),                     // always 0x0000000000000000
+        })
+    }
 }
 
 impl Dummy<Faker> for BlockHeader {
@@ -119,6 +158,7 @@ where
             // block: identifiers
             hash: Some(header.hash.into()),
             number: Some(header.number.into()),
+            mix_hash: Some(Default::default()),
 
             // block: relation with other blocks
             uncles_hash: HASH_EMPTY_UNCLES.into(),
@@ -143,22 +183,19 @@ where
             excess_blob_gas: None,
 
             // transactions
+            transactions: vec![], // can't fill transactions from header, must be modified afterward
             transactions_root: header.transactions_root.into(),
             receipts_root: HASH_EMPTY_TRIE.into(),
+            withdrawals_root: None,
+            withdrawals: None,
 
             // data
+            size: Some(u64::from(header.size).into()),
             logs_bloom: Some(*header.bloom),
             extra_data: Default::default(),
-
-            // TODO
-            ..Default::default() // state_root: todo!(),
-                                 // seal_fields: todo!(),
-                                 // transactions: todo!(),
-                                 // size: todo!(),
-                                 // mix_hash: todo!(),
-                                 // withdrawals_root: todo!(),
-                                 // withdrawals: todo!(),
-                                 // other: todo!(),
+            state_root: header.state_root.into(),
+            seal_fields: Default::default(),
+            other: OtherFields::default(),
         }
     }
 }
@@ -167,9 +204,9 @@ where
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 
-impl TryFrom<ExternalBlock> for BlockHeader {
+impl TryFrom<&ExternalBlock> for BlockHeader {
     type Error = anyhow::Error;
-    fn try_from(mut value: ExternalBlock) -> Result<Self, Self::Error> {
+    fn try_from(value: &ExternalBlock) -> Result<Self, Self::Error> {
         Ok(Self {
             number: value.number(),
             hash: value.hash(),
@@ -180,7 +217,7 @@ impl TryFrom<ExternalBlock> for BlockHeader {
             parent_hash: value.parent_hash.into(),
             gas_limit: value.gas_limit.try_into()?,
             author: value.author(),
-            extra_data: value.extra_data(),
+            extra_data: value.extra_data.clone().into(),
             miner: value.author.unwrap_or_default().into(),
             difficulty: value.difficulty.into(),
             receipts_root: value.receipts_root.into(),
@@ -195,6 +232,7 @@ impl TryFrom<ExternalBlock> for BlockHeader {
 
 impl From<BlockHeader> for SubscriptionMessage {
     fn from(value: BlockHeader) -> Self {
-        Self::from_json(&value).unwrap()
+        let ethers_block: EthersBlock<()> = EthersBlock::from(value);
+        Self::from_json(&ethers_block).unwrap()
     }
 }

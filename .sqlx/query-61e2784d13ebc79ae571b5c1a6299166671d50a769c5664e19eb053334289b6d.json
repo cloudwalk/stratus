@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT resigned_transaction\n            FROM tx_hash_map\n            WHERE stratus_hash=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "resigned_transaction",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "61e2784d13ebc79ae571b5c1a6299166671d50a769c5664e19eb053334289b6d"
+}

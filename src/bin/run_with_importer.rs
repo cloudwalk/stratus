@@ -4,30 +4,79 @@ use std::sync::Arc;
 
 use importer_online::run_importer_online;
 use stratus::config::RunWithImporterConfig;
+#[cfg(feature = "request-replication-test-sender")]
+use stratus::eth::rpc::create_replication_worker;
 use stratus::eth::rpc::serve_rpc;
-use stratus::init_global_services;
-use tokio::try_join;
+use stratus::eth::Consensus;
+use stratus::infra::BlockchainClient;
+use stratus::GlobalServices;
+use stratus::GlobalState;
+use tokio::join;
 
 fn main() -> anyhow::Result<()> {
-    let config: RunWithImporterConfig = init_global_services();
-    let runtime = config.init_runtime();
-    runtime.block_on(run(config))
+    let global_services = GlobalServices::<RunWithImporterConfig>::init();
+    global_services.runtime.block_on(run(global_services.config))
 }
 
 async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
-    let stratus_config = config.as_stratus();
-    let importer_config = config.as_importer();
+    const TASK_NAME: &str = "run-with-importer";
 
-    let storage = stratus_config.stratus_storage.init().await?;
+    // init services
+    let storage = config.storage.init()?;
+    let miner = config.miner.init_external_mode(Arc::clone(&storage), None)?;
+    let consensus = Consensus::new(
+        Arc::clone(&storage),
+        Arc::clone(&miner),
+        config.storage.perm_storage.rocks_path_prefix.clone(),
+        config.clone().candidate_peers.clone(),
+        Some(config.clone()),
+        config.rpc_server.address,
+        config.grpc_server_address,
+    ); // in development, with no leader configured, the current node ends up being the leader
+    let (http_url, ws_url) = consensus.get_chain_url().await.expect("chain url not found");
+    let chain = Arc::new(BlockchainClient::new_http_ws(&http_url, ws_url.as_deref(), config.online.external_rpc_timeout).await?);
 
-    let executor = stratus_config.executor.init(Arc::clone(&storage)).await;
+    let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
-    let rpc_task = tokio::spawn(serve_rpc(Arc::clone(&executor), Arc::clone(&storage), stratus_config));
-    let importer_task = tokio::spawn(run_importer_online(importer_config, Arc::clone(&executor), storage));
+    let rpc_storage = Arc::clone(&storage);
+    let rpc_executor = Arc::clone(&executor);
+    let rpc_miner = Arc::clone(&miner);
 
-    let join_result = try_join!(rpc_task, importer_task)?;
-    join_result.0?;
-    join_result.1?;
+    // run rpc and importer-online in parallel
+    let rpc_config = config.clone();
+    let rpc_task = async move {
+        let res = serve_rpc(
+            // services
+            rpc_storage,
+            rpc_executor,
+            rpc_miner,
+            Arc::clone(&consensus),
+            #[cfg(feature = "request-replication-test-sender")]
+            create_replication_worker(rpc_config.replicate_request_to.clone()),
+            // config
+            rpc_config.clone(),
+            rpc_config.rpc_server,
+            rpc_config.executor.chain_id.into(),
+        )
+        .await;
+        GlobalState::shutdown_from(TASK_NAME, "rpc server finished unexpectedly");
+        res
+    };
+
+    let importer_task = async {
+        let res = run_importer_online(executor, miner, Arc::clone(&storage), chain, config.online.sync_interval).await;
+        GlobalState::shutdown_from(TASK_NAME, "importer online finished unexpectedly");
+        res
+    };
+
+    // await both services to finish
+    let (rpc_result, importer_result) = join!(rpc_task, importer_task);
+    tracing::debug!(?rpc_result, ?importer_result, "rpc and importer tasks finished");
+    rpc_result?;
+    importer_result?;
+
+    // Explicitly block the `main` thread to drop the storage.
+    drop(storage);
 
     Ok(())
 }

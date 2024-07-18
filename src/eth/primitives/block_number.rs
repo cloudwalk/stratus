@@ -1,12 +1,3 @@
-//! Block Number Module
-//!
-//! The Block Number module manages the numerical identification of blocks in
-//! the Ethereum blockchain. Each block is assigned a unique, sequential number
-//! for easy reference and tracking within the blockchain. This module provides
-//! functionality for manipulating and comparing block numbers, essential for
-//! operations like validating blockchain continuity and retrieving specific
-//! blocks.
-
 use std::fmt::Display;
 use std::num::TryFromIntError;
 use std::ops::Add;
@@ -62,6 +53,17 @@ impl BlockNumber {
         self.0.is_zero()
     }
 
+    /// Count how many blocks there is between itself and the othe block.
+    ///
+    /// Assumes that self is the lower-end of the range.
+    pub fn count_to(&self, higher_end: &BlockNumber) -> u64 {
+        if higher_end >= self {
+            higher_end.as_u64() - self.as_u64() + 1
+        } else {
+            0
+        }
+    }
+
     /// Converts itself to i64.
     pub fn as_i64(&self) -> i64 {
         self.0.as_u64() as i64
@@ -79,7 +81,7 @@ impl BlockNumber {
 
 impl Display for BlockNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+        write!(f, "#{}", self.0)
     }
 }
 

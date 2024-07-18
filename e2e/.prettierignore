@@ -1,0 +1,11 @@
+# Files and folders that Prettier must ignore
+artifacts/**
+cache/**
+typechain-types/**
+cloudwalk-contracts/*.sh
+cloudwalk-contracts/repos/**
+cloudwalk-contracts/patches/**
+cloudwalk-contracts/integration/artifacts/**
+cloudwalk-contracts/integration/cache/**
+cloudwalk-contracts/integration/typechain-types/**
+cloudwalk-contracts/integration/node_modules/**

@@ -25,5 +25,4 @@ _outdated_minors_only:
 _outdated:
     #!/bin/bash
     command -v cargo-outdated >/dev/null 2>&1 || { cargo install cargo-outdated; }
-    cargo outdated --root-deps-only --ignore-external-rel --exit-code=1
-    exit $?
+    cargo outdated --root-deps-only --ignore-external-rel

@@ -1,68 +1,128 @@
-use std::collections::HashMap;
+use std::str::FromStr;
 
-use async_trait::async_trait;
+use anyhow::anyhow;
+use clap::Parser;
+use display_json::DebugAsJson;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotIndexes;
 use crate::eth::primitives::SlotSample;
-use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::StorageError;
+use crate::eth::storage::InMemoryPermanentStorage;
+use crate::eth::storage::RocksPermanentStorage;
 
-/// Permanent (committed) storage operations
-#[async_trait]
-pub trait PermanentStorage: Send + Sync {
-    /// Allows the storage to allocate dedicated resources for EVM execution.
-    async fn allocate_evm_thread_resources(&self) -> anyhow::Result<()>;
+/// Permanent (committed) storage operations.
+pub trait PermanentStorage: Send + Sync + 'static {
+    // -------------------------------------------------------------------------
+    // Block number
+    // -------------------------------------------------------------------------
 
-    /// Sets the last mined block number to a specific value.
-    async fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+    /// Sets the last mined block number.
+    fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
 
     // Retrieves the last mined block number.
-    async fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber>;
+    fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber>;
 
-    /// Atomically increments the block number, returning the new value.
-    ///
-    /// TODO: this can probably be removed because set_mined_block_number and set_active_block_number may be enough.
-    async fn increment_block_number(&self) -> anyhow::Result<BlockNumber>;
-
-    /// Retrieves an account from the storage. Returns Option when not found.
-    async fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
-
-    /// Retrieves an slot from the storage. Returns Option when not found.
-    async fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>>;
-
-    /// Retrieves several slots at once.
-    async fn read_slots(&self, address: &Address, indexes: &SlotIndexes, point_in_time: &StoragePointInTime) -> anyhow::Result<HashMap<SlotIndex, SlotValue>>;
-
-    /// Retrieves a block from the storage.
-    async fn read_block(&self, block_selection: &BlockSelection) -> anyhow::Result<Option<Block>>;
-
-    /// Retrieves a transaction from the storage.
-    async fn read_mined_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>>;
-
-    /// Retrieves logs from the storage.
-    async fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
+    // -------------------------------------------------------------------------
+    // Block
+    // -------------------------------------------------------------------------
 
     /// Persists atomically all changes from a block.
-    async fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError>;
+    fn save_block(&self, block: Block) -> anyhow::Result<()>;
+
+    /// Retrieves a block from the storage.
+    fn read_block(&self, block_filter: &BlockFilter) -> anyhow::Result<Option<Block>>;
+
+    /// Retrieves a transaction from the storage.
+    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>>;
+
+    /// Retrieves logs from the storage.
+    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
+
+    // -------------------------------------------------------------------------
+    // Account and slots
+    // -------------------------------------------------------------------------
 
     /// Persists initial accounts (test accounts or genesis accounts).
-    async fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
+    fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
-    /// Resets all state to a specific block number.
-    async fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
+    /// Retrieves an account from the storage. Returns Option when not found.
+    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
+
+    /// Retrieves an slot from the storage. Returns Option when not found.
+    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>>;
 
     /// Retrieves a random sample of slots, from the provided start and end blocks.
-    async fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
+    fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>>;
+
+    /// Retrieves all current slots associated to an address.
+    fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>>;
+
+    // -------------------------------------------------------------------------
+    // Global state
+    // -------------------------------------------------------------------------
+
+    /// Resets all state to a specific block number.
+    fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
+}
+
+// -----------------------------------------------------------------------------
+// Config
+// -----------------------------------------------------------------------------
+
+/// Permanent storage configuration.
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+pub struct PermanentStorageConfig {
+    /// Permamenent storage implementation.
+    #[arg(long = "perm-storage", env = "PERM_STORAGE")]
+    pub perm_storage_kind: PermanentStorageKind,
+
+    /// RocksDB storage path prefix to execute multiple local Stratus instances.
+    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
+    pub rocks_path_prefix: Option<String>,
+}
+
+#[derive(DebugAsJson, Clone, serde::Serialize)]
+pub enum PermanentStorageKind {
+    #[serde(rename = "inmemory")]
+    InMemory,
+    #[serde(rename = "rocks")]
+    Rocks,
+}
+
+impl PermanentStorageConfig {
+    /// Initializes permanent storage implementation.
+    pub fn init(&self) -> anyhow::Result<Box<dyn PermanentStorage>> {
+        tracing::info!(config = ?self, "creating permanent storage");
+
+        let perm: Box<dyn PermanentStorage> = match self.perm_storage_kind {
+            PermanentStorageKind::InMemory => Box::<InMemoryPermanentStorage>::default(),
+            PermanentStorageKind::Rocks => {
+                let prefix = self.rocks_path_prefix.clone();
+                Box::new(RocksPermanentStorage::new(prefix)?)
+            }
+        };
+        Ok(perm)
+    }
+}
+
+impl FromStr for PermanentStorageKind {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        match s {
+            "inmemory" => Ok(Self::InMemory),
+            "rocks" => Ok(Self::Rocks),
+            s => Err(anyhow!("unknown permanent storage: {}", s)),
+        }
+    }
 }

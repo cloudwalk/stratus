@@ -14,7 +14,7 @@ impl Docker {
     /// Starts PostgreSQL container for local development.
     #[must_use]
     pub fn start_postgres(&self) -> Container<'_, PostgresImage> {
-        tracing::info!("starting postgres container");
+        tracing::info!("creating postgres container");
 
         let image = RunnableImage::from(PostgresImage::default().with_user("postgres").with_password("123").with_db_name("stratus"))
             .with_mapped_port((5432, 5432))
@@ -32,7 +32,7 @@ impl Docker {
     /// Starts Prometheus container for local development.
     #[must_use]
     pub fn start_prometheus(&self) -> Container<'_, GenericImage> {
-        tracing::info!("starting prometheus container");
+        tracing::info!("creating prometheus container");
 
         let prometheus_image = GenericImage::new("prom/prometheus", "v2.50.1").with_wait_for(WaitFor::StdErrMessage {
             message: "Starting rule manager...".to_string(),

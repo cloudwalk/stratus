@@ -1,5 +1,6 @@
 use ethers_core::types::Block as EthersBlock;
 use ethers_core::types::Transaction as EthersTransaction;
+use serde::Deserialize;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -8,6 +9,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
+use crate::ext::JsonValue;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
@@ -51,9 +53,9 @@ impl From<ExternalBlock> for EthersBlock<ExternalTransaction> {
     }
 }
 
-impl TryFrom<ExternalBlock> for Block {
+impl TryFrom<&ExternalBlock> for Block {
     type Error = anyhow::Error;
-    fn try_from(value: ExternalBlock) -> Result<Self, Self::Error> {
+    fn try_from(value: &ExternalBlock) -> Result<Self, Self::Error> {
         Ok(Block {
             header: value.try_into()?,
             transactions: vec![],
@@ -64,11 +66,11 @@ impl TryFrom<ExternalBlock> for Block {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-impl TryFrom<serde_json::Value> for ExternalBlock {
+impl TryFrom<JsonValue> for ExternalBlock {
     type Error = anyhow::Error;
 
-    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
-        match serde_json::from_value(value.clone()) {
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+        match ExternalBlock::deserialize(&value) {
             Ok(v) => Ok(v),
             Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to ExternalBlock"),
         }

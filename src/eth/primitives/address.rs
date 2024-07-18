@@ -1,14 +1,3 @@
-//! Address Module
-//!
-//! This module handles Ethereum addresses, a fundamental component for
-//! identifying accounts and contracts within the Ethereum network. The address
-//! is a 20-byte identifier derived from the public key of an account and is
-//! crucial for transactions and smart contract interactions. Key functionalities
-//! include generating new addresses, determining special addresses like the zero
-//! address (often used to represent non-specific or null addresses in smart
-//! contracts) and the coinbase address (which is crucial in mining processes
-//! for receiving block rewards).
-
 use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
@@ -31,7 +20,7 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
-#[derive(Debug, Clone, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Address(H160);
 
 impl Address {
@@ -40,6 +29,7 @@ impl Address {
 
     /// Special address that receives the block reward.
     pub const COINBASE: Address = Address(H160(hex!("00000000000000000000000000000000000000ff")));
+    pub const BRLC: Address = Address(H160(hex!("a9a55a81a4c085ec0c31585aed4cfb09d78dfd53")));
 
     /// Creates a new address from the given bytes.
     pub const fn new(bytes: [u8; 20]) -> Self {
@@ -188,6 +178,6 @@ impl From<Address> for Token {
 
 impl From<Address> for [u8; 20] {
     fn from(value: Address) -> Self {
-        H160::from(value.clone()).0
+        H160::from(value).0
     }
 }

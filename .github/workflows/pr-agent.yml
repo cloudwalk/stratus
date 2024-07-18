@@ -1,0 +1,62 @@
+name: Codium AI
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    paths-ignore:
+      - '.github/workflows/deploy.yml'
+      - '.github/workflows/docs-release.yml'
+      - '.github/workflows/outdated.yml'
+      - '.github/workflows/comment-tag-report.yml'
+      - '.github/workflows/pr-agent.yml'
+      - '.github/CODEOWNERS'
+      - 'config/**'
+      - 'README.md'
+      - 'LICENSE'
+      - 'CONTRIBUTING.md'
+      - 'utils/slack-notifiers/**'
+  issue_comment:
+  workflow_dispatch:
+
+env:
+  EXTRA_INSTRUCTIONS: |
+    These rules apply mostly to Rust code:
+    * Most part of the codebase is written in Rust and formatted and analysed with clippy.
+    * Do not waste time on trivial things like null handling or formatting because the compiler and clippy can handle these things.
+    * When you detect a task spawned to background with tokio or threads,  ensure to review the operations are properly logged and monitored.
+    * When you detect the use of tokio::spawn or tokio::spawn_blocking, suggest using spawn_named or spawn_blocking_named functions.
+    * When you detect the use of tokio::sleep or thread::sleep, suggest to use traced_sleep, so we can have visibility in tracing events.
+    * When a long-running blocking task is running inside Tokio async context, suggest using spawn_blocking_named to avoid Tokio thread locking.
+    * When a function is instrumented with tracing::instrument, suggest to record identifiers as span fields if none are present.
+    * Never suggest to use log crate. We use structured tracing here.
+    * When you detect a tracing event, do not allow the message to be formatted with dynamic fields. Instead suggest to add these dynamic fields as tracing fields.
+    * When an error is logged, ensure the original error is logged in a field called reason.
+    * When you detect an unwrap, suggest to use expect.
+    * When you detect a core component or service is being initialized, ensure its initialization is being logged with all relevant configurations.
+    * When too much cloning is happening, suggest to use references if possible.
+
+jobs:
+  pr_agent_job:
+    if: ${{ github.event.sender.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: write
+    name: PR Agent
+    steps:
+      - name: Review
+        id: pr_agent
+        uses: Codium-ai/pr-agent@main
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_action_config.auto_review: "true"
+          github_action_config.auto_improve: "true"
+          github_action_config.auto_describe: "false"
+          pr_description.publish_labels: "false"
+          github_action_config.enable_output: "false"
+          pr_reviewer.enable_review_labels_effort: "false"
+          pr_reviewer.enable_review_labels_security: "false"
+          pr_reviewer.extra_instructions: "${{ env.EXTRA_INSTRUCTIONS }}"
+          config.model: "gpt-4o"

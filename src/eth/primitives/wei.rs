@@ -1,13 +1,3 @@
-//! Wei Module
-//!
-//! Manages Wei, the smallest denomination of Ether, Ethereum's native
-//! cryptocurrency. Wei is essential for representing transaction values,
-//! calculating gas costs, and handling financial operations on the Ethereum
-//! network. This module includes functionalities for manipulating Wei values,
-//! enabling precise financial operations and conversions within the Ethereum
-//! ecosystem.
-
-use std::fmt::Display;
 use std::str::FromStr;
 
 use ethabi::Token;
@@ -26,7 +16,9 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 
 /// Native token amount in wei.
-#[derive(Debug, Clone, Default, Eq, PartialEq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, derive_more::Display, Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize,
+)]
 pub struct Wei(U256);
 
 impl Wei {
@@ -34,15 +26,17 @@ impl Wei {
     pub const ONE: Wei = Wei(U256::one());
     pub const TEST_BALANCE: Wei = Wei(U256([u64::MAX, 0, 0, 0]));
 
+    pub fn new(value: U256) -> Self {
+        Self(value)
+    }
+
     /// Checks if current value is zero.
     pub fn is_zero(&self) -> bool {
         self == &Self::ZERO
     }
-}
 
-impl Display for Wei {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+    pub fn inner(&self) -> &U256 {
+        &self.0
     }
 }
 
@@ -90,10 +84,10 @@ impl sqlx::Type<sqlx::Postgres> for Wei {
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Wei {
     fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
-        match BigDecimal::try_from(self.clone()) {
+        match BigDecimal::try_from(*self) {
             Ok(res) => res.encode(buf),
-            Err(err) => {
-                tracing::error!(?err, "failed to encode gas");
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to encode gas");
                 IsNull::Yes
             }
         }
@@ -105,8 +99,8 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Wei {
     {
         match BigDecimal::try_from(self) {
             Ok(res) => res.encode(buf),
-            Err(err) => {
-                tracing::error!(?err, "failed to encode gas");
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to encode gas");
                 IsNull::Yes
             }
         }

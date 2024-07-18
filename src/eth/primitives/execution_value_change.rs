@@ -8,6 +8,15 @@ where
     modified: ValueState<T>,
 }
 
+impl<T: PartialEq> Default for ExecutionValueChange<T> {
+    fn default() -> Self {
+        Self {
+            original: ValueState::NotSet,
+            modified: ValueState::NotSet,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ValueState<T> {

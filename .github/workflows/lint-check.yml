@@ -8,11 +8,15 @@ on:
       - '.github/workflows/deploy.yml'
       - '.github/workflows/docs-release.yml'
       - '.github/workflows/outdated.yml'
+      - '.github/workflows/comment-tag-report.yml'
+      - '.github/workflows/pr-agent.yml'
+      - '.github/workflows/build-binary.yml'
       - '.github/CODEOWNERS'
       - 'config/**'
       - 'README.md'
       - 'LICENSE'
       - 'CONTRIBUTING.md'
+      - 'utils/slack-notifiers/**'
   workflow_dispatch:
   push: # Rebuild cache policy
     branches:
@@ -33,25 +37,52 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Cache Cargo Registry and Target Directory
-        uses: actions/cache@v4.0.2
-        id: cache-cargo
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-nightly-debug-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-nightly-debug-
+        uses: actions/checkout@v4
 
       - name: Set up Rust Nightly
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-01-01
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-02-29
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: ${{ runner.os }}-v3-cargo
+          shared-key: nightly-debug
+          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          cache-provider: "github"
+          cache-directories: "~/.cargo/bin/"
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
 
       - name: Set up Just
-        uses: extractions/setup-just@v1
+        uses: extractions/setup-just@v2
 
       - name: Just lint-check
-        run: just lint-check -2024-01-01
+        run: just lint-check -2024-02-29
+
+  e2e_lint:
+    name: E2E Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    concurrency:
+      group: ${{ github.workflow }}-e2e-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+
+      - name: Set up Just
+        uses: extractions/setup-just@v2
+
+      - name: Just e2e-lint
+        run: |
+          npm --prefix ./e2e --silent install
+          just e2e-lint --check

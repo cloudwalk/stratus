@@ -1,3 +1,4 @@
+use display_json::DebugAsJson;
 use nonempty::NonEmpty;
 
 use crate::eth::primitives::Address;
@@ -6,7 +7,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::Wei;
 
-#[derive(Debug)]
+#[derive(DebugAsJson, serde::Serialize)]
 pub struct ExecutionConflicts(pub NonEmpty<ExecutionConflict>);
 
 #[derive(Debug, Default)]
@@ -43,21 +44,13 @@ impl ExecutionConflictsBuilder {
     }
 }
 
-#[derive(Debug)]
+#[derive(DebugAsJson, serde::Serialize)]
 pub enum ExecutionConflict {
     /// Account nonce mismatch.
-    Nonce {
-        address: Address,
-        expected: Nonce,
-        actual: Nonce,
-    },
+    Nonce { address: Address, expected: Nonce, actual: Nonce },
 
     /// Account balance mismatch.
-    Balance {
-        address: Address,
-        expected: Wei,
-        actual: Wei,
-    },
+    Balance { address: Address, expected: Wei, actual: Wei },
 
     /// Slot value mismatch.
     Slot {
@@ -67,7 +60,9 @@ pub enum ExecutionConflict {
         actual: SlotValue,
     },
 
-    Account,
+    /// Number of modified accounts mismatch.
+    AccountModifiedCount { expected: usize, actual: usize },
 
-    PgSlot,
+    /// Number of modified slots mismatch.
+    SlotModifiedCount { expected: usize, actual: usize },
 }

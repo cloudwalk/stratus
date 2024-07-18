@@ -1,56 +1,55 @@
 //! Application configuration.
 
-use std::cmp::max;
-use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use clap::Parser;
+use display_json::DebugAsJson;
+use strum::VariantNames;
 use tokio::runtime::Builder;
-use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 
-use crate::bin_name;
-use crate::eth::evm::revm::Revm;
-use crate::eth::evm::Evm;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::test_accounts;
+use crate::eth::executor::ExecutorConfig;
+use crate::eth::miner::MinerConfig;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockSelection;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::StoragePointInTime;
-use crate::eth::storage::ExternalRpcStorage;
-use crate::eth::storage::InMemoryPermanentStorage;
-use crate::eth::storage::InMemoryTemporaryStorage;
-use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::PostgresExternalRpcStorage;
-use crate::eth::storage::PostgresExternalRpcStorageConfig;
-use crate::eth::storage::PostgresPermanentStorage;
-use crate::eth::storage::PostgresPermanentStorageConfig;
-#[cfg(feature = "rocks")]
-use crate::eth::storage::RocksPermanentStorage;
-#[cfg(feature = "rocks")]
-use crate::eth::storage::RocksTemporary;
-use crate::eth::storage::StratusStorage;
-use crate::eth::storage::TemporaryStorage;
-use crate::eth::BlockMiner;
-use crate::eth::EthExecutor;
-use crate::eth::EvmTask;
-#[cfg(feature = "dev")]
-use crate::ext::not;
+use crate::eth::relayer::ExternalRelayer;
+use crate::eth::relayer::ExternalRelayerClient;
+use crate::eth::rpc::RpcServerConfig;
+use crate::eth::storage::ExternalRpcStorageConfig;
+use crate::eth::storage::StratusStorageConfig;
+use crate::eth::TransactionRelayer;
+use crate::ext::parse_duration;
+use crate::infra::build_info;
+use crate::infra::tracing::TracingConfig;
+use crate::infra::BlockchainClient;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
-    let env = std::env::var("ENV").unwrap_or_else(|_| "local".to_string());
-    let env_filename = format!("config/{}.env.{}", bin_name(), env);
+    // parse env manually because this is executed before clap
+    let env = match std::env::var("ENV") {
+        Ok(env) => Environment::from_str(env.as_str()),
+        Err(_) => Ok(Environment::Local),
+    };
+    let env = match env {
+        Ok(env) => env,
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
+    };
 
-    println!("reading env file: {}", env_filename);
-    let _ = dotenvy::from_filename(env_filename);
+    // load .env file
+    let env_filename = format!("config/{}.env.{}", build_info::binary_name(), env);
+    println!("reading env file | filename={}", env_filename);
+
+    if let Err(e) = dotenvy::from_filename(env_filename) {
+        println!("env file error: {e}");
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -62,9 +61,13 @@ pub trait WithCommonConfig {
 }
 
 /// Configuration that can be used by any binary.
-#[derive(Clone, Parser, Debug)]
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 #[command(author, version, about, long_about = None)]
 pub struct CommonConfig {
+    /// Environment where the application is running.
+    #[arg(long = "env", env = "ENV", default_value = "local")]
+    pub env: Environment,
+
     /// Number of threads to execute global async tasks.
     #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
     pub num_async_threads: usize,
@@ -73,8 +76,28 @@ pub struct CommonConfig {
     #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "10")]
     pub num_blocking_threads: usize,
 
-    #[arg(long = "metrics-histogram-kind", env = "METRICS_HISTOGRAM_KIND", default_value = "summary")]
-    pub metrics_histogram_kind: MetricsHistogramKind,
+    #[clap(flatten)]
+    pub tracing: TracingConfig,
+
+    /// Address where Prometheus metrics will be exposed.
+    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
+    pub metrics_exporter_address: SocketAddr,
+
+    // Address where Tokio Console GRPC server will be exposed.
+    #[arg(long = "tokio-console-address", env = "TRACING_TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
+    pub tokio_console_address: SocketAddr,
+
+    /// Sentry URL where error events will be pushed.
+    #[arg(long = "sentry-url", env = "SENTRY_URL")]
+    pub sentry_url: Option<String>,
+
+    /// Direct access to peers via IP address, why will be included on data propagation and leader election.
+    #[arg(long = "candidate-peers", env = "CANDIDATE_PEERS", value_delimiter = ',')]
+    pub candidate_peers: Vec<String>,
+
+    // Address for the GRPC Server
+    #[arg(long = "grpc-server-address", env = "GRPC_SERVER_ADDRESS", default_value = "0.0.0.0:3777")]
+    pub grpc_server_address: SocketAddr,
 
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
@@ -89,146 +112,139 @@ impl WithCommonConfig for CommonConfig {
 
 impl CommonConfig {
     /// Initializes Tokio runtime.
-    pub fn init_runtime(&self) -> Runtime {
-        tracing::info!(
-            async_threads = %self.num_async_threads,
-            blocking_threads = %self.num_blocking_threads,
-            "starting tokio runtime"
+    pub fn init_runtime(&self) -> anyhow::Result<Runtime> {
+        println!(
+            "creating tokio runtime | async_threads={} blocking_threads={}",
+            self.num_async_threads, self.num_blocking_threads
         );
 
-        let runtime = Builder::new_multi_thread()
+        let num_async_threads = self.num_async_threads;
+        let num_blocking_threads = self.num_blocking_threads;
+        let result = Builder::new_multi_thread()
             .enable_all()
-            .thread_name("tokio")
-            .worker_threads(self.num_async_threads)
-            .max_blocking_threads(self.num_blocking_threads)
+            .worker_threads(num_async_threads)
+            .max_blocking_threads(num_blocking_threads)
             .thread_keep_alive(Duration::from_secs(u64::MAX))
-            .build()
-            .expect("failed to start tokio runtime");
+            .thread_name_fn(move || {
+                // Tokio first create all async threads, then all blocking threads.
+                // Threads are not expected to die because Tokio catches panics and blocking threads are configured to never die.
+                // If one of these premises are not true anymore, this will possibly categorize threads wrongly.
 
-        runtime
-    }
-}
+                static ASYNC_ID: AtomicUsize = AtomicUsize::new(1);
+                static BLOCKING_ID: AtomicUsize = AtomicUsize::new(1);
 
-// -----------------------------------------------------------------------------
-// Config: StratusStorage
-// -----------------------------------------------------------------------------
-
-/// Configuration that can be used by any binary that interacts with Stratus storage.
-#[derive(Parser, Debug, Clone)]
-pub struct StratusStorageConfig {
-    #[clap(flatten)]
-    pub temp_storage: TemporaryStorageConfig,
-
-    #[clap(flatten)]
-    pub perm_storage: PermanentStorageConfig,
-
-    /// Generates genesis block on startup when it does not exist.
-    #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
-    pub enable_genesis: bool,
-
-    /// Enables test accounts with max wei on startup.
-    #[cfg(feature = "dev")]
-    #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
-    pub enable_test_accounts: bool,
-}
-
-impl StratusStorageConfig {
-    /// Initializes Stratus storage.
-    pub async fn init(&self) -> anyhow::Result<Arc<StratusStorage>> {
-        let temp_storage = self.temp_storage.init().await?;
-        let perm_storage = self.perm_storage.init().await?;
-        let storage = StratusStorage::new(temp_storage, perm_storage);
-
-        if self.enable_genesis {
-            let genesis = storage.read_block(&BlockSelection::Number(BlockNumber::ZERO)).await?;
-            if genesis.is_none() {
-                tracing::info!("enabling genesis block");
-                storage.commit_to_perm(BlockMiner::genesis()).await?;
-            }
-        }
-
-        #[cfg(feature = "dev")]
-        if self.enable_test_accounts {
-            let mut test_accounts_to_insert = Vec::new();
-            for test_account in test_accounts() {
-                let storage_account = storage.read_account(&test_account.address, &StoragePointInTime::Present).await?;
-                if storage_account.is_empty() {
-                    test_accounts_to_insert.push(test_account);
+                // identify async threads
+                let async_id = ASYNC_ID.fetch_add(1, Ordering::SeqCst);
+                if async_id <= num_async_threads {
+                    return format!("tokio-async-{}", async_id);
                 }
-            }
 
-            if not(test_accounts_to_insert.is_empty()) {
-                tracing::info!(accounts = ?test_accounts_to_insert, "enabling test accounts");
-                storage.save_accounts_to_perm(test_accounts_to_insert).await?;
+                // identify blocking threads
+                let blocking_id = BLOCKING_ID.fetch_add(1, Ordering::SeqCst);
+                format!("tokio-blocking-{}", blocking_id)
+            })
+            .build();
+
+        match result {
+            Ok(runtime) => Ok(runtime),
+            Err(e) => {
+                println!("failed to create tokio runtime | reason={:?}", e);
+                Err(e.into())
             }
         }
-
-        Ok(Arc::new(storage))
     }
 }
 
 // -----------------------------------------------------------------------------
-// Config: Executor
+// Config: Relayer
 // -----------------------------------------------------------------------------
-
-#[derive(Parser, Debug, Clone)]
-pub struct ExecutorConfig {
-    /// Chain ID of the network.
-    #[arg(long = "chain-id", env = "CHAIN_ID")]
-    pub chain_id: u64,
-
-    /// Number of EVM instances to run.
-    #[arg(long = "evms", env = "EVMS")]
-    pub num_evms: usize,
-
-    /// Rpc address to forward the transactions to.
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+pub struct IntegratedRelayerConfig {
+    /// RPC address to forward transactions to.
     #[arg(long = "forward-to", env = "FORWARD_TO")]
     pub forward_to: Option<String>,
+
+    /// Timeout for blockchain requests (relayer)
+    #[arg(long = "relayer-timeout", value_parser=parse_duration, env = "RELAYER_TIMEOUT", default_value = "2s")]
+    pub relayer_timeout: Duration,
 }
 
-impl ExecutorConfig {
-    /// Initializes EthExecutor. Should be called inside an async runtime.
-    pub async fn init(&self, storage: Arc<StratusStorage>) -> Arc<EthExecutor> {
-        let num_evms = max(self.num_evms, 1);
-        tracing::info!(evms = %num_evms, "starting executor and evms");
+impl IntegratedRelayerConfig {
+    pub async fn init(&self) -> anyhow::Result<Option<Arc<TransactionRelayer>>> {
+        tracing::info!(config = ?self, "creating transaction relayer");
 
-        // spawn evm in background using native threads
-        let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
-        for _ in 1..=num_evms {
-            // create evm resources
-            let evm_chain_id = self.chain_id.into();
-            let evm_storage = Arc::clone(&storage);
-            let evm_tokio = Handle::current();
-            let evm_rx = evm_rx.clone();
-
-            // spawn thread that will run evm
-            // todo: needs a way to signal error like a cancellation token in case it fails to initialize
-            let t = thread::Builder::new().name("evm".into());
-            t.spawn(move || {
-                // init tokio
-                let _tokio_guard = evm_tokio.enter();
-
-                // init storage
-                if let Err(e) = Handle::current().block_on(evm_storage.allocate_evm_thread_resources()) {
-                    tracing::error!(reason = ?e, "failed to allocate evm storage resources");
-                }
-
-                // init evm
-                let mut evm = Revm::new(evm_storage, evm_chain_id);
-
-                // keep executing transactions until the channel is closed
-                while let Ok((input, tx)) = evm_rx.recv() {
-                    let result = evm.execute(input);
-                    if let Err(e) = tx.send(result) {
-                        tracing::error!(reason = ?e, "failed to send evm execution result");
-                    };
-                }
-                tracing::warn!("stopping evm thread because task channel was closed");
-            })
-            .expect("spawning evm threads should not fail");
+        match self.forward_to {
+            Some(ref forward_to) => {
+                let chain = BlockchainClient::new_http(forward_to, self.relayer_timeout).await?;
+                let relayer = TransactionRelayer::new(Arc::new(chain));
+                Ok(Some(Arc::new(relayer)))
+            }
+            None => Ok(None),
         }
+    }
+}
 
-        Arc::new(EthExecutor::new(evm_tx, Arc::clone(&storage), self.forward_to.as_ref()).await)
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+#[group(requires_all = ["url", "connections", "acquire_timeout"])]
+pub struct ExternalRelayerClientConfig {
+    #[arg(long = "relayer-db-url", env = "RELAYER_DB_URL", required = false)]
+    pub url: String,
+    #[arg(long = "relayer-db-connections", env = "RELAYER_DB_CONNECTIONS", required = false)]
+    pub connections: u32,
+    #[arg(long = "relayer-db-timeout", value_parser=parse_duration, env = "RELAYER_DB_TIMEOUT", required = false)]
+    pub acquire_timeout: Duration,
+}
+
+impl ExternalRelayerClientConfig {
+    pub async fn init(self) -> ExternalRelayerClient {
+        ExternalRelayerClient::new(self).await
+    }
+}
+
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+pub struct ExternalRelayerServerConfig {
+    /// Postgresql url.
+    #[arg(long = "db-url", env = "DB_URL")]
+    pub url: String,
+
+    /// Connections to database.
+    #[arg(long = "db-connections", env = "DB_CONNECTIONS", default_value = "5")]
+    pub connections: u32,
+
+    /// Timeout to acquire connections to the database.
+    #[arg(long = "db-timeout", value_parser=parse_duration, env = "DB_TIMEOUT", default_value = "1s")]
+    pub acquire_timeout: Duration,
+
+    /// RPC to forward to.
+    #[arg(long = "forward-to", env = "RELAYER_FORWARD_TO")]
+    pub forward_to: String,
+
+    /// RPC to forward to.
+    #[arg(long = "stratus-rpc", env = "STRATUS_RPC")]
+    pub stratus_rpc: String,
+
+    /// Backoff.
+    #[arg(long = "backoff", value_parser=parse_duration, env = "BACKOFF", default_value = "10ms")]
+    pub backoff: Duration,
+
+    /// RPC response timeout.
+    #[arg(long = "rpc-timeout", value_parser=parse_duration, env = "RPC_TIMEOUT", default_value = "2s")]
+    pub rpc_timeout: Duration,
+
+    #[arg(long = "signer", env = "SIGNER")]
+    pub signer: String,
+
+    #[arg(long = "blocks-to-fetch", env = "BLOCKS_TO_FETCH", default_value = "3")]
+    pub blocks_to_fetch: u64,
+
+    /// Clanup db on startup (delete blocks that don't exist in stratus currently)
+    #[arg(long = "cleanup-db", env = "CLEANUP_DB", default_value = "false")]
+    pub cleanup: bool,
+}
+
+impl ExternalRelayerServerConfig {
+    pub async fn init(self) -> anyhow::Result<ExternalRelayer> {
+        ExternalRelayer::new(self).await
     }
 }
 
@@ -237,17 +253,29 @@ impl ExecutorConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for main Stratus service.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct StratusConfig {
-    /// JSON-RPC binding address.
-    #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
-    pub address: SocketAddr,
+    #[clap(flatten)]
+    pub rpc_server: RpcServerConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
+
+    #[clap(flatten)]
+    pub relayer: IntegratedRelayerConfig,
+
+    #[clap(flatten)]
+    pub external_relayer: Option<ExternalRelayerClientConfig>,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[cfg(feature = "request-replication-test-sender")]
+    #[arg(long = "replicate-request-to", env = "REPLICATE_REQUEST_TO")]
+    pub replicate_request_to: String,
 
     #[deref]
     #[clap(flatten)]
@@ -265,14 +293,22 @@ impl WithCommonConfig for StratusConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for `rpc-downlaoder` binary.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct RpcDownloaderConfig {
+    /// Final block number to be downloaded.
+    #[arg(long = "block-end", env = "BLOCK_END")]
+    pub block_end: Option<u64>,
+
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
 
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
     pub external_rpc: String,
+
+    /// Timeout for blockchain requests
+    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
+    pub external_rpc_timeout: Duration,
 
     /// Number of parallel downloads.
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
@@ -298,7 +334,7 @@ impl WithCommonConfig for RpcDownloaderConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for `importer-offline` binary.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(Parser, DebugAsJson, derive_more::Deref, serde::Serialize)]
 pub struct ImporterOfflineConfig {
     /// Initial block number to be imported.
     #[arg(long = "block-start", env = "BLOCK_START")]
@@ -316,10 +352,6 @@ pub struct ImporterOfflineConfig {
     #[arg(short = 'b', long = "blocks-by-fetch", env = "BLOCKS_BY_FETCH", default_value = "10000")]
     pub blocks_by_fetch: usize,
 
-    /// Write data to CSV file instead of permanent storage.
-    #[arg(long = "export-csv", env = "EXPORT_CSV", default_value = "false")]
-    pub export_csv: bool,
-
     /// Export selected blocks to fixtures snapshots to be used in tests.
     #[arg(long = "export-snapshot", env = "EXPORT_SNAPSHOT", value_delimiter = ',')]
     pub export_snapshot: Vec<u64>,
@@ -328,7 +360,10 @@ pub struct ImporterOfflineConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
@@ -349,21 +384,44 @@ impl WithCommonConfig for ImporterOfflineConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for `importer-online` binary.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct ImporterOnlineConfig {
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
-    pub external_rpc: String,
+    #[clap(flatten)]
+    pub base: ImporterOnlineBaseConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub relayer: IntegratedRelayerConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
+    pub storage: StratusStorageConfig,
 
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,
+}
+
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+pub struct ImporterOnlineBaseConfig {
+    /// External RPC HTTP endpoint to sync blocks with Stratus.
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
+    pub external_rpc: String,
+
+    /// External RPC WS endpoint to sync blocks with Stratus.
+    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS")]
+    pub external_rpc_ws: Option<String>,
+
+    /// Timeout for blockchain requests (importer online)
+    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
+    pub external_rpc_timeout: Duration,
+
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
+    pub sync_interval: Duration,
 }
 
 impl WithCommonConfig for ImporterOnlineConfig {
@@ -372,45 +430,39 @@ impl WithCommonConfig for ImporterOnlineConfig {
     }
 }
 
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct RunWithImporterConfig {
-    /// JSON-RPC binding address.
-    #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]
-    pub address: SocketAddr,
+    #[clap(flatten)]
+    pub rpc_server: RpcServerConfig,
+
+    #[arg(long = "leader-node", env = "LEADER_NODE")]
+    pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub online: ImporterOnlineBaseConfig,
+
+    #[clap(flatten)]
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 
-    /// External RPC endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
-    pub external_rpc: String,
+    #[clap(flatten)]
+    pub relayer: IntegratedRelayerConfig,
+
+    #[clap(flatten)]
+    pub external_relayer: Option<ExternalRelayerClientConfig>,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[cfg(feature = "request-replication-test-sender")]
+    #[arg(long = "replicate-request-to", env = "REPLICATE_REQUEST_TO")]
+    pub replicate_request_to: String,
 
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,
-}
-
-impl RunWithImporterConfig {
-    pub fn as_importer(&self) -> ImporterOnlineConfig {
-        ImporterOnlineConfig {
-            external_rpc: self.external_rpc.clone(),
-            executor: self.executor.clone(),
-            stratus_storage: self.stratus_storage.clone(),
-            common: self.common.clone(),
-        }
-    }
-
-    pub fn as_stratus(&self) -> StratusConfig {
-        StratusConfig {
-            address: self.address,
-            executor: self.executor.clone(),
-            stratus_storage: self.stratus_storage.clone(),
-            common: self.common.clone(),
-        }
-    }
 }
 
 impl WithCommonConfig for RunWithImporterConfig {
@@ -424,7 +476,7 @@ impl WithCommonConfig for RunWithImporterConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for `state-validator` binary.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct StateValidatorConfig {
     /// How many slots to validate per batch. 0 means every slot.
     #[arg(long = "max-samples", env = "MAX_SAMPLES", default_value_t = 0)]
@@ -435,7 +487,7 @@ pub struct StateValidatorConfig {
     pub seed: u64,
 
     /// Validate in batches of n blocks.
-    #[arg(short = 'i', long = "inverval", env = "INVERVAL", default_value_t = 1000)]
+    #[arg(short = 'i', long = "interval", env = "INTERVAL", default_value = "1000")]
     pub interval: u64,
 
     /// What method to use when validating.
@@ -451,7 +503,7 @@ pub struct StateValidatorConfig {
     pub common: CommonConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub storage: StratusStorageConfig,
 }
 
 impl WithCommonConfig for StateValidatorConfig {
@@ -465,7 +517,7 @@ impl WithCommonConfig for StateValidatorConfig {
 // -----------------------------------------------------------------------------
 
 /// Configuration for integration tests.
-#[derive(Parser, Debug, derive_more::Deref)]
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct IntegrationTestConfig {
     #[deref]
     #[clap(flatten)]
@@ -475,7 +527,13 @@ pub struct IntegrationTestConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub stratus_storage: StratusStorageConfig,
+    pub relayer: IntegratedRelayerConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
+    pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
@@ -488,190 +546,53 @@ impl WithCommonConfig for IntegrationTestConfig {
 }
 
 // -----------------------------------------------------------------------------
-// Config: ExternalRpcStorage
+// Config: ExternalRelayer
 // -----------------------------------------------------------------------------
 
-/// External RPC storage configuration.
-#[derive(Parser, Debug)]
-pub struct ExternalRpcStorageConfig {
-    /// External RPC storage implementation.
-    #[arg(long = "external-rpc-storage", env = "EXTERNAL_RPC_STORAGE")]
-    pub external_rpc_storage_kind: ExternalRpcStorageKind,
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
+pub struct ExternalRelayerConfig {
+    #[clap(flatten)]
+    pub relayer: ExternalRelayerServerConfig,
 
-    /// External RPC storage number of parallel open connections.
-    #[arg(long = "external-rpc-storage-connections", env = "EXTERNAL_RPC_STORAGE_CONNECTIONS")]
-    pub external_rpc_storage_connections: u32,
-
-    /// External RPC storage timeout when opening a connection (in millis).
-    #[arg(long = "external-rpc-storage-timeout", env = "EXTERNAL_RPC_STORAGE_TIMEOUT")]
-    pub external_rpc_storage_timeout_millis: u64,
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
 }
 
-#[derive(Clone, Debug)]
-pub enum ExternalRpcStorageKind {
-    Postgres { url: String },
-}
-
-impl ExternalRpcStorageConfig {
-    /// Initializes external rpc storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpcStorage>> {
-        match self.external_rpc_storage_kind {
-            ExternalRpcStorageKind::Postgres { ref url } => {
-                let config = PostgresExternalRpcStorageConfig {
-                    url: url.to_owned(),
-                    connections: self.external_rpc_storage_connections,
-                    acquire_timeout: Duration::from_millis(self.external_rpc_storage_timeout_millis),
-                };
-                Ok(Arc::new(PostgresExternalRpcStorage::new(config).await?))
-            }
-        }
+impl WithCommonConfig for ExternalRelayerConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
     }
 }
 
-impl FromStr for ExternalRpcStorageKind {
+// -----------------------------------------------------------------------------
+// Enum: Env
+// -----------------------------------------------------------------------------
+#[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
+pub enum Environment {
+    #[serde(rename = "local")]
+    #[strum(to_string = "local")]
+    Local,
+
+    #[serde(rename = "staging")]
+    #[strum(to_string = "staging")]
+    Staging,
+
+    #[serde(rename = "production")]
+    #[strum(to_string = "production")]
+    Production,
+}
+
+impl FromStr for Environment {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s {
-            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
-            s => Err(anyhow!("unknown external rpc storage: {}", s)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enum: TemporaryStorageConfig
-// -----------------------------------------------------------------------------
-
-/// Temporary storage configuration.
-#[derive(Parser, Debug, Clone)]
-pub struct TemporaryStorageConfig {
-    /// Temporary storage implementation.
-    #[arg(long = "temp-storage", env = "TEMP_STORAGE")]
-    pub temp_storage_kind: TemporaryStorageKind,
-}
-
-#[derive(Clone, Debug)]
-pub enum TemporaryStorageKind {
-    InMemory,
-    #[cfg(feature = "rocks")]
-    Rocks,
-}
-
-impl TemporaryStorageConfig {
-    /// Initializes temporary storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn TemporaryStorage>> {
-        match self.temp_storage_kind {
-            TemporaryStorageKind::InMemory => Ok(Arc::new(InMemoryTemporaryStorage::default())),
-            #[cfg(feature = "rocks")]
-            TemporaryStorageKind::Rocks => Ok(Arc::new(RocksTemporary::new().await?)),
-        }
-    }
-}
-
-impl FromStr for TemporaryStorageKind {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s {
-            "inmemory" => Ok(Self::InMemory),
-            #[cfg(feature = "rocks")]
-            "rocks" => Ok(Self::Rocks),
-            s => Err(anyhow!("unknown temporary storage: {}", s)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enum: PermanentStorageConfig
-// -----------------------------------------------------------------------------
-
-/// Permanent storage configuration.
-#[derive(Clone, Parser, Debug)]
-pub struct PermanentStorageConfig {
-    /// Permamenent storage implementation.
-    #[arg(long = "perm-storage", env = "PERM_STORAGE")]
-    pub perm_storage_kind: PermanentStorageKind,
-
-    /// Permamenent storage number of parallel open connections.
-    #[arg(long = "perm-storage-connections", env = "PERM_STORAGE_CONNECTIONS")]
-    pub perm_storage_connections: u32,
-
-    /// Permamenent storage timeout when opening a connection (in millis).
-    #[arg(long = "perm-storage-timeout", env = "PERM_STORAGE_TIMEOUT")]
-    pub perm_storage_timeout_millis: u64,
-}
-
-#[derive(Clone, Debug)]
-pub enum PermanentStorageKind {
-    InMemory,
-    #[cfg(feature = "rocks")]
-    Rocks,
-    Postgres {
-        url: String,
-    },
-}
-
-impl PermanentStorageConfig {
-    /// Initializes permanent storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn PermanentStorage>> {
-        let perm: Arc<dyn PermanentStorage> = match self.perm_storage_kind {
-            PermanentStorageKind::InMemory => Arc::new(InMemoryPermanentStorage::default()),
-            #[cfg(feature = "rocks")]
-            PermanentStorageKind::Rocks => Arc::new(RocksPermanentStorage::new().await?),
-            PermanentStorageKind::Postgres { ref url } => {
-                let config = PostgresPermanentStorageConfig {
-                    url: url.to_owned(),
-                    connections: self.perm_storage_connections,
-                    acquire_timeout: Duration::from_millis(self.perm_storage_timeout_millis),
-                };
-                Arc::new(PostgresPermanentStorage::new(config).await?)
-            }
-        };
-        Ok(perm)
-    }
-}
-
-impl FromStr for PermanentStorageKind {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s {
-            "inmemory" => Ok(Self::InMemory),
-            #[cfg(feature = "rocks")]
-            "rocks" => Ok(Self::Rocks),
-            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
-            s => Err(anyhow!("unknown permanent storage: {}", s)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enum: MetricsHistogramKind
-// -----------------------------------------------------------------------------
-
-/// See: <https://prometheus.io/docs/practices/histograms/>
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MetricsHistogramKind {
-    /// Quantiles are calculated on client-side based on recent data kept in-memory.
-    ///
-    /// Client defines the quantiles to calculate.
-    Summary,
-
-    /// Quantiles are calculated on server-side based on bucket counts.
-    ///
-    /// Cient defines buckets to group observations.
-    Histogram,
-}
-
-impl FromStr for MetricsHistogramKind {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s.to_lowercase().trim() {
-            "summary" => Ok(Self::Summary),
-            "histogram" => Ok(Self::Histogram),
-            s => Err(anyhow!("unknown metrics histogram kind: {}", s)),
+        let s = s.trim().to_lowercase();
+        match s.as_ref() {
+            "local" => Ok(Self::Local),
+            "staging" | "test" => Ok(Self::Staging),
+            "production" | "prod" => Ok(Self::Production),
+            s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
         }
     }
 }
@@ -680,7 +601,7 @@ impl FromStr for MetricsHistogramKind {
 // Enum: ValidatorMethodConfig
 // -----------------------------------------------------------------------------
 
-#[derive(Clone, Debug, strum::Display)]
+#[derive(DebugAsJson, Clone, strum::Display, serde::Serialize)]
 pub enum ValidatorMethodConfig {
     Rpc { url: String },
     CompareTables,

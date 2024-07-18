@@ -1,93 +1,235 @@
 //! Track RPC requests and responses using metrics and traces.
-//!
-//! TODO: If it becomes a bottleneck, it can be processed asynchronously.
 
 use std::future::Future;
 use std::task::Poll;
 use std::time::Instant;
 
+use futures::future::BoxFuture;
+#[cfg(feature = "request-replication-test-sender")]
+use futures::pin_mut;
+#[cfg(feature = "request-replication-test-sender")]
+use futures::StreamExt;
+use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
+use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
+use pin_project::pinned_drop;
+use tracing::field;
+use tracing::info_span;
+use tracing::Level;
+use tracing::Span;
 
-use crate::eth::codegen::{self};
+use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
-use crate::eth::primitives::Signature4Bytes;
+use crate::eth::primitives::Hash;
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
+use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
+use crate::eth::rpc::RpcClientApp;
+use crate::event_with;
+#[cfg(feature = "request-replication-test-sender")]
+use crate::ext::spawn_named;
+use crate::ext::to_json_value;
+use crate::ext::JsonValue;
+use crate::ext::ResultExt;
+use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::tracing::new_cid;
+use crate::infra::tracing::SpanExt;
+use crate::infra::tracing::TracingExt;
+
+// -----------------------------------------------------------------------------
+// Active requests tracking
+// -----------------------------------------------------------------------------
+#[cfg(feature = "metrics")]
+mod active_requests {
+    use std::collections::HashMap;
+    use std::sync::atomic::AtomicU64;
+    use std::sync::atomic::Ordering;
+    use std::sync::Arc;
+    use std::sync::RwLock;
+
+    use lazy_static::lazy_static;
+
+    use crate::eth::rpc::RpcClientApp;
+    use crate::infra::metrics;
+
+    lazy_static! {
+        pub static ref COUNTERS: ActiveRequests = ActiveRequests::default();
+    }
+
+    #[derive(Default)]
+    pub struct ActiveRequests {
+        inner: RwLock<HashMap<String, Arc<AtomicU64>>>,
+    }
+
+    impl ActiveRequests {
+        pub fn inc(&self, client: &RpcClientApp, method: &str) {
+            let active = self.counter_for(client, method).fetch_add(1, Ordering::Relaxed) + 1;
+            metrics::set_rpc_requests_active(active, client, method);
+        }
+
+        pub fn dec(&self, client: &RpcClientApp, method: &str) {
+            let active = self
+                .counter_for(client, method)
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                    let new = current.saturating_sub(1);
+                    Some(new)
+                })
+                .unwrap();
+            let active = active.saturating_sub(1);
+            metrics::set_rpc_requests_active(active, client, method);
+        }
+
+        fn counter_for(&self, client: &RpcClientApp, method: &str) -> Arc<AtomicU64> {
+            let id = format!("{}::{}", client, method);
+
+            // try to read counter
+            let active_requests_read = self.inner.read().unwrap();
+            if let Some(counter) = active_requests_read.get(&id) {
+                return Arc::clone(counter);
+            }
+            drop(active_requests_read);
+
+            // create a new counter
+            let mut active_requests_write = self.inner.write().unwrap();
+            let counter = Arc::new(AtomicU64::new(0));
+            active_requests_write.insert(id, Arc::clone(&counter));
+            counter
+        }
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Request handling
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, derive_new::new)]
-pub struct RpcMiddleware<S> {
-    service: S,
+#[cfg(feature = "request-replication-test-sender")]
+pub fn create_replication_worker(replicate_request_to: String) -> tokio::sync::mpsc::UnboundedSender<serde_json::Value> {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    spawn_named("replication::sender", replication_worker(replicate_request_to, rx));
+    tx
 }
 
-impl<'a, S> RpcServiceT<'a> for RpcMiddleware<S>
-where
-    S: RpcServiceT<'a> + Send + Sync,
-{
-    type Future = RpcResponse<S::Future>;
+#[cfg(feature = "request-replication-test-sender")]
+async fn replication_worker(replicate_request_to: String, mut rx: tokio::sync::mpsc::UnboundedReceiver<serde_json::Value>) {
+    let client = reqwest::Client::default();
+    let stream = async_stream::stream! {
+        while let Some(request) = rx.recv().await {
+            let client = client.clone().post(&replicate_request_to);
+            yield client.json(&request).send();
+        }
+    };
+    pin_mut!(stream);
+    let mut buffer = stream.buffer_unordered(200);
+    while buffer.next().await.is_some() {}
+}
 
-    fn call(&self, request: jsonrpsee::types::Request<'a>) -> Self::Future {
-        // extract signature if available
-        let method = request.method_name();
-        let function = match method {
-            "eth_call" | "eth_estimateGas" => extract_function_from_call(request.params()),
-            "eth_sendRawTransaction" => extract_function_from_transaction(request.params()),
+#[derive(Debug)]
+pub struct RpcMiddleware {
+    service: RpcService,
+
+    #[cfg(feature = "request-replication-test-sender")]
+    replication_tx: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
+}
+
+impl RpcMiddleware {
+    pub fn new(
+        service: RpcService,
+        #[cfg(feature = "request-replication-test-sender")] replication_tx: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
+    ) -> Self {
+        Self {
+            service,
+            #[cfg(feature = "request-replication-test-sender")]
+            replication_tx,
+        }
+    }
+}
+
+impl<'a> RpcServiceT<'a> for RpcMiddleware {
+    type Future = RpcResponse<'a>;
+
+    fn call(&self, mut request: jsonrpsee::types::Request<'a>) -> Self::Future {
+        // track request
+        let span = info_span!(
+            "rpc::request",
+            cid = %new_cid(),
+            rpc_client = field::Empty,
+            rpc_id = field::Empty,
+            rpc_method = field::Empty,
+            rpc_tx_hash = field::Empty,
+            rpc_tx_from = field::Empty,
+            rpc_tx_to = field::Empty,
+            rpc_tx_nonce = field::Empty,
+            rpc_tx_function = field::Empty
+        );
+        let middleware_enter = span.enter();
+
+        // extract request data
+        let client = request.extensions.rpc_client();
+        let method = request.method_name().to_owned();
+        let tx = match method.as_str() {
+            "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(request.params()).ok(),
+            "eth_sendRawTransaction" => TransactionTracingIdentifiers::from_transaction(request.params()).ok(),
+            "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
             _ => None,
         };
 
+        #[cfg(feature = "request-replication-test-sender")]
+        if method != "eth_subscribe" && method != "eth_unsubscribe" && method != "eth_subscription" {
+            if let Ok(req) = serde_json::to_value(&request) {
+                let _ = self.replication_tx.send(req);
+            }
+        }
+
         // trace request
+        Span::with(|s| {
+            s.rec_str("rpc_id", &request.id);
+            s.rec_str("rpc_client", &client);
+            s.rec_str("rpc_method", &method);
+            if let Some(ref tx) = tx {
+                tx.record_span(s);
+            }
+        });
         tracing::info!(
-            id = %request.id,
-            %method,
-            function = %function.unwrap_or_default(),
-            // params = ?request.params(),
+            rpc_client = %client,
+            rpc_id = %request.id,
+            rpc_method = %method,
+            rpc_params = %to_json_value(&request.params),
+            rpc_tx_hash = %tx.as_ref().and_then(|tx|tx.hash).or_empty(),
+            rpc_tx_function = %tx.as_ref().and_then(|tx|tx.function.clone()).or_empty(),
+            rpc_tx_from = %tx.as_ref().and_then(|tx|tx.from).or_empty(),
+            rpc_tx_to = %tx.as_ref().and_then(|tx|tx.to).or_empty(),
             "rpc request"
         );
 
         // metrify request
         #[cfg(feature = "metrics")]
-        metrics::inc_rpc_requests_started(method, function);
+        {
+            active_requests::COUNTERS.inc(&client, &method);
+            metrics::inc_rpc_requests_started(&client, &method, tx.as_ref().and_then(|tx| tx.function.clone()));
+        }
+        drop(middleware_enter);
+
+        // make span available to rpc-server
+        request.extensions_mut().insert(span);
 
         RpcResponse {
+            client,
             id: request.id.to_string(),
             method: method.to_string(),
-            function,
-            future_response: self.service.call(request),
+            tx,
             start: Instant::now(),
+            future_response: self.service.call(request),
         }
-    }
-}
-
-fn extract_function_from_call(params: Params) -> Option<SoliditySignature> {
-    let (_, call) = next_rpc_param::<CallInput>(params.sequence()).ok()?;
-    let data = call.data;
-    extract_function_signature(data.get(..4)?.try_into().ok()?)
-}
-
-fn extract_function_from_transaction(params: Params) -> Option<SoliditySignature> {
-    let (_, data) = next_rpc_param::<Bytes>(params.sequence()).ok()?;
-    let transaction = parse_rpc_rlp::<TransactionInput>(&data).ok()?;
-    if transaction.is_contract_deployment() {
-        return Some("contract_deployment");
-    }
-    extract_function_signature(transaction.input.get(..4)?.try_into().ok()?)
-}
-
-fn extract_function_signature(id: Signature4Bytes) -> Option<SoliditySignature> {
-    match codegen::SIGNATURES_4_BYTES.get(&id) {
-        Some(signature) => Some(signature),
-        None => Some("unknown"),
     }
 }
 
@@ -96,45 +238,159 @@ fn extract_function_signature(id: Signature4Bytes) -> Option<SoliditySignature> 
 // -----------------------------------------------------------------------------
 
 /// https://blog.adamchalmers.com/pin-unpin/
-#[pin_project]
-pub struct RpcResponse<F> {
-    #[pin]
-    future_response: F,
-
+#[pin_project(PinnedDrop)]
+pub struct RpcResponse<'a> {
+    // identifiers
+    client: RpcClientApp,
     id: String,
     method: String,
-    function: Option<SoliditySignature>,
+    tx: Option<TransactionTracingIdentifiers>,
+
+    // data
     start: Instant,
+    #[pin]
+    future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 }
 
-impl<F: Future<Output = MethodResponse>> Future for RpcResponse<F> {
-    type Output = F::Output;
+impl<'a> Future for RpcResponse<'a> {
+    type Output = MethodResponse;
 
     fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
         // poll future
-        let proj = self.project();
-        let response = proj.future_response.poll(cx);
+        let resp = self.project();
+        let response = resp.future_response.poll(cx);
 
         // when ready, track response
         if let Poll::Ready(response) = &response {
-            let elapsed = proj.start.elapsed();
+            let elapsed = resp.start.elapsed();
+            let _middleware_enter = response.extensions().enter_middleware_span();
 
             // trace response
-            tracing::info!(
-                id = %proj.id,
-                method = %proj.method,
-                function = %proj.function.unwrap_or_default(),
-                duration_ms = %elapsed.as_millis(),
-                success = %response.success_or_error.is_success(),
-                // result = %response.result,
+            let response_success = response.is_success();
+            let response_result: JsonValue = serde_json::from_str(response.as_result()).expect_infallible();
+            let (level, error_code) = match response_result
+                .get("error")
+                .and_then(|v| v.get("code"))
+                .and_then(|v| v.as_number())
+                .and_then(|v| v.as_i64())
+                .map(|v| v as i32)
+            {
+                Some(INTERNAL_ERROR_CODE) => (Level::ERROR, INTERNAL_ERROR_CODE),
+                Some(code) => (Level::WARN, code),
+                None => (Level::INFO, 0),
+            };
+
+            event_with!(
+                level,
+                rpc_client = %resp.client,
+                rpc_id = %resp.id,
+                rpc_method = %resp.method,
+                rpc_tx_hash = %resp.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
+                rpc_tx_function = %resp.tx.as_ref().and_then(|tx|tx.function.clone()).or_empty(),
+                rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
+                rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
+                rpc_result = %response_result,
+                rpc_success = %response_success,
+                duration_us = %elapsed.as_micros(),
                 "rpc response"
             );
 
             // metrify response
             #[cfg(feature = "metrics")]
-            metrics::inc_rpc_requests_finished(elapsed, proj.method.clone(), *proj.function, response.success_or_error.is_success());
+            {
+                let rpc_result = match response_result.get("result") {
+                    Some(result) => if_else!(result.is_null(), "missing", "present"),
+                    None => "error",
+                };
+
+                metrics::inc_rpc_requests_finished(
+                    elapsed,
+                    &*resp.client,
+                    resp.method.clone(),
+                    resp.tx.as_ref().and_then(|tx| tx.function.clone()),
+                    rpc_result,
+                    error_code,
+                    response.is_success(),
+                );
+            }
         }
 
         response
+    }
+}
+
+#[pinned_drop]
+impl PinnedDrop for RpcResponse<'_> {
+    fn drop(self: std::pin::Pin<&mut Self>) {
+        #[cfg(feature = "metrics")]
+        {
+            active_requests::COUNTERS.dec(&self.client, &self.method);
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
+struct TransactionTracingIdentifiers {
+    pub hash: Option<Hash>,
+    pub function: Option<SoliditySignature>,
+    pub from: Option<Address>,
+    pub to: Option<Address>,
+    pub nonce: Option<Nonce>,
+}
+
+impl TransactionTracingIdentifiers {
+    fn from_transaction(params: Params) -> anyhow::Result<Self> {
+        let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
+        let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
+        Ok(Self {
+            hash: Some(tx.hash),
+            function: tx.extract_function(),
+            from: Some(tx.signer),
+            to: tx.to,
+            nonce: Some(tx.nonce),
+        })
+    }
+
+    fn from_call(params: Params) -> anyhow::Result<Self> {
+        let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
+        Ok(Self {
+            hash: None,
+            function: call.extract_function(),
+            from: call.from,
+            to: call.to,
+            nonce: None,
+        })
+    }
+
+    fn from_transaction_query(params: Params) -> anyhow::Result<Self> {
+        let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
+        Ok(Self {
+            hash: Some(hash),
+            function: None,
+            from: None,
+            to: None,
+            nonce: None,
+        })
+    }
+
+    pub fn record_span(&self, span: Span) {
+        if let Some(tx_hash) = self.hash {
+            span.rec_str("rpc_tx_hash", &tx_hash);
+        }
+        if let Some(ref tx_function) = self.function {
+            span.rec_str("rpc_tx_function", &tx_function);
+        }
+        if let Some(tx_from) = self.from {
+            span.rec_str("rpc_tx_from", &tx_from);
+        }
+        if let Some(tx_to) = self.to {
+            span.rec_str("rpc_tx_to", &tx_to);
+        }
+        if let Some(tx_nonce) = self.nonce {
+            span.rec_str("rpc_tx_nonce", &tx_nonce);
+        }
     }
 }

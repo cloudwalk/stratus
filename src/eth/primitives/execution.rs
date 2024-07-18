@@ -1,16 +1,9 @@
-//! Transaction Execution Module
-//!
-//! Handles the details and results of executing transactions in the Ethereum
-//! Virtual Machine (EVM). This module defines structures to represent
-//! transaction outcomes, including status, gas usage, logs, and state changes.
-//! It is vital for interpreting the results of transaction execution and
-//! applying changes to the Ethereum state.
-
 use std::collections::HashMap;
 use std::fmt::Debug;
 
 use anyhow::anyhow;
 use anyhow::Ok;
+use hex_literal::hex;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -22,19 +15,20 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::log_and_err;
 
 pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
 
-/// Output of a executed transaction in the EVM.
+/// Output of a transaction executed in the EVM.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
-pub struct Execution {
+pub struct EvmExecution {
     /// Assumed block timestamp during the execution.
     pub block_timestamp: UnixTime,
 
-    /// Flag to indicate if the execution costs have been applied.
-    pub execution_costs_applied: bool,
+    /// Flag to indicate if  external receipt fixes have been applied.
+    pub receipt_applied: bool,
 
     /// Status of the execution.
     pub result: ExecutionResult,
@@ -49,15 +43,15 @@ pub struct Execution {
     pub gas: Gas,
 
     /// Storage changes that happened during the transaction execution.
-    pub changes: Vec<ExecutionAccountChanges>,
+    pub changes: HashMap<Address, ExecutionAccountChanges>,
 
     /// The contract address if the executed transaction deploys a contract.
     pub deployed_contract_address: Option<Address>,
 }
 
-impl Execution {
+impl EvmExecution {
     /// Creates an execution from an external transaction that failed.
-    pub fn from_failed_external_transaction(block: &ExternalBlock, receipt: &ExternalReceipt, sender: Account) -> anyhow::Result<Self> {
+    pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
         if receipt.is_success() {
             return log_and_err!("cannot create failed execution for successful transaction");
         }
@@ -73,35 +67,40 @@ impl Execution {
         // crete execution and apply costs
         let mut execution = Self {
             block_timestamp: block.timestamp(),
-            execution_costs_applied: false,
+            receipt_applied: false,
             result: ExecutionResult::new_reverted(), // assume it reverted
             output: Bytes::default(),                // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
             gas: receipt.gas_used.unwrap_or_default().try_into()?,
-            changes: vec![sender_changes],
+            changes: HashMap::from([(sender_changes.address, sender_changes)]),
             deployed_contract_address: None,
         };
-        execution.apply_execution_costs(receipt)?;
+        execution.apply_receipt(receipt)?;
         Ok(execution)
-    }
-
-    /// When the transaction is a contract deployment, returns the address of the deployed contract.
-    pub fn contract_address(&self) -> Option<Address> {
-        if let Some(contract_address) = &self.deployed_contract_address {
-            return Some(contract_address.to_owned());
-        }
-
-        for changes in &self.changes {
-            if changes.bytecode.is_modified() {
-                return Some(changes.address.clone());
-            }
-        }
-        None
     }
 
     /// Checks if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
         matches!(self.result, ExecutionResult::Success { .. })
+    }
+
+    /// Checks if the current transaction was completed with a failure (reverted or halted).
+    pub fn is_failure(&self) -> bool {
+        not(self.is_success())
+    }
+
+    /// Returns the address of the deployed contract if the transaction is a deployment.
+    pub fn contract_address(&self) -> Option<Address> {
+        if let Some(contract_address) = &self.deployed_contract_address {
+            return Some(contract_address.to_owned());
+        }
+
+        for changes in self.changes.values() {
+            if changes.bytecode.is_modified() {
+                return Some(changes.address);
+            }
+        }
+        None
     }
 
     /// Checks if current execution state matches the information present in the external receipt.
@@ -131,18 +130,18 @@ impl Execution {
         // compare logs pairs
         for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(&receipt.logs).enumerate() {
             // compare log topics length
-            if execution_log.topics.len() != receipt_log.topics.len() {
+            if execution_log.topics().len() != receipt_log.topics.len() {
                 return log_and_err!(format!(
                     "log topics length mismatch | hash={} log_index={} execution={} receipt={}",
                     receipt.hash(),
                     log_index,
-                    execution_log.topics.len(),
+                    execution_log.topics().len(),
                     receipt_log.topics.len(),
                 ));
             }
 
             // compare log topics content
-            for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics.iter().zip(&receipt_log.topics).enumerate() {
+            for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics().iter().zip(&receipt_log.topics).enumerate() {
                 if execution_log_topic.as_ref() != receipt_log_topic.as_ref() {
                     return log_and_err!(format!(
                         "log topic content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
@@ -169,34 +168,98 @@ impl Execution {
         Ok(())
     }
 
-    /// Apply execution costs of an external transaction.
+    pub fn fix_logs_relayer_signer(&mut self, receipt: &ExternalReceipt) {
+        const REQUEST_CASHOUT_EVENT_HASH: [u8; 32] = hex!("20b676b4cd29836c09ac8cdd7874e46af9018a34a1085e1945f7bfa506af3cbd");
+
+        for (execution_log, receipt_log) in self.logs.iter_mut().zip(&receipt.logs) {
+            let execution_log_matches = || execution_log.topic0.is_some_and(|topic| REQUEST_CASHOUT_EVENT_HASH == topic.as_ref());
+            let receipt_log_matches = || receipt_log.topics.first().is_some_and(|topic| REQUEST_CASHOUT_EVENT_HASH == topic.as_ref());
+
+            // only try overwriting if both logs refer to the target event
+            let should_overwrite = execution_log_matches() && receipt_log_matches();
+            if !should_overwrite {
+                continue;
+            }
+
+            let (Some(_), Some(source)) = (execution_log.topic3, receipt_log.topics.get(3)) else {
+                continue;
+            };
+            execution_log.topic3 = Some((*source).into());
+        }
+    }
+
+    /// External transactions are re-executed locally with max gas and zero gas price.
     ///
-    /// External transactions are re-executed locally with max gas and zero gas price,
-    /// so the paid amount is applied after execution based on the receipt.
-    pub fn apply_execution_costs(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
-        // do nothing if execution costs were already applied
-        if self.execution_costs_applied {
+    /// This causes some attributes to be different from the original execution.
+    ///
+    /// This method updates the attributes that can diverge based on the receipt of the external transaction.
+    pub fn apply_receipt(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
+        // do nothing if receipt is already applied
+        if self.receipt_applied {
             return Ok(());
         }
-        self.execution_costs_applied = true;
+        self.receipt_applied = true;
 
-        // do nothing if execution cost is zero
+        // fix gas
+        self.gas = receipt.gas_used.unwrap_or_default().try_into()?;
+
+        // fix logs
+        self.fix_logs_gas_left(receipt);
+
+        // fix sender balance
         let execution_cost = receipt.execution_cost();
-        if execution_cost.is_zero() {
-            return Ok(());
+        if execution_cost > Wei::ZERO {
+            // find sender changes
+            let sender_address: Address = receipt.0.from.into();
+            let Some(sender_changes) = self.changes.get_mut(&sender_address) else {
+                return log_and_err!("sender changes not present in execution when applying execution costs");
+            };
+
+            // subtract execution cost from sender balance
+            let sender_balance = *sender_changes.balance.take_ref().expect("balance is never None");
+            let sender_new_balance = if sender_balance > execution_cost {
+                sender_balance - execution_cost
+            } else {
+                Wei::ZERO
+            };
+            sender_changes.balance.set_modified(sender_new_balance);
         }
 
-        // find sender changes (this can be improved if changes is HashMap)
-        let sender_address: Address = receipt.0.from.into();
-        let sender_changes = self.changes.iter_mut().find(|c| c.address == sender_address);
-        let Some(sender_changes) = sender_changes else {
-            return log_and_err!("sender changes not present in execution when applying execution costs");
-        };
-
-        // subtract execution cost from sender balance
-        let current_balance = sender_changes.balance.take_ref().expect("balance is never None").clone();
-        let new_balance = current_balance - execution_cost; // TODO: handle underflow, but it should not happen
-        sender_changes.balance.set_modified(new_balance);
         Ok(())
+    }
+
+    /// Apply `gasLeft` values from receipt to execution logs.
+    ///
+    /// External transactions are re-executed locally with a different amount of gas limit, so, rely
+    /// on the given receipt to copy the `gasLeft` values found in Logs.
+    ///
+    /// This is necessary if the contract emits an event that puts `gasLeft` in a log, this function
+    /// covers the following events that do the described:
+    ///
+    /// - `ERC20Trace` (topic0: `0x31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671`)
+    /// - `BalanceTrackerTrace` (topic0: `0x63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9`)
+    ///
+    /// The overwriting should be done by copying the first 32 bytes from the receipt to log in `self`.
+    fn fix_logs_gas_left(&mut self, receipt: &ExternalReceipt) {
+        const ERC20_TRACE_EVENT_HASH: [u8; 32] = hex!("31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671");
+        const BALANCE_TRACKER_TRACE_EVENT_HASH: [u8; 32] = hex!("63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9");
+
+        const EVENT_HASHES: [&[u8]; 2] = [&ERC20_TRACE_EVENT_HASH, &BALANCE_TRACKER_TRACE_EVENT_HASH];
+
+        for (execution_log, receipt_log) in self.logs.iter_mut().zip(&receipt.logs) {
+            let execution_log_matches = || execution_log.topic0.is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
+            let receipt_log_matches = || receipt_log.topics.first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
+
+            // only try overwriting if both logs refer to the target event
+            let should_overwrite = execution_log_matches() && receipt_log_matches();
+            if !should_overwrite {
+                continue;
+            }
+
+            let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data.get(0..32)) else {
+                continue;
+            };
+            destination.copy_from_slice(source);
+        }
     }
 }

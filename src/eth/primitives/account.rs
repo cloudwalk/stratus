@@ -1,35 +1,18 @@
-//! Account Module
-//!
-//! The Account module is central to Ethereum's functionality, representing
-//! both user wallets and contracts. It encapsulates key aspects of an Ethereum
-//! account, such as its unique address, nonce (which tracks the number of
-//! transactions sent from the account), current balance, and in the case of
-//! smart contracts, their associated bytecode. This module is pivotal for
-//! tracking account states and differentiating between standard accounts and
-//! contract accounts.
-
-use std::collections::HashSet;
-
-use itertools::Itertools;
+use display_json::DebugAsJson;
 use revm::primitives::AccountInfo as RevmAccountInfo;
 use revm::primitives::Address as RevmAddress;
 
-use super::slot::SlotIndexes;
-use crate::eth::evm::EvmInputSlotKeys;
-use crate::eth::primitives::parse_bytecode_slots_indexes;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::SlotAccess;
 use crate::eth::primitives::Wei;
-use crate::ext::not;
 use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
 ///
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
-#[derive(Debug, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Deserialize, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Deserialize, serde::Serialize)]
 pub struct Account {
     /// Immutable address of the account.
     pub address: Address,
@@ -45,12 +28,6 @@ pub struct Account {
 
     /// Keccak256 Hash of the bytecode. If bytecode is null, then the hash of empty string.
     pub code_hash: CodeHash,
-
-    /// Slots indexes that are accessed statically.
-    pub static_slot_indexes: Option<SlotIndexes>,
-
-    /// Slots indexes that are accessed using the mapping hash algorithm.
-    pub mapping_slot_indexes: Option<SlotIndexes>,
 }
 
 impl Account {
@@ -67,8 +44,6 @@ impl Account {
             balance,
             bytecode: None,
             code_hash: CodeHash::default(),
-            static_slot_indexes: None,
-            mapping_slot_indexes: None,
         }
     }
 
@@ -86,26 +61,6 @@ impl Account {
             None => false,
         }
     }
-
-    /// Compute slot indexes to be accessed for a give input.
-    pub fn slot_indexes(&self, input_keys: EvmInputSlotKeys) -> SlotIndexes {
-        let mut slot_indexes = SlotIndexes::new();
-
-        // calculate static indexes
-        if let Some(ref indexes) = self.static_slot_indexes {
-            slot_indexes.extend(indexes.0.clone());
-        }
-
-        // calculate mapping indexes
-        if let Some(ref indexes) = self.mapping_slot_indexes {
-            for (base_slot_index, input_key) in indexes.iter().cartesian_product(input_keys.into_iter()) {
-                let mapping_slot_index = base_slot_index.to_mapping_index(input_key);
-                slot_indexes.insert(mapping_slot_index);
-            }
-        }
-
-        slot_indexes
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -115,40 +70,12 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
     fn from(value: (RevmAddress, RevmAccountInfo)) -> Self {
         let (address, info) = value;
 
-        // parse bytecode
-        let slot_indexes: HashSet<SlotAccess> = match info.code {
-            Some(ref bytecode) if not(bytecode.is_empty()) => parse_bytecode_slots_indexes(bytecode.clone().into()),
-            _ => HashSet::new(),
-        };
-
-        let mut static_slot_indexes = SlotIndexes::with_capacity(slot_indexes.len());
-        let mut mapping_slot_indexes = SlotIndexes::with_capacity(slot_indexes.len());
-        for index in slot_indexes {
-            match index {
-                SlotAccess::Static(index) => {
-                    static_slot_indexes.insert(index);
-                }
-                SlotAccess::Mapping(index) => {
-                    mapping_slot_indexes.insert(index);
-                }
-                _ => {}
-            }
-        }
-
         Self {
             address: address.into(),
             nonce: info.nonce.into(),
             balance: info.balance.into(),
             bytecode: info.code.map_into(),
             code_hash: info.code_hash.into(),
-            static_slot_indexes: match static_slot_indexes.is_empty() {
-                true => None,
-                false => Some(static_slot_indexes),
-            },
-            mapping_slot_indexes: match mapping_slot_indexes.is_empty() {
-                true => None,
-                false => Some(mapping_slot_indexes),
-            },
         }
     }
 }
@@ -157,13 +84,13 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl From<Account> for RevmAccountInfo {
-    fn from(value: Account) -> Self {
+impl From<&Account> for RevmAccountInfo {
+    fn from(value: &Account) -> Self {
         Self {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
             code_hash: value.code_hash.inner().0.into(),
-            code: value.bytecode.map_into(),
+            code: value.bytecode.as_ref().cloned().map_into(),
         }
     }
 }
@@ -183,6 +110,7 @@ pub fn test_accounts() -> Vec<Account> {
         hex!("15d34aaf54267db7d7c367839aaf71a00a2c6a65"),
         hex!("9965507d1a55bcc2695c58ba16fb37d819b0a4dc"),
         hex!("976ea74026e726554db657fa54763abd0c3a0aa9"),
+        hex!("e45b176cad7090a5cf70b69a73b6def9296ba6a2"),
     ]
     .into_iter()
     .map(|address| Account {
