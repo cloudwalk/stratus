@@ -380,7 +380,11 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Ext
 // -----------------------------------------------------------------------------
 
 async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
-    stratus_health(params, arc, ext).await
+    let net_listening = stratus_health(params, arc, ext).await;
+
+    tracing::info!(net_listening = ?net_listening, "network listening status");
+
+    net_listening
 }
 
 fn net_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> String {
