@@ -9,6 +9,7 @@ use jsonrpsee::types::error::TOO_MANY_SUBSCRIPTIONS_CODE;
 use jsonrpsee::types::ErrorObjectOwned;
 
 use crate::eth::primitives::Bytes;
+use crate::eth::storage::StorageError;
 use crate::infra::metrics::MetricLabelValue;
 
 #[derive(Debug, strum::Display, strum::EnumMessage)]
@@ -32,6 +33,7 @@ pub enum RpcError {
 
     // Unexpected
     Unexpected(anyhow::Error),
+    UnexpectedStorage(StorageError),
 
     // Stratus
     StratusNotReady,
@@ -60,6 +62,7 @@ impl RpcError {
 
             // Unexpected
             Self::Unexpected(_) => INTERNAL_ERROR_CODE,
+            Self::UnexpectedStorage(_) => INTERNAL_ERROR_CODE,
 
             // Stratus
             Self::StratusNotReady => SERVER_IS_BUSY_CODE,
@@ -88,6 +91,7 @@ impl RpcError {
 
             // Unexpected
             Self::Unexpected(_) => "Unexpected error.".into(),
+            Self::UnexpectedStorage(_) => "Unexpected storage error.".into(),
 
             // Stratus
             Self::StratusNotReady => "Stratus is not ready to start servicing requests.".into(),
@@ -116,6 +120,12 @@ impl Error for RpcError {}
 impl From<anyhow::Error> for RpcError {
     fn from(value: anyhow::Error) -> Self {
         Self::Unexpected(value)
+    }
+}
+
+impl From<StorageError> for RpcError {
+    fn from(value: StorageError) -> Self {
+        Self::UnexpectedStorage(value)
     }
 }
 

@@ -342,7 +342,7 @@ impl Executor {
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
                     Err(e) =>
-                        if let Some(StorageError::Conflict(_)) = e.downcast_ref::<StorageError>() {
+                        if let Some(StorageError::ExecutionConflict(_)) = e.downcast_ref::<StorageError>() {
                             self.execute_local_transaction_attempts(tx_input, EvmRoute::Serial, INFINITE_ATTEMPTS)
                         } else {
                             Err(e)
@@ -426,7 +426,7 @@ impl Executor {
                     return Ok(tx_execution);
                 }
                 Err(e) =>
-                    if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
+                    if let Some(StorageError::ExecutionConflict(conflicts)) = e.downcast_ref::<StorageError>() {
                         tracing::warn!(%attempt, ?conflicts, "temporary storage conflict detected when saving execution");
                         if attempt >= max_attempts {
                             return Err(e);

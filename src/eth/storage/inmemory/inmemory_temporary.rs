@@ -151,7 +151,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         // check conflicts
         let mut states = self.lock_write();
         if let Some(conflicts) = check_conflicts(&states, tx.execution()) {
-            return Err(StorageError::Conflict(conflicts)).context("execution conflicts with current state");
+            return Err(StorageError::ExecutionConflict(conflicts.into())).context("execution conflicts with current state");
         }
 
         // save account changes
