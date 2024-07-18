@@ -229,16 +229,13 @@ impl Consensus {
         };
         let consensus = Arc::new(consensus);
 
-        //TODO replace this for a synchronous call
-        #[cfg(feature = "raft")]
-        {
-            let rx_pending_txs: broadcast::Receiver<TransactionExecution> = miner.notifier_pending_txs.subscribe();
-            let rx_blocks: broadcast::Receiver<Block> = miner.notifier_blocks.subscribe();
-        }
 
         Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
         #[cfg(feature = "raft")]
         {
+            //TODO replace this for a synchronous call
+            let rx_pending_txs: broadcast::Receiver<TransactionExecution> = miner.notifier_pending_txs.subscribe();
+            let rx_blocks: broadcast::Receiver<Block> = miner.notifier_blocks.subscribe();
             Self::initialize_transaction_execution_queue(Arc::clone(&consensus));
             Self::initialize_append_entries_channel(Arc::clone(&consensus), rx_pending_txs, rx_blocks);
             Self::initialize_server(Arc::clone(&consensus));
