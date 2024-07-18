@@ -7,7 +7,6 @@ use std::time::Duration;
 use futures::try_join;
 use futures::StreamExt;
 use serde::Deserialize;
-use stratus::channel_read;
 use stratus::config::ImporterOnlineConfig;
 use stratus::eth::executor::Executor;
 use stratus::eth::miner::Miner;
@@ -152,10 +151,19 @@ async fn start_block_executor(
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "block-executor";
 
-    while let Some((block, receipts)) = channel_read!(backlog_rx) {
+    loop {
         if GlobalState::is_shutdown_warn(TASK_NAME) {
             return Ok(());
         }
+
+        let (block, receipts) = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
+            Ok(Some(inner)) => inner,
+            Ok(None) => break, // channel closed
+            Err(_timed_out) => {
+                tracing::warn!(timeout = "2s", "timeout reading block executor channel, expected around 1 block per second");
+                continue;
+            }
+        };
 
         #[cfg(feature = "metrics")]
         let start = metrics::now();

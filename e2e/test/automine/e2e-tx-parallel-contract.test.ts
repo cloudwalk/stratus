@@ -165,3 +165,36 @@ describe("Transaction: parallel TestContractCounter", async () => {
         }
     });
 });
+
+describe("Transaction: send repeated transaction in parallel", async () => {
+    let _contract: TestContractCounter;
+
+    it("Resets blockchain", async () => {
+        // HACK: sleeps for 50ms to avoid having the previous test interfering
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await sendReset();
+        const blockNumber = await send("eth_blockNumber", []);
+        expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
+    });
+
+    it("Deploy TestContractCounter", async () => {
+        _contract = await deployTestContractCounter();
+    });
+
+    it("Sends repeated transaction in parallel", async () => {
+        const tx = await _contract.connect(ALICE).inc.populateTransaction({ nonce: 0, ...TX_PARAMS });
+        const signedTx = await ALICE.signer().signTransaction(tx);
+
+        const signedTxs = [];
+        for (let i = 0; i < 50; i++) {
+            signedTxs.push(signedTx);
+        }
+
+        // send transactions in parallel
+        const hashes = await sendRawTransactions(signedTxs);
+        const filteredHashes = hashes.filter((hash) => hash !== undefined);
+
+        // only one transaction should pass
+        expect(filteredHashes.length).eq(1, "Success transaction count mismatch");
+    });
+});
