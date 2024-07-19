@@ -56,7 +56,7 @@ where
         // With this, we'll be able to talk to the DB
         assert!(
             this.handle_checked().is_some(),
-            "Can't find column family '{}' in database! Check if CFs are provided properly when creating/opening the DB",
+            "can't find column family '{}' in database! check if CFs are configured properly when creating/opening the DB",
             this.column_family,
         );
 
@@ -73,8 +73,8 @@ where
             Some(handle) => handle,
             None => {
                 panic!(
-                    "Accessing the RocksDB Column Family named '{}' failed, but it was there before! something weird happened",
-                    self.column_family
+                    "accessing the CF '{}' failed, but it was checked on creation! this should be impossible",
+                    self.column_family,
                 );
             }
         }
@@ -88,16 +88,16 @@ where
         let first = self.db.iterator_cf(&cf, IteratorMode::Start).next();
         let last = self.db.iterator_cf(&cf, IteratorMode::End).next();
         if let (Some(Ok((first_key, _))), Some(Ok((last_key, _)))) = (first, last) {
-            self.db.delete_range_cf(&cf, first_key, last_key)?;
+            self.db.delete_range_cf(&cf, first_key, last_key).context("when deleting elements in range")?;
         }
 
         // clear left-overs
         let mut batch = WriteBatch::default();
         for item in self.db.iterator_cf(&cf, IteratorMode::Start) {
-            let (key, _) = item?; // Handle or unwrap the Result
+            let (key, _) = item.context("when reading an element from the iterator")?; // Handle or unwrap the Result
             batch.delete_cf(&cf, key);
         }
-        self.db.write(batch)?;
+        self.write_batch_with_context(batch)?;
         Ok(())
     }
 
@@ -111,7 +111,7 @@ where
         bincode::deserialize(&value_bytes).ok()
     }
 
-    #[allow(dead_code)]
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn multi_get<I>(&self, keys: I) -> anyhow::Result<Vec<(K, V)>>
     where
         I: IntoIterator<Item = K> + Clone,
@@ -293,6 +293,13 @@ where
         if let Some(background_errors) = background_errors {
             metrics::set_rocks_background_errors(background_errors, db_name);
         }
+    }
+
+    /// A helper function just to add error context to the writing operation.
+    fn write_batch_with_context(&self, batch: WriteBatch) -> Result<()> {
+        self.db
+            .write(batch)
+            .with_context(|| format!("failed to write batch to column family '{}'", self.column_family))
     }
 }
 

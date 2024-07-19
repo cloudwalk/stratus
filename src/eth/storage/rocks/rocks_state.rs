@@ -466,7 +466,7 @@ impl RocksStorageState {
         self.db.write(batch).unwrap();
     }
 
-    /// Write to all DBs in a batch
+    /// Write to DB in a batch
     fn write_batch(&self, batch: WriteBatch) -> anyhow::Result<()> {
         let batch_len = batch.len();
         let result = self.db.write(batch);
@@ -479,14 +479,14 @@ impl RocksStorageState {
 
     /// Clears in-memory state.
     pub fn clear(&self) -> anyhow::Result<()> {
-        self.accounts.clear()?;
-        self.accounts_history.clear()?;
-        self.account_slots.clear()?;
-        self.account_slots_history.clear()?;
-        self.transactions.clear()?;
-        self.blocks_by_hash.clear()?;
-        self.blocks_by_number.clear()?;
-        self.logs.clear()?;
+        self.accounts.clear().context("when clearing accounts")?;
+        self.accounts_history.clear().context("when clearing accounts_history")?;
+        self.account_slots.clear().context("when clearing account_slots")?;
+        self.account_slots_history.clear().context("when clearing account_slots_history")?;
+        self.transactions.clear().context("when clearing transactions")?;
+        self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
+        self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
+        self.logs.clear().context("when clearing logs")?;
         Ok(())
     }
 }
