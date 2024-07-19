@@ -1,0 +1,18 @@
+Function signatures:
+9225297a: autoRepay(uint256[],uint256[])
+b6b55f25: deposit(uint256)
+00113e08: getBalances()
+24d7806c: isAdmin(address)
+80f55605: market()
+55ddb5e0: onAfterLoanPayment(uint256,uint256)
+78b03b8b: onAfterLoanRevocation(uint256)
+68a1070d: onBeforeLoanTaken(uint256)
+7a4e4ecf: rescue(address,uint256)
+fc0c546a: token()
+441a3e70: withdraw(uint256,uint256)
+
+Event signatures:
+e77ab4050a4deddf83307fb306d5d6fd2ccb8c4ce6a006030217d427684f697f: AutoRepayment(uint256)
+4d6ce1e535dbade1c23defba91e23b8f791ce5edc0cc320257a2b364e4e38426: Deposit(uint256)
+542fa6bfee3b4746210fbdd1d83f9e49b65adde3639f8d8f165dd18347938af2: Rescue(address,uint256)
+bf2ed60bd5b5965d685680c01195c9514e4382e28e3a5a2d2d5244bf59411b93: Withdrawal(uint256,uint256)

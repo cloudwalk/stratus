@@ -18,6 +18,7 @@ enum AppendResponse {
     TransactionExecutionsResponse(tonic::Response<AppendTransactionExecutionsResponse>),
 }
 
+#[allow(dead_code)]
 pub async fn save_and_handle_log_entry(consensus: &Consensus, log_entry_data: LogEntryData) -> Result<()> {
     let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
     tracing::debug!(last_index, "Last index fetched");
@@ -49,6 +50,7 @@ pub async fn save_and_handle_log_entry(consensus: &Consensus, log_entry_data: Lo
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn handle_block_entry(consensus: &Consensus, block: Block) {
     if Consensus::is_leader() {
         tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
@@ -62,6 +64,7 @@ pub async fn handle_block_entry(consensus: &Consensus, block: Block) {
     }
 }
 
+#[allow(dead_code)]
 pub async fn handle_transaction_executions(consensus: &Consensus) {
     if Consensus::is_leader() {
         let mut queue = consensus.transaction_execution_queue.lock().await;

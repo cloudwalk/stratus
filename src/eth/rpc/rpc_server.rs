@@ -37,7 +37,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
@@ -45,17 +45,18 @@ use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcContext;
-use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
+use crate::eth::storage::StoragePointInTime;
 use crate::eth::storage::StratusStorage;
 use crate::eth::Consensus;
 use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
+use crate::ext::ResultExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -73,13 +74,15 @@ pub async fn serve_rpc(
     executor: Arc<Executor>,
     miner: Arc<Miner>,
     consensus: Arc<Consensus>,
-    // config
-    rpc_server: RpcServerConfig,
-    chain_id: ChainId,
     #[cfg(feature = "request-replication-test-sender")] replication_sender: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
+
+    // config
+    app_config: impl serde::Serialize,
+    rpc_config: RpcServerConfig,
+    chain_id: ChainId,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
-    tracing::info!(%rpc_server.address, %rpc_server.max_connections, "creating {}", TASK_NAME);
+    tracing::info!(%rpc_config.address, %rpc_config.max_connections, "creating {}", TASK_NAME);
 
     // configure subscriptions
     let subs = RpcSubscriptions::spawn(
@@ -90,6 +93,7 @@ pub async fn serve_rpc(
 
     // configure context
     let ctx = RpcContext {
+        app_config: serde_json::to_value(app_config).expect_infallible(),
         chain_id,
         client_version: "stratus",
         gas_price: 0,
@@ -99,7 +103,7 @@ pub async fn serve_rpc(
         storage,
         miner,
         consensus,
-        rpc_server: rpc_server.clone(),
+        rpc_server: rpc_config.clone(),
 
         // subscriptions
         subs: Arc::clone(&subs.connected),
@@ -119,19 +123,17 @@ pub async fn serve_rpc(
     });
     let http_middleware = tower::ServiceBuilder::new()
         .layer_fn(RpcHttpMiddleware::new)
-        .layer(ProxyGetRequestLayer::new("/startup", "stratus_startup").unwrap())
-        .layer(ProxyGetRequestLayer::new("/readiness", "stratus_readiness").unwrap())
-        .layer(ProxyGetRequestLayer::new("/liveness", "stratus_liveness").unwrap())
         .layer(ProxyGetRequestLayer::new("/health", "stratus_health").unwrap())
-        .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap());
+        .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap())
+        .layer(ProxyGetRequestLayer::new("/config", "stratus_config").unwrap());
 
     // serve module
     let server = Server::builder()
         .set_rpc_middleware(rpc_middleware)
         .set_http_middleware(http_middleware)
         .set_id_provider(RandomStringIdProvider::new(8))
-        .max_connections(rpc_server.max_connections)
-        .build(rpc_server.address)
+        .max_connections(rpc_config.max_connections)
+        .build(rpc_config.address)
         .await?;
 
     let handle_rpc_server = server.start(module);
@@ -163,19 +165,19 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     }
 
     // stratus status
-    module.register_method("stratus_startup", stratus_startup)?;
-    module.register_async_method("stratus_readiness", stratus_readiness)?;
-    module.register_method("stratus_liveness", stratus_liveness)?;
     module.register_async_method("stratus_health", stratus_health)?;
-    module.register_method("stratus_version", stratus_version)?;
 
-    // stratus state
+    // stratus admin
     module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
     module.register_method("stratus_disableTransactions", stratus_disable_transactions)?;
     module.register_method("stratus_enableMiner", stratus_enable_miner)?;
     module.register_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
+
+    // stratus state
+    module.register_method("stratus_version", stratus_version)?;
+    module.register_method("stratus_config", stratus_config)?;
 
     module.register_blocking_method("stratus_getSlots", stratus_get_slots)?;
     module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
@@ -225,20 +227,20 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 // -----------------------------------------------------------------------------
 
 #[cfg(feature = "dev")]
-fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, RpcError> {
+fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
     ctx.storage.reset(number)?;
     Ok(to_json_value(number))
 }
 
 #[cfg(feature = "dev")]
-fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, RpcError> {
+fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     ctx.miner.mine_local_and_commit()?;
     Ok(to_json_value(true))
 }
 
 #[cfg(feature = "dev")]
-fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, RpcError> {
+fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     use crate::eth::primitives::UnixTime;
     use crate::log_and_err;
 
@@ -252,46 +254,32 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 }
 
 // -----------------------------------------------------------------------------
-// Status
+// Status - Health checks
 // -----------------------------------------------------------------------------
 
-fn stratus_startup(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
-    Ok(json!(true))
-}
+/// If stratus is ready and able to receive traffic.
+///
+/// This is an `AND` of `readiness` with `liveness`.
+async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensions: Extensions) -> Result<JsonValue, StratusError> {
+    if GlobalState::is_shutdown() {
+        tracing::warn!("liveness check failed because of shutdown");
+        return Err(StratusError::StratusShutdown);
+    }
 
-async fn stratus_readiness(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, RpcError> {
     let should_serve = context.consensus.should_serve().await;
     if not(should_serve) {
         tracing::warn!("readiness check failed because consensus is not ready");
         metrics::set_consensus_is_ready(0_u64);
-        return Err(RpcError::StratusNotReady);
+        return Err(StratusError::StratusNotReady);
     }
 
     metrics::set_consensus_is_ready(1_u64);
     Ok(json!(true))
 }
 
-fn stratus_liveness(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
-    if GlobalState::is_shutdown() {
-        tracing::warn!("liveness check failed because of shutdown");
-        return Err(RpcError::StratusShutdown);
-    }
-
-    Ok(json!(true))
-}
-
-/// If stratus is ready and able to receive traffic.
-///
-/// This is an `AND` of `readiness` with `liveness`.
-async fn stratus_health(params: Params<'_>, context: Arc<RpcContext>, extensions: Extensions) -> Result<JsonValue, RpcError> {
-    stratus_liveness(params.clone(), &context, &extensions)?;
-    stratus_readiness(params, context, extensions).await?;
-    Ok(json!(true))
-}
-
-fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
-    Ok(build_info::as_json(ctx))
-}
+// -----------------------------------------------------------------------------
+// Stratus - Admin
+// -----------------------------------------------------------------------------
 
 fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
     GlobalState::set_unknown_client_enabled(true);
@@ -323,7 +311,19 @@ fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool 
     GlobalState::is_miner_enabled()
 }
 
-fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<Vec<Slot>, RpcError> {
+// -----------------------------------------------------------------------------
+// Stratus - State
+// -----------------------------------------------------------------------------
+
+fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    Ok(build_info::as_json(ctx))
+}
+
+fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    Ok(ctx.app_config.clone())
+}
+
+fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<Vec<Slot>, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::stratus_getSlots", address = field::Empty, indexes = field::Empty).entered();
@@ -344,7 +344,7 @@ fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     // no indexes specified, read all slots
     let point_in_time = ctx.storage.translate_to_point_in_time(&block_filter)?;
     match indexes.len() {
-        // no indexes specified, real all slots
+        // no indexes specified, read all slots
         0 => {
             tracing::info!(%address, ?indexes, indexes_len = %indexes.len(), %point_in_time, "reading all account slots");
             let all_slots = ctx.storage.read_all_slots(&address, &point_in_time)?;
@@ -363,7 +363,7 @@ fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     }
 }
 
-async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
+async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     reject_unknown_client(ext.rpc_client())?;
 
     let (pending_txs, new_heads, logs) = join!(ctx.subs.new_heads.read(), ctx.subs.pending_txs.read(), ctx.subs.logs.read());
@@ -379,8 +379,12 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Ext
 // Blockchain
 // -----------------------------------------------------------------------------
 
-async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
-    stratus_readiness(params, arc, ext).await
+async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    let net_listening = stratus_health(params, arc, ext).await;
+
+    tracing::info!(net_listening = ?net_listening, "network listening status");
+
+    net_listening
 }
 
 fn net_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> String {
@@ -407,7 +411,7 @@ fn eth_gas_price(_: Params<'_>, _: &RpcContext, _: &Extensions) -> String {
 // Block
 // -----------------------------------------------------------------------------
 
-fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
+fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_blockNumber", block_number = field::Empty).entered();
@@ -419,16 +423,16 @@ fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     Ok(to_json_value(block_number))
 }
 
-fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
+fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     eth_get_block_by_selector::<'h'>(params, ctx, ext)
 }
 
-fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
+fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     eth_get_block_by_selector::<'n'>(params, ctx, ext)
 }
 
 #[inline(always)]
-fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
+fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = if KIND == 'h' {
@@ -482,7 +486,7 @@ fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcC
     }
 }
 
-fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
+fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     Ok(JsonValue::Null)
 }
 
@@ -490,7 +494,7 @@ fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Exte
 // Transaction
 // -----------------------------------------------------------------------------
 
-fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
+fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionByHash", tx_hash = field::Empty, found = field::Empty).entered();
@@ -521,7 +525,7 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     }
 }
 
-fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
+fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionReceipt", tx_hash = field::Empty, found = field::Empty).entered();
@@ -552,7 +556,7 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     }
 }
 
-fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, RpcError> {
+fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_estimateGas", tx_from = field::Empty, tx_to = field::Empty).entered();
@@ -580,18 +584,18 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_estimateGas with failure");
-            Err(RpcError::TransactionReverted { output: result.output })
+            Err(StratusError::TransactionReverted { output: result.output })
         }
 
         // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_estimateGas because of unexpected error");
-            Err(error_with_source(e, "failed to execute eth_estimateGas"))
+            Err(StratusError::Unexpected(e.context("failed to execute eth_estimateGas")))
         }
     }
 }
 
-fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, RpcError> {
+fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
@@ -621,18 +625,18 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_call with failure");
-            Err(RpcError::TransactionReverted { output: result.output })
+            Err(StratusError::TransactionReverted { output: result.output })
         }
 
         // internal error
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_call because of unexpected error");
-            Err(error_with_source(e, "failed to execute eth_call"))
+            Err(StratusError::Unexpected(e.context("failed to execute eth_call")))
         }
     }
 }
 
-fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, RpcError> {
+fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
@@ -668,7 +672,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
             }
             Err(e) => {
                 tracing::error!(reason = ?e, %tx_hash, "failed to forward eth_sendRawTransaction to leader");
-                Err(RpcError::TransactionForwardFailed)
+                Err(StratusError::TransactionForwardFailed)
             }
         };
     }
@@ -676,7 +680,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     // check feature
     if not(GlobalState::is_transactions_enabled()) {
         tracing::warn!(%tx_hash, "failed to execute eth_sendRawTransaction because transactions are disabled");
-        return Err(RpcError::TransactionDisabled);
+        return Err(StratusError::TransactionDisabled);
     }
 
     // execute locally if leader
@@ -692,7 +696,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
         }
         Err(e) => {
             tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction because of unexpected error");
-            Err(error_with_source(e, "failed to execute eth_sendRawTransaction"))
+            Err(StratusError::Unexpected(e.context("failed to execute eth_sendRawTransaction")))
         }
     }
 }
@@ -701,7 +705,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
 // Logs
 // -----------------------------------------------------------------------------
 
-fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, RpcError> {
+fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     const MAX_BLOCK_RANGE: u64 = 5_000;
 
     // enter span
@@ -737,7 +741,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
 
     // check range
     if blocks_in_range > MAX_BLOCK_RANGE {
-        return Err(RpcError::BlockRangeInvalid {
+        return Err(StratusError::BlockRangeInvalid {
             actual: blocks_in_range,
             max: MAX_BLOCK_RANGE,
         });
@@ -752,11 +756,11 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
 // Account
 // -----------------------------------------------------------------------------
 
-fn eth_accounts(_: Params<'_>, _ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, RpcError> {
+fn eth_accounts(_: Params<'_>, _ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     Ok(json!([]))
 }
 
-fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, RpcError> {
+fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionCount", address = field::Empty, filter = field::Empty).entered();
@@ -778,7 +782,7 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     Ok(hex_num(account.nonce))
 }
 
-fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, RpcError> {
+fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getBalance", address = field::Empty, filter = field::Empty).entered();
@@ -801,7 +805,7 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) ->
     Ok(hex_num(account.balance))
 }
 
-fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, RpcError> {
+fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getCode", address = field::Empty, filter = field::Empty).entered();
@@ -880,7 +884,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         event => {
             drop(method_enter);
             pending
-                .reject(RpcError::SubscriptionInvalid { event: event.to_string() })
+                .reject(StratusError::SubscriptionInvalid { event: event.to_string() })
                 .instrument(method_span)
                 .await;
         }
@@ -892,7 +896,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
 // Storage
 // -----------------------------------------------------------------------------
 
-fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, RpcError> {
+fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getStorageAt", address = field::Empty, index = field::Empty).entered();
@@ -921,9 +925,9 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
 // -----------------------------------------------------------------------------
 
 /// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
-fn reject_unknown_client(client: RpcClientApp) -> Result<(), RpcError> {
+fn reject_unknown_client(client: RpcClientApp) -> Result<(), StratusError> {
     if client.is_unknown() && not(GlobalState::is_unknown_client_enabled()) {
-        return Err(RpcError::ClientMissing);
+        return Err(StratusError::ClientMissing);
     }
     Ok(())
 }
@@ -946,13 +950,6 @@ fn hex_num(value: impl Into<U256>) -> String {
 fn hex_num_zero_padded(value: impl Into<U256>) -> String {
     let width = 64 + 2; //the prefix is included in the total width
     format!("{:#0width$x}", value.into(), width = width)
-}
-
-/// TODO: remove
-#[inline(always)]
-fn error_with_source(e: anyhow::Error, context: &str) -> RpcError {
-    let error_source = format!("{:?}", e.source());
-    e.context(format!("{} {}", context, error_source)).into()
 }
 
 fn hex_zero() -> String {

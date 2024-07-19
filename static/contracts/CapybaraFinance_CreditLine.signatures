@@ -1,0 +1,17 @@
+Function signatures:
+3acbc21a: configureBorrower(address,(uint32,uint32,uint32,uint64,uint64,uint8,uint32,uint32,uint32,uint32))
+b50c1f71: configureBorrowers(address[],(uint32,uint32,uint32,uint64,uint64,uint8,uint32,uint32,uint32,uint32)[])
+0cb7aa16: configureCreditLine((uint64,uint64,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32,uint32))
+2c6e061d: creditLineConfiguration()
+8684696b: determineLoanTerms(address,uint256,uint256)
+5366c3de: getBorrowerConfiguration(address)
+24d7806c: isAdmin(address)
+80f55605: market()
+55ddb5e0: onAfterLoanPayment(uint256,uint256)
+78b03b8b: onAfterLoanRevocation(uint256)
+68a1070d: onBeforeLoanTaken(uint256)
+fc0c546a: token()
+
+Event signatures:
+9f7082f34c6ccd69d87faf6a6496a20b38eec2faa53868d7155d3d8d41655710: BorrowerConfigured(address,address)
+8f2eef4f3384a4f85b043dba7fcf72109d04d72f0a81ce12cb69baa65a390174: CreditLineConfigured(address)

@@ -12,17 +12,17 @@ use serde::ser::SerializeMap;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tokio::time::timeout;
 use tokio::time::Duration;
 
-use crate::channel_read;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::DateTimeNow;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::rpc::RpcClientApp;
-use crate::eth::rpc::RpcError;
 use crate::ext::not;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -31,7 +31,7 @@ use crate::ext::SleepReason;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
-use crate::infra::tracing::warn_task_tx_closed;
+use crate::infra::tracing::warn_task_rx_closed;
 use crate::GlobalState;
 
 /// Frequency of cleaning up closed subscriptions.
@@ -39,6 +39,9 @@ const CLEANING_FREQUENCY: Duration = Duration::from_secs(10);
 
 /// Timeout used when sending notifications to subscribers.
 const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Max wait since last checked shutdown in notifier.
+const NOTIFIER_SHUTDOWN_CHECK_INTERVAL: Duration = Duration::from_secs(2);
 
 #[cfg(feature = "metrics")]
 mod label {
@@ -154,15 +157,17 @@ impl RpcSubscriptions {
                     return Ok(());
                 }
 
-                let Ok(tx) = channel_read!(rx_tx_hash) else {
-                    warn_task_tx_closed(TASK_NAME);
-                    break;
+                let tx = match timeout(NOTIFIER_SHUTDOWN_CHECK_INTERVAL, rx_tx_hash.recv()).await {
+                    Ok(Ok(tx)) => tx,
+                    Ok(Err(_channel_closed)) => break,
+                    Err(_timed_out) => continue,
                 };
 
                 let interested_subs = subs.pending_txs.read().await;
                 let interested_subs = interested_subs.values().collect_vec();
                 Self::notify(interested_subs, tx.hash().to_string());
             }
+            warn_task_rx_closed(TASK_NAME);
             Ok(())
         })
     }
@@ -176,15 +181,17 @@ impl RpcSubscriptions {
                     return Ok(());
                 }
 
-                let Ok(block) = channel_read!(rx_block) else {
-                    warn_task_tx_closed(TASK_NAME);
-                    break;
+                let block = match timeout(NOTIFIER_SHUTDOWN_CHECK_INTERVAL, rx_block.recv()).await {
+                    Ok(Ok(block)) => block,
+                    Ok(Err(_channel_closed)) => break,
+                    Err(_timed_out) => continue,
                 };
 
                 let interested_subs = subs.new_heads.read().await;
                 let interested_subs = interested_subs.values().collect_vec();
                 Self::notify(interested_subs, block.header);
             }
+            warn_task_rx_closed(TASK_NAME);
             Ok(())
         })
     }
@@ -198,9 +205,10 @@ impl RpcSubscriptions {
                     return Ok(());
                 }
 
-                let Ok(log) = channel_read!(rx_log_mined) else {
-                    warn_task_tx_closed(TASK_NAME);
-                    break;
+                let log = match timeout(NOTIFIER_SHUTDOWN_CHECK_INTERVAL, rx_log_mined.recv()).await {
+                    Ok(Ok(log)) => log,
+                    Ok(Err(_channel_closed)) => break,
+                    Err(_timed_out) => continue,
                 };
 
                 let interested_subs = subs.logs.read().await;
@@ -212,6 +220,7 @@ impl RpcSubscriptions {
 
                 Self::notify(interested_subs, log);
             }
+            warn_task_rx_closed(TASK_NAME);
             Ok(())
         })
     }
@@ -326,7 +335,7 @@ pub struct RpcSubscriptionsConnected {
 
 impl RpcSubscriptionsConnected {
     /// Checks the number of subscriptions for a given client.
-    pub async fn check_client_subscriptions(&self, max_subscriptions: u32, client: &RpcClientApp) -> Result<(), RpcError> {
+    pub async fn check_client_subscriptions(&self, max_subscriptions: u32, client: &RpcClientApp) -> Result<(), StratusError> {
         let pending_txs = self.pending_txs.read().await.values().filter(|s| s.client == *client).count();
         let new_heads = self.new_heads.read().await.values().filter(|s| s.client == *client).count();
         let logs = self
@@ -340,7 +349,7 @@ impl RpcSubscriptionsConnected {
         tracing::info!(%pending_txs, %new_heads, %logs, "current client subscriptions");
 
         if pending_txs + new_heads + logs >= max_subscriptions as usize {
-            return Err(RpcError::SubscriptionLimit {
+            return Err(StratusError::SubscriptionLimit {
                 max_limit: max_subscriptions.to_string(),
             });
         }

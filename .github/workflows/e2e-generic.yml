@@ -18,12 +18,6 @@ on:
       - 'CONTRIBUTING.md'
       - 'utils/slack-notifiers/**'
   workflow_dispatch:
-    push: # Rebuild cache policy
-      branches:
-        - 'main'
-      paths:
-        - 'Cargo.lock'
-        - 'Cargo.toml'
 
 jobs:
   e2e_generic:
@@ -47,7 +41,7 @@ jobs:
             instances: 1
             iterations: 2
 
-    name: E2E with ${{ matrix.instances }} instance(s) restarting for ${{ matrix.leader-restart }}
+    name: E2E Generic with (${{ matrix.instances }}, ${{ matrix.leader-restart }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -88,10 +82,10 @@ jobs:
           cargo install wait-service || true
 
       - name: Clone all contracts
-        run: just contracts-clone
+        run: just contracts-clone --token
 
       - name: Flatten all contracts
-        run: just contracts-flatten
+        run: just contracts-flatten --token
 
       - name: Run e2e tests
         run: just run-chaos-experiment stratus ${{ matrix.instances }} ${{ matrix.iterations }} ${{ matrix.leader-restart }} leader-election

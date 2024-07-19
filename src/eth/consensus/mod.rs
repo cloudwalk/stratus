@@ -1,3 +1,5 @@
+//FIXME temporarily there are a lot of allow dead_code and allow unused_imports, we need to deal with them properly later
+#[allow(dead_code)] //TODO remove this
 mod append_log_entries_storage;
 mod discovery;
 pub mod forward_to;
@@ -167,6 +169,7 @@ pub struct Consensus {
     transaction_execution_queue: Arc<Mutex<Vec<TransactionExecutionEntry>>>,
     heartbeat_timeout: Duration,
     my_address: PeerAddress,
+    #[allow(dead_code)]
     grpc_address: SocketAddr,
     reset_heartbeat_signal: tokio::sync::Notify,
     blockchain_client: Mutex<Option<Arc<BlockchainClient>>>,
@@ -213,14 +216,16 @@ impl Consensus {
         };
         let consensus = Arc::new(consensus);
 
-        //TODO replace this for a synchronous call
-        let rx_pending_txs: broadcast::Receiver<TransactionExecution> = miner.notifier_pending_txs.subscribe();
-        let rx_blocks: broadcast::Receiver<Block> = miner.notifier_blocks.subscribe();
-
         Self::initialize_periodic_peer_discovery(Arc::clone(&consensus));
-        Self::initialize_transaction_execution_queue(Arc::clone(&consensus));
-        Self::initialize_append_entries_channel(Arc::clone(&consensus), rx_pending_txs, rx_blocks);
-        Self::initialize_server(Arc::clone(&consensus));
+        #[cfg(feature = "raft")]
+        {
+            //TODO replace this for a synchronous call
+            let rx_pending_txs: broadcast::Receiver<TransactionExecution> = miner.notifier_pending_txs.subscribe();
+            let rx_blocks: broadcast::Receiver<Block> = miner.notifier_blocks.subscribe();
+            Self::initialize_transaction_execution_queue(Arc::clone(&consensus));
+            Self::initialize_append_entries_channel(Arc::clone(&consensus), rx_pending_txs, rx_blocks);
+            Self::initialize_server(Arc::clone(&consensus));
+        }
         Self::initialize_heartbeat_timer(Arc::clone(&consensus));
 
         tracing::info!(my_address = %my_address, "consensus module initialized");
@@ -438,6 +443,7 @@ impl Consensus {
         });
     }
 
+    #[allow(dead_code)]
     fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
         // XXX FIXME: deal with the scenario where a transactionHash arrives after the block;
         // in this case, before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
@@ -461,6 +467,7 @@ impl Consensus {
     /// This channel broadcasts blocks and transactons executions to followers.
     /// Each follower has a queue of blocks and transactions to be sent at handle_peer_propagation.
     //TODO this broadcast needs to wait for majority of followers to confirm the log before sending the next one
+    #[allow(dead_code)]
     fn initialize_append_entries_channel(
         consensus: Arc<Consensus>,
         mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
@@ -500,6 +507,7 @@ impl Consensus {
         });
     }
 
+    #[allow(dead_code)]
     fn initialize_server(consensus: Arc<Consensus>) {
         const TASK_NAME: &str = "consensus::server";
         spawn_named(TASK_NAME, async move {
@@ -593,6 +601,30 @@ impl Consensus {
     }
 
     pub async fn should_serve(&self) -> bool {
+        if self.importer_config.is_some() {
+            //gather the latest block number, check how far behind it is from current storage block
+            //if its greater than 3 blocks of distance, it should not be served
+            let blockchain_client_lock = self.blockchain_client.lock().await;
+
+            let Some(ref blockchain_client) = *blockchain_client_lock else {
+                tracing::error!("blockchain client is not set at importer, cannot serve requests because they cant be forwarded");
+                return false;
+            };
+
+            let Ok(validator_block_number) = blockchain_client.fetch_block_number().await else {
+                tracing::error!("unable to fetch latest block number");
+                return false;
+            };
+
+            let Ok(current_block_number) = self.storage.read_mined_block_number() else {
+                tracing::error!("unable to fetch current block number");
+                return false;
+            };
+
+            return (validator_block_number.as_u64() - 3) <= current_block_number.as_u64();
+        }
+
+        // consensus
         if Self::is_leader() {
             return true;
         }

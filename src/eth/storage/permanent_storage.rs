@@ -15,10 +15,10 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
-use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::RocksPermanentStorage;
+use crate::eth::storage::StoragePointInTime;
 
 /// Permanent (committed) storage operations.
 pub trait PermanentStorage: Send + Sync + 'static {
@@ -93,7 +93,9 @@ pub struct PermanentStorageConfig {
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub enum PermanentStorageKind {
+    #[serde(rename = "inmemory")]
     InMemory,
+    #[serde(rename = "rocks")]
     Rocks,
 }
 

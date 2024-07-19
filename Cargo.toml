@@ -191,6 +191,8 @@ metrics = ["dep:metrics-exporter-prometheus"]
 # Enable runtime tracing/spans collection.
 tracing = []
 
+raft = []
+
 request-replication-test-sender = ["dep:async-stream"]
 
 request-replication-test-receiver = []
