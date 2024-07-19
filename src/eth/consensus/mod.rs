@@ -44,12 +44,7 @@ pub mod append_entry {
 use append_entry::append_entry_service_client::AppendEntryServiceClient;
 use append_entry::append_entry_service_server::AppendEntryService;
 use append_entry::append_entry_service_server::AppendEntryServiceServer;
-use append_entry::AppendBlockCommitRequest;
-use append_entry::AppendBlockCommitResponse;
-use append_entry::AppendTransactionExecutionsRequest;
-use append_entry::AppendTransactionExecutionsResponse;
 use append_entry::RequestVoteRequest;
-use append_entry::StatusCode;
 use append_entry::TransactionExecutionEntry;
 
 use self::append_log_entries_storage::AppendLogEntriesStorage;
@@ -62,7 +57,6 @@ use crate::eth::primitives::Block;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
-const RETRY_DELAY: Duration = Duration::from_millis(10);
 const PEER_DISCOVERY_DELAY: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -459,7 +453,7 @@ impl Consensus {
 
                 tokio::time::sleep(interval).await;
 
-                propagation::handle_transaction_executions(&consensus).await;
+                propagation::handle_transaction_executions(consensus.clone()).await;
             }
         });
     }
@@ -491,13 +485,13 @@ impl Consensus {
 
                             let transaction = vec![tx.to_append_entry_transaction()];
                             let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
-                            if consensus.broadcast_sender.send(transaction_entry).is_err() {
+                            if consensus.clone().broadcast_sender.send(transaction_entry).is_err() {
                                 tracing::debug!("failed to broadcast transaction");
                             }
                         }
                     },
                     Ok(block) = rx_blocks.recv() => {
-                        propagation::handle_block_entry(&consensus, block).await;
+                        propagation::handle_block_entry(consensus.clone(), block).await;
                     },
                     else => {
                         tokio::task::yield_now().await;
