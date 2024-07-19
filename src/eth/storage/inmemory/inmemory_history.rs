@@ -4,7 +4,7 @@ use itertools::Itertools;
 use nonempty::NonEmpty;
 
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::StoragePointInTime;
+use crate::eth::storage::StoragePointInTime;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryHistory<T>(NonEmpty<InMemoryHistoryValue<T>>)

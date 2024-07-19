@@ -25,10 +25,11 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Signature;
 use crate::eth::primitives::SoliditySignature;
-use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
+use crate::eth::storage::StoragePointInTime;
 use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::if_else;
@@ -56,7 +57,7 @@ impl EvmExecutionResult {
 /// EVM operations.
 pub trait Evm {
     /// Execute a transaction that deploys a contract or call a contract function.
-    fn execute(&mut self, input: EvmInput) -> anyhow::Result<EvmExecutionResult>;
+    fn execute(&mut self, input: EvmInput) -> Result<EvmExecutionResult, StratusError>;
 }
 
 /// EVM input data. Usually derived from a transaction or call.
