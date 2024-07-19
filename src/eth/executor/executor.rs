@@ -153,7 +153,7 @@ impl Evms {
 
         match execution_rx.recv() {
             Ok(result) => result,
-            Err(_) => Err(StratusError::UnexpectedChannelRead { name: "evm" }),
+            Err(_) => Err(StratusError::UnexpectedChannelRead { channel: "evm" }),
         }
     }
 }

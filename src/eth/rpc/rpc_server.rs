@@ -662,7 +662,13 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     });
     let tx_hash = tx.hash;
 
-    // forward transaction to the leader
+    // check feature
+    if not(GlobalState::is_transactions_enabled()) {
+        tracing::warn!(%tx_hash, "failed to execute eth_sendRawTransaction because transactions are disabled");
+        return Err(StratusError::RpcTransactionDisabled);
+    }
+
+    // forward transaction to the validator node
     if ctx.consensus.should_forward() {
         tracing::info!(%tx_hash, "forwarding eth_sendRawTransaction to leader");
         return match Handle::current().block_on(ctx.consensus.forward(data)) {
@@ -672,15 +678,9 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
             }
             Err(e) => {
                 tracing::error!(reason = ?e, %tx_hash, "failed to forward eth_sendRawTransaction to leader");
-                Err(StratusError::TransactionForwardFailed)
+                Err(StratusError::TransactionForwardToLeaderFailed)
             }
         };
-    }
-
-    // check feature
-    if not(GlobalState::is_transactions_enabled()) {
-        tracing::warn!(%tx_hash, "failed to execute eth_sendRawTransaction because transactions are disabled");
-        return Err(StratusError::TransactionDisabled);
     }
 
     // execute locally if leader
@@ -741,7 +741,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
 
     // check range
     if blocks_in_range > MAX_BLOCK_RANGE {
-        return Err(StratusError::BlockRangeInvalid {
+        return Err(StratusError::RpcBlockRangeInvalid {
             actual: blocks_in_range,
             max: MAX_BLOCK_RANGE,
         });
@@ -884,7 +884,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         event => {
             drop(method_enter);
             pending
-                .reject(StratusError::SubscriptionInvalid { event: event.to_string() })
+                .reject(StratusError::RpcSubscriptionInvalid { event: event.to_string() })
                 .instrument(method_span)
                 .await;
         }
@@ -927,7 +927,7 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
 /// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
 fn reject_unknown_client(client: RpcClientApp) -> Result<(), StratusError> {
     if client.is_unknown() && not(GlobalState::is_unknown_client_enabled()) {
-        return Err(StratusError::ClientMissing);
+        return Err(StratusError::RpcClientMissing);
     }
     Ok(())
 }

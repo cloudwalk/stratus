@@ -408,7 +408,7 @@ impl StratusStorage {
         let mined_number = self.read_mined_block_number()?;
         if not(block_number.is_zero()) && block_number != mined_number.next() {
             tracing::error!(%block_number, %mined_number, "failed to save block because mismatch with mined block number");
-            return Err(StratusError::MinedNumberConflict {
+            return Err(StratusError::StorageMinedNumberConflict {
                 new: block_number,
                 mined: mined_number,
             });
@@ -418,7 +418,7 @@ impl StratusStorage {
         if let Some(pending_number) = self.read_pending_block_number()? {
             if block_number >= pending_number {
                 tracing::error!(%block_number, %pending_number, "failed to save block because mismatch with pending block number");
-                return Err(StratusError::PendingNumberConflict {
+                return Err(StratusError::StoragePendingNumberConflict {
                     new: block_number,
                     pending: pending_number,
                 });
@@ -429,7 +429,7 @@ impl StratusStorage {
         let existing_block = self.read_block(&BlockFilter::Number(block_number))?;
         if existing_block.is_some() {
             tracing::error!(%block_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
-            return Err(StratusError::BlockConflict { number: block_number });
+            return Err(StratusError::StorageBlockConflict { number: block_number });
         }
 
         // save block
@@ -548,7 +548,7 @@ impl StratusStorage {
             BlockFilter::Number(number) => Ok(StoragePointInTime::MinedPast(*number)),
             BlockFilter::Hash(_) => match self.read_block(block_filter)? {
                 Some(block) => Ok(StoragePointInTime::MinedPast(block.header.number)),
-                None => Err(StratusError::BlockFilterInvalid { filter: *block_filter }),
+                None => Err(StratusError::RpcBlockFilterInvalid { filter: *block_filter }),
             },
         }
     }
