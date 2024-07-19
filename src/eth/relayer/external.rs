@@ -42,7 +42,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StoragePointInTime;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
-use crate::ext::ResultExt;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -161,7 +160,7 @@ impl ExternalRelayer {
 
     async fn insert_unsent_transaction(&mut self, tx_mined: TransactionMined) {
         let tx_hash = tx_mined.input.hash;
-        let tx_json = serde_json::to_value(tx_mined).expect_infallible();
+        let tx_json = to_json_value(tx_mined);
         while let Err(e) = sqlx::query!(
             "INSERT INTO unsent_transactions(transaction_hash, transaction) VALUES ($1, $2) ON CONFLICT DO NOTHING",
             tx_hash as _,
@@ -241,7 +240,7 @@ impl ExternalRelayer {
                 break;
             }
             tracing::info!(?missing, "found missing blocks, cleaning up");
-            let missing_json = missing.into_iter().map(|hash| serde_json::to_value(hash).expect_infallible()).collect_vec();
+            let missing_json = missing.into_iter().map(to_json_value).collect_vec();
             while sqlx::query!(
                 "DELETE FROM relayer_blocks WHERE payload->'header'->'hash' IN (SELECT * FROM UNNEST($1::JSONB[]))",
                 missing_json as _

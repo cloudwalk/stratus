@@ -56,7 +56,6 @@ use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
-use crate::ext::ResultExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -93,7 +92,7 @@ pub async fn serve_rpc(
 
     // configure context
     let ctx = RpcContext {
-        app_config: serde_json::to_value(app_config).expect_infallible(),
+        app_config: to_json_value(app_config),
         chain_id,
         client_version: "stratus",
         gas_price: 0,

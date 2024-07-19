@@ -34,11 +34,11 @@ use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
 use crate::event_with;
+use crate::ext::from_json_str;
 #[cfg(feature = "request-replication-test-sender")]
 use crate::ext::spawn_named;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
-use crate::ext::ResultExt;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -267,7 +267,7 @@ impl<'a> Future for RpcResponse<'a> {
 
             // trace response
             let response_success = response.is_success();
-            let response_result: JsonValue = serde_json::from_str(response.as_result()).expect_infallible();
+            let response_result: JsonValue = from_json_str(response.as_result());
             let (level, error_code) = match response_result
                 .get("error")
                 .and_then(|v| v.get("code"))
