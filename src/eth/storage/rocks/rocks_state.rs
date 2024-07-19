@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
+use std::fmt::Debug;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
@@ -77,8 +78,8 @@ lazy_static! {
 /// Helper for creating a `RocksCfRef` with our option presets.
 fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> RocksCfRef<K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Clone,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 

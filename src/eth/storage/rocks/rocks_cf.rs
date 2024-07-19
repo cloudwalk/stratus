@@ -2,12 +2,14 @@
 //!
 //! Check `RocksCfRef` docs for more details.
 
+use std::fmt::Debug;
 use std::iter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::Result;
+use const_hex::hex;
 use rocksdb::BoundColumnFamily;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
@@ -41,8 +43,8 @@ pub struct RocksCfRef<K, V> {
 
 impl<K, V> RocksCfRef<K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Clone,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     /// Create Column Family reference struct.
     pub fn new(db: Arc<DB>, column_family: &str, opts: Options) -> Self {
@@ -103,6 +105,12 @@ where
     }
 
     pub fn get(&self, key: &K) -> Result<Option<V>> {
+        self.get_impl(key)
+            .with_context(|| format!("when trying to read value from CF: '{}'", self.column_family))
+    }
+
+    #[inline]
+    fn get_impl(&self, key: &K) -> Result<Option<V>> {
         let cf = self.handle();
 
         let serialized_key = bincode::serialize(key).with_context(|| format!("failed to serialize key in DB get query for CF '{}'", self.column_family))?;
@@ -110,7 +118,8 @@ where
         let Some(value_bytes) = self.db.get_cf(&cf, serialized_key)? else {
             return Ok(None);
         };
-        bincode::deserialize(&value_bytes).with_context(|| format!("failed to deserialize value in DB get query for CF '{}'", self.column_family))
+
+        bincode::deserialize(&value_bytes).with_context(|| format!("failed to deserialize value bytes: '{}'", hex::encode(value_bytes)))
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
@@ -312,15 +321,21 @@ pub struct RocksDBIterator<'a, K, V> {
     _marker: PhantomData<(K, V)>,
 }
 
-impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> RocksDBIterator<'a, K, V> {
+impl<'a, K, V> RocksDBIterator<'a, K, V>
+where
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+{
     pub fn new(iter: DBIteratorWithThreadMode<'a, DB>) -> Self {
         Self { iter, _marker: PhantomData }
     }
 }
 
 /// Custom iterator for navigating RocksDB entries.
-impl<'a, K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq, V: Serialize + for<'de> Deserialize<'de> + Clone> Iterator
-    for RocksDBIterator<'a, K, V>
+impl<'a, K, V> Iterator for RocksDBIterator<'a, K, V>
+where
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     type Item = (K, V);
 
