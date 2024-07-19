@@ -204,30 +204,30 @@ where
         })
     }
 
-    pub fn iter_start(&self) -> RocksDBIterator<K, V> {
+    pub fn iter_start(&self) -> RocksCfIterator<K, V> {
         let cf = self.handle();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::Start);
-        RocksDBIterator::<K, V>::new(iter)
+        RocksCfIterator::<K, V>::new(iter)
     }
 
-    pub fn iter_end(&self) -> RocksDBIterator<K, V> {
+    pub fn iter_end(&self) -> RocksCfIterator<K, V> {
         let cf = self.handle();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::End);
-        RocksDBIterator::<K, V>::new(iter)
+        RocksCfIterator::<K, V>::new(iter)
     }
 
     pub fn iter_from<P: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq>(
         &self,
         key_prefix: P,
         direction: rocksdb::Direction,
-    ) -> RocksDBIterator<K, V> {
+    ) -> RocksCfIterator<K, V> {
         let cf = self.handle();
         let serialized_key = bincode::serialize(&key_prefix).unwrap();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::From(&serialized_key, direction));
-        RocksDBIterator::<K, V>::new(iter)
+        RocksCfIterator::<K, V>::new(iter)
     }
 
     #[allow(dead_code)]
@@ -316,23 +316,24 @@ where
     }
 }
 
-pub struct RocksDBIterator<'a, K, V> {
+/// An iterator over data in a CF.
+pub(super) struct RocksCfIterator<'a, K, V> {
     iter: DBIteratorWithThreadMode<'a, DB>,
     _marker: PhantomData<(K, V)>,
 }
 
-impl<'a, K, V> RocksDBIterator<'a, K, V>
+impl<'a, K, V> RocksCfIterator<'a, K, V>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
-    pub fn new(iter: DBIteratorWithThreadMode<'a, DB>) -> Self {
+    fn new(iter: DBIteratorWithThreadMode<'a, DB>) -> Self {
         Self { iter, _marker: PhantomData }
     }
 }
 
 /// Custom iterator for navigating RocksDB entries.
-impl<'a, K, V> Iterator for RocksDBIterator<'a, K, V>
+impl<'a, K, V> Iterator for RocksCfIterator<'a, K, V>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
