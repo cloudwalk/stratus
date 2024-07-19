@@ -17,6 +17,7 @@ use ethers_signers::Signer;
 use futures::future::join_all;
 use futures::StreamExt;
 use itertools::Itertools;
+use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
@@ -656,7 +657,7 @@ impl ExternalRelayer {
 }
 
 pub struct ExternalRelayerClient {
-    pool: PgPool,
+    pool: Option<PgPool>,
     conn_lost: RwLock<bool>,
 }
 
@@ -669,13 +670,28 @@ impl ExternalRelayerClient {
             .max_connections(config.connections)
             .acquire_timeout(config.acquire_timeout)
             .connect(&config.url)
-            .await
-            .expect("should not fail to create pgpool");
-
-        Self {
-            pool: storage,
-            conn_lost: false.into(),
+            .await;
+        match storage {
+            Ok(storage) => Self {
+                pool: Some(storage),
+                conn_lost: false.into(),
+            },
+            Err(err) => {
+                tracing::error!(?err, "failed to establish connection to postgresql");
+                Self {
+                    pool: None,
+                    conn_lost: true.into(),
+                }
+            }
         }
+    }
+
+    pub fn save_block_to_file(block_number: BlockNumber, block_json: &Value) -> anyhow::Result<()> {
+        let file = File::create(format!("blocks_json/{}", block_number.as_u64()))?;
+        let mut writer = BufWriter::new(file);
+        serde_json::to_writer(&mut writer, &block_json)?;
+        writer.flush()?;
+        Ok(())
     }
 
     /// Insert the block into the relayer_blocks table on pgsql to be processed by the relayer. Returns Err if
@@ -702,32 +718,29 @@ impl ExternalRelayerClient {
 
         match *self.conn_lost.read().await {
             false =>
-                while remaining_tries > 0 {
-                    if let Err(e) = sqlx::query!(
-                        r#"
+                if let Some(pool) = &self.pool {
+                    while remaining_tries > 0 {
+                        if let Err(e) = sqlx::query!(
+                            r#"
                             INSERT INTO relayer_blocks
                             (number, payload)
                             VALUES ($1, $2)
                             ON CONFLICT (number) DO UPDATE
                             SET payload = EXCLUDED.payload"#,
-                        block_number as _,
-                        &block_json
-                    )
-                    .execute(&self.pool)
-                    .await
-                    {
-                        remaining_tries -= 1;
-                        tracing::warn!(reason = ?e, ?remaining_tries, "failed to insert into relayer_blocks");
-                    } else {
-                        break;
+                            block_number as _,
+                            &block_json
+                        )
+                        .execute(pool)
+                        .await
+                        {
+                            remaining_tries -= 1;
+                            tracing::warn!(reason = ?e, ?remaining_tries, "failed to insert into relayer_blocks");
+                        } else {
+                            break;
+                        }
                     }
                 },
-            true => {
-                let file = File::create(format!("blocks_json/{}", block_number.as_u64()))?;
-                let mut writer = BufWriter::new(file);
-                serde_json::to_writer(&mut writer, &block_json)?;
-                writer.flush()?;
-            }
+            true => Self::save_block_to_file(block_number, &block_json)?,
         }
 
         #[cfg(feature = "metrics")]
@@ -737,6 +750,7 @@ impl ExternalRelayerClient {
             0 => {
                 let _ = create_dir("blocks_json");
                 let mut conn_lost = self.conn_lost.write().await;
+                Self::save_block_to_file(block_number, &block_json)?;
                 *conn_lost = true;
                 Err(anyhow!(
                     "failed to insert block into relayer_blocks after 5 tries, switching to storing blocks in files."
