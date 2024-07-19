@@ -3,6 +3,7 @@ use std::fs::create_dir;
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
+use std::path::Path;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -664,6 +665,9 @@ pub struct ExternalRelayerClient {
 impl ExternalRelayerClient {
     /// Creates a new [`ExternalRelayerClient`].
     pub async fn new(config: ExternalRelayerClientConfig) -> Self {
+        if !Path::new("blocks_json").exists() {
+            create_dir("blocks_json").expect("creating a dir that does not exist should not fail");
+        }
         tracing::info!(?config, "creating external relayer client");
         let storage = PgPoolOptions::new()
             .min_connections(config.connections)
@@ -748,7 +752,6 @@ impl ExternalRelayerClient {
 
         match remaining_tries {
             0 => {
-                let _ = create_dir("blocks_json");
                 let mut conn_lost = self.conn_lost.write().await;
                 Self::save_block_to_file(block_number, &block_json)?;
                 *conn_lost = true;
