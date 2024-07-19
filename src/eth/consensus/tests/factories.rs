@@ -138,6 +138,9 @@ pub fn create_mock_consensus() -> Arc<Consensus> {
 
 use tonic::service::Interceptor;
 
+use super::append_entry::AppendBlockCommitRequest;
+use super::append_entry::AppendTransactionExecutionsRequest;
+use super::append_entry::StatusCode;
 use super::Hash;
 use super::Miner;
 
@@ -200,10 +203,10 @@ impl MockAppendEntryServiceClient {
     #[allow(clippy::unused_async)]
     pub async fn append_transaction_executions(
         &mut self,
-        _request: impl tonic::IntoRequest<super::AppendTransactionExecutionsRequest>,
+        _request: impl tonic::IntoRequest<AppendTransactionExecutionsRequest>,
     ) -> std::result::Result<tonic::Response<AppendTransactionExecutionsResponse>, tonic::Status> {
         Ok(tonic::Response::new(AppendTransactionExecutionsResponse {
-            status: super::StatusCode::AppendSuccess as i32,
+            status: StatusCode::AppendSuccess as i32,
             message: "Mock response".to_string(),
             match_log_index: 0,
             last_log_index: 0,
@@ -214,10 +217,10 @@ impl MockAppendEntryServiceClient {
     #[allow(clippy::unused_async)]
     pub async fn append_block_commit(
         &mut self,
-        _request: impl tonic::IntoRequest<super::AppendBlockCommitRequest>,
+        _request: impl tonic::IntoRequest<AppendBlockCommitRequest>,
     ) -> std::result::Result<tonic::Response<AppendBlockCommitResponse>, tonic::Status> {
         Ok(tonic::Response::new(AppendBlockCommitResponse {
-            status: super::StatusCode::AppendSuccess as i32,
+            status: StatusCode::AppendSuccess as i32,
             message: "Mock response".to_string(),
             match_log_index: 0,
             last_log_index: 0,

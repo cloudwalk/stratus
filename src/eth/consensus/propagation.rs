@@ -1,24 +1,23 @@
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::anyhow;
 use anyhow::Result;
 use tonic::Request;
-use anyhow::anyhow;
-
-use std::sync::Arc;
-use crate::GlobalState;
-use crate::ext::traced_sleep;
-use crate::eth::consensus::append_entry::AppendBlockCommitRequest;
-use crate::eth::consensus::append_entry::AppendBlockCommitResponse;
-use crate::eth::consensus::append_entry::AppendTransactionExecutionsRequest;
-use crate::eth::consensus::append_entry::AppendTransactionExecutionsResponse;
-use crate::eth::consensus::append_entry::StatusCode;
-use crate::ext::SleepReason;
 
 use super::Block;
 use super::Consensus;
 use super::LogEntryData;
 use super::Peer;
+use crate::eth::consensus::append_entry::AppendBlockCommitRequest;
+use crate::eth::consensus::append_entry::AppendBlockCommitResponse;
+use crate::eth::consensus::append_entry::AppendTransactionExecutionsRequest;
+use crate::eth::consensus::append_entry::AppendTransactionExecutionsResponse;
+use crate::eth::consensus::append_entry::StatusCode;
+use crate::ext::traced_sleep;
+use crate::ext::SleepReason;
+use crate::GlobalState;
 
 const RETRY_DELAY: Duration = Duration::from_millis(10);
 
@@ -58,7 +57,7 @@ pub async fn save_and_handle_log_entry(consensus: Arc<Consensus>, log_entry_data
             let peers = consensus.peers.read().await;
             for (_, (peer, _)) in peers.iter() {
                 let mut peer_clone = peer.clone();
-                let _ = append_entry_to_peer(consensus.clone(), &mut peer_clone, &log_entry_data).await;
+                let _ = append_entry_to_peer(Arc::clone(&consensus), &mut peer_clone, &log_entry_data).await;
             }
         }
     }
@@ -130,7 +129,7 @@ pub async fn handle_peer_propagation(mut peer: Peer, consensus: Arc<Consensus>) 
                         peer.match_index,
                         peer.next_index
                     );
-                    match append_entry_to_peer(consensus.clone(), &mut peer, log_entry).await {
+                    match append_entry_to_peer(Arc::clone(&consensus), &mut peer, log_entry).await {
                         Ok(_) => {
                             log_entry_queue.remove(0);
                             tracing::info!("successfully appended block to peer: {:?}", peer.client);
@@ -210,7 +209,7 @@ async fn append_entry_to_peer(consensus: Arc<Consensus>, peer: &mut Peer, entry_
             next_index
         );
 
-        let response = send_append_entry_request(consensus.clone(), peer, current_term, prev_log_index, prev_log_term, &entry_to_send).await?;
+        let response = send_append_entry_request(Arc::clone(&consensus), peer, current_term, prev_log_index, prev_log_term, &entry_to_send).await?;
 
         let (response_status, _response_message, response_match_log_index, response_last_log_index, _response_last_log_term) = match response {
             AppendResponse::BlockCommitResponse(res) => {

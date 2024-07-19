@@ -453,7 +453,7 @@ impl Consensus {
 
                 tokio::time::sleep(interval).await;
 
-                propagation::handle_transaction_executions(consensus.clone()).await;
+                propagation::handle_transaction_executions(Arc::clone(&consensus)).await;
             }
         });
     }
@@ -485,13 +485,13 @@ impl Consensus {
 
                             let transaction = vec![tx.to_append_entry_transaction()];
                             let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
-                            if consensus.clone().broadcast_sender.send(transaction_entry).is_err() {
+                            if Arc::clone(&consensus).broadcast_sender.send(transaction_entry).is_err() {
                                 tracing::debug!("failed to broadcast transaction");
                             }
                         }
                     },
                     Ok(block) = rx_blocks.recv() => {
-                        propagation::handle_block_entry(consensus.clone(), block).await;
+                        propagation::handle_block_entry(Arc::clone(&consensus), block).await;
                     },
                     else => {
                         tokio::task::yield_now().await;
