@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use jsonrpsee::types::error::CALL_EXECUTION_FAILED_CODE;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::error::INVALID_PARAMS_CODE;
@@ -14,38 +12,72 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::ext::to_json_string;
-use crate::infra::metrics::MetricLabelValue;
 
-#[derive(Debug, strum::Display, strum::EnumMessage)]
+#[derive(Debug, thiserror::Error)]
 pub enum StratusError {
     // RPC
+    #[error("Block filter does not point to a valid block.")]
     RpcBlockFilterInvalid { filter: BlockFilter },
+
+    #[error("Denied because will fetch data from {actual} blocks, but the max allowed is {max}.")]
     RpcBlockRangeInvalid { actual: u64, max: u64 },
+
+    #[error("Denied because client did not identify itself.")]
     RpcClientMissing,
+
+    #[error("Failed to decode {rust_type} parameter.")]
     RpcParameterInvalid { rust_type: &'static str, decode_error: String },
+
+    #[error("Expected {rust_type} parameter, but received nothing.")]
     RpcParameterMissing { rust_type: &'static str },
+
+    #[error("Invalid subscription event: {event}")]
     RpcSubscriptionInvalid { event: String },
+
+    #[error("Denied because reached maximum subscription limit of {max}.")]
     RpcSubscriptionLimit { max: u32 },
+
+    #[error("Transaction processing is temporarily disabled.")]
     RpcTransactionDisabled,
+
+    #[error("Failed to decode transaction RLP data.")]
     RpcTransactionInvalid { decode_error: String },
 
     // Transaction
+    #[error("Transaction execution conflicts: {0:?}.")]
     TransactionConflict(Box<ExecutionConflicts>),
+
+    #[error("Failed to executed transaction in EVM: {0:?}.")]
     TransactionFailed(EVMError<anyhow::Error>), // split this in multiple errors
+
+    #[error("Failed to forward transaction to leader node.")]
     TransactionForwardToLeaderFailed,
+
+    #[error("Transaction reverted during execution.")]
     TransactionReverted { output: Bytes },
 
     // Storage
+    #[error("Block conflict: {number} already exists in the permanent storage.")]
     StorageBlockConflict { number: BlockNumber },
+
+    #[error("Mined number conflict between new block number ({new}) and mined block number ({mined}).")]
     StorageMinedNumberConflict { new: BlockNumber, mined: BlockNumber },
+
+    #[error("Pending number conflict between new block number ({new}) and pending block number ({pending}).")]
     StoragePendingNumberConflict { new: BlockNumber, pending: BlockNumber },
 
     // Unexpected
-    UnexpectedChannelRead { channel: &'static str },
+    #[error("Unexpected channel {channel} closed.")]
+    UnexpectedChannelClosed { channel: &'static str },
+
+    #[error("Unexpected error: {0:?}.")]
     Unexpected(anyhow::Error),
 
     // Stratus state
+    #[error("Stratus is not ready to start servicing requests.")]
     StratusNotReady,
+
+    #[error("Stratus is shutting down.")]
     StratusShutdown,
 }
 
@@ -81,7 +113,7 @@ impl StratusError {
 
             // Unexpected
             Self::Unexpected(_) => INTERNAL_ERROR_CODE,
-            Self::UnexpectedChannelRead { .. } => INTERNAL_ERROR_CODE,
+            Self::UnexpectedChannelClosed { .. } => INTERNAL_ERROR_CODE,
 
             // Stratus state
             Self::StratusNotReady => SERVER_IS_BUSY_CODE,
@@ -91,43 +123,7 @@ impl StratusError {
 
     /// Error message to be used in JSON-RPC response.
     pub fn rpc_message(&self) -> String {
-        match self {
-            // RPC Request
-            Self::RpcClientMissing => "Denied because client did not identify itself.".to_owned(),
-
-            // RPC Params
-            Self::RpcBlockFilterInvalid { .. } => "Block filter does not point to a valid block.".into(),
-            Self::RpcBlockRangeInvalid { actual, max } => format!("Denied because will fetch data from {actual} blocks, but the max allowed is {max}."),
-            Self::RpcParameterMissing { rust_type } => format!("Expected {rust_type} parameter, but received nothing."),
-            Self::RpcParameterInvalid { rust_type, .. } => format!("Failed to decode {rust_type} parameter."),
-            Self::RpcSubscriptionInvalid { event } => format!("Invalid subscription event: {event}"),
-            Self::RpcSubscriptionLimit { max: max_limit } => format!("Client has reached the maximum subscription limit of {max_limit}."),
-            Self::RpcTransactionInvalid { .. } => "Failed to decode transaction RLP data.".into(),
-
-            // Execution
-            Self::RpcTransactionDisabled => "Transaction processing is temporarily disabled.".into(),
-            Self::TransactionReverted { .. } => "Transaction reverted during execution.".into(),
-            Self::TransactionForwardToLeaderFailed => "Failed to forward transaction to leader node.".into(),
-            Self::TransactionConflict(conflicts) => format!("Execution conflicts: {conflicts:?}"),
-
-            // EVM
-            Self::TransactionFailed(_) => "Failed to executed transaction in EVM.".into(),
-
-            // Storage
-            Self::StorageBlockConflict { number } => format!("Block conflict: {number} already exists in the permanent storage."),
-            Self::StorageMinedNumberConflict { new, mined } =>
-                format!("Mined number conflict between new block number ({new}) and mined block number ({mined})."),
-            Self::StoragePendingNumberConflict { new, pending } =>
-                format!("Pending number conflict between new block number ({new}) and pending block number ({pending})."),
-
-            // Unexpected
-            Self::Unexpected(_) => "Unexpected error.".into(),
-            Self::UnexpectedChannelRead { .. } => "Unexpected channel error.".into(),
-
-            // Stratus state
-            Self::StratusNotReady => "Stratus is not ready to start servicing requests.".into(),
-            Self::StratusShutdown => "Stratus is shutting down.".into(),
-        }
+        self.to_string()
     }
 
     /// Error additional data to be used in JSON-RPC response.
@@ -149,8 +145,6 @@ impl StratusError {
     }
 }
 
-impl Error for StratusError {}
-
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
@@ -167,11 +161,5 @@ impl From<anyhow::Error> for StratusError {
 impl From<StratusError> for ErrorObjectOwned {
     fn from(value: StratusError) -> Self {
         Self::owned(value.rpc_code(), value.rpc_message(), value.rpc_data())
-    }
-}
-
-impl From<&StratusError> for MetricLabelValue {
-    fn from(value: &StratusError) -> Self {
-        Self::Some(value.to_string())
     }
 }
