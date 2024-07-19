@@ -13,7 +13,7 @@ use crate::eth::consensus::append_entry::append_entry_service_server::AppendEntr
 use crate::eth::consensus::append_entry::AppendBlockCommitRequest;
 use crate::eth::consensus::append_entry::AppendTransactionExecutionsRequest;
 use crate::eth::consensus::append_entry::StatusCode;
-use crate::eth::consensus::AppendEntryServiceImpl;
+use crate::eth::consensus::server::AppendEntryServiceImpl;
 use crate::eth::consensus::Role;
 use crate::eth::consensus::TransactionExecutionEntry;
 use crate::eth::primitives::Address;

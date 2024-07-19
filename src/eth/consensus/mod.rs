@@ -20,15 +20,14 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use rand::Rng;
-use server::AppendEntryServiceImpl;
 use tokio::sync::broadcast;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tonic::transport::Server;
 use tonic::Request;
 
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -43,14 +42,12 @@ pub mod append_entry {
 #[allow(unused_imports)]
 use append_entry::append_entry_service_client::AppendEntryServiceClient;
 use append_entry::append_entry_service_server::AppendEntryService;
-use append_entry::append_entry_service_server::AppendEntryServiceServer;
 use append_entry::RequestVoteRequest;
 use append_entry::TransactionExecutionEntry;
 
 use self::append_log_entries_storage::AppendLogEntriesStorage;
 use self::log_entry::LogEntryData;
 use super::primitives::Bytes;
-use super::primitives::TransactionExecution;
 use crate::config::RunWithImporterConfig;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::Block;
@@ -216,9 +213,9 @@ impl Consensus {
             //TODO replace this for a synchronous call
             let rx_pending_txs: broadcast::Receiver<TransactionExecution> = miner.notifier_pending_txs.subscribe();
             let rx_blocks: broadcast::Receiver<Block> = miner.notifier_blocks.subscribe();
-            Self::initialize_transaction_execution_queue(Arc::clone(&consensus));
-            Self::initialize_append_entries_channel(Arc::clone(&consensus), rx_pending_txs, rx_blocks);
-            Self::initialize_server(Arc::clone(&consensus));
+            propagation::initialize_transaction_execution_queue(Arc::clone(&consensus));
+            propagation::initialize_append_entries_channel(Arc::clone(&consensus), rx_pending_txs, rx_blocks);
+            server::initialize_server(Arc::clone(&consensus));
         }
         Self::initialize_heartbeat_timer(Arc::clone(&consensus));
 
@@ -434,95 +431,6 @@ impl Consensus {
                     unreachable!("this infinite future doesn't end");
                 },
             };
-        });
-    }
-
-    #[allow(dead_code)]
-    fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
-        // XXX FIXME: deal with the scenario where a transactionHash arrives after the block;
-        // in this case, before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
-
-        const TASK_NAME: &str = "consensus::transaction_execution_queue";
-
-        spawn_named(TASK_NAME, async move {
-            let interval = Duration::from_millis(40);
-            loop {
-                if GlobalState::is_shutdown_warn(TASK_NAME) {
-                    return;
-                };
-
-                tokio::time::sleep(interval).await;
-
-                propagation::handle_transaction_executions(Arc::clone(&consensus)).await;
-            }
-        });
-    }
-
-    /// This channel broadcasts blocks and transactons executions to followers.
-    /// Each follower has a queue of blocks and transactions to be sent at handle_peer_propagation.
-    //TODO this broadcast needs to wait for majority of followers to confirm the log before sending the next one
-    #[allow(dead_code)]
-    fn initialize_append_entries_channel(
-        consensus: Arc<Consensus>,
-        mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
-        mut rx_blocks: broadcast::Receiver<Block>,
-    ) {
-        const TASK_NAME: &str = "consensus::block_and_executions_sender";
-        spawn_named(TASK_NAME, async move {
-            loop {
-                tokio::select! {
-                    _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
-                        return;
-                    },
-                    Ok(tx) = rx_pending_txs.recv() => {
-                        tracing::debug!("Attempting to receive transaction execution");
-                        if Self::is_leader() {
-                            tracing::info!(tx_hash = %tx.hash(), "received transaction execution to send to followers");
-                            if tx.is_local() {
-                                tracing::debug!(tx_hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
-                                continue;
-                            }
-
-                            let transaction = vec![tx.to_append_entry_transaction()];
-                            let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
-                            if Arc::clone(&consensus).broadcast_sender.send(transaction_entry).is_err() {
-                                tracing::debug!("failed to broadcast transaction");
-                            }
-                        }
-                    },
-                    Ok(block) = rx_blocks.recv() => {
-                        propagation::handle_block_entry(Arc::clone(&consensus), block).await;
-                    },
-                    else => {
-                        tokio::task::yield_now().await;
-                    },
-                }
-            }
-        });
-    }
-
-    #[allow(dead_code)]
-    fn initialize_server(consensus: Arc<Consensus>) {
-        const TASK_NAME: &str = "consensus::server";
-        spawn_named(TASK_NAME, async move {
-            tracing::info!("Starting append entry service at address: {}", consensus.grpc_address);
-            let addr = consensus.grpc_address;
-
-            let append_entry_service = AppendEntryServiceImpl {
-                consensus: Mutex::new(consensus),
-            };
-
-            let shutdown = GlobalState::wait_shutdown_warn(TASK_NAME);
-
-            let server = Server::builder()
-                .add_service(AppendEntryServiceServer::new(append_entry_service))
-                .serve_with_shutdown(addr, shutdown)
-                .await;
-
-            if let Err(e) = server {
-                let message = GlobalState::shutdown_from("consensus", &format!("failed to create server at {}", addr));
-                tracing::error!(reason = ?e, %message);
-            }
         });
     }
 
