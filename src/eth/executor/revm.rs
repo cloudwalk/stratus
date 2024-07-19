@@ -149,7 +149,7 @@ impl Evm for Revm {
             Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
-                Err(StratusError::Evm(e))
+                Err(StratusError::TransactionFailed(e))
             }
         };
 

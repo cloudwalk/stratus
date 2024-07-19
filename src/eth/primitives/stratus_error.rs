@@ -18,35 +18,30 @@ use crate::infra::metrics::MetricLabelValue;
 
 #[derive(Debug, strum::Display, strum::EnumMessage)]
 pub enum StratusError {
-    // Request
-    ClientMissing,
+    // RPC
+    RpcBlockFilterInvalid { filter: BlockFilter },
+    RpcBlockRangeInvalid { actual: u64, max: u64 },
+    RpcClientMissing,
+    RpcParameterInvalid { rust_type: &'static str, decode_error: String },
+    RpcParameterMissing { rust_type: &'static str },
+    RpcSubscriptionInvalid { event: String },
+    RpcSubscriptionLimit { max: u32 },
+    RpcTransactionDisabled,
+    RpcTransactionInvalid { decode_error: String },
 
-    // Params
-    BlockFilterInvalid { filter: BlockFilter },
-    BlockRangeInvalid { actual: u64, max: u64 },
-    ParameterMissing { rust_type: &'static str },
-    ParameterInvalid { rust_type: &'static str, decode_error: String },
-    SubscriptionInvalid { event: String },
-    SubscriptionLimit { max_limit: String },
-    TransactionInvalidRlp { decode_error: String },
-
-    // Execution
-    TransactionDisabled,
-    TransactionReverted { output: Bytes },
-    TransactionForwardFailed,
+    // Transaction
     TransactionConflict(Box<ExecutionConflicts>),
-
-    // EVM
-    // TODO: remove this catch-all and identify specific errors
-    Evm(EVMError<anyhow::Error>),
+    TransactionFailed(EVMError<anyhow::Error>), // split this in multiple errors
+    TransactionForwardToLeaderFailed,
+    TransactionReverted { output: Bytes },
 
     // Storage
-    BlockConflict { number: BlockNumber },
-    MinedNumberConflict { new: BlockNumber, mined: BlockNumber },
-    PendingNumberConflict { new: BlockNumber, pending: BlockNumber },
+    StorageBlockConflict { number: BlockNumber },
+    StorageMinedNumberConflict { new: BlockNumber, mined: BlockNumber },
+    StoragePendingNumberConflict { new: BlockNumber, pending: BlockNumber },
 
     // Unexpected
-    UnexpectedChannelRead { name: &'static str },
+    UnexpectedChannelRead { channel: &'static str },
     Unexpected(anyhow::Error),
 
     // Stratus state
@@ -59,30 +54,30 @@ impl StratusError {
     pub fn rpc_code(&self) -> i32 {
         match self {
             // RPC Request
-            Self::ClientMissing => INVALID_REQUEST_CODE,
+            Self::RpcClientMissing => INVALID_REQUEST_CODE,
 
             // RPC Params
-            Self::BlockFilterInvalid { .. } => INVALID_PARAMS_CODE,
-            Self::BlockRangeInvalid { .. } => INVALID_PARAMS_CODE,
-            Self::ParameterInvalid { .. } => INVALID_PARAMS_CODE,
-            Self::ParameterMissing { .. } => INVALID_PARAMS_CODE,
-            Self::SubscriptionInvalid { .. } => INVALID_PARAMS_CODE,
-            Self::SubscriptionLimit { .. } => TOO_MANY_SUBSCRIPTIONS_CODE,
-            Self::TransactionInvalidRlp { .. } => INVALID_PARAMS_CODE,
+            Self::RpcBlockFilterInvalid { .. } => INVALID_PARAMS_CODE,
+            Self::RpcBlockRangeInvalid { .. } => INVALID_PARAMS_CODE,
+            Self::RpcParameterInvalid { .. } => INVALID_PARAMS_CODE,
+            Self::RpcParameterMissing { .. } => INVALID_PARAMS_CODE,
+            Self::RpcSubscriptionInvalid { .. } => INVALID_PARAMS_CODE,
+            Self::RpcSubscriptionLimit { .. } => TOO_MANY_SUBSCRIPTIONS_CODE,
+            Self::RpcTransactionInvalid { .. } => INVALID_PARAMS_CODE,
 
             // Execution
-            Self::TransactionDisabled => INTERNAL_ERROR_CODE,
-            Self::TransactionForwardFailed => INTERNAL_ERROR_CODE,
+            Self::RpcTransactionDisabled => INTERNAL_ERROR_CODE,
+            Self::TransactionForwardToLeaderFailed => INTERNAL_ERROR_CODE,
             Self::TransactionReverted { .. } => CALL_EXECUTION_FAILED_CODE,
             Self::TransactionConflict(_) => INTERNAL_ERROR_CODE,
 
             // EVM
-            Self::Evm(_) => INTERNAL_ERROR_CODE,
+            Self::TransactionFailed(_) => INTERNAL_ERROR_CODE,
 
             // Storage
-            Self::BlockConflict { .. } => INTERNAL_ERROR_CODE,
-            Self::MinedNumberConflict { .. } => INTERNAL_ERROR_CODE,
-            Self::PendingNumberConflict { .. } => INTERNAL_ERROR_CODE,
+            Self::StorageBlockConflict { .. } => INTERNAL_ERROR_CODE,
+            Self::StorageMinedNumberConflict { .. } => INTERNAL_ERROR_CODE,
+            Self::StoragePendingNumberConflict { .. } => INTERNAL_ERROR_CODE,
 
             // Unexpected
             Self::Unexpected(_) => INTERNAL_ERROR_CODE,
@@ -98,30 +93,31 @@ impl StratusError {
     pub fn rpc_message(&self) -> String {
         match self {
             // RPC Request
-            Self::ClientMissing => "Denied because client did not identify itself.".to_owned(),
+            Self::RpcClientMissing => "Denied because client did not identify itself.".to_owned(),
 
             // RPC Params
-            Self::BlockFilterInvalid { .. } => "Block filter does not point to a valid block.".into(),
-            Self::BlockRangeInvalid { actual, max } => format!("Denied because will fetch data from {actual} blocks, but the max allowed is {max}."),
-            Self::ParameterMissing { rust_type } => format!("Expected {rust_type} parameter, but received nothing."),
-            Self::ParameterInvalid { rust_type, .. } => format!("Failed to decode {rust_type} parameter."),
-            Self::SubscriptionInvalid { event } => format!("Invalid subscription event: {event}"),
-            Self::SubscriptionLimit { max_limit } => format!("Client has reached the maximum subscription limit of {max_limit}."),
-            Self::TransactionInvalidRlp { .. } => "Failed to decode transaction RLP data.".into(),
+            Self::RpcBlockFilterInvalid { .. } => "Block filter does not point to a valid block.".into(),
+            Self::RpcBlockRangeInvalid { actual, max } => format!("Denied because will fetch data from {actual} blocks, but the max allowed is {max}."),
+            Self::RpcParameterMissing { rust_type } => format!("Expected {rust_type} parameter, but received nothing."),
+            Self::RpcParameterInvalid { rust_type, .. } => format!("Failed to decode {rust_type} parameter."),
+            Self::RpcSubscriptionInvalid { event } => format!("Invalid subscription event: {event}"),
+            Self::RpcSubscriptionLimit { max: max_limit } => format!("Client has reached the maximum subscription limit of {max_limit}."),
+            Self::RpcTransactionInvalid { .. } => "Failed to decode transaction RLP data.".into(),
 
             // Execution
-            Self::TransactionDisabled => "Transaction processing is temporarily disabled.".into(),
+            Self::RpcTransactionDisabled => "Transaction processing is temporarily disabled.".into(),
             Self::TransactionReverted { .. } => "Transaction reverted during execution.".into(),
-            Self::TransactionForwardFailed => "Failed to forward transaction to leader node.".into(),
+            Self::TransactionForwardToLeaderFailed => "Failed to forward transaction to leader node.".into(),
             Self::TransactionConflict(conflicts) => format!("Execution conflicts: {conflicts:?}"),
 
             // EVM
-            Self::Evm(_) => "Failed to executed transaction in EVM.".into(),
+            Self::TransactionFailed(_) => "Failed to executed transaction in EVM.".into(),
 
             // Storage
-            Self::BlockConflict { number } => format!("Block conflict: {number} already exists in the permanent storage."),
-            Self::MinedNumberConflict { new, mined } => format!("Mined number conflict between new block number ({new}) and mined block number ({mined})."),
-            Self::PendingNumberConflict { new, pending } =>
+            Self::StorageBlockConflict { number } => format!("Block conflict: {number} already exists in the permanent storage."),
+            Self::StorageMinedNumberConflict { new, mined } =>
+                format!("Mined number conflict between new block number ({new}) and mined block number ({mined})."),
+            Self::StoragePendingNumberConflict { new, pending } =>
                 format!("Pending number conflict between new block number ({new}) and pending block number ({pending})."),
 
             // Unexpected
@@ -138,15 +134,13 @@ impl StratusError {
     pub fn rpc_data(&self) -> Option<String> {
         match self {
             // RPC
-            Self::BlockFilterInvalid { filter } => Some(to_json_string(filter)),
-            Self::ParameterInvalid { decode_error, .. } => Some(decode_error.to_string()),
+            Self::RpcBlockFilterInvalid { filter } => Some(to_json_string(filter)),
+            Self::RpcParameterInvalid { decode_error, .. } => Some(decode_error.to_string()),
 
             // Transaction
-            Self::TransactionInvalidRlp { decode_error } => Some(decode_error.to_string()),
+            Self::RpcTransactionInvalid { decode_error } => Some(decode_error.to_string()),
+            Self::TransactionFailed(e) => Some(e.to_string()),
             Self::TransactionReverted { output } => Some(const_hex::encode_prefixed(output)),
-
-            // EVM
-            Self::Evm(e) => Some(e.to_string()),
 
             // Unexpected
             Self::Unexpected(error) => Some(error.to_string()),

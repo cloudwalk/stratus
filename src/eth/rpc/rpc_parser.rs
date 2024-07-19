@@ -35,10 +35,10 @@ where
 {
     match params.optional_next::<T>() {
         Ok(Some(value)) => Ok((params, value)),
-        Ok(None) => Err(StratusError::ParameterMissing {
+        Ok(None) => Err(StratusError::RpcParameterMissing {
             rust_type: type_basename::<T>(),
         }),
-        Err(e) => Err(StratusError::ParameterInvalid {
+        Err(e) => Err(StratusError::RpcParameterInvalid {
             rust_type: type_basename::<T>(),
             decode_error: e.data().map(|x| x.to_string()).unwrap_or_default(),
         }),
@@ -52,7 +52,7 @@ where
 {
     match next_rpc_param(params) {
         Ok((params, value)) => Ok((params, value)),
-        Err(StratusError::ParameterMissing { .. }) => Ok((params, T::default())),
+        Err(StratusError::RpcParameterMissing { .. }) => Ok((params, T::default())),
         Err(e) => Err(e),
     }
 }
@@ -61,6 +61,6 @@ where
 pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, StratusError> {
     match rlp::decode::<T>(value) {
         Ok(trx) => Ok(trx),
-        Err(e) => Err(StratusError::TransactionInvalidRlp { decode_error: e.to_string() }),
+        Err(e) => Err(StratusError::RpcTransactionInvalid { decode_error: e.to_string() }),
     }
 }

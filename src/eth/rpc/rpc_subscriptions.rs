@@ -349,9 +349,7 @@ impl RpcSubscriptionsConnected {
         tracing::info!(%pending_txs, %new_heads, %logs, "current client subscriptions");
 
         if pending_txs + new_heads + logs >= max_subscriptions as usize {
-            return Err(StratusError::SubscriptionLimit {
-                max_limit: max_subscriptions.to_string(),
-            });
+            return Err(StratusError::RpcSubscriptionLimit { max: max_subscriptions });
         }
 
         Ok(())
