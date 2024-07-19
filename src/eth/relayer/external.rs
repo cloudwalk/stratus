@@ -721,7 +721,7 @@ impl ExternalRelayerClient {
         let mut remaining_tries = 3;
 
         match *self.conn_lost.read().await {
-            false =>
+            false => {
                 if let Some(pool) = &self.pool {
                     while remaining_tries > 0 {
                         if let Err(e) = sqlx::query!(
@@ -743,7 +743,8 @@ impl ExternalRelayerClient {
                             break;
                         }
                     }
-                },
+                }
+            }
             true => Self::save_block_to_file(block_number, &block_json)?,
         }
 
