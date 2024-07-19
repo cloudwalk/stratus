@@ -22,10 +22,10 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
-use crate::eth::primitives::StoragePointInTime;
+use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::StorageError;
+use crate::eth::storage::StoragePointInTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
@@ -43,11 +43,11 @@ use crate::GlobalState;
 pub struct EvmTask {
     pub span: Span,
     pub input: EvmInput,
-    pub response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>,
+    pub response_tx: oneshot::Sender<Result<EvmExecutionResult, StratusError>>,
 }
 
 impl EvmTask {
-    pub fn new(input: EvmInput, response_tx: oneshot::Sender<anyhow::Result<EvmExecutionResult>>) -> Self {
+    pub fn new(input: EvmInput, response_tx: oneshot::Sender<Result<EvmExecutionResult, StratusError>>) -> Self {
         Self {
             span: Span::current(),
             input,
@@ -139,8 +139,8 @@ impl Evms {
     }
 
     /// Executes a transaction in the specified route.
-    fn execute(&self, evm_input: EvmInput, route: EvmRoute) -> anyhow::Result<EvmExecutionResult> {
-        let (execution_tx, execution_rx) = oneshot::channel::<anyhow::Result<EvmExecutionResult>>();
+    fn execute(&self, evm_input: EvmInput, route: EvmRoute) -> Result<EvmExecutionResult, StratusError> {
+        let (execution_tx, execution_rx) = oneshot::channel::<Result<EvmExecutionResult, StratusError>>();
 
         let task = EvmTask::new(evm_input, execution_tx);
         let _ = match route {
@@ -151,7 +151,10 @@ impl Evms {
             EvmRoute::CallPast => self.call_past.send(task),
         };
 
-        execution_rx.recv()?
+        match execution_rx.recv() {
+            Ok(result) => result,
+            Err(_) => Err(StratusError::UnexpectedChannelClosed { channel: "evm" }),
+        }
     }
 }
 
@@ -288,7 +291,7 @@ impl Executor {
                 let json_tx = to_json_string(&tx);
                 let json_receipt = to_json_string(&receipt);
                 tracing::error!(reason = ?e, block_number = %block.number(), tx_hash = %tx.hash(), %json_tx, %json_receipt, "failed to reexecute external transaction");
-                return Err(e);
+                return Err(e.into());
             }
         };
 
@@ -342,7 +345,7 @@ impl Executor {
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
                     Err(e) =>
-                        if let Some(StorageError::Conflict(_)) = e.downcast_ref::<StorageError>() {
+                        if let Some(StratusError::TransactionConflict(_)) = e.downcast_ref::<StratusError>() {
                             self.execute_local_transaction_attempts(tx_input, EvmRoute::Serial, INFINITE_ATTEMPTS)
                         } else {
                             Err(e)
@@ -415,7 +418,7 @@ impl Executor {
 
             let evm_result = match self.evms.execute(evm_input, evm_route) {
                 Ok(evm_result) => evm_result,
-                Err(e) => return Err(e),
+                Err(e) => return Err(e.into()),
             };
 
             // save execution to temporary storage
@@ -426,14 +429,14 @@ impl Executor {
                     return Ok(tx_execution);
                 }
                 Err(e) =>
-                    if let Some(StorageError::Conflict(conflicts)) = e.downcast_ref::<StorageError>() {
+                    if let StratusError::TransactionConflict(ref conflicts) = e {
                         tracing::warn!(%attempt, ?conflicts, "temporary storage conflict detected when saving execution");
                         if attempt >= max_attempts {
-                            return Err(e);
+                            return Err(e.into());
                         }
                         continue;
                     } else {
-                        return Err(e);
+                        return Err(e.into());
                     },
             }
         }

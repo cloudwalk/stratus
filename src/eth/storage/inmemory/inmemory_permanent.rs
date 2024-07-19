@@ -28,11 +28,11 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotSample;
-use crate::eth::primitives::StoragePointInTime;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::StoragePointInTime;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentStorageState {

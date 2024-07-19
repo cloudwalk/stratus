@@ -113,7 +113,7 @@ check_liveness() {
     local port=$1
     curl -s http://0.0.0.0:$port \
         --header "content-type: application/json" \
-        --data '{"jsonrpc":"2.0","method":"stratus_liveness","params":[],"id":1}' | jq '.result'
+        --data '{"jsonrpc":"2.0","method":"stratus_health","params":[],"id":1}' | jq '.result'
 }
 
 # Function to check if an instance is the leader

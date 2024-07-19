@@ -5,8 +5,8 @@ use jsonrpsee::Extensions;
 use rlp::Decodable;
 use tracing::Span;
 
+use crate::eth::primitives::StratusError;
 use crate::eth::rpc::rpc_client_app::RpcClientApp;
-use crate::eth::rpc::RpcError;
 use crate::ext::type_basename;
 
 /// Extensions for jsonrpsee Extensions.
@@ -29,16 +29,16 @@ impl RpcExtensionsExt for Extensions {
 }
 
 /// Extracts the next RPC parameter. Fails if parameter not present.
-pub fn next_rpc_param<'a, T>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), RpcError>
+pub fn next_rpc_param<'a, T>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), StratusError>
 where
     T: serde::Deserialize<'a>,
 {
     match params.optional_next::<T>() {
         Ok(Some(value)) => Ok((params, value)),
-        Ok(None) => Err(RpcError::ParameterMissing {
+        Ok(None) => Err(StratusError::RpcParameterMissing {
             rust_type: type_basename::<T>(),
         }),
-        Err(e) => Err(RpcError::ParameterInvalid {
+        Err(e) => Err(StratusError::RpcParameterInvalid {
             rust_type: type_basename::<T>(),
             decode_error: e.data().map(|x| x.to_string()).unwrap_or_default(),
         }),
@@ -46,21 +46,21 @@ where
 }
 
 /// Extract the next RPC parameter. Assumes default value if not present.
-pub fn next_rpc_param_or_default<'a, T>(params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), RpcError>
+pub fn next_rpc_param_or_default<'a, T>(params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), StratusError>
 where
     T: serde::Deserialize<'a> + Default,
 {
     match next_rpc_param(params) {
         Ok((params, value)) => Ok((params, value)),
-        Err(RpcError::ParameterMissing { .. }) => Ok((params, T::default())),
+        Err(StratusError::RpcParameterMissing { .. }) => Ok((params, T::default())),
         Err(e) => Err(e),
     }
 }
 
 /// Decode an RPC parameter encoded in RLP.
-pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, RpcError> {
+pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, StratusError> {
     match rlp::decode::<T>(value) {
         Ok(trx) => Ok(trx),
-        Err(e) => Err(RpcError::TransactionInvalidRlp { decode_error: e.to_string() }),
+        Err(e) => Err(StratusError::RpcTransactionInvalid { decode_error: e.to_string() }),
     }
 }

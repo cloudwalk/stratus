@@ -11,9 +11,13 @@ lazy_static! {
     static ref SIGNATURES: HashSet<&'static str> = [
         "PixCashier",
         "PixCashierv3",
+        "PixCashierv4",
+        "PixCashierv4_root",
         "CardPaymentProcessor",
         "CardPaymentProcessorv2",
         "CompoundAgent",
+        "BRLCToken::mint(address,uint256)",
+        "BRLCToken::burn(uint256)",
         // "BRLCToken::freeze(address,uint256)",
         // "BRLCToken::transferFrozen(address,address,uint256)",
         // "BRLCToken::restrictionIncrease(address,bytes32,uint256)",
