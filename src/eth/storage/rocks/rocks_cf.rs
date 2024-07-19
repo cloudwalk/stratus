@@ -6,6 +6,7 @@ use std::iter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use anyhow::Context;
 use anyhow::Result;
 use rocksdb::BoundColumnFamily;
 use rocksdb::DBIteratorWithThreadMode;
@@ -101,14 +102,15 @@ where
         Ok(())
     }
 
-    pub fn get(&self, key: &K) -> Option<V> {
-        let Ok(serialized_key) = bincode::serialize(key) else { return None };
+    pub fn get(&self, key: &K) -> Result<Option<V>> {
         let cf = self.handle();
-        let Ok(Some(value_bytes)) = self.db.get_cf(&cf, serialized_key) else {
-            return None;
-        };
 
-        bincode::deserialize(&value_bytes).ok()
+        let serialized_key = bincode::serialize(key).with_context(|| format!("failed to serialize key in DB get query for CF '{}'", self.column_family))?;
+
+        let Some(value_bytes) = self.db.get_cf(&cf, serialized_key)? else {
+            return Ok(None);
+        };
+        bincode::deserialize(&value_bytes).with_context(|| format!("failed to deserialize value in DB get query for CF '{}'", self.column_family))
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
@@ -177,18 +179,20 @@ where
     }
 
     // Custom method that combines entry and or_insert_with from a HashMap
-    pub fn get_or_insert_with<F>(&self, key: K, default: F) -> V
+    pub fn get_or_insert_with<F>(&self, key: K, default: F) -> Result<V>
     where
         F: FnOnce() -> V,
     {
-        match self.get(&key) {
+        let value = self.get(&key)?;
+
+        Ok(match value {
             Some(value) => value,
             None => {
                 let new_value = default();
                 self.insert(key, new_value.clone());
                 new_value
             }
-        }
+        })
     }
 
     pub fn iter_start(&self) -> RocksDBIterator<K, V> {

@@ -9,6 +9,7 @@ use std::time::Instant;
 
 use anyhow::anyhow;
 use anyhow::Context;
+use anyhow::Result;
 use lazy_static::lazy_static;
 use rocksdb::Direction;
 use rocksdb::Options;
@@ -220,7 +221,12 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    fn prepare_batch_state_update_with_execution_changes(&self, changes: &[ExecutionAccountChanges], block_number: BlockNumber, batch: &mut WriteBatch) {
+    fn prepare_batch_state_update_with_execution_changes(
+        &self,
+        changes: &[ExecutionAccountChanges],
+        block_number: BlockNumber,
+        batch: &mut WriteBatch,
+    ) -> Result<()> {
         let accounts = self.accounts.clone();
         let accounts_history = self.accounts_history.clone();
         let account_slots = self.account_slots.clone();
@@ -231,7 +237,7 @@ impl RocksStorageState {
 
         for change in changes {
             let address: AddressRocksdb = change.address.into();
-            let mut account_info_entry = accounts.get_or_insert_with(address, AccountRocksdb::default);
+            let mut account_info_entry = accounts.get_or_insert_with(address, AccountRocksdb::default)?;
 
             if let Some(nonce) = change.nonce.clone().take_modified() {
                 account_info_entry.nonce = nonce.into();
@@ -265,23 +271,25 @@ impl RocksStorageState {
         }
         account_slots.prepare_batch_insertion(slot_changes, batch);
         account_slots_history.prepare_batch_insertion(slot_history_changes, batch);
+
+        Ok(())
     }
 
     pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        match self.transactions.get(&(*tx_hash).into()) {
-            Some(block_number) => match self.blocks_by_number.get(&block_number) {
-                Some(block) => {
-                    tracing::trace!(%tx_hash, "transaction found");
-                    match block.transactions.into_iter().find(|tx| &Hash::from(tx.input.hash) == tx_hash) {
-                        Some(tx) => Ok(Some(tx.into())),
-                        None => log_and_err!("transaction was not found in block")
-                            .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
-                    }
-                }
-                None => log_and_err!("the block that the transaction was supposed to be in was not found")
-                    .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
-            },
-            None => Ok(None),
+        let Some(block_number) = self.transactions.get(&(*tx_hash).into())? else {
+            return Ok(None);
+        };
+
+        let Some(block) = self.blocks_by_number.get(&block_number)? else {
+            return log_and_err!("the block that the transaction was supposed to be in was not found")
+                .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash));
+        };
+
+        tracing::trace!(%tx_hash, "transaction found");
+        match block.transactions.into_iter().find(|tx| &Hash::from(tx.input.hash) == tx_hash) {
+            Some(tx) => Ok(Some(tx.into())),
+            None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
+                .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
         }
     }
 
@@ -305,18 +313,25 @@ impl RocksStorageState {
             .collect())
     }
 
-    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
+    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Option<Slot>> {
         if address.is_coinbase() {
             //XXX temporary, we will reload the database later without it
-            return None;
+            return Ok(None);
         }
 
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending =>
-                self.account_slots.get(&((*address).into(), (*index).into())).map(|account_slot_value| Slot {
+            StoragePointInTime::Mined | StoragePointInTime::Pending => {
+                let query_params = ((*address).into(), (*index).into());
+
+                let Some(account_slot_value) = self.account_slots.get(&query_params)? else {
+                    return Ok(None);
+                };
+
+                Ok(Some(Slot {
                     index: *index,
-                    value: account_slot_value.clone().into(),
-                }),
+                    value: account_slot_value.into(),
+                }))
+            }
             StoragePointInTime::MinedPast(number) => {
                 if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
@@ -324,36 +339,34 @@ impl RocksStorageState {
                     .next()
                 {
                     if rocks_index == (*index).into() && rocks_address == (*address).into() {
-                        return Some(Slot {
+                        return Ok(Some(Slot {
                             index: rocks_index.into(),
                             value: value.into(),
-                        });
+                        }));
                     }
                 }
-                None
+                Ok(None)
             }
         }
     }
 
-    pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Option<Account> {
+    pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Option<Account>> {
         if address.is_coinbase() || address.is_zero() {
             //XXX temporary, we will reload the database later without it
-            return None;
+            return Ok(None);
         }
 
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => match self.accounts.get(&((*address).into())) {
-                Some(inner_account) => {
-                    let account = inner_account.to_account(address);
-                    tracing::trace!(%address, ?account, "account found");
-                    Some(account)
-                }
-
-                None => {
+            StoragePointInTime::Mined | StoragePointInTime::Pending => {
+                let Some(inner_account) = self.accounts.get(&((*address).into()))? else {
                     tracing::trace!(%address, "account not found");
-                    None
-                }
-            },
+                    return Ok(None);
+                };
+
+                let account = inner_account.to_account(address);
+                tracing::trace!(%address, ?account, "account found");
+                Ok(Some(account))
+            }
             StoragePointInTime::MinedPast(block_number) => {
                 let rocks_address: AddressRocksdb = (*address).into();
                 if let Some(((addr, _), account_info)) = self
@@ -362,35 +375,30 @@ impl RocksStorageState {
                     .next()
                 {
                     if addr == (*address).into() {
-                        return Some(account_info.to_account(address));
+                        return Ok(Some(account_info.to_account(address)));
                     }
                 }
-                None
+                Ok(None)
             }
         }
     }
 
-    pub fn read_block(&self, selection: &BlockFilter) -> Option<Block> {
+    pub fn read_block(&self, selection: &BlockFilter) -> Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
         let block = match selection {
-            BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.iter_end().next().map(|(_, block)| block),
-            BlockFilter::Earliest => self.blocks_by_number.iter_start().next().map(|(_, block)| block),
+            BlockFilter::Latest | BlockFilter::Pending => Ok(self.blocks_by_number.iter_end().next().map(|(_, block)| block)),
+            BlockFilter::Earliest => Ok(self.blocks_by_number.iter_start().next().map(|(_, block)| block)),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
             BlockFilter::Hash(block_hash) =>
-                if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into()) {
+                if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
-                    None
+                    Ok(None)
                 },
         };
-        match block {
-            Some(block) => {
-                tracing::trace!(?selection, ?block, "block found");
-                Some(block.into())
-            }
-            None => None,
-        }
+
+        block.map(Option::map_into)
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) {
@@ -438,7 +446,7 @@ impl RocksStorageState {
         let block_by_hash = (block_hash.into(), number.into());
         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch);
 
-        self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch);
+        self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch)?;
 
         self.write_batch(batch).unwrap();
         Ok(())

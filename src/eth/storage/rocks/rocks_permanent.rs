@@ -75,15 +75,19 @@ impl PermanentStorage for RocksPermanentStorage {
     // ------------------------------------------------------------------------
 
     fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        Ok(self.state.read_account(address, point_in_time))
+        self.state.read_account(address, point_in_time)
     }
 
     fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        Ok(self.state.read_slot(address, index, point_in_time))
+        self.state.read_slot(address, index, point_in_time)
     }
 
     fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
-        Ok(self.state.read_block(selection))
+        let block = self.state.read_block(selection);
+        if let Ok(Some(block)) = &block {
+            tracing::trace!(?selection, ?block, "block found");
+        }
+        block
     }
 
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
