@@ -723,7 +723,7 @@ impl ExternalRelayerClient {
                     }
                 },
             true => {
-                let file = File::create(format!("blocks_json/{}", block_number))?;
+                let file = File::create(format!("blocks_json/{}", block_number.as_u64()))?;
                 let mut writer = BufWriter::new(file);
                 serde_json::to_writer(&mut writer, &block_json)?;
                 writer.flush()?;
