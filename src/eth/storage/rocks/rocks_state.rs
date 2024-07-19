@@ -75,7 +75,7 @@ lazy_static! {
     };
 }
 
-/// Helper for creating a `RocksCfRef` with our option presets.
+/// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
 fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> RocksCfRef<K, V>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
@@ -83,12 +83,12 @@ where
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
-    let Some(options) = CF_OPTIONS_MAP.get(column_family) else {
-        panic!("column_family `{column_family}` given to `new_cf_ref` not found in config options map");
+    let Some(_options) = CF_OPTIONS_MAP.get(column_family) else {
+        panic!("matching column_family `{column_family}` given to `new_cf_ref` wasn't found in configuration map");
     };
 
     // NOTE: this doesn't create the CFs in the database, read `RocksCfRef` docs for details
-    RocksCfRef::new(Arc::clone(db), column_family, options.clone())
+    RocksCfRef::new(Arc::clone(db), column_family)
 }
 
 /// State handler for our RocksDB storage, separating "tables" by column families.

@@ -13,7 +13,6 @@ use const_hex::hex;
 use rocksdb::BoundColumnFamily;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
-use rocksdb::Options;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
 use serde::Deserialize;
@@ -35,8 +34,6 @@ use crate::infra::metrics;
 #[derive(Clone)]
 pub struct RocksCfRef<K, V> {
     db: Arc<DB>,
-    // TODO: check if it's possible to gather metrics from a Column Family, if not, remove this
-    _opts: Options,
     column_family: String,
     _marker: PhantomData<(K, V)>,
 }
@@ -47,11 +44,10 @@ where
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     /// Create Column Family reference struct.
-    pub fn new(db: Arc<DB>, column_family: &str, opts: Options) -> Self {
+    pub fn new(db: Arc<DB>, column_family: &str) -> Self {
         let this = Self {
             db,
             column_family: column_family.to_owned(),
-            _opts: opts,
             _marker: PhantomData,
         };
 
