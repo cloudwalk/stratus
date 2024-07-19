@@ -189,10 +189,11 @@ impl ExternalRelayer {
         for mut tx in blocks.into_iter().flat_map(|block| block.transactions).sorted() {
             let should_resign = {
                 tx.input.extract_function().is_some_and(|sig| {
-                    let scope_split = sig.split_once("::");
+                    let scope = sig.split_once("::").map(|(scope, _)| scope);
                     let function_split = sig.split_once('(');
-                    (SIGNATURES.contains(sig.as_ref()) || scope_split.is_some_and(|(scope, _)| SIGNATURES.contains(scope)))
-                        && !function_split.is_some_and(|(function, _)| UNRESIGNABLE_FUNCTIONS.contains(function))
+                    let contract_is_resignable = || SIGNATURES.contains(sig.as_ref()) || scope.is_some_and(|scope| SIGNATURES.contains(scope));
+                    let function_is_not_blocklisted = || !function_split.is_some_and(|(function, _)| UNRESIGNABLE_FUNCTIONS.contains(function));
+                    contract_is_resignable() && function_is_not_blocklisted()
                 })
             };
             if should_resign {
