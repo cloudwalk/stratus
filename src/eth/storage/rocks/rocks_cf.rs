@@ -223,20 +223,6 @@ where
         RocksCfIterator::<K, V>::new(iter, &self.column_family)
     }
 
-    #[allow(dead_code)]
-    pub fn last(&self) -> Option<(K, V)> {
-        let cf = self.handle();
-
-        let mut iter = self.db.iterator_cf(&cf, IteratorMode::End);
-        if let Some(Ok((k, v))) = iter.next() {
-            let key = self.deserialize_key_with_context(&k).unwrap();
-            let value = self.deserialize_value_with_context(&v).unwrap();
-            Some((key, value))
-        } else {
-            None
-        }
-    }
-
     pub fn last_key(&self) -> Option<K> {
         let cf = self.handle();
 
