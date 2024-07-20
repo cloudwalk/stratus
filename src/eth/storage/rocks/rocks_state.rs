@@ -402,12 +402,13 @@ impl RocksStorageState {
         block.map(Option::map_into)
     }
 
-    pub fn save_accounts(&self, accounts: Vec<Account>) {
+    pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         for account in accounts {
             let (key, value) = account.into();
-            self.accounts.insert(key, value.clone());
-            self.accounts_history.insert((key, 0.into()), value);
+            self.accounts.insert(key, value.clone())?;
+            self.accounts_history.insert((key, 0.into()), value)?;
         }
+        Ok(())
     }
 
     pub fn save_block(&self, block: Block) -> anyhow::Result<()> {

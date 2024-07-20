@@ -30,7 +30,6 @@ use crate::infra::metrics;
 /// Note that creating this struct doesn't write a new CF to the database, instead, CFs are created
 /// when creating/opening the database (via `rocksdb::DB` or a wrapper). This is just a reference
 /// to an already created CF.
-///
 #[derive(Clone)]
 pub struct RocksCfRef<K, V> {
     db: Arc<DB>,
@@ -152,12 +151,18 @@ where
     }
 
     // Mimics the 'insert' functionality of a HashMap
-    pub fn insert(&self, key: K, value: V) {
+    pub fn insert(&self, key: K, value: V) -> Result<()> {
+        self.insert_impl(key, value)
+            .with_context(|| format!("when trying to insert value in CF: '{}'", self.column_family))
+    }
+
+    fn insert_impl(&self, key: K, value: V) -> Result<()> {
         let cf = self.handle();
 
-        let serialized_key = bincode::serialize(&key).unwrap();
-        let serialized_value = bincode::serialize(&value).unwrap();
-        self.db.put_cf(&cf, serialized_key, serialized_value).unwrap();
+        let serialized_key = bincode::serialize(&key)?;
+        let serialized_value = bincode::serialize(&value)?;
+
+        self.db.put_cf(&cf, serialized_key, serialized_value).map_err(Into::into)
     }
 
     pub fn prepare_batch_insertion<I>(&self, changes: I, batch: &mut WriteBatch)
@@ -194,7 +199,7 @@ where
             Some(value) => value,
             None => {
                 let new_value = default();
-                self.insert(key, new_value.clone());
+                self.insert(key, new_value.clone())?;
                 new_value
             }
         })
@@ -302,6 +307,30 @@ where
         if let Some(background_errors) = background_errors {
             metrics::set_rocks_background_errors(background_errors, db_name);
         }
+    }
+
+    // TODO: add input value to error message
+    fn deserialize_key_with_context(&self, key_bytes: &[u8]) -> Result<K> {
+        bincode::deserialize(key_bytes)
+            .with_context(|| format!("failed to deserialize '{}'", hex::encode(key_bytes)))
+            .with_context(|| format!("when deserializing a key of cf '{}'", self.column_family))
+    }
+
+    // TODO: add input value to error message
+    fn deserialize_value_with_context(&self, value_bytes: &[u8]) -> Result<V> {
+        bincode::deserialize(value_bytes)
+            .with_context(|| format!("failed to deserialize value_bytes of cf '{}'", self.column_family))
+            .with_context(|| format!("failed to deserialize value_bytes of cf '{}'", self.column_family))
+    }
+
+    // TODO: add input value to error message
+    fn serialize_key_with_context(&self, key: &K) -> Result<Vec<u8>> {
+        bincode::serialize(key).with_context(|| format!("failed to serialize key of cf '{}'", self.column_family))
+    }
+
+    // TODO: add input value to error message
+    fn serialize_value_with_context(&self, value: &V) -> Result<Vec<u8>> {
+        bincode::serialize(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family))
     }
 
     /// A helper function just to add error context to the writing operation.
