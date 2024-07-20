@@ -175,6 +175,10 @@ path = "src/bin/run_with_importer.rs"
 name = "relayer"
 path = "src/bin/relayer.rs"
 
+[[bin]]
+name = "deserialize-type"
+path = "src/bin/deserialize_type.rs"
+
 # ------------------------------------------------------------------------------
 # Features
 # ------------------------------------------------------------------------------
