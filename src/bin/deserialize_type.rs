@@ -70,7 +70,8 @@ fn main() {
     println!("size = {}", stdin.len());
 
     if args.hex {
-        stdin = hex::decode(stdin).expect("failed to decode HEX");
+        let input = std::str::from_utf8(&stdin).expect("HEX input isn't UTF-8");
+        stdin = hex::decode(input.trim()).expect("failed to decode HEX");
     }
 
     if let Some(function) = function {
