@@ -333,10 +333,9 @@ impl RocksStorageState {
                 }))
             }
             StoragePointInTime::MinedPast(number) => {
-                if let Some(((rocks_address, rocks_index, _), value)) = self
-                    .account_slots_history
-                    .iter_from((*address, *index, *number), rocksdb::Direction::Reverse)
-                    .next()
+                let iterator_start = ((*address).into(), (*index).into(), (*number).into());
+
+                if let Some(((rocks_address, rocks_index, _), value)) = self.account_slots_history.iter_from(iterator_start, rocksdb::Direction::Reverse).next()
                 {
                     if rocks_index == (*index).into() && rocks_address == (*address).into() {
                         return Ok(Some(Slot {
@@ -368,12 +367,9 @@ impl RocksStorageState {
                 Ok(Some(account))
             }
             StoragePointInTime::MinedPast(block_number) => {
-                let rocks_address: AddressRocksdb = (*address).into();
-                if let Some(((addr, _), account_info)) = self
-                    .accounts_history
-                    .iter_from((rocks_address, *block_number), rocksdb::Direction::Reverse)
-                    .next()
-                {
+                let iterator_start = ((*address).into(), (*block_number).into());
+
+                if let Some(((addr, _), account_info)) = self.accounts_history.iter_from(iterator_start, rocksdb::Direction::Reverse).next() {
                     if addr == (*address).into() {
                         return Ok(Some(account_info.to_account(address)));
                     }
@@ -390,12 +386,13 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => Ok(self.blocks_by_number.iter_end().next().map(|(_, block)| block)),
             BlockFilter::Earliest => Ok(self.blocks_by_number.iter_start().next().map(|(_, block)| block)),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
+                }
+            }
         };
 
         block.map(Option::map_into)

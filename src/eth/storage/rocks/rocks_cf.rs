@@ -206,26 +206,22 @@ where
         let cf = self.handle();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::Start);
-        RocksCfIterator::<K, V>::new(iter)
+        RocksCfIterator::<K, V>::new(iter, &self.column_family)
     }
 
     pub fn iter_end(&self) -> RocksCfIterator<K, V> {
         let cf = self.handle();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::End);
-        RocksCfIterator::<K, V>::new(iter)
+        RocksCfIterator::<K, V>::new(iter, &self.column_family)
     }
 
-    pub fn iter_from<P: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq>(
-        &self,
-        key_prefix: P,
-        direction: rocksdb::Direction,
-    ) -> RocksCfIterator<K, V> {
+    pub fn iter_from(&self, start_key: K, direction: rocksdb::Direction) -> RocksCfIterator<K, V> {
         let cf = self.handle();
-        let serialized_key = self.serialize_key_with_context(&key_prefix).unwrap();
+        let serialized_key = self.serialize_key_with_context(&start_key).unwrap();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::From(&serialized_key, direction));
-        RocksCfIterator::<K, V>::new(iter)
+        RocksCfIterator::<K, V>::new(iter, &self.column_family)
     }
 
     #[allow(dead_code)]
@@ -341,6 +337,7 @@ where
 /// An iterator over data in a CF.
 pub(super) struct RocksCfIterator<'a, K, V> {
     iter: DBIteratorWithThreadMode<'a, DB>,
+    column_family: &'a str,
     _marker: PhantomData<(K, V)>,
 }
 
@@ -349,8 +346,12 @@ where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
-    fn new(iter: DBIteratorWithThreadMode<'a, DB>) -> Self {
-        Self { iter, _marker: PhantomData }
+    fn new(iter: DBIteratorWithThreadMode<'a, DB>, column_family: &'a str) -> Self {
+        Self {
+            iter,
+            column_family,
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -371,8 +372,14 @@ where
         let next = self.iter.next()?;
         let (key, value) = next.unwrap();
 
-        let deserialized_key = bincode::deserialize::<K>(&key).unwrap();
-        let deserialized_value = bincode::deserialize::<V>(&value).unwrap();
+        let deserialized_key = bincode::deserialize::<K>(&key)
+            // TODO: add input value to error message
+            .with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family))
+            .unwrap();
+        let deserialized_value = bincode::deserialize::<V>(&value)
+            // TODO: add input value to error message
+            .with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family))
+            .unwrap();
         Some((deserialized_key, deserialized_value))
     }
 }
