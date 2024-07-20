@@ -153,15 +153,15 @@ impl RocksStorageState {
 
     pub fn reset_at(&self, block_number: BlockNumberRocksdb) -> Result<()> {
         // Clear current state
-        self.account_slots.clear().unwrap();
-        self.accounts.clear().unwrap();
+        self.account_slots.clear()?;
+        self.accounts.clear()?;
 
         // Get current state back from historical
         let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)> = HashMap::new();
         let mut latest_accounts: HashMap<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)> = HashMap::new();
         for ((address, idx, block), value) in self.account_slots_history.iter_start() {
             if block > block_number {
-                self.account_slots_history.delete(&(address, idx, block)).unwrap();
+                self.account_slots_history.delete(&(address, idx, block))?;
             } else if let Some((bnum, _)) = latest_slots.get(&(address, idx)) {
                 if bnum < &block {
                     latest_slots.insert((address, idx), (block, value.clone()));
@@ -172,10 +172,10 @@ impl RocksStorageState {
         }
         for ((address, block), account) in self.accounts_history.iter_start() {
             if block > block_number {
-                self.accounts_history.delete(&(address, block)).unwrap();
+                self.accounts_history.delete(&(address, block))?;
             } else if let Some((bnum, _)) = latest_accounts.get(&address) {
                 if bnum < &block {
-                    latest_accounts.insert(address, (block, account)).unwrap();
+                    latest_accounts.insert(address, (block, account));
                 }
             } else {
                 latest_accounts.insert(address, (block, account));
@@ -184,11 +184,14 @@ impl RocksStorageState {
 
         // write new current state
         let mut batch = WriteBatch::default();
+
         let accounts_iter = latest_accounts.into_iter().map(|(address, (_, account))| (address, account));
-        self.accounts.prepare_batch_insertion(accounts_iter, &mut batch);
+        self.accounts.prepare_batch_insertion(accounts_iter, &mut batch)?;
+
         let slots_iter = latest_slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value));
-        self.account_slots.prepare_batch_insertion(slots_iter, &mut batch);
-        self.write_batch(batch).unwrap();
+        self.account_slots.prepare_batch_insertion(slots_iter, &mut batch)?;
+
+        self.write_in_batch_for_multiple_cfs(batch)?;
 
         // Truncate rest of
         for (hash, block) in self.transactions.iter_start() {
@@ -213,7 +216,7 @@ impl RocksStorageState {
             if block > block_number {
                 self.blocks_by_number.delete(&block).unwrap();
             } else {
-                break;
+                break; // optimization: stop early
             }
         }
 
@@ -253,8 +256,8 @@ impl RocksStorageState {
             account_history_changes.push(((address, block_number.into()), account_info_entry));
         }
 
-        accounts.prepare_batch_insertion(account_changes, batch);
-        accounts_history.prepare_batch_insertion(account_history_changes, batch);
+        accounts.prepare_batch_insertion(account_changes, batch)?;
+        accounts_history.prepare_batch_insertion(account_history_changes, batch)?;
 
         let mut slot_changes = Vec::new();
         let mut slot_history_changes = Vec::new();
@@ -269,8 +272,8 @@ impl RocksStorageState {
                 }
             }
         }
-        account_slots.prepare_batch_insertion(slot_changes, batch);
-        account_slots_history.prepare_batch_insertion(slot_history_changes, batch);
+        account_slots.prepare_batch_insertion(slot_changes, batch)?;
+        account_slots_history.prepare_batch_insertion(slot_history_changes, batch)?;
 
         Ok(())
     }
@@ -420,8 +423,8 @@ impl RocksStorageState {
         }
         let mut batch = WriteBatch::default();
 
-        self.transactions.prepare_batch_insertion(txs_batch, &mut batch);
-        self.logs.prepare_batch_insertion(logs_batch, &mut batch);
+        self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
+        self.logs.prepare_batch_insertion(logs_batch, &mut batch)?;
 
         let number = block.number();
         let block_hash = block.hash();
@@ -439,48 +442,47 @@ impl RocksStorageState {
         };
 
         let block_by_number = (number.into(), block_without_changes.into());
-        self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch);
+        self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
-        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch);
+        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
 
         self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch)?;
 
-        self.write_batch(batch).unwrap();
+        self.write_in_batch_for_multiple_cfs(batch).unwrap();
         Ok(())
+    }
+
+    /// Write to DB in a batch
+    pub fn write_in_batch_for_multiple_cfs(&self, batch: WriteBatch) -> Result<()> {
+        let batch_len = batch.len();
+        let result = self.db.write(batch).context("failed to write in batch to multiple column families");
+
+        result.inspect_err(|e| {
+            tracing::error!(reason = ?e, batch_len, "failed to write batch to DB");
+        })
     }
 
     /// Writes accounts to state (does not write to account history)
     #[allow(dead_code)]
-    fn write_accounts(&self, accounts: Vec<Account>) {
+    fn write_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         let accounts = accounts.into_iter().map(Into::into);
 
         let mut batch = WriteBatch::default();
-        self.accounts.prepare_batch_insertion(accounts, &mut batch);
-        self.db.write(batch).unwrap();
+        self.accounts.prepare_batch_insertion(accounts, &mut batch)?;
+        self.accounts.write_batch_with_context(batch)
     }
 
     /// Writes slots to state (does not write to slot history)
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn write_slots(&self, slots: Vec<(Address, Slot)>) {
+    pub fn write_slots(&self, slots: Vec<(Address, Slot)>) -> Result<()> {
         let slots = slots
             .into_iter()
             .map(|(address, slot)| ((address.into(), slot.index.into()), slot.value.into()));
 
         let mut batch = WriteBatch::default();
-        self.account_slots.prepare_batch_insertion(slots, &mut batch);
-        self.db.write(batch).unwrap();
-    }
-
-    /// Write to DB in a batch
-    fn write_batch(&self, batch: WriteBatch) -> Result<()> {
-        let batch_len = batch.len();
-        let result = self.db.write(batch);
-
-        if let Err(e) = &result {
-            tracing::error!(reason = ?e, batch_len, "failed to write batch to DB");
-        }
-        result.map_err(Into::into)
+        self.account_slots.prepare_batch_insertion(slots, &mut batch)?;
+        self.account_slots.write_batch_with_context(batch)
     }
 
     /// Clears in-memory state.
@@ -643,8 +645,8 @@ mod tests {
             .collect();
 
         let mut batch = WriteBatch::default();
-        account_slots.prepare_batch_insertion(slots.clone(), &mut batch);
-        account_slots.prepare_batch_insertion(extra_slots.clone(), &mut batch);
+        account_slots.prepare_batch_insertion(slots.clone(), &mut batch).unwrap();
+        account_slots.prepare_batch_insertion(extra_slots.clone(), &mut batch).unwrap();
         db.write(batch).unwrap();
 
         let extra_keys: HashSet<SlotIndex> = (0..1000)

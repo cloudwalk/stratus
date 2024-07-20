@@ -91,7 +91,7 @@ where
         // clear left-overs
         let mut batch = WriteBatch::default();
         for item in self.db.iterator_cf(&cf, IteratorMode::Start) {
-            let (key, _) = item.context("when reading an element from the iterator")?; // Handle or unwrap the Result
+            let (key, _) = item.context("when reading an element from the iterator")?;
             batch.delete_cf(&cf, key);
         }
         self.write_batch_with_context(batch)?;
@@ -161,27 +161,40 @@ where
         self.db.put_cf(&cf, serialized_key, serialized_value).map_err(Into::into)
     }
 
-    pub fn prepare_batch_insertion<I>(&self, changes: I, batch: &mut WriteBatch)
+    pub fn prepare_batch_insertion<I>(&self, changes: I, batch: &mut WriteBatch) -> Result<()>
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        self.prepare_batch_insertion_impl(changes, batch)
+            .with_context(|| format!("when trying to prepare batch insertion for CF: '{}'", self.column_family))
+    }
+
+    fn prepare_batch_insertion_impl<I>(&self, changes: I, batch: &mut WriteBatch) -> Result<()>
     where
         I: IntoIterator<Item = (K, V)>,
     {
         let cf = self.handle();
 
         for (key, value) in changes {
-            let serialized_key = self.serialize_key_with_context(&key).unwrap();
-            let serialized_value = self.serialize_value_with_context(&value).unwrap();
+            let serialized_key = self.serialize_key_with_context(&key)?;
+            let serialized_value = self.serialize_value_with_context(&value)?;
             // Add serialized key-value pair to the batch
             batch.put_cf(&cf, serialized_key, serialized_value);
         }
+        Ok(())
     }
 
     // Deletes an entry from the database by key
     pub fn delete(&self, key: &K) -> Result<()> {
+        self.delete_impl(key)
+            .with_context(|| format!("when trying to delete value from CF: '{}'", self.column_family))
+    }
+
+    fn delete_impl(&self, key: &K) -> Result<()> {
         let serialized_key = self.serialize_key_with_context(key)?;
         let cf = self.handle();
 
-        self.db.delete_cf(&cf, serialized_key)?;
-        Ok(())
+        self.db.delete_cf(&cf, serialized_key).map_err(Into::into)
     }
 
     // Custom method that combines entry and or_insert_with from a HashMap
@@ -287,12 +300,6 @@ where
         }
     }
 
-    fn write_batch_with_context(&self, batch: WriteBatch) -> Result<()> {
-        self.db
-            .write(batch)
-            .with_context(|| format!("failed to write batch to column family '{}'", self.column_family))
-    }
-
     fn deserialize_key_with_context(&self, key_bytes: &[u8]) -> Result<K> {
         deserialize_with_context(key_bytes).with_context(|| format!("when deserializing a key of cf '{}'", self.column_family))
     }
@@ -307,6 +314,12 @@ where
 
     fn serialize_value_with_context(&self, value: &V) -> Result<Vec<u8>> {
         serialize_with_context(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family))
+    }
+
+    pub fn write_batch_with_context(&self, batch: WriteBatch) -> Result<()> {
+        self.db
+            .write(batch)
+            .with_context(|| format!("failed to write batch to column family '{}'", self.column_family))
     }
 }
 
