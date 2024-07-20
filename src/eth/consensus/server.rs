@@ -38,6 +38,7 @@ mod label {
     pub(super) const REQUEST_VOTE: &str = "request_vote";
 }
 
+#[allow(dead_code)]
 pub fn initialize_server(consensus: Arc<Consensus>) {
     const TASK_NAME: &str = "consensus::server";
     spawn_named(TASK_NAME, async move {

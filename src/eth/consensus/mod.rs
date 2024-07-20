@@ -27,6 +27,7 @@ use tokio::task::JoinHandle;
 use tonic::Request;
 
 use crate::eth::primitives::Hash;
+#[allow(unused_imports)]
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;

@@ -303,6 +303,7 @@ async fn send_append_entry_request(
     Ok(response)
 }
 
+#[allow(dead_code)]
 pub fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
     // XXX FIXME: deal with the scenario where a transactionHash arrives after the block;
     // in this case, before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
@@ -326,6 +327,7 @@ pub fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
 /// This channel broadcasts blocks and transactons executions to followers.
 /// Each follower has a queue of blocks and transactions to be sent at handle_peer_propagation.
 //TODO this broadcast needs to wait for majority of followers to confirm the log before sending the next one
+#[allow(dead_code)]
 pub fn initialize_append_entries_channel(
     consensus: Arc<Consensus>,
     mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
