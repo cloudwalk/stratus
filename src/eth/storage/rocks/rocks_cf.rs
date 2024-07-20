@@ -9,7 +9,6 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::Result;
-use const_hex::hex;
 use rocksdb::BoundColumnFamily;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
@@ -302,36 +301,43 @@ where
         }
     }
 
-    // TODO: add input value to error message
-    fn deserialize_key_with_context(&self, key_bytes: &[u8]) -> Result<K> {
-        bincode::deserialize(key_bytes)
-            .with_context(|| format!("failed to deserialize '{}'", hex::encode(key_bytes)))
-            .with_context(|| format!("when deserializing a key of cf '{}'", self.column_family))
-    }
-
-    // TODO: add input value to error message
-    fn deserialize_value_with_context(&self, value_bytes: &[u8]) -> Result<V> {
-        bincode::deserialize(value_bytes)
-            .with_context(|| format!("failed to deserialize value_bytes of cf '{}'", self.column_family))
-            .with_context(|| format!("failed to deserialize value_bytes of cf '{}'", self.column_family))
-    }
-
-    // TODO: add input value to error message
-    fn serialize_key_with_context(&self, key: &K) -> Result<Vec<u8>> {
-        bincode::serialize(key).with_context(|| format!("failed to serialize key of cf '{}'", self.column_family))
-    }
-
-    // TODO: add input value to error message
-    fn serialize_value_with_context(&self, value: &V) -> Result<Vec<u8>> {
-        bincode::serialize(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family))
-    }
-
-    /// A helper function just to add error context to the writing operation.
     fn write_batch_with_context(&self, batch: WriteBatch) -> Result<()> {
         self.db
             .write(batch)
             .with_context(|| format!("failed to write batch to column family '{}'", self.column_family))
     }
+
+    fn deserialize_key_with_context(&self, key_bytes: &[u8]) -> Result<K> {
+        deserialize_with_context(key_bytes).with_context(|| format!("when deserializing a key of cf '{}'", self.column_family))
+    }
+
+    fn deserialize_value_with_context(&self, value_bytes: &[u8]) -> Result<V> {
+        deserialize_with_context(value_bytes).with_context(|| format!("failed to deserialize value_bytes of cf '{}'", self.column_family))
+    }
+
+    fn serialize_key_with_context(&self, key: &K) -> Result<Vec<u8>> {
+        serialize_with_context(key).with_context(|| format!("failed to serialize key of cf '{}'", self.column_family))
+    }
+
+    fn serialize_value_with_context(&self, value: &V) -> Result<Vec<u8>> {
+        serialize_with_context(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family))
+    }
+}
+
+fn deserialize_with_context<T>(bytes: &[u8]) -> Result<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    bincode::deserialize::<T>(bytes)
+        .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
+        .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<T>()))
+}
+
+fn serialize_with_context<T>(input: T) -> Result<Vec<u8>>
+where
+    T: Serialize + Debug,
+{
+    bincode::serialize(&input).with_context(|| format!("failed to serialize '{input:?}'"))
 }
 
 /// An iterator over data in a CF.
@@ -372,14 +378,14 @@ where
         let next = self.iter.next()?;
         let (key, value) = next.unwrap();
 
-        let deserialized_key = bincode::deserialize::<K>(&key)
-            // TODO: add input value to error message
+        let deserialized_key = deserialize_with_context(&key)
             .with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family))
             .unwrap();
-        let deserialized_value = bincode::deserialize::<V>(&value)
-            // TODO: add input value to error message
+
+        let deserialized_value = deserialize_with_context(&value)
             .with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family))
             .unwrap();
+
         Some((deserialized_key, deserialized_value))
     }
 }
