@@ -108,17 +108,17 @@ where
     fn get_impl(&self, key: &K) -> Result<Option<V>> {
         let cf = self.handle();
 
-        let serialized_key = bincode::serialize(key).with_context(|| format!("failed to serialize key in DB get query for CF '{}'", self.column_family))?;
+        let serialized_key = self.serialize_key_with_context(key)?;
 
         let Some(value_bytes) = self.db.get_cf(&cf, serialized_key)? else {
             return Ok(None);
         };
 
-        bincode::deserialize(&value_bytes).with_context(|| format!("failed to deserialize value bytes: '{}'", hex::encode(value_bytes)))
+        self.deserialize_value_with_context(&value_bytes).map(Some)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn multi_get<I>(&self, keys: I) -> anyhow::Result<Vec<(K, V)>>
+    pub fn multi_get<I>(&self, keys: I) -> Result<Vec<(K, V)>>
     where
         I: IntoIterator<Item = K> + Clone,
     {
@@ -129,25 +129,22 @@ where
             .clone()
             .into_iter()
             .zip(cf_repeated)
-            .map(|(k, cf)| bincode::serialize(&k).map(|k| (cf, k)))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|(k, cf)| self.serialize_key_with_context(&k).map(|k| (cf, k)))
+            .collect::<Result<Vec<(_, _)>>>()?;
 
-        Ok(self
-            .db
+        self.db
             .multi_get_cf(serialized_keys_with_cfs)
             .into_iter()
+            .map(|result| result.context("when reading a value with multi_get"))
             .zip(keys)
-            .filter_map(|(value, key)| {
-                if let Ok(Some(value)) = value {
-                    // XXX: Maybe we should fail on a failed conversion instead of ignoring
-                    // Didn't fix this yet cause it's currently dead_code, nobody is using it
-                    let Ok(value) = bincode::deserialize::<V>(&value) else { return None };
-                    Some((key, value))
-                } else {
-                    None
-                }
+            .filter_map(|(result, key)| {
+                result.transpose().map(|value_bytes| {
+                    value_bytes
+                        .and_then(|value_bytes| self.deserialize_value_with_context(&value_bytes))
+                        .map(|value| (key, value))
+                })
             })
-            .collect())
+            .collect()
     }
 
     // Mimics the 'insert' functionality of a HashMap
@@ -159,8 +156,8 @@ where
     fn insert_impl(&self, key: K, value: V) -> Result<()> {
         let cf = self.handle();
 
-        let serialized_key = bincode::serialize(&key)?;
-        let serialized_value = bincode::serialize(&value)?;
+        let serialized_key = self.serialize_key_with_context(&key)?;
+        let serialized_value = self.serialize_value_with_context(&value)?;
 
         self.db.put_cf(&cf, serialized_key, serialized_value).map_err(Into::into)
     }
@@ -172,16 +169,16 @@ where
         let cf = self.handle();
 
         for (key, value) in changes {
-            let serialized_key = bincode::serialize(&key).unwrap();
-            let serialized_value = bincode::serialize(&value).unwrap();
-            // Add each serialized key-value pair to the batch
+            let serialized_key = self.serialize_key_with_context(&key).unwrap();
+            let serialized_value = self.serialize_value_with_context(&value).unwrap();
+            // Add serialized key-value pair to the batch
             batch.put_cf(&cf, serialized_key, serialized_value);
         }
     }
 
     // Deletes an entry from the database by key
     pub fn delete(&self, key: &K) -> Result<()> {
-        let serialized_key = bincode::serialize(key)?;
+        let serialized_key = self.serialize_key_with_context(key)?;
         let cf = self.handle();
 
         self.db.delete_cf(&cf, serialized_key)?;
@@ -225,7 +222,7 @@ where
         direction: rocksdb::Direction,
     ) -> RocksCfIterator<K, V> {
         let cf = self.handle();
-        let serialized_key = bincode::serialize(&key_prefix).unwrap();
+        let serialized_key = self.serialize_key_with_context(&key_prefix).unwrap();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::From(&serialized_key, direction));
         RocksCfIterator::<K, V>::new(iter)
@@ -237,8 +234,8 @@ where
 
         let mut iter = self.db.iterator_cf(&cf, IteratorMode::End);
         if let Some(Ok((k, v))) = iter.next() {
-            let key = bincode::deserialize(&k).unwrap();
-            let value = bincode::deserialize(&v).unwrap();
+            let key = self.deserialize_key_with_context(&k).unwrap();
+            let value = self.deserialize_value_with_context(&v).unwrap();
             Some((key, value))
         } else {
             None
@@ -250,7 +247,7 @@ where
 
         let mut iter = self.db.iterator_cf(&cf, IteratorMode::End);
         if let Some(Ok((k, _v))) = iter.next() {
-            let key = bincode::deserialize(&k).unwrap();
+            let key = self.deserialize_key_with_context(&k).unwrap();
             Some(key)
         } else {
             None

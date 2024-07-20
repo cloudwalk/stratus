@@ -8,7 +8,6 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
 use lazy_static::lazy_static;
@@ -146,13 +145,13 @@ impl RocksStorageState {
         state
     }
 
-    pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
+    pub fn preload_block_number(&self) -> Result<AtomicU64> {
         let block_number = self.blocks_by_number.last_key().unwrap_or_default();
         tracing::info!(%block_number, "preloaded block_number");
         Ok((u64::from(block_number)).into())
     }
 
-    pub fn reset_at(&self, block_number: BlockNumberRocksdb) -> anyhow::Result<()> {
+    pub fn reset_at(&self, block_number: BlockNumberRocksdb) -> Result<()> {
         // Clear current state
         self.account_slots.clear().unwrap();
         self.accounts.clear().unwrap();
@@ -276,7 +275,7 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    pub fn read_transaction(&self, tx_hash: &Hash) -> Result<Option<TransactionMined>> {
         let Some(block_number) = self.transactions.get(&(*tx_hash).into())? else {
             return Ok(None);
         };
@@ -294,7 +293,7 @@ impl RocksStorageState {
         }
     }
 
-    pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>> {
         let addresses: HashSet<AddressRocksdb> = filter.addresses.iter().map(|&address| AddressRocksdb::from(address)).collect();
 
         let end_block_range_filter = |number: BlockNumber| match filter.to_block.as_ref() {
@@ -411,7 +410,7 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    pub fn save_block(&self, block: Block) -> Result<()> {
         let account_changes = block.compact_account_changes();
 
         let mut txs_batch = vec![];
@@ -477,7 +476,7 @@ impl RocksStorageState {
     }
 
     /// Write to DB in a batch
-    fn write_batch(&self, batch: WriteBatch) -> anyhow::Result<()> {
+    fn write_batch(&self, batch: WriteBatch) -> Result<()> {
         let batch_len = batch.len();
         let result = self.db.write(batch);
 
@@ -488,7 +487,7 @@ impl RocksStorageState {
     }
 
     /// Clears in-memory state.
-    pub fn clear(&self) -> anyhow::Result<()> {
+    pub fn clear(&self) -> Result<()> {
         self.accounts.clear().context("when clearing accounts")?;
         self.accounts_history.clear().context("when clearing accounts_history")?;
         self.account_slots.clear().context("when clearing account_slots")?;

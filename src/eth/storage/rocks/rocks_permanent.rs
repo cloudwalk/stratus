@@ -107,8 +107,7 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        self.state.save_accounts(accounts);
-        Ok(())
+        self.state.save_accounts(accounts)
     }
 
     fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
