@@ -228,23 +228,43 @@ where
         RocksCfIterator::<K, V>::new(iter, &self.column_family)
     }
 
-    pub fn iter_from(&self, start_key: K, direction: rocksdb::Direction) -> RocksCfIterator<K, V> {
+    pub fn iter_from(&self, start_key: K, direction: rocksdb::Direction) -> Result<RocksCfIterator<K, V>> {
         let cf = self.handle();
-        let serialized_key = self.serialize_key_with_context(&start_key).unwrap();
+        let serialized_key = self.serialize_key_with_context(&start_key)?;
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::From(&serialized_key, direction));
-        RocksCfIterator::<K, V>::new(iter, &self.column_family)
+        Ok(RocksCfIterator::<K, V>::new(iter, &self.column_family))
     }
 
-    pub fn last_key(&self) -> Option<K> {
+    pub fn first_value(&self) -> Result<Option<V>> {
         let cf = self.handle();
+        let first_pair = self.db.iterator_cf(&cf, IteratorMode::Start).next().transpose()?;
 
-        let mut iter = self.db.iterator_cf(&cf, IteratorMode::End);
-        if let Some(Ok((k, _v))) = iter.next() {
-            let key = self.deserialize_key_with_context(&k).unwrap();
-            Some(key)
+        if let Some((_k, v)) = first_pair {
+            self.deserialize_value_with_context(&v).map(Some)
         } else {
-            None
+            Ok(None)
+        }
+    }
+
+    pub fn last_key(&self) -> Result<Option<K>> {
+        let cf = self.handle();
+        let last_pair = self.db.iterator_cf(&cf, IteratorMode::End).next().transpose()?;
+
+        if let Some((k, _v)) = last_pair {
+            self.deserialize_key_with_context(&k).map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn last_value(&self) -> Result<Option<V>> {
+        let cf = self.handle();
+        let last_pair = self.db.iterator_cf(&cf, IteratorMode::End).next().transpose()?;
+        if let Some((_k, v)) = last_pair {
+            self.deserialize_value_with_context(&v).map(Some)
+        } else {
+            Ok(None)
         }
     }
 
@@ -366,7 +386,7 @@ where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
-    type Item = (K, V);
+    type Item = Result<(K, V)>;
 
     /// Retrieves the next key-value pair from the database.
     ///
@@ -374,17 +394,29 @@ where
     /// - `Some((K, V))` if a valid key-value pair is found.
     /// - `None` if there are no more items to process, or if only special/control keys remain.
     fn next(&mut self) -> Option<Self::Item> {
-        let next = self.iter.next()?;
-        let (key, value) = next.unwrap();
+        let next = self
+            .iter
+            .next()?
+            .with_context(|| format!("rocksdb iterator failed while reading from cf '{}'", self.column_family));
 
-        let deserialized_key = deserialize_with_context(&key)
-            .with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family))
-            .unwrap();
+        let (key, value) = match next {
+            Ok(next) => next,
+            Err(e) => return Some(Err(e)),
+        };
 
-        let deserialized_value = deserialize_with_context(&value)
-            .with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family))
-            .unwrap();
+        let deserialized_key = deserialize_with_context(&key).with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family));
+        let deserialized_key = match deserialized_key {
+            Ok(inner) => inner,
+            Err(e) => return Some(Err(e)),
+        };
 
-        Some((deserialized_key, deserialized_value))
+        let deserialized_value =
+            deserialize_with_context(&value).with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family));
+        let deserialized_value = match deserialized_value {
+            Ok(inner) => inner,
+            Err(e) => return Some(Err(e)),
+        };
+
+        Some(Ok((deserialized_key, deserialized_value)))
     }
 }

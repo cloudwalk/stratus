@@ -146,7 +146,7 @@ impl RocksStorageState {
     }
 
     pub fn preload_block_number(&self) -> Result<AtomicU64> {
-        let block_number = self.blocks_by_number.last_key().unwrap_or_default();
+        let block_number = self.blocks_by_number.last_key()?.unwrap_or_default();
         tracing::info!(%block_number, "preloaded block_number");
         Ok((u64::from(block_number)).into())
     }
@@ -159,7 +159,8 @@ impl RocksStorageState {
         // Get current state back from historical
         let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)> = HashMap::new();
         let mut latest_accounts: HashMap<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)> = HashMap::new();
-        for ((address, idx, block), value) in self.account_slots_history.iter_start() {
+        for next in self.account_slots_history.iter_start() {
+            let ((address, idx, block), value) = next?;
             if block > block_number {
                 self.account_slots_history.delete(&(address, idx, block))?;
             } else if let Some((bnum, _)) = latest_slots.get(&(address, idx)) {
@@ -170,7 +171,8 @@ impl RocksStorageState {
                 latest_slots.insert((address, idx), (block, value.clone()));
             }
         }
-        for ((address, block), account) in self.accounts_history.iter_start() {
+        for next in self.accounts_history.iter_start() {
+            let ((address, block), account) = next?;
             if block > block_number {
                 self.accounts_history.delete(&(address, block))?;
             } else if let Some((bnum, _)) = latest_accounts.get(&address) {
@@ -194,25 +196,29 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(batch)?;
 
         // Truncate rest of
-        for (hash, block) in self.transactions.iter_start() {
+        for next in self.transactions.iter_start() {
+            let (hash, block) = next?;
             if block > block_number {
                 self.transactions.delete(&hash).unwrap();
             }
         }
 
-        for (key, block) in self.logs.iter_start() {
+        for next in self.logs.iter_start() {
+            let (key, block) = next?;
             if block > block_number {
                 self.logs.delete(&key).unwrap();
             }
         }
 
-        for (hash, block) in self.blocks_by_hash.iter_start() {
+        for next in self.blocks_by_hash.iter_start() {
+            let (hash, block) = next?;
             if block > block_number {
                 self.blocks_by_hash.delete(&hash).unwrap();
             }
         }
 
-        for (block, _) in self.blocks_by_number.iter_end() {
+        for next in self.blocks_by_number.iter_end() {
+            let (block, _) = next?;
             if block > block_number {
                 self.blocks_by_number.delete(&block).unwrap();
             } else {
@@ -304,16 +310,31 @@ impl RocksStorageState {
             None => true,
         };
 
-        Ok(self
+        let iter = self
             .blocks_by_number
-            .iter_from(BlockNumberRocksdb::from(filter.from_block), Direction::Forward)
-            .take_while(|(number, _)| end_block_range_filter((*number).into()))
-            .flat_map(|(_, block)| block.transactions)
-            .filter(|transaction| transaction.input.to.is_some_and(|to| addresses.contains(&to)))
-            .flat_map(|transaction| transaction.logs)
-            .map(LogMined::from)
-            .filter(|log_mined| filter.matches(log_mined))
-            .collect())
+            .iter_from(BlockNumberRocksdb::from(filter.from_block), Direction::Forward)?;
+
+        let mut logs_result = vec![];
+
+        for next in iter {
+            let (number, block) = next?;
+
+            if !end_block_range_filter(number.into()) {
+                break;
+            }
+            let transactions_with_matching_addresses = block
+                .transactions
+                .into_iter()
+                .filter(|transaction| transaction.input.to.is_some_and(|to| addresses.contains(&to)));
+
+            let logs = transactions_with_matching_addresses
+                .flat_map(|transaction| transaction.logs)
+                .map(LogMined::from);
+
+            let filtered_logs = logs.filter(|log| filter.matches(log));
+            logs_result.extend(filtered_logs);
+        }
+        Ok(logs_result)
     }
 
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Option<Slot>> {
@@ -338,7 +359,11 @@ impl RocksStorageState {
             StoragePointInTime::MinedPast(number) => {
                 let iterator_start = ((*address).into(), (*index).into(), (*number).into());
 
-                if let Some(((rocks_address, rocks_index, _), value)) = self.account_slots_history.iter_from(iterator_start, rocksdb::Direction::Reverse).next()
+                if let Some(((rocks_address, rocks_index, _), value)) = self
+                    .account_slots_history
+                    .iter_from(iterator_start, rocksdb::Direction::Reverse)?
+                    .next()
+                    .transpose()?
                 {
                     if rocks_index == (*index).into() && rocks_address == (*address).into() {
                         return Ok(Some(Slot {
@@ -348,6 +373,44 @@ impl RocksStorageState {
                     }
                 }
                 Ok(None)
+            }
+        }
+    }
+
+    pub fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Vec<Slot>> {
+        let rocks_address: AddressRocksdb = (*address).into();
+
+        let present_slots = {
+            let iter = self
+                .account_slots
+                .iter_from((rocks_address, SlotIndexRocksdb::from(0)), rocksdb::Direction::Forward)?;
+
+            let mut present_slots = vec![];
+            for next in iter {
+                let ((addr, idx), value) = next?;
+
+                if addr != rocks_address {
+                    break;
+                }
+                present_slots.push(Slot {
+                    index: idx.into(),
+                    value: value.into(),
+                });
+            }
+            present_slots
+        };
+
+        match point_in_time {
+            StoragePointInTime::Mined | StoragePointInTime::Pending => Ok(present_slots),
+            StoragePointInTime::MinedPast(_) => {
+                let mut past_slots = Vec::with_capacity(present_slots.len());
+                for index in present_slots.iter().map(|s| s.index) {
+                    let past_slot = self.read_slot(address, &index, point_in_time)?;
+                    if let Some(past_slot) = past_slot {
+                        past_slots.push(past_slot);
+                    }
+                }
+                Ok(past_slots)
             }
         }
     }
@@ -372,7 +435,8 @@ impl RocksStorageState {
             StoragePointInTime::MinedPast(block_number) => {
                 let iterator_start = ((*address).into(), (*block_number).into());
 
-                if let Some(((addr, _), account_info)) = self.accounts_history.iter_from(iterator_start, rocksdb::Direction::Reverse).next() {
+                if let Some(next) = self.accounts_history.iter_from(iterator_start, rocksdb::Direction::Reverse)?.next() {
+                    let ((addr, _), account_info) = next?;
                     if addr == (*address).into() {
                         return Ok(Some(account_info.to_account(address)));
                     }
@@ -386,16 +450,15 @@ impl RocksStorageState {
         tracing::debug!(?selection, "reading block");
 
         let block = match selection {
-            BlockFilter::Latest | BlockFilter::Pending => Ok(self.blocks_by_number.iter_end().next().map(|(_, block)| block)),
-            BlockFilter::Earliest => Ok(self.blocks_by_number.iter_start().next().map(|(_, block)| block)),
+            BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
+            BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
-            BlockFilter::Hash(block_hash) => {
+            BlockFilter::Hash(block_hash) =>
                 if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                }
-            }
+                },
         };
 
         block.map(Option::map_into)
