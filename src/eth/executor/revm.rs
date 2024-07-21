@@ -118,6 +118,7 @@ impl Evm for Revm {
         block_env.basefee = U256::ZERO;
         block_env.timestamp = input.block_timestamp.into();
         block_env.number = input.block_number.into();
+        let block_env_log = block_env.clone();
 
         // configure tx params
         let tx_env = &mut evm.tx_mut();
@@ -132,8 +133,10 @@ impl Evm for Revm {
         tx_env.nonce = nonce;
         tx_env.data = input.data.into();
         tx_env.value = input.value.into();
+        let tx_env_log = tx_env.clone();
 
         // execute transaction
+        tracing::info!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
         let evm_result = evm.transact();
 
         // extract results

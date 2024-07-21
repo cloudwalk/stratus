@@ -351,6 +351,17 @@ impl Executor {
             s.rec_str("tx_nonce", &tx_input.nonce);
         });
 
+        // WORKAROUND: prevents interval miner mining blocks while a transaction is being executed.
+        let _miner_lock = if self.miner.mode.is_interval() {
+            Some(self.miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
+                tracing::warn!("miner mine_and_commit lock was poisoned");
+                self.locks.serial.clear_poison();
+                poison.into_inner()
+            }))
+        } else {
+            None
+        };
+
         // execute according to the strategy
         const INFINITE_ATTEMPTS: usize = usize::MAX;
 
