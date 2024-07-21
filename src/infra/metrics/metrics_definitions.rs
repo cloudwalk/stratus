@@ -21,9 +21,6 @@ metrics! {
 metrics! {
     group: storage_read,
 
-    "Time to execute storage check_conflicts operation."
-    histogram_duration storage_check_conflicts{storage, success, conflicted},
-
     "Time to execute storage read_pending_block_number operation."
     histogram_duration storage_read_pending_block_number{storage, success},
 

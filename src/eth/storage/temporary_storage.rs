@@ -7,8 +7,6 @@ use display_json::DebugAsJson;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
@@ -52,9 +50,6 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
     // Accounts and slots
     // -------------------------------------------------------------------------
-
-    /// Checks if an execution conflicts with current storage state.
-    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
     fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>>;

@@ -1,6 +1,7 @@
 use std::cmp::max;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use anyhow::anyhow;
 use tracing::info_span;
@@ -180,7 +181,16 @@ pub enum EvmRoute {
 // Executor
 // -----------------------------------------------------------------------------
 
+/// Locks used for local execution.
+#[derive(Default)]
+pub struct ExecutorLocks {
+    serial: Mutex<()>,
+}
+
 pub struct Executor {
+    /// Executor inner locks.
+    locks: ExecutorLocks,
+
     // Executor configuration.
     config: ExecutorConfig,
 
@@ -199,7 +209,13 @@ impl Executor {
     pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating executor");
         let evms = Evms::spawn(Arc::clone(&storage), &config);
-        Self { evms, config, miner, storage }
+        Self {
+            locks: ExecutorLocks::default(),
+            config,
+            evms,
+            miner,
+            storage,
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -339,7 +355,22 @@ impl Executor {
         const INFINITE_ATTEMPTS: usize = usize::MAX;
 
         let tx_execution = match self.config.strategy {
-            ExecutorStrategy::Serial => self.execute_local_transaction_attempts(tx_input, EvmRoute::Serial, INFINITE_ATTEMPTS),
+            // Executes transactions in serial mode:
+            // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
+            // ) Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
+            // * Conflict detection runs, but it should never trigger because of the Mutex.
+            ExecutorStrategy::Serial => {
+                let _serial_lock = match self.locks.serial.lock() {
+                    Ok(guard) => guard,
+                    Err(_) => {
+                        self.locks.serial.clear_poison();
+                        self.locks.serial.lock().unwrap()
+                    }
+                };
+                self.execute_local_transaction_attempts(tx_input, EvmRoute::Serial, INFINITE_ATTEMPTS)
+            }
+            // Executes transactions in parallel mode:
+            // * Conflict detection prevents data corruption.
             ExecutorStrategy::Paralell => {
                 let parallel_attempt = self.execute_local_transaction_attempts(tx_input.clone(), EvmRoute::Parallel, 1);
                 match parallel_attempt {

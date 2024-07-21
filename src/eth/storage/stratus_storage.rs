@@ -9,8 +9,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
@@ -240,26 +238,6 @@ impl StratusStorage {
                 metrics::inc_storage_save_accounts(m.elapsed, label::PERM, m.result.is_ok());
                 if let Err(ref e) = m.result {
                     tracing::error!(reason = ?e, "failed to save accounts");
-                }
-            })
-            .map_err(Into::into)
-    }
-
-    pub fn check_conflicts(&self, execution: &EvmExecution) -> Result<Option<ExecutionConflicts>, StratusError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::debug_span!("storage::check_conflicts").entered();
-        tracing::debug!(storage = %label::TEMP, "checking conflicts");
-
-        timed(|| self.temp.check_conflicts(execution))
-            .with(|m| {
-                metrics::inc_storage_check_conflicts(
-                    m.elapsed,
-                    label::TEMP,
-                    m.result.is_ok(),
-                    m.result.as_ref().is_ok_and(|conflicts| conflicts.is_some()),
-                );
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to check conflicts");
                 }
             })
             .map_err(Into::into)
