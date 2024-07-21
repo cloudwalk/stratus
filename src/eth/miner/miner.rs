@@ -126,7 +126,7 @@ impl Miner {
     /// Same as [`Self::mine_external`], but automatically commits the block instead of returning it.
     pub fn mine_external_and_commit(&self) -> anyhow::Result<()> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock().unwrap();
-        tracing::debug!("acquired mine and commit lock for external block");
+        tracing::info!("miner acquired mine and commit lock for external block");
 
         let block = self.mine_external()?;
         self.commit(block)
@@ -141,7 +141,7 @@ impl Miner {
 
         // lock
         let _mine_lock = self.locks.mine.lock().unwrap();
-        tracing::debug!("acquired mine lock for external block");
+        tracing::info!("miner acquired mine lock for external block");
 
         // mine
         let block = self.storage.finish_pending_block()?;
@@ -168,7 +168,7 @@ impl Miner {
     /// Same as [`Self::mine_external_mixed`], but automatically commits the block instead of returning it.
     pub fn mine_external_mixed_and_commit(&self) -> anyhow::Result<()> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock().unwrap();
-        tracing::debug!("acquired mine and commit lock for external mixed local block");
+        tracing::info!("miner acquired mine and commit lock for external mixed local block");
 
         let block = self.mine_external_mixed()?;
         self.commit(block)
@@ -183,7 +183,7 @@ impl Miner {
 
         // lock
         let _mine_lock = self.locks.mine.lock().unwrap();
-        tracing::debug!("acquired mining lock for external mixed block");
+        tracing::info!("miner acquired mining lock for external mixed block");
 
         // mine
         let block = self.storage.finish_pending_block()?;
@@ -215,7 +215,7 @@ impl Miner {
     /// mainly used when is_automine is enabled.
     pub fn mine_local_and_commit(&self) -> anyhow::Result<()> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock().unwrap();
-        tracing::debug!("acquired mine and commit lock for local block");
+        tracing::info!("miner acquired mine and commit lock for local block");
 
         let block = self.mine_local()?;
         self.commit(block)
@@ -230,7 +230,7 @@ impl Miner {
 
         // lock
         let _mine_lock = self.locks.mine.lock().unwrap();
-        tracing::debug!("acquired mining lock for local block");
+        tracing::info!("miner acquired mining lock for local block");
 
         // mine
         let block = self.storage.finish_pending_block()?;
@@ -261,7 +261,7 @@ impl Miner {
 
         // lock
         let _commit_lock = self.locks.commit.lock().unwrap();
-        tracing::debug!(block_number = %block.number(), "acquired commit lock");
+        tracing::info!(block_number = %block.number(), "miner acquired commit lock");
 
         // extract fields to use in notifications
         let block_number = block.number();
@@ -508,7 +508,7 @@ mod interval_miner {
     #[inline(always)]
     fn mine_and_commit(miner: &Miner) {
         let _mine_and_commit_lock = miner.locks.mine_and_commit.lock().unwrap();
-        tracing::debug!("acquired mine and commit lock for interval local block");
+        tracing::info!("miner acquired mine and commit lock for interval local block");
 
         // mine
         let block = loop {

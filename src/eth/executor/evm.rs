@@ -61,7 +61,7 @@ pub trait Evm {
 }
 
 /// EVM input data. Usually derived from a transaction or call.
-#[derive(Debug, Clone, Default)]
+#[derive(DebugAsJson, Clone, Default, serde::Serialize)]
 pub struct EvmInput {
     /// Operation party address.
     ///

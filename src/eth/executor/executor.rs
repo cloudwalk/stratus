@@ -351,17 +351,6 @@ impl Executor {
             s.rec_str("tx_nonce", &tx_input.nonce);
         });
 
-        // WORKAROUND: prevents interval miner mining blocks while a transaction is being executed.
-        let _miner_lock = if self.miner.mode.is_interval() {
-            Some(self.miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
-                tracing::warn!("miner mine_and_commit lock was poisoned");
-                self.locks.serial.clear_poison();
-                poison.into_inner()
-            }))
-        } else {
-            None
-        };
-
         // execute according to the strategy
         const INFINITE_ATTEMPTS: usize = usize::MAX;
 
@@ -371,13 +360,33 @@ impl Executor {
             // ) Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
             // * Conflict detection runs, but it should never trigger because of the Mutex.
             ExecutorStrategy::Serial => {
+                // acquire serial execution lock
                 let _serial_lock = self.locks.serial.lock().unwrap_or_else(|poison| {
                     tracing::warn!("executor serial lock was poisoned");
                     self.locks.serial.clear_poison();
                     poison.into_inner()
                 });
+                tracing::info!("executor acquired serial execution lock");
+
+                // WORKAROUND: prevents interval miner mining blocks while a transaction is being executed.
+                // this can be removed when we implement conflict detection for block number
+                let _miner_lock = if self.miner.mode.is_interval() {
+                    let miner_lock = Some(self.miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
+                        tracing::warn!("miner mine_and_commit lock was poisoned");
+                        self.locks.serial.clear_poison();
+                        poison.into_inner()
+                    }));
+                    tracing::info!("executor acquired mine_and_commit lock to prevent executor mining block");
+                    miner_lock
+                } else {
+                    tracing::warn!("executor did not try to acquire mine_and_commit lock");
+                    None
+                };
+
+                // execute transaction
                 self.execute_local_transaction_attempts(tx_input, EvmRoute::Serial, INFINITE_ATTEMPTS)
             }
+
             // Executes transactions in parallel mode:
             // * Conflict detection prevents data corruption.
             ExecutorStrategy::Paralell => {
@@ -440,21 +449,24 @@ impl Executor {
             Span::with(|s| {
                 s.rec_opt("tx_to", &tx_input.to);
             });
+
+            // prepare evm input
+            let pending_block_number = self.storage.read_pending_block_number()?.unwrap_or_default();
+            let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_block_number);
+
+            // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::info!(
                 %attempt,
                 tx_hash = %tx_input.hash,
                 tx_nonce = %tx_input.nonce,
-                tx_from = ?tx_input.from,
+                tx_from = %tx_input.from,
                 tx_signer = %tx_input.signer,
                 tx_to = ?tx_input.to,
                 tx_data_len = %tx_input.input.len(),
                 tx_data = %tx_input.input,
+                ?evm_input,
                 "executing local transaction attempt"
             );
-
-            // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
-            let pending_block_number = self.storage.read_pending_block_number()?.unwrap_or_default();
-            let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_block_number);
 
             let evm_result = match self.evms.execute(evm_input, evm_route) {
                 Ok(evm_result) => evm_result,
