@@ -212,12 +212,10 @@ impl ExternalRelayer {
     pub async fn relay_unsent_transactions(&mut self) -> anyhow::Result<()> {
         let combined_transactions = self.resign_unsent_transactions().await?;
 
-        let dag = TransactionDag::new(combined_transactions);
-
-        match self.relay_dag(dag).await {
-            Err(RelayError::RelayTimeout) => return Err(anyhow!("relayer timedout")),
-            _=>(),
+        for tx in combined_transactions {
+            let _ = tokio::time::timeout(Duration::from_secs(1), self.relay_transaction(tx)).await;
         }
+
         Ok(())
     }
 
