@@ -23,7 +23,8 @@ create table slot_mismatches(
 create table tx_hash_map(
     stratus_hash bytea not null unique,
     substrate_hash bytea primary key not null,
-    resigned_transaction jsonb not null
+    resigned_transaction jsonb not null,
+    would_be_unsent boolean not null default false
 );
 create table unsent_transactions(
     transaction_hash bytea primary key not null,

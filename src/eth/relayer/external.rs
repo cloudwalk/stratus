@@ -183,9 +183,48 @@ impl ExternalRelayer {
         }
     }
 
+    async fn resign_unsent_transactions(&mut self) -> anyhow::Result<Vec<TransactionMined>> {
+        let unsent_transactions = sqlx::query!("SELECT * FROM unsent_transactions").fetch_all(&self.pool).await?;
+
+        let txs: Vec<TransactionMined> = unsent_transactions
+            .into_iter()
+            .map(|row| serde_json::from_value(row.transaction))
+            .collect::<Result<Vec<TransactionMined>, _>>()?
+            .into_iter()
+            .sorted()
+            .collect();
+        let mut ret = vec![];
+        for mut tx in txs {
+            if let Some(input) = self.get_mapped_transaction(tx.input.hash).await? {
+                tx.input = input;
+            } else {
+                let prev_hash = tx.input.hash;
+                tx.input = self.signer.sign_transaction_input(tx.input);
+                self.insert_transaction_mapping(prev_hash, &tx.input, true).await;
+            }
+            ret.push(tx);
+        }
+
+        Ok(ret)
+    }
+
+    pub async fn relay_unsent_transactions(&mut self) -> anyhow::Result<()> {
+        let combined_transactions = self.resign_unsent_transactions().await?;
+
+        let dag = TransactionDag::new(combined_transactions);
+
+        match self.relay_dag(dag).await {
+            Err(RelayError::RelayTimeout) => return Err(anyhow!("relayer timedout")),
+            _=>(),
+        }
+        Ok(())
+    }
+
     async fn combine_transactions(&mut self, blocks: Vec<Block>) -> anyhow::Result<Vec<TransactionMined>> {
         let mut combined_transactions = vec![];
         for mut tx in blocks.into_iter().flat_map(|block| block.transactions).sorted() {
+            let wallet_is_out_of_sync = self.out_of_sync_wallets.contains(&tx.input.signer);
+
             let should_resign = {
                 tx.input.extract_function().is_some_and(|sig| {
                     let scope = sig.split_once("::").map(|(scope, _)| scope);
@@ -195,17 +234,17 @@ impl ExternalRelayer {
                     contract_is_resignable() && function_is_not_blocklisted()
                 })
             };
-            if should_resign {
+            if should_resign || wallet_is_out_of_sync {
                 let transaction_signed = self.get_mapped_transaction(tx.input.hash).await?;
                 if let Some(transaction) = transaction_signed {
                     tx.input = transaction;
                 } else if tx.is_success() {
-                    if !self.out_of_sync_wallets.contains(&tx.input.signer) {
+                    if !wallet_is_out_of_sync {
                         self.insert_out_of_sync_wallet(tx.input.signer).await;
                     }
                     let prev_hash = tx.input.hash;
                     tx.input = self.signer.sign_transaction_input(tx.input);
-                    self.insert_transaction_mapping(prev_hash, &tx.input).await;
+                    self.insert_transaction_mapping(prev_hash, &tx.input, !should_resign).await;
                 } else {
                     continue;
                 }
@@ -313,14 +352,15 @@ impl ExternalRelayer {
         inc_compare_final_state(start.elapsed());
     }
 
-    pub async fn insert_transaction_mapping(&self, stratus_hash: Hash, new_transaction: &TransactionInput) {
+    pub async fn insert_transaction_mapping(&self, stratus_hash: Hash, new_transaction: &TransactionInput, would_be_unsent: bool) {
         let new_hash = new_transaction.hash;
         let transaction_json = to_json_value(new_transaction);
         while let Err(e) = sqlx::query!(
-            "INSERT INTO tx_hash_map (stratus_hash, substrate_hash, resigned_transaction) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+            "INSERT INTO tx_hash_map (stratus_hash, substrate_hash, resigned_transaction, would_be_unsent) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
             stratus_hash as _,
             new_hash as _,
             transaction_json as _,
+            would_be_unsent as _
         )
         .execute(&self.pool)
         .await
