@@ -184,6 +184,7 @@ impl ExternalRelayer {
     }
 
     async fn resign_unsent_transactions(&mut self) -> anyhow::Result<Vec<TransactionMined>> {
+        self.signer.sync_nonce(&self.substrate_chain).await?;
         let unsent_transactions = sqlx::query!("SELECT * FROM unsent_transactions").fetch_all(&self.pool).await?;
 
         let txs: Vec<TransactionMined> = unsent_transactions
