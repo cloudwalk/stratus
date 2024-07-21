@@ -17,6 +17,7 @@ use ethers_signers::LocalWallet;
 use ethers_signers::Signer;
 use futures::future::join_all;
 use futures::StreamExt;
+use hex_literal::hex;
 use itertools::Itertools;
 use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
@@ -172,6 +173,9 @@ impl ExternalRelayer {
     async fn combine_transactions(&mut self, blocks: Vec<Block>) -> anyhow::Result<Vec<TransactionMined>> {
         let mut combined_transactions = vec![];
         for mut tx in blocks.into_iter().flat_map(|block| block.transactions).sorted() {
+            if tx.input.hash == hex!("3e0686e6e2fb1512c0b7bca823f5eaefc971f5e003cac017c53cfb6b3812a266").into() {
+                continue;
+            }
             let wallet_is_out_of_sync = self.out_of_sync_wallets.contains(&tx.input.signer);
 
             let should_resign = {
