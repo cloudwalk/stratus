@@ -360,23 +360,30 @@ impl Executor {
             // ) Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
             // * Conflict detection runs, but it should never trigger because of the Mutex.
             ExecutorStrategy::Serial => {
+                // acquire serial execution lock
                 let _serial_lock = self.locks.serial.lock().unwrap_or_else(|poison| {
                     tracing::warn!("executor serial lock was poisoned");
                     self.locks.serial.clear_poison();
                     poison.into_inner()
                 });
+                tracing::info!("executor acquired serial execution lock");
 
                 // WORKAROUND: prevents interval miner mining blocks while a transaction is being executed.
+                // this can be removed when we implement conflict detection for block number
                 let _miner_lock = if self.miner.mode.is_interval() {
-                    Some(self.miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
+                    let miner_lock = Some(self.miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
                         tracing::warn!("miner mine_and_commit lock was poisoned");
                         self.locks.serial.clear_poison();
                         poison.into_inner()
-                    }))
+                    }));
+                    tracing::info!("executor acquired mine_and_commit lock to prevent executor mining block");
+                    miner_lock
                 } else {
+                    tracing::warn!("executor did not try to acquire mine_and_commit lock");
                     None
                 };
 
+                // execute transaction
                 self.execute_local_transaction_attempts(tx_input, EvmRoute::Serial, INFINITE_ATTEMPTS)
             }
 
