@@ -81,11 +81,12 @@ impl TxSigner {
 
     pub async fn sync_nonce(&mut self, chain: &BlockchainClient) -> anyhow::Result<()> {
         self.nonce = chain.fetch_transaction_count(&self.wallet.address().into()).await?;
+        tracing::info!(?self.nonce, "synced nonce with substrate");
         Ok(())
     }
 
     pub fn sign_transaction_input(&mut self, mut tx_input: TransactionInput) -> TransactionInput {
-        tracing::info!(?tx_input.hash, "signing transaction");
+        tracing::info!(?tx_input.hash, ?self.nonce, "signing transaction");
         let gas_limit = 9_999_999u32;
         let tx: TransactionRequest = <TransactionRequest as From<TransactionInput>>::from(tx_input.clone())
             .nonce(self.nonce)
@@ -158,21 +159,6 @@ impl ExternalRelayer {
         Ok(relayer)
     }
 
-    async fn insert_unsent_transaction(&mut self, tx_mined: TransactionMined) {
-        let tx_hash = tx_mined.input.hash;
-        let tx_json = to_json_value(tx_mined);
-        while let Err(e) = sqlx::query!(
-            "INSERT INTO unsent_transactions(transaction_hash, transaction) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-            tx_hash as _,
-            tx_json as _
-        )
-        .execute(&self.pool)
-        .await
-        {
-            tracing::warn!(?e, "failed to insert unsent transaction, retrying...");
-        }
-    }
-
     async fn insert_out_of_sync_wallet(&mut self, address: Address) {
         self.out_of_sync_wallets.insert(address);
         while let Err(e) = sqlx::query!("INSERT INTO out_of_sync_wallets(address) VALUES ($1) ON CONFLICT DO NOTHING", address as _)
@@ -181,42 +167,6 @@ impl ExternalRelayer {
         {
             tracing::warn!(?e, "failed to insert out of sync wallet, retrying...");
         }
-    }
-
-    async fn resign_unsent_transactions(&mut self) -> anyhow::Result<Vec<TransactionMined>> {
-        self.signer.sync_nonce(&self.substrate_chain).await?;
-        let unsent_transactions = sqlx::query!("SELECT * FROM unsent_transactions").fetch_all(&self.pool).await?;
-
-        let txs: Vec<TransactionMined> = unsent_transactions
-            .into_iter()
-            .map(|row| serde_json::from_value(row.transaction))
-            .collect::<Result<Vec<TransactionMined>, _>>()?
-            .into_iter()
-            .sorted()
-            .collect();
-        let mut ret = vec![];
-        for mut tx in txs {
-            if let Some(input) = self.get_mapped_transaction(tx.input.hash).await? {
-                tx.input = input;
-            } else {
-                let prev_hash = tx.input.hash;
-                tx.input = self.signer.sign_transaction_input(tx.input);
-                self.insert_transaction_mapping(prev_hash, &tx.input, true).await;
-            }
-            ret.push(tx);
-        }
-
-        Ok(ret)
-    }
-
-    pub async fn relay_unsent_transactions(&mut self) -> anyhow::Result<()> {
-        let combined_transactions = self.resign_unsent_transactions().await?;
-
-        for tx in combined_transactions {
-            let _ = tokio::time::timeout(Duration::from_secs(1), self.relay_transaction(tx)).await;
-        }
-
-        Ok(())
     }
 
     async fn combine_transactions(&mut self, blocks: Vec<Block>) -> anyhow::Result<Vec<TransactionMined>> {
@@ -247,9 +197,6 @@ impl ExternalRelayer {
                 } else {
                     continue;
                 }
-            } else if self.out_of_sync_wallets.contains(&tx.input.signer) {
-                self.insert_unsent_transaction(tx).await;
-                continue;
             }
             combined_transactions.push(tx);
         }
