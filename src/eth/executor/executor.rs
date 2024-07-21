@@ -449,21 +449,24 @@ impl Executor {
             Span::with(|s| {
                 s.rec_opt("tx_to", &tx_input.to);
             });
+
+            // prepare evm input
+            let pending_block_number = self.storage.read_pending_block_number()?.unwrap_or_default();
+            let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_block_number);
+
+            // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::info!(
                 %attempt,
                 tx_hash = %tx_input.hash,
                 tx_nonce = %tx_input.nonce,
-                tx_from = ?tx_input.from,
+                tx_from = %tx_input.from,
                 tx_signer = %tx_input.signer,
                 tx_to = ?tx_input.to,
                 tx_data_len = %tx_input.input.len(),
                 tx_data = %tx_input.input,
+                ?evm_input,
                 "executing local transaction attempt"
             );
-
-            // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
-            let pending_block_number = self.storage.read_pending_block_number()?.unwrap_or_default();
-            let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_block_number);
 
             let evm_result = match self.evms.execute(evm_input, evm_route) {
                 Ok(evm_result) => evm_result,
