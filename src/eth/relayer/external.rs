@@ -17,7 +17,6 @@ use ethers_signers::LocalWallet;
 use ethers_signers::Signer;
 use futures::future::join_all;
 use futures::StreamExt;
-use hex_literal::hex;
 use itertools::Itertools;
 use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
@@ -392,7 +391,6 @@ impl ExternalRelayer {
             return Err(anyhow!("some blocks in this batch have not been mined in stratus"));
         }
 
-        self.signer.sync_nonce(&self.substrate_chain).await?;
         let combined_transactions = self.combine_transactions(blocks).await?;
         let modified_slots = TransactionDag::get_slot_writes(&combined_transactions);
         let senders = combined_transactions
