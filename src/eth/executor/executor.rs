@@ -360,13 +360,11 @@ impl Executor {
             // ) Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
             // * Conflict detection runs, but it should never trigger because of the Mutex.
             ExecutorStrategy::Serial => {
-                let _serial_lock = match self.locks.serial.lock() {
-                    Ok(guard) => guard,
-                    Err(_) => {
-                        self.locks.serial.clear_poison();
-                        self.locks.serial.lock().unwrap()
-                    }
-                };
+                let _serial_lock = self.locks.serial.lock().unwrap_or_else(|poison| {
+                    tracing::warn!("executor serial lock was poisoned");
+                    self.locks.serial.clear_poison();
+                    poison.into_inner()
+                });
                 self.execute_local_transaction_attempts(tx_input, EvmRoute::Serial, INFINITE_ATTEMPTS)
             }
             // Executes transactions in parallel mode:
