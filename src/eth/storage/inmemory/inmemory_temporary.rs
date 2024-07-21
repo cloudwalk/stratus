@@ -224,11 +224,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Accounts and Slots
     // -------------------------------------------------------------------------
 
-    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
-        let states = self.lock_read();
-        Ok(check_conflicts(&states, execution))
-    }
-
     fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         let states = self.lock_read();
         Ok(read_account(&states, address))
