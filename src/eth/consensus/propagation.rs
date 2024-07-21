@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use tokio::sync::broadcast;
 use tonic::Request;
 
 use super::Block;
@@ -15,6 +16,8 @@ use crate::eth::consensus::append_entry::AppendBlockCommitResponse;
 use crate::eth::consensus::append_entry::AppendTransactionExecutionsRequest;
 use crate::eth::consensus::append_entry::AppendTransactionExecutionsResponse;
 use crate::eth::consensus::append_entry::StatusCode;
+use crate::eth::primitives::TransactionExecution;
+use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::SleepReason;
 use crate::GlobalState;
@@ -298,4 +301,67 @@ async fn send_append_entry_request(
     }?;
 
     Ok(response)
+}
+
+#[allow(dead_code)]
+pub fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
+    // XXX FIXME: deal with the scenario where a transactionHash arrives after the block;
+    // in this case, before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
+
+    const TASK_NAME: &str = "consensus::transaction_execution_queue";
+
+    spawn_named(TASK_NAME, async move {
+        let interval = Duration::from_millis(40);
+        loop {
+            if GlobalState::is_shutdown_warn(TASK_NAME) {
+                return;
+            };
+
+            tokio::time::sleep(interval).await;
+
+            handle_transaction_executions(Arc::clone(&consensus)).await;
+        }
+    });
+}
+
+/// This channel broadcasts blocks and transactons executions to followers.
+/// Each follower has a queue of blocks and transactions to be sent at handle_peer_propagation.
+//TODO this broadcast needs to wait for majority of followers to confirm the log before sending the next one
+#[allow(dead_code)]
+pub fn initialize_append_entries_channel(
+    consensus: Arc<Consensus>,
+    mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
+    mut rx_blocks: broadcast::Receiver<Block>,
+) {
+    const TASK_NAME: &str = "consensus::block_and_executions_sender";
+    spawn_named(TASK_NAME, async move {
+        loop {
+            tokio::select! {
+                _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
+                    return;
+                },
+                Ok(tx) = rx_pending_txs.recv() => {
+                    if Consensus::is_leader() {
+                        tracing::info!(tx_hash = %tx.hash(), "received transaction execution to send to followers");
+                        if tx.is_local() {
+                            tracing::debug!(tx_hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
+                            continue;
+                        }
+
+                        let transaction = vec![tx.to_append_entry_transaction()];
+                        let transaction_entry = LogEntryData::TransactionExecutionEntries(transaction);
+                        if Arc::clone(&consensus).broadcast_sender.send(transaction_entry).is_err() {
+                            tracing::debug!("failed to broadcast transaction");
+                        }
+                    }
+                },
+                Ok(block) = rx_blocks.recv() => {
+                    handle_block_entry(Arc::clone(&consensus), block).await;
+                },
+                else => {
+                    tokio::task::yield_now().await;
+                },
+            }
+        }
+    });
 }

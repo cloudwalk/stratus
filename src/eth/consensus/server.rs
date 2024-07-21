@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
+use tonic::transport::Server;
 use tonic::Request;
 use tonic::Response;
 use tonic::Status;
@@ -16,6 +17,7 @@ use super::append_entry::AppendTransactionExecutionsResponse;
 use super::append_entry::RequestVoteRequest;
 use super::append_entry::RequestVoteResponse;
 use super::append_entry::StatusCode;
+use crate::eth::consensus::append_entry::append_entry_service_server::AppendEntryServiceServer;
 use crate::eth::consensus::AppendEntryService;
 use crate::eth::consensus::LogEntryData;
 use crate::eth::consensus::PeerAddress;
@@ -24,14 +26,41 @@ use crate::eth::miner::block_from_propagation;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::Consensus;
+use crate::ext::spawn_named;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::GlobalState;
 
 #[cfg(feature = "metrics")]
 mod label {
     pub(super) const APPEND_TRANSACTION_EXECUTIONS: &str = "append_transaction_executions";
     pub(super) const APPEND_BLOCK_COMMIT: &str = "append_block_commit";
     pub(super) const REQUEST_VOTE: &str = "request_vote";
+}
+
+#[allow(dead_code)]
+pub fn initialize_server(consensus: Arc<Consensus>) {
+    const TASK_NAME: &str = "consensus::server";
+    spawn_named(TASK_NAME, async move {
+        tracing::info!("Starting append entry service at address: {}", consensus.grpc_address);
+        let addr = consensus.grpc_address;
+
+        let append_entry_service = AppendEntryServiceImpl {
+            consensus: Mutex::new(consensus),
+        };
+
+        let shutdown = GlobalState::wait_shutdown_warn(TASK_NAME);
+
+        let server = Server::builder()
+            .add_service(AppendEntryServiceServer::new(append_entry_service))
+            .serve_with_shutdown(addr, shutdown)
+            .await;
+
+        if let Err(e) = server {
+            let message = GlobalState::shutdown_from("consensus", &format!("failed to create server at {}", addr));
+            tracing::error!(reason = ?e, %message);
+        }
+    });
 }
 
 pub struct AppendEntryServiceImpl {
