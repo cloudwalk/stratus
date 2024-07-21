@@ -9,8 +9,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
@@ -245,26 +243,6 @@ impl StratusStorage {
             .map_err(Into::into)
     }
 
-    pub fn check_conflicts(&self, execution: &EvmExecution) -> Result<Option<ExecutionConflicts>, StratusError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::debug_span!("storage::check_conflicts").entered();
-        tracing::debug!(storage = %label::TEMP, "checking conflicts");
-
-        timed(|| self.temp.check_conflicts(execution))
-            .with(|m| {
-                metrics::inc_storage_check_conflicts(
-                    m.elapsed,
-                    label::TEMP,
-                    m.result.is_ok(),
-                    m.result.as_ref().is_ok_and(|conflicts| conflicts.is_some()),
-                );
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to check conflicts");
-                }
-            })
-            .map_err(Into::into)
-    }
-
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
@@ -408,7 +386,7 @@ impl StratusStorage {
         let mined_number = self.read_mined_block_number()?;
         if not(block_number.is_zero()) && block_number != mined_number.next() {
             tracing::error!(%block_number, %mined_number, "failed to save block because mismatch with mined block number");
-            return Err(StratusError::MinedNumberConflict {
+            return Err(StratusError::StorageMinedNumberConflict {
                 new: block_number,
                 mined: mined_number,
             });
@@ -418,7 +396,7 @@ impl StratusStorage {
         if let Some(pending_number) = self.read_pending_block_number()? {
             if block_number >= pending_number {
                 tracing::error!(%block_number, %pending_number, "failed to save block because mismatch with pending block number");
-                return Err(StratusError::PendingNumberConflict {
+                return Err(StratusError::StoragePendingNumberConflict {
                     new: block_number,
                     pending: pending_number,
                 });
@@ -429,7 +407,7 @@ impl StratusStorage {
         let existing_block = self.read_block(&BlockFilter::Number(block_number))?;
         if existing_block.is_some() {
             tracing::error!(%block_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
-            return Err(StratusError::BlockConflict { number: block_number });
+            return Err(StratusError::StorageBlockConflict { number: block_number });
         }
 
         // save block
@@ -548,7 +526,7 @@ impl StratusStorage {
             BlockFilter::Number(number) => Ok(StoragePointInTime::MinedPast(*number)),
             BlockFilter::Hash(_) => match self.read_block(block_filter)? {
                 Some(block) => Ok(StoragePointInTime::MinedPast(block.header.number)),
-                None => Err(StratusError::BlockFilterInvalid { filter: *block_filter }),
+                None => Err(StratusError::RpcBlockFilterInvalid { filter: *block_filter }),
             },
         }
     }

@@ -1,4 +1,9 @@
 use std::collections::HashSet;
+use std::fs::create_dir;
+use std::fs::File;
+use std::io::BufWriter;
+use std::io::Write;
+use std::path::Path;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -13,8 +18,10 @@ use ethers_signers::Signer;
 use futures::future::join_all;
 use futures::StreamExt;
 use itertools::Itertools;
+use serde_json::Value;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use tokio::sync::RwLock;
 use tracing::Span;
 
 use super::transaction_dag::TransactionDag;
@@ -35,7 +42,6 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StoragePointInTime;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
-use crate::ext::ResultExt;
 use crate::infra::blockchain_client::pending_transaction::PendingTransaction;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -154,7 +160,7 @@ impl ExternalRelayer {
 
     async fn insert_unsent_transaction(&mut self, tx_mined: TransactionMined) {
         let tx_hash = tx_mined.input.hash;
-        let tx_json = serde_json::to_value(tx_mined).expect_infallible();
+        let tx_json = to_json_value(tx_mined);
         while let Err(e) = sqlx::query!(
             "INSERT INTO unsent_transactions(transaction_hash, transaction) VALUES ($1, $2) ON CONFLICT DO NOTHING",
             tx_hash as _,
@@ -182,10 +188,11 @@ impl ExternalRelayer {
         for mut tx in blocks.into_iter().flat_map(|block| block.transactions).sorted() {
             let should_resign = {
                 tx.input.extract_function().is_some_and(|sig| {
-                    let scope_split = sig.split_once("::");
+                    let scope = sig.split_once("::").map(|(scope, _)| scope);
                     let function_split = sig.split_once('(');
-                    (SIGNATURES.contains(sig.as_ref()) || scope_split.is_some_and(|(scope, _)| SIGNATURES.contains(scope)))
-                        && !function_split.is_some_and(|(function, _)| UNRESIGNABLE_FUNCTIONS.contains(function))
+                    let contract_is_resignable = || SIGNATURES.contains(sig.as_ref()) || scope.is_some_and(|scope| SIGNATURES.contains(scope));
+                    let function_is_not_blocklisted = || !function_split.is_some_and(|(function, _)| UNRESIGNABLE_FUNCTIONS.contains(function));
+                    contract_is_resignable() && function_is_not_blocklisted()
                 })
             };
             if should_resign {
@@ -233,7 +240,7 @@ impl ExternalRelayer {
                 break;
             }
             tracing::info!(?missing, "found missing blocks, cleaning up");
-            let missing_json = missing.into_iter().map(|hash| serde_json::to_value(hash).expect_infallible()).collect_vec();
+            let missing_json = missing.into_iter().map(to_json_value).collect_vec();
             while sqlx::query!(
                 "DELETE FROM relayer_blocks WHERE payload->'header'->'hash' IN (SELECT * FROM UNNEST($1::JSONB[]))",
                 missing_json as _
@@ -651,22 +658,44 @@ impl ExternalRelayer {
 }
 
 pub struct ExternalRelayerClient {
-    pool: PgPool,
+    pool: Option<PgPool>,
+    conn_lost: RwLock<bool>,
 }
 
 impl ExternalRelayerClient {
     /// Creates a new [`ExternalRelayerClient`].
     pub async fn new(config: ExternalRelayerClientConfig) -> Self {
+        if !Path::new("blocks_json").exists() {
+            create_dir("blocks_json").expect("creating a dir that does not exist should not fail");
+        }
         tracing::info!(?config, "creating external relayer client");
         let storage = PgPoolOptions::new()
             .min_connections(config.connections)
             .max_connections(config.connections)
             .acquire_timeout(config.acquire_timeout)
             .connect(&config.url)
-            .await
-            .expect("should not fail to create pgpool");
+            .await;
+        match storage {
+            Ok(storage) => Self {
+                pool: Some(storage),
+                conn_lost: false.into(),
+            },
+            Err(err) => {
+                tracing::error!(?err, "failed to establish connection to postgresql");
+                Self {
+                    pool: None,
+                    conn_lost: true.into(),
+                }
+            }
+        }
+    }
 
-        Self { pool: storage }
+    pub fn save_block_to_file(block_number: BlockNumber, block_json: &Value) -> anyhow::Result<()> {
+        let file = File::create(format!("blocks_json/{}", block_number.as_u64()))?;
+        let mut writer = BufWriter::new(file);
+        serde_json::to_writer(&mut writer, &block_json)?;
+        writer.flush()?;
+        Ok(())
     }
 
     /// Insert the block into the relayer_blocks table on pgsql to be processed by the relayer. Returns Err if
@@ -689,34 +718,47 @@ impl ExternalRelayerClient {
         let block_json = to_json_value(block);
         // fill span
         Span::with(|s| s.rec_str("block_number", &block_number));
-        let mut remaining_tries = 5;
+        let mut remaining_tries = 3;
 
-        while remaining_tries > 0 {
-            if let Err(e) = sqlx::query!(
-                r#"
-                    INSERT INTO relayer_blocks
-                    (number, payload)
-                    VALUES ($1, $2)
-                    ON CONFLICT (number) DO UPDATE
-                    SET payload = EXCLUDED.payload"#,
-                block_number as _,
-                &block_json
-            )
-            .execute(&self.pool)
-            .await
-            {
-                remaining_tries -= 1;
-                tracing::warn!(reason = ?e, ?remaining_tries, "failed to insert into relayer_blocks");
-            } else {
-                break;
-            }
+        match *self.conn_lost.read().await {
+            false =>
+                if let Some(pool) = &self.pool {
+                    while remaining_tries > 0 {
+                        if let Err(e) = sqlx::query!(
+                            r#"
+                            INSERT INTO relayer_blocks
+                            (number, payload)
+                            VALUES ($1, $2)
+                            ON CONFLICT (number) DO UPDATE
+                            SET payload = EXCLUDED.payload"#,
+                            block_number as _,
+                            &block_json
+                        )
+                        .execute(pool)
+                        .await
+                        {
+                            remaining_tries -= 1;
+                            tracing::warn!(reason = ?e, ?remaining_tries, "failed to insert into relayer_blocks");
+                        } else {
+                            break;
+                        }
+                    }
+                },
+            true => Self::save_block_to_file(block_number, &block_json)?,
         }
 
         #[cfg(feature = "metrics")]
         metrics::inc_send_to_relayer(start.elapsed());
 
         match remaining_tries {
-            0 => Err(anyhow!("failed to insert block into relayer_blocks after 5 tries")),
+            0 => {
+                let mut conn_lost = self.conn_lost.write().await;
+                Self::save_block_to_file(block_number, &block_json)?;
+                *conn_lost = true;
+                Err(anyhow!(
+                    "failed to insert block into relayer_blocks after 5 tries, switching to storing blocks in files."
+                ))
+            }
             _ => Ok(()),
         }
     }
