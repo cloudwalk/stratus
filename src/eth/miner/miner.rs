@@ -33,12 +33,12 @@ use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
 
 pub struct Miner {
-    locks: MinerLocks,
+    pub locks: MinerLocks,
 
     storage: Arc<StratusStorage>,
 
     /// Mode the block miner is running.
-    mode: MinerMode,
+    pub mode: MinerMode,
 
     /// Broadcasts pending transactions events.
     pub notifier_pending_txs: broadcast::Sender<TransactionExecution>,
@@ -55,9 +55,9 @@ pub struct Miner {
 
 /// Locks used in operations that mutate state.
 #[derive(Default)]
-struct MinerLocks {
+pub struct MinerLocks {
     save_execution: Mutex<()>,
-    mine_and_commit: Mutex<()>,
+    pub mine_and_commit: Mutex<()>,
     mine: Mutex<()>,
     commit: Mutex<()>,
 }
