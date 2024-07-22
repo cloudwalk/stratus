@@ -8,15 +8,11 @@ use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
 #[derive(Debug, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ChainId(U64);
+pub struct ChainId(pub U64);
 
 impl ChainId {
     pub fn new(value: U64) -> Self {
         Self(value)
-    }
-
-    pub fn inner_value(&self) -> U64 {
-        self.0
     }
 }
 

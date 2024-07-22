@@ -10,7 +10,7 @@ use crate::gen_newtype_try_from;
 #[derive(
     Debug, derive_more::Display, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Hash, PartialOrd, Ord,
 )]
-pub struct Index(u64);
+pub struct Index(pub u64);
 
 impl Index {
     pub const ZERO: Index = Index(0u64);
@@ -18,10 +18,6 @@ impl Index {
 
     pub fn new(inner: u64) -> Self {
         Index(inner)
-    }
-
-    pub fn inner_value(&self) -> u64 {
-        self.0
     }
 }
 
