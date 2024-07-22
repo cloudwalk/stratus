@@ -625,7 +625,7 @@ impl ExternalRelayer {
         tracing::debug!("relaying transactions");
         let mut results = vec![];
         let futures = dag.split_components().into_iter().map(|dag| self.relay_component(dag));
-        let mut stream = futures::stream::iter(futures).buffered(60);
+        let mut stream = futures::stream::iter(futures).buffered(500);
         while let Some(result) = stream.next().await {
             match result {
                 Ok(res) => results.push(res),
