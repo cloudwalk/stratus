@@ -593,7 +593,7 @@ impl ExternalRelayer {
             let futures = roots
                 .into_iter()
                 .sorted()
-                .map(|root_tx| tokio::time::timeout(Duration::from_secs(240), self.relay_transaction(root_tx)));
+                .map(|root_tx| tokio::time::timeout(Duration::from_secs(120), self.relay_transaction(root_tx)));
             let mut stream = futures::stream::iter(futures).buffered(50);
             while let Some(result) = stream.next().await {
                 match result {
