@@ -366,7 +366,7 @@ impl Consensus {
             consensus.become_leader().await;
         } else {
             tracing::info!(votes = votes, peers = total_nodes - 1, term = term, "failed to become the leader on election");
-            consensus.set_role(Role::Follower);
+            Self::set_role(Role::Follower);
         }
 
         #[cfg(feature = "metrics")]
@@ -397,7 +397,7 @@ impl Consensus {
             }
         }
 
-        self.set_role(Role::Leader);
+        Self::set_role(Role::Leader);
     }
 
     async fn refresh_blockchain_client(&self) {
@@ -435,7 +435,7 @@ impl Consensus {
         });
     }
 
-    fn set_role(&self, role: Role) {
+    fn set_role(role: Role) {
         if ROLE.load(Ordering::SeqCst) == role as u8 {
             tracing::info!(role = ?role, "role remains the same");
             return;
