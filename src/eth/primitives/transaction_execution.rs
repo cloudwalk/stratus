@@ -38,9 +38,17 @@ pub enum TransactionExecution {
 }
 
 impl TransactionExecution {
-    /// Creates a new transaction execution from a local transaction.
+    /// Creates a new local transaction execution.
     pub fn new_local(tx: TransactionInput, result: EvmExecutionResult) -> Self {
         Self::Local(LocalTransactionExecution { input: tx, result })
+    }
+
+    /// Extracts the inner [`LocalTransactionExecution`] if the execution is a local execution.
+    pub fn as_local(self) -> Option<LocalTransactionExecution> {
+        match self {
+            Self::Local(inner) => Some(inner),
+            _ => None,
+        }
     }
 
     /// Checks if the current transaction was completed normally.
@@ -90,8 +98,8 @@ impl TransactionExecution {
             Self::Local(LocalTransactionExecution { input, result }) => append_entry::TransactionExecutionEntry {
                 hash: input.hash.as_fixed_bytes().to_vec(),
                 nonce: input.nonce.as_u64(),
-                value: u256_to_bytes(*input.value.inner()),
-                gas_price: u256_to_bytes(*input.gas_price.inner()),
+                value: u256_to_bytes(input.value.0),
+                gas_price: u256_to_bytes(input.gas_price.0),
                 input: input.input.to_vec(),
                 v: input.v.as_u64(),
                 r: u256_to_bytes(input.r),
@@ -108,10 +116,10 @@ impl TransactionExecution {
                     .map(|log| append_entry::Log {
                         address: log.address.as_bytes().to_vec(),
                         topics: vec![
-                            log.topic0.map_or_else(Vec::new, |t| t.inner().as_bytes().to_vec()),
-                            log.topic1.map_or_else(Vec::new, |t| t.inner().as_bytes().to_vec()),
-                            log.topic2.map_or_else(Vec::new, |t| t.inner().as_bytes().to_vec()),
-                            log.topic3.map_or_else(Vec::new, |t| t.inner().as_bytes().to_vec()),
+                            log.topic0.map_or_else(Vec::new, |t| t.0.as_bytes().to_vec()),
+                            log.topic1.map_or_else(Vec::new, |t| t.0.as_bytes().to_vec()),
+                            log.topic2.map_or_else(Vec::new, |t| t.0.as_bytes().to_vec()),
+                            log.topic3.map_or_else(Vec::new, |t| t.0.as_bytes().to_vec()),
                         ],
                         data: log.data.to_vec(),
                     })
@@ -184,13 +192,6 @@ impl TransactionExecution {
         };
 
         Ok(Self::Local(LocalTransactionExecution { input, result }))
-    }
-
-    pub fn inner_local(&self) -> Option<LocalTransactionExecution> {
-        match self {
-            Self::Local(inner) => Some(inner.clone()),
-            _ => None,
-        }
     }
 }
 

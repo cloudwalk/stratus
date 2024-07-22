@@ -89,7 +89,7 @@ impl From<&Account> for RevmAccountInfo {
         Self {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
-            code_hash: value.code_hash.inner().0.into(),
+            code_hash: value.code_hash.0 .0.into(),
             code: value.bytecode.as_ref().cloned().map_into(),
         }
     }

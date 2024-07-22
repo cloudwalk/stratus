@@ -9,15 +9,11 @@ use crate::gen_newtype_from;
 
 /// Topic is part of a [`Log`](super::Log) emitted by the EVM during contract execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Hash)]
-pub struct LogTopic(H256);
+pub struct LogTopic(pub H256);
 
 impl LogTopic {
     pub fn new(inner: H256) -> Self {
         Self(inner)
-    }
-
-    pub fn inner(&self) -> H256 {
-        self.0
     }
 }
 
