@@ -573,7 +573,10 @@ impl ExternalRelayer {
         loop {
             if let Err(error) = self.compare_receipt(tx_mined.clone(), tx).await {
                 match error {
-                    RelayError::TransactionNotFound => tracing::warn!(%tx_hash, "transaction not found in substrate, trying to resend"),
+                    RelayError::TransactionNotFound => {
+                        tracing::warn!(%tx_hash, "transaction not found in substrate, trying to resend");
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    },
                     err => break Err(err),
                 }
                 tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
@@ -596,7 +599,7 @@ impl ExternalRelayer {
                 .sorted()
                 .map(|root_tx| tokio::time::timeout(Duration::from_secs(120), self.relay_transaction(root_tx)));
             let mut stream = futures::stream::iter(futures).buffered(50);
-            while let Ok(Some(result)) = tokio::time::timeout(Duration::from_millis(50), stream.next()).await {
+            while let Ok(Some(result)) = tokio::time::timeout(Duration::from_secs(2), stream.next()).await {
                 match result {
                     Ok(res) => results.push(res),
                     Err(_) => return Err(RelayError::RelayTimeout),
