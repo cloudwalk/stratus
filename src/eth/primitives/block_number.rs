@@ -22,7 +22,7 @@ use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct BlockNumber(U64);
+pub struct BlockNumber(pub U64);
 
 impl BlockNumber {
     pub const ZERO: BlockNumber = BlockNumber(U64::zero());
@@ -72,10 +72,6 @@ impl BlockNumber {
     /// Converts itself to u64.
     pub fn as_u64(&self) -> u64 {
         self.0.as_u64()
-    }
-
-    pub fn inner_value(&self) -> U64 {
-        self.0
     }
 }
 

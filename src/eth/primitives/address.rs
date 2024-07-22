@@ -21,7 +21,7 @@ use crate::gen_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct Address(H160);
+pub struct Address(pub H160);
 
 impl Address {
     // Special ETH address used in some contexts.
@@ -56,10 +56,6 @@ impl Address {
     /// * Not sure if zero address should be ignored or not.
     pub fn is_ignored(&self) -> bool {
         self.is_coinbase() || self.is_zero()
-    }
-
-    pub fn inner_value(&self) -> H160 {
-        self.0
     }
 }
 

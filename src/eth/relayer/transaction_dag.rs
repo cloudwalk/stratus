@@ -276,7 +276,7 @@ mod tests {
         let mut i = 0;
         while let Some(roots) = dag.take_roots() {
             assert_eq!(roots.len(), expected[i].len());
-            assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
+            assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.0)));
             i += 1;
         }
         //println!("{:?}", petgraph::dot::Dot::with_config(&dag.dag, &[petgraph::dot::Config::EdgeNoLabel, petgraph::dot::Config::NodeIndexLabel]));
@@ -325,7 +325,7 @@ mod tests {
                 let expected = expected_component_1.clone();
                 while let Some(roots) = component.take_roots() {
                     assert_eq!(roots.len(), expected[i].len());
-                    assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
+                    assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.0)));
                     i += 1;
                 }
                 continue;
@@ -336,7 +336,7 @@ mod tests {
                 let mut i = 0;
                 while let Some(roots) = component.take_roots() {
                     assert_eq!(roots.len(), expected[i].len());
-                    assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
+                    assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.0)));
                     i += 1;
                 }
                 continue;
@@ -404,7 +404,7 @@ mod tests {
             while let Some(roots) = dag.take_roots() {
                 assert_eq!(roots.len(), expected[i].len());
 
-                assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.inner_value())));
+                assert!(roots.iter().all(|tx| expected[i].contains(&tx.transaction_index.0)));
                 i += 1;
             }
         }

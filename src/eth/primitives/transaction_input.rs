@@ -185,7 +185,7 @@ impl From<TransactionInput> for TransactionRequest {
     fn from(value: TransactionInput) -> Self {
         let input = value;
         Self {
-            chain_id: input.chain_id.map(|id| id.inner_value()),
+            chain_id: input.chain_id.map(|id| id.0),
             nonce: Some(input.nonce.into()),
             from: Some(input.signer.into()),
             to: input.to.map(|to| NameOrAddress::Address(to.into())),

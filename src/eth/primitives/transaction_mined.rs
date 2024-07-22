@@ -167,7 +167,7 @@ mod tests {
         let v = (0..1000)
             .map(|_| create_tx(rng.gen_range(0..100), rng.gen_range(0..100)))
             .sorted()
-            .map(|tx| (tx.block_number.as_u64(), tx.transaction_index.inner_value()))
+            .map(|tx| (tx.block_number.as_u64(), tx.transaction_index.0))
             .collect_vec();
         for pair in v {
             format!("{:?}", pair);

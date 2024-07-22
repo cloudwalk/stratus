@@ -164,13 +164,7 @@ impl AccountRocksdb {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SlotValueRocksdb(U256);
-
-impl SlotValueRocksdb {
-    pub fn inner_value(&self) -> U256 {
-        self.0
-    }
-}
+pub struct SlotValueRocksdb(pub U256);
 
 impl From<SlotValue> for SlotValueRocksdb {
     fn from(item: SlotValue) -> Self {
@@ -180,50 +174,39 @@ impl From<SlotValue> for SlotValueRocksdb {
 
 impl From<SlotValueRocksdb> for SlotValue {
     fn from(item: SlotValueRocksdb) -> Self {
-        SlotValue::from(item.inner_value())
+        SlotValue::from(item.0)
     }
 }
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct AddressRocksdb(H160);
-
-impl AddressRocksdb {
-    pub fn inner_value(&self) -> H160 {
-        self.0
-    }
-}
+pub struct AddressRocksdb(pub H160);
 
 impl From<Address> for AddressRocksdb {
     fn from(item: Address) -> Self {
-        AddressRocksdb(item.inner_value())
+        AddressRocksdb(item.0)
     }
 }
 
 impl From<AddressRocksdb> for Address {
     fn from(item: AddressRocksdb) -> Self {
-        Address::new_from_h160(item.inner_value())
+        Address::new_from_h160(item.0)
     }
 }
 
 #[derive(Debug, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
-pub struct BlockNumberRocksdb(U64);
+pub struct BlockNumberRocksdb(pub U64);
 
 gen_newtype_from!(self = BlockNumberRocksdb, other = u8, u16, u32, u64, U64, usize, i32, i64);
-impl BlockNumberRocksdb {
-    pub fn inner_value(&self) -> U64 {
-        self.0
-    }
-}
 
 impl From<BlockNumber> for BlockNumberRocksdb {
     fn from(item: BlockNumber) -> Self {
-        BlockNumberRocksdb(item.inner_value())
+        BlockNumberRocksdb(item.0)
     }
 }
 
 impl From<BlockNumberRocksdb> for BlockNumber {
     fn from(item: BlockNumberRocksdb) -> Self {
-        BlockNumber::from(item.inner_value())
+        BlockNumber::from(item.0)
     }
 }
 
@@ -238,12 +221,6 @@ pub struct SlotIndexRocksdb(U256);
 
 gen_newtype_from!(self = SlotIndexRocksdb, other = u64);
 
-impl SlotIndexRocksdb {
-    pub fn inner_value(&self) -> U256 {
-        self.0
-    }
-}
-
 impl From<SlotIndex> for SlotIndexRocksdb {
     fn from(item: SlotIndex) -> Self {
         SlotIndexRocksdb(item.as_u256())
@@ -252,49 +229,37 @@ impl From<SlotIndex> for SlotIndexRocksdb {
 
 impl From<SlotIndexRocksdb> for SlotIndex {
     fn from(item: SlotIndexRocksdb) -> Self {
-        SlotIndex::from(item.inner_value())
+        SlotIndex::from(item.0)
     }
 }
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct HashRocksdb(H256);
-
-impl HashRocksdb {
-    pub fn inner_value(&self) -> H256 {
-        self.0
-    }
-}
+pub struct HashRocksdb(pub H256);
 
 impl From<Hash> for HashRocksdb {
     fn from(item: Hash) -> Self {
-        HashRocksdb(item.inner_value())
+        HashRocksdb(item.0)
     }
 }
 
 impl From<HashRocksdb> for Hash {
     fn from(item: HashRocksdb) -> Self {
-        Hash::new_from_h256(item.inner_value())
+        Hash::new_from_h256(item.0)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Copy, Hash)]
-pub struct IndexRocksdb(u64);
-
-impl IndexRocksdb {
-    pub fn inner_value(&self) -> u64 {
-        self.0
-    }
-}
+pub struct IndexRocksdb(pub u64);
 
 impl From<Index> for IndexRocksdb {
     fn from(item: Index) -> Self {
-        IndexRocksdb(item.inner_value())
+        IndexRocksdb(item.0)
     }
 }
 
 impl From<IndexRocksdb> for Index {
     fn from(item: IndexRocksdb) -> Self {
-        Index::new(item.inner_value())
+        Index::new(item.0)
     }
 }
 
@@ -415,23 +380,17 @@ impl From<SizeRocksdb> for Size {
 }
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ChainIdRocksdb(U64);
-
-impl ChainIdRocksdb {
-    pub fn inner_value(&self) -> U64 {
-        self.0
-    }
-}
+pub struct ChainIdRocksdb(pub U64);
 
 impl From<ChainId> for ChainIdRocksdb {
     fn from(value: ChainId) -> Self {
-        ChainIdRocksdb(value.inner_value())
+        ChainIdRocksdb(value.0)
     }
 }
 
 impl From<ChainIdRocksdb> for ChainId {
     fn from(value: ChainIdRocksdb) -> Self {
-        ChainId::new(value.inner_value())
+        ChainId::new(value.0)
     }
 }
 

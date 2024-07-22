@@ -13,7 +13,7 @@ use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct Hash(H256);
+pub struct Hash(pub H256);
 
 impl Hash {
     /// Creates a hash from the given bytes.
@@ -38,10 +38,6 @@ impl Hash {
     pub fn into_hash_partition(self) -> i16 {
         let n = self.0.to_low_u64_ne() % 10;
         n as i16
-    }
-
-    pub fn inner_value(&self) -> H256 {
-        self.0
     }
 
     pub fn as_fixed_bytes(&self) -> &[u8; 32] {
