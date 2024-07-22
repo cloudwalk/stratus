@@ -4,7 +4,6 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -357,17 +356,19 @@ impl ExternalRelayer {
             .collect::<Result<_, _>>()
     }
 
-    async fn check_nonces(&mut self, addresses: HashSet<Address>) -> anyhow::Result<()> {
+    async fn check_nonces(&mut self, addresses: HashSet<Address>) -> anyhow::Result<bool> {
+        let mut out_of_sync_wallets_found = false;
         for from in addresses.into_iter() {
             if !self.out_of_sync_wallets.contains(&from) {
                 let substrate_nonce = self.substrate_chain.fetch_transaction_count(&from).await?;
                 let stratus_nonce = self.stratus_chain.fetch_transaction_count(&from).await?;
                 if substrate_nonce != stratus_nonce {
                     self.insert_out_of_sync_wallet(from).await;
+                    out_of_sync_wallets_found = true;
                 }
             }
         }
-        Ok(())
+        Ok(out_of_sync_wallets_found)
     }
 
     /// Polls the next block to be relayed and relays it to Substrate.
@@ -394,11 +395,15 @@ impl ExternalRelayer {
 
         let combined_transactions = self.combine_transactions(blocks).await?;
         let modified_slots = TransactionDag::get_slot_writes(&combined_transactions);
-        let senders = combined_transactions
+        let senders: HashSet<Address> = combined_transactions
             .iter()
             .map(|tx| tx.input.signer)
             .filter(|address| address != &self.signer.address)
             .collect();
+
+        if self.check_nonces(senders.clone()).await? {
+            return Err(anyhow!("out of sync wallets found, retrying blocks"));
+        }
 
         let dag = TransactionDag::new(combined_transactions);
 
