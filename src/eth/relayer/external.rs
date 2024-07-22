@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -393,16 +394,16 @@ impl ExternalRelayer {
 
         let combined_transactions = self.combine_transactions(blocks).await?;
         let modified_slots = TransactionDag::get_slot_writes(&combined_transactions);
-        let senders = combined_transactions
-            .iter()
-            .map(|tx| tx.input.signer)
-            .filter(|address| address != &self.signer.address)
-            .collect();
+        // let senders = combined_transactions
+        //    .iter()
+        //    .map(|tx| tx.input.signer)
+        //    .filter(|address| address != &self.signer.address)
+        //    .collect();
 
         let dag = TransactionDag::new(combined_transactions);
 
         let Ok(mismatched_blocks) = self.relay_dag(dag).await else {
-            self.check_nonces(senders).await?;
+            //self.check_nonces(senders).await?;
             return Err(anyhow!("relay timedout, updated out of sync wallets and will try again"));
         };
 
@@ -576,7 +577,7 @@ impl ExternalRelayer {
                     RelayError::TransactionNotFound => {
                         tracing::warn!(%tx_hash, "transaction not found in substrate, trying to resend");
                         tokio::time::sleep(Duration::from_secs(1)).await;
-                    },
+                    }
                     err => break Err(err),
                 }
                 tx = self.send_transaction(tx_mined.clone(), rlp.clone()).await;
@@ -586,24 +587,18 @@ impl ExternalRelayer {
         }
     }
 
-    /// Relays a dag by removing its roots and sending them consecutively.
-    async fn relay_component(&self, mut dag: TransactionDag) -> anyhow::Result<MismatchedBlocks, RelayError> {
-        let start = Instant::now();
-
+    async fn relay_roots(&self, roots: Vec<TransactionMined>) -> anyhow::Result<MismatchedBlocks, RelayError> {
         let mut results = vec![];
 
-        while let Some(roots) = dag.take_roots() {
-            tracing::info!(elapsed=?start.elapsed().as_secs(), transaction_num=roots.len(), remaining=dag.txs_remaining(),"forwarding");
-            let futures = roots
-                .into_iter()
-                .sorted()
-                .map(|root_tx| tokio::time::timeout(Duration::from_secs(120), self.relay_transaction(root_tx)));
-            let mut stream = futures::stream::iter(futures).buffered(50);
-            while let Ok(Some(result)) = tokio::time::timeout(Duration::from_secs(2), stream.next()).await {
-                match result {
-                    Ok(res) => results.push(res),
-                    Err(_) => return Err(RelayError::RelayTimeout),
-                }
+        let futures = roots
+            .into_iter()
+            .sorted()
+            .map(|root_tx| tokio::time::timeout(Duration::from_secs(120), self.relay_transaction(root_tx)));
+        let mut stream = futures::stream::iter(futures).buffered(50);
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(res) => results.push(res),
+                Err(_) => return Err(RelayError::RelayTimeout),
             }
         }
 
@@ -619,6 +614,23 @@ impl ExternalRelayer {
         }
 
         Ok(mismatched_blocks)
+    }
+    /// Relays a dag by removing its roots and sending them consecutively.
+    async fn relay_component(&self, mut dag: TransactionDag) -> anyhow::Result<MismatchedBlocks, RelayError> {
+        let mut futures = vec![];
+        while let Some(roots) = dag.take_roots() {
+            futures.push(self.relay_roots(roots));
+        }
+
+        let results = join_all(futures)
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        Ok(results)
     }
 
     // Split the dag and relay its components.
