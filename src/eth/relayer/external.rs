@@ -588,6 +588,7 @@ impl ExternalRelayer {
         let start = Instant::now();
 
         let mut results = vec![];
+
         while let Some(roots) = dag.take_roots() {
             tracing::info!(elapsed=?start.elapsed().as_secs(), transaction_num=roots.len(), remaining=dag.txs_remaining(),"forwarding");
             let futures = roots
@@ -595,7 +596,7 @@ impl ExternalRelayer {
                 .sorted()
                 .map(|root_tx| tokio::time::timeout(Duration::from_secs(120), self.relay_transaction(root_tx)));
             let mut stream = futures::stream::iter(futures).buffered(50);
-            while let Some(result) = stream.next().await {
+            while let Ok(Some(result)) = tokio::time::timeout(Duration::from_millis(50), stream.next()).await {
                 match result {
                     Ok(res) => results.push(res),
                     Err(_) => return Err(RelayError::RelayTimeout),
