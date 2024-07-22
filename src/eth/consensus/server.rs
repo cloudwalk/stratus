@@ -455,7 +455,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         if request.last_log_index >= candidate_last_log_index {
             consensus.current_term.store(request.term, Ordering::SeqCst);
-            consensus.set_role(Role::Follower);
+            Consensus::set_role(Role::Follower);
             consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
 
             *consensus.voted_for.lock().await = Some(candidate_address.clone());
@@ -495,7 +495,7 @@ mod tests {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
-        consensus.set_role(Role::Follower);
+        Consensus::set_role(Role::Follower);
 
         let executions = vec![create_mock_transaction_execution_entry(None)];
 
@@ -530,7 +530,7 @@ mod tests {
         };
 
         // Simulate the node as not a leader
-        consensus.set_role(Role::Follower);
+        Consensus::set_role(Role::Follower);
 
         let request = Request::new(AppendTransactionExecutionsRequest {
             term: 1,
@@ -557,7 +557,7 @@ mod tests {
         };
 
         // Simulate the node as a leader
-        consensus.set_role(Role::Leader);
+        Consensus::set_role(Role::Leader);
 
         let request = Request::new(AppendTransactionExecutionsRequest {
             term: 1,
@@ -614,7 +614,7 @@ mod tests {
         };
 
         // Simulate the node as a leader
-        consensus.set_role(Role::Leader);
+        Consensus::set_role(Role::Leader);
 
         let request = Request::new(AppendBlockCommitRequest {
             term: 1,

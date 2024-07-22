@@ -168,7 +168,7 @@ fn create_mock_leader_peer(consensus: Arc<Consensus>) -> (PeerAddress, Peer) {
 
 pub async fn create_follower_consensus_with_leader(term: Option<u64>) -> Arc<Consensus> {
     let consensus = create_mock_consensus();
-    consensus.set_role(Role::Follower);
+    Consensus::set_role(Role::Follower);
 
     if let Some(term) = term {
         consensus.current_term.store(term, Ordering::SeqCst);
@@ -185,7 +185,7 @@ pub async fn create_follower_consensus_with_leader(term: Option<u64>) -> Arc<Con
 
 pub fn create_leader_consensus() -> Arc<Consensus> {
     let consensus = create_mock_consensus();
-    consensus.set_role(Role::Leader);
+    Consensus::set_role(Role::Leader);
     zero_global_counter();
     consensus
 }
