@@ -384,7 +384,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
             Status::internal("Failed to get pending transactions")
         })?;
 
-        let transaction_executions: Vec<LocalTransactionExecution> = pending_transactions.iter().filter_map(|tx| tx.inner_local()).collect();
+        let transaction_executions: Vec<LocalTransactionExecution> = pending_transactions.into_iter().filter_map(|tx| tx.as_local()).collect();
 
         //TODO move this logic into BlockMiner and add safety checks as consensus is or isnt on follower mode there
         let block_result = block_from_propagation(block_entry.clone(), transaction_executions);

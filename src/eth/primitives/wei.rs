@@ -19,7 +19,7 @@ use crate::gen_newtype_from;
 #[derive(
     Debug, derive_more::Display, Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize,
 )]
-pub struct Wei(U256);
+pub struct Wei(pub U256);
 
 impl Wei {
     pub const ZERO: Wei = Wei(U256::zero());
@@ -33,10 +33,6 @@ impl Wei {
     /// Checks if current value is zero.
     pub fn is_zero(&self) -> bool {
         self == &Self::ZERO
-    }
-
-    pub fn inner(&self) -> &U256 {
-        &self.0
     }
 }
 

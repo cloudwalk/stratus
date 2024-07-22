@@ -12,7 +12,7 @@ use crate::gen_newtype_from;
 /// In the case of an externally-owned account (EOA), bytecode is null
 /// and the code hash is fixed as the keccak256 hash of an empty string
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct CodeHash(H256);
+pub struct CodeHash(pub H256);
 
 impl Dummy<Faker> for CodeHash {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
@@ -30,10 +30,6 @@ impl CodeHash {
             Some(bytecode) => CodeHash(H256::from_slice(&keccak256(bytecode.as_ref()))),
             None => CodeHash::default(),
         }
-    }
-
-    pub fn inner(&self) -> H256 {
-        self.0
     }
 }
 
