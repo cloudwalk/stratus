@@ -402,7 +402,7 @@ impl ExternalRelayer {
 
         let dag = TransactionDag::new(combined_transactions);
 
-        let Ok(Ok(mismatched_blocks)) = tokio::time::timeout(Duration::from_secs(200), self.relay_dag(dag)).await else {
+        let Ok(Ok(mismatched_blocks)) = tokio::time::timeout(Duration::from_secs(30), self.relay_dag(dag)).await else {
             self.check_nonces(senders).await?;
             return Err(anyhow!("relay timedout, updated out of sync wallets and will try again"));
         };
