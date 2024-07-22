@@ -594,7 +594,7 @@ impl ExternalRelayer {
                 .into_iter()
                 .sorted()
                 .map(|root_tx| tokio::time::timeout(Duration::from_secs(240), self.relay_transaction(root_tx)));
-            let mut stream = futures::stream::iter(futures).buffered(30);
+            let mut stream = futures::stream::iter(futures).buffered(50);
             while let Some(result) = stream.next().await {
                 match result {
                     Ok(res) => results.push(res),
@@ -623,15 +623,8 @@ impl ExternalRelayer {
         let start = Instant::now();
 
         tracing::debug!("relaying transactions");
-        let mut results = vec![];
         let futures = dag.split_components().into_iter().map(|dag| self.relay_component(dag));
-        let mut stream = futures::stream::iter(futures).buffered(500);
-        while let Some(result) = stream.next().await {
-            match result {
-                Ok(res) => results.push(res),
-                err => return err,
-            }
-        }
+        let results = join_all(futures).await.into_iter().collect::<Result<Vec<HashSet<BlockNumber>>, _>>()?;
 
         let mismatched_blocks: MismatchedBlocks = results.into_iter().flatten().collect();
 
@@ -706,7 +699,7 @@ impl ExternalRelayerClient {
         let mut remaining_tries = 3;
 
         match *self.conn_lost.read().await {
-            false =>
+            false => {
                 if let Some(pool) = &self.pool {
                     while remaining_tries > 0 {
                         if let Err(e) = sqlx::query!(
@@ -728,7 +721,8 @@ impl ExternalRelayerClient {
                             break;
                         }
                     }
-                },
+                }
+            }
             true => Self::save_block_to_file(block_number, &block_json)?,
         }
 
