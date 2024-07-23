@@ -17,7 +17,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExecutionMetrics;
+use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
@@ -39,7 +39,7 @@ use crate::log_and_err;
 #[derive(DebugAsJson, Clone, serde::Serialize)]
 pub struct EvmExecutionResult {
     pub execution: EvmExecution,
-    pub metrics: ExecutionMetrics,
+    pub metrics: EvmExecutionMetrics,
 }
 
 impl EvmExecutionResult {
@@ -130,7 +130,6 @@ impl EvmInput {
             return Some(Cow::from("contract_deployment"));
         }
         let sig = Signature::Function(self.data.get(..4)?.try_into().ok()?);
-
         Some(sig.extract())
     }
 

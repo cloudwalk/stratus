@@ -284,7 +284,7 @@ fn mine_external_transactions(block_number: BlockNumber, txs: Vec<ExternalTransa
         if tx.tx.block_number() != block_number {
             return log_and_err!("failed to mine external block because one of the transactions does not belong to the external block");
         }
-        mined_txs.push(TransactionMined::from_external(tx.tx, tx.receipt, tx.result.execution)?);
+        mined_txs.push(TransactionMined::from_external(tx.tx, tx.receipt, tx.evm_execution.execution)?);
     }
     Ok(mined_txs)
 }

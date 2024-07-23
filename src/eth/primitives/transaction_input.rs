@@ -64,7 +64,6 @@ impl TransactionInput {
             return Some(Cow::from("contract_deployment"));
         }
         let sig = Signature::Function(self.input.get(..4)?.try_into().ok()?);
-
         Some(sig.extract())
     }
 }
