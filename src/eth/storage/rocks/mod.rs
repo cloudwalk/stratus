@@ -8,4 +8,5 @@ mod rocks_db;
 pub mod rocks_permanent;
 /// State handler for DB and column families.
 mod rocks_state;
+
 mod types;
