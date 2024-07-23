@@ -3,7 +3,6 @@ pub mod consensus;
 pub mod executor;
 pub mod miner;
 pub mod primitives;
-pub mod relayer;
 pub mod rpc;
 pub mod storage;
 

@@ -4,7 +4,6 @@ use std::stringify;
 use crate::infra::metrics::metrics_for_consensus;
 use crate::infra::metrics::metrics_for_evm;
 use crate::infra::metrics::metrics_for_executor;
-use crate::infra::metrics::metrics_for_external_relayer;
 use crate::infra::metrics::metrics_for_importer_online;
 use crate::infra::metrics::metrics_for_json_rpc;
 use crate::infra::metrics::metrics_for_rocks;
@@ -27,7 +26,6 @@ pub fn init_metrics(address: SocketAddr) -> anyhow::Result<()> {
     metrics.extend(metrics_for_storage_write());
     metrics.extend(metrics_for_rocks());
     metrics.extend(metrics_for_consensus());
-    metrics.extend(metrics_for_external_relayer());
 
     // init metric exporter
     init_metrics_exporter(address);

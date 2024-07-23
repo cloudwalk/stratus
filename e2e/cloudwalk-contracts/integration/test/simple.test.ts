@@ -1,7 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 
-import { getDbClient } from "./helpers/db";
 import {
     GAS_LIMIT_OVERRIDE,
     brlcToken,
@@ -11,10 +10,9 @@ import {
     send,
     sendWithRetry,
     setDeployer,
-    updateProviderUrl,
 } from "./helpers/rpc";
 
-describe("Relayer integration test", function () {
+describe("Integration test", function () {
     before(async function () {
         await setDeployer();
     });

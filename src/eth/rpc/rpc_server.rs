@@ -73,7 +73,6 @@ pub async fn serve_rpc(
     executor: Arc<Executor>,
     miner: Arc<Miner>,
     consensus: Arc<Consensus>,
-    #[cfg(feature = "request-replication-test-sender")] replication_sender: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
 
     // config
     app_config: impl serde::Serialize,
@@ -113,13 +112,7 @@ pub async fn serve_rpc(
     module = register_methods(module)?;
 
     // configure middleware
-    let rpc_middleware = RpcServiceBuilder::new().layer_fn(move |service| {
-        RpcMiddleware::new(
-            service,
-            #[cfg(feature = "request-replication-test-sender")]
-            replication_sender.clone(),
-        )
-    });
+    let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
     let http_middleware = tower::ServiceBuilder::new()
         .layer_fn(RpcHttpMiddleware::new)
         .layer(ProxyGetRequestLayer::new("/health", "stratus_health").unwrap())

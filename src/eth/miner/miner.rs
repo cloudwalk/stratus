@@ -5,7 +5,6 @@ use std::sync::Mutex;
 use ethereum_types::BloomInput;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
-use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use tracing::Span;
 
@@ -24,7 +23,6 @@ use crate::eth::primitives::Size;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::spawn_thread;
@@ -48,9 +46,6 @@ pub struct Miner {
 
     /// Broadcasts transaction logs events.
     pub notifier_logs: broadcast::Sender<LogMined>,
-
-    /// External relayer client
-    relayer_client: Option<ExternalRelayerClient>,
 }
 
 /// Locks used in operations that mutate state.
@@ -64,7 +59,7 @@ pub struct MinerLocks {
 
 impl Miner {
     /// Creates a new [`BlockMiner`].
-    pub fn new(storage: Arc<StratusStorage>, mode: MinerMode, relayer_client: Option<ExternalRelayerClient>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, mode: MinerMode) -> Self {
         tracing::info!(?mode, "creating block miner");
         Self {
             locks: MinerLocks::default(),
@@ -73,7 +68,6 @@ impl Miner {
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
-            relayer_client,
         }
     }
 
@@ -266,10 +260,6 @@ impl Miner {
         // extract fields to use in notifications
         let block_number = block.number();
         let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
-
-        if let Some(relayer) = &self.relayer_client {
-            Handle::current().block_on(relayer.send_to_relayer(block.clone()))?;
-        }
 
         self.storage.save_block(block.clone())?;
         self.storage.set_mined_block_number(block_number)?;

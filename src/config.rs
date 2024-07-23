@@ -17,8 +17,6 @@ use tokio::runtime::Runtime;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::miner::MinerConfig;
 use crate::eth::primitives::Address;
-use crate::eth::relayer::ExternalRelayer;
-use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::ExternalRpcStorageConfig;
 use crate::eth::storage::StratusStorageConfig;
@@ -184,70 +182,6 @@ impl IntegratedRelayerConfig {
     }
 }
 
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-#[group(requires_all = ["url", "connections", "acquire_timeout"])]
-pub struct ExternalRelayerClientConfig {
-    #[arg(long = "relayer-db-url", env = "RELAYER_DB_URL", required = false)]
-    pub url: String,
-    #[arg(long = "relayer-db-connections", env = "RELAYER_DB_CONNECTIONS", required = false)]
-    pub connections: u32,
-    #[arg(long = "relayer-db-timeout", value_parser=parse_duration, env = "RELAYER_DB_TIMEOUT", required = false)]
-    pub acquire_timeout: Duration,
-}
-
-impl ExternalRelayerClientConfig {
-    pub async fn init(self) -> ExternalRelayerClient {
-        ExternalRelayerClient::new(self).await
-    }
-}
-
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct ExternalRelayerServerConfig {
-    /// Postgresql url.
-    #[arg(long = "db-url", env = "DB_URL")]
-    pub url: String,
-
-    /// Connections to database.
-    #[arg(long = "db-connections", env = "DB_CONNECTIONS", default_value = "5")]
-    pub connections: u32,
-
-    /// Timeout to acquire connections to the database.
-    #[arg(long = "db-timeout", value_parser=parse_duration, env = "DB_TIMEOUT", default_value = "1s")]
-    pub acquire_timeout: Duration,
-
-    /// RPC to forward to.
-    #[arg(long = "forward-to", env = "RELAYER_FORWARD_TO")]
-    pub forward_to: String,
-
-    /// RPC to forward to.
-    #[arg(long = "stratus-rpc", env = "STRATUS_RPC")]
-    pub stratus_rpc: String,
-
-    /// Backoff.
-    #[arg(long = "backoff", value_parser=parse_duration, env = "BACKOFF", default_value = "10ms")]
-    pub backoff: Duration,
-
-    /// RPC response timeout.
-    #[arg(long = "rpc-timeout", value_parser=parse_duration, env = "RPC_TIMEOUT", default_value = "2s")]
-    pub rpc_timeout: Duration,
-
-    #[arg(long = "signer", env = "SIGNER")]
-    pub signer: String,
-
-    #[arg(long = "blocks-to-fetch", env = "BLOCKS_TO_FETCH", default_value = "3")]
-    pub blocks_to_fetch: u64,
-
-    /// Clanup db on startup (delete blocks that don't exist in stratus currently)
-    #[arg(long = "cleanup-db", env = "CLEANUP_DB", default_value = "false")]
-    pub cleanup: bool,
-}
-
-impl ExternalRelayerServerConfig {
-    pub async fn init(self) -> anyhow::Result<ExternalRelayer> {
-        ExternalRelayer::new(self).await
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Config: Stratus
 // -----------------------------------------------------------------------------
@@ -268,14 +202,7 @@ pub struct StratusConfig {
     pub relayer: IntegratedRelayerConfig,
 
     #[clap(flatten)]
-    pub external_relayer: Option<ExternalRelayerClientConfig>,
-
-    #[clap(flatten)]
     pub miner: MinerConfig,
-
-    #[cfg(feature = "request-replication-test-sender")]
-    #[arg(long = "replicate-request-to", env = "REPLICATE_REQUEST_TO")]
-    pub replicate_request_to: String,
 
     #[deref]
     #[clap(flatten)]
@@ -451,14 +378,7 @@ pub struct RunWithImporterConfig {
     pub relayer: IntegratedRelayerConfig,
 
     #[clap(flatten)]
-    pub external_relayer: Option<ExternalRelayerClientConfig>,
-
-    #[clap(flatten)]
     pub miner: MinerConfig,
-
-    #[cfg(feature = "request-replication-test-sender")]
-    #[arg(long = "replicate-request-to", env = "REPLICATE_REQUEST_TO")]
-    pub replicate_request_to: String,
 
     #[deref]
     #[clap(flatten)]
@@ -540,26 +460,6 @@ pub struct IntegrationTestConfig {
 }
 
 impl WithCommonConfig for IntegrationTestConfig {
-    fn common(&self) -> &CommonConfig {
-        &self.common
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config: ExternalRelayer
-// -----------------------------------------------------------------------------
-
-#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-pub struct ExternalRelayerConfig {
-    #[clap(flatten)]
-    pub relayer: ExternalRelayerServerConfig,
-
-    #[deref]
-    #[clap(flatten)]
-    pub common: CommonConfig,
-}
-
-impl WithCommonConfig for ExternalRelayerConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }

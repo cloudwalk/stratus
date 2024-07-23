@@ -5,10 +5,6 @@ use std::task::Poll;
 use std::time::Instant;
 
 use futures::future::BoxFuture;
-#[cfg(feature = "request-replication-test-sender")]
-use futures::pin_mut;
-#[cfg(feature = "request-replication-test-sender")]
-use futures::StreamExt;
 use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
 use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
@@ -35,8 +31,6 @@ use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
 use crate::event_with;
 use crate::ext::from_json_str;
-#[cfg(feature = "request-replication-test-sender")]
-use crate::ext::spawn_named;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
 use crate::if_else;
@@ -112,45 +106,14 @@ mod active_requests {
 // Request handling
 // -----------------------------------------------------------------------------
 
-#[cfg(feature = "request-replication-test-sender")]
-pub fn create_replication_worker(replicate_request_to: String) -> tokio::sync::mpsc::UnboundedSender<serde_json::Value> {
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-    spawn_named("replication::sender", replication_worker(replicate_request_to, rx));
-    tx
-}
-
-#[cfg(feature = "request-replication-test-sender")]
-async fn replication_worker(replicate_request_to: String, mut rx: tokio::sync::mpsc::UnboundedReceiver<serde_json::Value>) {
-    let client = reqwest::Client::default();
-    let stream = async_stream::stream! {
-        while let Some(request) = rx.recv().await {
-            let client = client.clone().post(&replicate_request_to);
-            yield client.json(&request).send();
-        }
-    };
-    pin_mut!(stream);
-    let mut buffer = stream.buffer_unordered(200);
-    while buffer.next().await.is_some() {}
-}
-
 #[derive(Debug)]
 pub struct RpcMiddleware {
     service: RpcService,
-
-    #[cfg(feature = "request-replication-test-sender")]
-    replication_tx: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
 }
 
 impl RpcMiddleware {
-    pub fn new(
-        service: RpcService,
-        #[cfg(feature = "request-replication-test-sender")] replication_tx: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
-    ) -> Self {
-        Self {
-            service,
-            #[cfg(feature = "request-replication-test-sender")]
-            replication_tx,
-        }
+    pub fn new(service: RpcService) -> Self {
+        Self { service }
     }
 }
 
@@ -182,13 +145,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
             _ => None,
         };
-
-        #[cfg(feature = "request-replication-test-sender")]
-        if method != "eth_subscribe" && method != "eth_unsubscribe" && method != "eth_subscription" {
-            if let Ok(req) = serde_json::to_value(&request) {
-                let _ = self.replication_tx.send(req);
-            }
-        }
 
         // trace request
         Span::with(|s| {
