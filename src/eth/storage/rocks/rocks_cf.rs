@@ -7,6 +7,7 @@ use std::iter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
 use rocksdb::BoundColumnFamily;
@@ -42,7 +43,7 @@ where
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     /// Create Column Family reference struct.
-    pub fn new(db: Arc<DB>, column_family: &str) -> Self {
+    pub fn new(db: Arc<DB>, column_family: &str) -> Result<Self> {
         let this = Self {
             db,
             column_family: column_family.to_owned(),
@@ -51,13 +52,14 @@ where
 
         // Guarantee that the referred database does contain the CF in it
         // With this, we'll be able to talk to the DB
-        assert!(
-            this.handle_checked().is_some(),
-            "can't find column family '{}' in database! check if CFs are configured properly when creating/opening the DB",
-            this.column_family,
-        );
+        if this.handle_checked().is_none() {
+            return Err(anyhow!(
+                "can't find column family '{}' in database! check if CFs are configured properly when creating/opening the DB",
+                this.column_family,
+            ));
+        }
 
-        this
+        Ok(this)
     }
 
     fn handle_checked(&self) -> Option<Arc<BoundColumnFamily>> {
@@ -69,8 +71,8 @@ where
         match self.handle_checked() {
             Some(handle) => handle,
             None => {
-                panic!(
-                    "accessing the CF '{}' failed, but it was checked on creation! this should be impossible",
+                unreachable!(
+                    "failed to access CF '{}', but it should be checked when creating RocksCfRef",
                     self.column_family,
                 );
             }
@@ -296,27 +298,27 @@ where
             .property_int_value_cf(&handle, rocksdb::properties::BACKGROUND_ERRORS)
             .unwrap_or_default();
 
-        let db_name = &self.column_family;
+        let cf_name = &self.column_family;
         if let Some(cur_size_active_mem_table) = cur_size_active_mem_table {
-            metrics::set_rocks_cur_size_active_mem_table(cur_size_active_mem_table, db_name);
+            metrics::set_rocks_cur_size_active_mem_table(cur_size_active_mem_table, cf_name);
         }
 
         if let Some(cur_size_all_mem_tables) = cur_size_all_mem_tables {
-            metrics::set_rocks_cur_size_all_mem_tables(cur_size_all_mem_tables, db_name);
+            metrics::set_rocks_cur_size_all_mem_tables(cur_size_all_mem_tables, cf_name);
         }
 
         if let Some(size_all_mem_tables) = size_all_mem_tables {
-            metrics::set_rocks_size_all_mem_tables(size_all_mem_tables, db_name);
+            metrics::set_rocks_size_all_mem_tables(size_all_mem_tables, cf_name);
         }
 
         if let Some(block_cache_usage) = block_cache_usage {
-            metrics::set_rocks_block_cache_usage(block_cache_usage, db_name);
+            metrics::set_rocks_block_cache_usage(block_cache_usage, cf_name);
         }
         if let Some(block_cache_capacity) = block_cache_capacity {
-            metrics::set_rocks_block_cache_capacity(block_cache_capacity, db_name);
+            metrics::set_rocks_block_cache_capacity(block_cache_capacity, cf_name);
         }
         if let Some(background_errors) = background_errors {
-            metrics::set_rocks_background_errors(background_errors, db_name);
+            metrics::set_rocks_background_errors(background_errors, cf_name);
         }
     }
 

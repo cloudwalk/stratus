@@ -2,6 +2,8 @@ use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
+use anyhow::bail;
+
 use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -28,7 +30,10 @@ impl RocksPermanentStorage {
         tracing::info!("setting up rocksdb storage");
         let path = if let Some(prefix) = rocks_path_prefix {
             // run some checks on the given prefix
-            assert!(!prefix.is_empty(), "given prefix for RocksDB is empty, try not providing the flag");
+            if prefix.is_empty() {
+                bail!("given prefix for RocksDB is empty, try not providing the flag");
+            }
+
             if Path::new(&prefix).is_dir() || Path::new(&prefix).iter().count() > 1 {
                 tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
             }
@@ -41,7 +46,7 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = RocksStorageState::new(path);
+        let state = RocksStorageState::new(path)?;
         let block_number = state.preload_block_number()?;
         Ok(Self { state, block_number })
     }
@@ -50,9 +55,10 @@ impl RocksPermanentStorage {
     // State methods
     // -------------------------------------------------------------------------
 
-    pub fn clear(&self) {
-        self.state.clear().unwrap();
+    pub fn clear(&self) -> anyhow::Result<()> {
+        self.state.clear()?;
         self.block_number.store(0, Ordering::SeqCst);
+        Ok(())
     }
 }
 
@@ -101,7 +107,7 @@ impl PermanentStorage for RocksPermanentStorage {
     fn save_block(&self, block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
-            self.state.export_metrics();
+            self.state.export_metrics()?;
         }
         self.state.save_block(block)
     }

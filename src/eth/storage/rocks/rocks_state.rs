@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::fmt;
 use std::fmt::Debug;
 use std::path::Path;
-use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Instant;
 
+use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
 use lazy_static::lazy_static;
@@ -75,16 +76,16 @@ lazy_static! {
 }
 
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
-fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> RocksCfRef<K, V>
+fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> Result<RocksCfRef<K, V>>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
-    let Some(_options) = CF_OPTIONS_MAP.get(column_family) else {
-        panic!("matching column_family `{column_family}` given to `new_cf_ref` wasn't found in configuration map");
-    };
+    CF_OPTIONS_MAP
+        .get(column_family)
+        .with_context(|| format!("matching column_family `{column_family}` given to `new_cf_ref` wasn't found in configuration map"))?;
 
     // NOTE: this doesn't create the CFs in the database, read `RocksCfRef` docs for details
     RocksCfRef::new(Arc::clone(db), column_family)
@@ -95,7 +96,7 @@ where
 /// With data separated by column families, writing and reading should be done via the `RocksCfRef` fields.
 pub struct RocksStorageState {
     db: Arc<DB>,
-    db_path: PathBuf,
+    db_path: String,
     accounts: RocksCfRef<AddressRocksdb, AccountRocksdb>,
     accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>,
     account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
@@ -116,24 +117,28 @@ pub struct RocksStorageState {
 }
 
 impl RocksStorageState {
-    pub fn new(path: impl AsRef<Path>) -> Self {
-        let db_path = path.as_ref().to_path_buf();
-
+    pub fn new(path: String) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
         #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
-        let (db, db_options) = create_or_open_db(&db_path, &CF_OPTIONS_MAP).unwrap();
+        let (db, db_options) = create_or_open_db(&path, &CF_OPTIONS_MAP).context("when trying to create (or open) rocksdb")?;
 
-        tracing::debug!("opened database successfully");
+        if db.path().to_str().is_none() {
+            bail!("db path doesn't isn't valid UTF-8: {:?}", db.path());
+        }
+        if db.path().file_name().is_none() {
+            bail!("db path doesn't have a file name or isn't valid UTF-8: {:?}", db.path());
+        }
+
         let state = Self {
-            db_path,
-            accounts: new_cf_ref(&db, "accounts"),
-            accounts_history: new_cf_ref(&db, "accounts_history"),
-            account_slots: new_cf_ref(&db, "account_slots"),
-            account_slots_history: new_cf_ref(&db, "account_slots_history"),
-            transactions: new_cf_ref(&db, "transactions"),
-            blocks_by_number: new_cf_ref(&db, "blocks_by_number"),
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash"),
-            logs: new_cf_ref(&db, "logs"),
+            db_path: path,
+            accounts: new_cf_ref(&db, "accounts")?,
+            accounts_history: new_cf_ref(&db, "accounts_history")?,
+            account_slots: new_cf_ref(&db, "account_slots")?,
+            account_slots_history: new_cf_ref(&db, "account_slots_history")?,
+            transactions: new_cf_ref(&db, "transactions")?,
+            blocks_by_number: new_cf_ref(&db, "blocks_by_number")?,
+            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash")?,
+            logs: new_cf_ref(&db, "logs")?,
             #[cfg(feature = "metrics")]
             prev_stats: Default::default(),
             #[cfg(feature = "metrics")]
@@ -141,8 +146,15 @@ impl RocksStorageState {
             db,
         };
 
-        tracing::debug!("returning RocksStorageState");
-        state
+        tracing::debug!("opened database successfully");
+        Ok(state)
+    }
+
+    /// Get the filename of the database path.
+    ///
+    /// Should be checked on creation.
+    fn db_path_filename(&self) -> &str {
+        self.db.path().file_name().unwrap().to_str().unwrap()
     }
 
     pub fn preload_block_number(&self) -> Result<AtomicU64> {
@@ -199,28 +211,28 @@ impl RocksStorageState {
         for next in self.transactions.iter_start() {
             let (hash, block) = next?;
             if block > block_number {
-                self.transactions.delete(&hash).unwrap();
+                self.transactions.delete(&hash)?;
             }
         }
 
         for next in self.logs.iter_start() {
             let (key, block) = next?;
             if block > block_number {
-                self.logs.delete(&key).unwrap();
+                self.logs.delete(&key)?;
             }
         }
 
         for next in self.blocks_by_hash.iter_start() {
             let (hash, block) = next?;
             if block > block_number {
-                self.blocks_by_hash.delete(&hash).unwrap();
+                self.blocks_by_hash.delete(&hash)?;
             }
         }
 
         for next in self.blocks_by_number.iter_end() {
             let (block, _) = next?;
             if block > block_number {
-                self.blocks_by_number.delete(&block).unwrap();
+                self.blocks_by_number.delete(&block)?;
             } else {
                 break; // optimization: stop early
             }
@@ -512,7 +524,7 @@ impl RocksStorageState {
 
         self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch)?;
 
-        self.write_in_batch_for_multiple_cfs(batch).unwrap();
+        self.write_in_batch_for_multiple_cfs(batch)?;
         Ok(())
     }
 
@@ -564,7 +576,7 @@ impl RocksStorageState {
 
 #[cfg(feature = "metrics")]
 impl RocksStorageState {
-    pub fn export_metrics(&self) {
+    pub fn export_metrics(&self) -> Result<()> {
         let db_get = self.db_options.get_histogram_data(Histogram::DbGet);
         let db_write = self.db_options.get_histogram_data(Histogram::DbWrite);
 
@@ -581,7 +593,7 @@ impl RocksStorageState {
         let block_cache_capacity = self.db.property_int_value(rocksdb::properties::BLOCK_CACHE_CAPACITY).unwrap_or_default();
         let background_errors = self.db.property_int_value(rocksdb::properties::BACKGROUND_ERRORS).unwrap_or_default();
 
-        let db_name = self.db.path().file_name().unwrap().to_str();
+        let db_name = self.db_path_filename();
 
         metrics::set_rocks_db_get(db_get.count(), db_name);
         metrics::set_rocks_db_write(db_write.count(), db_name);
@@ -591,9 +603,9 @@ impl RocksStorageState {
         metrics::set_rocks_bytes_read(bytes_read, db_name);
         metrics::set_rocks_wal_file_synced(wal_file_synced, db_name);
 
-        metrics::set_rocks_compaction_time(self.get_histogram_average_in_interval(Histogram::CompactionTime), db_name);
-        metrics::set_rocks_compaction_cpu_time(self.get_histogram_average_in_interval(Histogram::CompactionCpuTime), db_name);
-        metrics::set_rocks_flush_time(self.get_histogram_average_in_interval(Histogram::FlushTime), db_name);
+        metrics::set_rocks_compaction_time(self.get_histogram_average_in_interval(Histogram::CompactionTime)?, db_name);
+        metrics::set_rocks_compaction_cpu_time(self.get_histogram_average_in_interval(Histogram::CompactionCpuTime)?, db_name);
+        metrics::set_rocks_flush_time(self.get_histogram_average_in_interval(Histogram::FlushTime)?, db_name);
 
         if let Some(cur_size_active_mem_table) = cur_size_active_mem_table {
             metrics::set_rocks_cur_size_active_mem_table(cur_size_active_mem_table, db_name);
@@ -625,24 +637,28 @@ impl RocksStorageState {
         self.blocks_by_number.export_metrics();
         self.logs.export_metrics();
         self.transactions.export_metrics();
+        Ok(())
     }
 
-    fn get_histogram_average_in_interval(&self, hist: Histogram) -> u64 {
+    fn get_histogram_average_in_interval(&self, hist: Histogram) -> Result<u64> {
         // The stats are cumulative since opening the db
         // we can get the average in the time interval with: avg = (new_sum - sum)/(new_count - count)
 
-        let mut prev_values = self.prev_stats.lock().unwrap();
+        let mut prev_values = match self.prev_stats.lock() {
+            Ok(guard) => guard,
+            Err(_) => bail!("mutex in get_histogram_average_in_interval is poisoned"),
+        };
         let (prev_sum, prev_count): (Sum, Count) = *prev_values.get(&(hist as u32)).unwrap_or(&(0, 0));
         let data = self.db_options.get_histogram_data(hist);
         let data_count = data.count();
         let data_sum = data.sum();
 
         let Some(avg) = (data_sum - prev_sum).checked_div(data_count - prev_count) else {
-            return 0;
+            return Ok(0);
         };
 
         prev_values.insert(hist as u32, (data_sum, data_count));
-        avg
+        Ok(avg)
     }
 }
 
@@ -668,7 +684,7 @@ impl Drop for RocksStorageState {
 
         #[cfg(feature = "metrics")]
         {
-            let db_name = self.db.path().file_name().unwrap().to_str();
+            let db_name = self.db_path_filename();
             metrics::set_rocks_last_shutdown_delay_millis(waited_for.as_millis() as u64, db_name);
         }
 
@@ -699,7 +715,7 @@ mod tests {
     #[test]
     fn test_rocks_multi_get() {
         let (db, _db_options) = create_or_open_db("./data/slots_test.rocksdb", &CF_OPTIONS_MAP).unwrap();
-        let account_slots: RocksCfRef<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots");
+        let account_slots: RocksCfRef<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots").unwrap();
 
         let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
         let extra_slots: HashMap<SlotIndex, SlotValue> = (0..1000)
