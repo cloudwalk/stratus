@@ -6,7 +6,9 @@ use itertools::Itertools;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
+use revm::primitives::EVMError;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
+use revm::primitives::InvalidTransaction;
 use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::SpecId;
 use revm::primitives::State as RevmState;
@@ -139,9 +141,22 @@ impl Evm for Revm {
         #[cfg(feature = "metrics")]
         let session_point_in_time = std::mem::take(&mut session.input.point_in_time);
 
-        // parse and enrich result
+        // parse result
         let execution = match evm_result {
+            // executed
             Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
+
+            // nonce errors
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(StratusError::TransactionNonce {
+                transaction: tx.into(),
+                account: state.into(),
+            }),
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state })) => Err(StratusError::TransactionNonce {
+                transaction: tx.into(),
+                account: state.into(),
+            }),
+
+            // unexpected errors
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
                 Err(StratusError::TransactionFailed(e))

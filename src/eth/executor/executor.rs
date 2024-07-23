@@ -342,7 +342,7 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
-    pub fn execute_local_transaction(&self, tx_input: TransactionInput) -> anyhow::Result<TransactionExecution> {
+    pub fn execute_local_transaction(&self, tx_input: TransactionInput) -> Result<TransactionExecution, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -397,7 +397,7 @@ impl Executor {
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
                     Err(e) =>
-                        if let Some(StratusError::TransactionConflict(_)) = e.downcast_ref::<StratusError>() {
+                        if let StratusError::TransactionConflict(_) = e {
                             self.execute_local_transaction_attempts(tx_input.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
                         } else {
                             Err(e)
@@ -427,11 +427,15 @@ impl Executor {
     }
 
     /// Executes a transaction until it reaches the max number of attempts.
-    fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, evm_route: EvmRoute, max_attempts: usize) -> anyhow::Result<TransactionExecution> {
+    fn execute_local_transaction_attempts(
+        &self,
+        tx_input: TransactionInput,
+        evm_route: EvmRoute,
+        max_attempts: usize,
+    ) -> Result<TransactionExecution, StratusError> {
         // validate
         if tx_input.signer.is_zero() {
-            tracing::warn!("rejecting transaction from zero address");
-            return Err(anyhow!("transaction sent from zero address is not allowed"));
+            return Err(StratusError::TransactionFromZeroAddress);
         }
 
         // executes transaction until no more conflicts
@@ -473,7 +477,7 @@ impl Executor {
 
             let evm_result = match self.evms.execute(evm_input, evm_route) {
                 Ok(evm_result) => evm_result,
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e),
             };
 
             // save execution to temporary storage
@@ -487,11 +491,11 @@ impl Executor {
                     if let StratusError::TransactionConflict(ref conflicts) = e {
                         tracing::warn!(%attempt, ?conflicts, "temporary storage conflict detected when saving execution");
                         if attempt >= max_attempts {
-                            return Err(e.into());
+                            return Err(e);
                         }
                         continue;
                     } else {
-                        return Err(e.into());
+                        return Err(e);
                     },
             }
         }
@@ -499,7 +503,7 @@ impl Executor {
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: StoragePointInTime) -> anyhow::Result<EvmExecution> {
+    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: StoragePointInTime) -> Result<EvmExecution, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
