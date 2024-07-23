@@ -219,8 +219,8 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
                 &client,
                 &method,
                 tx.as_ref().and_then(|tx| tx.function.clone()),
-                tx.as_ref().and_then(|tx| tx.from.clone()),
-                tx.as_ref().and_then(|tx| tx.to.clone()),
+                tx.as_ref().and_then(|tx| tx.from),
+                tx.as_ref().and_then(|tx| tx.to),
             );
         }
         drop(middleware_enter);
@@ -314,8 +314,8 @@ impl<'a> Future for RpcResponse<'a> {
                     &*resp.client,
                     resp.method.clone(),
                     resp.tx.as_ref().and_then(|tx| tx.function.clone()),
-                    resp.tx.as_ref().and_then(|tx| tx.from.clone()),
-                    resp.tx.as_ref().and_then(|tx| tx.to.clone()),
+                    resp.tx.as_ref().and_then(|tx| tx.from),
+                    resp.tx.as_ref().and_then(|tx| tx.to),
                     rpc_result,
                     error_code,
                     response.is_success(),

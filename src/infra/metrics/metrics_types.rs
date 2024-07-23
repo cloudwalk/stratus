@@ -5,6 +5,7 @@ use metrics::describe_counter;
 use metrics::describe_gauge;
 use metrics::describe_histogram;
 use metrics::Label;
+
 use crate::eth::primitives::Address;
 
 pub type HistogramInt = u32;
@@ -90,7 +91,7 @@ impl From<Option<Address>> for MetricLabelValue {
     fn from(value: Option<Address>) -> Self {
         match value {
             Some(value) => Self::Some(value.to_string()),
-            None => Self::None
+            None => Self::None,
         }
     }
 }
