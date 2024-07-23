@@ -9,9 +9,6 @@ use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
 
 use indexmap::IndexMap;
-use rand::rngs::StdRng;
-use rand::seq::IteratorRandom;
-use rand::SeedableRng;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -27,7 +24,6 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::inmemory::InMemoryHistory;
@@ -175,21 +171,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
-        let state = self.lock_read();
-
-        let Some(account) = state.accounts.get(address) else {
-            return Ok(Default::default());
-        };
-
-        Ok(account
-            .slots
-            .clone()
-            .into_values()
-            .map(|slot| slot.get_at_point(point_in_time).unwrap_or_default())
-            .collect())
-    }
-
     fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
         let state_lock = self.lock_read();
         let block = match selection {
@@ -323,41 +304,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
 
         Ok(())
-    }
-
-    fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> anyhow::Result<Vec<SlotSample>> {
-        let state = self.lock_read();
-
-        let samples = state
-            .accounts
-            .iter()
-            .filter(|(_, account_info)| account_info.is_contract())
-            .flat_map(|(_, contract)| {
-                contract
-                    .slots
-                    .values()
-                    .flat_map(|slot_history| Vec::from((*slot_history).clone()))
-                    .filter_map(|slot| {
-                        if slot.block_number >= start && slot.block_number < end {
-                            Some(SlotSample {
-                                address: contract.address,
-                                block_number: slot.block_number,
-                                index: slot.value.index,
-                                value: slot.value.value,
-                            })
-                        } else {
-                            None
-                        }
-                    })
-            });
-
-        match max_samples {
-            0 => Ok(samples.collect()),
-            n => {
-                let mut rng = StdRng::seed_from_u64(seed);
-                Ok(samples.choose_multiple(&mut rng, n as usize))
-            }
-        }
     }
 }
 
