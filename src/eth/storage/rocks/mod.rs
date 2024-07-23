@@ -8,5 +8,5 @@ mod rocks_db;
 pub mod rocks_permanent;
 /// State handler for DB and column families.
 mod rocks_state;
-
+/// All types to be serialized and desserialized in the db.
 mod types;
