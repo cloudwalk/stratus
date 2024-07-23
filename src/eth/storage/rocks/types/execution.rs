@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
 use super::execution_result::ExecutionResultRocksdb;

@@ -66,10 +66,10 @@ lazy_static! {
         "accounts_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
         "account_slots" => DbConfig::Default.to_options(CacheSetting::Enabled(45 * GIGABYTE)),
         "account_slots_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
-        "transactions" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
+        "transaction_index" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
         "blocks_by_number" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
-        "blocks_by_hash" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
-        "logs" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
+        "block_hash_index" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
+        "log_index" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
     };
 }
 
@@ -99,10 +99,10 @@ pub struct RocksStorageState {
     accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>,
     account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
     account_slots_history: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>,
-    transactions: RocksCfRef<HashRocksdb, BlockNumberRocksdb>,
+    transaction_index: RocksCfRef<HashRocksdb, BlockNumberRocksdb>,
     blocks_by_number: RocksCfRef<BlockNumberRocksdb, BlockRocksdb>,
-    blocks_by_hash: RocksCfRef<HashRocksdb, BlockNumberRocksdb>,
-    logs: RocksCfRef<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
+    block_hash_index: RocksCfRef<HashRocksdb, BlockNumberRocksdb>,
+    log_index: RocksCfRef<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
     /// Last collected stats for a histogram
     #[cfg(feature = "metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -133,10 +133,10 @@ impl RocksStorageState {
             accounts_history: new_cf_ref(&db, "accounts_history")?,
             account_slots: new_cf_ref(&db, "account_slots")?,
             account_slots_history: new_cf_ref(&db, "account_slots_history")?,
-            transactions: new_cf_ref(&db, "transactions")?,
+            transaction_index: new_cf_ref(&db, "transaction_index")?,
             blocks_by_number: new_cf_ref(&db, "blocks_by_number")?,
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash")?,
-            logs: new_cf_ref(&db, "logs")?,
+            block_hash_index: new_cf_ref(&db, "block_hash_index")?,
+            log_index: new_cf_ref(&db, "log_index")?,
             #[cfg(feature = "metrics")]
             prev_stats: Default::default(),
             #[cfg(feature = "metrics")]
@@ -206,24 +206,24 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(batch)?;
 
         // Truncate rest of
-        for next in self.transactions.iter_start() {
+        for next in self.transaction_index.iter_start() {
             let (hash, block) = next?;
             if block > block_number {
-                self.transactions.delete(&hash)?;
+                self.transaction_index.delete(&hash)?;
             }
         }
 
-        for next in self.logs.iter_start() {
+        for next in self.log_index.iter_start() {
             let (key, block) = next?;
             if block > block_number {
-                self.logs.delete(&key)?;
+                self.log_index.delete(&key)?;
             }
         }
 
-        for next in self.blocks_by_hash.iter_start() {
+        for next in self.block_hash_index.iter_start() {
             let (hash, block) = next?;
             if block > block_number {
-                self.blocks_by_hash.delete(&hash)?;
+                self.block_hash_index.delete(&hash)?;
             }
         }
 
@@ -295,7 +295,7 @@ impl RocksStorageState {
     }
 
     pub fn read_transaction(&self, tx_hash: &Hash) -> Result<Option<TransactionMined>> {
-        let Some(block_number) = self.transactions.get(&(*tx_hash).into())? else {
+        let Some(block_number) = self.transaction_index.get(&(*tx_hash).into())? else {
             return Ok(None);
         };
 
@@ -426,7 +426,7 @@ impl RocksStorageState {
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
             BlockFilter::Hash(block_hash) =>
-                if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into())? {
+                if let Some(block_number) = self.block_hash_index.get(&(*block_hash).into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
@@ -458,8 +458,8 @@ impl RocksStorageState {
         }
         let mut batch = WriteBatch::default();
 
-        self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
-        self.logs.prepare_batch_insertion(logs_batch, &mut batch)?;
+        self.transaction_index.prepare_batch_insertion(txs_batch, &mut batch)?;
+        self.log_index.prepare_batch_insertion(logs_batch, &mut batch)?;
 
         let number = block.number();
         let block_hash = block.hash();
@@ -480,7 +480,7 @@ impl RocksStorageState {
         self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
-        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
+        self.block_hash_index.prepare_batch_insertion([block_by_hash], &mut batch)?;
 
         self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch)?;
 
@@ -526,10 +526,10 @@ impl RocksStorageState {
         self.accounts_history.clear().context("when clearing accounts_history")?;
         self.account_slots.clear().context("when clearing account_slots")?;
         self.account_slots_history.clear().context("when clearing account_slots_history")?;
-        self.transactions.clear().context("when clearing transactions")?;
-        self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
+        self.transaction_index.clear().context("when clearing transactions_index")?;
+        self.block_hash_index.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
-        self.logs.clear().context("when clearing logs")?;
+        self.log_index.clear().context("when clearing logs")?;
         Ok(())
     }
 }
@@ -593,10 +593,10 @@ impl RocksStorageState {
         self.account_slots_history.export_metrics();
         self.accounts.export_metrics();
         self.accounts_history.export_metrics();
-        self.blocks_by_hash.export_metrics();
+        self.block_hash_index.export_metrics();
         self.blocks_by_number.export_metrics();
-        self.logs.export_metrics();
-        self.transactions.export_metrics();
+        self.log_index.export_metrics();
+        self.transaction_index.export_metrics();
         Ok(())
     }
 
