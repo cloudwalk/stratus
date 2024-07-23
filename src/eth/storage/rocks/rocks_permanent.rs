@@ -13,7 +13,6 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StoragePointInTime;
@@ -121,13 +120,5 @@ impl PermanentStorage for RocksPermanentStorage {
         });
 
         self.state.reset_at(block_number.into())
-    }
-
-    fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
-        todo!()
-    }
-
-    fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
-        self.state.read_all_slots(address, point_in_time)
     }
 }
