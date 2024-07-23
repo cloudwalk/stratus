@@ -18,7 +18,7 @@ pub mod rocks_test {
 
             let rocks = RocksPermanentStorage::new(Some("test_import_external_snapshot_with_rocksdb".to_string())).unwrap();
             rocks.save_accounts(accounts).unwrap();
-            rocks.state.write_slots(slots);
+            rocks.state.write_slots(slots).unwrap();
 
             common::execute_test("RocksDB", &global_services.config, &docker, rocks, block, receipts).await;
         });

@@ -49,7 +49,7 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &HashMap<&'static s
 
     #[cfg(feature = "metrics")]
     {
-        let db_name = path.file_name().unwrap().to_str();
+        let db_name = path.file_name().with_context(|| format!("invalid db path without name '{path:?}'"))?.to_str();
         metrics::set_rocks_last_startup_delay_millis(waited_for.as_millis() as u64, db_name);
     }
 
