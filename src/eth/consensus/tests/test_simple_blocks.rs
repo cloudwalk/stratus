@@ -164,13 +164,6 @@ async fn test_append_entries_transaction_executions_and_block() {
         //TODO test slot details
     }
 
-    for execution in all_executions.iter() {
-        let _slots = storage
-            .read_all_slots(&Address::new_from_h160(H160::from_slice(&execution.from)), &StoragePointInTime::Mined)
-            .unwrap();
-        //TODO test slots details
-    }
-
     // generates a second block
     let block_entry = create_mock_block_entry(vec![], None);
 

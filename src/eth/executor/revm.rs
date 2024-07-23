@@ -6,7 +6,9 @@ use itertools::Itertools;
 use revm::primitives::AccountInfo;
 use revm::primitives::Address as RevmAddress;
 use revm::primitives::Bytecode as RevmBytecode;
+use revm::primitives::EVMError;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
+use revm::primitives::InvalidTransaction;
 use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::SpecId;
 use revm::primitives::State as RevmState;
@@ -25,9 +27,9 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
@@ -139,9 +141,22 @@ impl Evm for Revm {
         #[cfg(feature = "metrics")]
         let session_point_in_time = std::mem::take(&mut session.input.point_in_time);
 
-        // parse and enrich result
+        // parse result
         let execution = match evm_result {
+            // executed
             Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
+
+            // nonce errors
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(StratusError::TransactionNonce {
+                transaction: tx.into(),
+                account: state.into(),
+            }),
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state })) => Err(StratusError::TransactionNonce {
+                transaction: tx.into(),
+                account: state.into(),
+            }),
+
+            // unexpected errors
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm execution error");
                 Err(StratusError::TransactionFailed(e))
@@ -178,7 +193,7 @@ struct RevmSession {
     storage_changes: ExecutionChanges,
 
     /// Metrics collected during EVM execution.
-    metrics: ExecutionMetrics,
+    metrics: EvmExecutionMetrics,
 }
 
 impl RevmSession {

@@ -2,6 +2,8 @@ use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
+use anyhow::bail;
+
 use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -13,7 +15,6 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StoragePointInTime;
@@ -29,7 +30,10 @@ impl RocksPermanentStorage {
         tracing::info!("setting up rocksdb storage");
         let path = if let Some(prefix) = rocks_path_prefix {
             // run some checks on the given prefix
-            assert!(!prefix.is_empty(), "given prefix for RocksDB is empty, try not providing the flag");
+            if prefix.is_empty() {
+                bail!("given prefix for RocksDB is empty, try not providing the flag");
+            }
+
             if Path::new(&prefix).is_dir() || Path::new(&prefix).iter().count() > 1 {
                 tracing::warn!(?prefix, "given prefix for RocksDB might put it in another folder");
             }
@@ -42,7 +46,7 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = RocksStorageState::new(path);
+        let state = RocksStorageState::new(path)?;
         let block_number = state.preload_block_number()?;
         Ok(Self { state, block_number })
     }
@@ -51,9 +55,10 @@ impl RocksPermanentStorage {
     // State methods
     // -------------------------------------------------------------------------
 
-    pub fn clear(&self) {
-        self.state.clear().unwrap();
+    pub fn clear(&self) -> anyhow::Result<()> {
+        self.state.clear()?;
         self.block_number.store(0, Ordering::SeqCst);
+        Ok(())
     }
 }
 
@@ -76,15 +81,19 @@ impl PermanentStorage for RocksPermanentStorage {
     // ------------------------------------------------------------------------
 
     fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        Ok(self.state.read_account(address, point_in_time))
+        self.state.read_account(address, point_in_time)
     }
 
     fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        Ok(self.state.read_slot(address, index, point_in_time))
+        self.state.read_slot(address, index, point_in_time)
     }
 
     fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
-        Ok(self.state.read_block(selection))
+        let block = self.state.read_block(selection);
+        if let Ok(Some(block)) = &block {
+            tracing::trace!(?selection, ?block, "block found");
+        }
+        block
     }
 
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
@@ -98,14 +107,13 @@ impl PermanentStorage for RocksPermanentStorage {
     fn save_block(&self, block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
-            self.state.export_metrics();
+            self.state.export_metrics()?;
         }
         self.state.save_block(block)
     }
 
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        self.state.save_accounts(accounts);
-        Ok(())
+        self.state.save_accounts(accounts)
     }
 
     fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
@@ -121,13 +129,5 @@ impl PermanentStorage for RocksPermanentStorage {
         });
 
         self.state.reset_at(block_number.into())
-    }
-
-    fn read_slots_sample(&self, _start: BlockNumber, _end: BlockNumber, _max_samples: u64, _seed: u64) -> anyhow::Result<Vec<SlotSample>> {
-        todo!()
-    }
-
-    fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Vec<Slot>> {
-        self.state.read_all_slots(address, point_in_time)
     }
 }

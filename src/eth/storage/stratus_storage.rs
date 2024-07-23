@@ -16,7 +16,6 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotSample;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
@@ -321,15 +320,6 @@ impl StratusStorage {
         }
     }
 
-    pub fn read_all_slots(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Vec<Slot>, StratusError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::read_all_slots").entered();
-        tracing::debug!(storage = %label::TEMP, "checking conflicts");
-
-        tracing::info!(storage = %label::PERM, %address, %point_in_time, "reading all slots");
-        self.perm.read_all_slots(address, point_in_time).map_err(Into::into)
-    }
-
     // -------------------------------------------------------------------------
     // Blocks
     // -------------------------------------------------------------------------
@@ -529,10 +519,6 @@ impl StratusStorage {
                 None => Err(StratusError::RpcBlockFilterInvalid { filter: *block_filter }),
             },
         }
-    }
-
-    pub fn read_slots_sample(&self, start: BlockNumber, end: BlockNumber, max_samples: u64, seed: u64) -> Result<Vec<SlotSample>, StratusError> {
-        self.perm.read_slots_sample(start, end, max_samples, seed).map_err(Into::into)
     }
 }
 
