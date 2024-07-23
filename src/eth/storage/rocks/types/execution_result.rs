@@ -1,5 +1,6 @@
 use crate::eth::primitives::ExecutionResult;
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ExecutionResultRocksdb {
     Success,
     Reverted,
