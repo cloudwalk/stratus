@@ -1,18 +1,16 @@
 use std::fmt::Debug;
 
-
+use super::address::AddressRocksdb;
+use super::block_header::BlockHeaderRocksdb;
+use super::block_number::BlockNumberRocksdb;
+use super::hash::HashRocksdb;
+use super::transaction_mined::TransactionMinedRocksdb;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
-
-use super::address::AddressRocksdb;
-use super::block_header::BlockHeaderRocksdb;
-use super::block_number::BlockNumberRocksdb;
-use super::hash::HashRocksdb;
-use super::transaction_mined::TransactionMinedRocksdb;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockRocksdb {

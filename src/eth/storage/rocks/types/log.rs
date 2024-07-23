@@ -2,11 +2,10 @@ use std::fmt::Debug;
 
 use ethereum_types::H256;
 
-use crate::eth::primitives::Log;
-use crate::ext::OptionExt;
-
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
+use crate::eth::primitives::Log;
+use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LogRocksdb {

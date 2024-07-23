@@ -1,12 +1,10 @@
 use std::fmt::Debug;
 
-
-use crate::eth::primitives::LogMined;
-
 use super::block_number::BlockNumberRocksdb;
 use super::hash::HashRocksdb;
 use super::index::IndexRocksdb;
 use super::log::LogRocksdb;
+use crate::eth::primitives::LogMined;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LogMinedRockdb {
@@ -30,9 +28,6 @@ impl From<LogMined> for LogMinedRockdb {
         }
     }
 }
-
-
-
 
 impl From<LogMinedRockdb> for LogMined {
     fn from(item: LogMinedRockdb) -> Self {

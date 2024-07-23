@@ -2,14 +2,13 @@ use std::fmt::Debug;
 
 use revm::primitives::KECCAK_EMPTY;
 
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::ext::OptionExt;
-
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
 use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
+use crate::eth::primitives::Account;
+use crate::eth::primitives::Address;
+use crate::ext::OptionExt;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct AccountRocksdb {

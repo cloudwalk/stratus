@@ -1,17 +1,14 @@
 use std::collections::HashMap;
 
-
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::Log;
-use crate::ext::OptionExt;
-
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
 use super::execution_result::ExecutionResultRocksdb;
 use super::gas::GasRocksdb;
 use super::log::LogRocksdb;
 use super::unix_time::UnixTimeRocksdb;
-
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::Log;
+use crate::ext::OptionExt;
 
 pub struct ExecutionRocksdb {
     pub block_timestamp: UnixTimeRocksdb,

@@ -27,8 +27,6 @@ impl From<SlotValueRocksdb> for SlotValue {
     }
 }
 
-
-
 #[derive(Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndexRocksdb(U256);
 

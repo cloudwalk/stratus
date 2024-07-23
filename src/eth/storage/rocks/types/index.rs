@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 
-
 use crate::eth::primitives::Index;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Copy, Hash)]

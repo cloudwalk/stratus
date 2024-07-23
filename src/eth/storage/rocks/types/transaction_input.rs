@@ -3,9 +3,6 @@ use std::fmt::Debug;
 use ethereum_types::U256;
 use ethereum_types::U64;
 
-use crate::eth::primitives::TransactionInput;
-use crate::ext::OptionExt;
-
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
 use super::chain_id::ChainIdRocksdb;
@@ -13,6 +10,8 @@ use super::gas::GasRocksdb;
 use super::hash::HashRocksdb;
 use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
+use crate::eth::primitives::TransactionInput;
+use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInputRocksdb {

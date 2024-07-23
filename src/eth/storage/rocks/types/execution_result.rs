@@ -1,5 +1,3 @@
-
-
 use crate::eth::primitives::ExecutionResult;
 
 pub enum ExecutionResultRocksdb {

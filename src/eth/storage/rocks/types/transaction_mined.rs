@@ -1,15 +1,13 @@
 use std::fmt::Debug;
 
-
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::LogMined;
-use crate::eth::primitives::TransactionMined;
-
 use super::block_number::BlockNumberRocksdb;
 use super::hash::HashRocksdb;
 use super::index::IndexRocksdb;
 use super::log_mined::LogMinedRockdb;
 use super::transaction_input::TransactionInputRocksdb;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::LogMined;
+use crate::eth::primitives::TransactionMined;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionMinedRocksdb {

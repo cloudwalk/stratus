@@ -2,7 +2,6 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
 
-
 use crate::eth::primitives::Bytes;
 
 #[derive(Clone, Default, Eq, PartialEq, fake::Dummy, serde::Serialize, serde::Deserialize)]

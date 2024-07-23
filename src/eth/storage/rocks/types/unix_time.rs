@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 
-
 use crate::eth::primitives::UnixTime;
 use crate::gen_newtype_from;
 

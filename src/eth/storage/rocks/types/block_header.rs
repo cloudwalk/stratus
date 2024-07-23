@@ -1,7 +1,5 @@
 use std::fmt::Debug;
 
-
-
 use super::address::AddressRocksdb;
 use super::block_number::BlockNumberRocksdb;
 use super::bytes::BytesRocksdb;
@@ -12,7 +10,6 @@ use super::logs_bloom::LogsBloomRocksdb;
 use super::miner_nonce::MinerNonceRocksdb;
 use super::size::SizeRocksdb;
 use super::unix_time::UnixTimeRocksdb;
-
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockHeaderRocksdb {
