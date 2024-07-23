@@ -25,9 +25,9 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExecutionMetrics;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
@@ -178,7 +178,7 @@ struct RevmSession {
     storage_changes: ExecutionChanges,
 
     /// Metrics collected during EVM execution.
-    metrics: ExecutionMetrics,
+    metrics: EvmExecutionMetrics,
 }
 
 impl RevmSession {

@@ -68,7 +68,7 @@ pub use execution_account_changes::ExecutionAccountChanges;
 pub use execution_conflict::ExecutionConflict;
 pub use execution_conflict::ExecutionConflicts;
 pub use execution_conflict::ExecutionConflictsBuilder;
-pub use execution_metrics::ExecutionMetrics;
+pub use execution_metrics::EvmExecutionMetrics;
 pub use execution_result::ExecutionResult;
 pub use execution_value_change::ExecutionValueChange;
 pub use external_block::ExternalBlock;

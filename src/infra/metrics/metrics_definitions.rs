@@ -90,10 +90,16 @@ metrics! {
     "Time to execute and persist an external block with all transactions."
     histogram_duration executor_external_block{},
 
-    "Time to execute and persist temporary changes of a single transaction inside import_offline operation."
+    "Time to execute an external transaction."
     histogram_duration executor_external_transaction{function},
 
-    "Gas spent to execute a single transaction inside import_offline operation."
+    "Number of account reads executing an external transaction."
+    histogram_counter executor_external_transaction_account_reads{function},
+
+    "Number of slot reads executing an external transaction."
+    histogram_counter executor_external_transaction_slot_reads{function},
+
+    "Gas spent executing an external transaction."
     histogram_counter executor_external_transaction_gas{function},
 
     "Number of account reads when importing an external block."
@@ -102,17 +108,29 @@ metrics! {
     "Number of slot reads when importing an external block."
     histogram_counter executor_external_block_slot_reads{},
 
-    "Time to execute a transaction received with eth_sendRawTransaction."
-    histogram_duration executor_transact{success, function},
+    "Time to execute a local transaction."
+    histogram_duration executor_local_transaction{success, function},
 
-    "Gas spent execute a transaction received with eth_sendRawTransaction."
-    histogram_counter executor_transact_gas{success, function},
+    "Number of account reads when executing a local transaction."
+    histogram_counter executor_local_transaction_account_reads{function},
+
+    "Number of slot reads when executing a local transaction."
+    histogram_counter executor_local_transaction_slot_reads{function},
+
+    "Gas spent executing a local transaction."
+    histogram_counter executor_local_transaction_gas{success, function},
 
     "Time to execute a transaction received with eth_call or eth_estimateGas."
-    histogram_duration executor_call{success, function},
+    histogram_duration executor_local_call{success, function},
 
-    "Gas spent to execute a transaction received with eth_call or eth_estimateGas."
-    histogram_counter executor_call_gas{function}
+    "Number of account reads when executing a local call."
+    histogram_counter executor_local_call_account_reads{function},
+
+    "Number of slot reads when executing a local call."
+    histogram_counter executor_local_call_slot_reads{function},
+
+    "Gas spent executing a local call."
+    histogram_counter executor_local_call_gas{function}
 }
 
 metrics! {
