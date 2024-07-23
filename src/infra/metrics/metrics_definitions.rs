@@ -8,10 +8,10 @@ metrics! {
     gauge rpc_requests_active{client, method},
 
     "Number of JSON-RPC requests that started."
-    counter rpc_requests_started{client, method, function},
+    counter rpc_requests_started{client, method, function, from, to},
 
     "Number of JSON-RPC requests that finished."
-    histogram_duration rpc_requests_finished{client, method, function, result, result_code, success},
+    histogram_duration rpc_requests_finished{client, method, function, from, to, result, result_code, success},
 
     "Number of JSON-RPC subscriptions active right now."
     gauge rpc_subscriptions_active{subscription}

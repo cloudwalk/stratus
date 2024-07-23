@@ -215,7 +215,13 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         #[cfg(feature = "metrics")]
         {
             active_requests::COUNTERS.inc(&client, &method);
-            metrics::inc_rpc_requests_started(&client, &method, tx.as_ref().and_then(|tx| tx.function.clone()));
+            metrics::inc_rpc_requests_started(
+                &client,
+                &method,
+                tx.as_ref().and_then(|tx| tx.function.clone()),
+                tx.as_ref().and_then(|tx| tx.from.clone()),
+                tx.as_ref().and_then(|tx| tx.to.clone()),
+            );
         }
         drop(middleware_enter);
 
@@ -308,6 +314,8 @@ impl<'a> Future for RpcResponse<'a> {
                     &*resp.client,
                     resp.method.clone(),
                     resp.tx.as_ref().and_then(|tx| tx.function.clone()),
+                    resp.tx.as_ref().and_then(|tx| tx.from.clone()),
+                    resp.tx.as_ref().and_then(|tx| tx.to.clone()),
                     rpc_result,
                     error_code,
                     response.is_success(),
