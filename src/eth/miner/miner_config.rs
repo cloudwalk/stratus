@@ -11,7 +11,6 @@ use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::relayer::ExternalRelayerClient;
 use crate::eth::storage::StratusStorage;
 use crate::ext::parse_duration;
 
@@ -37,20 +36,20 @@ pub struct MinerConfig {
 
 impl MinerConfig {
     /// Inits [`BlockMiner`] with external mining mode, ignoring the configured value.
-    pub fn init_external_mode(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<Miner>> {
-        self.init_with_mode(MinerMode::External, storage, relayer)
+    pub fn init_external_mode(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
+        self.init_with_mode(MinerMode::External, storage)
     }
 
     /// Inits [`BlockMiner`] with the configured mining mode.
-    pub fn init(&self, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<Miner>> {
-        self.init_with_mode(self.block_mode, storage, relayer)
+    pub fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
+        self.init_with_mode(self.block_mode, storage)
     }
 
-    fn init_with_mode(&self, mode: MinerMode, storage: Arc<StratusStorage>, relayer: Option<ExternalRelayerClient>) -> anyhow::Result<Arc<Miner>> {
+    fn init_with_mode(&self, mode: MinerMode, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
         tracing::info!(config = ?self, "creating block miner");
 
         // create miner
-        let miner = Miner::new(Arc::clone(&storage), mode, relayer);
+        let miner = Miner::new(Arc::clone(&storage), mode);
         let miner = Arc::new(miner);
 
         // enable genesis block

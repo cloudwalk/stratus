@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
 use stratus::config::StratusConfig;
-#[cfg(feature = "request-replication-test-sender")]
-use stratus::eth::rpc::create_replication_worker;
 use stratus::eth::rpc::serve_rpc;
 use stratus::eth::Consensus;
 use stratus::GlobalServices;
@@ -15,12 +13,7 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: StratusConfig) -> anyhow::Result<()> {
     // init services
     let storage = config.storage.init()?;
-    let external_relayer = if let Some(c) = config.clone().external_relayer {
-        Some(c.init().await)
-    } else {
-        None
-    };
-    let miner = config.miner.init(Arc::clone(&storage), external_relayer)?;
+    let miner = config.miner.init(Arc::clone(&storage))?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
     let consensus = Consensus::new(
         Arc::clone(&storage),
@@ -39,8 +32,6 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         executor,
         miner,
         consensus,
-        #[cfg(feature = "request-replication-test-sender")]
-        create_replication_worker(config.replicate_request_to.clone()),
         // config
         config.clone(),
         config.rpc_server,

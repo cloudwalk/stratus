@@ -216,34 +216,3 @@ metrics! {
     "The readiness of Stratus."
     gauge consensus_is_ready{}
 }
-
-metrics! {
-    group: external_relayer,
-
-    "Time to run ExternalRelayer::relay_next_block."
-    histogram_duration relay_next_block{},
-
-    "Time to run ExternalRelayer::compute_tx_dag."
-    histogram_duration compute_tx_dag{},
-
-    "Time to run ExternalRelayer::relay_transaction."
-    histogram_duration relay_transaction{},
-
-    "Time to run ExternalRelayer::take_roots."
-    histogram_duration take_roots{},
-
-    "Time to run ExternalRelayer::relay_dag."
-    histogram_duration relay_dag{},
-
-    "Time to run ExternalRelayer::compare_receipts."
-    histogram_duration compare_receipts{},
-
-    "Number of execution mismatches."
-    histogram_duration save_mismatch{},
-
-    "Time to run ExternalRelayerClient::send_to_relayer."
-    histogram_duration send_to_relayer{},
-
-    "Time to run ExternalRelayerClient::compare_final_state."
-    histogram_duration compare_final_state{}
-}
