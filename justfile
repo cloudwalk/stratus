@@ -364,7 +364,6 @@ e2e-importer-online-down:
     stratus_pid=$(pgrep -f 'stratus')
     kill $stratus_pid
 
-
     # Delete data contents
     rm -rf ./temp_*
 
