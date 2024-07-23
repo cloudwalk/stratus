@@ -10,6 +10,7 @@ use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::Log;
 use crate::ext::OptionExt;
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionRocksdb {
     pub block_timestamp: UnixTimeRocksdb,
     pub execution_costs_applied: bool,
@@ -43,7 +44,7 @@ impl From<ExecutionRocksdb> for EvmExecution {
             output: item.output.into(),
             logs: item.logs.into_iter().map(Log::from).collect(),
             gas: item.gas.into(),
-            changes: HashMap::new(),
+            changes: Default::default(),
             deployed_contract_address: item.deployed_contract_address.map_into(),
         }
     }
