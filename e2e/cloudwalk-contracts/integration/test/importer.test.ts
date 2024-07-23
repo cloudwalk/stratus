@@ -117,7 +117,8 @@ describe("Run With Importer integration test", function () {
                 const stratusProcessingTime = stratusTimestamps[stratusTimestamps.length - 1] - stratusTimestamps[0];
 
                 // Total time it took for Run With Importer to process all the blocks containing transactions
-                const runWithImporterProcessingTime = runWithImporterTimestamps[runWithImporterTimestamps.length - 1] - runWithImporterTimestamps[0];
+                const runWithImporterProcessingTime =
+                    runWithImporterTimestamps[runWithImporterTimestamps.length - 1] - runWithImporterTimestamps[0];
 
                 console.log(
                     `          ✔ Stratus processing time: ${stratusProcessingTime}s | Run With Importer processing time: ${runWithImporterProcessingTime}s`,
