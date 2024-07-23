@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::ffi::OsStr;
 use std::fmt;
 use std::fmt::Debug;
-use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Instant;
@@ -644,9 +642,8 @@ impl RocksStorageState {
         // The stats are cumulative since opening the db
         // we can get the average in the time interval with: avg = (new_sum - sum)/(new_count - count)
 
-        let mut prev_values = match self.prev_stats.lock() {
-            Ok(guard) => guard,
-            Err(_) => bail!("mutex in get_histogram_average_in_interval is poisoned"),
+        let Ok(mut prev_values) = self.prev_stats.lock() else {
+            bail!("mutex in get_histogram_average_in_interval is poisoned")
         };
         let (prev_sum, prev_count): (Sum, Count) = *prev_values.get(&(hist as u32)).unwrap_or(&(0, 0));
         let data = self.db_options.get_histogram_data(hist);
