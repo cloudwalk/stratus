@@ -11,6 +11,7 @@ use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionConflicts;
+use crate::eth::primitives::Nonce;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
 
@@ -68,6 +69,10 @@ pub enum StratusError {
     #[strum(props(kind = "execution"))]
     TransactionConflict(Box<ExecutionConflicts>),
 
+    #[error("Transaction nonce {transaction} does not match account nonce {account}.")]
+    #[strum(props(kind = "execution"))]
+    TransactionNonce { transaction: Nonce, account: Nonce },
+
     #[error("Failed to executed transaction in EVM: {0:?}.")]
     #[strum(props(kind = "execution"))]
     TransactionFailed(EVMError<anyhow::Error>), // split this in multiple errors
@@ -79,6 +84,10 @@ pub enum StratusError {
     #[error("Transaction reverted during execution.")]
     #[strum(props(kind = "execution"))]
     TransactionReverted { output: Bytes },
+
+    #[error("Transaction from zero address is not allowed.")]
+    #[strum(props(kind = "execution"))]
+    TransactionFromZeroAddress,
 
     // -------------------------------------------------------------------------
     // Storage
@@ -119,6 +128,11 @@ pub enum StratusError {
 }
 
 impl StratusError {
+    /// Checks if the error is an unexpected/internal error.
+    pub fn is_internal(&self) -> bool {
+        self.rpc_code() == INTERNAL_ERROR_CODE
+    }
+
     /// Error code to be used in JSON-RPC response.
     pub fn rpc_code(&self) -> i32 {
         match self.get_str("kind") {
