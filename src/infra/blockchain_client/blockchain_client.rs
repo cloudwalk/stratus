@@ -20,11 +20,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::Wei;
-use crate::eth::storage::StoragePointInTime;
 use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
 use crate::ext::JsonValue;
@@ -162,22 +158,6 @@ impl BlockchainClient {
         }
     }
 
-    /// Fetches a block by hash.
-    pub async fn fetch_block_by_hash(&self, tx_hash: Hash, tx_detail: bool) -> anyhow::Result<JsonValue> {
-        tracing::debug!(%tx_hash, "fetching block");
-
-        let hash = to_json_value(tx_hash);
-        let result = self
-            .http
-            .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByHash", vec![hash, JsonValue::Bool(tx_detail)])
-            .await;
-
-        match result {
-            Ok(block) => Ok(block),
-            Err(e) => log_and_err!(reason = e, "failed to fetch block by hash"),
-        }
-    }
-
     /// Fetches a transaction by hash.
     pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<Transaction>> {
         tracing::debug!(%tx_hash, "fetching transaction");
@@ -222,44 +202,6 @@ impl BlockchainClient {
         match result {
             Ok(receipt) => Ok(receipt),
             Err(e) => log_and_err!(reason = e, "failed to fetch account balance"),
-        }
-    }
-
-    /// Fetches a slot by a slot at some block.
-    pub async fn fetch_storage_at(&self, address: &Address, index: &SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<SlotValue> {
-        tracing::debug!(%address, %point_in_time, "fetching account balance");
-
-        let address = to_json_value(address);
-        let index = to_json_value(index);
-        let number = match point_in_time {
-            StoragePointInTime::Pending => to_json_value("pending"),
-            StoragePointInTime::Mined => to_json_value("latest"),
-            StoragePointInTime::MinedPast(number) => to_json_value(number),
-        };
-        let result = self
-            .http
-            .request::<SlotValue, Vec<JsonValue>>("eth_getStorageAt", vec![address, index, number])
-            .await;
-
-        match result {
-            Ok(value) => Ok(value),
-            Err(e) => log_and_err!(reason = e, "failed to fetch account balance"),
-        }
-    }
-
-    /// Fetches the current transaction count (nonce) for an account.
-    pub async fn fetch_transaction_count(&self, address: &Address) -> anyhow::Result<Nonce> {
-        tracing::debug!("fetching block number");
-        let address = to_json_value(address);
-
-        let result = self
-            .http
-            .request::<Nonce, Vec<JsonValue>>("eth_getTransactionCount", vec![address, to_json_value("latest")])
-            .await;
-
-        match result {
-            Ok(number) => Ok(number),
-            Err(e) => log_and_err!(reason = e, "failed to fetch transaction count"),
         }
     }
 

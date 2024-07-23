@@ -35,7 +35,6 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilterInput;
-use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionInput;
@@ -171,7 +170,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_version", stratus_version)?;
     module.register_method("stratus_config", stratus_config)?;
 
-    module.register_blocking_method("stratus_getSlots", stratus_get_slots)?;
     module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
 
     // blockchain
@@ -313,46 +311,6 @@ fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<Js
 
 fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     Ok(ctx.app_config.clone())
-}
-
-fn stratus_get_slots(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<Vec<Slot>, StratusError> {
-    // enter span
-    let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::stratus_getSlots", address = field::Empty, indexes = field::Empty).entered();
-
-    // parse params
-    reject_unknown_client(ext.rpc_client())?;
-    let (params, address) = next_rpc_param::<Address>(params.sequence())?;
-    let (params, indexes) = next_rpc_param_or_default::<Vec<SlotIndex>>(params)?;
-    let (_, block_filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
-
-    // track
-    Span::with(|s| {
-        s.rec_str("address", &address);
-        s.rec_str("index", &format!("{:?}", indexes));
-    });
-
-    // execute
-    // no indexes specified, read all slots
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_filter)?;
-    match indexes.len() {
-        // no indexes specified, read all slots
-        0 => {
-            tracing::info!(%address, ?indexes, indexes_len = %indexes.len(), %point_in_time, "reading all account slots");
-            let all_slots = ctx.storage.read_all_slots(&address, &point_in_time)?;
-            Ok(all_slots)
-        }
-        // indexes specified, read only the ones specified
-        _ => {
-            tracing::info!(%address, ?indexes, indexes_len = %indexes.len(), %point_in_time, "reading selected account slots");
-            let mut selected_slots = Vec::with_capacity(indexes.len());
-            for index in indexes {
-                let slot = ctx.storage.read_slot(&address, &index, &point_in_time)?;
-                selected_slots.push(slot);
-            }
-            Ok(selected_slots)
-        }
-    }
 }
 
 async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
