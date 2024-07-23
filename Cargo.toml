@@ -20,6 +20,7 @@ const_format = "=0.2.32"
 const-hex = "=1.12.0"
 derive_more = "=0.99.17"
 derive-new = "=0.6.0"
+hex_fmt = "=0.3.0"
 hex-literal = "=0.4.1"
 humantime = "=2.1.0"
 indexmap = { version = "=2.2.6", features = ["serde"] }

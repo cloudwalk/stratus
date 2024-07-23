@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
-use std::path::Path;
-use std::path::PathBuf;
+use std::fmt::Debug;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::anyhow;
+use anyhow::bail;
 use anyhow::Context;
+use anyhow::Result;
 use lazy_static::lazy_static;
 use rocksdb::Direction;
 use rocksdb::Options;
@@ -73,20 +73,20 @@ lazy_static! {
     };
 }
 
-/// Helper for creating a `RocksCfRef` with our option presets.
-fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> RocksCfRef<K, V>
+/// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
+fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> Result<RocksCfRef<K, V>>
 where
-    K: Serialize + for<'de> Deserialize<'de> + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Clone,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
-    let Some(options) = CF_OPTIONS_MAP.get(column_family) else {
-        panic!("column_family `{column_family}` given to `new_cf_ref` not found in config options map");
-    };
+    CF_OPTIONS_MAP
+        .get(column_family)
+        .with_context(|| format!("matching column_family `{column_family}` given to `new_cf_ref` wasn't found in configuration map"))?;
 
     // NOTE: this doesn't create the CFs in the database, read `RocksCfRef` docs for details
-    RocksCfRef::new(Arc::clone(db), column_family, options.clone())
+    RocksCfRef::new(Arc::clone(db), column_family)
 }
 
 /// State handler for our RocksDB storage, separating "tables" by column families.
@@ -94,7 +94,7 @@ where
 /// With data separated by column families, writing and reading should be done via the `RocksCfRef` fields.
 pub struct RocksStorageState {
     db: Arc<DB>,
-    db_path: PathBuf,
+    db_path: String,
     accounts: RocksCfRef<AddressRocksdb, AccountRocksdb>,
     accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>,
     account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
@@ -115,24 +115,28 @@ pub struct RocksStorageState {
 }
 
 impl RocksStorageState {
-    pub fn new(path: impl AsRef<Path>) -> Self {
-        let db_path = path.as_ref().to_path_buf();
-
+    pub fn new(path: String) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
         #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
-        let (db, db_options) = create_or_open_db(&db_path, &CF_OPTIONS_MAP).unwrap();
+        let (db, db_options) = create_or_open_db(&path, &CF_OPTIONS_MAP).context("when trying to create (or open) rocksdb")?;
 
-        tracing::debug!("opened database successfully");
+        if db.path().to_str().is_none() {
+            bail!("db path doesn't isn't valid UTF-8: {:?}", db.path());
+        }
+        if db.path().file_name().is_none() {
+            bail!("db path doesn't have a file name or isn't valid UTF-8: {:?}", db.path());
+        }
+
         let state = Self {
-            db_path,
-            accounts: new_cf_ref(&db, "accounts"),
-            accounts_history: new_cf_ref(&db, "accounts_history"),
-            account_slots: new_cf_ref(&db, "account_slots"),
-            account_slots_history: new_cf_ref(&db, "account_slots_history"),
-            transactions: new_cf_ref(&db, "transactions"),
-            blocks_by_number: new_cf_ref(&db, "blocks_by_number"),
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash"),
-            logs: new_cf_ref(&db, "logs"),
+            db_path: path,
+            accounts: new_cf_ref(&db, "accounts")?,
+            accounts_history: new_cf_ref(&db, "accounts_history")?,
+            account_slots: new_cf_ref(&db, "account_slots")?,
+            account_slots_history: new_cf_ref(&db, "account_slots_history")?,
+            transactions: new_cf_ref(&db, "transactions")?,
+            blocks_by_number: new_cf_ref(&db, "blocks_by_number")?,
+            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash")?,
+            logs: new_cf_ref(&db, "logs")?,
             #[cfg(feature = "metrics")]
             prev_stats: Default::default(),
             #[cfg(feature = "metrics")]
@@ -140,27 +144,35 @@ impl RocksStorageState {
             db,
         };
 
-        tracing::debug!("returning RocksStorageState");
-        state
+        tracing::debug!("opened database successfully");
+        Ok(state)
     }
 
-    pub fn preload_block_number(&self) -> anyhow::Result<AtomicU64> {
-        let block_number = self.blocks_by_number.last_key().unwrap_or_default();
+    /// Get the filename of the database path.
+    ///
+    /// Should be checked on creation.
+    fn db_path_filename(&self) -> &str {
+        self.db.path().file_name().unwrap().to_str().unwrap()
+    }
+
+    pub fn preload_block_number(&self) -> Result<AtomicU64> {
+        let block_number = self.blocks_by_number.last_key()?.unwrap_or_default();
         tracing::info!(%block_number, "preloaded block_number");
         Ok((u64::from(block_number)).into())
     }
 
-    pub fn reset_at(&self, block_number: BlockNumberRocksdb) -> anyhow::Result<()> {
+    pub fn reset_at(&self, block_number: BlockNumberRocksdb) -> Result<()> {
         // Clear current state
-        self.account_slots.clear().unwrap();
-        self.accounts.clear().unwrap();
+        self.account_slots.clear()?;
+        self.accounts.clear()?;
 
         // Get current state back from historical
         let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)> = HashMap::new();
         let mut latest_accounts: HashMap<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)> = HashMap::new();
-        for ((address, idx, block), value) in self.account_slots_history.iter_start() {
+        for next in self.account_slots_history.iter_start() {
+            let ((address, idx, block), value) = next?;
             if block > block_number {
-                self.account_slots_history.delete(&(address, idx, block)).unwrap();
+                self.account_slots_history.delete(&(address, idx, block))?;
             } else if let Some((bnum, _)) = latest_slots.get(&(address, idx)) {
                 if bnum < &block {
                     latest_slots.insert((address, idx), (block, value.clone()));
@@ -169,12 +181,13 @@ impl RocksStorageState {
                 latest_slots.insert((address, idx), (block, value.clone()));
             }
         }
-        for ((address, block), account) in self.accounts_history.iter_start() {
+        for next in self.accounts_history.iter_start() {
+            let ((address, block), account) = next?;
             if block > block_number {
-                self.accounts_history.delete(&(address, block)).unwrap();
+                self.accounts_history.delete(&(address, block))?;
             } else if let Some((bnum, _)) = latest_accounts.get(&address) {
                 if bnum < &block {
-                    latest_accounts.insert(address, (block, account)).unwrap();
+                    latest_accounts.insert(address, (block, account));
                 }
             } else {
                 latest_accounts.insert(address, (block, account));
@@ -183,36 +196,43 @@ impl RocksStorageState {
 
         // write new current state
         let mut batch = WriteBatch::default();
+
         let accounts_iter = latest_accounts.into_iter().map(|(address, (_, account))| (address, account));
-        self.accounts.prepare_batch_insertion(accounts_iter, &mut batch);
+        self.accounts.prepare_batch_insertion(accounts_iter, &mut batch)?;
+
         let slots_iter = latest_slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value));
-        self.account_slots.prepare_batch_insertion(slots_iter, &mut batch);
-        self.write_batch(batch).unwrap();
+        self.account_slots.prepare_batch_insertion(slots_iter, &mut batch)?;
+
+        self.write_in_batch_for_multiple_cfs(batch)?;
 
         // Truncate rest of
-        for (hash, block) in self.transactions.iter_start() {
+        for next in self.transactions.iter_start() {
+            let (hash, block) = next?;
             if block > block_number {
-                self.transactions.delete(&hash).unwrap();
+                self.transactions.delete(&hash)?;
             }
         }
 
-        for (key, block) in self.logs.iter_start() {
+        for next in self.logs.iter_start() {
+            let (key, block) = next?;
             if block > block_number {
-                self.logs.delete(&key).unwrap();
+                self.logs.delete(&key)?;
             }
         }
 
-        for (hash, block) in self.blocks_by_hash.iter_start() {
+        for next in self.blocks_by_hash.iter_start() {
+            let (hash, block) = next?;
             if block > block_number {
-                self.blocks_by_hash.delete(&hash).unwrap();
+                self.blocks_by_hash.delete(&hash)?;
             }
         }
 
-        for (block, _) in self.blocks_by_number.iter_end() {
+        for next in self.blocks_by_number.iter_end() {
+            let (block, _) = next?;
             if block > block_number {
-                self.blocks_by_number.delete(&block).unwrap();
+                self.blocks_by_number.delete(&block)?;
             } else {
-                break;
+                break; // optimization: stop early
             }
         }
 
@@ -220,7 +240,12 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    fn prepare_batch_state_update_with_execution_changes(&self, changes: &[ExecutionAccountChanges], block_number: BlockNumber, batch: &mut WriteBatch) {
+    fn prepare_batch_state_update_with_execution_changes(
+        &self,
+        changes: &[ExecutionAccountChanges],
+        block_number: BlockNumber,
+        batch: &mut WriteBatch,
+    ) -> Result<()> {
         let accounts = self.accounts.clone();
         let accounts_history = self.accounts_history.clone();
         let account_slots = self.account_slots.clone();
@@ -231,7 +256,7 @@ impl RocksStorageState {
 
         for change in changes {
             let address: AddressRocksdb = change.address.into();
-            let mut account_info_entry = accounts.get_or_insert_with(address, AccountRocksdb::default);
+            let mut account_info_entry = accounts.get_or_insert_with(address, AccountRocksdb::default)?;
 
             if let Some(nonce) = change.nonce.clone().take_modified() {
                 account_info_entry.nonce = nonce.into();
@@ -247,8 +272,8 @@ impl RocksStorageState {
             account_history_changes.push(((address, block_number.into()), account_info_entry));
         }
 
-        accounts.prepare_batch_insertion(account_changes, batch);
-        accounts_history.prepare_batch_insertion(account_history_changes, batch);
+        accounts.prepare_batch_insertion(account_changes, batch)?;
+        accounts_history.prepare_batch_insertion(account_history_changes, batch)?;
 
         let mut slot_changes = Vec::new();
         let mut slot_history_changes = Vec::new();
@@ -263,29 +288,31 @@ impl RocksStorageState {
                 }
             }
         }
-        account_slots.prepare_batch_insertion(slot_changes, batch);
-        account_slots_history.prepare_batch_insertion(slot_history_changes, batch);
+        account_slots.prepare_batch_insertion(slot_changes, batch)?;
+        account_slots_history.prepare_batch_insertion(slot_history_changes, batch)?;
+
+        Ok(())
     }
 
-    pub fn read_transaction(&self, tx_hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        match self.transactions.get(&(*tx_hash).into()) {
-            Some(block_number) => match self.blocks_by_number.get(&block_number) {
-                Some(block) => {
-                    tracing::trace!(%tx_hash, "transaction found");
-                    match block.transactions.into_iter().find(|tx| &Hash::from(tx.input.hash) == tx_hash) {
-                        Some(tx) => Ok(Some(tx.into())),
-                        None => log_and_err!("transaction was not found in block")
-                            .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
-                    }
-                }
-                None => log_and_err!("the block that the transaction was supposed to be in was not found")
-                    .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
-            },
-            None => Ok(None),
+    pub fn read_transaction(&self, tx_hash: &Hash) -> Result<Option<TransactionMined>> {
+        let Some(block_number) = self.transactions.get(&(*tx_hash).into())? else {
+            return Ok(None);
+        };
+
+        let Some(block) = self.blocks_by_number.get(&block_number)? else {
+            return log_and_err!("the block that the transaction was supposed to be in was not found")
+                .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash));
+        };
+
+        tracing::trace!(%tx_hash, "transaction found");
+        match block.transactions.into_iter().find(|tx| &Hash::from(tx.input.hash) == tx_hash) {
+            Some(tx) => Ok(Some(tx.into())),
+            None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
+                .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
         }
     }
 
-    pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>> {
         let addresses: HashSet<AddressRocksdb> = filter.addresses.iter().map(|&address| AddressRocksdb::from(address)).collect();
 
         let end_block_range_filter = |number: BlockNumber| match filter.to_block.as_ref() {
@@ -293,115 +320,132 @@ impl RocksStorageState {
             None => true,
         };
 
-        Ok(self
+        let iter = self
             .blocks_by_number
-            .iter_from(BlockNumberRocksdb::from(filter.from_block), Direction::Forward)
-            .take_while(|(number, _)| end_block_range_filter((*number).into()))
-            .flat_map(|(_, block)| block.transactions)
-            .filter(|transaction| transaction.input.to.is_some_and(|to| addresses.contains(&to)))
-            .flat_map(|transaction| transaction.logs)
-            .map(LogMined::from)
-            .filter(|log_mined| filter.matches(log_mined))
-            .collect())
+            .iter_from(BlockNumberRocksdb::from(filter.from_block), Direction::Forward)?;
+
+        let mut logs_result = vec![];
+
+        for next in iter {
+            let (number, block) = next?;
+
+            if !end_block_range_filter(number.into()) {
+                break;
+            }
+            let transactions_with_matching_addresses = block
+                .transactions
+                .into_iter()
+                .filter(|transaction| transaction.input.to.is_some_and(|to| addresses.contains(&to)));
+
+            let logs = transactions_with_matching_addresses
+                .flat_map(|transaction| transaction.logs)
+                .map(LogMined::from);
+
+            let filtered_logs = logs.filter(|log| filter.matches(log));
+            logs_result.extend(filtered_logs);
+        }
+        Ok(logs_result)
     }
 
-    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Option<Slot> {
+    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Option<Slot>> {
         if address.is_coinbase() {
             //XXX temporary, we will reload the database later without it
-            return None;
+            return Ok(None);
         }
 
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending =>
-                self.account_slots.get(&((*address).into(), (*index).into())).map(|account_slot_value| Slot {
+            StoragePointInTime::Mined | StoragePointInTime::Pending => {
+                let query_params = ((*address).into(), (*index).into());
+
+                let Some(account_slot_value) = self.account_slots.get(&query_params)? else {
+                    return Ok(None);
+                };
+
+                Ok(Some(Slot {
                     index: *index,
-                    value: account_slot_value.clone().into(),
-                }),
+                    value: account_slot_value.into(),
+                }))
+            }
             StoragePointInTime::MinedPast(number) => {
+                let iterator_start = ((*address).into(), (*index).into(), (*number).into());
+
                 if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
-                    .iter_from((*address, *index, *number), rocksdb::Direction::Reverse)
+                    .iter_from(iterator_start, rocksdb::Direction::Reverse)?
                     .next()
+                    .transpose()?
                 {
                     if rocks_index == (*index).into() && rocks_address == (*address).into() {
-                        return Some(Slot {
+                        return Ok(Some(Slot {
                             index: rocks_index.into(),
                             value: value.into(),
-                        });
+                        }));
                     }
                 }
-                None
+                Ok(None)
             }
         }
     }
 
-    pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Option<Account> {
+    pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Option<Account>> {
         if address.is_coinbase() || address.is_zero() {
             //XXX temporary, we will reload the database later without it
-            return None;
+            return Ok(None);
         }
 
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => match self.accounts.get(&((*address).into())) {
-                Some(inner_account) => {
-                    let account = inner_account.to_account(address);
-                    tracing::trace!(%address, ?account, "account found");
-                    Some(account)
-                }
-
-                None => {
+            StoragePointInTime::Mined | StoragePointInTime::Pending => {
+                let Some(inner_account) = self.accounts.get(&((*address).into()))? else {
                     tracing::trace!(%address, "account not found");
-                    None
-                }
-            },
+                    return Ok(None);
+                };
+
+                let account = inner_account.to_account(address);
+                tracing::trace!(%address, ?account, "account found");
+                Ok(Some(account))
+            }
             StoragePointInTime::MinedPast(block_number) => {
-                let rocks_address: AddressRocksdb = (*address).into();
-                if let Some(((addr, _), account_info)) = self
-                    .accounts_history
-                    .iter_from((rocks_address, *block_number), rocksdb::Direction::Reverse)
-                    .next()
-                {
+                let iterator_start = ((*address).into(), (*block_number).into());
+
+                if let Some(next) = self.accounts_history.iter_from(iterator_start, rocksdb::Direction::Reverse)?.next() {
+                    let ((addr, _), account_info) = next?;
                     if addr == (*address).into() {
-                        return Some(account_info.to_account(address));
+                        return Ok(Some(account_info.to_account(address)));
                     }
                 }
-                None
+                Ok(None)
             }
         }
     }
 
-    pub fn read_block(&self, selection: &BlockFilter) -> Option<Block> {
+    pub fn read_block(&self, selection: &BlockFilter) -> Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
         let block = match selection {
-            BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.iter_end().next().map(|(_, block)| block),
-            BlockFilter::Earliest => self.blocks_by_number.iter_start().next().map(|(_, block)| block),
+            BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
+            BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
             BlockFilter::Hash(block_hash) =>
-                if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into()) {
+                if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
-                    None
+                    Ok(None)
                 },
         };
-        match block {
-            Some(block) => {
-                tracing::trace!(?selection, ?block, "block found");
-                Some(block.into())
-            }
-            None => None,
-        }
+
+        block.map(Option::map_into)
     }
 
-    pub fn save_accounts(&self, accounts: Vec<Account>) {
+    pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         for account in accounts {
             let (key, value) = account.into();
-            self.accounts.insert(key, value.clone());
-            self.accounts_history.insert((key, 0.into()), value);
+            self.accounts.insert(key, value.clone())?;
+            self.accounts_history.insert((key, 0.into()), value)?;
         }
+        Ok(())
     }
 
-    pub fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    pub fn save_block(&self, block: Block) -> Result<()> {
         let account_changes = block.compact_account_changes();
 
         let mut txs_batch = vec![];
@@ -414,8 +458,8 @@ impl RocksStorageState {
         }
         let mut batch = WriteBatch::default();
 
-        self.transactions.prepare_batch_insertion(txs_batch, &mut batch);
-        self.logs.prepare_batch_insertion(logs_batch, &mut batch);
+        self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
+        self.logs.prepare_batch_insertion(logs_batch, &mut batch)?;
 
         let number = block.number();
         let block_hash = block.hash();
@@ -433,67 +477,66 @@ impl RocksStorageState {
         };
 
         let block_by_number = (number.into(), block_without_changes.into());
-        self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch);
+        self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
-        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch);
+        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
 
-        self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch);
+        self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch)?;
 
-        self.write_batch(batch).unwrap();
+        self.write_in_batch_for_multiple_cfs(batch)?;
         Ok(())
+    }
+
+    /// Write to DB in a batch
+    pub fn write_in_batch_for_multiple_cfs(&self, batch: WriteBatch) -> Result<()> {
+        let batch_len = batch.len();
+        let result = self.db.write(batch).context("failed to write in batch to multiple column families");
+
+        result.inspect_err(|e| {
+            tracing::error!(reason = ?e, batch_len, "failed to write batch to DB");
+        })
     }
 
     /// Writes accounts to state (does not write to account history)
     #[allow(dead_code)]
-    fn write_accounts(&self, accounts: Vec<Account>) {
+    fn write_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         let accounts = accounts.into_iter().map(Into::into);
 
         let mut batch = WriteBatch::default();
-        self.accounts.prepare_batch_insertion(accounts, &mut batch);
-        self.db.write(batch).unwrap();
+        self.accounts.prepare_batch_insertion(accounts, &mut batch)?;
+        self.accounts.write_batch_with_context(batch)
     }
 
     /// Writes slots to state (does not write to slot history)
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn write_slots(&self, slots: Vec<(Address, Slot)>) {
+    pub fn write_slots(&self, slots: Vec<(Address, Slot)>) -> Result<()> {
         let slots = slots
             .into_iter()
             .map(|(address, slot)| ((address.into(), slot.index.into()), slot.value.into()));
 
         let mut batch = WriteBatch::default();
-        self.account_slots.prepare_batch_insertion(slots, &mut batch);
-        self.db.write(batch).unwrap();
-    }
-
-    /// Write to all DBs in a batch
-    fn write_batch(&self, batch: WriteBatch) -> anyhow::Result<()> {
-        let batch_len = batch.len();
-        let result = self.db.write(batch);
-
-        if let Err(e) = &result {
-            tracing::error!(reason = ?e, batch_len, "failed to write batch to DB");
-        }
-        result.map_err(Into::into)
+        self.account_slots.prepare_batch_insertion(slots, &mut batch)?;
+        self.account_slots.write_batch_with_context(batch)
     }
 
     /// Clears in-memory state.
-    pub fn clear(&self) -> anyhow::Result<()> {
-        self.accounts.clear()?;
-        self.accounts_history.clear()?;
-        self.account_slots.clear()?;
-        self.account_slots_history.clear()?;
-        self.transactions.clear()?;
-        self.blocks_by_hash.clear()?;
-        self.blocks_by_number.clear()?;
-        self.logs.clear()?;
+    pub fn clear(&self) -> Result<()> {
+        self.accounts.clear().context("when clearing accounts")?;
+        self.accounts_history.clear().context("when clearing accounts_history")?;
+        self.account_slots.clear().context("when clearing account_slots")?;
+        self.account_slots_history.clear().context("when clearing account_slots_history")?;
+        self.transactions.clear().context("when clearing transactions")?;
+        self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
+        self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
+        self.logs.clear().context("when clearing logs")?;
         Ok(())
     }
 }
 
 #[cfg(feature = "metrics")]
 impl RocksStorageState {
-    pub fn export_metrics(&self) {
+    pub fn export_metrics(&self) -> Result<()> {
         let db_get = self.db_options.get_histogram_data(Histogram::DbGet);
         let db_write = self.db_options.get_histogram_data(Histogram::DbWrite);
 
@@ -510,7 +553,7 @@ impl RocksStorageState {
         let block_cache_capacity = self.db.property_int_value(rocksdb::properties::BLOCK_CACHE_CAPACITY).unwrap_or_default();
         let background_errors = self.db.property_int_value(rocksdb::properties::BACKGROUND_ERRORS).unwrap_or_default();
 
-        let db_name = self.db.path().file_name().unwrap().to_str();
+        let db_name = self.db_path_filename();
 
         metrics::set_rocks_db_get(db_get.count(), db_name);
         metrics::set_rocks_db_write(db_write.count(), db_name);
@@ -520,9 +563,9 @@ impl RocksStorageState {
         metrics::set_rocks_bytes_read(bytes_read, db_name);
         metrics::set_rocks_wal_file_synced(wal_file_synced, db_name);
 
-        metrics::set_rocks_compaction_time(self.get_histogram_average_in_interval(Histogram::CompactionTime), db_name);
-        metrics::set_rocks_compaction_cpu_time(self.get_histogram_average_in_interval(Histogram::CompactionCpuTime), db_name);
-        metrics::set_rocks_flush_time(self.get_histogram_average_in_interval(Histogram::FlushTime), db_name);
+        metrics::set_rocks_compaction_time(self.get_histogram_average_in_interval(Histogram::CompactionTime)?, db_name);
+        metrics::set_rocks_compaction_cpu_time(self.get_histogram_average_in_interval(Histogram::CompactionCpuTime)?, db_name);
+        metrics::set_rocks_flush_time(self.get_histogram_average_in_interval(Histogram::FlushTime)?, db_name);
 
         if let Some(cur_size_active_mem_table) = cur_size_active_mem_table {
             metrics::set_rocks_cur_size_active_mem_table(cur_size_active_mem_table, db_name);
@@ -554,24 +597,27 @@ impl RocksStorageState {
         self.blocks_by_number.export_metrics();
         self.logs.export_metrics();
         self.transactions.export_metrics();
+        Ok(())
     }
 
-    fn get_histogram_average_in_interval(&self, hist: Histogram) -> u64 {
+    fn get_histogram_average_in_interval(&self, hist: Histogram) -> Result<u64> {
         // The stats are cumulative since opening the db
         // we can get the average in the time interval with: avg = (new_sum - sum)/(new_count - count)
 
-        let mut prev_values = self.prev_stats.lock().unwrap();
+        let Ok(mut prev_values) = self.prev_stats.lock() else {
+            bail!("mutex in get_histogram_average_in_interval is poisoned")
+        };
         let (prev_sum, prev_count): (Sum, Count) = *prev_values.get(&(hist as u32)).unwrap_or(&(0, 0));
         let data = self.db_options.get_histogram_data(hist);
         let data_count = data.count();
         let data_sum = data.sum();
 
         let Some(avg) = (data_sum - prev_sum).checked_div(data_count - prev_count) else {
-            return 0;
+            return Ok(0);
         };
 
         prev_values.insert(hist as u32, (data_sum, data_count));
-        avg
+        Ok(avg)
     }
 }
 
@@ -597,7 +643,7 @@ impl Drop for RocksStorageState {
 
         #[cfg(feature = "metrics")]
         {
-            let db_name = self.db.path().file_name().unwrap().to_str();
+            let db_name = self.db_path_filename();
             metrics::set_rocks_last_shutdown_delay_millis(waited_for.as_millis() as u64, db_name);
         }
 
@@ -628,7 +674,7 @@ mod tests {
     #[test]
     fn test_rocks_multi_get() {
         let (db, _db_options) = create_or_open_db("./data/slots_test.rocksdb", &CF_OPTIONS_MAP).unwrap();
-        let account_slots: RocksCfRef<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots");
+        let account_slots: RocksCfRef<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots").unwrap();
 
         let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
         let extra_slots: HashMap<SlotIndex, SlotValue> = (0..1000)
@@ -637,8 +683,8 @@ mod tests {
             .collect();
 
         let mut batch = WriteBatch::default();
-        account_slots.prepare_batch_insertion(slots.clone(), &mut batch);
-        account_slots.prepare_batch_insertion(extra_slots.clone(), &mut batch);
+        account_slots.prepare_batch_insertion(slots.clone(), &mut batch).unwrap();
+        account_slots.prepare_batch_insertion(extra_slots.clone(), &mut batch).unwrap();
         db.write(batch).unwrap();
 
         let extra_keys: HashSet<SlotIndex> = (0..1000)
