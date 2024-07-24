@@ -54,3 +54,9 @@ impl From<LogTopic> for H256 {
         value.0
     }
 }
+
+impl From<LogTopic> for [u8; 32] {
+    fn from(value: LogTopic) -> Self {
+        value.0 .0
+    }
+}
