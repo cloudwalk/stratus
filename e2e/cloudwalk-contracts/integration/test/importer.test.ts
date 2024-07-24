@@ -126,7 +126,7 @@ describe("Run With Importer integration test", function () {
                 );
             });
 
-            it(`${params.name}: Validate transactions were imported from Stratus to Run With Importer`, async function () {
+            it(`${params.name}: Validate all transactions were imported from Stratus to Run With Importer`, async function () {
                 // Get Stratus transaction receipts
                 updateProviderUrl("stratus");
                 const stratusReceipts = await Promise.all(
