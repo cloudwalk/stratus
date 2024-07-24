@@ -3,8 +3,8 @@ use std::fmt::Display;
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
-use revm::primitives::B256 as RevmB256;
 
+use crate::alias::RevmB256;
 use crate::gen_newtype_from;
 
 /// Topic is part of a [`Log`](super::Log) emitted by the EVM during contract execution.

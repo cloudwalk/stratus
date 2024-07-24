@@ -4,7 +4,6 @@ use std::task::Context;
 use std::task::Poll;
 use std::time::Duration;
 
-use ethers_core::types::Transaction;
 use futures::Future;
 use futures::Stream;
 use futures_timer::Delay;
@@ -14,6 +13,7 @@ use futures_util::StreamExt;
 use pin_project::pin_project;
 
 use super::BlockchainClient;
+use crate::alias::EthersTransaction;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 
@@ -32,7 +32,7 @@ enum PendingTxState<'a> {
     PausedGettingTx,
 
     /// Polling The blockchain to see if the Tx has confirmed or dropped
-    GettingTx(PinBoxFut<'a, Option<Transaction>>),
+    GettingTx(PinBoxFut<'a, Option<EthersTransaction>>),
 
     /// Waiting for interval to elapse before calling API again
     PausedGettingReceipt,

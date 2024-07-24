@@ -1,7 +1,7 @@
-use ethers_core::types::Block as EthersBlock;
-use ethers_core::types::Transaction as EthersTransaction;
 use serde::Deserialize;
 
+use crate::alias::EthersBlockEthersTransaction;
+use crate::alias::EthersBlockExternalTransaction;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
@@ -14,7 +14,7 @@ use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
-pub struct ExternalBlock(#[deref] pub EthersBlock<ExternalTransaction>);
+pub struct ExternalBlock(#[deref] pub EthersBlockExternalTransaction);
 
 impl ExternalBlock {
     /// Returns the block hash.
@@ -47,7 +47,7 @@ impl ExternalBlock {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl From<ExternalBlock> for EthersBlock<ExternalTransaction> {
+impl From<ExternalBlock> for EthersBlockExternalTransaction {
     fn from(value: ExternalBlock) -> Self {
         value.0
     }
@@ -77,12 +77,12 @@ impl TryFrom<JsonValue> for ExternalBlock {
     }
 }
 
-impl From<EthersBlock<EthersTransaction>> for ExternalBlock {
-    fn from(value: EthersBlock<EthersTransaction>) -> Self {
+impl From<EthersBlockEthersTransaction> for ExternalBlock {
+    fn from(value: EthersBlockEthersTransaction) -> Self {
         let txs: Vec<ExternalTransaction> = value.transactions.into_iter().map(ExternalTransaction::from).collect();
 
         // Is there a better way to do this?
-        let block = EthersBlock {
+        let block = EthersBlockExternalTransaction {
             transactions: txs,
             hash: value.hash,
             parent_hash: value.parent_hash,

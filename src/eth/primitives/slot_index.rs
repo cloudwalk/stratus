@@ -7,7 +7,6 @@ use ethereum_types::U256;
 use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
-use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
@@ -15,6 +14,7 @@ use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
 use sqlx::Decode;
 
+use crate::alias::RevmU256;
 use crate::gen_newtype_from;
 
 #[derive(Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]

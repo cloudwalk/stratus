@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use ethereum_types::H256;
-use ethers_core::types::Block as EthersBlock;
-use ethers_core::types::Transaction as EthersTransaction;
 use itertools::Itertools;
 use serde::Deserialize;
 
 use super::LogMined;
 use super::TransactionInput;
+use crate::alias::EthersBlockEthersTransaction;
+use crate::alias::EthersBlockH256;
+use crate::alias::EthersTransaction;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
@@ -104,13 +105,13 @@ impl Block {
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
-        let ethers_block: EthersBlock<EthersTransaction> = self.into();
+        let ethers_block: EthersBlockEthersTransaction = self.into();
         to_json_value(ethers_block)
     }
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
     pub fn to_json_rpc_with_transactions_hashes(self) -> JsonValue {
-        let ethers_block: EthersBlock<H256> = self.into();
+        let ethers_block: EthersBlockH256 = self.into();
         to_json_value(ethers_block)
     }
 
@@ -161,9 +162,9 @@ impl Block {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<Block> for EthersBlock<EthersTransaction> {
+impl From<Block> for EthersBlockEthersTransaction {
     fn from(block: Block) -> Self {
-        let ethers_block = EthersBlock::<EthersTransaction>::from(block.header.clone());
+        let ethers_block = EthersBlockEthersTransaction::from(block.header.clone());
         let ethers_block_transactions: Vec<EthersTransaction> = block.transactions.clone().into_iter().map_into().collect();
         Self {
             transactions: ethers_block_transactions,
@@ -172,9 +173,9 @@ impl From<Block> for EthersBlock<EthersTransaction> {
     }
 }
 
-impl From<Block> for EthersBlock<H256> {
+impl From<Block> for EthersBlockH256 {
     fn from(block: Block) -> Self {
-        let ethers_block = EthersBlock::<H256>::from(block.header);
+        let ethers_block = EthersBlockH256::from(block.header);
         let ethers_block_transactions: Vec<H256> = block.transactions.into_iter().map(|x| x.input.hash).map_into().collect();
         Self {
             transactions: ethers_block_transactions,
