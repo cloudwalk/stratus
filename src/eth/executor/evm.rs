@@ -310,7 +310,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
         if changes.bytecode.is_modified() {
             deployed_contract_address = Some(changes.address);
         }
-    };
+    }
 
     EvmExecution {
         block_timestamp: input.block_timestamp,
