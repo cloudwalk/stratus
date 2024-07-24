@@ -126,24 +126,6 @@ describe("Run With Importer integration test", function () {
                 );
             });
 
-            it(`${params.name}: Validate balances between Stratus and Run With Importer`, async function () {
-                for (let i = 0; i < wallets.length; i++) {
-                    // Get Stratus balance
-                    updateProviderUrl("stratus");
-                    const stratusBalance = await brlcToken.balanceOf(wallets[i].address);
-
-                    // Get Run With Importer balance
-                    updateProviderUrl("run-with-importer");
-                    const runWithImporterBalance = await brlcToken.balanceOf(wallets[i].address);
-
-                    // Assert that the balances are equal
-                    expect(stratusBalance).to.equal(
-                        runWithImporterBalance,
-                        `Wallet ${wallets[i].address} balances are not equal between Stratus and Run With Importer`,
-                    );
-                }
-            });
-
             it(`${params.name}: Validate transactions were imported from Stratus to Run With Importer`, async function () {
                 // Get Stratus transaction receipts
                 updateProviderUrl("stratus");
@@ -167,6 +149,52 @@ describe("Run With Importer integration test", function () {
                 for (let i = 0; i < txHashList.length; i++) {
                     expect(stratusReceipts[i]).to.exist;
                     expect(runWithImporterReceipts[i]).to.exist;
+                }
+            });
+
+            it(`${params.name}: Validate each transaction was imported into the same block between Stratus and Run With Importer`, async function () {
+                // Get Stratus block numbers
+                updateProviderUrl("stratus");
+                const stratusBlockNumbers = await Promise.all(
+                    txHashList.map(async (txHash) => {
+                        const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
+                        return receipt.blockNumber;
+                    }),
+                );
+
+                // Get Run With Importer block numbers
+                updateProviderUrl("run-with-importer");
+                const runWithImporterBlockNumbers = await Promise.all(
+                    txHashList.map(async (txHash) => {
+                        const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash], 20);
+                        return receipt.blockNumber;
+                    }),
+                );
+
+                // Assert that each transaction fell into the same block between Stratus and Run With Importer
+                for (let i = 0; i < txHashList.length; i++) {
+                    expect(
+                        stratusBlockNumbers[i],
+                        `Transaction ${txHashList[i]} did not fall into the same block between Stratus and Run With Importer`,
+                    ).to.equal(runWithImporterBlockNumbers[i]);
+                }
+            });
+
+            it(`${params.name}: Validate balances between Stratus and Run With Importer`, async function () {
+                for (let i = 0; i < wallets.length; i++) {
+                    // Get Stratus balance
+                    updateProviderUrl("stratus");
+                    const stratusBalance = await brlcToken.balanceOf(wallets[i].address);
+
+                    // Get Run With Importer balance
+                    updateProviderUrl("run-with-importer");
+                    const runWithImporterBalance = await brlcToken.balanceOf(wallets[i].address);
+
+                    // Assert that the balances are equal
+                    expect(stratusBalance).to.equal(
+                        runWithImporterBalance,
+                        `Wallet ${wallets[i].address} balances are not equal between Stratus and Run With Importer`,
+                    );
                 }
                 updateProviderUrl("stratus");
             });
