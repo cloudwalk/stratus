@@ -30,9 +30,9 @@ describe("Run With Importer integration test", function () {
 
     describe("Long duration transaction tests", function () {
         const parameters = [
-            { name: "Few wallets, sufficient balance", wallets: 3, duration: 15, tps: 30, baseBalance: 2000 },
-            { name: "Few wallets, insufficient balance", wallets: 2, duration: 15, tps: 5, baseBalance: 5 },
-            { name: "Many wallets, sufficient balance", wallets: 20, duration: 15, tps: 5, baseBalance: 2000 },
+            { name: "Few wallets, sufficient balance", wallets: 3, duration: 20, tps: 300, baseBalance: 2000 },
+            { name: "Few wallets, insufficient balance", wallets: 2, duration: 20, tps: 300, baseBalance: 5 },
+            { name: "Many wallets, sufficient balance", wallets: 20, duration: 20, tps: 300, baseBalance: 2000 },
         ];
         parameters.forEach((params, index) => {
             const wallets: any[] = [];
@@ -120,7 +120,9 @@ describe("Run With Importer integration test", function () {
                 const runWithImporterProcessingTime =
                     runWithImporterTimestamps[runWithImporterTimestamps.length - 1] - runWithImporterTimestamps[0];
 
+                console.log(`          ✔ Number of transactions sent: ${txHashList.length}`);
                 console.log(
+                    
                     `          ✔ Stratus processing time: ${stratusProcessingTime}s | Run With Importer processing time: ${runWithImporterProcessingTime}s`,
                 );
             });
