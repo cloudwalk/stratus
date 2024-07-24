@@ -264,7 +264,7 @@ run_test() {
         echo "Killing the leader instance on address $leader_port..."
         for i in "${!leader_ports[@]}"; do
             if [ "${leader_ports[i]}" == "$leader_port" ]; then
-                killport --quiet $leader_port
+                killport --quiet $leader_port || true
                 break
             fi
         done
