@@ -5,7 +5,6 @@ use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethereum_types::U64;
 use ethers_core::types::NameOrAddress;
-use ethers_core::types::Transaction as EthersTransaction;
 use ethers_core::types::TransactionRequest;
 use fake::Dummy;
 use fake::Fake;
@@ -13,6 +12,7 @@ use fake::Faker;
 use rlp::Decodable;
 use serde::Deserialize;
 
+use crate::alias::EthersTransaction;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;

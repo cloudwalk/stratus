@@ -4,7 +4,6 @@ use ethabi::Token;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
-use revm::primitives::U256 as RevmU256;
 use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
@@ -13,6 +12,7 @@ use sqlx::postgres::PgHasArrayType;
 use sqlx::types::BigDecimal;
 use sqlx::Decode;
 
+use crate::alias::RevmU256;
 use crate::gen_newtype_from;
 
 /// Native token amount in wei.

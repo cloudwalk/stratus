@@ -3,12 +3,12 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use ethers_core::types::Bytes as EthersBytes;
 use revm::interpreter::analysis::to_analysed;
-use revm::primitives::Bytecode as RevmBytecode;
-use revm::primitives::Bytes as RevmBytes;
-use revm::primitives::Output as RevmOutput;
 
+use crate::alias::EthersBytes;
+use crate::alias::RevmBytecode;
+use crate::alias::RevmBytes;
+use crate::alias::RevmOutput;
 use crate::gen_newtype_from;
 
 #[derive(Clone, Default, Eq, PartialEq, fake::Dummy)]

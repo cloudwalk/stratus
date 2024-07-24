@@ -10,6 +10,7 @@ use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
+use crate::alias::EthersBlockVoid;
 use crate::eth::consensus::append_entry;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
@@ -22,6 +23,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Size;
 use crate::eth::primitives::UnixTime;
+use crate::ext::ResultExt;
 
 /// Special hash used in block mining to indicate no uncle blocks.
 const HASH_EMPTY_UNCLES: Hash = Hash::new(hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"));
@@ -232,7 +234,7 @@ impl TryFrom<&ExternalBlock> for BlockHeader {
 
 impl From<BlockHeader> for SubscriptionMessage {
     fn from(value: BlockHeader) -> Self {
-        let ethers_block: EthersBlock<()> = EthersBlock::from(value);
-        Self::from_json(&ethers_block).unwrap()
+        let ethers_block = EthersBlockVoid::from(value);
+        Self::from_json(&ethers_block).expect_infallible()
     }
 }

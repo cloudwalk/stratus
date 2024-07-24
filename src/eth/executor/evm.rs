@@ -4,8 +4,6 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use itertools::Itertools;
 use revm::primitives::AccountInfo;
-use revm::primitives::Address as RevmAddress;
-use revm::primitives::Bytecode as RevmBytecode;
 use revm::primitives::EVMError;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
 use revm::primitives::InvalidTransaction;
@@ -19,6 +17,8 @@ use revm::Database;
 use revm::Evm as RevmEvm;
 use revm::Handler;
 
+use crate::alias::RevmAddress;
+use crate::alias::RevmBytecode;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;

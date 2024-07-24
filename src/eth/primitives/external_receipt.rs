@@ -1,7 +1,7 @@
 use ethereum_types::U256;
-use ethers_core::types::TransactionReceipt as EthersReceipt;
 use serde::Deserialize;
 
+use crate::alias::EthersReceipt;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;

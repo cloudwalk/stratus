@@ -298,6 +298,73 @@ e2e-flamegraph:
     echo "Running cargo flamegraph"
     cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
+e2e-importer-online:
+    #!/bin/bash
+
+    just e2e-importer-online-up
+    result_code=$?
+
+    just e2e-importer-online-down
+
+    exit $result_code
+
+# E2E: Importer Online
+e2e-importer-online-up:
+    #!/bin/bash
+
+    # Build Stratus and Run With Importer binaries
+    echo "Building Stratus and Run With Importer binaries"
+    cargo build --release --bin stratus --bin run-with-importer --features dev
+
+    mkdir e2e_logs
+
+    # Start Stratus binary
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --enable-genesis --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+
+    # Wait for Stratus to start
+    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+
+    # Start Run With Importer binary
+    RUST_LOG=info cargo run --release --bin run-with-importer --features dev -- --block-mode 1s --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
+
+    # Wait for Run With Importer to start
+    wait-service --tcp 0.0.0.0:3001 -t {{ wait_service_timeout }} -- echo
+
+    if [ -d e2e/cloudwalk-contracts ]; then
+    (
+        cd e2e/cloudwalk-contracts/integration
+        npm install
+        npx hardhat test test/importer.test.ts --network stratus --bail
+        if [ $? -ne 0 ]; then
+            echo "Tests failed"
+            exit 1
+        else
+            echo "Tests passed successfully"
+            exit 0
+        fi
+    )
+    fi
+
+# E2E: Importer Online
+e2e-importer-online-down:
+    #!/bin/bash
+
+    # Kill run-with-importer
+    killport 3001
+    run_with_importer_pid=$(pgrep -f 'run-with-importer')
+    kill $run_with_importer_pid
+
+    # Kill Stratus
+    killport 3000
+    stratus_pid=$(pgrep -f 'stratus')
+    kill $stratus_pid
+
+    # Delete data contents
+    rm -rf ./temp_*
+
+    # Delete zeppelin directory
+    rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
+
 # ------------------------------------------------------------------------------
 # Contracts tasks
 # ------------------------------------------------------------------------------
