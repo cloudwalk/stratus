@@ -6,7 +6,8 @@ use chrono::Utc;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
-use revm::primitives::U256 as RevmU256;
+
+use crate::alias::RevmU256;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnixTime(u64);

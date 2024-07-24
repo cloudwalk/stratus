@@ -1,7 +1,7 @@
 use display_json::DebugAsJson;
-use revm::primitives::AccountInfo as RevmAccountInfo;
-use revm::primitives::Address as RevmAddress;
 
+use crate::alias::RevmAccountInfo;
+use crate::alias::RevmAddress;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;

@@ -1,7 +1,7 @@
-use ethers_core::types::Log as EthersLog;
 use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
 
+use crate::alias::EthersLog;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
