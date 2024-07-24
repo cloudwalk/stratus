@@ -318,9 +318,6 @@ e2e-importer-online-up:
 
     mkdir e2e_logs
 
-    # Wait for builds to finish
-    wait
-
     # Start Stratus binary
     RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --enable-genesis --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
