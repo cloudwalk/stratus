@@ -121,7 +121,7 @@ impl Default for InMemoryPermanentStorage {
         tracing::info!("creating inmemory permanent storage");
         Self {
             state: RwLock::new(InMemoryPermanentStorageState::default()),
-            block_number: Default::default(),
+            block_number: AtomicU64::default(),
         }
     }
 }
@@ -158,8 +158,9 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
     fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         let state = self.lock_read();
+
         let Some(account) = state.accounts.get(address) else {
-            return Ok(Default::default());
+            return Ok(None);
         };
 
         match account.slots.get(index) {
@@ -333,7 +334,7 @@ impl InMemoryPermanentAccount {
             nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
             bytecode: InMemoryHistory::new_at_zero(None),
             code_hash: InMemoryHistory::new_at_zero(CodeHash::default()),
-            slots: Default::default(),
+            slots: HashMap::default(),
         }
     }
 

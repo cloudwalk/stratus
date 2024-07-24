@@ -188,6 +188,7 @@ raft = []
 [lints.clippy]
 clone_on_ref_ptr = "warn"
 cloned_instead_of_copied = "warn"
+default_trait_access = "warn"
 disallowed_names = "warn"
 manual_let_else = "warn"
 semicolon_if_nothing_returned = "warn"
