@@ -6,8 +6,6 @@
 //! facilitates flexible EVM integrations, enabling the project to adapt to different blockchain environments
 //! or requirements while maintaining a consistent execution interface.
 
-use std::borrow::Cow;
-
 use display_json::DebugAsJson;
 
 use crate::eth::primitives::Address;
@@ -23,14 +21,11 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Signature;
-use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::StoragePointInTime;
-use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::if_else;
 use crate::log_and_err;
@@ -121,18 +116,6 @@ pub struct EvmInput {
 }
 
 impl EvmInput {
-    fn is_contract_deployment(&self) -> bool {
-        self.to.is_none() && not(self.data.is_empty())
-    }
-
-    pub fn extract_function(&self) -> Option<SoliditySignature> {
-        if self.is_contract_deployment() {
-            return Some(Cow::from("contract_deployment"));
-        }
-        let sig = Signature::Function(self.data.get(..4)?.try_into().ok()?);
-        Some(sig.extract())
-    }
-
     /// Creates from a transaction that was sent directly to Stratus with `eth_sendRawTransaction`.
     pub fn from_eth_transaction(input: TransactionInput, pending_block_number: BlockNumber) -> Self {
         Self {

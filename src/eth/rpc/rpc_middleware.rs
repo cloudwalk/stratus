@@ -303,7 +303,7 @@ impl TransactionTracingIdentifiers {
         let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
         Ok(Self {
             hash: Some(tx.hash),
-            function: tx.extract_function(),
+            function: tx.solidity_signature(),
             from: Some(tx.signer),
             to: tx.to,
             nonce: Some(tx.nonce),
@@ -314,7 +314,7 @@ impl TransactionTracingIdentifiers {
         let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
         Ok(Self {
             hash: None,
-            function: call.extract_function(),
+            function: call.solidity_signature(),
             from: call.from,
             to: call.to,
             nonce: None,
