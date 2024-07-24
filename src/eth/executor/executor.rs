@@ -241,16 +241,13 @@ impl Executor {
         // determine how to execute each transaction
         for tx in &block.transactions {
             let receipt = receipts.try_get(&tx.hash())?;
-            let tx_execution = self.execute_external_transaction(tx, receipt, block)?;
-
-            // track block metrics
-            #[cfg(feature = "metrics")]
-            {
-                block_metrics += tx_execution.evm_execution.metrics;
-            }
-
-            // persist state
-            self.miner.save_execution(TransactionExecution::External(tx_execution))?;
+            self.execute_external_transaction(
+                tx,
+                receipt,
+                block,
+                #[cfg(feature = "metrics")]
+                &mut block_metrics,
+            )?;
         }
 
         // track block metrics
@@ -269,71 +266,88 @@ impl Executor {
     /// This function wraps `reexecute_external_tx_inner` and returns back the payload
     /// to facilitate re-execution of parallel transactions that failed
     #[tracing::instrument(name = "executor::external_transaction", skip_all, fields(tx_hash))]
-    fn execute_external_transaction<'a, 'b>(
-        &'a self,
-        tx: &'b ExternalTransaction,
-        receipt: &'b ExternalReceipt,
+    fn execute_external_transaction(
+        &self,
+        tx: &ExternalTransaction,
+        receipt: &ExternalReceipt,
         block: &ExternalBlock,
-    ) -> anyhow::Result<ExternalTransactionExecution> {
-        Span::with(|s| {
-            s.rec_str("tx_hash", &tx.hash);
-        });
-
-        tracing::info!(block_number = %block.number(), tx_hash = %tx.hash(), "reexecuting external transaction");
-
+        #[cfg(feature = "metrics")] block_metrics: &mut EvmExecutionMetrics,
+    ) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
+        // track
+        Span::with(|s| {
+            s.rec_str("tx_hash", &tx.hash);
+        });
+        tracing::info!(block_number = %block.number(), tx_hash = %tx.hash(), "reexecuting external transaction");
+
         // when transaction externally failed, create fake transaction instead of reexecuting
-        if receipt.is_failure() {
-            let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Pending)?;
-            let execution = EvmExecution::from_failed_external_transaction(sender, receipt, block)?;
-            let evm_result = EvmExecutionResult {
-                execution,
-                metrics: EvmExecutionMetrics::default(),
-            };
-            return Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result));
-        }
+        let tx_execution = match receipt.is_success() {
+            //
+            // successful external transaction, re-execute locally
+            true => {
+                // re-execute transaction
+                let evm_input = EvmInput::from_external(tx, receipt, block)?;
+                let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
 
-        // re-execute transaction
-        let evm_input = EvmInput::from_external(tx, receipt, block)?;
-        let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
+                // handle re-execution result
+                let mut evm_execution = match evm_execution {
+                    Ok(inner) => inner,
+                    Err(e) => {
+                        let json_tx = to_json_string(&tx);
+                        let json_receipt = to_json_string(&receipt);
+                        tracing::error!(reason = ?e, block_number = %block.number(), tx_hash = %tx.hash(), %json_tx, %json_receipt, "failed to reexecute external transaction");
+                        return Err(e.into());
+                    }
+                };
 
-        // handle re-execution result
-        let mut evm_execution = match evm_execution {
-            Ok(inner) => inner,
-            Err(e) => {
-                let json_tx = to_json_string(&tx);
-                let json_receipt = to_json_string(&receipt);
-                tracing::error!(reason = ?e, block_number = %block.number(), tx_hash = %tx.hash(), %json_tx, %json_receipt, "failed to reexecute external transaction");
-                return Err(e.into());
+                // update execution with receipt
+                evm_execution.execution.apply_receipt(receipt)?;
+
+                // ensure it matches receipt before saving
+                if let Err(e) = evm_execution.execution.compare_with_receipt(receipt) {
+                    let json_tx = to_json_string(&tx);
+                    let json_receipt = to_json_string(&receipt);
+                    let json_execution_logs = to_json_string(&evm_execution.execution.logs);
+                    tracing::error!(reason = %"mismatch reexecuting transaction", block_number = %block.number(), tx_hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
+                    return Err(e);
+                };
+
+                ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_execution)
+            }
+            //
+            // failed external transaction, re-cretea from receipt without re-executing
+            false => {
+                let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Pending)?;
+                let execution = EvmExecution::from_failed_external_transaction(sender, receipt, block)?;
+                let evm_result = EvmExecutionResult {
+                    execution,
+                    metrics: EvmExecutionMetrics::default(),
+                };
+                ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result)
             }
         };
 
+        // persist state
+        let tx_execution = TransactionExecution::External(tx_execution);
+        self.miner.save_execution(tx_execution.clone())?;
+
         // track metrics
-        // FIX: these metrics are wrong because they are computed before saving the execution
         #[cfg(feature = "metrics")]
         {
-            let function = evm_input.extract_function();
+            let evm_execution = tx_execution.execution();
+            let evm_metrics = tx_execution.metrics();
+            *block_metrics += *evm_metrics;
+
+            let function = tx.solidity_signature();
             metrics::inc_executor_external_transaction(start.elapsed(), function.clone());
-            metrics::inc_executor_external_transaction_account_reads(evm_execution.metrics.account_reads, function.clone());
-            metrics::inc_executor_external_transaction_slot_reads(evm_execution.metrics.slot_reads, function.clone());
-            metrics::inc_executor_external_transaction_gas(evm_execution.execution.gas.as_u64() as usize, function);
+            metrics::inc_executor_external_transaction_account_reads(evm_metrics.account_reads, function.clone());
+            metrics::inc_executor_external_transaction_slot_reads(evm_metrics.slot_reads, function.clone());
+            metrics::inc_executor_external_transaction_gas(evm_execution.gas.as_u64() as usize, function);
         }
 
-        // update execution with receipt
-        evm_execution.execution.apply_receipt(receipt)?;
-
-        // ensure it matches receipt before saving
-        if let Err(e) = evm_execution.execution.compare_with_receipt(receipt) {
-            let json_tx = to_json_string(&tx);
-            let json_receipt = to_json_string(&receipt);
-            let json_execution_logs = to_json_string(&evm_execution.execution.logs);
-            tracing::error!(reason = %"mismatch reexecuting transaction", block_number = %block.number(), tx_hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
-            return Err(e);
-        };
-
-        Ok(ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_execution))
+        Ok(())
     }
 
     // -------------------------------------------------------------------------
@@ -409,7 +423,7 @@ impl Executor {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            let function = tx_input.extract_function();
+            let function = tx_input.solidity_signature();
             match &tx_execution {
                 Ok(tx_execution) => {
                     metrics::inc_executor_local_transaction(start.elapsed(), true, function.clone());
@@ -537,7 +551,7 @@ impl Executor {
 
         #[cfg(feature = "metrics")]
         {
-            let function = call_input.extract_function();
+            let function = call_input.solidity_signature();
             match &evm_result {
                 Ok(evm_result) => {
                     metrics::inc_executor_local_call(start.elapsed(), true, function.clone());

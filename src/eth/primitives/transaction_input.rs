@@ -54,12 +54,15 @@ pub struct TransactionInput {
 }
 
 impl TransactionInput {
-    /// Checks if the current transaction is for a contract deployment.
+    /// Checks if the current transaction is a contract deployment.
     pub fn is_contract_deployment(&self) -> bool {
         self.to.is_none() && not(self.input.is_empty())
     }
 
-    pub fn extract_function(&self) -> Option<SoliditySignature> {
+    /// Parses the Solidity function being called.
+    ///
+    /// TODO: unify and remove duplicate implementations.
+    pub fn solidity_signature(&self) -> Option<SoliditySignature> {
         if self.is_contract_deployment() {
             return Some(Cow::from("contract_deployment"));
         }
