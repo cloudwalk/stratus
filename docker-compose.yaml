@@ -10,7 +10,7 @@ services:
     ports:
       - 5432:5432
     volumes:
-      - "./static/schema/001-schema-external-rpc.sql:/docker-entrypoint-initdb.d/002-schema.sql"
+      - "./static/schema/001-schema-external-rpc.sql:/docker-entrypoint-initdb.d/001-schema.sql"
 
   postgres-persistent:
     extends:
