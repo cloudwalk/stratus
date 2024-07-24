@@ -18,6 +18,8 @@ use tracing::info_span;
 use tracing::Level;
 use tracing::Span;
 
+use crate::eth::codegen;
+use crate::eth::codegen::ContractName;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
@@ -132,6 +134,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             rpc_tx_from = field::Empty,
             rpc_tx_to = field::Empty,
             rpc_tx_nonce = field::Empty,
+            rpc_tx_contract = field::Empty,
             rpc_tx_function = field::Empty
         );
         let middleware_enter = span.enter();
@@ -170,8 +173,9 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         // metrify request
         #[cfg(feature = "metrics")]
         {
+            let tx_ref = tx.as_ref();
             active_requests::COUNTERS.inc(&client, &method);
-            metrics::inc_rpc_requests_started(&client, &method, tx.as_ref().and_then(|tx| tx.function.clone()));
+            metrics::inc_rpc_requests_started(&client, &method, tx_ref.and_then(|tx| tx.contract), tx_ref.and_then(|tx| tx.function.clone()));
         }
         drop(middleware_enter);
 
@@ -259,11 +263,13 @@ impl<'a> Future for RpcResponse<'a> {
                     None => "error",
                 };
 
+                let tx_ref = resp.tx.as_ref();
                 metrics::inc_rpc_requests_finished(
                     elapsed,
                     &*resp.client,
                     resp.method.clone(),
-                    resp.tx.as_ref().and_then(|tx| tx.function.clone()),
+                    tx_ref.and_then(|tx| tx.contract),
+                    tx_ref.and_then(|tx| tx.function.clone()),
                     rpc_result,
                     error_code,
                     response.is_success(),
@@ -291,6 +297,7 @@ impl PinnedDrop for RpcResponse<'_> {
 
 struct TransactionTracingIdentifiers {
     pub hash: Option<Hash>,
+    pub contract: Option<ContractName>,
     pub function: Option<SoliditySignature>,
     pub from: Option<Address>,
     pub to: Option<Address>,
@@ -298,11 +305,13 @@ struct TransactionTracingIdentifiers {
 }
 
 impl TransactionTracingIdentifiers {
+    // eth_sendRawTransction
     fn from_transaction(params: Params) -> anyhow::Result<Self> {
         let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
         let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
         Ok(Self {
             hash: Some(tx.hash),
+            contract: tx.to.as_ref().map(codegen::get_contract_name),
             function: tx.solidity_signature(),
             from: Some(tx.signer),
             to: tx.to,
@@ -310,10 +319,12 @@ impl TransactionTracingIdentifiers {
         })
     }
 
+    /// eth_call / eth_estimateGas
     fn from_call(params: Params) -> anyhow::Result<Self> {
         let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
         Ok(Self {
             hash: None,
+            contract: call.to.as_ref().map(codegen::get_contract_name),
             function: call.solidity_signature(),
             from: call.from,
             to: call.to,
@@ -321,10 +332,12 @@ impl TransactionTracingIdentifiers {
         })
     }
 
+    /// eth_getTransactionByHash / eth_getTransactionReceipt
     fn from_transaction_query(params: Params) -> anyhow::Result<Self> {
         let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
         Ok(Self {
             hash: Some(hash),
+            contract: None,
             function: None,
             from: None,
             to: None,
@@ -335,6 +348,9 @@ impl TransactionTracingIdentifiers {
     pub fn record_span(&self, span: Span) {
         if let Some(tx_hash) = self.hash {
             span.rec_str("rpc_tx_hash", &tx_hash);
+        }
+        if let Some(ref tx_contract) = self.contract {
+            span.rec_str("rpc_tx_contract", &tx_contract);
         }
         if let Some(ref tx_function) = self.function {
             span.rec_str("rpc_tx_function", &tx_function);
