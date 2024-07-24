@@ -56,6 +56,12 @@ impl From<LogsBloom> for Bloom {
     }
 }
 
+impl From<LogsBloom> for [u8; 256] {
+    fn from(value: LogsBloom) -> Self {
+        value.0 .0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use hex_literal::hex;

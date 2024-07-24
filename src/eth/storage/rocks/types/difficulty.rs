@@ -1,15 +1,10 @@
 use std::fmt::Debug;
 
-use ethereum_types::U256;
-
 use crate::eth::primitives::Difficulty;
-use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct DifficultyRocksdb(U256);
-
-gen_newtype_from!(self = DifficultyRocksdb, other = U256);
+pub struct DifficultyRocksdb([u64; 4]);
 
 impl From<DifficultyRocksdb> for Difficulty {
     fn from(value: DifficultyRocksdb) -> Self {
@@ -19,6 +14,6 @@ impl From<DifficultyRocksdb> for Difficulty {
 
 impl From<Difficulty> for DifficultyRocksdb {
     fn from(value: Difficulty) -> Self {
-        U256::from(value).into()
+        Self(value.0 .0)
     }
 }
