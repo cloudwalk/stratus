@@ -7,23 +7,17 @@ use crate::eth::primitives::SlotValue;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SlotValueRocksdb(U256);
-
-impl SlotValueRocksdb {
-    pub fn inner_value(&self) -> U256 {
-        self.0
-    }
-}
+pub struct SlotValueRocksdb([u64; 4]);
 
 impl From<SlotValue> for SlotValueRocksdb {
     fn from(item: SlotValue) -> Self {
-        SlotValueRocksdb(item.as_u256())
+        SlotValueRocksdb(item.0 .0)
     }
 }
 
 impl From<SlotValueRocksdb> for SlotValue {
     fn from(item: SlotValueRocksdb) -> Self {
-        SlotValue::from(item.inner_value())
+        SlotValue::from(item.0)
     }
 }
 

@@ -15,7 +15,7 @@ use sqlx::Decode;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SlotValue(U256);
+pub struct SlotValue(pub U256);
 
 impl SlotValue {
     /// Checks if the value is zero.
@@ -76,6 +76,12 @@ impl From<SlotValue> for Vec<u8> {
 impl From<RevmU256> for SlotValue {
     fn from(value: RevmU256) -> Self {
         Self(value.to_be_bytes().into())
+    }
+}
+
+impl From<[u64; 4]> for SlotValue {
+    fn from(value: [u64; 4]) -> Self {
+        Self(U256(value))
     }
 }
 
