@@ -9,7 +9,6 @@ use ethers_core::types::NameOrAddress;
 use fake::Dummy;
 use fake::Faker;
 use hex_literal::hex;
-use revm::primitives::Address as RevmAddress;
 use sqlx::database::HasArguments;
 use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
@@ -17,6 +16,7 @@ use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
 use sqlx::Decode;
 
+use crate::alias::RevmAddress;
 use crate::gen_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
@@ -162,7 +162,7 @@ impl From<Address> for H160 {
 
 impl From<Address> for RevmAddress {
     fn from(value: Address) -> Self {
-        RevmAddress(value.0 .0.into())
+        revm::primitives::Address(value.0 .0.into())
     }
 }
 

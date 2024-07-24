@@ -1,8 +1,6 @@
 use std::time::Duration;
 
 use anyhow::Context;
-use ethers_core::types::Bytes;
-use ethers_core::types::Transaction;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::client::Subscription;
 use jsonrpsee::core::client::SubscriptionClientT;
@@ -15,6 +13,8 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
 use super::pending_transaction::PendingTransaction;
+use crate::alias::EthersBytes;
+use crate::alias::EthersTransaction;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
@@ -159,14 +159,14 @@ impl BlockchainClient {
     }
 
     /// Fetches a transaction by hash.
-    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<Transaction>> {
+    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<EthersTransaction>> {
         tracing::debug!(%tx_hash, "fetching transaction");
 
         let hash = to_json_value(tx_hash);
 
         let result = self
             .http
-            .request::<Option<Transaction>, Vec<JsonValue>>("eth_getTransactionByHash", vec![hash])
+            .request::<Option<EthersTransaction>, Vec<JsonValue>>("eth_getTransactionByHash", vec![hash])
             .await;
 
         match result {
@@ -210,7 +210,7 @@ impl BlockchainClient {
     // -------------------------------------------------------------------------
 
     /// Sends a signed transaction.
-    pub async fn send_raw_transaction(&self, tx: Bytes) -> anyhow::Result<PendingTransaction<'_>> {
+    pub async fn send_raw_transaction(&self, tx: EthersBytes) -> anyhow::Result<PendingTransaction<'_>> {
         tracing::debug!("sending raw transaction");
 
         let tx = to_json_value(tx);

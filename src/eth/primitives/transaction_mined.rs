@@ -1,9 +1,9 @@
 use std::hash::Hash as HashTrait;
 
-use ethers_core::types::Transaction as EthersTransaction;
-use ethers_core::types::TransactionReceipt as EthersReceipt;
 use itertools::Itertools;
 
+use crate::alias::EthersReceipt;
+use crate::alias::EthersTransaction;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;

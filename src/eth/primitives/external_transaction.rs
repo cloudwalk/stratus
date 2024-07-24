@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
-use ethers_core::types::Transaction as EthersTransaction;
-
+use crate::alias::EthersTransaction;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Signature;

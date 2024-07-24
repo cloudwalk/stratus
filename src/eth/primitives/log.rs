@@ -1,6 +1,5 @@
-use ethers_core::types::Log as EthersLog;
-use revm::primitives::Log as RevmLog;
-
+use crate::alias::EthersLog;
+use crate::alias::RevmLog;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::LogTopic;
