@@ -59,7 +59,7 @@ describe("Run With Importer integration test", function () {
                 const transactionInterval = 1000 / params.tps;
 
                 let nonces = await Promise.all(
-                    wallets.map((wallet) => send("eth_getTransactionCount", [wallet.address, "latest"])),
+                    wallets.map((wallet) => sendWithRetry("eth_getTransactionCount", [wallet.address, "latest"])),
                 );
 
                 const startTime = Date.now();
@@ -131,7 +131,7 @@ describe("Run With Importer integration test", function () {
                 updateProviderUrl("stratus");
                 const stratusReceipts = await Promise.all(
                     txHashList.map(async (txHash) => {
-                        const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                        const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
                         return receipt;
                     }),
                 );
@@ -140,7 +140,7 @@ describe("Run With Importer integration test", function () {
                 updateProviderUrl("run-with-importer");
                 const runWithImporterReceipts = await Promise.all(
                     txHashList.map(async (txHash) => {
-                        const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                        const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
                         return receipt;
                     }),
                 );
