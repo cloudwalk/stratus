@@ -120,12 +120,8 @@ describe("Run With Importer integration test", function () {
                 const runWithImporterProcessingTime =
                     runWithImporterTimestamps[runWithImporterTimestamps.length - 1] - runWithImporterTimestamps[0];
 
+                console.log(`          ✔ Number of transactions sent: ${txHashList.length}`);
                 console.log(
-                    
-                    `          ✔ Number of transactions sent: ${txHashList.length}`,
-                );
-                console.log(
-                    
                     `          ✔ Stratus processing time: ${stratusProcessingTime}s | Run With Importer processing time: ${runWithImporterProcessingTime}s`,
                 );
             });
