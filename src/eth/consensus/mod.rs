@@ -2,7 +2,6 @@
 #[allow(dead_code)] //TODO remove this
 mod append_log_entries_storage;
 mod discovery;
-pub mod forward_to;
 mod log_entry;
 mod propagation;
 pub mod utils;
