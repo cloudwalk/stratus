@@ -312,11 +312,9 @@ e2e-importer-online:
 e2e-importer-online-up:
     #!/bin/bash
 
-    # Build Stratus and Relayer binaries
-    echo "Building Stratus binary"
-    cargo build --release --bin stratus --features dev &
-    echo "Building Run With Importer binary"
-    cargo build --release --bin run-with-importer --features dev &
+    # Build Stratus and Run With Importer binaries
+    echo "Building Stratus and Run With Importer binaries"
+    cargo build --release --bin stratus --bin run-with-importer --features dev
 
     mkdir e2e_logs
 
