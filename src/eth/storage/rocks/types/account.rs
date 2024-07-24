@@ -42,6 +42,16 @@ impl From<Account> for (AddressRocksdb, AccountRocksdb) {
     }
 }
 
+impl From<Account> for AccountRocksdb {
+    fn from(value: Account) -> Self {
+        AccountRocksdb {
+            balance: value.balance.into(),
+            nonce: value.nonce.into(),
+            bytecode: value.bytecode.map_into(),
+        }
+    }
+}
+
 impl Default for AccountRocksdb {
     fn default() -> Self {
         Self {
