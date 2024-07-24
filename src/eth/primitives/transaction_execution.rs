@@ -15,7 +15,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExecutionMetrics;
+use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
@@ -79,15 +79,23 @@ impl TransactionExecution {
     pub fn result(&self) -> &EvmExecutionResult {
         match self {
             Self::Local(LocalTransactionExecution { result, .. }) => result,
-            Self::External(ExternalTransactionExecution { result, .. }) => result,
+            Self::External(ExternalTransactionExecution { evm_execution: result, .. }) => result,
         }
     }
 
-    /// Returns the execution.
+    /// Returns the EVM execution.
     pub fn execution(&self) -> &EvmExecution {
         match self {
             Self::Local(LocalTransactionExecution { result, .. }) => &result.execution,
-            Self::External(ExternalTransactionExecution { result, .. }) => &result.execution,
+            Self::External(ExternalTransactionExecution { evm_execution: result, .. }) => &result.execution,
+        }
+    }
+
+    /// Returns the EVM execution metrics.
+    pub fn metrics(&self) -> &EvmExecutionMetrics {
+        match self {
+            Self::Local(LocalTransactionExecution { result, .. }) => &result.metrics,
+            Self::External(ExternalTransactionExecution { evm_execution: result, .. }) => &result.metrics,
         }
     }
 
@@ -188,7 +196,7 @@ impl TransactionExecution {
                 changes: HashMap::new(), // assuming empty for now
                 deployed_contract_address: entry.deployed_contract_address.map(|addr| Address::new_from_h160(H160::from_slice(&addr))),
             },
-            metrics: ExecutionMetrics::default(), // assuming default metrics for now
+            metrics: EvmExecutionMetrics::default(), // assuming default metrics for now
         };
 
         Ok(Self::Local(LocalTransactionExecution { input, result }))
@@ -217,17 +225,17 @@ impl LocalTransactionExecution {
 pub struct ExternalTransactionExecution {
     pub tx: ExternalTransaction,
     pub receipt: ExternalReceipt,
-    pub result: EvmExecutionResult,
+    pub evm_execution: EvmExecutionResult,
 }
 
 impl ExternalTransactionExecution {
     /// Check if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
-        self.result.is_success()
+        self.evm_execution.is_success()
     }
 
     /// Checks if the current transaction was completed with a failure (reverted or halted).
     pub fn is_failure(&self) -> bool {
-        self.result.is_failure()
+        self.evm_execution.is_failure()
     }
 }

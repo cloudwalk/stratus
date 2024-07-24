@@ -1,206 +1,368 @@
-//! `Evm` Trait and `EvmInput` Structure
-//!
-//! Defines a standard interface for Ethereum Virtual Machine (EVM) implementations within the Stratus project,
-//! allowing for execution of smart contracts and transactions. `EvmInput` encapsulates all necessary parameters
-//! for EVM operations, including sender, receiver, value, data, nonce, and execution context. This abstraction
-//! facilitates flexible EVM integrations, enabling the project to adapt to different blockchain environments
-//! or requirements while maintaining a consistent execution interface.
+use std::cmp::min;
+use std::sync::Arc;
 
-use std::borrow::Cow;
+use anyhow::anyhow;
+use itertools::Itertools;
+use revm::primitives::AccountInfo;
+use revm::primitives::Address as RevmAddress;
+use revm::primitives::Bytecode as RevmBytecode;
+use revm::primitives::EVMError;
+use revm::primitives::ExecutionResult as RevmExecutionResult;
+use revm::primitives::InvalidTransaction;
+use revm::primitives::ResultAndState as RevmResultAndState;
+use revm::primitives::SpecId;
+use revm::primitives::State as RevmState;
+use revm::primitives::TransactTo;
+use revm::primitives::B256;
+use revm::primitives::U256;
+use revm::Database;
+use revm::Evm as RevmEvm;
+use revm::Handler;
 
-use display_json::DebugAsJson;
-
+use crate::eth::executor::EvmExecutionResult;
+use crate::eth::executor::EvmInput;
+use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExecutionMetrics;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalReceipt;
-use crate::eth::primitives::ExternalTransaction;
+use crate::eth::primitives::EvmExecutionMetrics;
+use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExecutionResult;
+use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Signature;
-use crate::eth::primitives::SoliditySignature;
+use crate::eth::primitives::Log;
+use crate::eth::primitives::Slot;
+use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::UnixTime;
-use crate::eth::primitives::Wei;
-use crate::eth::storage::StoragePointInTime;
+use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
-use crate::if_else;
-use crate::log_and_err;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 
-/// Evm execution result.
-#[derive(DebugAsJson, Clone, serde::Serialize)]
-pub struct EvmExecutionResult {
-    pub execution: EvmExecution,
-    pub metrics: ExecutionMetrics,
+/// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
+const GAS_MAX_LIMIT: u64 = 1_000_000_000;
+
+/// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
+pub struct Evm {
+    evm: RevmEvm<'static, (), RevmSession>,
 }
 
-impl EvmExecutionResult {
-    /// Checks if the current transaction was completed normally.
-    pub fn is_success(&self) -> bool {
-        self.execution.is_success()
+impl Evm {
+    /// Creates a new instance of the Evm.
+    #[allow(clippy::arc_with_non_send_sync)]
+    pub fn new(storage: Arc<StratusStorage>, chain_id: ChainId) -> Self {
+        tracing::info!(%chain_id, "creating revm");
+
+        // configure handler
+        let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
+
+        // handler custom validators
+        let validate_tx_against_state = handler.validation.tx_against_state;
+        handler.validation.tx_against_state = Arc::new(move |ctx| {
+            let result = validate_tx_against_state(ctx);
+            if result.is_err() {
+                let _ = ctx.evm.inner.journaled_state.finalize(); // clear revm state on validation failure
+            }
+            result
+        });
+
+        // handler custom instructions
+        let instructions = handler.take_instruction_table();
+        handler.set_instruction_table(instructions);
+
+        // configure revm
+        let mut evm = RevmEvm::builder()
+            .with_external_context(())
+            .with_db(RevmSession::new(storage))
+            .with_handler(handler)
+            .build();
+
+        // global general config
+        let cfg_env = evm.cfg_mut();
+        cfg_env.chain_id = chain_id.into();
+        cfg_env.limit_contract_code_size = Some(usize::MAX);
+
+        // global block config
+        let block_env = evm.block_mut();
+        block_env.coinbase = Address::COINBASE.into();
+
+        // global tx config
+        let tx_env = evm.tx_mut();
+        tx_env.gas_priority_fee = None;
+
+        Self { evm }
     }
 
-    /// Checks if the current transaction was completed with a failure (reverted or halted).
-    pub fn is_failure(&self) -> bool {
-        self.execution.is_failure()
-    }
-}
-
-/// EVM operations.
-pub trait Evm {
     /// Execute a transaction that deploys a contract or call a contract function.
-    fn execute(&mut self, input: EvmInput) -> Result<EvmExecutionResult, StratusError>;
-}
+    pub fn execute(&mut self, input: EvmInput) -> Result<EvmExecutionResult, StratusError> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
 
-/// EVM input data. Usually derived from a transaction or call.
-#[derive(DebugAsJson, Clone, Default, serde::Serialize)]
-pub struct EvmInput {
-    /// Operation party address.
-    ///
-    /// It can be:
-    /// * Transaction signer when executing an `eth_sendRawTransaction`.
-    /// * Placeholder when performing an `eth_call`
-    /// * Not specified when performing an `eth_call`
-    pub from: Address,
+        // configure session
+        let evm = &mut self.evm;
+        evm.db_mut().reset(input.clone());
 
-    /// Operation counterparty address.
-    ///
-    /// It can be:
-    /// * Contract address when performing a function call.
-    /// * Destination account address when transfering funds.
-    /// * Not specified when deploying a contract.
-    pub to: Option<Address>,
+        // configure block params
+        let block_env = evm.block_mut();
+        block_env.basefee = U256::ZERO;
+        block_env.timestamp = input.block_timestamp.into();
+        block_env.number = input.block_number.into();
+        let block_env_log = block_env.clone();
 
-    /// Transfered amount from party to counterparty.
-    ///
-    /// Present only in native token transfers. When calling a contract function, the value is usually zero.
-    pub value: Wei,
+        // configure tx params
+        let tx_env = &mut evm.tx_mut();
+        tx_env.caller = input.from.into();
+        tx_env.transact_to = match input.to {
+            Some(contract) => TransactTo::Call(contract.into()),
+            None => TransactTo::Create,
+        };
+        tx_env.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
+        tx_env.gas_price = input.gas_price.into();
+        tx_env.chain_id = input.chain_id.map_into();
+        tx_env.nonce = input.nonce.map_into();
+        tx_env.data = input.data.into();
+        tx_env.value = input.value.into();
+        let tx_env_log = tx_env.clone();
 
-    /// Operation data.
-    ///
-    /// It can be:
-    /// * Function ID and parameters when performing a contract function call.
-    /// * Not specified when transfering funds.
-    /// * Contract bytecode when deploying a contract.
-    pub data: Bytes,
+        // execute transaction
+        tracing::info!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
+        let evm_result = evm.transact();
 
-    /// Operation party nonce.
-    ///
-    /// It can be:
-    /// * Required when executing an `eth_sendRawTransaction`.
-    /// * Not specified when performing an `eth_call`.
-    pub nonce: Option<Nonce>,
+        // extract results
+        let session = evm.db_mut();
+        let session_input = std::mem::take(&mut session.input);
+        let session_storage_changes = std::mem::take(&mut session.storage_changes);
+        let session_metrics = std::mem::take(&mut session.metrics);
+        #[cfg(feature = "metrics")]
+        let session_point_in_time = std::mem::take(&mut session.input.point_in_time);
 
-    /// Max gas consumption allowed for the transaction.
-    pub gas_limit: Gas,
+        // parse result
+        let execution = match evm_result {
+            // executed
+            Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
 
-    /// Gas price paid by each unit of gas consumed by the transaction.
-    pub gas_price: Wei,
+            // nonce errors
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(StratusError::TransactionNonce {
+                transaction: tx.into(),
+                account: state.into(),
+            }),
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state })) => Err(StratusError::TransactionNonce {
+                transaction: tx.into(),
+                account: state.into(),
+            }),
 
-    /// Number of the block where the transaction will be or was included.
-    pub block_number: BlockNumber,
+            // unexpected errors
+            Err(e) => {
+                tracing::warn!(reason = ?e, "evm execution error");
+                Err(StratusError::TransactionFailed(e))
+            }
+        };
 
-    /// Timestamp of the block where the transaction will be or was included.
-    pub block_timestamp: UnixTime,
-
-    /// Point-in-time from where accounts and slots will be read.
-    pub point_in_time: StoragePointInTime,
-
-    /// ID of the blockchain where the transaction will be or was included.
-    ///
-    /// If not specified, it will not be validated.
-    pub chain_id: Option<ChainId>,
-}
-
-impl EvmInput {
-    fn is_contract_deployment(&self) -> bool {
-        self.to.is_none() && not(self.data.is_empty())
-    }
-
-    pub fn extract_function(&self) -> Option<SoliditySignature> {
-        if self.is_contract_deployment() {
-            return Some(Cow::from("contract_deployment"));
+        // track metrics
+        #[cfg(feature = "metrics")]
+        {
+            metrics::inc_evm_execution(start.elapsed(), &session_point_in_time, execution.is_ok());
+            metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
         }
-        let sig = Signature::Function(self.data.get(..4)?.try_into().ok()?);
 
-        Some(sig.extract())
+        execution.map(|execution| EvmExecutionResult {
+            execution,
+            metrics: session_metrics,
+        })
     }
+}
 
-    /// Creates from a transaction that was sent directly to Stratus with `eth_sendRawTransaction`.
-    pub fn from_eth_transaction(input: TransactionInput, pending_block_number: BlockNumber) -> Self {
+// -----------------------------------------------------------------------------
+// Database
+// -----------------------------------------------------------------------------
+
+/// Contextual data that is read or set durint the execution of a transaction in the EVM.
+struct RevmSession {
+    /// Service to communicate with the storage.
+    storage: Arc<StratusStorage>,
+
+    /// Input passed to EVM to execute the transaction.
+    input: EvmInput,
+
+    /// Changes made to the storage during the execution of the transaction.
+    storage_changes: ExecutionChanges,
+
+    /// Metrics collected during EVM execution.
+    metrics: EvmExecutionMetrics,
+}
+
+impl RevmSession {
+    /// Creates the base session to be used with REVM.
+    pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self {
-            from: input.signer,
-            to: input.to,
-            value: input.value,
-            data: input.input,
-            gas_limit: Gas::MAX,
-            gas_price: Wei::ZERO, // XXX: use value from input?
-            nonce: Some(input.nonce),
-            block_number: pending_block_number,
-            block_timestamp: UnixTime::now(),
-            point_in_time: StoragePointInTime::Pending,
-            chain_id: input.chain_id,
+            storage,
+            input: Default::default(),
+            storage_changes: Default::default(),
+            metrics: Default::default(),
         }
     }
 
-    /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas`.
-    pub fn from_eth_call(
-        input: CallInput,
-        point_in_time: StoragePointInTime,
-        pending_block_number: BlockNumber,
-        mined_block: Option<Block>,
-    ) -> anyhow::Result<Self> {
-        Ok(Self {
-            from: input.from.unwrap_or(Address::ZERO),
-            to: input.to.map_into(),
-            value: input.value,
-            data: input.data,
-            gas_limit: Gas::MAX,  // XXX: use value from input?
-            gas_price: Wei::ZERO, // XXX: use value from input?
-            nonce: None,
-            block_number: match point_in_time {
-                StoragePointInTime::Mined | StoragePointInTime::Pending => pending_block_number,
-                StoragePointInTime::MinedPast(number) => number,
-            },
-            block_timestamp: match point_in_time {
-                StoragePointInTime::Mined | StoragePointInTime::Pending => UnixTime::now(),
-                StoragePointInTime::MinedPast(_) => match mined_block {
-                    Some(block) => block.header.timestamp,
-                    None => return log_and_err!("failed to create EvmInput because cannot determine mined block timestamp"),
-                },
-            },
-            point_in_time,
-            chain_id: None,
-        })
+    /// Resets the session to be used with a new transaction.
+    pub fn reset(&mut self, input: EvmInput) {
+        self.input = input;
+        self.storage_changes = Default::default();
+        self.metrics = Default::default();
+    }
+}
+
+impl Database for RevmSession {
+    type Error = anyhow::Error;
+
+    fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
+        self.metrics.account_reads += 1;
+
+        // retrieve account
+        let address: Address = revm_address.into();
+        let account = self.storage.read_account(&address, &self.input.point_in_time)?;
+
+        // warn if the loaded account is the `to` account and it does not have a bytecode
+        if let Some(ref to_address) = self.input.to {
+            if &address == to_address && not(account.is_contract()) && not(self.input.data.is_empty()) {
+                tracing::warn!(%address, "evm to_account does not have bytecode");
+            }
+        }
+
+        // early convert response because account will be moved
+        let revm_account: AccountInfo = (&account).into();
+
+        // track original value, except if ignored address
+        if not(account.address.is_ignored()) {
+            self.storage_changes
+                .insert(account.address, ExecutionAccountChanges::from_original_values(account));
+        }
+
+        Ok(Some(revm_account))
     }
 
-    /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
-    ///
-    /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
-    pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
-        Ok(Self {
-            from: tx.0.from.into(),
-            to: tx.0.to.map_into(),
-            value: tx.0.value.into(),
-            data: tx.0.input.clone().into(),
-            nonce: Some(tx.0.nonce.try_into()?),
-            gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.0.gas.try_into()?),
-            gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.0.gas_price.map_into().unwrap_or(Wei::ZERO)),
-            point_in_time: StoragePointInTime::Pending,
-            block_number: block.number(),
-            block_timestamp: block.timestamp(),
-            chain_id: match tx.0.chain_id {
-                Some(chain_id) => Some(chain_id.try_into()?),
-                None => None,
-            },
-        })
+    fn code_by_hash(&mut self, _: B256) -> anyhow::Result<RevmBytecode> {
+        todo!()
     }
+
+    fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
+        self.metrics.slot_reads += 1;
+
+        // convert slot
+        let address: Address = revm_address.into();
+        let index: SlotIndex = revm_index.into();
+
+        // load slot from storage
+        let slot = self.storage.read_slot(&address, &index, &self.input.point_in_time)?;
+
+        // track original value, except if ignored address
+        if not(address.is_ignored()) {
+            match self.storage_changes.get_mut(&address) {
+                Some(account) => {
+                    account.slots.insert(index, ExecutionValueChange::from_original(slot));
+                }
+                None => {
+                    tracing::error!(reason = "reading slot without account loaded", %address, %index);
+                    return Err(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address));
+                }
+            };
+        }
+
+        Ok(slot.value.into())
+    }
+
+    fn block_hash(&mut self, _: U256) -> anyhow::Result<B256> {
+        todo!()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversion
+// -----------------------------------------------------------------------------
+
+fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> EvmExecution {
+    let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
+    let changes = parse_revm_state(revm_result.state, execution_changes);
+
+    tracing::info!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
+
+    EvmExecution {
+        block_timestamp: input.block_timestamp,
+        receipt_applied: false,
+        result,
+        output: tx_output,
+        logs,
+        gas,
+        changes,
+        deployed_contract_address: None,
+    }
+}
+
+fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
+    match result {
+        RevmExecutionResult::Success { output, gas_used, logs, .. } => {
+            let result = ExecutionResult::Success;
+            let output = Bytes::from(output);
+            let logs = logs.into_iter().map_into().collect();
+            let gas = Gas::from(gas_used);
+            (result, output, logs, gas)
+        }
+        RevmExecutionResult::Revert { output, gas_used } => {
+            let result = ExecutionResult::Reverted;
+            let output = Bytes::from(output);
+            let gas = Gas::from(gas_used);
+            (result, output, Vec::new(), gas)
+        }
+        RevmExecutionResult::Halt { reason, gas_used } => {
+            let result = ExecutionResult::new_halted(format!("{:?}", reason));
+            let output = Bytes::default();
+            let gas = Gas::from(gas_used);
+            (result, output, Vec::new(), gas)
+        }
+    }
+}
+
+fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> ExecutionChanges {
+    for (revm_address, revm_account) in revm_state {
+        let address: Address = revm_address.into();
+        if address.is_ignored() {
+            continue;
+        }
+
+        // apply changes according to account status
+        tracing::debug!(
+            %address,
+            status = ?revm_account.status,
+            balance = %revm_account.info.balance,
+            nonce = %revm_account.info.nonce,
+            slots = %revm_account.storage.len(),
+            "evm account"
+        );
+        let (account_created, account_touched) = (revm_account.is_created(), revm_account.is_touched());
+
+        // parse revm types to stratus primitives
+        let account: Account = (revm_address, revm_account.info).into();
+        let account_modified_slots: Vec<Slot> = revm_account
+            .storage
+            .into_iter()
+            .filter_map(|(index, value)| match value.is_changed() {
+                true => Some(Slot::new(index.into(), value.present_value.into())),
+                false => None,
+            })
+            .collect();
+
+        // handle account created (contracts) or touched (everything else)
+        if account_created {
+            let account_changes = ExecutionAccountChanges::from_modified_values(account, account_modified_slots);
+            execution_changes.insert(account_changes.address, account_changes);
+        } else if account_touched {
+            let Some(account_changes) = execution_changes.get_mut(&address) else {
+                tracing::error!(keys = ?execution_changes.keys(), %address, "account touched, but not loaded by evm");
+                panic!("Account '{}' was expected to be loaded by EVM, but it was not", address);
+            };
+            account_changes.apply_modifications(account, account_modified_slots);
+        }
+    }
+    execution_changes
 }

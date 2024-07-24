@@ -539,8 +539,10 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
 
         // internal error
         Err(e) => {
-            tracing::error!(reason = ?e, "failed to execute eth_estimateGas because of unexpected error");
-            Err(StratusError::Unexpected(e.context("failed to execute eth_estimateGas")))
+            if e.is_internal() {
+                tracing::error!(reason = ?e, "failed to execute eth_estimateGas");
+            }
+            Err(e)
         }
     }
 }
@@ -580,8 +582,10 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
 
         // internal error
         Err(e) => {
-            tracing::error!(reason = ?e, "failed to execute eth_call because of unexpected error");
-            Err(StratusError::Unexpected(e.context("failed to execute eth_call")))
+            if e.is_internal() {
+                tracing::error!(reason = ?e, "failed to execute eth_call");
+            }
+            Err(e)
         }
     }
 }
@@ -645,8 +649,10 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
             Ok(hex_data(tx_hash))
         }
         Err(e) => {
-            tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction because of unexpected error");
-            Err(StratusError::Unexpected(e.context("failed to execute eth_sendRawTransaction")))
+            if e.is_internal() {
+                tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
+            }
+            Err(e)
         }
     }
 }

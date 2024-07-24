@@ -21,25 +21,25 @@ metrics! {
 metrics! {
     group: storage_read,
 
-    "Time to execute storage read_pending_block_number operation."
+    "Time executing storage read_pending_block_number operation."
     histogram_duration storage_read_pending_block_number{storage, success},
 
-    "Time to execute storage read_mined_block_number operation."
+    "Time executing storage read_mined_block_number operation."
     histogram_duration storage_read_mined_block_number{storage, success},
 
-    "Time to execute storage read_account operation."
+    "Time executing storage read_account operation."
     histogram_duration storage_read_account{storage, point_in_time, success},
 
-    "Time to execute storage read_block operation."
+    "Time executing storage read_block operation."
     histogram_duration storage_read_block{storage, success},
 
-    "Time to execute storage read_logs operation."
+    "Time executing storage read_logs operation."
     histogram_duration storage_read_logs{storage, success},
 
-    "Time to execute storage read_slot operation."
+    "Time executing storage read_slot operation."
     histogram_duration storage_read_slot{storage, point_in_time, success},
 
-    "Time to execute storage read_transaction operation."
+    "Time executing storage read_transaction operation."
     histogram_duration storage_read_transaction{storage, success}
 }
 
@@ -47,28 +47,28 @@ metrics! {
 metrics! {
     group: storage_write,
 
-    "Time to execute storage set_pending_block_number operation."
+    "Time executing storage set_pending_block_number operation."
     histogram_duration storage_set_pending_block_number{storage, success},
 
-    "Time to execute storage set_mined_block_number operation."
+    "Time executing storage set_mined_block_number operation."
     histogram_duration storage_set_mined_block_number{storage, success},
 
-    "Time to execute storage save_accounts operation."
+    "Time executing storage save_accounts operation."
     histogram_duration storage_save_accounts{storage, success},
 
-    "Time to execute storage save_account_changes operation."
+    "Time executing storage save_account_changes operation."
     histogram_duration storage_save_execution{storage, success},
 
-    "Time to execute storage set_pending_external_block operation."
+    "Time executing storage set_pending_external_block operation."
     histogram_duration storage_set_pending_external_block{storage, success},
 
-    "Time to execute storage finish_pending_block operation."
+    "Time executing storage finish_pending_block operation."
     histogram_duration storage_finish_pending_block{storage, success},
 
-    "Time to execute storage save_block operation."
+    "Time executing storage save_block operation."
     histogram_duration storage_save_block{storage, size_by_tx, size_by_gas, success},
 
-    "Time to execute storage reset operation."
+    "Time executing storage reset operation."
     histogram_duration storage_reset{storage, success}
 }
 
@@ -87,13 +87,19 @@ metrics! {
 metrics! {
     group: executor,
 
-    "Time to execute and persist an external block with all transactions."
+    "Time executing and persist an external block with all transactions."
     histogram_duration executor_external_block{},
 
-    "Time to execute and persist temporary changes of a single transaction inside import_offline operation."
+    "Time executing an external transaction."
     histogram_duration executor_external_transaction{function},
 
-    "Gas spent to execute a single transaction inside import_offline operation."
+    "Number of account reads executing an external transaction."
+    histogram_counter executor_external_transaction_account_reads{function},
+
+    "Number of slot reads executing an external transaction."
+    histogram_counter executor_external_transaction_slot_reads{function},
+
+    "Gas spent executing an external transaction."
     histogram_counter executor_external_transaction_gas{function},
 
     "Number of account reads when importing an external block."
@@ -102,23 +108,35 @@ metrics! {
     "Number of slot reads when importing an external block."
     histogram_counter executor_external_block_slot_reads{},
 
-    "Time to execute a transaction received with eth_sendRawTransaction."
-    histogram_duration executor_transact{success, function},
+    "Time executing a local transaction."
+    histogram_duration executor_local_transaction{success, function},
 
-    "Gas spent execute a transaction received with eth_sendRawTransaction."
-    histogram_counter executor_transact_gas{success, function},
+    "Number of account reads when executing a local transaction."
+    histogram_counter executor_local_transaction_account_reads{function},
 
-    "Time to execute a transaction received with eth_call or eth_estimateGas."
-    histogram_duration executor_call{success, function},
+    "Number of slot reads when executing a local transaction."
+    histogram_counter executor_local_transaction_slot_reads{function},
 
-    "Gas spent to execute a transaction received with eth_call or eth_estimateGas."
-    histogram_counter executor_call_gas{function}
+    "Gas spent executing a local transaction."
+    histogram_counter executor_local_transaction_gas{success, function},
+
+    "Time executing a transaction received with eth_call or eth_estimateGas."
+    histogram_duration executor_local_call{success, function},
+
+    "Number of account reads when executing a local call."
+    histogram_counter executor_local_call_account_reads{function},
+
+    "Number of slot reads when executing a local call."
+    histogram_counter executor_local_call_slot_reads{function},
+
+    "Gas spent executing a local call."
+    histogram_counter executor_local_call_gas{function}
 }
 
 metrics! {
     group: evm,
 
-    "Time to execute EVM execution."
+    "Time executing EVM execution."
     histogram_duration evm_execution{point_in_time, success},
 
     "Number of accounts read in a single EVM execution."

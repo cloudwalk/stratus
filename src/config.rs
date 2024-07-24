@@ -4,7 +4,6 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -20,11 +19,9 @@ use crate::eth::primitives::Address;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::ExternalRpcStorageConfig;
 use crate::eth::storage::StratusStorageConfig;
-use crate::eth::TransactionRelayer;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
 use crate::infra::tracing::TracingConfig;
-use crate::infra::BlockchainClient;
 
 /// Loads .env files according to the binary and environment.
 pub fn load_dotenv() {
@@ -154,35 +151,6 @@ impl CommonConfig {
 }
 
 // -----------------------------------------------------------------------------
-// Config: Relayer
-// -----------------------------------------------------------------------------
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct IntegratedRelayerConfig {
-    /// RPC address to forward transactions to.
-    #[arg(long = "forward-to", env = "FORWARD_TO")]
-    pub forward_to: Option<String>,
-
-    /// Timeout for blockchain requests (relayer)
-    #[arg(long = "relayer-timeout", value_parser=parse_duration, env = "RELAYER_TIMEOUT", default_value = "2s")]
-    pub relayer_timeout: Duration,
-}
-
-impl IntegratedRelayerConfig {
-    pub async fn init(&self) -> anyhow::Result<Option<Arc<TransactionRelayer>>> {
-        tracing::info!(config = ?self, "creating transaction relayer");
-
-        match self.forward_to {
-            Some(ref forward_to) => {
-                let chain = BlockchainClient::new_http(forward_to, self.relayer_timeout).await?;
-                let relayer = TransactionRelayer::new(Arc::new(chain));
-                Ok(Some(Arc::new(relayer)))
-            }
-            None => Ok(None),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
 // Config: Stratus
 // -----------------------------------------------------------------------------
 
@@ -197,9 +165,6 @@ pub struct StratusConfig {
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
-
-    #[clap(flatten)]
-    pub relayer: IntegratedRelayerConfig,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
@@ -320,9 +285,6 @@ pub struct ImporterOnlineConfig {
     pub executor: ExecutorConfig,
 
     #[clap(flatten)]
-    pub relayer: IntegratedRelayerConfig,
-
-    #[clap(flatten)]
     pub miner: MinerConfig,
 
     #[clap(flatten)]
@@ -373,9 +335,6 @@ pub struct RunWithImporterConfig {
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
-
-    #[clap(flatten)]
-    pub relayer: IntegratedRelayerConfig,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
@@ -445,9 +404,6 @@ pub struct IntegrationTestConfig {
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
-
-    #[clap(flatten)]
-    pub relayer: IntegratedRelayerConfig,
 
     #[clap(flatten)]
     pub miner: MinerConfig,
