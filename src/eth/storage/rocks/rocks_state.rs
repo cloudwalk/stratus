@@ -19,10 +19,24 @@ use serde::Deserialize;
 use serde::Serialize;
 use sugars::hmap;
 
+use super::cf_versions::CfAccountSlotsHistoryValue;
+use super::cf_versions::CfAccountSlotsValue;
+use super::cf_versions::CfAccountsHistoryValue;
+use super::cf_versions::CfAccountsValue;
+use super::cf_versions::CfBlocksByHashValue;
+use super::cf_versions::CfBlocksByNumberValue;
+use super::cf_versions::CfLogsValue;
+use super::cf_versions::CfTransactionsValue;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
 use super::rocks_db::create_or_open_db;
+use super::types::AccountRocksdb;
+use super::types::AddressRocksdb;
+use super::types::BlockNumberRocksdb;
+use super::types::HashRocksdb;
+use super::types::IndexRocksdb;
+use super::types::SlotIndexRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -35,14 +49,6 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::rocks::types::AccountRocksdb;
-use crate::eth::storage::rocks::types::AddressRocksdb;
-use crate::eth::storage::rocks::types::BlockNumberRocksdb;
-use crate::eth::storage::rocks::types::BlockRocksdb;
-use crate::eth::storage::rocks::types::HashRocksdb;
-use crate::eth::storage::rocks::types::IndexRocksdb;
-use crate::eth::storage::rocks::types::SlotIndexRocksdb;
-use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::StoragePointInTime;
 use crate::ext::OptionExt;
 use crate::log_and_err;
@@ -95,14 +101,14 @@ where
 pub struct RocksStorageState {
     db: Arc<DB>,
     db_path: String,
-    accounts: RocksCfRef<AddressRocksdb, AccountRocksdb>,
-    accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>,
-    account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
-    account_slots_history: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>,
-    transactions: RocksCfRef<HashRocksdb, BlockNumberRocksdb>,
-    blocks_by_number: RocksCfRef<BlockNumberRocksdb, BlockRocksdb>,
-    blocks_by_hash: RocksCfRef<HashRocksdb, BlockNumberRocksdb>,
-    logs: RocksCfRef<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
+    accounts: RocksCfRef<AddressRocksdb, CfAccountsValue>,
+    accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), CfAccountsHistoryValue>,
+    account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), CfAccountSlotsValue>,
+    account_slots_history: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), CfAccountSlotsHistoryValue>,
+    transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
+    blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
+    blocks_by_hash: RocksCfRef<HashRocksdb, CfBlocksByHashValue>,
+    logs: RocksCfRef<(HashRocksdb, IndexRocksdb), CfLogsValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -167,18 +173,18 @@ impl RocksStorageState {
         self.accounts.clear()?;
 
         // Get current state back from historical
-        let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)> = HashMap::new();
-        let mut latest_accounts: HashMap<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)> = HashMap::new();
+        let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, CfAccountSlotsValue)> = HashMap::new();
+        let mut latest_accounts: HashMap<AddressRocksdb, (BlockNumberRocksdb, CfAccountsValue)> = HashMap::new();
         for next in self.account_slots_history.iter_start() {
             let ((address, idx, block), value) = next?;
             if block > block_number {
                 self.account_slots_history.delete(&(address, idx, block))?;
             } else if let Some((bnum, _)) = latest_slots.get(&(address, idx)) {
                 if bnum < &block {
-                    latest_slots.insert((address, idx), (block, value.clone()));
+                    latest_slots.insert((address, idx), (block, value.into_inner().into()));
                 }
             } else {
-                latest_slots.insert((address, idx), (block, value.clone()));
+                latest_slots.insert((address, idx), (block, value.into_inner().into()));
             }
         }
         for next in self.accounts_history.iter_start() {
@@ -187,10 +193,10 @@ impl RocksStorageState {
                 self.accounts_history.delete(&(address, block))?;
             } else if let Some((bnum, _)) = latest_accounts.get(&address) {
                 if bnum < &block {
-                    latest_accounts.insert(address, (block, account));
+                    latest_accounts.insert(address, (block, account.into_inner().into()));
                 }
             } else {
-                latest_accounts.insert(address, (block, account));
+                latest_accounts.insert(address, (block, account.into_inner().into()));
             }
         }
 
@@ -208,21 +214,21 @@ impl RocksStorageState {
         // Truncate rest of
         for next in self.transactions.iter_start() {
             let (hash, block) = next?;
-            if block > block_number {
+            if *block > block_number {
                 self.transactions.delete(&hash)?;
             }
         }
 
         for next in self.logs.iter_start() {
             let (key, block) = next?;
-            if block > block_number {
+            if *block > block_number {
                 self.logs.delete(&key)?;
             }
         }
 
         for next in self.blocks_by_hash.iter_start() {
             let (hash, block) = next?;
-            if block > block_number {
+            if *block > block_number {
                 self.blocks_by_hash.delete(&hash)?;
             }
         }
@@ -251,12 +257,12 @@ impl RocksStorageState {
         let account_slots = self.account_slots.clone();
         let account_slots_history = self.account_slots_history.clone();
 
-        let mut account_changes = Vec::new();
-        let mut account_history_changes = Vec::new();
+        let mut account_changes: Vec<(_, CfAccountsValue)> = Vec::new();
+        let mut account_history_changes: Vec<(_, CfAccountsHistoryValue)> = Vec::new();
 
         for change in changes {
             let address: AddressRocksdb = change.address.into();
-            let mut account_info_entry = accounts.get_or_insert_with(address, AccountRocksdb::default)?;
+            let mut account_info_entry = accounts.get_or_insert_with(address, || AccountRocksdb::default().into())?;
 
             if let Some(nonce) = change.nonce.clone().take_modified() {
                 account_info_entry.nonce = nonce.into();
@@ -269,7 +275,7 @@ impl RocksStorageState {
             }
 
             account_changes.push((address, account_info_entry.clone()));
-            account_history_changes.push(((address, block_number.into()), account_info_entry));
+            account_history_changes.push(((address, block_number.into()), account_info_entry.into_inner().into()));
         }
 
         accounts.prepare_batch_insertion(account_changes, batch)?;
@@ -304,9 +310,13 @@ impl RocksStorageState {
                 .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash));
         };
 
-        tracing::trace!(%tx_hash, "transaction found");
-        match block.transactions.into_iter().find(|tx| &Hash::from(tx.input.hash) == tx_hash) {
-            Some(tx) => Ok(Some(tx.into())),
+        let transaction = block.into_inner().transactions.into_iter().find(|tx| &Hash::from(tx.input.hash) == tx_hash);
+
+        match transaction {
+            Some(tx) => {
+                tracing::trace!(%tx_hash, "transaction found");
+                Ok(Some(tx.into()))
+            }
             None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
                 .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
         }
@@ -333,6 +343,7 @@ impl RocksStorageState {
                 break;
             }
             let transactions_with_matching_addresses = block
+                .into_inner()
                 .transactions
                 .into_iter()
                 .filter(|transaction| transaction.input.to.is_some_and(|to| addresses.contains(&to)));
@@ -363,7 +374,7 @@ impl RocksStorageState {
 
                 Ok(Some(Slot {
                     index: *index,
-                    value: account_slot_value.into(),
+                    value: account_slot_value.into_inner().into(),
                 }))
             }
             StoragePointInTime::MinedPast(number) => {
@@ -378,7 +389,7 @@ impl RocksStorageState {
                     if rocks_index == (*index).into() && rocks_address == (*address).into() {
                         return Ok(Some(Slot {
                             index: rocks_index.into(),
-                            value: value.into(),
+                            value: value.into_inner().into(),
                         }));
                     }
                 }
@@ -433,14 +444,15 @@ impl RocksStorageState {
                 },
         };
 
-        block.map(Option::map_into)
+        block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         for account in accounts {
             let (key, value) = account.into();
+            let value: CfAccountsValue = value.into();
             self.accounts.insert(key, value.clone())?;
-            self.accounts_history.insert((key, 0.into()), value)?;
+            self.accounts_history.insert((key, 0.into()), value.into_inner().into())?;
         }
         Ok(())
     }
@@ -501,7 +513,10 @@ impl RocksStorageState {
     /// Writes accounts to state (does not write to account history)
     #[allow(dead_code)]
     fn write_accounts(&self, accounts: Vec<Account>) -> Result<()> {
-        let accounts = accounts.into_iter().map(Into::into);
+        let accounts = accounts.into_iter().map(|account| {
+            let (address, account) = account.into();
+            (address, account.into())
+        });
 
         let mut batch = WriteBatch::default();
         self.accounts.prepare_batch_insertion(accounts, &mut batch)?;
