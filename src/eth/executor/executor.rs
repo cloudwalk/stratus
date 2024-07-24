@@ -11,7 +11,6 @@ use crate::eth::executor::Evm;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
-use crate::eth::executor::Revm;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::CallInput;
@@ -86,7 +85,7 @@ impl Evms {
 
         // function executed by evm threads
         fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, chain_id: ChainId, task_rx: crossbeam_channel::Receiver<EvmTask>) {
-            let mut evm = Revm::new(storage, chain_id);
+            let mut evm = Evm::new(storage, chain_id);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
