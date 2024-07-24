@@ -17,7 +17,10 @@ pub struct CallInput {
 }
 
 impl CallInput {
-    pub fn extract_function(&self) -> Option<SoliditySignature> {
+    /// Parses the Solidity function being called.
+    ///
+    /// TODO: unify and remove duplicate implementations.
+    pub fn solidity_signature(&self) -> Option<SoliditySignature> {
         let sig = Signature::Function(self.data.get(..4)?.try_into().ok()?);
         Some(sig.extract())
     }
