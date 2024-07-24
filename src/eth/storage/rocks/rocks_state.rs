@@ -380,7 +380,7 @@ impl RocksStorageState {
             let (key, value) = account.into();
             let value: CfAccountsValue = value.into();
             self.accounts.insert(key, value.clone())?;
-            self.accounts_history.insert((key, 0.into()), value.into_inner().into())?;
+            self.accounts_history.insert((key, 0u64.into()), value.into_inner().into())?;
         }
         Ok(())
     }

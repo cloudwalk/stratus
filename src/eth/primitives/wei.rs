@@ -60,6 +60,12 @@ impl Dummy<Faker> for Wei {
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = Wei, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
+impl From<[u64; 4]> for Wei {
+    fn from(value: [u64; 4]) -> Self {
+        Self(U256(value))
+    }
+}
+
 impl From<RevmU256> for Wei {
     fn from(value: RevmU256) -> Self {
         Self(value.to_be_bytes().into())

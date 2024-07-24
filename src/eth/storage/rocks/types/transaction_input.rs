@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 
 use ethereum_types::U256;
-use ethereum_types::U64;
 
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
@@ -25,9 +24,9 @@ pub struct TransactionInputRocksdb {
     pub input: BytesRocksdb,
     pub gas_limit: GasRocksdb,
     pub gas_price: WeiRocksdb,
-    pub v: U64,
-    pub r: U256,
-    pub s: U256,
+    pub v: u64,
+    pub r: [u64; 4],
+    pub s: [u64; 4],
 }
 
 impl From<TransactionInput> for TransactionInputRocksdb {
@@ -43,9 +42,9 @@ impl From<TransactionInput> for TransactionInputRocksdb {
             input: BytesRocksdb::from(item.input),
             gas_limit: GasRocksdb::from(item.gas_limit),
             gas_price: WeiRocksdb::from(item.gas_price),
-            v: item.v,
-            r: item.r,
-            s: item.s,
+            v: item.v.as_u64(),
+            r: item.r.0,
+            s: item.s.0,
         }
     }
 }
@@ -63,9 +62,9 @@ impl From<TransactionInputRocksdb> for TransactionInput {
             input: item.input.into(),
             gas_limit: item.gas_limit.into(),
             gas_price: item.gas_price.into(),
-            v: item.v,
-            r: item.r,
-            s: item.s,
+            v: item.v.into(),
+            r: U256(item.r),
+            s: U256(item.s),
             tx_type: None,
         }
     }
