@@ -440,7 +440,7 @@ impl RocksStorageState {
         for account in accounts {
             let (key, value) = account.into();
             self.accounts.insert(key, value.clone())?;
-            self.accounts_history.insert((key, 0.into()), value)?;
+            self.accounts_history.insert((key, 0u64.into()), value)?;
         }
         Ok(())
     }
