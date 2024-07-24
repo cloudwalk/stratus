@@ -5161,6 +5161,7 @@ dependencies = [
  "serde_urlencoded",
  "serde_with 3.8.1",
  "sqlx",
+ "static_assertions",
  "stringreader",
  "strum",
  "sugars",
