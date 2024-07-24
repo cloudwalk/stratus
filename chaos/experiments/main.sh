@@ -61,10 +61,10 @@ cleanup() {
   sleep 2
   if [ $exit_code -eq 0 ]; then
     rm instance_*.log 2>/dev/null || true
-    find . -type d -name "instance_*" -print0 | xargs -0 rm -rf 2>/dev/null || true
+    find . -xdev -type d -name "instance_*" -print0 | xargs -0 rm -rf 2>/dev/null || true
   fi
   rm -rf tmp_rocks_* 2>/dev/null || true
-  find . -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf 2>/dev/null || true
+  find . -xdev -type d -name "tmp_rocks_*" -print0 | xargs -0 rm -rf 2>/dev/null || true
   echo "Job is done. With exit code $exit_code"
 }
 trap cleanup EXIT INT TERM
@@ -264,7 +264,7 @@ run_test() {
         echo "Killing the leader instance on address $leader_port..."
         for i in "${!leader_ports[@]}"; do
             if [ "${leader_ports[i]}" == "$leader_port" ]; then
-                killport --quiet $leader_port
+                killport --quiet $leader_port || true
                 break
             fi
         done
