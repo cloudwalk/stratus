@@ -3,12 +3,15 @@ use std::fmt::Debug;
 use ethereum_types::U256;
 
 use crate::eth::primitives::Wei;
-use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize)]
-pub struct WeiRocksdb(U256);
+#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct WeiRocksdb([u64; 4]);
 
-gen_newtype_from!(self = WeiRocksdb, other = U256);
+impl From<U256> for WeiRocksdb {
+    fn from(value: U256) -> Self {
+        Self(value.0)
+    }
+}
 
 impl From<WeiRocksdb> for Wei {
     fn from(value: WeiRocksdb) -> Self {
@@ -23,6 +26,6 @@ impl From<Wei> for WeiRocksdb {
 }
 
 impl WeiRocksdb {
-    pub const ZERO: WeiRocksdb = WeiRocksdb(U256::zero());
-    pub const ONE: WeiRocksdb = WeiRocksdb(U256::one());
+    pub const ZERO: WeiRocksdb = WeiRocksdb([0; 4]);
+    pub const ONE: WeiRocksdb = WeiRocksdb([1, 0, 0, 0]);
 }
