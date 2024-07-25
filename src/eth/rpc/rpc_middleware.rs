@@ -20,12 +20,12 @@ use tracing::Span;
 
 use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
+use crate::eth::codegen::SoliditySignature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -164,7 +164,8 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             rpc_method = %method,
             rpc_params = %to_json_value(&request.params),
             rpc_tx_hash = %tx.as_ref().and_then(|tx|tx.hash).or_empty(),
-            rpc_tx_function = %tx.as_ref().and_then(|tx|tx.function.clone()).or_empty(),
+            rpc_tx_contract = %tx.as_ref().map(|tx|tx.contract).or_empty(),
+            rpc_tx_function = %tx.as_ref().map(|tx|tx.function).or_empty(),
             rpc_tx_from = %tx.as_ref().and_then(|tx|tx.from).or_empty(),
             rpc_tx_to = %tx.as_ref().and_then(|tx|tx.to).or_empty(),
             "rpc request"
@@ -175,7 +176,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         {
             let tx_ref = tx.as_ref();
             active_requests::COUNTERS.inc(&client, &method);
-            metrics::inc_rpc_requests_started(&client, &method, tx_ref.and_then(|tx| tx.contract), tx_ref.and_then(|tx| tx.function.clone()));
+            metrics::inc_rpc_requests_started(&client, &method, tx_ref.map(|tx| tx.contract), tx_ref.map(|tx| tx.function));
         }
         drop(middleware_enter);
 
@@ -246,7 +247,8 @@ impl<'a> Future for RpcResponse<'a> {
                 rpc_id = %resp.id,
                 rpc_method = %resp.method,
                 rpc_tx_hash = %resp.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
-                rpc_tx_function = %resp.tx.as_ref().and_then(|tx|tx.function.clone()).or_empty(),
+                rpc_tx_contract = %resp.tx.as_ref().map(|tx|tx.contract).or_empty(),
+                rpc_tx_function = %resp.tx.as_ref().map(|tx|tx.function).or_empty(),
                 rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
                 rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
                 rpc_result = %response_result,
@@ -259,8 +261,8 @@ impl<'a> Future for RpcResponse<'a> {
             #[cfg(feature = "metrics")]
             {
                 let rpc_result = match response_result.get("result") {
-                    Some(result) => if_else!(result.is_null(), "missing", "present"),
-                    None => "error",
+                    Some(result) => if_else!(result.is_null(), metrics::LABEL_MISSING, metrics::LABEL_PRESENT),
+                    None => metrics::LABEL_ERROR,
                 };
 
                 let tx_ref = resp.tx.as_ref();
@@ -268,8 +270,8 @@ impl<'a> Future for RpcResponse<'a> {
                     elapsed,
                     &*resp.client,
                     resp.method.clone(),
-                    tx_ref.and_then(|tx| tx.contract),
-                    tx_ref.and_then(|tx| tx.function.clone()),
+                    tx_ref.map(|tx| tx.contract),
+                    tx_ref.map(|tx| tx.function),
                     rpc_result,
                     error_code,
                     response.is_success(),
@@ -297,8 +299,8 @@ impl PinnedDrop for RpcResponse<'_> {
 
 struct TransactionTracingIdentifiers {
     pub hash: Option<Hash>,
-    pub contract: Option<ContractName>,
-    pub function: Option<SoliditySignature>,
+    pub contract: ContractName,
+    pub function: SoliditySignature,
     pub from: Option<Address>,
     pub to: Option<Address>,
     pub nonce: Option<Nonce>,
@@ -311,8 +313,8 @@ impl TransactionTracingIdentifiers {
         let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
         Ok(Self {
             hash: Some(tx.hash),
-            contract: tx.to.as_ref().map(codegen::get_contract_name),
-            function: tx.solidity_signature(),
+            contract: codegen::contract_name_for_o11y(&tx.to),
+            function: codegen::function_sig_for_o11y(&tx.input),
             from: Some(tx.signer),
             to: tx.to,
             nonce: Some(tx.nonce),
@@ -324,8 +326,8 @@ impl TransactionTracingIdentifiers {
         let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
         Ok(Self {
             hash: None,
-            contract: call.to.as_ref().map(codegen::get_contract_name),
-            function: call.solidity_signature(),
+            contract: codegen::contract_name_for_o11y(&call.to),
+            function: codegen::function_sig_for_o11y(&call.data),
             from: call.from,
             to: call.to,
             nonce: None,
@@ -337,8 +339,8 @@ impl TransactionTracingIdentifiers {
         let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
         Ok(Self {
             hash: Some(hash),
-            contract: None,
-            function: None,
+            contract: metrics::LABEL_MISSING,
+            function: metrics::LABEL_MISSING,
             from: None,
             to: None,
             nonce: None,
@@ -346,14 +348,11 @@ impl TransactionTracingIdentifiers {
     }
 
     pub fn record_span(&self, span: Span) {
+        span.rec_str("rpc_tx_contract", &self.contract);
+        span.rec_str("rpc_tx_function", &self.function);
+
         if let Some(tx_hash) = self.hash {
             span.rec_str("rpc_tx_hash", &tx_hash);
-        }
-        if let Some(ref tx_contract) = self.contract {
-            span.rec_str("rpc_tx_contract", &tx_contract);
-        }
-        if let Some(ref tx_function) = self.function {
-            span.rec_str("rpc_tx_function", &tx_function);
         }
         if let Some(tx_from) = self.from {
             span.rec_str("rpc_tx_from", &tx_from);

@@ -11,6 +11,22 @@ pub type Sum = u64;
 pub type Count = u64;
 
 // -----------------------------------------------------------------------------
+// Labels
+// -----------------------------------------------------------------------------
+
+/// Label value indicating a value is present.
+pub const LABEL_PRESENT: &str = "present";
+
+/// Label value indicating a value is missing.
+pub const LABEL_MISSING: &str = "missing";
+
+/// Label value indicating a value is unknown.
+pub const LABEL_UNKNOWN: &str = "unknown";
+
+/// Label value indicating an error happened.
+pub const LABEL_ERROR: &str = "error";
+
+// -----------------------------------------------------------------------------
 // Metric
 // -----------------------------------------------------------------------------
 
