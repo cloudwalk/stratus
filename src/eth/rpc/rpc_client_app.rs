@@ -30,14 +30,35 @@ impl RpcClientApp {
             return RpcClientApp::Unknown;
         }
         let name = match name {
+            // Stratus
+            v if v.starts_with("stratus") => {
+                let v = v.trim_start_matches("stratus");
+                format!("stratus::{}", v)
+            }
+
+            // Acquiring
+            v if v == "authorizer" => format!("acquiring::{}", v),
+
+            // Banking
             v if v.starts_with("banking") || v.starts_with("balance") => format!("banking::{}", v),
+
+            // Issuing
             v if v.starts_with("issuing") || v.starts_with("infinitecard") => format!("issuing::{}", v),
+
+            // Lending
             v if v.starts_with("lending") => format!("lending::{}", v),
+
+            // Infra
             v if v == "blockscout" || v == "golani" || v == "tx-replayer" => format!("infra::{}", v),
+
+            // User
             v if v.starts_with("user-") => {
                 let v = v.trim_start_matches("user-");
                 format!("user::{}", v)
             }
+            v if v == "insomnia" => format!("user::{}", v),
+
+            // Other
             v => format!("other::{}", v),
         };
         RpcClientApp::Identified(name)
