@@ -36,7 +36,6 @@ use crate::ext::from_json_str;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
 use crate::if_else;
-#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::new_cid;
 use crate::infra::tracing::SpanExt;
