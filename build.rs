@@ -1,7 +1,3 @@
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
-
 use std::collections::HashSet;
 use std::env;
 use std::fs;
