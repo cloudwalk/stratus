@@ -312,22 +312,22 @@ e2e-importer-online:
 e2e-importer-online-up:
     #!/bin/bash
 
-    # Build Stratus and Run With Importer binaries
-    echo "Building Stratus and Run With Importer binaries"
-    cargo build --release --bin stratus --bin run-with-importer --features dev
+    # Build Stratus binary
+    echo "Building Stratus binary"
+    cargo build --release --bin stratus --features dev
 
     mkdir e2e_logs
 
-    # Start Stratus binary
+    # Start Stratus with rpc miner flag
     RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --enable-genesis --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
-    # Wait for Stratus to start
+    # Wait for Stratus with rpc miner flag to start
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
-    # Start Run With Importer binary
-    RUST_LOG=info cargo run --release --bin run-with-importer --features dev -- --block-mode 1s --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
+    # Start Stratus with run with importer flag
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode run-with-importer --block-mode 1s --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
 
-    # Wait for Run With Importer to start
+    # Wait for Stratus with run with importer flag to start
     wait-service --tcp 0.0.0.0:3001 -t {{ wait_service_timeout }} -- echo
 
     if [ -d e2e/cloudwalk-contracts ]; then
@@ -349,12 +349,8 @@ e2e-importer-online-up:
 e2e-importer-online-down:
     #!/bin/bash
 
-    # Kill run-with-importer
-    killport 3001
-    run_with_importer_pid=$(pgrep -f 'run-with-importer')
-    kill $run_with_importer_pid
-
     # Kill Stratus
+    killport 3001
     killport 3000
     stratus_pid=$(pgrep -f 'stratus')
     kill $stratus_pid
