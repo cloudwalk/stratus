@@ -21,6 +21,7 @@ import {
     send,
     sendEvmMine,
     sendExpect,
+    sendGetBlockNumber,
     sendGetNonce,
     sendRawTransaction,
     sendReset,
@@ -137,13 +138,65 @@ describe("JSON-RPC", () => {
 
     describe("Logs", () => {
         describe("eth_getLogs", () => {
+            it("returns the expected amount of logs for different block ranges", async () => {
+                await sendReset();
+
+                const contract = await deployTestContractBalances();
+                const filter = { address: contract.target };
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const contractOps = contract.connect(ALICE.signer());
+                await sendEvmMine();
+                const block = await sendGetBlockNumber();
+
+                async function sendNTransactions(n: number) {
+                    for(let i = 0; i < n; i++){
+                        await contractOps.add(ALICE.address, 10);
+                    }
+                    await sendEvmMine();
+                }
+
+                await sendNTransactions(8)
+                await sendNTransactions(4)
+                await sendNTransactions(2)
+                await sendNTransactions(1)
+
+                // single block
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 1), toBlock: toHex(block + 1)}])).length(8);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 2), toBlock: toHex(block + 2)}])).length(4);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 3), toBlock: toHex(block + 3)}])).length(2);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 4), toBlock: toHex(block + 4)}])).length(1);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 5), toBlock: toHex(block + 5)}])).length(0);
+
+
+                // block range (offset fromBlock)
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 1) }])).length(15);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 2) }])).length(7);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 3) }])).length(3);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 4) }])).length(1);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 5) }])).length(0);
+
+                // block range (offset toBlock)
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 1) }])).length(8);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 2) }])).length(12);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 3) }])).length(14);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 4) }])).length(15);
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 4) }])).length(15);
+
+                // block range (middle blocks)
+                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 2), toBlock: toHex(block + 3) }])).length(6);
+            });
+        });
+
+        describe("eth_getLogs", () => {
             it("returns no logs for queries after last mined block", async () => {
                 const contract = await deployTestContractBalances();
-                sendEvmMine();
+                await sendEvmMine();
                 await contract.waitForDeployment();
 
                 const txResponse = await contract.connect(ALICE.signer()).add(ALICE.address, 10);
-                sendEvmMine();
+                await sendEvmMine();
                 const txReceipt = await ETHERJS.getTransactionReceipt(txResponse.hash);
                 expect(txReceipt).to.not.be.null;
 
@@ -155,10 +208,10 @@ describe("JSON-RPC", () => {
                 const filter = { address: contract.target };
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber) }])).length(1); // last mined block
 
-                sendEvmMine();
+                await sendEvmMine();
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber + 1) }])).length(0); // 1 after mined block
 
-                sendEvmMine();
+                await sendEvmMine();
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(txBlockNumber + 2) }])).length(0); // 2 after mined block
             });
         });
