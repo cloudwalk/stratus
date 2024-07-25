@@ -27,12 +27,21 @@ on:
 
 jobs:
   run_lint:
-    name: Lint and Style checks
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
+    strategy:
+      matrix:
+        include: 
+          - name: Lint and Style checks
+            arguments: "-D warnings -A clippy::unwrap_used -A clippy::expect_used -A clippy::panic"
+          - name: Lint with unwrap expect panic
+            arguments: "-D warnings"
+
+    name: ${{ matrix.name }}
+
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.name }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -59,7 +68,7 @@ jobs:
         uses: extractions/setup-just@v2
 
       - name: Just lint-check
-        run: just lint-check -2024-02-29
+        run: just lint-check -2024-02-29 "${{ matrix.arguments }}"
 
   e2e_lint:
     name: E2E Lint
