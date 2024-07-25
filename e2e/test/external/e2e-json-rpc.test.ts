@@ -151,24 +151,33 @@ describe("JSON-RPC", () => {
                 const block = await sendGetBlockNumber();
 
                 async function sendNTransactions(n: number) {
-                    for(let i = 0; i < n; i++){
+                    for (let i = 0; i < n; i++) {
                         await contractOps.add(ALICE.address, 10);
                     }
                     await sendEvmMine();
                 }
 
-                await sendNTransactions(8)
-                await sendNTransactions(4)
-                await sendNTransactions(2)
-                await sendNTransactions(1)
+                await sendNTransactions(8);
+                await sendNTransactions(4);
+                await sendNTransactions(2);
+                await sendNTransactions(1);
 
                 // single block
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 1), toBlock: toHex(block + 1)}])).length(8);
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 2), toBlock: toHex(block + 2)}])).length(4);
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 3), toBlock: toHex(block + 3)}])).length(2);
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 4), toBlock: toHex(block + 4)}])).length(1);
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 5), toBlock: toHex(block + 5)}])).length(0);
-
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 1), toBlock: toHex(block + 1) }]),
+                ).length(8);
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 2), toBlock: toHex(block + 2) }]),
+                ).length(4);
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 3), toBlock: toHex(block + 3) }]),
+                ).length(2);
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 4), toBlock: toHex(block + 4) }]),
+                ).length(1);
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 5), toBlock: toHex(block + 5) }]),
+                ).length(0);
 
                 // block range (offset fromBlock)
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 1) }])).length(15);
@@ -178,14 +187,26 @@ describe("JSON-RPC", () => {
                 expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 5) }])).length(0);
 
                 // block range (offset toBlock)
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 1) }])).length(8);
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 2) }])).length(12);
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 3) }])).length(14);
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 4) }])).length(15);
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 4) }])).length(15);
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 1) }]),
+                ).length(8);
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 2) }]),
+                ).length(12);
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 3) }]),
+                ).length(14);
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 4) }]),
+                ).length(15);
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block), toBlock: toHex(block + 4) }]),
+                ).length(15);
 
                 // block range (middle blocks)
-                expect(await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 2), toBlock: toHex(block + 3) }])).length(6);
+                expect(
+                    await send("eth_getLogs", [{ ...filter, fromBlock: toHex(block + 2), toBlock: toHex(block + 3) }]),
+                ).length(6);
             });
         });
 
