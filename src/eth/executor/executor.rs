@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use tracing::info_span;
 use tracing::Span;
 
+use crate::eth::codegen;
 use crate::eth::executor::Evm;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
@@ -333,16 +334,17 @@ impl Executor {
         self.miner.save_execution(tx_execution.clone())?;
 
         // track metrics
+
         #[cfg(feature = "metrics")]
         {
             let evm_execution = tx_execution.execution();
             let evm_metrics = tx_execution.metrics();
             *block_metrics += *evm_metrics;
 
-            let function = tx.solidity_signature();
-            metrics::inc_executor_external_transaction(start.elapsed(), function.clone());
-            metrics::inc_executor_external_transaction_account_reads(evm_metrics.account_reads, function.clone());
-            metrics::inc_executor_external_transaction_slot_reads(evm_metrics.slot_reads, function.clone());
+            let function = codegen::function_sig_for_o11y(&tx.0.input);
+            metrics::inc_executor_external_transaction(start.elapsed(), function);
+            metrics::inc_executor_external_transaction_account_reads(evm_metrics.account_reads, function);
+            metrics::inc_executor_external_transaction_slot_reads(evm_metrics.slot_reads, function);
             metrics::inc_executor_external_transaction_gas(evm_execution.gas.as_u64() as usize, function);
         }
 
@@ -422,12 +424,12 @@ impl Executor {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            let function = tx_input.solidity_signature();
+            let function = codegen::function_sig_for_o11y(&tx_input.input);
             match &tx_execution {
                 Ok(tx_execution) => {
-                    metrics::inc_executor_local_transaction(start.elapsed(), true, function.clone());
-                    metrics::inc_executor_local_transaction_account_reads(tx_execution.metrics().account_reads, function.clone());
-                    metrics::inc_executor_local_transaction_slot_reads(tx_execution.metrics().slot_reads, function.clone());
+                    metrics::inc_executor_local_transaction(start.elapsed(), true, function);
+                    metrics::inc_executor_local_transaction_account_reads(tx_execution.metrics().account_reads, function);
+                    metrics::inc_executor_local_transaction_slot_reads(tx_execution.metrics().slot_reads, function);
                     metrics::inc_executor_local_transaction_gas(tx_execution.execution().gas.as_u64() as usize, true, function);
                 }
                 Err(_) => {
@@ -548,18 +550,19 @@ impl Executor {
         };
         let evm_result = self.evms.execute(evm_input, evm_route);
 
+        // track metrics
         #[cfg(feature = "metrics")]
         {
-            let function = call_input.solidity_signature();
+            let function = codegen::function_sig_for_o11y(&call_input.data);
             match &evm_result {
                 Ok(evm_result) => {
-                    metrics::inc_executor_local_call(start.elapsed(), true, function.clone());
-                    metrics::inc_executor_local_call_account_reads(evm_result.metrics.account_reads, function.clone());
-                    metrics::inc_executor_local_call_slot_reads(evm_result.metrics.slot_reads, function.clone());
+                    metrics::inc_executor_local_call(start.elapsed(), true, function);
+                    metrics::inc_executor_local_call_account_reads(evm_result.metrics.account_reads, function);
+                    metrics::inc_executor_local_call_slot_reads(evm_result.metrics.slot_reads, function);
                     metrics::inc_executor_local_call_gas(evm_result.execution.gas.as_u64() as usize, function);
                 }
                 Err(_) => {
-                    metrics::inc_executor_local_call(start.elapsed(), false, function.clone());
+                    metrics::inc_executor_local_call(start.elapsed(), false, function);
                 }
             }
         }

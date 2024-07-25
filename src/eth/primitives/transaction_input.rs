@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
@@ -20,10 +18,7 @@ use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Signature;
-use crate::eth::primitives::SoliditySignature;
 use crate::eth::primitives::Wei;
-use crate::ext::not;
 use crate::ext::JsonValue;
 use crate::ext::OptionExt;
 use crate::log_and_err;
@@ -51,24 +46,6 @@ pub struct TransactionInput {
     pub v: U64,
     pub r: U256,
     pub s: U256,
-}
-
-impl TransactionInput {
-    /// Checks if the current transaction is a contract deployment.
-    pub fn is_contract_deployment(&self) -> bool {
-        self.to.is_none() && not(self.input.is_empty())
-    }
-
-    /// Parses the Solidity function being called.
-    ///
-    /// TODO: unify and remove duplicate implementations.
-    pub fn solidity_signature(&self) -> Option<SoliditySignature> {
-        if self.is_contract_deployment() {
-            return Some(Cow::from("contract_deployment"));
-        }
-        let sig = Signature::Function(self.input.get(..4)?.try_into().ok()?);
-        Some(sig.extract())
-    }
 }
 
 impl Dummy<Faker> for TransactionInput {
