@@ -14,6 +14,7 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
 use crate::eth::primitives::Address;
 use crate::eth::rpc::RpcServerConfig;
@@ -62,6 +63,10 @@ pub struct CommonConfig {
     /// Environment where the application is running.
     #[arg(long = "env", env = "ENV", default_value = "local")]
     pub env: Environment,
+
+    /// Stratus mode.
+    #[arg(long = "mode", env = "MODE", default_value = "stratus")]
+    pub mode: StratusMode,
 
     /// Number of threads to execute global async tasks.
     #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
@@ -168,6 +173,9 @@ pub struct StratusConfig {
 
     #[clap(flatten)]
     pub miner: MinerConfig,
+
+    #[clap(flatten)]
+    pub importer: ImporterConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -449,6 +457,38 @@ impl FromStr for Environment {
             "staging" | "test" => Ok(Self::Staging),
             "production" | "prod" => Ok(Self::Production),
             s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Enum: Stratus Mode
+// -----------------------------------------------------------------------------
+#[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
+pub enum StratusMode {
+    #[serde(rename = "stratus")]
+    #[strum(to_string = "stratus")]
+    Stratus,
+
+    #[serde(rename = "importer-online")]
+    #[strum(to_string = "importer-online")]
+    ImporterOnline,
+
+    #[serde(rename = "run-with-importer")]
+    #[strum(to_string = "run-with-importer")]
+    RunWithImporter,
+}
+
+impl FromStr for StratusMode {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
+        let s = s.trim().to_lowercase();
+        match s.as_ref() {
+            "stratus" => Ok(Self::Stratus),
+            "importer-online" => Ok(Self::ImporterOnline),
+            "run-with-importer" => Ok(Self::RunWithImporter),
+            s => Err(anyhow!("unknown stratus mode: \"{}\" - valid values are {:?}", s, StratusMode::VARIANTS)),
         }
     }
 }
