@@ -67,8 +67,8 @@ lint:
     @just _lint
 
 # Stratus: Lint and check code formatting
-lint-check nightly-version="" clippy-flags="-D warnings":
-    @just _lint "{{nightly-version}}" --check "{{ clippy-flags }}"
+lint-check nightly-version="":
+    @just _lint "{{nightly-version}}" --check "-D warnings"
 
 # Stratus: Check for dependencies major updates
 outdated:
