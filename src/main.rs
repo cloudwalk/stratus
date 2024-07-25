@@ -51,7 +51,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
             let (http_url, ws_url) = consensus.get_chain_url().await.expect("chain url not found");
 
             Some(Arc::new(
-                BlockchainClient::new_http_ws(&http_url, ws_url.as_deref(), config.importer.external_rpc_timeout).await?,
+                BlockchainClient::new_http_ws(http_url, ws_url.as_deref(), config.importer.external_rpc_timeout).await?,
             ))
         }
         _ => None,
