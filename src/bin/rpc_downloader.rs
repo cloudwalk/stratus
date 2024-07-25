@@ -30,7 +30,7 @@ async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     let _timer = DropTimer::start("rpc-downloader");
 
     let rpc_storage = config.rpc_storage.init().await?;
-    let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc, config.external_rpc_timeout).await?);
+    let chain = Arc::new(BlockchainClient::new_http(Some(&config.external_rpc), config.external_rpc_timeout).await?);
 
     let block_end = match config.block_end {
         Some(end) => BlockNumber::from(end),

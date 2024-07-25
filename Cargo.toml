@@ -155,14 +155,6 @@ path = "src/bin/rpc_downloader.rs"
 name = "importer-offline"
 path = "src/bin/importer_offline.rs"
 
-[[bin]]
-name = "importer-online"
-path = "src/bin/importer_online.rs"
-
-[[bin]]
-name = "run-with-importer"
-path = "src/bin/run_with_importer.rs"
-
 # ------------------------------------------------------------------------------
 # Features
 # ------------------------------------------------------------------------------
