@@ -36,15 +36,14 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
 
     // init chain
     let chain = match config.mode {
-        StratusMode::Follower =>
-            if let Some(consensus) = &consensus {
-                let (http_url, ws_url) = consensus.get_chain_url().await?;
-                Some(Arc::new(
-                    BlockchainClient::new_http_ws(Some(&http_url), ws_url.as_deref(), config.importer.external_rpc_timeout).await?,
-                ))
-            } else {
-                return Err(anyhow::anyhow!("cannot get chain url")); // TODO: better error handling
-            },
+        StratusMode::Follower => Some(Arc::new(
+            BlockchainClient::new_http_ws(
+                config.importer.external_rpc.as_deref(),
+                config.importer.external_rpc_ws.as_deref(),
+                config.importer.external_rpc_timeout,
+            )
+            .await?,
+        )),
         _ => None,
     };
 
