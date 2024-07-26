@@ -1,4 +1,4 @@
-name: E2E Run With Importer
+name: E2E Importer
 
 on:
   pull_request:
@@ -29,7 +29,7 @@ jobs:
   run_with_importer_test:
     strategy:
       fail-fast: false
-    name: E2E Run With Importer on BRLCToken
+    name: E2E Importer on BRLCToken
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
