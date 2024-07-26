@@ -161,6 +161,10 @@ mod tests {
         }
     }
 
+    fn is_sorted<T: Ord>(vec: &[T]) -> bool {
+        vec.windows(2).all(|w| w[0] <= w[1])
+    }
+
     #[test]
     fn sort_transactions() {
         let mut rng = rand::thread_rng();
@@ -169,8 +173,6 @@ mod tests {
             .sorted()
             .map(|tx| (tx.block_number.as_u64(), tx.transaction_index.0))
             .collect_vec();
-        for pair in v {
-            format!("{:?}", pair);
-        }
+        assert!(is_sorted(&v));
     }
 }

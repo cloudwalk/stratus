@@ -153,10 +153,7 @@ impl Miner {
         let mined_txs = mine_external_transactions(block.number, external_txs)?;
         let block = block_from_external(external_block, mined_txs);
 
-        block.map(|block| {
-            Span::with(|s| s.rec_str("block_number", &block.number()));
-            block
-        })
+        block.inspect(|block| Span::with(|s| s.rec_str("block_number", &block.number())))
     }
 
     /// Same as [`Self::mine_external_mixed`], but automatically commits the block instead of returning it.
@@ -241,10 +238,7 @@ impl Miner {
             None => Ok(Block::new_at_now(block.number)),
         };
 
-        block.map(|block| {
-            Span::with(|s| s.rec_str("block_number", &block.number()));
-            block
-        })
+        block.inspect(|block| Span::with(|s| s.rec_str("block_number", &block.number())))
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
