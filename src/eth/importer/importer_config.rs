@@ -15,7 +15,7 @@ use crate::infra::BlockchainClient;
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
-    pub external_rpc: Option<String>,
+    pub external_rpc: String,
 
     /// External RPC WS endpoint to sync blocks with Stratus.
     #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS")]

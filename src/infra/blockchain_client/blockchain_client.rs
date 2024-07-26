@@ -30,7 +30,7 @@ use crate::log_and_err;
 #[derive(Debug)]
 pub struct BlockchainClient {
     http: HttpClient,
-    pub http_url: Option<String>,
+    pub http_url: String,
     ws: Option<RwLock<WsClient>>,
     ws_url: Option<String>,
     timeout: Duration,
@@ -38,40 +38,36 @@ pub struct BlockchainClient {
 
 impl BlockchainClient {
     /// Creates a new RPC client connected only to HTTP.
-    pub async fn new_http(http_url: Option<&str>, timeout: Duration) -> anyhow::Result<Self> {
+    pub async fn new_http(http_url: &str, timeout: Duration) -> anyhow::Result<Self> {
         Self::new_http_ws(http_url, None, timeout).await
     }
 
     /// Creates a new RPC client connected to HTTP and optionally to WS.
-    pub async fn new_http_ws(http_url: Option<&str>, ws_url: Option<&str>, timeout: Duration) -> anyhow::Result<Self> {
-        if let Some(http_url) = http_url {
-            tracing::info!(%http_url, "creating blockchain client");
+    pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>, timeout: Duration) -> anyhow::Result<Self> {
+        tracing::info!(%http_url, "creating blockchain client");
 
-            // build http provider
-            let http = Self::build_http_client(http_url, timeout)?;
+        // build http provider
+        let http = Self::build_http_client(http_url, timeout)?;
 
-            // build ws provider
-            let ws = if let Some(ws_url) = ws_url {
-                Some(RwLock::new(Self::build_ws_client(ws_url, timeout).await?))
-            } else {
-                None
-            };
-
-            let client = Self {
-                http,
-                http_url: Some(http_url.to_owned()),
-                ws,
-                ws_url: ws_url.map(|x| x.to_owned()),
-                timeout,
-            };
-
-            // check health before assuming it is ok
-            client.fetch_listening().await?;
-
-            Ok(client)
+        // build ws provider
+        let ws = if let Some(ws_url) = ws_url {
+            Some(RwLock::new(Self::build_ws_client(ws_url, timeout).await?))
         } else {
-            log_and_err!("HTTP URL must be provided")
-        }
+            None
+        };
+
+        let client = Self {
+            http,
+            http_url: http_url.to_owned(),
+            ws,
+            ws_url: ws_url.map(|x| x.to_owned()),
+            timeout,
+        };
+
+        // check health before assuming it is ok
+        client.fetch_listening().await?;
+
+        Ok(client)
     }
 
     fn build_http_client(url: &str, timeout: Duration) -> anyhow::Result<HttpClient> {
