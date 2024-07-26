@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::anyhow;
@@ -199,17 +200,17 @@ impl RevmSession {
     pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self {
             storage,
-            input: Default::default(),
-            storage_changes: Default::default(),
-            metrics: Default::default(),
+            input: EvmInput::default(),
+            storage_changes: HashMap::default(),
+            metrics: EvmExecutionMetrics::default(),
         }
     }
 
     /// Resets the session to be used with a new transaction.
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
-        self.storage_changes = Default::default();
-        self.metrics = Default::default();
+        self.storage_changes = HashMap::default();
+        self.metrics = EvmExecutionMetrics::default();
     }
 }
 

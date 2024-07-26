@@ -36,7 +36,7 @@ use crate::infra::BlockchainClient;
 use crate::GlobalState;
 
 pub mod append_entry {
-    #![allow(clippy::wildcard_imports)]
+    #![allow(clippy::default_trait_access, clippy::wildcard_imports)]
     tonic::include_proto!("append_entry");
 }
 #[allow(unused_imports)]

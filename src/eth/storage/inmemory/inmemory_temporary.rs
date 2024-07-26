@@ -106,7 +106,7 @@ impl InMemoryTemporaryAccount {
     fn new(address: Address) -> Self {
         Self {
             info: Account::new_empty(address),
-            slots: Default::default(),
+            slots: HashMap::default(),
         }
     }
 }

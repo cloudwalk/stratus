@@ -138,7 +138,7 @@ impl RocksStorageState {
             blocks_by_hash: new_cf_ref(&db, "blocks_by_hash")?,
             logs: new_cf_ref(&db, "logs")?,
             #[cfg(feature = "metrics")]
-            prev_stats: Default::default(),
+            prev_stats: Mutex::default(),
             #[cfg(feature = "metrics")]
             db_options,
             db,
