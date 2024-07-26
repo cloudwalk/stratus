@@ -325,7 +325,7 @@ e2e-importer-online-up:
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
     # Start Stratus with follower flag
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode follower --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode follower --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
 
     # Wait for Stratus with follower flag to start
     wait-service --tcp 0.0.0.0:3001 -t {{ wait_service_timeout }} -- echo
