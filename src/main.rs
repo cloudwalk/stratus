@@ -38,7 +38,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     };
 
     // init consensus
-    let consensus: Arc<dyn Consensus> = Arc::new(SimpleConsensus::new(Arc::clone(&storage), chain.as_ref().map(Arc::clone)));
+    let consensus: Arc<dyn Consensus> = Arc::new(SimpleConsensus::new(Arc::clone(&storage), chain.clone()));
 
     // start rpc server
     let rpc_server_config = config.rpc_server.clone();
