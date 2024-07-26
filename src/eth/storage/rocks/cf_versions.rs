@@ -4,6 +4,8 @@ use std::ops::DerefMut;
 use serde::Deserialize;
 use serde::Serialize;
 use strum::EnumCount;
+use strum::IntoStaticStr;
+use strum::VariantNames;
 
 use super::types::AccountRocksdb;
 use super::types::BlockNumberRocksdb;
@@ -16,7 +18,7 @@ use crate::eth::primitives::SlotValue;
 
 macro_rules! impl_single_version_cf_value {
     ($name:ident, $inner_type:ty, $non_rocks_equivalent: ty) => {
-        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount)]
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount, VariantNames, IntoStaticStr)]
         pub enum $name {
             V1($inner_type),
         }
@@ -76,13 +78,59 @@ impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
 impl_single_version_cf_value!(CfLogsValue, BlockNumberRocksdb, BlockNumber);
 
+#[cfg_attr(not(test), allow(dead_code))]
+trait ToCfName {
+    const CF_NAME: &'static str;
+}
+
+macro_rules! impl_to_cf_name {
+    ($type:ident, $cf_name:expr) => {
+        impl ToCfName for $type {
+            const CF_NAME: &'static str = $cf_name;
+        }
+    };
+}
+
+impl_to_cf_name!(CfAccountsValue, "accounts");
+impl_to_cf_name!(CfAccountsHistoryValue, "accounts_history");
+impl_to_cf_name!(CfAccountSlotsValue, "account_slots");
+impl_to_cf_name!(CfAccountSlotsHistoryValue, "account_slots_history");
+impl_to_cf_name!(CfTransactionsValue, "transactions");
+impl_to_cf_name!(CfBlocksByNumberValue, "blocks_by_number");
+impl_to_cf_name!(CfBlocksByHashValue, "blocks_by_hash");
+impl_to_cf_name!(CfLogsValue, "logs");
+
+/// Test that deserialization works for each variant of the enum.
+///
+/// This is intended to give an error when the following happens:
+///
+/// 1. A new variant is added to the enum.
+/// 2. A variant is renamed.
+/// 3. A variant is removed.
+/// 4. A variant is modified.
+/// 5. A variant is reordered.
+///
+/// Here is a breakdown of why, and how to proceed:
+///
+/// 1. New variants need to be tested, go to the test below and cover it, but watch out for:
+///   - You'll need an ENV VAR to create the new snapshot file.
+///   - When commiting the change, make sure you're just adding your new snapshot, and not editing others by accident.
+/// 2. For renamed variants, because we use bincode, you just need to update the snapshot file.
+///   - Rename it locally.
+/// 3. Previous variants can't be removed as they break our database, because they won't be able to read the older data.
+///   - Don't do it¹.
+/// 4. If you modify a variant, the database won't be able to read it anymore.
+///   - Don't do it¹.
+/// 5. Reordering variants will break deserialization because bincode uses their order to determine the enum tag.
+///   - Don't do it¹.
+///
+/// ¹: if you really want to do it, make sure you can reload your entire database from scratch.
 #[cfg(test)]
 mod tests {
     use std::env;
     use std::fmt::Debug;
     use std::fs;
     use std::marker::PhantomData;
-    use std::ops;
     use std::path::Path;
 
     use anyhow::bail;
@@ -91,7 +139,6 @@ mod tests {
     use anyhow::Result;
     use fake::Dummy;
     use fake::Faker;
-    use itertools::Itertools;
 
     use super::*;
     use crate::ext::not;
@@ -99,8 +146,61 @@ mod tests {
     use crate::utils::test_utils::fake_first;
     use crate::utils::test_utils::glob_to_string_paths;
 
-    fn get_snapshot_folder_path_and_parent_path(name: &str) -> String {
-        format!("tests/fixtures/cf_versions/{name}")
+    /// A drop bomb that guarantees that all variants of an enum have been tested.
+    struct EnumCoverageDropBombChecker<CfValue>
+    where
+        CfValue: VariantNames + ToCfName,
+    {
+        confirmations: Vec<TestRunConfirmation<CfValue>>,
+    }
+
+    impl<CfValue> EnumCoverageDropBombChecker<CfValue>
+    where
+        CfValue: VariantNames + ToCfName,
+    {
+        fn new() -> Self {
+            Self { confirmations: Vec::new() }
+        }
+
+        fn add(&mut self, rhs: TestRunConfirmation<CfValue>) {
+            self.confirmations.push(rhs);
+        }
+    }
+
+    impl<CfValue> Drop for EnumCoverageDropBombChecker<CfValue>
+    where
+        CfValue: VariantNames + ToCfName,
+    {
+        fn drop(&mut self) {
+            // check for missing confirmations
+            for variant_name in CfValue::VARIANTS {
+                let found = self.confirmations.iter().find(|confirmation| confirmation.variant_name == *variant_name);
+
+                if found.is_none() {
+                    panic!(
+                        "TestRunDropBombChecker<{enum_typename}> panic on drop: cf {}: missing test for variant '{}' of enum {enum_typename}",
+                        CfValue::CF_NAME,
+                        variant_name,
+                        enum_typename = type_basename::<CfValue>(),
+                    );
+                }
+            }
+        }
+    }
+
+    /// A confirmation that a test was run for a specific variant of an enum, used by the drop bomb.
+    struct TestRunConfirmation<CfValue> {
+        variant_name: &'static str,
+        _marker: PhantomData<CfValue>,
+    }
+
+    impl<CfValue> TestRunConfirmation<CfValue> {
+        fn new(variant_name: &'static str) -> Self {
+            Self {
+                variant_name,
+                _marker: PhantomData,
+            }
+        }
     }
 
     fn get_all_bincode_snapshots_from_folder(folder: impl AsRef<str>) -> Result<Vec<String>> {
@@ -108,140 +208,39 @@ mod tests {
         glob_to_string_paths(pattern).context("failed to get all bincode snapshots from folder")
     }
 
-    struct TestRunDropBombChecker<CfValue>
-    where
-        CfValue: EnumCount,
-    {
-        name: String,
-        certificates: Vec<TestRunConfirmation<CfValue>>,
-        _marker: PhantomData<CfValue>,
-    }
-
-    impl<CfValue> TestRunDropBombChecker<CfValue>
-    where
-        CfValue: EnumCount,
-    {
-        fn new(name: impl ToString) -> Self {
-            Self {
-                name: name.to_string(),
-                certificates: Vec::new(),
-                _marker: PhantomData,
-            }
-        }
-    }
-
-    impl<CfValue> ops::BitOrAssign<TestRunConfirmation<CfValue>> for TestRunDropBombChecker<CfValue>
-    where
-        CfValue: EnumCount,
-    {
-        fn bitor_assign(&mut self, rhs: TestRunConfirmation<CfValue>) {
-            self.certificates.push(rhs);
-        }
-    }
-
-    // use CfValue::COUNT to check if all certificates were there
-    impl<CfValue> Drop for TestRunDropBombChecker<CfValue>
-    where
-        CfValue: EnumCount,
-    {
-        fn drop(&mut self) {
-            let variants = CfValue::COUNT;
-
-            for variant in 1..=variants {
-                let found = self.certificates.iter().find(|certificate| certificate.version_number == variant);
-
-                if found.is_none() {
-                    panic!(
-                        "TestRunDropBombChecker panic on drop: cf {}: missing certificate for variant {} of {}",
-                        self.name,
-                        variant,
-                        type_basename::<CfValue>()
-                    );
-                }
-            }
-        }
-    }
-
-    struct TestRunConfirmation<CfValue> {
-        version_number: usize,
-        _marker: PhantomData<CfValue>,
-    }
-
-    impl<CfValue> TestRunConfirmation<CfValue>
-    where
-        CfValue: EnumCount,
-    {
-        fn new(version_number: usize) -> Self {
-            Self {
-                version_number,
-                _marker: PhantomData,
-            }
-        }
-    }
-
     /// Store snapshots of the current serialization format for each version.
     #[test]
     fn test_snapshot_bincode_deserialization_for_single_version_enums() {
-        fn create_new_snapshots<CfValue, Inner>(name: &str) -> Result<()>
+        fn test_deserialization<CfValue, Inner, F>(inner_to_cf_value: F) -> Result<TestRunConfirmation<CfValue>>
         where
-            CfValue: From<Inner> + Serialize + EnumCount,
+            CfValue: From<Inner> + for<'de> Deserialize<'de> + Serialize + Clone + Debug + PartialEq + Into<&'static str> + ToCfName,
+            F: FnOnce(Inner) -> CfValue,
             Inner: Dummy<Faker>,
         {
-            let last_variant_number = <CfValue as EnumCount>::COUNT;
-            let snapshot_parent_path = get_snapshot_folder_path_and_parent_path(name);
-            let snapshot_path = format!("{snapshot_parent_path}/v{last_variant_number}.bincode");
-            let snapshot_path = Path::new(&snapshot_path);
+            let expected: CfValue = inner_to_cf_value(fake_first::<Inner>());
+            let variant_name: &'static str = expected.clone().into();
+            let cf_name = CfValue::CF_NAME;
 
-            if not(snapshot_path.exists()) {
-                if env::var("GEN_NEW_VARIANT_SNAPSHOT").is_ok() {
-                    let expected: CfValue = fake_first::<Inner>().into();
+            let snapshot_parent_path = format!("tests/fixtures/cf_versions/{cf_name}");
+            let snapshot_path = format!("{snapshot_parent_path}/{variant_name}.bincode");
+
+            // create snapshot if it doesn't exist
+            if not(Path::new(&snapshot_path).exists()) {
+                // -> CAREFUL WHEN UPDATING SNAPSHOTS <-
+                // the snapshots are supposed to prevent you from breaking the DB accidentally
+                // the DB must be able to deserialize older versions, and those versions can't change
+                // don't reorder variants, remove older variants or modify the data inside existing ones
+                // adding a new snapshot for a new variant is safe as long as you don't mess up in the points above
+                // -> CAREFUL WHEN UPDATING SNAPSHOTS <-
+                if env::var("DANGEROUS_UPDATE_SNAPSHOTS").is_ok() {
                     let serialized = bincode::serialize(&expected)?;
-                    fs::create_dir_all(snapshot_parent_path)?;
+                    fs::create_dir_all(&snapshot_parent_path)?;
                     fs::write(snapshot_path, serialized)?;
                 } else {
                     bail!("snapshot file at '{snapshot_path:?}' doesn't exist and GEN_NEW_VARIANT_SNAPSHOT is not set");
                 }
             }
-            Ok(())
-        }
 
-        fn check_if_snapshot_files_exist<CfValue>(name: &str) -> Result<()>
-        where
-            CfValue: EnumCount,
-        {
-            let variant_count = CfValue::COUNT;
-            let folder = get_snapshot_folder_path_and_parent_path(name);
-            let snapshots = get_all_bincode_snapshots_from_folder(&folder)?;
-            let filenames = snapshots.iter().map(|path| path.split('/').next_back().unwrap_or(path.as_str())).collect_vec();
-
-            for i in 1..=variant_count {
-                let filename = format!("v{i}.bincode");
-                ensure!(filenames.contains(&filename.as_str()), "missing snapshot file {filename} for variant {i}");
-            }
-
-            let path_past_last_version = format!("{folder}/v{}.bincode", variant_count + 1);
-            ensure!(
-                not(Path::new(&path_past_last_version).exists()),
-                "found snapshot past last version: '{path_past_last_version}', note that removing a version is a breaking change!",
-            );
-
-            Ok(())
-        }
-
-        fn test_deserialization<CfValue, Inner, F>(inner_to_cf_value: F, variant_number: usize, name: &str) -> Result<TestRunConfirmation<CfValue>>
-        where
-            CfValue: From<Inner> + for<'de> Deserialize<'de> + Debug + EnumCount + PartialEq,
-            Inner: Dummy<Faker>,
-            F: FnOnce(Inner) -> CfValue,
-        {
-            let expected: CfValue = inner_to_cf_value(fake_first::<Inner>());
-
-            if variant_number > CfValue::COUNT {
-                bail!("enum '{}' doesn't have the {variant_number}th variant", type_basename::<CfValue>());
-            }
-
-            let snapshot_parent_path = get_snapshot_folder_path_and_parent_path(name);
-            let expected_snapshot_path = format!("{snapshot_parent_path}/v{variant_number}.bincode");
             let snapshots = get_all_bincode_snapshots_from_folder(&snapshot_parent_path)?;
 
             let [snapshot_path] = snapshots.as_slice() else {
@@ -249,52 +248,35 @@ mod tests {
             };
 
             ensure!(
-                *snapshot_path == expected_snapshot_path,
-                "snapshot path {snapshot_path:?} doesn't match the expected for v1: {expected_snapshot_path:?}"
+                snapshot_path == snapshot_path,
+                "snapshot path {snapshot_path:?} doesn't match the expected for v1: {snapshot_path:?}"
             );
 
-            let deserialized = bincode::deserialize::<CfValue>(&fs::read(&expected_snapshot_path)?)?;
+            let deserialized = bincode::deserialize::<CfValue>(&fs::read(&snapshot_path)?)?;
             ensure!(
                 expected == deserialized,
                 "deserialized value doesn't match expected\n deserialized = {deserialized:?}\n expected = {expected:?}",
             );
-            Ok(TestRunConfirmation::new(variant_number))
+
+            Ok(TestRunConfirmation::new(variant_name))
         }
 
-        create_new_snapshots::<CfAccountsValue, AccountRocksdb>("accounts").unwrap();
-        create_new_snapshots::<CfAccountsHistoryValue, AccountRocksdb>("accounts_history").unwrap();
-        create_new_snapshots::<CfAccountSlotsValue, SlotValueRocksdb>("account_slots").unwrap();
-        create_new_snapshots::<CfAccountSlotsHistoryValue, SlotValueRocksdb>("account_slots_history").unwrap();
-        create_new_snapshots::<CfTransactionsValue, BlockNumberRocksdb>("transactions").unwrap();
-        create_new_snapshots::<CfBlocksByNumberValue, BlockRocksdb>("blocks_by_number").unwrap();
-        create_new_snapshots::<CfBlocksByHashValue, BlockNumberRocksdb>("blocks_by_hash").unwrap();
-        create_new_snapshots::<CfLogsValue, BlockNumberRocksdb>("logs").unwrap();
+        let mut accounts_checker = EnumCoverageDropBombChecker::<CfAccountsValue>::new();
+        let mut accounts_history_checker = EnumCoverageDropBombChecker::<CfAccountsHistoryValue>::new();
+        let mut account_slots_checker = EnumCoverageDropBombChecker::<CfAccountSlotsValue>::new();
+        let mut account_slots_history_checker = EnumCoverageDropBombChecker::<CfAccountSlotsHistoryValue>::new();
+        let mut transactions_checker = EnumCoverageDropBombChecker::<CfTransactionsValue>::new();
+        let mut blocks_by_number_checker = EnumCoverageDropBombChecker::<CfBlocksByNumberValue>::new();
+        let mut blocks_by_hash_checker = EnumCoverageDropBombChecker::<CfBlocksByHashValue>::new();
+        let mut logs_checker = EnumCoverageDropBombChecker::<CfLogsValue>::new();
 
-        check_if_snapshot_files_exist::<CfAccountsValue>("accounts").unwrap();
-        check_if_snapshot_files_exist::<CfAccountsHistoryValue>("accounts_history").unwrap();
-        check_if_snapshot_files_exist::<CfAccountSlotsValue>("account_slots").unwrap();
-        check_if_snapshot_files_exist::<CfAccountSlotsHistoryValue>("account_slots_history").unwrap();
-        check_if_snapshot_files_exist::<CfTransactionsValue>("transactions").unwrap();
-        check_if_snapshot_files_exist::<CfBlocksByNumberValue>("blocks_by_number").unwrap();
-        check_if_snapshot_files_exist::<CfBlocksByHashValue>("blocks_by_hash").unwrap();
-        check_if_snapshot_files_exist::<CfLogsValue>("logs").unwrap();
-
-        let mut accounts_checker = TestRunDropBombChecker::new("accounts");
-        let mut accounts_history_checker = TestRunDropBombChecker::new("accounts_history");
-        let mut account_slots_checker = TestRunDropBombChecker::new("account_slots");
-        let mut account_slots_history_checker = TestRunDropBombChecker::new("account_slots_history");
-        let mut transactions_checker = TestRunDropBombChecker::new("transactions");
-        let mut blocks_by_number_checker = TestRunDropBombChecker::new("blocks_by_number");
-        let mut blocks_by_hash_checker = TestRunDropBombChecker::new("blocks_by_hash");
-        let mut logs_checker = TestRunDropBombChecker::new("logs");
-
-        accounts_checker |= test_deserialization::<_, AccountRocksdb, _>(CfAccountsValue::V1, 1, "accounts").unwrap();
-        accounts_history_checker |= test_deserialization::<_, AccountRocksdb, _>(CfAccountsHistoryValue::V1, 1, "accounts_history").unwrap();
-        account_slots_checker |= test_deserialization::<_, SlotValueRocksdb, _>(CfAccountSlotsValue::V1, 1, "account_slots").unwrap();
-        account_slots_history_checker |= test_deserialization::<_, SlotValueRocksdb, _>(CfAccountSlotsHistoryValue::V1, 1, "account_slots_history").unwrap();
-        transactions_checker |= test_deserialization::<_, BlockNumberRocksdb, _>(CfTransactionsValue::V1, 1, "transactions").unwrap();
-        blocks_by_number_checker |= test_deserialization::<_, BlockRocksdb, _>(CfBlocksByNumberValue::V1, 1, "blocks_by_number").unwrap();
-        blocks_by_hash_checker |= test_deserialization::<_, BlockNumberRocksdb, _>(CfBlocksByHashValue::V1, 1, "blocks_by_hash").unwrap();
-        logs_checker |= test_deserialization::<_, BlockNumberRocksdb, _>(CfLogsValue::V1, 1, "logs").unwrap();
+        accounts_checker.add(test_deserialization::<_, AccountRocksdb, _>(CfAccountsValue::V1).unwrap());
+        accounts_history_checker.add(test_deserialization::<_, AccountRocksdb, _>(CfAccountsHistoryValue::V1).unwrap());
+        account_slots_checker.add(test_deserialization::<_, SlotValueRocksdb, _>(CfAccountSlotsValue::V1).unwrap());
+        account_slots_history_checker.add(test_deserialization::<_, SlotValueRocksdb, _>(CfAccountSlotsHistoryValue::V1).unwrap());
+        transactions_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfTransactionsValue::V1).unwrap());
+        blocks_by_number_checker.add(test_deserialization::<_, BlockRocksdb, _>(CfBlocksByNumberValue::V1).unwrap());
+        blocks_by_hash_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfBlocksByHashValue::V1).unwrap());
+        logs_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfLogsValue::V1).unwrap());
     }
 }
