@@ -65,7 +65,7 @@ pub struct CommonConfig {
     pub env: Environment,
 
     /// Stratus mode.
-    #[arg(long = "mode", env = "MODE", default_value = "stratus")]
+    #[arg(long = "mode", env = "MODE")]
     pub mode: StratusMode,
 
     /// Number of threads to execute global async tasks.
@@ -466,17 +466,13 @@ impl FromStr for Environment {
 // -----------------------------------------------------------------------------
 #[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
 pub enum StratusMode {
-    #[serde(rename = "stratus")]
-    #[strum(to_string = "stratus")]
-    Stratus,
+    #[serde(rename = "leader")]
+    #[strum(to_string = "leader")]
+    Leader,
 
-    #[serde(rename = "importer-online")]
-    #[strum(to_string = "importer-online")]
-    ImporterOnline,
-
-    #[serde(rename = "run-with-importer")]
-    #[strum(to_string = "run-with-importer")]
-    RunWithImporter,
+    #[serde(rename = "follower")]
+    #[strum(to_string = "follower")]
+    Follower,
 }
 
 impl FromStr for StratusMode {
@@ -485,9 +481,8 @@ impl FromStr for StratusMode {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         let s = s.trim().to_lowercase();
         match s.as_ref() {
-            "stratus" => Ok(Self::Stratus),
-            "importer-online" => Ok(Self::ImporterOnline),
-            "run-with-importer" => Ok(Self::RunWithImporter),
+            "leader" => Ok(Self::Leader),
+            "follower" => Ok(Self::Follower),
             s => Err(anyhow!("unknown stratus mode: \"{}\" - valid values are {:?}", s, StratusMode::VARIANTS)),
         }
     }

@@ -318,16 +318,16 @@ e2e-importer-online-up:
 
     mkdir e2e_logs
 
-    # Start Stratus with rpc miner flag
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --enable-genesis --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    # Start Stratus with leader flag
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode leader --block-mode 1s --enable-genesis --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
-    # Wait for Stratus with rpc miner flag to start
+    # Wait for Stratus with leader flag to start
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
 
-    # Start Stratus with run with importer flag
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode run-with-importer --block-mode 1s --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
+    # Start Stratus with follower flag
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode follower --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
 
-    # Wait for Stratus with run with importer flag to start
+    # Wait for Stratus with follower flag to start
     wait-service --tcp 0.0.0.0:3001 -t {{ wait_service_timeout }} -- echo
 
     if [ -d e2e/cloudwalk-contracts ]; then
