@@ -65,7 +65,7 @@ pub struct CommonConfig {
     pub env: Environment,
 
     /// Stratus mode.
-    #[arg(long = "mode", env = "MODE")]
+    #[arg(long = "mode", env = "MODE", default_value = "leader")] // should we leave a default value?
     pub mode: StratusMode,
 
     /// Number of threads to execute global async tasks.
