@@ -136,7 +136,7 @@ impl RpcSubscriptions {
                 {
                     metrics::set_rpc_subscriptions_active(subs.pending_txs.read().await.len() as u64, label::PENDING_TXS);
                     metrics::set_rpc_subscriptions_active(subs.new_heads.read().await.len() as u64, label::NEW_HEADS);
-                    RpcSubscriptionsConnected::set_log_subs_metric(&(*subs.logs.read().await))
+                    RpcSubscriptionsConnected::set_log_subs_metric(&(*subs.logs.read().await));
                 }
 
                 // await next iteration
