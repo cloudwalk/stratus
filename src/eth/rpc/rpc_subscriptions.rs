@@ -136,7 +136,7 @@ impl RpcSubscriptions {
                 {
                     metrics::set_rpc_subscriptions_active(subs.pending_txs.read().await.len() as u64, label::PENDING_TXS);
                     metrics::set_rpc_subscriptions_active(subs.new_heads.read().await.len() as u64, label::NEW_HEADS);
-                    metrics::set_rpc_subscriptions_active(subs.logs.read().await.len() as u64, label::LOGS);
+                    RpcSubscriptionsConnected::set_log_subs_metric(&(*subs.logs.read().await));
                 }
 
                 // await next iteration
@@ -402,6 +402,12 @@ impl RpcSubscriptionsConnected {
         filter_to_subscription_map.insert(filter.clone(), SubscriptionWithFilter::new(inner, filter));
 
         #[cfg(feature = "metrics")]
-        metrics::set_rpc_subscriptions_active(subs.len() as u64, label::LOGS);
+        Self::set_log_subs_metric(&subs);
+    }
+
+    #[cfg(feature = "metrics")]
+    fn set_log_subs_metric(log_subs: &HashMap<ConnectionId, HashMap<LogFilter, SubscriptionWithFilter>>) {
+        let sub_count: usize = log_subs.values().map(|value| value.len()).sum();
+        metrics::set_rpc_subscriptions_active(sub_count as u64, label::LOGS);
     }
 }
