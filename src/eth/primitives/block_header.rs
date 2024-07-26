@@ -11,6 +11,7 @@ use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
 use crate::alias::EthersBlockVoid;
+use crate::alias::EthersBytes;
 use crate::eth::consensus::append_entry;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
@@ -130,7 +131,7 @@ impl Dummy<Faker> for BlockHeader {
             hash: faker.fake_with_rng(rng),
             transactions_root: faker.fake_with_rng(rng),
             gas_used: faker.fake_with_rng(rng),
-            bloom: Default::default(),
+            bloom: LogsBloom::default(),
             timestamp: faker.fake_with_rng(rng),
             parent_hash: faker.fake_with_rng(rng),
             gas_limit: faker.fake_with_rng(rng),
@@ -160,7 +161,7 @@ where
             // block: identifiers
             hash: Some(header.hash.into()),
             number: Some(header.number.into()),
-            mix_hash: Some(Default::default()),
+            mix_hash: Some(H256::default()),
 
             // block: relation with other blocks
             uncles_hash: HASH_EMPTY_UNCLES.into(),
@@ -194,9 +195,9 @@ where
             // data
             size: Some(u64::from(header.size).into()),
             logs_bloom: Some(*header.bloom),
-            extra_data: Default::default(),
+            extra_data: EthersBytes::default(),
             state_root: header.state_root.into(),
-            seal_fields: Default::default(),
+            seal_fields: Vec::default(),
             other: OtherFields::default(),
         }
     }

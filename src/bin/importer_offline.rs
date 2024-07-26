@@ -119,19 +119,32 @@ fn execute_block_importer(
             return Ok(());
         };
 
-        // receive new tasks to execute, or exit
+        // receive blocks to execute
         let Some((blocks, receipts)) = backlog_rx.blocking_recv() else {
-            tracing::info!("{} has no more blocks to process", TASK_NAME);
+            tracing::info!("{} has no more blocks to reexecute", TASK_NAME);
             return Ok(());
         };
 
-        // imports block transactions
-        let block_start = blocks.first().unwrap().number();
-        let block_end = blocks.last().unwrap().number();
-        let blocks_len = blocks.len();
-        let receipts = ExternalReceipts::from(receipts);
+        // ensure range is not empty
+        let (Some(block_start), Some(block_end)) = (blocks.first(), blocks.last()) else {
+            let message = GlobalState::shutdown_from(TASK_NAME, "received empty block range to reexecute");
+            return log_and_err!(message);
+        };
 
-        tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "reexecuting (and importing) blocks");
+        // track operation
+        let block_start = block_start.number();
+        let block_end = block_end.number();
+        let blocks_len = blocks.len();
+        tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "reexecuting blocks");
+
+        // ensure block range have no gaps
+        if block_start.count_to(&block_end) != blocks_len as u64 {
+            let message = GlobalState::shutdown_from(TASK_NAME, "received block range with gaps to reexecute");
+            return log_and_err!(message);
+        }
+
+        // imports block transactions
+        let receipts = ExternalReceipts::from(receipts);
         let mut transaction_count = 0;
         let instant_before_execution = Instant::now();
 
@@ -230,10 +243,10 @@ async fn execute_external_rpc_storage_loader(
     }
 }
 
-async fn load_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpcStorage>, start: BlockNumber, end: BlockNumber) -> anyhow::Result<BacklogTask> {
-    tracing::info!(%start, %end, "loading blocks and receipts");
-    let blocks_task = rpc_storage.read_blocks_in_range(start, end);
-    let receipts_task = rpc_storage.read_receipts_in_range(start, end);
+async fn load_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpcStorage>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BacklogTask> {
+    tracing::info!(%block_start, %block_end, "loading blocks and receipts");
+    let blocks_task = rpc_storage.read_blocks_in_range(block_start, block_end);
+    let receipts_task = rpc_storage.read_receipts_in_range(block_start, block_end);
     try_join!(blocks_task, receipts_task)
 }
 
