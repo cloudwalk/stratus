@@ -402,6 +402,8 @@ impl RpcSubscriptionsConnected {
         filter_to_subscription_map.insert(filter.clone(), SubscriptionWithFilter::new(inner, filter));
 
         #[cfg(feature = "metrics")]
-        metrics::set_rpc_subscriptions_active(subs.len() as u64, label::LOGS);
+        let sub_count = self.logs.read().await.values().flat_map(HashMap::values).count();
+        #[cfg(feature = "metrics")]
+        metrics::set_rpc_subscriptions_active(sub_count as u64, label::LOGS);
     }
 }
