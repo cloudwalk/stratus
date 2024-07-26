@@ -408,7 +408,7 @@ impl Raft {
         tracing::info!(http_url = http_url, "changing blockchain client");
 
         *blockchain_client_lock = Some(
-            BlockchainClient::new_http(&http_url, Duration::from_secs(2))
+            BlockchainClient::new_http(Some(&http_url), Duration::from_secs(2))
                 .await
                 .expect("failed to create blockchain client")
                 .into(),
@@ -501,7 +501,9 @@ impl Raft {
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
 
-        Ok((result.tx_hash, blockchain_client.http_url.clone())) //XXX HEX
+        let http_url = blockchain_client.http_url.clone().ok_or(anyhow::anyhow!("HTTP URL is not set"))?;
+
+        Ok((result.tx_hash, http_url)) //XXX HEX
     }
 
     pub async fn should_serve(&self) -> bool {

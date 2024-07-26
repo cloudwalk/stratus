@@ -25,12 +25,12 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // init chain
-    let chain = match (config.mode, &config.importer) {
-        (StratusMode::Follower, Some(importer_config)) => Some(Arc::new(
+    let chain = match config.mode {
+        StratusMode::Follower => Some(Arc::new(
             BlockchainClient::new_http_ws(
-                importer_config.external_rpc.as_ref(),
-                importer_config.external_rpc_ws.as_deref(),
-                importer_config.external_rpc_timeout,
+                config.importer.external_rpc.as_deref(),
+                config.importer.external_rpc_ws.as_deref(),
+                config.importer.external_rpc_timeout,
             )
             .await?,
         )),
@@ -59,8 +59,9 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     .await?;
 
     // start importer
-    if let (StratusMode::Follower, Some(importer_config)) = (config.mode, config.importer) {
-        importer_config.init(executor, miner, Arc::clone(&storage), chain.unwrap())?;
+    if let StratusMode::Follower = config.mode {
+        config.importer.init(executor, miner, Arc::clone(&storage), chain.unwrap())?;
+        // fix unwrap
     }
 
     // Explicitly block the `main` thread to drop the storage.
