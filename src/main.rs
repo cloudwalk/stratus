@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use stratus::config::StratusConfig;
 use stratus::config::StratusMode;
-use stratus::eth::consensus::raft::Raft;
+use stratus::eth::consensus::simple_consensus::SimpleConsensus;
+use stratus::eth::consensus::Consensus;
 use stratus::eth::rpc::serve_rpc;
 use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
@@ -23,17 +24,6 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
 
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
-    // init consensus
-    let consensus = Some(Raft::new(
-        Arc::clone(&storage),
-        Arc::clone(&miner),
-        config.storage.perm_storage.rocks_path_prefix.clone(),
-        config.clone().candidate_peers.clone(),
-        None,
-        config.rpc_server.address,
-        config.grpc_server_address,
-    )); // for now, we force None to initiate with the current node being the leader
-
     // init chain
     let chain = match config.mode {
         StratusMode::Follower => Some(Arc::new(
@@ -47,27 +37,26 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         _ => None,
     };
 
-    // start rpc server
-    if let Some(consensus) = consensus {
-        let rpc_server_config = config.rpc_server.clone();
-        let executor_chain_id = config.executor.chain_id.into();
-        let config_clone = config.clone();
+    // init consensus
+    let consensus: Arc<dyn Consensus> = Arc::new(SimpleConsensus::new(Arc::clone(&storage), chain.as_ref().map(Arc::clone)));
 
-        serve_rpc(
-            // services
-            Arc::clone(&storage),
-            Arc::clone(&executor),
-            Arc::clone(&miner),
-            consensus,
-            // config
-            config_clone,
-            rpc_server_config,
-            executor_chain_id,
-        )
-        .await?;
-    } else {
-        return Err(anyhow::anyhow!("consensus error")); // TODO: better error handling
-    }
+    // start rpc server
+    let rpc_server_config = config.rpc_server.clone();
+    let executor_chain_id = config.executor.chain_id.into();
+    let config_clone = config.clone();
+
+    serve_rpc(
+        // services
+        Arc::clone(&storage),
+        Arc::clone(&executor),
+        Arc::clone(&miner),
+        consensus,
+        // config
+        config_clone,
+        rpc_server_config,
+        executor_chain_id,
+    )
+    .await?;
 
     // start importer
     if let StratusMode::Follower = config.mode {

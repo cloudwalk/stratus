@@ -14,7 +14,13 @@ use crate::log_and_err;
 pub struct SimpleConsensus {
     storage: Arc<StratusStorage>,
     // if blockchain_client.is_some() then this is a replica, else this is the validator
-    blockchain_client: Option<BlockchainClient>,
+    blockchain_client: Option<Arc<BlockchainClient>>,
+}
+
+impl SimpleConsensus {
+    pub fn new(storage: Arc<StratusStorage>, blockchain_client: Option<Arc<BlockchainClient>>) -> Self {
+        SimpleConsensus { storage, blockchain_client }
+    }
 }
 
 #[async_trait]

@@ -305,8 +305,8 @@ fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool 
 // Stratus - State
 // -----------------------------------------------------------------------------
 
-fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
-    Ok(build_info::as_json(ctx))
+fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    Ok(build_info::as_json())
 }
 
 fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {

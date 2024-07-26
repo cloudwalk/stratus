@@ -1,6 +1,5 @@
 use serde_json::json;
 
-use crate::eth::rpc::RpcContext;
 use crate::ext::JsonValue;
 
 // -----------------------------------------------------------------------------
@@ -59,7 +58,7 @@ pub fn version() -> &'static str {
 }
 
 /// Returns build info as JSON.
-pub fn as_json(ctx: &RpcContext) -> JsonValue {
+pub fn as_json() -> JsonValue {
     json!(
         {
             "build": {
