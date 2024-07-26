@@ -175,7 +175,7 @@ pub struct StratusConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub importer: ImporterConfig,
+    pub importer: Option<ImporterConfig>,
 
     #[deref]
     #[clap(flatten)]
