@@ -152,7 +152,8 @@ mod tests {
 
                 if found.is_none() {
                     panic!(
-                        "TestRunDropBombChecker panic on drop: : missing certificate for variant {} of {}",
+                        "TestRunDropBombChecker panic on drop: cf {}: missing certificate for variant {} of {}",
+                        self.name,
                         variant,
                         type_basename::<CfValue>()
                     );
