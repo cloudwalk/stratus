@@ -44,6 +44,9 @@ export let ETHERJS = new JsonRpcProvider(providerUrl, undefined);
 
 export function updateProviderUrl(providerName: string) {
     switch (providerName) {
+        case "run-with-importer":
+            providerUrl = "http://localhost:3001?app=e2e";
+            break;
         case "stratus":
             providerUrl = "http://localhost:3000?app=e2e";
             break;

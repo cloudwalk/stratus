@@ -43,6 +43,7 @@ macro_rules! metrics {
 macro_rules! metrics_impl_fn_inc {
     (counter $name:ident $group:ident $($label:ident)*) => {
         paste::paste! {
+            #[allow(clippy::too_many_arguments)]
             #[doc = "Add n to `" $name "` counter."]
             pub fn [<inc_n_ $name>](n: u64, $( $label: impl Into<super::MetricLabelValue> ),*) {
                 let labels = super::into_labels(
@@ -59,6 +60,7 @@ macro_rules! metrics_impl_fn_inc {
         }
 
         paste::paste! {
+            #[allow(clippy::too_many_arguments)]
             #[doc = "Add 1 to `" $name "` counter."]
             pub fn [<inc_ $name>]($( $label: impl Into<super::MetricLabelValue> ),*) {
                 let labels = super::into_labels(
@@ -76,6 +78,7 @@ macro_rules! metrics_impl_fn_inc {
     };
     (histogram_counter  $name:ident $group:ident $($label:ident)*) => {
         paste::paste! {
+            #[allow(clippy::too_many_arguments)]
             #[doc = "Add N to `" $name "` histogram."]
             pub fn [<inc_ $name>](n: usize, $( $label: impl Into<super::MetricLabelValue> ),*) {
                 let labels = super::into_labels(
@@ -93,6 +96,7 @@ macro_rules! metrics_impl_fn_inc {
     };
     (histogram_duration  $name:ident $group:ident $($label:ident)*) => {
         paste::paste! {
+            #[allow(clippy::too_many_arguments)]
             #[doc = "Add operation duration to `" $name "` histogram."]
             pub fn [<inc_ $name>](duration: std::time::Duration, $( $label: impl Into<super::MetricLabelValue> ),*) {
                 let labels = super::into_labels(
@@ -110,6 +114,7 @@ macro_rules! metrics_impl_fn_inc {
     };
     (gauge  $name:ident $group:ident $($label:ident)*) => {
         paste::paste! {
+            #[allow(clippy::too_many_arguments)]
             #[doc = "Set `" $name "` gauge."]
             pub fn [<set_ $name>](n: u64, $( $label: impl Into<super::MetricLabelValue> ),*) {
                 let labels = super::into_labels(
