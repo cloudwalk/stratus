@@ -72,7 +72,8 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
 
     // start importer
     if let StratusMode::Follower = config.mode {
-        config.importer.init(executor, miner, Arc::clone(&storage), chain.unwrap())?; // fix unwrap
+        config.importer.init(executor, miner, Arc::clone(&storage), chain.unwrap())?;
+        // fix unwrap
     }
 
     // Explicitly block the `main` thread to drop the storage.
