@@ -8,7 +8,7 @@ use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::Log;
 use crate::ext::OptionExt;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct ExecutionRocksdb {
     pub block_timestamp: UnixTimeRocksdb,
     pub execution_costs_applied: bool,

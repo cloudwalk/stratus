@@ -12,7 +12,7 @@ use super::wei::WeiRocksdb;
 use crate::eth::primitives::TransactionInput;
 use crate::ext::OptionExt;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct TransactionInputRocksdb {
     pub chain_id: Option<ChainIdRocksdb>,
     pub hash: HashRocksdb,
