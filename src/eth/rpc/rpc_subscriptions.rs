@@ -407,7 +407,7 @@ impl RpcSubscriptionsConnected {
 
     #[cfg(feature = "metrics")]
     fn set_log_subs_metric(log_subs: &HashMap<ConnectionId, HashMap<LogFilter, SubscriptionWithFilter>>) {
-        let sub_count = log_subs.values().flat_map(HashMap::values).count();
+        let sub_count: usize = log_subs.values().map(|value| value.len()).sum();
         metrics::set_rpc_subscriptions_active(sub_count as u64, label::LOGS);
     }
 }
