@@ -17,15 +17,15 @@ use super::append_entry::AppendTransactionExecutionsResponse;
 use super::append_entry::RequestVoteRequest;
 use super::append_entry::RequestVoteResponse;
 use super::append_entry::StatusCode;
-use crate::eth::consensus::append_entry::append_entry_service_server::AppendEntryServiceServer;
-use crate::eth::consensus::AppendEntryService;
-use crate::eth::consensus::LogEntryData;
-use crate::eth::consensus::PeerAddress;
-use crate::eth::consensus::Role;
+use super::Raft;
+use crate::eth::consensus::raft::append_entry::append_entry_service_server::AppendEntryServiceServer;
+use crate::eth::consensus::raft::AppendEntryService;
+use crate::eth::consensus::raft::LogEntryData;
+use crate::eth::consensus::raft::PeerAddress;
+use crate::eth::consensus::raft::Role;
 use crate::eth::miner::block_from_propagation;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::Consensus;
 use crate::ext::spawn_named;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -39,7 +39,7 @@ mod label {
 }
 
 #[allow(dead_code)]
-pub fn initialize_server(consensus: Arc<Consensus>) {
+pub fn initialize_server(consensus: Arc<Raft>) {
     const TASK_NAME: &str = "consensus::server";
     spawn_named(TASK_NAME, async move {
         tracing::info!("Starting append entry service at address: {}", consensus.grpc_address);
@@ -64,7 +64,7 @@ pub fn initialize_server(consensus: Arc<Consensus>) {
 }
 
 pub struct AppendEntryServiceImpl {
-    pub consensus: Mutex<Arc<Consensus>>,
+    pub consensus: Mutex<Arc<Raft>>,
 }
 
 #[tonic::async_trait]
@@ -87,7 +87,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
 
-        if Consensus::is_leader() {
+        if Raft::is_leader() {
             tracing::error!(sender = request_inner.leader_id, "append_transaction_executions called on leader node");
             return Err(Status::new(
                 (StatusCode::NotLeader as i32).into(),
@@ -252,7 +252,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
         let current_term = consensus.current_term.load(Ordering::SeqCst);
         let request_inner = request.into_inner();
 
-        if Consensus::is_leader() {
+        if Raft::is_leader() {
             tracing::error!(sender = request_inner.leader_id, "append_block_commit called on leader node");
             return Err(Status::new(
                 (StatusCode::NotLeader as i32).into(),
@@ -455,7 +455,7 @@ impl AppendEntryService for AppendEntryServiceImpl {
 
         if request.last_log_index >= candidate_last_log_index {
             consensus.current_term.store(request.term, Ordering::SeqCst);
-            Consensus::set_role(Role::Follower);
+            Raft::set_role(Role::Follower);
             consensus.reset_heartbeat_signal.notify_waiters(); // reset the heartbeat signal to avoid election timeout just after voting
 
             *consensus.voted_for.lock().await = Some(candidate_address.clone());
@@ -485,8 +485,8 @@ impl AppendEntryService for AppendEntryServiceImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eth::consensus::append_entry::BlockEntry;
-    use crate::eth::consensus::tests::factories::*;
+    use crate::eth::consensus::raft::append_entry::BlockEntry;
+    use crate::eth::consensus::raft::tests::factories::*;
 
     #[tokio::test]
     async fn test_append_transaction_executions_insert() {
@@ -495,7 +495,7 @@ mod tests {
             consensus: Mutex::new(Arc::clone(&consensus)),
         };
 
-        Consensus::set_role(Role::Follower);
+        Raft::set_role(Role::Follower);
 
         let executions = vec![create_mock_transaction_execution_entry(None)];
 
@@ -530,7 +530,7 @@ mod tests {
         };
 
         // Simulate the node as not a leader
-        Consensus::set_role(Role::Follower);
+        Raft::set_role(Role::Follower);
 
         let request = Request::new(AppendTransactionExecutionsRequest {
             term: 1,
@@ -557,7 +557,7 @@ mod tests {
         };
 
         // Simulate the node as a leader
-        Consensus::set_role(Role::Leader);
+        Raft::set_role(Role::Leader);
 
         let request = Request::new(AppendTransactionExecutionsRequest {
             term: 1,
@@ -614,7 +614,7 @@ mod tests {
         };
 
         // Simulate the node as a leader
-        Consensus::set_role(Role::Leader);
+        Raft::set_role(Role::Leader);
 
         let request = Request::new(AppendBlockCommitRequest {
             term: 1,

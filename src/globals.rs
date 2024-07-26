@@ -10,7 +10,6 @@ use tokio_util::sync::CancellationToken;
 
 use crate::config::load_dotenv;
 use crate::config::WithCommonConfig;
-use crate::eth::Consensus;
 use crate::ext::spawn_signal_handler;
 use crate::infra;
 use crate::infra::tracing::warn_task_cancellation;
@@ -133,15 +132,6 @@ impl GlobalState {
     pub async fn wait_shutdown_warn(task_name: &str) {
         Self::wait_shutdown().await;
         warn_task_cancellation(task_name);
-    }
-
-    // -------------------------------------------------------------------------
-    // Leadership
-    // -------------------------------------------------------------------------
-
-    /// Checks if node is leader.
-    pub fn is_leader() -> bool {
-        Consensus::is_leader()
     }
 
     // -------------------------------------------------------------------------

@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use stratus::config::StratusConfig;
 use stratus::config::StratusMode;
+use stratus::eth::consensus::raft::Raft;
 use stratus::eth::rpc::serve_rpc;
-use stratus::eth::Consensus;
 use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
 
@@ -24,7 +24,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // init consensus
-    let consensus = Some(Consensus::new(
+    let consensus = Some(Raft::new(
         Arc::clone(&storage),
         Arc::clone(&miner),
         config.storage.perm_storage.rocks_path_prefix.clone(),

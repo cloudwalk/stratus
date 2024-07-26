@@ -71,7 +71,7 @@ pub async fn serve_rpc(
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
     miner: Arc<Miner>,
-    consensus: Arc<Consensus>,
+    consensus: Arc<dyn Consensus>,
 
     // config
     app_config: impl serde::Serialize,
@@ -626,10 +626,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     if ctx.consensus.should_forward() {
         tracing::info!(%tx_hash, "forwarding eth_sendRawTransaction to leader");
         return match Handle::current().block_on(ctx.consensus.forward(data)) {
-            Ok((hash, url)) => {
-                tracing::info!(%tx_hash, %url, "forwarded eth_sendRawTransaction to leader");
-                Ok(hex_data(hash))
-            }
+            Ok(hash) => Ok(hex_data(hash)),
             Err(e) => {
                 tracing::error!(reason = ?e, %tx_hash, "failed to forward eth_sendRawTransaction to leader");
                 Err(StratusError::TransactionForwardToLeaderFailed)

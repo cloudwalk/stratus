@@ -26,7 +26,7 @@ pub struct RpcContext {
     #[allow(dead_code)] // HACK this was triggered in Rust 1.79
     pub miner: Arc<Miner>,
     pub storage: Arc<StratusStorage>,
-    pub consensus: Arc<Consensus>,
+    pub consensus: Arc<dyn Consensus>,
     pub rpc_server: RpcServerConfig,
     pub subs: Arc<RpcSubscriptionsConnected>,
 }
