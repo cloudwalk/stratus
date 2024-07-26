@@ -26,7 +26,7 @@ on:
       - 'Cargo.toml'
 
 jobs:
-  run_with_importer_test:
+  importer_test:
     strategy:
       fail-fast: false
     name: E2E Importer on BRLCToken
