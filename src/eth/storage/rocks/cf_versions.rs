@@ -108,16 +108,16 @@ mod tests {
         glob_to_string_paths(pattern).context("failed to get all bincode snapshots from folder")
     }
 
-    struct VariantTestChecker<CfValue>
+    struct TestRunDropBombChecker<CfValue>
     where
         CfValue: EnumCount,
     {
         name: String,
-        certificates: Vec<TestRunCertificate<CfValue>>,
+        certificates: Vec<TestRunConfirmation<CfValue>>,
         _marker: PhantomData<CfValue>,
     }
 
-    impl<CfValue> VariantTestChecker<CfValue>
+    impl<CfValue> TestRunDropBombChecker<CfValue>
     where
         CfValue: EnumCount,
     {
@@ -130,17 +130,17 @@ mod tests {
         }
     }
 
-    impl<CfValue> ops::BitOrAssign<TestRunCertificate<CfValue>> for VariantTestChecker<CfValue>
+    impl<CfValue> ops::BitOrAssign<TestRunConfirmation<CfValue>> for TestRunDropBombChecker<CfValue>
     where
         CfValue: EnumCount,
     {
-        fn bitor_assign(&mut self, rhs: TestRunCertificate<CfValue>) {
+        fn bitor_assign(&mut self, rhs: TestRunConfirmation<CfValue>) {
             self.certificates.push(rhs);
         }
     }
 
     // use CfValue::COUNT to check if all certificates were there
-    impl<CfValue> Drop for VariantTestChecker<CfValue>
+    impl<CfValue> Drop for TestRunDropBombChecker<CfValue>
     where
         CfValue: EnumCount,
     {
@@ -152,7 +152,7 @@ mod tests {
 
                 if found.is_none() {
                     panic!(
-                        "VariantTestChecker panic on drop: : missing certificate for variant {} of {}",
+                        "TestRunDropBombChecker panic on drop: : missing certificate for variant {} of {}",
                         variant,
                         type_basename::<CfValue>()
                     );
@@ -161,12 +161,12 @@ mod tests {
         }
     }
 
-    struct TestRunCertificate<CfValue> {
+    struct TestRunConfirmation<CfValue> {
         version_number: usize,
         _marker: PhantomData<CfValue>,
     }
 
-    impl<CfValue> TestRunCertificate<CfValue>
+    impl<CfValue> TestRunConfirmation<CfValue>
     where
         CfValue: EnumCount,
     {
@@ -227,7 +227,7 @@ mod tests {
             Ok(())
         }
 
-        fn test_deserialization<CfValue, Inner, F>(inner_to_cf_value: F, variant_number: usize, name: &str) -> Result<TestRunCertificate<CfValue>>
+        fn test_deserialization<CfValue, Inner, F>(inner_to_cf_value: F, variant_number: usize, name: &str) -> Result<TestRunConfirmation<CfValue>>
         where
             CfValue: From<Inner> + for<'de> Deserialize<'de> + Debug + EnumCount + PartialEq,
             Inner: Dummy<Faker>,
@@ -257,7 +257,7 @@ mod tests {
                 expected == deserialized,
                 "deserialized value doesn't match expected\n deserialized = {deserialized:?}\n expected = {expected:?}",
             );
-            Ok(TestRunCertificate::new(variant_number))
+            Ok(TestRunConfirmation::new(variant_number))
         }
 
         create_new_snapshots::<CfAccountsValue, AccountRocksdb>("accounts").unwrap();
@@ -278,14 +278,14 @@ mod tests {
         check_if_snapshot_files_exist::<CfBlocksByHashValue>("blocks_by_hash").unwrap();
         check_if_snapshot_files_exist::<CfLogsValue>("logs").unwrap();
 
-        let mut accounts_checker = VariantTestChecker::new("accounts");
-        let mut accounts_history_checker = VariantTestChecker::new("accounts_history");
-        let mut account_slots_checker = VariantTestChecker::new("account_slots");
-        let mut account_slots_history_checker = VariantTestChecker::new("account_slots_history");
-        let mut transactions_checker = VariantTestChecker::new("transactions");
-        let mut blocks_by_number_checker = VariantTestChecker::new("blocks_by_number");
-        let mut blocks_by_hash_checker = VariantTestChecker::new("blocks_by_hash");
-        let mut logs_checker = VariantTestChecker::new("logs");
+        let mut accounts_checker = TestRunDropBombChecker::new("accounts");
+        let mut accounts_history_checker = TestRunDropBombChecker::new("accounts_history");
+        let mut account_slots_checker = TestRunDropBombChecker::new("account_slots");
+        let mut account_slots_history_checker = TestRunDropBombChecker::new("account_slots_history");
+        let mut transactions_checker = TestRunDropBombChecker::new("transactions");
+        let mut blocks_by_number_checker = TestRunDropBombChecker::new("blocks_by_number");
+        let mut blocks_by_hash_checker = TestRunDropBombChecker::new("blocks_by_hash");
+        let mut logs_checker = TestRunDropBombChecker::new("logs");
 
         accounts_checker |= test_deserialization::<_, AccountRocksdb, _>(CfAccountsValue::V1, 1, "accounts").unwrap();
         accounts_history_checker |= test_deserialization::<_, AccountRocksdb, _>(CfAccountsHistoryValue::V1, 1, "accounts_history").unwrap();
