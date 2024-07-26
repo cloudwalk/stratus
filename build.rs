@@ -41,7 +41,7 @@ fn generate_proto_structs() {
     tonic_build::configure()
         .protoc_arg("--experimental_allow_proto3_optional")
         .compile(&["static/proto/append_entry.proto"], &["static/proto"])
-        .unwrap();
+        .expect("Compiling .proto structs should not fail");
 }
 
 // -----------------------------------------------------------------------------
@@ -63,13 +63,16 @@ fn generate_build_info() {
         .rustc_host_triple()
         .emit()
     {
-        panic!("failed to emit build information | reason={e:?}");
+        panic!("Failed to emit build information | reason={e:?}");
     };
 }
 
 // -----------------------------------------------------------------------------
 // Code generation: Contract addresses
 // -----------------------------------------------------------------------------
+type ContractAddress = [u8; 20];
+type ContractName = str;
+
 fn generate_contracts_structs() {
     write_module("contracts.rs", generate_contracts_module_content());
 }
@@ -77,7 +80,7 @@ fn generate_contracts_structs() {
 fn generate_contracts_module_content() -> String {
     let deployment_files = list_files("static/contracts-deployments/*.csv");
 
-    let mut seen = HashSet::<Vec<u8>>::new();
+    let mut seen = HashSet::<ContractAddress>::new();
     let mut contracts = phf_codegen::Map::<[u8; 20]>::new();
     for deployment_file in deployment_files {
         populate_contracts_map(&deployment_file.content, &mut seen, &mut contracts);
@@ -92,31 +95,56 @@ fn generate_contracts_module_content() -> String {
     )
 }
 
-fn populate_contracts_map(file_content: &str, seen: &mut HashSet<Vec<u8>>, contracts: &mut phf_codegen::Map<[u8; 20]>) {
+fn populate_contracts_map(file_content: &str, seen: &mut HashSet<ContractAddress>, contracts: &mut phf_codegen::Map<[u8; 20]>) {
     for line in file_content.lines() {
-        let (_, (address, name)) = parse_contract(line).unwrap();
+        let (address, name) = parse_contract(line);
 
         if seen.contains(&address) {
             continue;
         }
-        seen.insert(address.clone());
+        seen.insert(address);
 
         let name = format!("\"{name}\"");
-        contracts.entry(address.try_into().unwrap(), &name);
+        contracts.entry(address, &name);
     }
 }
 
-type ContractAddress = Vec<u8>;
-type ContractName = str;
-fn parse_contract(input: &str) -> IResult<&str, (ContractAddress, &ContractName)> {
-    let (remaining, (address, name)) = separated_pair(preceded(tag("0x"), hex_digit1), tag(","), rest)(input)?;
-    let address = const_hex::decode(address).unwrap();
-    Ok((remaining, (address, name)))
+fn parse_contract(input: &str) -> (ContractAddress, &ContractName) {
+    fn parse(input: &str) -> IResult<&str, (&str, &str)> {
+        separated_pair(preceded(tag("0x"), hex_digit1), tag(","), rest)(input)
+    }
+
+    let (_, (address, name)) = parse(input).expect("Contract deployment line should match the expected pattern | pattern=[0x<hex_address>,<name>]\n");
+
+    let address = match const_hex::decode(address) {
+        Ok(address) => address,
+        Err(e) => panic!("Failed to parse contract address as hexadecimal | value={} reason={:?}", address, e),
+    };
+
+    let address: [u8; 20] = match address.try_into() {
+        Ok(address) => address,
+        Err(address) => panic!(
+            "Contract address should have 20 bytes | value={}, len={}",
+            const_hex::encode_prefixed(&address),
+            address.len()
+        ),
+    };
+
+    (address, name)
 }
 
 // -----------------------------------------------------------------------------
 // Code generation: Solidity signatures
 // -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+enum SolidityId {
+    FunctionOrError(SolidityFunctionOrErrorId),
+    Event(SolidityEventId),
+}
+type SolidityFunctionOrErrorId = [u8; 4];
+type SolidityEventId = [u8; 32];
+type SoliditySignature = str;
 
 fn generate_signatures_structs() {
     write_module("signatures.rs", generate_signature_module_content());
@@ -126,7 +154,7 @@ fn generate_signatures_structs() {
 fn generate_signature_module_content() -> String {
     let signature_files = list_files("static/contracts/*.signatures");
 
-    let mut seen = HashSet::<Vec<u8>>::new();
+    let mut seen = HashSet::<SolidityId>::new();
     let mut signatures_4_bytes = phf_codegen::Map::<[u8; 4]>::new();
     let mut signatures_32_bytes = phf_codegen::Map::<[u8; 32]>::new();
     for signature_file in signature_files {
@@ -148,37 +176,66 @@ fn generate_signature_module_content() -> String {
 
 fn populate_signature_maps(
     file_content: &str,
-    seen: &mut HashSet<Vec<u8>>,
+    seen: &mut HashSet<SolidityId>,
     signatures_4_bytes: &mut phf_codegen::Map<[u8; 4]>,
     signatures_32_bytes: &mut phf_codegen::Map<[u8; 32]>,
 ) {
     for line in file_content.lines() {
-        if let Ok((_, (id, signature))) = parse_signature(line) {
-            if seen.contains(&id) {
-                continue;
-            }
-            seen.insert(id.clone());
+        // skip empty lines and header lines
+        if line.is_empty() || line.contains("signatures") {
+            continue;
+        }
 
-            let signature = format!("\"{}\"", signature);
-            match id.len() {
-                4 => {
-                    signatures_4_bytes.entry(id.try_into().unwrap(), &signature);
-                }
-                32 => {
-                    signatures_32_bytes.entry(id.try_into().unwrap(), &signature);
-                }
-                _ => continue,
-            };
+        // parse
+        let (id, signature) = parse_signature(line);
+
+        // check tracked
+        if seen.contains(&id) {
+            continue;
+        }
+
+        // track
+        seen.insert(id);
+        let signature = format!("\"{}\"", signature);
+        match id {
+            SolidityId::FunctionOrError(id) => {
+                signatures_4_bytes.entry(id, &signature);
+            }
+            SolidityId::Event(id) => {
+                signatures_32_bytes.entry(id, &signature);
+            }
         }
     }
 }
 
-type SolidityId = Vec<u8>;
-type SoliditySignature = str;
-fn parse_signature(input: &str) -> IResult<&str, (SolidityId, &SoliditySignature)> {
-    let (remaining, (id, signature)) = separated_pair(hex_digit1, tag(": "), rest)(input)?;
-    let id = const_hex::decode(id).unwrap();
-    Ok((remaining, (id, signature)))
+fn parse_signature(input: &str) -> (SolidityId, &SoliditySignature) {
+    fn parse(input: &str) -> IResult<&str, (&str, &str)> {
+        separated_pair(hex_digit1, tag(": "), rest)(input)
+    }
+    let (_, (id, signature)) = parse(input).expect("Solidity signature line should match the expected pattern | pattern=[0x<hex_id>: <signature>]\n");
+    let id = match const_hex::decode(id) {
+        Ok(id) => id,
+        Err(e) => panic!("Failed to parse Solidity ID as hexadecimal | value={} reason={:?}", id, e),
+    };
+
+    // try to parse 32 bytes
+    let id_result: Result<SolidityEventId, Vec<u8>> = id.clone().try_into();
+    if let Ok(id) = id_result {
+        return (SolidityId::Event(id), signature);
+    }
+
+    // try to parse 4 bytes
+    let id_result: Result<SolidityFunctionOrErrorId, Vec<u8>> = id.clone().try_into();
+    if let Ok(id) = id_result {
+        return (SolidityId::FunctionOrError(id), signature);
+    }
+
+    // failure
+    panic!(
+        "Failed to parse Solidity ID as function, error or event | id={} len={}",
+        const_hex::encode_prefixed(&id),
+        id.len()
+    );
 }
 
 // -----------------------------------------------------------------------------
@@ -195,7 +252,7 @@ fn list_files(pattern: &'static str) -> Vec<InputFile> {
     // list files
     let filenames: Vec<PathBuf> = glob(pattern)
         .expect("Listing files should not fail")
-        .map(|x| x.expect("Listing file should not fail"))
+        .map(|x| x.expect("Listing files should not fail"))
         .collect();
 
     // ensure at least one exists
@@ -220,6 +277,6 @@ fn write_module(file_basename: &'static str, file_content: String) {
     let out_dir = env::var_os("OUT_DIR").map(PathBuf::from).expect("Compiler should set OUT_DIR");
     let module_path = out_dir.join(file_basename);
     if let Err(e) = fs::write(&module_path, file_content) {
-        panic!("failed to write to file {module_path:?} | reason={e:?}");
+        panic!("Failed to write to file {module_path:?} | reason={e:?}");
     }
 }
