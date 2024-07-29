@@ -123,26 +123,32 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
         }
     };
 
-    let subscriber_builder = tracing_subscriber::registry()
+    // configure tokio-console layer
+    let tokio_console_layer = match tokio_console_address {
+        Some(tokio_console_address) => {
+            println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
+
+            let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
+            spawn_named("console::grpc-server", async move {
+                if let Err(e) = console_server.serve().await {
+                    tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
+                };
+            });
+            Some(console_layer)
+        }
+        None => {
+            println!("tracing registry: skipping tokio-console");
+            None
+        }
+    };
+
+    let result = tracing_subscriber::registry()
         .with(tracing_context_layer)
         .with(stdout_layer)
         .with(opentelemetry_layer)
-        .with(sentry_layer);
-
-    // configure tokio-console layer
-    let result = if let Some(tokio_console_address) = tokio_console_address {
-        println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
-
-        let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
-        spawn_named("console::grpc-server", async move {
-            if let Err(e) = console_server.serve().await {
-                tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
-            };
-        });
-        subscriber_builder.with(console_layer).try_init()
-    } else {
-        subscriber_builder.try_init()
-    };
+        .with(sentry_layer)
+        .with(tokio_console_layer)
+        .try_init();
 
     match result {
         Ok(()) => Ok(()),
