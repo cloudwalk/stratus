@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use crate::eth::primitives::Nonce;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct NonceRocksdb(u64);
 
 gen_newtype_from!(self = NonceRocksdb, other = u64);
