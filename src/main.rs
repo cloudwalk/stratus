@@ -60,10 +60,6 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     }
 
     // init rpc server
-    let rpc_server_config = config.rpc_server.clone();
-    let executor_chain_id = config.executor.chain_id.into();
-    let config_clone = config.clone();
-
     serve_rpc(
         // services
         Arc::clone(&storage),
@@ -71,9 +67,9 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         miner,
         consensus,
         // config
-        config_clone,
-        rpc_server_config,
-        executor_chain_id,
+        config.clone(),
+        config.rpc_server,
+        config.executor.chain_id.into(),
     )
     .await?;
 
