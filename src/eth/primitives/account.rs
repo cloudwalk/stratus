@@ -100,7 +100,7 @@ impl From<&Account> for RevmAccountInfo {
 // -----------------------------------------------------------------------------
 
 /// Accounts to be used only in development-mode.
-pub fn dev_accounts() -> Vec<Account> {
+pub fn test_accounts() -> Vec<Account> {
     use hex_literal::hex;
 
     [
