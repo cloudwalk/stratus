@@ -12,14 +12,15 @@ use crate::ext::parse_duration;
 use crate::ext::spawn_named;
 use crate::infra::BlockchainClient;
 
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+#[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize)]
+#[group(requires_all = ["external_rpc", "external_rpc_ws"])]
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
-    pub external_rpc: Option<String>, // TODO BEFORE MERGE: make required
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", required = false)]
+    pub external_rpc: String,
 
     /// External RPC WS endpoint to sync blocks with Stratus.
-    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS")]
+    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS", required = false)]
     pub external_rpc_ws: Option<String>,
 
     /// Timeout for blockchain requests (importer online)

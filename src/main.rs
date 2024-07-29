@@ -26,29 +26,40 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
 
     // init chain
     let chain = match config.mode {
-        StratusMode::Follower => Some(Arc::new(
-            BlockchainClient::new_http_ws(
-                config.importer.external_rpc.as_deref(),
-                config.importer.external_rpc_ws.as_deref(),
-                config.importer.external_rpc_timeout,
-            )
-            .await?,
-        )),
-        _ => None,
+        StratusMode::Leader => None,
+        StratusMode::Follower => {
+            let importer_config = config.importer.as_ref().ok_or(anyhow::anyhow!("importer config is not set"))?;
+            Some(Arc::new(
+                BlockchainClient::new_http_ws(
+                    importer_config.external_rpc.as_ref(),
+                    importer_config.external_rpc_ws.as_deref(),
+                    importer_config.external_rpc_timeout,
+                )
+                .await?,
+            ))
+        }
     };
 
     // init consensus
     let consensus: Arc<dyn Consensus> = Arc::new(SimpleConsensus::new(Arc::clone(&storage), chain.clone()));
 
-    // start importer
-    if let StratusMode::Follower = config.mode {
-        config
-            .importer
-            .init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), chain.unwrap())?;
-        // fix unwrap
+    // init importer
+    match config.mode {
+        StratusMode::Leader => {}
+        StratusMode::Follower => match config.importer.as_ref() {
+            Some(importer_config) =>
+                if let Some(chain) = chain {
+                    importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), chain)?;
+                } else {
+                    return Err(anyhow::anyhow!("chain is not initialized"));
+                },
+            None => {
+                return Err(anyhow::anyhow!("importer config is not set"));
+            }
+        },
     }
 
-    // start rpc server
+    // init rpc server
     let rpc_server_config = config.rpc_server.clone();
     let executor_chain_id = config.executor.chain_id.into();
     let config_clone = config.clone();

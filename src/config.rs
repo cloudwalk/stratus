@@ -1,5 +1,6 @@
 //! Application configuration.
 
+use std::any::Any;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
@@ -54,6 +55,7 @@ pub fn load_dotenv() {
 
 pub trait WithCommonConfig {
     fn common(&self) -> &CommonConfig;
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// Configuration that can be used by any binary.
@@ -106,6 +108,10 @@ pub struct CommonConfig {
 
 impl WithCommonConfig for CommonConfig {
     fn common(&self) -> &CommonConfig {
+        self
+    }
+
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -175,7 +181,7 @@ pub struct StratusConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub importer: ImporterConfig,
+    pub importer: Option<ImporterConfig>,
 
     #[deref]
     #[clap(flatten)]
@@ -185,6 +191,10 @@ pub struct StratusConfig {
 impl WithCommonConfig for StratusConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -226,6 +236,10 @@ pub struct RpcDownloaderConfig {
 impl WithCommonConfig for RpcDownloaderConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -277,6 +291,10 @@ impl WithCommonConfig for ImporterOfflineConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -325,6 +343,10 @@ impl WithCommonConfig for ImporterOnlineConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
@@ -355,6 +377,10 @@ pub struct RunWithImporterConfig {
 impl WithCommonConfig for RunWithImporterConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -397,6 +423,10 @@ impl WithCommonConfig for StateValidatorConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -426,6 +456,10 @@ pub struct IntegrationTestConfig {
 impl WithCommonConfig for IntegrationTestConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -464,7 +498,7 @@ impl FromStr for Environment {
 // -----------------------------------------------------------------------------
 // Enum: Stratus Mode
 // -----------------------------------------------------------------------------
-#[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
+#[derive(DebugAsJson, PartialEq, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
 pub enum StratusMode {
     #[serde(rename = "leader")]
     #[strum(to_string = "leader")]
@@ -506,5 +540,29 @@ impl FromStr for ValidatorMethodConfig {
             "compare_tables" => Ok(Self::CompareTables),
             s => Ok(Self::Rpc { url: s.to_string() }),
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: Configuration Checks
+// -----------------------------------------------------------------------------
+
+pub trait ConfigChecks {
+    fn perform_checks(&self) -> anyhow::Result<()>;
+}
+
+impl ConfigChecks for StratusConfig {
+    fn perform_checks(&self) -> anyhow::Result<()> {
+        match self.mode {
+            StratusMode::Leader =>
+                if self.importer.is_some() {
+                    return Err(anyhow::anyhow!("importer config must not be set when stratus mode is leader"));
+                },
+            StratusMode::Follower =>
+                if self.importer.is_none() {
+                    return Err(anyhow::anyhow!("importer config must be set when stratus mode is follower"));
+                },
+        }
+        Ok(())
     }
 }
