@@ -79,7 +79,7 @@ pub struct CommonConfig {
     pub metrics_exporter_address: SocketAddr,
 
     // Address where Tokio Console GRPC server will be exposed.
-    #[arg(long = "tokio-console-address", env = "TRACING_TOKIO_CONSOLE_ADDRESS", default_value = "0.0.0.0:6669")]
+    #[arg(long = "tokio-console-address", env = "TRACING_TOKIO_CONSOLE_ADDRESS")]
     pub tokio_console_address: Option<SocketAddr>,
 
     /// Sentry URL where error events will be pushed.
