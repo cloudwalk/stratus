@@ -87,9 +87,9 @@ impl PermanentStorage for RedisPermanentStorage {
 
         // transactions
         for tx in &block.transactions {
-            let tx_key = format!("tx::{}", tx.input.hash);
-            let tx_value = to_json_string(&tx);
-            redis_values.push((tx_key, tx_value));
+            let key = tx_key(&tx.input.hash);
+            let value = to_json_string(&tx);
+            redis_values.push((key, value));
         }
 
         // changes
@@ -105,14 +105,14 @@ impl PermanentStorage for RedisPermanentStorage {
             if let Some(bytecode) = changes.bytecode.take() {
                 account.bytecode = bytecode;
             }
-            let account_key = format!("account::{}", account.address);
+            let account_key = account_key(&account.address);
             let account_value = to_json_string(&account);
             redis_values.push((account_key, account_value));
 
             // slot
             for slot in changes.slots.into_values() {
                 if let Some(slot) = slot.take() {
-                    let slot_key = format!("slot::{}::{}", account.address, slot.index);
+                    let slot_key = slot_key(&account.address, &slot.index);
                     let slot_value = to_json_string(&slot);
                     redis_values.push((slot_key, slot_value));
                 }
@@ -129,7 +129,7 @@ impl PermanentStorage for RedisPermanentStorage {
     }
 
     fn read_block(&self, block_filter: &BlockFilter) -> anyhow::Result<Option<Block>> {
-        let key = match block_filter {
+        let block_key = match block_filter {
             BlockFilter::Latest | BlockFilter::Pending => "block::latest".to_owned(),
             BlockFilter::Earliest => "block::earliest".to_owned(),
             BlockFilter::Hash(hash) => format!("block::{}", hash),
@@ -138,7 +138,7 @@ impl PermanentStorage for RedisPermanentStorage {
 
         // execute command
         let mut conn = self.conn()?;
-        let redis_block: RedisOptJsonResult = conn.get(key);
+        let redis_block: RedisOptJsonResult = conn.get(block_key);
 
         // parse
         match redis_block {
@@ -149,11 +149,11 @@ impl PermanentStorage for RedisPermanentStorage {
     }
 
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        let key = format!("tx::{}", hash);
+        let tx_key = tx_key(hash);
 
         // execute command
         let mut conn = self.conn()?;
-        let redis_transaction: RedisOptJsonResult = conn.get(key);
+        let redis_transaction: RedisOptJsonResult = conn.get(tx_key);
 
         // parse
         match redis_transaction {
@@ -175,9 +175,9 @@ impl PermanentStorage for RedisPermanentStorage {
         let redis_accounts = accounts
             .into_iter()
             .map(|acc| {
-                let key = format!("account::{}", acc.address);
-                let value = to_json_string(&acc);
-                (key, value)
+                let account_key = account_key(&acc.address);
+                let account_value = to_json_string(&acc);
+                (account_key, account_value)
             })
             .collect_vec();
 
@@ -192,13 +192,13 @@ impl PermanentStorage for RedisPermanentStorage {
     }
 
     fn read_account(&self, address: &Address, point_in_time: &crate::eth::storage::StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        let key = format!("account::{}", address);
+        let account_key = account_key(address);
 
         // execute and parse
         let mut conn = self.conn()?;
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => {
-                let redis_account: RedisOptJsonResult = conn.get(key);
+                let redis_account: RedisOptJsonResult = conn.get(account_key);
                 match redis_account {
                     Ok(Some(json)) => Ok(Some(from_json_str(&json))),
                     Ok(None) => Ok(None),
@@ -210,13 +210,13 @@ impl PermanentStorage for RedisPermanentStorage {
     }
 
     fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &crate::eth::storage::StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        let key = format!("slot::{}::{}", address, index);
+        let slot_key = slot_key(address, index);
 
         // execute and parse
         let mut conn = self.conn()?;
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => {
-                let redis_slot: RedisOptJsonResult = conn.get(key);
+                let redis_slot: RedisOptJsonResult = conn.get(slot_key);
                 match redis_slot {
                     Ok(Some(json)) => Ok(Some(from_json_str(&json))),
                     Ok(None) => Ok(None),
@@ -235,4 +235,23 @@ impl PermanentStorage for RedisPermanentStorage {
             Err(e) => log_and_err!(reason = e, "failed to clear all redis keys"),
         }
     }
+}
+
+// -----------------------------------------------------------------------------
+// Keys helpers
+// -----------------------------------------------------------------------------
+
+/// Generates a key for accessing an account.
+fn account_key(address: &Address) -> String {
+    format!("account::{}", address)
+}
+
+/// Generates a key for accessing a slot.
+fn slot_key(address: &Address, index: &SlotIndex) -> String {
+    format!("slot::{}::{}", address, index)
+}
+
+/// Generates a key for accessing a transaction.
+fn tx_key(hash: &Hash) -> String {
+    format!("tx::{}", hash)
 }
