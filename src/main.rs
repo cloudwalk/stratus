@@ -40,6 +40,14 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     // init consensus
     let consensus: Arc<dyn Consensus> = Arc::new(SimpleConsensus::new(Arc::clone(&storage), chain.clone()));
 
+    // start importer
+    if let StratusMode::Follower = config.mode {
+        config
+            .importer
+            .init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), chain.unwrap())?;
+        // fix unwrap
+    }
+
     // start rpc server
     let rpc_server_config = config.rpc_server.clone();
     let executor_chain_id = config.executor.chain_id.into();
@@ -48,8 +56,8 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     serve_rpc(
         // services
         Arc::clone(&storage),
-        Arc::clone(&executor),
-        Arc::clone(&miner),
+        executor,
+        miner,
         consensus,
         // config
         config_clone,
@@ -57,12 +65,6 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         executor_chain_id,
     )
     .await?;
-
-    // start importer
-    if let StratusMode::Follower = config.mode {
-        config.importer.init(executor, miner, Arc::clone(&storage), chain.unwrap())?;
-        // fix unwrap
-    }
 
     // Explicitly block the `main` thread to drop the storage.
     drop(storage);
