@@ -255,6 +255,10 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                 }
             };
 
+            if GlobalState::is_shutdown_warn(TASK_NAME) {
+                return Ok(());
+            }
+
             // resubscribe if necessary.
             // only update the existing subscription if succedeed, otherwise we will try again in the next iteration.
             if chain.supports_ws() && resubscribe_ws {
@@ -269,6 +273,10 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                     }
                 }
             }
+        }
+
+        if GlobalState::is_shutdown_warn(TASK_NAME) {
+            return Ok(());
         }
 
         // fallback to polling
