@@ -27,11 +27,6 @@ pub struct MinerConfig {
     /// Generates genesis block on startup when it does not exist.
     #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
     pub enable_genesis: bool,
-
-    /// Enables test accounts with max wei on startup.
-    #[cfg(feature = "dev")]
-    #[arg(long = "enable-test-accounts", env = "ENABLE_TEST_ACCOUNTS", default_value = "false")]
-    pub enable_test_accounts: bool,
 }
 
 impl MinerConfig {
@@ -63,7 +58,7 @@ impl MinerConfig {
 
         // enable test accounts
         #[cfg(feature = "dev")]
-        if self.enable_test_accounts {
+        {
             let test_accounts = test_accounts();
             tracing::info!(accounts = ?test_accounts, "enabling test accounts");
             storage.save_accounts(test_accounts)?;
