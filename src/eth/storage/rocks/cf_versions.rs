@@ -256,7 +256,7 @@ mod tests {
                 "snapshot path {snapshot_path:?} doesn't match the expected for v1: {snapshot_path:?}"
             );
 
-            let deserialized = bincode::deserialize::<CfValue>(&fs::read(&snapshot_path)?)?;
+            let deserialized = bincode::deserialize::<CfValue>(&fs::read(snapshot_path)?)?;
             ensure!(
                 expected == deserialized,
                 "deserialized value doesn't match expected\n deserialized = {deserialized:?}\n expected = {expected:?}",
