@@ -4,7 +4,7 @@ use ethereum_types::U256;
 
 use crate::eth::primitives::Wei;
 
-#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct WeiRocksdb([u64; 4]);
 
 impl From<U256> for WeiRocksdb {

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 
-#[derive(Clone, Debug, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct SlotValueRocksdb([u64; 4]);
 
 impl From<SlotValue> for SlotValueRocksdb {
@@ -18,7 +18,7 @@ impl From<SlotValueRocksdb> for SlotValue {
     }
 }
 
-#[derive(Clone, Debug, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Copy, Default, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct SlotIndexRocksdb([u64; 4]);
 
 impl From<SlotIndex> for SlotIndexRocksdb {

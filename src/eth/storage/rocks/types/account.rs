@@ -10,7 +10,7 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::ext::OptionExt;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct AccountRocksdb {
     pub balance: WeiRocksdb,
     pub nonce: NonceRocksdb,
@@ -48,16 +48,6 @@ impl From<Account> for AccountRocksdb {
             balance: value.balance.into(),
             nonce: value.nonce.into(),
             bytecode: value.bytecode.map_into(),
-        }
-    }
-}
-
-impl Default for AccountRocksdb {
-    fn default() -> Self {
-        Self {
-            balance: WeiRocksdb::ZERO,
-            nonce: NonceRocksdb::ZERO,
-            bytecode: None,
         }
     }
 }

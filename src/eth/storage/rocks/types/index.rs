@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::eth::primitives::Index;
 
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Copy, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_more::Add, Copy, Hash, fake::Dummy)]
 pub struct IndexRocksdb(u64);
 
 impl IndexRocksdb {

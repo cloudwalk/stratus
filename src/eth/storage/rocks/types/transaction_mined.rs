@@ -9,7 +9,7 @@ use super::transaction_input::TransactionInputRocksdb;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionMined;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct TransactionMinedRocksdb {
     pub input: TransactionInputRocksdb,
     pub execution: ExecutionRocksdb,
