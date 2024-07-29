@@ -57,7 +57,7 @@ use crate::infra::tracing::TracingLogFormat;
 use crate::infra::tracing::TracingProtocol;
 
 /// Init application tracing.
-pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, tokio_console_address: SocketAddr) -> anyhow::Result<()> {
+pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, tokio_console_address: Option<SocketAddr>) -> anyhow::Result<()> {
     println!("creating tracing registry");
 
     // configure tracing context layer
@@ -123,23 +123,26 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
         }
     };
 
-    // configure tokio-console layer
-    println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
-    //let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
-    //spawn_named("console::grpc-server", async move {
-    //    if let Err(e) = console_server.serve().await {
-    //        tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
-    //    };
-    //});
-
-    // init registry
-    let result = tracing_subscriber::registry()
+    let subscriber_builder = tracing_subscriber::registry()
         .with(tracing_context_layer)
         .with(stdout_layer)
         .with(opentelemetry_layer)
-        .with(sentry_layer)
-        //.with(console_layer)
-        .try_init();
+        .with(sentry_layer);
+
+    // configure tokio-console layer
+    let result = if let Some(tokio_console_address) = tokio_console_address {
+        println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
+
+        let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
+        spawn_named("console::grpc-server", async move {
+            if let Err(e) = console_server.serve().await {
+                tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
+            };
+        });
+        subscriber_builder.with(console_layer).try_init()
+    } else {
+        subscriber_builder.try_init()
+    };
 
     match result {
         Ok(()) => Ok(()),
