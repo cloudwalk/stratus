@@ -9,6 +9,7 @@ use crate::eth::importer::Importer;
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
 use crate::ext::parse_duration;
+use crate::ext::spawn_named;
 use crate::infra::BlockchainClient;
 
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
@@ -37,6 +38,7 @@ impl ImporterConfig {
         storage: Arc<StratusStorage>,
         chain: Arc<BlockchainClient>,
     ) -> anyhow::Result<Arc<Importer>> {
+        const TASK_NAME: &str = "importer::init";
         tracing::info!(config = ?self, "creating importer");
 
         let config = self.clone();
@@ -44,7 +46,7 @@ impl ImporterConfig {
         let importer = Importer::new(executor, miner, Arc::clone(&storage), chain, config.sync_interval);
         let importer = Arc::new(importer);
 
-        tokio::spawn({
+        spawn_named(TASK_NAME, {
             let importer = Arc::clone(&importer);
             async move {
                 if let Err(e) = importer.run_importer_online().await {
