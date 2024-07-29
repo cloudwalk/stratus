@@ -4,7 +4,7 @@ use std::ops::Add;
 use crate::eth::primitives::BlockNumber;
 use crate::gen_newtype_from;
 
-#[derive(Debug, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Ord, PartialOrd, Hash, derive_more::Display, fake::Dummy)]
 pub struct BlockNumberRocksdb(pub u64);
 
 gen_newtype_from!(self = BlockNumberRocksdb, other = u8, u16, u32, u64);

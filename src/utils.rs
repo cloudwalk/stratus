@@ -39,8 +39,10 @@ impl Drop for DropTimer {
 
 #[cfg(test)]
 pub mod test_utils {
+    use anyhow::Context;
     use fake::Fake;
     use fake::Faker;
+    use glob::glob;
     use rand::rngs::SmallRng;
     use rand::SeedableRng;
 
@@ -62,5 +64,20 @@ pub mod test_utils {
     pub fn fake_first<T: fake::Dummy<Faker>>() -> T {
         let mut rng = deterministic_rng();
         Faker.fake_with_rng::<T, _>(&mut rng)
+    }
+
+    pub fn glob_to_string_paths(pattern: impl AsRef<str>) -> anyhow::Result<Vec<String>> {
+        let pattern = pattern.as_ref();
+
+        let iter = glob(pattern).with_context(|| format!("failed to parse glob pattern: {pattern}"))?;
+        let mut paths = vec![];
+
+        for entry in iter {
+            let entry = entry.with_context(|| format!("failed to read glob entry with pattern: {pattern}"))?;
+            let path = entry.to_str().with_context(|| format!("failed to convert path to string: {entry:?}"))?;
+            paths.push(path.to_owned());
+        }
+
+        Ok(paths)
     }
 }
