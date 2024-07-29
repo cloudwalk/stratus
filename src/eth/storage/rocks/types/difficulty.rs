@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::eth::primitives::Difficulty;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 #[serde(transparent)]
 pub struct DifficultyRocksdb([u64; 4]);
 

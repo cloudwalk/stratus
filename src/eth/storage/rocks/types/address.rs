@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::eth::primitives::Address;
 
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct AddressRocksdb([u8; 20]);
 
 impl AddressRocksdb {

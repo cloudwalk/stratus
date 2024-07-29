@@ -8,7 +8,7 @@ use ethereum_types::Bloom;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde_with::DeserializeFromStr, serde_with::SerializeDisplay)]
+#[derive(Debug, Clone, PartialEq, Eq, serde_with::DeserializeFromStr, serde_with::SerializeDisplay, fake::Dummy)]
 pub struct LogsBloomRocksdb([u8; 256]);
 
 gen_newtype_from!(self = LogsBloomRocksdb, other = Bloom, LogsBloom);
