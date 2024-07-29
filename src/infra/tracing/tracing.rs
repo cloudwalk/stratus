@@ -125,12 +125,12 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
 
     // configure tokio-console layer
     println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
-    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
-    spawn_named("console::grpc-server", async move {
-        if let Err(e) = console_server.serve().await {
-            tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
-        };
-    });
+    //let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
+    //spawn_named("console::grpc-server", async move {
+    //    if let Err(e) = console_server.serve().await {
+    //        tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
+    //    };
+    //});
 
     // init registry
     let result = tracing_subscriber::registry()
@@ -138,7 +138,7 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
         .with(stdout_layer)
         .with(opentelemetry_layer)
         .with(sentry_layer)
-        .with(console_layer)
+        //.with(console_layer)
         .try_init();
 
     match result {
