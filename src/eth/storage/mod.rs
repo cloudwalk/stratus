@@ -6,6 +6,7 @@ mod permanent_storage;
 mod postgres_external_rpc;
 pub mod rocks;
 
+mod redis;
 mod storage_point_in_time;
 mod stratus_storage;
 mod temporary_storage;
