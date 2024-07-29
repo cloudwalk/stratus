@@ -87,9 +87,9 @@ impl PermanentStorage for RedisPermanentStorage {
 
         // transactions
         for tx in &block.transactions {
-            let key = tx_key(&tx.input.hash);
-            let value = to_json_string(&tx);
-            redis_values.push((key, value));
+            let tx_key = tx_key(&tx.input.hash);
+            let tx_value = to_json_string(&tx);
+            redis_values.push((tx_key, tx_value));
         }
 
         // changes
