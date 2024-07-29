@@ -137,7 +137,7 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
             Some(console_layer)
         }
         None => {
-            println!("tracing registry: skipping tokio-console");
+            println!("tracing registry: skipping tokio-console exporter");
             None
         }
     };
