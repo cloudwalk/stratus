@@ -242,15 +242,21 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                     continue;
                 }
                 Ok(None) => {
-                    tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
+                    if !GlobalState::is_shutdown_warn(TASK_NAME) {
+                        tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
+                    }
                     true
                 }
                 Ok(Some(Err(e))) => {
-                    tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
+                    if !GlobalState::is_shutdown_warn(TASK_NAME) {
+                        tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
+                    }
                     true
                 }
                 Err(_) => {
-                    tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
+                    if !GlobalState::is_shutdown_warn(TASK_NAME) {
+                        tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
+                    }
                     true
                 }
             };
@@ -268,9 +274,10 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                         tracing::info!("{} resubscribed to newHeads event", TASK_NAME);
                         sub_new_heads = Some(sub);
                     }
-                    Err(e) => {
-                        tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
-                    }
+                    Err(e) =>
+                        if !GlobalState::is_shutdown_warn(TASK_NAME) {
+                            tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
+                        },
                 }
             }
         }
@@ -291,9 +298,10 @@ async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Durat
                 set_external_rpc_current_block(block_number);
                 traced_sleep(sync_interval, SleepReason::SyncData).await;
             }
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to retrieve block number. retrying now.");
-            }
+            Err(e) =>
+                if !GlobalState::is_shutdown_warn(TASK_NAME) {
+                    tracing::error!(reason = ?e, "failed to retrieve block number. retrying now.");
+                },
         }
     }
 }
