@@ -12,7 +12,6 @@ use std::thread::Thread;
 use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
-use console_subscriber::ConsoleLayer;
 use itertools::Itertools;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::Protocol;
@@ -47,7 +46,6 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
 use crate::ext::not;
-use crate::ext::spawn_named;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::ext::JsonValue;
@@ -57,7 +55,7 @@ use crate::infra::tracing::TracingLogFormat;
 use crate::infra::tracing::TracingProtocol;
 
 /// Init application tracing.
-pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, tokio_console_address: SocketAddr) -> anyhow::Result<()> {
+pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, _tokio_console_address: SocketAddr) -> anyhow::Result<()> {
     println!("creating tracing registry");
 
     // configure tracing context layer
@@ -123,22 +121,12 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
         }
     };
 
-    // configure tokio-console layer
-    println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
-    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
-    spawn_named("console::grpc-server", async move {
-        if let Err(e) = console_server.serve().await {
-            tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
-        };
-    });
-
     // init registry
     let result = tracing_subscriber::registry()
         .with(tracing_context_layer)
         .with(stdout_layer)
         .with(opentelemetry_layer)
         .with(sentry_layer)
-        .with(console_layer)
         .try_init();
 
     match result {
