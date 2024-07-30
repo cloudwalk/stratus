@@ -65,7 +65,7 @@ impl BlockHeader {
             gas_limit: Gas::ZERO,
             bloom: LogsBloom::default(),
             timestamp,
-            parent_hash: number.prev().map(|n| n.hash()).unwrap_or(Hash::zero()),
+            parent_hash: number.prev().map(|n| n.hash()).unwrap_or(Hash::ZERO),
             author: Address::default(),
             extra_data: Bytes::default(),
             miner: Address::default(),
@@ -237,5 +237,37 @@ impl From<BlockHeader> for SubscriptionMessage {
     fn from(value: BlockHeader) -> Self {
         let ethers_block = EthersBlockVoid::from(value);
         Self::from_json(&ethers_block).expect_infallible()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tests
+// -----------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use crate::eth::primitives::BlockHeader;
+    use crate::eth::primitives::BlockNumber;
+    use crate::eth::primitives::Hash;
+    use crate::eth::primitives::UnixTime;
+
+    #[test]
+    fn block_header_hash_calculation() {
+        let header = BlockHeader::new(BlockNumber::ZERO, UnixTime::from(1234567890));
+        assert_eq!(header.hash.to_string(), "0x011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce");
+    }
+
+    #[test]
+    fn block_header_parent_hash() {
+        let header = BlockHeader::new(BlockNumber::ONE, UnixTime::from(1234567891));
+        assert_eq!(
+            header.parent_hash.to_string(),
+            "0x011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce"
+        );
+    }
+
+    #[test]
+    fn block_header_genesis_parent_hash() {
+        let header = BlockHeader::new(BlockNumber::ZERO, UnixTime::from(1234567890));
+        assert_eq!(header.parent_hash, Hash::ZERO);
     }
 }
