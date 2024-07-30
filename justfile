@@ -97,7 +97,7 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service
 stratus *args="":
-    cargo run --bin stratus {{build_flags}} --features dev -- --enable-genesis {{args}}
+    cargo run --bin stratus {{build_flags}} --features dev -- {{args}}
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 rpc-downloader *args="":
