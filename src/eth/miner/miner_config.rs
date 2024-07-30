@@ -38,6 +38,18 @@ impl MinerConfig {
         let miner = Miner::new(Arc::clone(&storage), mode);
         let miner = Arc::new(miner);
 
+        // create genesis block if necessary
+        #[cfg(feature = "dev")]
+        {
+            if mode.is_automine() || mode.is_interval() {
+                let genesis = storage.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
+                if genesis.is_none() {
+                    tracing::info!("enabling genesis block");
+                    miner.commit(crate::eth::primitives::Block::genesis())?;
+                }
+            }
+        }
+
         // set block number
         storage.set_pending_block_number_as_next_if_not_set()?;
 
