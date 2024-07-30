@@ -323,26 +323,6 @@ e2e-importer-online-down:
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
 
 # ------------------------------------------------------------------------------
-# Chaos tests
-# ------------------------------------------------------------------------------
-
-# Chaos: Run chaos testing experiment
-run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" experiment="":
-    #!/bin/bash
-
-    just _log "Building Stratus"
-    cargo build --release --bin {{ bin }} --features dev
-
-    cd e2e/cloudwalk-contracts/integration
-    if [ ! -d node_modules ]; then
-        npm install
-    fi
-    cd ../../..
-
-    just _log "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
-    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}
-
-# ------------------------------------------------------------------------------
 # Hive tests
 # ------------------------------------------------------------------------------
 
