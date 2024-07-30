@@ -169,7 +169,7 @@ path = "src/bin/run_with_importer.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["metrics", "tracing"]
+default = ["metrics", "tracing", "dev"]
 
 # Application is running in develoment mode.
 dev = []

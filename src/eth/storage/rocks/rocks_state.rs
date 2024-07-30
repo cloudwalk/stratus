@@ -161,80 +161,15 @@ impl RocksStorageState {
         Ok((u64::from(block_number)).into())
     }
 
-    pub fn reset_at(&self, block_number: BlockNumberRocksdb) -> Result<()> {
-        // Clear current state
-        self.account_slots.clear()?;
+    pub fn reset(&self) -> Result<()> {
         self.accounts.clear()?;
-
-        // Get current state back from historical
-        let mut latest_slots: HashMap<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)> = HashMap::new();
-        let mut latest_accounts: HashMap<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)> = HashMap::new();
-        for next in self.account_slots_history.iter_start() {
-            let ((address, idx, block), value) = next?;
-            if block > block_number {
-                self.account_slots_history.delete(&(address, idx, block))?;
-            } else if let Some((bnum, _)) = latest_slots.get(&(address, idx)) {
-                if bnum < &block {
-                    latest_slots.insert((address, idx), (block, value.clone()));
-                }
-            } else {
-                latest_slots.insert((address, idx), (block, value.clone()));
-            }
-        }
-        for next in self.accounts_history.iter_start() {
-            let ((address, block), account) = next?;
-            if block > block_number {
-                self.accounts_history.delete(&(address, block))?;
-            } else if let Some((bnum, _)) = latest_accounts.get(&address) {
-                if bnum < &block {
-                    latest_accounts.insert(address, (block, account));
-                }
-            } else {
-                latest_accounts.insert(address, (block, account));
-            }
-        }
-
-        // write new current state
-        let mut batch = WriteBatch::default();
-
-        let accounts_iter = latest_accounts.into_iter().map(|(address, (_, account))| (address, account));
-        self.accounts.prepare_batch_insertion(accounts_iter, &mut batch)?;
-
-        let slots_iter = latest_slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value));
-        self.account_slots.prepare_batch_insertion(slots_iter, &mut batch)?;
-
-        self.write_in_batch_for_multiple_cfs(batch)?;
-
-        // Truncate rest of
-        for next in self.transactions.iter_start() {
-            let (hash, block) = next?;
-            if block > block_number {
-                self.transactions.delete(&hash)?;
-            }
-        }
-
-        for next in self.logs.iter_start() {
-            let (key, block) = next?;
-            if block > block_number {
-                self.logs.delete(&key)?;
-            }
-        }
-
-        for next in self.blocks_by_hash.iter_start() {
-            let (hash, block) = next?;
-            if block > block_number {
-                self.blocks_by_hash.delete(&hash)?;
-            }
-        }
-
-        for next in self.blocks_by_number.iter_end() {
-            let (block, _) = next?;
-            if block > block_number {
-                self.blocks_by_number.delete(&block)?;
-            } else {
-                break; // optimization: stop early
-            }
-        }
+        self.accounts_history.clear()?;
+        self.account_slots.clear()?;
+        self.account_slots_history.clear()?;
+        self.transactions.clear()?;
+        self.blocks_by_number.clear()?;
+        self.blocks_by_hash.clear()?;
+        self.logs.clear()?;
 
         Ok(())
     }

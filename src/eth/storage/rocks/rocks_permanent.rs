@@ -117,18 +117,8 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn reset(&self, block_number: BlockNumber) -> anyhow::Result<()> {
-        let block_number_u64 = block_number.as_u64();
-
-        // reset block number
-        let _ = self.block_number.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-            if block_number_u64 < current {
-                Some(block_number_u64)
-            } else {
-                None
-            }
-        });
-
-        self.state.reset_at(block_number.into())
+    fn reset(&self) -> anyhow::Result<()> {
+        self.block_number.store(0u64, Ordering::SeqCst);
+        self.state.reset()
     }
 }

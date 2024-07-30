@@ -186,19 +186,6 @@ where
         Ok(())
     }
 
-    // Deletes an entry from the database by key
-    pub fn delete(&self, key: &K) -> Result<()> {
-        self.delete_impl(key)
-            .with_context(|| format!("when trying to delete value from CF: '{}'", self.column_family))
-    }
-
-    fn delete_impl(&self, key: &K) -> Result<()> {
-        let serialized_key = self.serialize_key_with_context(key)?;
-        let cf = self.handle();
-
-        self.db.delete_cf(&cf, serialized_key).map_err(Into::into)
-    }
-
     // Custom method that combines entry and or_insert_with from a HashMap
     pub fn get_or_insert_with<F>(&self, key: K, default: F) -> Result<V>
     where
@@ -214,20 +201,6 @@ where
                 new_value
             }
         })
-    }
-
-    pub fn iter_start(&self) -> RocksCfIterator<K, V> {
-        let cf = self.handle();
-
-        let iter = self.db.iterator_cf(&cf, IteratorMode::Start);
-        RocksCfIterator::<K, V>::new(iter, &self.column_family)
-    }
-
-    pub fn iter_end(&self) -> RocksCfIterator<K, V> {
-        let cf = self.handle();
-
-        let iter = self.db.iterator_cf(&cf, IteratorMode::End);
-        RocksCfIterator::<K, V>::new(iter, &self.column_family)
     }
 
     pub fn iter_from(&self, start_key: K, direction: rocksdb::Direction) -> Result<RocksCfIterator<K, V>> {

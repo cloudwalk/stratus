@@ -7,10 +7,6 @@ use display_json::DebugAsJson;
 
 use crate::eth::miner::Miner;
 #[cfg(feature = "dev")]
-use crate::eth::primitives::test_accounts;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::storage::StratusStorage;
 use crate::ext::parse_duration;
 
@@ -23,10 +19,6 @@ pub struct MinerConfig {
     /// Target block time.
     #[arg(long = "block-mode", env = "BLOCK_MODE", default_value = "automine")]
     pub block_mode: MinerMode,
-
-    /// Generates genesis block on startup when it does not exist.
-    #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
-    pub enable_genesis: bool,
 }
 
 impl MinerConfig {
@@ -46,23 +38,6 @@ impl MinerConfig {
         // create miner
         let miner = Miner::new(Arc::clone(&storage), mode);
         let miner = Arc::new(miner);
-
-        // enable genesis block
-        if self.enable_genesis {
-            let genesis = storage.read_block(&BlockFilter::Number(BlockNumber::ZERO))?;
-            if genesis.is_none() {
-                tracing::info!("enabling genesis block");
-                miner.commit(Block::genesis())?;
-            }
-        }
-
-        // enable test accounts
-        #[cfg(feature = "dev")]
-        {
-            let test_accounts = test_accounts();
-            tracing::info!(accounts = ?test_accounts, "enabling test accounts");
-            storage.save_accounts(test_accounts)?;
-        }
 
         // set block number
         storage.set_pending_block_number_as_next_if_not_set()?;

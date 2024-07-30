@@ -228,7 +228,7 @@ impl PermanentStorage for RedisPermanentStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn reset(&self, number: BlockNumber) -> anyhow::Result<()> {
+    fn reset(&self) -> anyhow::Result<()> {
         let mut conn = self.conn()?;
         let flush: RedisMutationResult = redis::cmd("FLUSHDB").exec(&mut conn);
         match flush {

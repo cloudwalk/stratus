@@ -13,7 +13,7 @@ wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
 
 # Cargo flags.
 build_flags := nightly_flag + " " + release_flag + " --bin stratus --features " + feature_flags
-run_flags := "--enable-genesis"
+run_flags := ""
 
 # Project: Show available tasks
 default:
@@ -319,7 +319,7 @@ e2e-importer-online-up:
     mkdir e2e_logs
 
     # Start Stratus binary
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --enable-genesis --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus to start
     wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
