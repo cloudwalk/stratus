@@ -5,15 +5,13 @@ export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
 export RUST_BACKTRACE := env("RUST_BACKTRACE", "0")
 
 # Global arguments that can be passed to receipts.
-feature_flags := "dev," + env("FEATURES", "")
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
 
 # Cargo flags.
-build_flags := nightly_flag + " " + release_flag + " --bin stratus --features " + feature_flags
-run_flags := "--enable-genesis"
+build_flags := nightly_flag + " " + release_flag + " "
 
 # Project: Show available tasks
 default:
@@ -37,13 +35,11 @@ setup:
 # Stratus tasks
 # ------------------------------------------------------------------------------
 
-# Stratus: Run main service
-run *args="":
-    cargo run {{ build_flags }} -- {{ run_flags }} {{args}}
+alias run := stratus
 
 # Stratus: Compile with debug options
 build:
-    cargo build {{ build_flags }}
+    cargo build {{build_flags}}
 
 # Stratus: Check, or compile without generating code
 check:
@@ -84,36 +80,36 @@ update:
 
 # Database: Compile SQLx queries
 db-compile:
-    SQLX_OFFLINE=true cargo sqlx prepare --database-url {{ database_url }} -- --all-targets
+    SQLX_OFFLINE=true cargo sqlx prepare --database-url {{database_url}} -- --all-targets
 alias sqlx := db-compile
 
 # ------------------------------------------------------------------------------
 # Additional binaries
 # ------------------------------------------------------------------------------
 
+# Bin: Stratus main service
+stratus *args="":
+    cargo run --bin stratus {{build_flags}} --features dev -- --enable-genesis {{args}}
+
 # Bin: Download external RPC blocks and receipts to temporary storage
 rpc-downloader *args="":
-    cargo run --bin rpc-downloader {{release_flag}} --features {{feature_flags}} -- {{args}}
+    cargo run --bin rpc-downloader {{build_flags}} -- {{args}}
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 importer-offline *args="":
-    cargo run --bin importer-offline {{release_flag}} --features {{feature_flags}} -- {{args}}
-
-# Bin: Import external RPC blocks from temporary storage to Stratus storage - with rocksdb
-importer-offline-rocks *args="":
-    cargo run --bin importer-offline {{release_flag}} --features rocks -- {{args}}
+    cargo run --bin importer-offline {{build_flags}} -- {{args}}
 
 # Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
 importer-online *args="":
-    cargo run --bin importer-online {{release_flag}} --features dev -- {{args}}
+    cargo run --bin importer-online {{build_flags}} -- {{args}}
 
 # Bin: Validate Stratus storage slots matches reference slots
 state-validator *args="":
-    cargo run --bin state-validator {{release_flag}} --features dev -- {{args}}
+    cargo run --bin state-validator {{build_flags}} -- {{args}}
 
 # Bin: `stratus` and `importer-online` in a single binary
 run-with-importer *args="":
-    cargo run --bin run-with-importer {{release_flag}} --features dev -- {{args}}
+    cargo run --bin run-with-importer {{build_flags}} -- {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -131,11 +127,11 @@ test-doc name="":
 
 # Test: Execute Rust unit tests
 test-unit name="":
-    cargo test --lib {{name}} --features {{feature_flags}} -- --nocapture --test-threads=1
+    cargo test --lib {{name}} -- --nocapture --test-threads=1
 
 # Test: Execute Rust integration tests
 test-int name="'*'":
-    cargo test --test {{name}} {{release_flag}} --features {{feature_flags}},metrics,rocks -- --nocapture
+    cargo test --test {{name}} {{release_flag}} -- --nocapture
 
 # ------------------------------------------------------------------------------
 # E2E tasks
@@ -188,7 +184,7 @@ e2e-stratus block-mode="automine" test="":
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
 
     echo "-> Running E2E tests"
     just e2e stratus {{block-mode}} {{test}}
@@ -210,7 +206,7 @@ e2e-stratus-rocks block-mode="automine" test="":
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
 
     echo "-> Running E2E tests"
     just e2e stratus {{block-mode}} {{test}}
@@ -225,10 +221,10 @@ e2e-clock-stratus:
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev, -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
 
     echo "-> Validating block time"
     ./utils/block-time-check.sh
@@ -243,10 +239,10 @@ e2e-clock-stratus-rocks:
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev, -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
 
     echo "-> Validating block time"
     ./utils/block-time-check.sh
@@ -275,7 +271,7 @@ e2e-flamegraph:
 
     # Wait for PostgreSQL
     echo "Waiting for PostgreSQL to be ready"
-    wait-service --tcp 0.0.0.0:5432 -t {{ wait_service_timeout }} -- echo
+    wait-service --tcp 0.0.0.0:5432 -t {{wait_service_timeout}} -- echo
     sleep 1
 
     # Start RPC mock server
@@ -292,11 +288,11 @@ e2e-flamegraph:
 
     # Wait for RPC mock server
     echo "Waiting for RPC mock server to be ready..."
-    wait-service --tcp 0.0.0.0:3003 -t {{ wait_service_timeout }} -- echo
+    wait-service --tcp 0.0.0.0:3003 -t {{wait_service_timeout}} -- echo
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph"
-    cargo flamegraph --bin importer-online --deterministic --features dev,perf -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
+    cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
 e2e-importer-online:
     #!/bin/bash
@@ -322,13 +318,13 @@ e2e-importer-online-up:
     RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --enable-genesis --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus to start
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
 
     # Start Run With Importer binary
     RUST_LOG=info cargo run --release --bin run-with-importer --features dev -- --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
 
     # Wait for Run With Importer to start
-    wait-service --tcp 0.0.0.0:3001 -t {{ wait_service_timeout }} -- echo
+    wait-service --tcp 0.0.0.0:3001 -t {{wait_service_timeout}} -- echo
 
     if [ -d e2e/cloudwalk-contracts ]; then
     (
@@ -371,7 +367,7 @@ e2e-importer-online-down:
 
 # Contracts: Clone Solidity repositories
 contracts-clone *args="":
-    cd e2e/cloudwalk-contracts && ./clone-contracts.sh {{ args }}
+    cd e2e/cloudwalk-contracts && ./clone-contracts.sh {{args}}
 
 # Contracts: Compile selected Solidity contracts
 contracts-compile:
@@ -379,16 +375,16 @@ contracts-compile:
 
 # Contracts: Flatten solidity contracts for integration test
 contracts-flatten *args="":
-    cd e2e/cloudwalk-contracts && ./flatten-contracts.sh {{ args }}
+    cd e2e/cloudwalk-contracts && ./flatten-contracts.sh {{args}}
 
 # Contracts: Test selected Solidity contracts on Stratus
 contracts-test *args="":
-    cd e2e/cloudwalk-contracts && ./test-contracts.sh {{ args }}
+    cd e2e/cloudwalk-contracts && ./test-contracts.sh {{args}}
 alias e2e-contracts := contracts-test
 
 # Contracts: Remove all the cloned repositories
 contracts-remove *args="":
-    cd e2e/cloudwalk-contracts && ./remove-contracts.sh {{ args }}
+    cd e2e/cloudwalk-contracts && ./remove-contracts.sh {{args}}
 
 # Contracts: Start Stratus and run contracts test
 contracts-test-stratus *args="":
@@ -398,10 +394,10 @@ contracts-test-stratus *args="":
     just run -a 0.0.0.0:3000 > stratus.log &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
 
     echo "-> Running E2E Contracts tests"
-    just e2e-contracts {{ args }}
+    just e2e-contracts {{args}}
     result_code=$?
 
     echo "-> Killing Stratus"
@@ -415,10 +411,10 @@ contracts-test-stratus-rocks *args="":
     just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{ wait_service_timeout }} -- echo
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
 
     echo "-> Running E2E tests"
-    just e2e-contracts {{ args }}
+    just e2e-contracts {{args}}
     result_code=$?
 
     echo "-> Killing Stratus"
