@@ -9,9 +9,6 @@ nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 
-# Cargo flags.
-build_flags := nightly_flag + " " + release_flag + " "
-
 # Project: Show available tasks
 default:
     just --list --unsorted
@@ -38,18 +35,11 @@ alias run := stratus
 
 # Stratus: Compile with debug options
 build features="":
-    #!/bin/bash
-    if [ -z "{{features}}" ]; then
-        just _log "Compiling Stratus without additional features"
-        cargo build {{build_flags}}
-    else
-        just _log "Compiling Stratus with additional features: {{features}}"
-        cargo build {{build_flags}} --features {{features}}
-    fi
+    cargo {{nightly_flag}} build {{release_flag}} --features "{{features}}"
 
 # Stratus: Check, or compile without generating code
 check:
-    cargo check
+    cargo {{nightly_flag}} check
 
 # Stratus: Check all features individually using cargo hack
 check-features *args="":
@@ -97,27 +87,27 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service
 stratus *args="":
-    cargo run --bin stratus {{build_flags}} --features dev -- {{args}}
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- {{args}}
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 rpc-downloader *args="":
-    cargo run --bin rpc-downloader {{build_flags}} -- {{args}}
+    cargo {{nightly_flag}} run --bin rpc-downloader {{release_flag}} -- {{args}}
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 importer-offline *args="":
-    cargo run --bin importer-offline {{build_flags}} -- {{args}}
+    cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} -- {{args}}
 
 # Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
 importer-online *args="":
-    cargo run --bin importer-online {{build_flags}} -- {{args}}
+    cargo {{nightly_flag}} run --bin importer-online {{release_flag}} -- {{args}}
 
 # Bin: Validate Stratus storage slots matches reference slots
 state-validator *args="":
-    cargo run --bin state-validator {{build_flags}} -- {{args}}
+    cargo {{nightly_flag}} run --bin state-validator {{release_flag}} -- {{args}}
 
 # Bin: `stratus` and `importer-online` in a single binary
 run-with-importer *args="":
-    cargo run --bin run-with-importer {{build_flags}} -- {{args}}
+    cargo {{nightly_flag}} run --bin run-with-importer {{release_flag}} -- {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
