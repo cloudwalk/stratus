@@ -40,8 +40,10 @@ alias run := stratus
 build features="":
     #!/bin/bash
     if [ -z "{{features}}" ]; then
+        just _log "Compiling Stratus without additional features"
         cargo build {{build_flags}}
     else
+        just _log "Compiling Stratus with additional features: {{features}}"
         cargo build {{build_flags}} --features {{features}}
     fi
 
