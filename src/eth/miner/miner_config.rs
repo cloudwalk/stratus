@@ -38,16 +38,12 @@ impl MinerConfig {
         let miner = Miner::new(Arc::clone(&storage), mode);
         let miner = Arc::new(miner);
 
-        // create genesis block if necessary
+        // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            if mode.is_automine() || mode.is_interval() {
-                let genesis = storage.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
-                if genesis.is_none() {
-                    let genesis = crate::eth::primitives::Block::genesis();
-                    tracing::info!(block = ?genesis, "enabling genesis block");
-                    miner.commit(genesis)?;
-                }
+            let genesis = storage.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
+            if mode.can_mine_new_blocks() && genesis.is_none() {
+                storage.reset_to_genesis()?;
             }
         }
 
@@ -81,6 +77,17 @@ pub enum MinerMode {
     /// Does not automatically mines a new block. A call to `mine_*` must be executed to mine a new block.
     #[serde(rename = "external")]
     External,
+}
+
+impl MinerMode {
+    /// Checks if the mode allow to mine new blocks.
+    pub fn can_mine_new_blocks(&self) -> bool {
+        match self {
+            Self::Automine => true,
+            Self::Interval(_) => true,
+            Self::External => false,
+        }
+    }
 }
 
 impl FromStr for MinerMode {
