@@ -91,5 +91,5 @@ jobs:
         run: just run-chaos-experiment stratus ${{ matrix.instances }} ${{ matrix.iterations }} ${{ matrix.leader-restart }} main
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
-          RUST_LOG: warn
+          RUST_LOG: error
           RELEASE: 1
