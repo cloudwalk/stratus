@@ -262,7 +262,7 @@ describe("JSON-RPC", () => {
             it("Returns an expected result when a contract transaction fails", async () => {
                 // deploy
                 const contract = await deployTestContractBalances();
-                sendEvmMine();
+                await sendEvmMine();
                 contract.waitForDeployment();
 
                 // send a transaction that will fail
@@ -274,7 +274,7 @@ describe("JSON-RPC", () => {
                 });
                 const expectedTxHash = keccak256(signedTx);
                 const actualTxHash = await sendRawTransaction(signedTx);
-                sendEvmMine();
+                await sendEvmMine();
 
                 // validate
                 const txReceiptAfterMining = await ETHERJS.getTransactionReceipt(expectedTxHash);
