@@ -98,32 +98,40 @@ impl PermanentStorage for RedisPermanentStorage {
         // changes
         for changes in block.compact_account_changes() {
             // account
-            let mut account = Account {
-                address: changes.address,
-                ..Account::default()
-            };
-            if let Some(nonce) = changes.nonce.take() {
-                account.nonce = nonce;
-            }
-            if let Some(balance) = changes.balance.take() {
-                account.balance = balance;
-            }
-            if let Some(bytecode) = changes.bytecode.take() {
-                account.bytecode = bytecode;
-            }
-            let account_value = to_json_string(&account);
-            mset_values.push((key_account(&account.address), account_value.clone()));
-            zadd_values.push((key_account_history(&account.address), account_value, block.number().as_u64()));
+            if changes.is_account_modified() {
+                let mut account = Account {
+                    address: changes.address,
+                    ..Account::default()
+                };
+                if let Some(nonce) = changes.nonce.take() {
+                    account.nonce = nonce;
+                }
+                if let Some(balance) = changes.balance.take() {
+                    account.balance = balance;
+                }
+                if let Some(bytecode) = changes.bytecode.take() {
+                    account.bytecode = bytecode;
+                }
 
-            // slot
+                // add block number to force slot modification
+                let mut account_value = to_json_value(&account);
+                account_value.as_object_mut().unwrap().insert("block".to_owned(), to_json_value(block.number()));
+                let account_value = to_json_string(&account_value);
+
+                mset_values.push((key_account(&account.address), account_value.clone()));
+                zadd_values.push((key_account_history(&account.address), account_value, block.number().as_u64()));
+            }
+
+            // slots
             for slot in changes.slots.into_values() {
                 if let Some(slot) = slot.take() {
+                    // add block number to force slot modification
                     let mut slot_value = to_json_value(slot);
                     slot_value.as_object_mut().unwrap().insert("block".to_owned(), to_json_value(block.number()));
                     let slot_value = to_json_string(&slot_value);
 
-                    mset_values.push((key_slot(&account.address, &slot.index), slot_value.clone()));
-                    zadd_values.push((key_slot_history(&account.address, &slot.index), slot_value, block.number().as_u64()));
+                    mset_values.push((key_slot(&changes.address, &slot.index), slot_value.clone()));
+                    zadd_values.push((key_slot_history(&changes.address, &slot.index), slot_value, block.number().as_u64()));
                 }
             }
         }
