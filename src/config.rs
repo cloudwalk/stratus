@@ -66,10 +66,6 @@ pub struct CommonConfig {
     #[arg(long = "env", env = "ENV", default_value = "local")]
     pub env: Environment,
 
-    /// Stratus mode.
-    #[arg(long = "mode", env = "MODE")]
-    pub mode: StratusMode,
-
     /// Number of threads to execute global async tasks.
     #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
     pub num_async_threads: usize,
@@ -168,6 +164,10 @@ impl CommonConfig {
 /// Configuration for main Stratus service.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 pub struct StratusConfig {
+    /// Stratus mode.
+    #[arg(long = "mode", env = "MODE")]
+    pub mode: StratusMode,
+
     #[clap(flatten)]
     pub rpc_server: RpcServerConfig,
 
