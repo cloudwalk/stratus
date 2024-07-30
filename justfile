@@ -42,7 +42,7 @@ build features="":
     if [ -z "{{features}}" ]; then
         cargo build {{build_flags}}
     else
-        cargo build --features {{features}}
+        cargo build {{build_flags}} --features {{features}}
     fi
 
 # Stratus: Check, or compile without generating code
