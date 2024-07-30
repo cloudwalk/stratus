@@ -23,9 +23,10 @@ use crate::ext::from_json_str;
 use crate::ext::to_json_string;
 use crate::log_and_err;
 
-type RedisOptJsonResult = RedisResult<Option<String>>;
-type RedisOptUsizeResult = RedisResult<Option<usize>>;
-type RedisMutationResult = RedisResult<()>;
+type RedisVecOptString = RedisResult<Vec<Option<String>>>;
+type RedisOptString = RedisResult<Option<String>>;
+type RedisOptUsize = RedisResult<Option<usize>>;
+type RedisVoid = RedisResult<()>;
 
 pub struct RedisPermanentStorage {
     client: redis::Client,
@@ -49,8 +50,9 @@ impl PermanentStorage for RedisPermanentStorage {
     fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         // execute command
         let mut conn = self.conn()?;
+        let set: RedisVoid = conn.set("number::mined", number.to_string());
 
-        let set: RedisMutationResult = conn.set("number::mined", number.to_string());
+        // parse
         match set {
             Ok(_) => Ok(()),
             Err(e) => log_and_err!(reason = e, "failed to write mined number to redis"),
@@ -60,7 +62,7 @@ impl PermanentStorage for RedisPermanentStorage {
     fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
         // execute command
         let mut conn = self.conn()?;
-        let value: RedisOptUsizeResult = conn.get("number::mined");
+        let value: RedisOptUsize = conn.get("number::mined");
 
         // parse
         match value {
@@ -72,8 +74,8 @@ impl PermanentStorage for RedisPermanentStorage {
 
     fn save_block(&self, block: Block) -> anyhow::Result<()> {
         // generate block keys
-        let key_number = format!("block::{}", block.number());
-        let key_hash = format!("block::{}", block.hash());
+        let key_number = key_block_by_number(block.number());
+        let key_hash = key_block_by_hash(&block.hash());
 
         // generate values
         let block_json = to_json_string(&block);
@@ -87,7 +89,7 @@ impl PermanentStorage for RedisPermanentStorage {
 
         // transactions
         for tx in &block.transactions {
-            let tx_key = tx_key(&tx.input.hash);
+            let tx_key = key_tx(&tx.input.hash);
             let tx_value = to_json_string(&tx);
             redis_values.push((tx_key, tx_value));
         }
@@ -105,14 +107,14 @@ impl PermanentStorage for RedisPermanentStorage {
             if let Some(bytecode) = changes.bytecode.take() {
                 account.bytecode = bytecode;
             }
-            let account_key = account_key(&account.address);
+            let account_key = key_account(&account.address);
             let account_value = to_json_string(&account);
             redis_values.push((account_key, account_value));
 
             // slot
             for slot in changes.slots.into_values() {
                 if let Some(slot) = slot.take() {
-                    let slot_key = slot_key(&account.address, &slot.index);
+                    let slot_key = key_slot(&account.address, &slot.index);
                     let slot_value = to_json_string(&slot);
                     redis_values.push((slot_key, slot_value));
                 }
@@ -121,7 +123,7 @@ impl PermanentStorage for RedisPermanentStorage {
 
         // execute command
         let mut conn = self.conn()?;
-        let set: RedisMutationResult = conn.mset(&redis_values);
+        let set: RedisVoid = conn.mset(&redis_values);
         match set {
             Ok(_) => Ok(()),
             Err(e) => log_and_err!(reason = e, "failed to write block to redis"),
@@ -129,53 +131,88 @@ impl PermanentStorage for RedisPermanentStorage {
     }
 
     fn read_block(&self, block_filter: &BlockFilter) -> anyhow::Result<Option<Block>> {
+        // prepare keys
         let block_key = match block_filter {
             BlockFilter::Latest | BlockFilter::Pending => "block::latest".to_owned(),
             BlockFilter::Earliest => "block::earliest".to_owned(),
-            BlockFilter::Hash(hash) => format!("block::{}", hash),
-            BlockFilter::Number(number) => format!("block::{}", number),
+            BlockFilter::Hash(hash) => key_block_by_hash(hash),
+            BlockFilter::Number(number) => key_block_by_number(*number),
         };
 
         // execute command
         let mut conn = self.conn()?;
-        let redis_block: RedisOptJsonResult = conn.get(block_key);
+        let redis_block: RedisOptString = conn.get(block_key);
 
         // parse
         match redis_block {
             Ok(Some(json)) => Ok(from_json_str(&json)),
             Ok(None) => Ok(None),
-            Err(e) => log_and_err!(reason = e, "failed to retrieve block from redis"),
+            Err(e) => log_and_err!(reason = e, "failed to read block from redis"),
         }
     }
 
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        let tx_key = tx_key(hash);
+        // prepare keys
+        let tx_key = key_tx(hash);
 
         // execute command
         let mut conn = self.conn()?;
-        let redis_transaction: RedisOptJsonResult = conn.get(tx_key);
+        let redis_transaction: RedisOptString = conn.get(tx_key);
 
         // parse
         match redis_transaction {
             Ok(Some(json)) => Ok(from_json_str(&json)),
             Ok(None) => Ok(None),
-            Err(e) => log_and_err!(reason = e, "failed to retrieve transaction from redis"),
+            Err(e) => log_and_err!(reason = e, "failed to read transaction from redis"),
         }
     }
 
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        todo!()
+        // prepare keys
+        let from_block = filter.from_block.as_u64();
+        let to_block = match filter.to_block {
+            Some(number) => number.as_u64(),
+            None => self.read_mined_block_number()?.as_u64(),
+        };
+        let block_keys = (from_block..=to_block).map(key_block_by_number).collect_vec();
+
+        // exit if no keys
+        if block_keys.is_empty() {
+            return Ok(vec![])
+        }
+
+        // execute command
+        let mut conn = self.conn()?;
+        let blocks: RedisVecOptString =  conn.mget(block_keys);
+
+        // parse
+        let blocks: Vec<Block> = match blocks {
+            Ok(vec_json) => vec_json.into_iter().flatten().map(|json| from_json_str(&json)).collect_vec(),
+            Err(e) => return log_and_err!(reason = e, "failed to read logs from redis"),
+        };
+
+        // filter
+        let logs = blocks
+            .into_iter()
+            .flat_map(|b| b.transactions)
+            .flat_map(|t| t.logs)
+            .filter(|log| filter.matches(log))
+            .collect_vec();
+
+        Ok(logs)
     }
 
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        // exit if no accounts
         if accounts.is_empty() {
             return Ok(());
         }
 
+        // prepare values
         let redis_accounts = accounts
             .into_iter()
             .map(|acc| {
-                let account_key = account_key(&acc.address);
+                let account_key = key_account(&acc.address);
                 let account_value = to_json_string(&acc);
                 (account_key, account_value)
             })
@@ -183,8 +220,9 @@ impl PermanentStorage for RedisPermanentStorage {
 
         // execute command
         let mut conn = self.conn()?;
-        let set: RedisMutationResult = conn.mset(&redis_accounts);
+        let set: RedisVoid = conn.mset(&redis_accounts);
 
+        // parse
         match set {
             Ok(_) => Ok(()),
             Err(e) => log_and_err!(reason = e, "failed to write accounts to redis"),
@@ -192,45 +230,47 @@ impl PermanentStorage for RedisPermanentStorage {
     }
 
     fn read_account(&self, address: &Address, point_in_time: &crate::eth::storage::StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        let account_key = account_key(address);
+        // prepare keys
+        let account_key = key_account(address);
 
         // execute and parse
         let mut conn = self.conn()?;
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => {
-                let redis_account: RedisOptJsonResult = conn.get(account_key);
+                let redis_account: RedisOptString = conn.get(account_key);
                 match redis_account {
                     Ok(Some(json)) => Ok(Some(from_json_str(&json))),
                     Ok(None) => Ok(None),
                     Err(e) => log_and_err!(reason = e, "failed to read account from redis"),
                 }
             }
-            StoragePointInTime::MinedPast(number) => todo!(),
+            StoragePointInTime::MinedPast(number) => Ok(None),
         }
     }
 
     fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &crate::eth::storage::StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        let slot_key = slot_key(address, index);
+        // prepare keys
+        let slot_key = key_slot(address, index);
 
-        // execute and parse
+        // execute command and parse
         let mut conn = self.conn()?;
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => {
-                let redis_slot: RedisOptJsonResult = conn.get(slot_key);
+                let redis_slot: RedisOptString = conn.get(slot_key);
                 match redis_slot {
                     Ok(Some(json)) => Ok(Some(from_json_str(&json))),
                     Ok(None) => Ok(None),
                     Err(e) => log_and_err!(reason = e, "failed to read slot from redis"),
                 }
             }
-            StoragePointInTime::MinedPast(number) => todo!(),
+            StoragePointInTime::MinedPast(number) => Ok(None),
         }
     }
 
     #[cfg(feature = "dev")]
     fn reset(&self) -> anyhow::Result<()> {
         let mut conn = self.conn()?;
-        let flush: RedisMutationResult = redis::cmd("FLUSHDB").exec(&mut conn);
+        let flush: RedisVoid = redis::cmd("FLUSHDB").exec(&mut conn);
         match flush {
             Ok(_) => Ok(()),
             Err(e) => log_and_err!(reason = e, "failed to clear all redis keys"),
@@ -242,17 +282,27 @@ impl PermanentStorage for RedisPermanentStorage {
 // Keys helpers
 // -----------------------------------------------------------------------------
 
+/// Generates a key for accessing a block by number.
+fn key_block_by_number(number: impl Into<u64>) -> String {
+    format!("block::number::{}", number.into())
+}
+
+/// Generates a key for accessing a block by hash.
+fn key_block_by_hash(hash: &Hash) -> String {
+    format!("block::hash::{}", hash)
+}
+
 /// Generates a key for accessing an account.
-fn account_key(address: &Address) -> String {
+fn key_account(address: &Address) -> String {
     format!("account::{}", address)
 }
 
 /// Generates a key for accessing a slot.
-fn slot_key(address: &Address, index: &SlotIndex) -> String {
+fn key_slot(address: &Address, index: &SlotIndex) -> String {
     format!("slot::{}::{}", address, index)
 }
 
 /// Generates a key for accessing a transaction.
-fn tx_key(hash: &Hash) -> String {
+fn key_tx(hash: &Hash) -> String {
     format!("tx::{}", hash)
 }

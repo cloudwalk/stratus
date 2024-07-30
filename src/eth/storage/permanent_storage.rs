@@ -46,6 +46,8 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>>;
 
     /// Retrieves logs from the storage.
+    ///
+    /// TODO: `filter.to_block` is always populated, need to change the type to reflect that.
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
 
     // -------------------------------------------------------------------------
