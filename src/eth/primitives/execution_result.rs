@@ -1,5 +1,7 @@
+use display_json::DebugAsJson;
+
 /// Indicates how a transaction execution was finished.
-#[derive(Debug, strum::Display, Clone, PartialEq, Eq, fake::Dummy, derive_new::new, serde::Serialize, serde::Deserialize, strum::EnumString)]
+#[derive(DebugAsJson, strum::Display, Clone, PartialEq, Eq, fake::Dummy, derive_new::new, serde::Serialize, serde::Deserialize, strum::EnumString)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionResult {
     /// Finished normally (RETURN opcode).

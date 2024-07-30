@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use display_json::DebugAsJson;
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
@@ -8,7 +9,7 @@ use crate::alias::RevmB256;
 use crate::gen_newtype_from;
 
 /// Topic is part of a [`Log`](super::Log) emitted by the EVM during contract execution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Hash)]
+#[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Hash)]
 pub struct LogTopic(pub H256);
 
 impl LogTopic {

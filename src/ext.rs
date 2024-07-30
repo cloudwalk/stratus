@@ -305,6 +305,14 @@ macro_rules! gen_test_serde {
     ($type:ty) => {
         paste::paste! {
             #[test]
+            pub fn [<serde_debug_json_ $type:snake>]() {
+                let original = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
+                let encoded_json = serde_json::to_string(&original).unwrap();
+                let encoded_debug = format!("{:?}", original);
+                assert_eq!(encoded_json, encoded_debug);
+            }
+
+            #[test]
             pub fn [<serde_json_ $type:snake>]() {
                 // encode
                 let original = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);

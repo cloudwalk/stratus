@@ -3,13 +3,14 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use chrono::Utc;
+use display_json::DebugAsJson;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 
 use crate::alias::RevmU256;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnixTime(u64);
 
 impl UnixTime {

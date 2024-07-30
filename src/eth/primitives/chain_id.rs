@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethereum_types::U64;
 use fake::Dummy;
@@ -7,7 +8,7 @@ use fake::Faker;
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
-#[derive(Debug, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(pub U64);
 
 impl ChainId {
