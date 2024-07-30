@@ -102,7 +102,7 @@ impl PermanentStorage for RedisPermanentStorage {
                 address: changes.address,
                 ..Account::default()
             };
-            if let Some(nonce) = changes.nonce.take_modified() {
+            if let Some(nonce) = changes.nonce.take() {
                 account.nonce = nonce;
             }
             if let Some(balance) = changes.balance.take() {
