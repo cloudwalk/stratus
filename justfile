@@ -367,24 +367,24 @@ e2e-importer-online-down:
 
 # Contracts: Clone Solidity repositories
 contracts-clone *args="":
-    cd e2e/cloudwalk-contracts && ./clone-contracts.sh {{args}}
+    cd e2e/cloudwalk-contracts && ./contracts-clone.sh {{args}}
 
 # Contracts: Compile selected Solidity contracts
 contracts-compile:
-    cd e2e/cloudwalk-contracts && ./compile-contracts.sh
+    cd e2e/cloudwalk-contracts && ./contracts-compile.sh
 
 # Contracts: Flatten solidity contracts for integration test
 contracts-flatten *args="":
-    cd e2e/cloudwalk-contracts && ./flatten-contracts.sh {{args}}
+    cd e2e/cloudwalk-contracts && ./contracts-flatten.sh {{args}}
 
 # Contracts: Test selected Solidity contracts on Stratus
 contracts-test *args="":
-    cd e2e/cloudwalk-contracts && ./test-contracts.sh {{args}}
+    cd e2e/cloudwalk-contracts && ./contracts-test.sh {{args}}
 alias e2e-contracts := contracts-test
 
 # Contracts: Remove all the cloned repositories
 contracts-remove *args="":
-    cd e2e/cloudwalk-contracts && ./remove-contracts.sh {{args}}
+    cd e2e/cloudwalk-contracts && ./contracts-remove.sh {{args}}
 
 # Contracts: Start Stratus and run contracts test
 contracts-test-stratus *args="":
@@ -424,7 +424,7 @@ contracts-test-stratus-rocks *args="":
 
 # Contracts: Run tests and generate coverage info. Use --html to open in browser.
 contracts-coverage *args="":
-    cd e2e/cloudwalk-contracts && ./coverage-contracts.sh {{args}}
+    cd e2e/cloudwalk-contracts && ./contracts-coverage.sh {{args}}
 
 # Contracts: Erase coverage info
 contracts-coverage-erase:
