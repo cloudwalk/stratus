@@ -114,7 +114,6 @@ mod tests {
     type TransactionExecutionValueChangeSlot = ExecutionValueChange<Slot>;
     type TransactionExecutionValueChangeWei = ExecutionValueChange<Wei>;
 
-
     // FIX: gen_test_serde!(Block);
     // FIX: gen_test_serde!(EvmExecution);
     // FIX: gen_test_serde!(ExecutionAccountChanges);

@@ -306,26 +306,40 @@ macro_rules! gen_test_serde {
         paste::paste! {
             #[test]
             pub fn [<serde_json_ $type:snake>]() {
+                // encode
                 let value_original = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
                 let value_encoded = serde_json::to_string(&value_original).unwrap();
 
+                // decode
                 let value_decoded = serde_json::from_str::<$type>(&value_encoded).unwrap();
                 assert_eq!(value_decoded, value_original);
 
+                // re-encode
                 let value_reencoded = serde_json::to_string(&value_decoded).unwrap();
                 assert_eq!(value_reencoded, value_encoded);
+
+                // re-decode
+                let value_redecoded = serde_json::from_str::<$type>(&value_reencoded).unwrap();
+                assert_eq!(value_redecoded, value_original);
             }
 
             #[test]
             pub fn [<serde_bincode_ $type:snake>]() {
+                // encode
                 let value_original = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
                 let value_encoded = bincode::serialize(&value_original).unwrap();
 
+                // decode
                 let value_decoded = bincode::deserialize::<$type>(&value_encoded).unwrap();
                 assert_eq!(value_decoded, value_original);
 
+                // re-encode
                 let value_reencoded = bincode::serialize(&value_decoded).unwrap();
                 assert_eq!(value_reencoded, value_encoded);
+
+                // re-decode
+                let value_redecoded = bincode::deserialize::<$type>(&value_reencoded).unwrap();
+                assert_eq!(value_redecoded, value_original);
             }
         }
     };
