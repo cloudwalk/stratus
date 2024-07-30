@@ -15,6 +15,7 @@ use tokio::sync::RwLockReadGuard;
 use super::pending_transaction::PendingTransaction;
 use crate::alias::EthersBytes;
 use crate::alias::EthersTransaction;
+use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
@@ -23,7 +24,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
-use crate::ext::JsonValue;
 use crate::infra::tracing::TracingExt;
 use crate::log_and_err;
 

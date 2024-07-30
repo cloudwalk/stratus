@@ -24,6 +24,7 @@ use tracing::info_span;
 use tracing::Instrument;
 use tracing::Span;
 
+use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::Address;
@@ -54,7 +55,6 @@ use crate::eth::Consensus;
 use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
