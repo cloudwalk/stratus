@@ -6,7 +6,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 

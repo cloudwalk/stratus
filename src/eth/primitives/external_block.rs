@@ -9,7 +9,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]

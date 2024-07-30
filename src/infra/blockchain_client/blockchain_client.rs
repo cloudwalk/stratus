@@ -23,7 +23,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 use crate::infra::tracing::TracingExt;
 use crate::log_and_err;
 

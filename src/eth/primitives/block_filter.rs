@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Hash)]
 pub enum BlockFilter {

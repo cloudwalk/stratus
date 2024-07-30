@@ -8,7 +8,7 @@ use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StratusStorage;
 use crate::eth::Consensus;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 
 pub struct RpcContext {
     // app config

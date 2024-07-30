@@ -34,7 +34,7 @@ use crate::eth::rpc::RpcClientApp;
 use crate::event_with;
 use crate::ext::from_json_str;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 use crate::if_else;
 use crate::infra::metrics;
 use crate::infra::tracing::new_cid;

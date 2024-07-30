@@ -2,7 +2,7 @@ use serde_json::json;
 
 use crate::eth::rpc::RpcContext;
 use crate::eth::Consensus;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 
 // -----------------------------------------------------------------------------
 // Build constants

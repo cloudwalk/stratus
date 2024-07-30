@@ -275,8 +275,6 @@ pub async fn spawn_signal_handler() -> anyhow::Result<()> {
 // serde_json
 // -----------------------------------------------------------------------------
 
-pub type JsonValue = serde_json::Value;
-
 /// Serializes any serializable value to non-formatted [`String`] without having to check for errors.
 pub fn to_json_string<V: serde::Serialize>(value: &V) -> String {
     serde_json::to_string(value).expect_infallible()

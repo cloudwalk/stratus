@@ -50,7 +50,7 @@ use crate::ext::not;
 use crate::ext::spawn_named;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 use crate::infra::build_info;
 use crate::infra::tracing::TracingConfig;
 use crate::infra::tracing::TracingLogFormat;

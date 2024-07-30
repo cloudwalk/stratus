@@ -16,7 +16,7 @@ use crate::eth::primitives::Wei;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 use crate::ext::SleepReason;
 use crate::log_and_err;
 

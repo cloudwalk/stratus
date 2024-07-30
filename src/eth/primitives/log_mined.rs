@@ -9,7 +9,7 @@ use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::LogTopic;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 
 /// Log that was emitted by the EVM and added to a block.
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]

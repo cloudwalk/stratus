@@ -19,7 +19,7 @@ use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::StoragePointInTime;
 use stratus::eth::storage::StratusStorage;
 use stratus::ext::traced_sleep;
-use stratus::ext::JsonValue;
+use stratus::alias::JsonValue;
 use stratus::ext::SleepReason;
 use stratus::infra::docker::Docker;
 use stratus::GlobalServices;

@@ -19,7 +19,7 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 

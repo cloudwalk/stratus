@@ -3,7 +3,7 @@ use crate::alias::EthersTransaction;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 
 /// Stages that a transaction can be in.
 #[allow(clippy::large_enum_variant)]

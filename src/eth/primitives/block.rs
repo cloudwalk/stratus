@@ -18,7 +18,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]

@@ -13,7 +13,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Nonce;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 
 /// Valid  error catogories are:
 /// * client_request: request is invalid.
