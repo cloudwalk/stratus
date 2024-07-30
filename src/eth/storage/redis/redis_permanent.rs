@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use itertools::Itertools;
 use redis::Client as RedisClient;
 use redis::Commands;
@@ -24,6 +22,7 @@ use crate::ext::to_json_string;
 use crate::log_and_err;
 
 type RedisVecOptString = RedisResult<Vec<Option<String>>>;
+type RedisVecString = RedisResult<Vec<String>>;
 type RedisOptString = RedisResult<Option<String>>;
 type RedisOptUsize = RedisResult<Option<usize>>;
 type RedisVoid = RedisResult<()>;
@@ -74,30 +73,34 @@ impl PermanentStorage for RedisPermanentStorage {
 
     fn save_block(&self, block: Block) -> anyhow::Result<()> {
         // generate block keys
-        let key_number = key_block_by_number(block.number());
-        let key_hash = key_block_by_hash(&block.hash());
+        let key_block_number = key_block_by_number(block.number());
+        let key_block_hash = key_block_by_hash(&block.hash());
 
         // generate values
         let block_json = to_json_string(&block);
 
         // blocks
-        let mut redis_values = vec![
-            (key_number, block_json.clone()),
-            (key_hash, block_json.clone()),
+        let mut mset_values = vec![
+            (key_block_number, block_json.clone()),
+            (key_block_hash, block_json.clone()),
             ("block::latest".to_owned(), block_json),
         ];
+        let mut zadd_values = vec![];
 
         // transactions
         for tx in &block.transactions {
             let tx_key = key_tx(&tx.input.hash);
             let tx_value = to_json_string(&tx);
-            redis_values.push((tx_key, tx_value));
+            mset_values.push((tx_key, tx_value));
         }
 
         // changes
         for changes in block.compact_account_changes() {
             // account
-            let mut account = Account::default();
+            let mut account = Account {
+                address: changes.address,
+                ..Account::default()
+            };
             if let Some(nonce) = changes.nonce.take() {
                 account.nonce = nonce;
             }
@@ -107,27 +110,37 @@ impl PermanentStorage for RedisPermanentStorage {
             if let Some(bytecode) = changes.bytecode.take() {
                 account.bytecode = bytecode;
             }
-            let account_key = key_account(&account.address);
+
             let account_value = to_json_string(&account);
-            redis_values.push((account_key, account_value));
+            mset_values.push((key_account(&account.address), account_value.clone()));
+            zadd_values.push((key_account_history(&account.address), account_value, block.number().as_u64()));
 
             // slot
             for slot in changes.slots.into_values() {
                 if let Some(slot) = slot.take() {
-                    let slot_key = key_slot(&account.address, &slot.index);
                     let slot_value = to_json_string(&slot);
-                    redis_values.push((slot_key, slot_value));
+                    mset_values.push((key_slot(&account.address, &slot.index), slot_value.clone()));
+                    zadd_values.push((key_slot_history(&account.address, &slot.index), slot_value, block.number().as_u64()));
                 }
             }
         }
 
-        // execute command
+        // execute mset command
         let mut conn = self.conn()?;
-        let set: RedisVoid = conn.mset(&redis_values);
-        match set {
-            Ok(_) => Ok(()),
-            Err(e) => log_and_err!(reason = e, "failed to write block to redis"),
+        let set: RedisVoid = conn.mset(&mset_values);
+        if let Err(e) = set {
+            return log_and_err!(reason = e, "failed to write block mset to redis");
         }
+
+        // execute zadd commands
+        for (key, value, score) in zadd_values {
+            let zadd: RedisVoid = conn.zadd(key, value, score);
+            if let Err(e) = zadd {
+                return log_and_err!(reason = e, "failed to write block zadd to redis");
+            }
+        }
+
+        Ok(())
     }
 
     fn read_block(&self, block_filter: &BlockFilter) -> anyhow::Result<Option<Block>> {
@@ -231,39 +244,95 @@ impl PermanentStorage for RedisPermanentStorage {
 
     fn read_account(&self, address: &Address, point_in_time: &crate::eth::storage::StoragePointInTime) -> anyhow::Result<Option<Account>> {
         // prepare keys
-        let account_key = key_account(address);
 
         // execute and parse
         let mut conn = self.conn()?;
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => {
+                // prepare key
+                let account_key = key_account(address);
+
+                // execute
                 let redis_account: RedisOptString = conn.get(account_key);
+
+                // parse
                 match redis_account {
                     Ok(Some(json)) => Ok(Some(from_json_str(&json))),
                     Ok(None) => Ok(None),
-                    Err(e) => log_and_err!(reason = e, "failed to read account from redis"),
+                    Err(e) => log_and_err!(reason = e, "failed to read account from redis current value"),
                 }
             }
-            StoragePointInTime::MinedPast(number) => Ok(None),
+            StoragePointInTime::MinedPast(number) => {
+                // prepare key
+                let account_key = key_account_history(address);
+
+                // execute
+                let mut cmd = redis::cmd("ZRANGE");
+                cmd.arg(account_key)
+                    .arg(number.as_u64())
+                    .arg(0)
+                    .arg("BYSCORE")
+                    .arg("REV")
+                    .arg("LIMIT")
+                    .arg(0)
+                    .arg(1);
+                let redis_account: RedisVecString = cmd.query(&mut conn);
+
+                // parse
+                match redis_account {
+                    Ok(vec_json) => match vec_json.first() {
+                        Some(json) => Ok(Some(from_json_str(json))),
+                        None => Ok(None),
+                    },
+                    Err(e) => log_and_err!(reason = e, "failed to read account from redis historical value"),
+                }
+            }
         }
     }
 
-    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &crate::eth::storage::StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        // prepare keys
-        let slot_key = key_slot(address, index);
-
+    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         // execute command and parse
         let mut conn = self.conn()?;
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => {
+                // prepare key
+                let slot_key = key_slot(address, index);
+
+                // execute
                 let redis_slot: RedisOptString = conn.get(slot_key);
+
+                // parse
                 match redis_slot {
                     Ok(Some(json)) => Ok(Some(from_json_str(&json))),
                     Ok(None) => Ok(None),
-                    Err(e) => log_and_err!(reason = e, "failed to read slot from redis"),
+                    Err(e) => log_and_err!(reason = e, "failed to read slot from redis current value"),
                 }
             }
-            StoragePointInTime::MinedPast(number) => Ok(None),
+            StoragePointInTime::MinedPast(number) => {
+                // prepare key
+                let slot_key = key_slot_history(address, index);
+
+                // execute
+                let mut cmd = redis::cmd("ZRANGE");
+                cmd.arg(slot_key)
+                    .arg(number.as_u64())
+                    .arg(0)
+                    .arg("BYSCORE")
+                    .arg("REV")
+                    .arg("LIMIT")
+                    .arg(0)
+                    .arg(1);
+                let redis_account: RedisVecString = cmd.query(&mut conn);
+
+                // parse
+                match redis_account {
+                    Ok(vec_json) => match vec_json.first() {
+                        Some(json) => Ok(Some(from_json_str(json))),
+                        None => Ok(None)
+                    },
+                    Err(e) => log_and_err!(reason = e, "failed to read account from redis historical value"),
+                }
+            }
         }
     }
 
@@ -297,9 +366,19 @@ fn key_account(address: &Address) -> String {
     format!("account::{}", address)
 }
 
+/// Generates a key for accessing an account history.
+fn key_account_history(address: &Address) -> String {
+    format!("account_history::{}", address)
+}
+
 /// Generates a key for accessing a slot.
 fn key_slot(address: &Address, index: &SlotIndex) -> String {
     format!("slot::{}::{}", address, index)
+}
+
+/// Generates a key for accessing a slot history.
+fn key_slot_history(address: &Address, index: &SlotIndex) -> String {
+    format!("slot_history::{}::{}", address, index)
 }
 
 /// Generates a key for accessing a transaction.
