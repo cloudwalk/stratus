@@ -2,14 +2,17 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Wei;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct CallInput {
+    #[serde(rename = "from")]
     pub from: Option<Address>,
+
+    #[serde(rename = "to")]
     pub to: Option<Address>,
 
-    #[serde(default)]
+    #[serde(rename = "value", default)]
     pub value: Wei,
 
-    #[serde(alias = "input", default)]
+    #[serde(rename = "data", alias = "input", default)]
     pub data: Bytes,
 }
