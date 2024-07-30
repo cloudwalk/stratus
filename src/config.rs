@@ -528,11 +528,6 @@ impl ConfigChecks for StratusConfig {
             if self.miner.block_mode != MinerMode::External {
                 return Err(anyhow::anyhow!("miner mode must be external when importer config is set"));
             }
-        } else {
-            // When importer is not set, miner mode cannot be external.
-            if self.miner.block_mode == MinerMode::External {
-                return Err(anyhow::anyhow!("miner mode must not be external when importer config is not set"));
-            }
         }
         Ok(())
     }
