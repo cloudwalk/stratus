@@ -260,7 +260,7 @@ e2e-lint mode="--write":
     fi
     node_modules/.bin/prettier . {{ mode }} --ignore-unknown
 
-# E2E: profiles rpc sync and generates a flamegraph
+# E2E: profiles RPC sync and generates a flamegraph
 e2e-flamegraph:
     #!/bin/bash
 
@@ -362,6 +362,52 @@ e2e-importer-online-down:
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
 
 # ------------------------------------------------------------------------------
+# Chaos tests
+# ------------------------------------------------------------------------------
+
+# Chaos: Run chaos testing experiment
+run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" experiment="":
+    #!/bin/bash
+
+    echo "Building Stratus"
+    cargo build --release --bin {{ bin }} --features dev
+
+    cd e2e/cloudwalk-contracts/integration
+    if [ ! -d node_modules ]; then
+        npm install
+    fi
+    cd ../../..
+
+    echo "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
+    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}
+
+# ------------------------------------------------------------------------------
+# Hive tests
+# ------------------------------------------------------------------------------
+
+# Hive: Build Stratus image for hive task
+hive-build-client:
+    docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .
+
+# Hive: Execute test pipeline
+hive:
+    if ! docker images | grep -q stratus_base; then \
+        echo "Building Docker image..."; \
+        docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .; \
+    else \
+        echo "Docker image already built."; \
+    fi
+    cd hive && go build .
+    cd hive && ./hive --client stratus --sim stratus/rpc --sim.parallelism 10
+#    cd hive && sudo ./hive --client stratus --sim stratus/rpc --sim.parallelism 10 --loglevel 5 --docker.output
+
+# Hive: View test pipeline results in Hiveview
+hiveview:
+    cd hive && go build ./cmd/hiveview
+    ./hive/hiveview --serve --addr 0.0.0.0:8080 --logdir ./hive/workspace/logs/
+
+
+# ------------------------------------------------------------------------------
 # Contracts tasks
 # ------------------------------------------------------------------------------
 
@@ -386,7 +432,7 @@ alias e2e-contracts := contracts-test
 contracts-remove *args="":
     cd e2e/cloudwalk-contracts && ./contracts-remove.sh {{args}}
 
-# Contracts: Start Stratus and run contracts test
+# Contracts: Start Stratus and run contracts tests with InMemory storage
 contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
@@ -404,6 +450,7 @@ contracts-test-stratus *args="":
     killport 3000
     exit $result_code
 
+# Contracts: Start Stratus and run contracts tests with RocksDB storage
 contracts-test-stratus-rocks *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
@@ -433,39 +480,3 @@ contracts-coverage-erase:
     echo "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
 
-# Chaos Testing: Run chaos experiment
-run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" experiment="":
-    #!/bin/bash
-
-    echo "Building Stratus"
-    cargo build --release --bin {{ bin }} --features dev
-
-    cd e2e/cloudwalk-contracts/integration
-    if [ ! -d node_modules ]; then
-        npm install
-    fi
-    cd ../../..
-
-    echo "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
-    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}
-
-# Build Stratus docker image for hive test
-hive-build-client:
-    docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .
-
-# Run Hive test
-hive:
-    if ! docker images | grep -q stratus_base; then \
-        echo "Building Docker image..."; \
-        docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .; \
-    else \
-        echo "Docker image already built."; \
-    fi
-    cd hive && go build .
-    cd hive && ./hive --client stratus --sim stratus/rpc --sim.parallelism 10
-#    cd hive && sudo ./hive --client stratus --sim stratus/rpc --sim.parallelism 10 --loglevel 5 --docker.output
-
-# Run Hiveview
-hiveview:
-    cd hive && go build ./cmd/hiveview
-    ./hive/hiveview --serve --addr 0.0.0.0:8080 --logdir ./hive/workspace/logs/
