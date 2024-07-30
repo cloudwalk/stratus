@@ -37,8 +37,13 @@ setup:
 alias run := stratus
 
 # Stratus: Compile with debug options
-build:
-    cargo build {{build_flags}}
+build features="":
+    #!/bin/bash
+    if [ -z "{{features}}" ]; then
+        cargo build {{build_flags}}
+    else
+        cargo build --features {{features}}
+    fi
 
 # Stratus: Check, or compile without generating code
 check:
@@ -162,7 +167,7 @@ e2e-stratus block-mode="automine" test="":
     fi
 
     just _log "Starting Stratus"
-    just build || exit 1
+    just build "dev" || exit 1
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
 
     just _wait_for_stratus
@@ -183,7 +188,7 @@ e2e-stratus-rocks block-mode="automine" test="":
     fi
 
     just _log "Starting Stratus"
-    just build || exit 1
+    just build "dev" || exit 1
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
@@ -200,7 +205,7 @@ e2e-stratus-rocks block-mode="automine" test="":
 e2e-clock-stratus:
     #!/bin/bash
     just _log "Starting Stratus"
-    just build || exit 1
+    just build "dev" || exit 1
     cargo run  --release --bin stratus --features dev -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
@@ -217,7 +222,7 @@ e2e-clock-stratus:
 e2e-clock-stratus-rocks:
     #!/bin/bash
     just _log "Starting Stratus"
-    just build || exit 1
+    just build "dev" || exit 1
     cargo run  --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
@@ -404,7 +409,7 @@ contracts-remove *args="":
 contracts-test-stratus *args="":
     #!/bin/bash
     just _log "Starting Stratus"
-    just build || exit 1
+    just build "dev" || exit 1
     just run -a 0.0.0.0:3000 &
 
     just _wait_for_stratus
@@ -421,7 +426,7 @@ contracts-test-stratus *args="":
 contracts-test-stratus-rocks *args="":
     #!/bin/bash
     just _log "Starting Stratus"
-    just build || exit 1
+    just build "dev" || exit 1
     just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
