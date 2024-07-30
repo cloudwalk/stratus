@@ -120,11 +120,6 @@ mod tests {
     // FIX: gen_test_serde!(ExecutionChanges);
     // FIX: gen_test_serde!(TransactionMined);
     // TODO: gen_test_serde!(BlockFilter);
-    // TODO: gen_test_serde!(CallInput);
-    // TODO: gen_test_serde!(DateTimeNow);
-    // TODO: gen_test_serde!(EcdsaRs);
-    // TODO: gen_test_serde!(EcdsaV);
-    // TODO: gen_test_serde!(EvmExecutionMetrics);
     // TODO: gen_test_serde!(ExecutionConflict);
     // TODO: gen_test_serde!(ExecutionConflicts);
     // TODO: gen_test_serde!(ExecutionConflictsBuilder);
@@ -141,15 +136,19 @@ mod tests {
     // TODO: gen_test_serde!(StratusError);
     // TODO: gen_test_serde!(TransactionExecution);
     // TODO: gen_test_serde!(TransactionStage);
-    // Type aliases
     gen_test_serde!(Account);
     gen_test_serde!(Address);
     gen_test_serde!(BlockHeader);
     gen_test_serde!(BlockNumber);
     gen_test_serde!(Bytes);
+    gen_test_serde!(CallInput);
     gen_test_serde!(ChainId);
     gen_test_serde!(CodeHash);
+    gen_test_serde!(DateTimeNow);
     gen_test_serde!(Difficulty);
+    gen_test_serde!(EcdsaRs);
+    gen_test_serde!(EcdsaV);
+    gen_test_serde!(EvmExecutionMetrics);
     gen_test_serde!(ExecutionResult);
     gen_test_serde!(Gas);
     gen_test_serde!(Hash);
