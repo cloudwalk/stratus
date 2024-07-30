@@ -328,7 +328,7 @@ impl PermanentStorage for RedisPermanentStorage {
                 match redis_account {
                     Ok(vec_json) => match vec_json.first() {
                         Some(json) => Ok(Some(from_json_str(json))),
-                        None => Ok(None)
+                        None => Ok(None),
                     },
                     Err(e) => log_and_err!(reason = e, "failed to read account from redis historical value"),
                 }
