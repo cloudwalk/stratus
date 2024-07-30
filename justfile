@@ -15,6 +15,7 @@ wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
 build_flags := nightly_flag + " " + release_flag + " --bin stratus --features " + feature_flags
 run_flags := "--enable-genesis"
 
+
 # Project: Show available tasks
 default:
     just --list --unsorted
