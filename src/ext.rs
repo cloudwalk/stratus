@@ -312,7 +312,7 @@ macro_rules! gen_test_serde {
                 let value_decoded = serde_json::from_str::<$type>(&value_encoded).unwrap();
                 assert_eq!(value_decoded, value_original);
 
-                let value_reencoded = serde_json::to_string(&value_original).unwrap();
+                let value_reencoded = serde_json::to_string(&value_decoded).unwrap();
                 assert_eq!(value_reencoded, value_encoded);
             }
 
@@ -324,7 +324,7 @@ macro_rules! gen_test_serde {
                 let value_decoded = bincode::deserialize::<$type>(&value_encoded).unwrap();
                 assert_eq!(value_decoded, value_original);
 
-                let value_reencoded = bincode::serialize(&value_original).unwrap();
+                let value_reencoded = bincode::serialize(&value_decoded).unwrap();
                 assert_eq!(value_reencoded, value_encoded);
             }
         }

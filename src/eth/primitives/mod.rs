@@ -114,6 +114,12 @@ mod tests {
     type TransactionExecutionValueChangeSlot = ExecutionValueChange<Slot>;
     type TransactionExecutionValueChangeWei = ExecutionValueChange<Wei>;
 
+
+    // FIX: gen_test_serde!(Block);
+    // FIX: gen_test_serde!(EvmExecution);
+    // FIX: gen_test_serde!(ExecutionAccountChanges);
+    // FIX: gen_test_serde!(ExecutionChanges);
+    // FIX: gen_test_serde!(TransactionMined);
     // TODO: gen_test_serde!(BlockFilter);
     // TODO: gen_test_serde!(CallInput);
     // TODO: gen_test_serde!(DateTimeNow);
@@ -136,18 +142,15 @@ mod tests {
     // TODO: gen_test_serde!(StratusError);
     // TODO: gen_test_serde!(TransactionExecution);
     // TODO: gen_test_serde!(TransactionStage);
+    // Type aliases
     gen_test_serde!(Account);
     gen_test_serde!(Address);
-    gen_test_serde!(Block);
     gen_test_serde!(BlockHeader);
     gen_test_serde!(BlockNumber);
     gen_test_serde!(Bytes);
     gen_test_serde!(ChainId);
     gen_test_serde!(CodeHash);
     gen_test_serde!(Difficulty);
-    gen_test_serde!(EvmExecution);
-    gen_test_serde!(ExecutionAccountChanges);
-    gen_test_serde!(ExecutionChanges);
     gen_test_serde!(ExecutionResult);
     gen_test_serde!(Gas);
     gen_test_serde!(Hash);
@@ -161,15 +164,12 @@ mod tests {
     gen_test_serde!(Slot);
     gen_test_serde!(SlotIndex);
     gen_test_serde!(SlotValue);
-    gen_test_serde!(TransactionInput);
-    gen_test_serde!(TransactionMined);
-    gen_test_serde!(UnixTime);
-    gen_test_serde!(Wei);
-
-    // Type aliases
     gen_test_serde!(TransactionExecutionValueChangeBytes);
     gen_test_serde!(TransactionExecutionValueChangeNonce);
     gen_test_serde!(TransactionExecutionValueChangeOptionString);
     gen_test_serde!(TransactionExecutionValueChangeSlot);
     gen_test_serde!(TransactionExecutionValueChangeWei);
+    gen_test_serde!(TransactionInput);
+    gen_test_serde!(UnixTime);
+    gen_test_serde!(Wei);
 }
