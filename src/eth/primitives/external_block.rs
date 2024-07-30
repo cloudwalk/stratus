@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 use crate::alias::EthersBlockEthersTransaction;
 use crate::alias::EthersBlockExternalTransaction;
+use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
@@ -9,7 +10,6 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
-use crate::ext::JsonValue;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more:: Deref, serde::Deserialize, serde::Serialize)]

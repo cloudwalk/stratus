@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use display_json::DebugAsJson;
 use ethereum_types::H256;
 use itertools::Itertools;
 use serde::Deserialize;
@@ -9,6 +10,7 @@ use super::TransactionInput;
 use crate::alias::EthersBlockEthersTransaction;
 use crate::alias::EthersBlockH256;
 use crate::alias::EthersTransaction;
+use crate::alias::JsonValue;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
@@ -18,10 +20,9 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<TransactionMined>,

@@ -18,10 +18,10 @@ index 3bebd80..0f45a75 100644
 +      method: "evm_setNextBlockTimestamp",
 +      params: [0]
 +    });
-+    await network.provider.request({
-+      method: "debug_setHead",
-+      params: [`0x1`]
-+    });
++    // await network.provider.request({
++    //  method: "debug_setHead",
++    //  params: [`0x1`]
++    // });
      return func();
    }
  }
@@ -104,8 +104,8 @@ index 3bebd80..0f45a75 100644
 +      });
 +    } else {
 +      await network.provider.request({
-+        method: "debug_setHead",
-+        params: [`0x0`]
++        method: "stratus_reset",
++        params: []
 +      });
 +    }
      [deployer, attacker, user1, user2] = await ethers.getSigners();

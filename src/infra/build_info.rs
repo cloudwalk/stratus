@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::ext::JsonValue;
+use crate::alias::JsonValue;
 
 // -----------------------------------------------------------------------------
 // Build constants

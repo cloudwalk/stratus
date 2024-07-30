@@ -46,18 +46,18 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 
+use crate::alias::JsonValue;
 use crate::ext::not;
 use crate::ext::spawn_named;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
 use crate::infra::build_info;
 use crate::infra::tracing::TracingConfig;
 use crate::infra::tracing::TracingLogFormat;
 use crate::infra::tracing::TracingProtocol;
 
 /// Init application tracing.
-pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, tokio_console_address: SocketAddr) -> anyhow::Result<()> {
+pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, tokio_console_address: Option<SocketAddr>) -> anyhow::Result<()> {
     println!("creating tracing registry");
 
     // configure tracing context layer
@@ -124,21 +124,30 @@ pub async fn init_tracing(config: &TracingConfig, sentry_url: Option<&str>, toki
     };
 
     // configure tokio-console layer
-    println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
-    let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
-    spawn_named("console::grpc-server", async move {
-        if let Err(e) = console_server.serve().await {
-            tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
-        };
-    });
+    let tokio_console_layer = match tokio_console_address {
+        Some(tokio_console_address) => {
+            println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
 
-    // init registry
+            let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
+            spawn_named("console::grpc-server", async move {
+                if let Err(e) = console_server.serve().await {
+                    tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
+                };
+            });
+            Some(console_layer)
+        }
+        None => {
+            println!("tracing registry: skipping tokio-console exporter");
+            None
+        }
+    };
+
     let result = tracing_subscriber::registry()
         .with(tracing_context_layer)
         .with(stdout_layer)
         .with(opentelemetry_layer)
         .with(sentry_layer)
-        .with(console_layer)
+        .with(tokio_console_layer)
         .try_init();
 
     match result {

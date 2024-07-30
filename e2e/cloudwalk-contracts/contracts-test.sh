@@ -16,14 +16,22 @@ test() {
     # configure hardhat env
     cd repos/$repo
     git restore .
-    git apply ../../patches/$repo.patch || true
     cp ../../../hardhat.config.ts .
     rm -rf .openzeppelin/
 
+    # apply git patch
+    patch_file="../../patches/$repo.patch"
+    if [ -e $patch_file ]; then
+        log "Applying Git patch: $patch_file"
+        git apply $patch_file || true
+    fi
+
     # test
     if [ -z "$test" ]; then
+        log "Executing all tests"
         npx hardhat test --bail --network stratus test/$file.test.ts
     else
+        log "Executing filtered tests: $test"
         npx hardhat test --bail --network stratus test/$file.test.ts --grep $test
     fi
     result_code=$?

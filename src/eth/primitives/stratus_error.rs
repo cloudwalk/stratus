@@ -7,13 +7,13 @@ use jsonrpsee::types::ErrorObjectOwned;
 use revm::primitives::EVMError;
 use strum::EnumProperty;
 
+use crate::alias::JsonValue;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Nonce;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
 
 /// Valid  error catogories are:
 /// * client_request: request is invalid.

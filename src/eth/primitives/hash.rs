@@ -16,6 +16,8 @@ use crate::gen_newtype_from;
 pub struct Hash(pub H256);
 
 impl Hash {
+    pub const ZERO: Hash = Hash(H256::zero());
+
     /// Creates a hash from the given bytes.
     pub const fn new(bytes: [u8; 32]) -> Self {
         Self(H256(bytes))
@@ -28,11 +30,6 @@ impl Hash {
     /// Creates a new random hash.
     pub fn new_random() -> Self {
         Self(H256::random())
-    }
-
-    /// Returns the zero hash
-    pub fn zero() -> Self {
-        Self(H256::zero())
     }
 
     pub fn into_hash_partition(self) -> i16 {

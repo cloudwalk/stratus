@@ -15,6 +15,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::redis::RedisPermanentStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StoragePointInTime;
@@ -45,6 +46,8 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>>;
 
     /// Retrieves logs from the storage.
+    ///
+    /// TODO: `filter.to_block` is always populated, need to change the type to reflect that.
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
 
     // -------------------------------------------------------------------------
@@ -64,8 +67,9 @@ pub trait PermanentStorage: Send + Sync + 'static {
     // Global state
     // -------------------------------------------------------------------------
 
+    #[cfg(feature = "dev")]
     /// Resets all state to a specific block number.
-    fn reset_at(&self, number: BlockNumber) -> anyhow::Result<()>;
+    fn reset(&self) -> anyhow::Result<()>;
 }
 
 // -----------------------------------------------------------------------------
@@ -79,6 +83,10 @@ pub struct PermanentStorageConfig {
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
     pub perm_storage_kind: PermanentStorageKind,
 
+    /// Storage connection URL.
+    #[arg(long = "perm-storage-url", env = "PERM_STORAGE_URL")]
+    pub perm_storage_url: Option<String>,
+
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
     pub rocks_path_prefix: Option<String>,
@@ -88,6 +96,10 @@ pub struct PermanentStorageConfig {
 pub enum PermanentStorageKind {
     #[serde(rename = "inmemory")]
     InMemory,
+
+    #[serde(rename = "redis")]
+    Redis,
+
     #[serde(rename = "rocks")]
     Rocks,
 }
@@ -99,6 +111,9 @@ impl PermanentStorageConfig {
 
         let perm: Box<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Box::<InMemoryPermanentStorage>::default(),
+
+            PermanentStorageKind::Redis => Box::new(RedisPermanentStorage::new()?),
+
             PermanentStorageKind::Rocks => {
                 let prefix = self.rocks_path_prefix.clone();
                 Box::new(RocksPermanentStorage::new(prefix)?)
@@ -114,6 +129,7 @@ impl FromStr for PermanentStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
+            "redis" => Ok(Self::Redis),
             "rocks" => Ok(Self::Rocks),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
         }

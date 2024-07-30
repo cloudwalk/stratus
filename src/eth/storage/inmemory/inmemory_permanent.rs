@@ -279,30 +279,12 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
-        // reset block number
-        let block_number_u64: u64 = block_number.into();
-        let _ = self.block_number.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
-            if block_number_u64 <= current {
-                Some(block_number_u64)
-            } else {
-                None
-            }
-        });
+    #[cfg(feature = "dev")]
+    fn reset(&self) -> anyhow::Result<()> {
+        self.block_number.store(0u64, Ordering::SeqCst);
 
-        // remove blocks
         let mut state = self.lock_write();
-        state.blocks_by_hash.retain(|_, b| b.number() <= block_number);
-        state.blocks_by_number.retain(|_, b| b.number() <= block_number);
-
-        // remove transactions and logs
-        state.transactions.retain(|_, t| t.block_number <= block_number);
-        state.logs.retain(|l| l.block_number <= block_number);
-
-        // remove account changes
-        for account in state.accounts.values_mut() {
-            account.reset_at(block_number);
-        }
+        *state = InMemoryPermanentStorageState::default();
 
         Ok(())
     }

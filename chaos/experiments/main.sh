@@ -98,7 +98,6 @@ start_instance() {
 
     RUST_LOG=info RUST_BACKTRACE=1 cargo run --release --bin $binary --features dev -- \
         --block-mode=1s \
-        --enable-test-accounts \
         --candidate-peers="$candidate_peers" \
         -a=$address \
         --grpc-server-address=$grpc_address \

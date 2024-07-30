@@ -111,7 +111,8 @@ mod offset {
     use std::sync::atomic::Ordering::Acquire;
     use std::sync::atomic::Ordering::SeqCst;
 
-    use super::*;
+    use super::UnixTime;
+    use super::Utc;
 
     pub static TIME_OFFSET: AtomicI64 = AtomicI64::new(0);
     pub static NEXT_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
