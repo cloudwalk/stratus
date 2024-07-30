@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use display_json::DebugAsJson;
 use ethereum_types::H256;
 use itertools::Itertools;
 use serde::Deserialize;
@@ -21,7 +22,7 @@ use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<TransactionMined>,

@@ -44,8 +44,9 @@ impl MinerConfig {
             if mode.is_automine() || mode.is_interval() {
                 let genesis = storage.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
                 if genesis.is_none() {
-                    tracing::info!("enabling genesis block");
-                    miner.commit(crate::eth::primitives::Block::genesis())?;
+                    let genesis = crate::eth::primitives::Block::genesis();
+                    tracing::info!(block = ?genesis, "enabling genesis block");
+                    miner.commit(genesis)?;
                 }
             }
         }
