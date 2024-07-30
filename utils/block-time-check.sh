@@ -14,7 +14,7 @@ done
 echo "-> Getting info on first block"
 first_block_info=$(curl -s http://0.0.0.0:3000 \
     -H "Content-Type: application/json" \
-    -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["earliest",false],"id":1}')
+    -d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["0x1",false],"id":1}')
 
 echo "-> Getting info on latest block"
 latest_block_info=$(curl -s http://0.0.0.0:3000 \
@@ -33,7 +33,7 @@ block_count_hex_no_prefix=${block_count_hex#0x}
 
 # Convert hex to number
 first_block_time_dec=$((16#${first_block_time_hex_no_prefix}))
-latest_block_time_dec=$((16#${latest_block_time_hex_no_prefix}))  
+latest_block_time_dec=$((16#${latest_block_time_hex_no_prefix}))
 block_count=$((16#${block_count_hex_no_prefix}))
 
 # Elapsed time between first and latest block
