@@ -162,7 +162,7 @@ e2e-stratus block-mode="automine" test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} | tee stratus.log &
 
     echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
     wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
@@ -184,7 +184,7 @@ e2e-stratus-rocks block-mode="automine" test="":
 
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks | tee stratus.log &
 
     echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
     wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
@@ -202,7 +202,7 @@ e2e-clock-stratus:
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev -- --block-mode 1s -a 0.0.0.0:3000 | tee stratus.log &
 
     echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
     wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
@@ -220,7 +220,7 @@ e2e-clock-stratus-rocks:
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 | tee stratus.log &
 
     echo "-> Waiting Stratus to start {{wait_service_timeout}} for seconds"
     wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
@@ -298,7 +298,6 @@ e2e-importer-online-up:
     # Wait for Run With Importer to start
     echo "-> Waiting Stratus 2 to start for {{wait_service_timeout}} seconds"
     wait-service --tcp 0.0.0.0:3001 -t {{wait_service_timeout}} -- echo "Stratus 2 started"
-
 
     if [ -d e2e/cloudwalk-contracts ]; then
     (
@@ -411,7 +410,7 @@ contracts-test-stratus *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 > stratus.log &
+    just run -a 0.0.0.0:3000 &
 
     echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
     wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
@@ -429,7 +428,7 @@ contracts-test-stratus-rocks *args="":
     #!/bin/bash
     echo "-> Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --perm-storage=rocks | tee stratus.log &
 
     echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
     wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
