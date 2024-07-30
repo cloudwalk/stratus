@@ -136,7 +136,7 @@ test-int name="'*'":
 # ------------------------------------------------------------------------------
 
 # E2E: Execute Hardhat tests in the specified network
-e2e network="stratus" block-mode="automine" test="":
+e2e network="stratus" block_modes="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -145,11 +145,16 @@ e2e network="stratus" block-mode="automine" test="":
         npm install
     fi
 
-    if [ -z "{{test}}" ]; then
-        BLOCK_MODE={{block-mode}} npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}}
-    else
-        BLOCK_MODE={{block-mode}} npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}} --grep "{{test}}"
-    fi
+    block_modes_split=$(echo {{block_modes}} | sed "s/,/ /g")
+    for block_mode in $block_modes_split
+    do
+        just _log "Executing: $block_mode"
+        if [ -z "{{test}}" ]; then
+            BLOCK_MODE=$block_mode npx hardhat test test/$block_mode/*.test.ts --network {{network}}
+        else
+            BLOCK_MODE=$block_mode npx hardhat test test/$block_mode/*.test.ts --network {{network}} --grep "{{test}}"
+        fi
+    done
 
 # E2E: Starts and execute Hardhat tests in Stratus
 e2e-stratus block-mode="automine" test="":
