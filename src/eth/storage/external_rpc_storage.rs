@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use display_json::DebugAsJson;
 
+use crate::alias::JsonValue;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -17,7 +18,6 @@ use crate::eth::primitives::Wei;
 use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::ext::parse_duration;
-use crate::alias::JsonValue;
 
 #[async_trait]
 pub trait ExternalRpcStorage: Send + Sync {

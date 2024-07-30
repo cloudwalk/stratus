@@ -11,6 +11,7 @@ use rlp::Decodable;
 use serde::Deserialize;
 
 use crate::alias::EthersTransaction;
+use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
@@ -19,7 +20,6 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
-use crate::alias::JsonValue;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 

@@ -7,6 +7,7 @@ use std::time::Duration;
 #[cfg(feature = "dev")]
 use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
+use stratus::alias::JsonValue;
 use stratus::config::IntegrationTestConfig;
 use stratus::eth::primitives::Account;
 use stratus::eth::primitives::Address;
@@ -19,7 +20,6 @@ use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::StoragePointInTime;
 use stratus::eth::storage::StratusStorage;
 use stratus::ext::traced_sleep;
-use stratus::alias::JsonValue;
 use stratus::ext::SleepReason;
 use stratus::infra::docker::Docker;
 use stratus::GlobalServices;
