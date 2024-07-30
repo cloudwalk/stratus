@@ -34,10 +34,9 @@ describe("JSON-RPC", () => {
     });
 
     describe("State", () => {
-        it("debug_setHead", async () => {
-            if (isStratus) {
-                (await sendExpect("debug_setHead", [ZERO])).eq(ZERO);
-            }
+        it("stratus_reset", async () => {
+            (await sendExpect("stratus_reset")).eq(true);
+            (await sendExpect("hardhat_reset")).eq(true);
         });
     });
 

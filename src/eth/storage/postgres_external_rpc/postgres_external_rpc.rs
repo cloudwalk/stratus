@@ -6,6 +6,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::types::BigDecimal;
 use sqlx::PgPool;
 
+use crate::alias::JsonValue;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -16,7 +17,6 @@ use crate::eth::primitives::Wei;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
-use crate::ext::JsonValue;
 use crate::ext::SleepReason;
 use crate::log_and_err;
 

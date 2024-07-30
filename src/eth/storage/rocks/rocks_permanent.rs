@@ -116,7 +116,8 @@ impl PermanentStorage for RocksPermanentStorage {
         self.state.save_accounts(accounts)
     }
 
-    fn reset_at(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+    #[cfg(feature = "dev")]
+    fn reset(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         let block_number_u64 = block_number.as_u64();
 
         // reset block number

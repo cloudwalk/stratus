@@ -223,11 +223,7 @@ export async function sendRawTransactions(signedTxs: string[]): Promise<string[]
 
 /// Resets the blockchain state to the specified block number.
 export async function sendReset(): Promise<void> {
-    if (isStratus) {
-        await send("debug_setHead", [toHex(0)]);
-    } else {
-        await send("hardhat_reset");
-    }
+    await send("hardhat_reset");
 }
 
 /// Retrieves the current nonce of an account.

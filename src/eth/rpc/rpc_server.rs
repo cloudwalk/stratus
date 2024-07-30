@@ -24,12 +24,11 @@ use tracing::info_span;
 use tracing::Instrument;
 use tracing::Span;
 
+use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
@@ -54,7 +53,6 @@ use crate::eth::Consensus;
 use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
-use crate::ext::JsonValue;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -147,12 +145,13 @@ pub async fn serve_rpc(
 }
 
 fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {
-    // debug
+    // dev mode methods
     #[cfg(feature = "dev")]
     {
         module.register_blocking_method("evm_setNextBlockTimestamp", evm_set_next_block_timestamp)?;
         module.register_blocking_method("evm_mine", evm_mine)?;
-        module.register_blocking_method("debug_setHead", debug_set_head)?;
+        module.register_blocking_method("hardhat_reset", stratus_reset)?;
+        module.register_blocking_method("stratus_reset", stratus_reset)?;
     }
 
     // stratus status
@@ -217,13 +216,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 // -----------------------------------------------------------------------------
 
 #[cfg(feature = "dev")]
-fn debug_set_head(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    let (_, number) = next_rpc_param::<BlockNumber>(params.sequence())?;
-    ctx.storage.reset(number)?;
-    Ok(to_json_value(number))
-}
-
-#[cfg(feature = "dev")]
 fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     ctx.miner.mine_local_and_commit()?;
     Ok(to_json_value(true))
@@ -247,9 +239,6 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
-/// If stratus is ready and able to receive traffic.
-///
-/// This is an `AND` of `readiness` with `liveness`.
 async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensions: Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_shutdown() {
         tracing::warn!("liveness check failed because of shutdown");
@@ -270,6 +259,12 @@ async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensio
 // -----------------------------------------------------------------------------
 // Stratus - Admin
 // -----------------------------------------------------------------------------
+
+#[cfg(feature = "dev")]
+fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    ctx.storage.reset()?;
+    Ok(to_json_value(true))
+}
 
 fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
     GlobalState::set_unknown_client_enabled(true);
