@@ -178,12 +178,12 @@ impl PermanentStorage for RedisPermanentStorage {
 
         // exit if no keys
         if block_keys.is_empty() {
-            return Ok(vec![])
+            return Ok(vec![]);
         }
 
         // execute command
         let mut conn = self.conn()?;
-        let blocks: RedisVecOptString =  conn.mget(block_keys);
+        let blocks: RedisVecOptString = conn.mget(block_keys);
 
         // parse
         let blocks: Vec<Block> = match blocks {
