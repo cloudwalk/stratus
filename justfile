@@ -1,4 +1,4 @@
-import '.justfile_helpers' # _lint, _outdated
+import "justfile_helpers"
 
 # Environment variables automatically passed to executed commands.
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
@@ -8,7 +8,6 @@ export RUST_BACKTRACE := env("RUST_BACKTRACE", "0")
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
-wait_service_timeout := env("WAIT_SERVICE_TIMEOUT", "60")
 
 # Cargo flags.
 build_flags := nightly_flag + " " + release_flag + " "
@@ -19,16 +18,16 @@ default:
 
 # Project: Run project setup
 setup:
-    @echo "* Installing Cargo killport"
+    @just _log "Installing Cargo killport"
     cargo install killport
 
-    @echo "* Installing Cargo wait-service"
+    @just _log "Installing Cargo wait-service"
     cargo install wait-service
 
-    @echo "* Installing Cargo flamegraph"
+    @just _log "Installing Cargo flamegraph"
     cargo install flamegraph
 
-    @echo "* Cloning Solidity repositories"
+    @just _log "Cloning Solidity repositories"
     just contracts-clone
 
 # ------------------------------------------------------------------------------
@@ -68,7 +67,9 @@ lint-check nightly-version="":
 
 # Stratus: Check for dependencies major updates
 outdated:
-    @just _outdated
+    #!/bin/bash
+    command -v cargo-outdated >/dev/null 2>&1 || { cargo install cargo-outdated; }
+    cargo outdated --root-deps-only --ignore-external-rel
 
 # Stratus: Update only the project dependencies
 update:
@@ -160,18 +161,17 @@ e2e-stratus block-mode="automine" test="":
         cd e2e
     fi
 
-    echo "-> Starting Stratus"
+    just _log "Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} | tee stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
 
-    echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
+    just _wait_for_stratus
 
-    echo "-> Running E2E tests"
+    just _log "Running E2E tests"
     just e2e stratus {{block-mode}} {{test}}
     result_code=$?
 
-    echo "-> Killing Stratus"
+    just _log "Killing Stratus"
     killport 3000
     exit $result_code
 
@@ -182,54 +182,51 @@ e2e-stratus-rocks block-mode="automine" test="":
         cd e2e
     fi
 
-    echo "-> Starting Stratus"
+    just _log "Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks | tee stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
 
-    echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
+    just _wait_for_stratus
 
-    echo "-> Running E2E tests"
+    just _log "Running E2E tests"
     just e2e stratus {{block-mode}} {{test}}
     result_code=$?
 
-    echo "-> Killing Stratus"
+    just _log "Killing Stratus"
     killport 3000
     exit $result_code
 
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus:
     #!/bin/bash
-    echo "-> Starting Stratus"
+    just _log "Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev -- --block-mode 1s -a 0.0.0.0:3000 | tee stratus.log &
+    cargo run  --release --bin stratus --features dev -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
-    echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
+    just _wait_for_stratus
 
-    echo "-> Validating block time"
+    just _log "Validating block time"
     ./utils/block-time-check.sh
     result_code=$?
 
-    echo "-> Killing Stratus"
+    just _log "Killing Stratus"
     killport 3000
     exit $result_code
 
 # E2E Clock: Builds and runs Stratus Rocks with block-time flag, then validates average block generation time
 e2e-clock-stratus-rocks:
     #!/bin/bash
-    echo "-> Starting Stratus"
+    just _log "Starting Stratus"
     just build || exit 1
-    cargo run  --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 | tee stratus.log &
+    cargo run  --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
-    echo "-> Waiting Stratus to start {{wait_service_timeout}} for seconds"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
+    just _wait_for_stratus
 
-    echo "-> Validating block time"
+    just _log "Validating block time"
     ./utils/block-time-check.sh
     result_code=$?
 
-    echo "-> Killing Stratus"
+    just _log "Killing Stratus"
     killport 3000
     exit $result_code
 
@@ -246,7 +243,7 @@ e2e-flamegraph:
     #!/bin/bash
 
     # Start RPC mock server
-    echo "Starting RPC mock server"
+    just _log "Starting RPC mock server"
     killport 3003
 
     cd e2e/rpc-mock-server
@@ -258,11 +255,11 @@ e2e-flamegraph:
     sleep 1
 
     # Wait for RPC mock server
-    echo "Waiting for RPC mock server to start for {{wait_service_timeout}} seconds"
-    wait-service --tcp 0.0.0.0:3003 -t {{wait_service_timeout}} -- echo "RPC mock server started"
+    just _log "Waiting for RPC mock server to start for 60 seconds"
+    wait-service --tcp 0.0.0.0:3003 -t 60 -- echo "RPC mock server started"
 
     # Run cargo flamegraph with necessary environment variables
-    echo "Running cargo flamegraph"
+    just _log "Running cargo flamegraph"
     cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
 e2e-importer-online:
@@ -280,7 +277,7 @@ e2e-importer-online-up:
     #!/bin/bash
 
     # Build Stratus and Run With Importer binaries
-    echo "Building Stratus and Run With Importer binaries"
+    just _log "Building Stratus and Run With Importer binaries"
     cargo build --release --bin stratus --bin run-with-importer --features dev
 
     mkdir e2e_logs
@@ -289,15 +286,13 @@ e2e-importer-online-up:
     RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --enable-genesis --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus to start
-    echo "-> Waiting Stratus 1 to start for {{wait_service_timeout}} seconds"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus 1 started"
+    just _wait_for_stratus 3000
 
     # Start Run With Importer binary
     RUST_LOG=info cargo run --release --bin run-with-importer --features dev -- --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
 
     # Wait for Run With Importer to start
-    echo "-> Waiting Stratus 2 to start for {{wait_service_timeout}} seconds"
-    wait-service --tcp 0.0.0.0:3001 -t {{wait_service_timeout}} -- echo "Stratus 2 started"
+    just _wait_for_stratus 3001
 
     if [ -d e2e/cloudwalk-contracts ]; then
     (
@@ -305,10 +300,10 @@ e2e-importer-online-up:
         npm install
         npx hardhat test test/importer.test.ts --network stratus --bail
         if [ $? -ne 0 ]; then
-            echo "Tests failed"
+            just _log "Tests failed"
             exit 1
         else
-            echo "Tests passed successfully"
+            just _log "Tests passed successfully"
             exit 0
         fi
     )
@@ -342,7 +337,7 @@ e2e-importer-online-down:
 run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" experiment="":
     #!/bin/bash
 
-    echo "Building Stratus"
+    just _log "Building Stratus"
     cargo build --release --bin {{ bin }} --features dev
 
     cd e2e/cloudwalk-contracts/integration
@@ -351,7 +346,7 @@ run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" 
     fi
     cd ../../..
 
-    echo "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
+    just _log "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
     ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}
 
 # ------------------------------------------------------------------------------
@@ -365,10 +360,10 @@ hive-build-client:
 # Hive: Execute test pipeline
 hive:
     if ! docker images | grep -q stratus_base; then \
-        echo "Building Docker image..."; \
+        just _log "Building Docker image..."; \
         docker build -f hive/clients/stratus/Dockerfile_base -t stratus_base .; \
     else \
-        echo "Docker image already built."; \
+        just _log "Docker image already built."; \
     fi
     cd hive && go build .
     cd hive && ./hive --client stratus --sim stratus/rpc --sim.parallelism 10
@@ -408,36 +403,34 @@ contracts-remove *args="":
 # Contracts: Start Stratus and run contracts tests with InMemory storage
 contracts-test-stratus *args="":
     #!/bin/bash
-    echo "-> Starting Stratus"
+    just _log "Starting Stratus"
     just build || exit 1
     just run -a 0.0.0.0:3000 &
 
-    echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
+    just _wait_for_stratus
 
-    echo "-> Running E2E Contracts tests"
+    just _log "Running E2E Contracts tests"
     just e2e-contracts {{args}}
     result_code=$?
 
-    echo "-> Killing Stratus"
+    just _log "Killing Stratus"
     killport 3000
     exit $result_code
 
 # Contracts: Start Stratus and run contracts tests with RocksDB storage
 contracts-test-stratus-rocks *args="":
     #!/bin/bash
-    echo "-> Starting Stratus"
+    just _log "Starting Stratus"
     just build || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage=rocks | tee stratus.log &
+    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
-    echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
+    just _wait_for_stratus
 
-    echo "-> Running E2E tests"
+    just _log "Running E2E tests"
     just e2e-contracts {{args}}
     result_code=$?
 
-    echo "-> Killing Stratus"
+    just _log "Killing Stratus"
     killport 3000
 
     exit $result_code
@@ -450,6 +443,6 @@ contracts-coverage *args="":
 contracts-coverage-erase:
     #!/bin/bash
     cd e2e/cloudwalk-contracts/repos || exit 1
-    echo "Erasing coverage info..."
+    just _log "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
 

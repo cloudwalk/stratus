@@ -1,0 +1,23 @@
+_lint version="" fmt-flag="" clippy-flag="":
+    cargo +nightly{{version}} fmt --all {{fmt-flag}}
+    cargo +nightly{{version}} clippy --all-targets -- {{clippy-flag}}
+
+_doc version="":
+    cargo +nightly{{version}} doc --no-deps
+
+# Log a message to stderr.
+_log message:
+    @echo "-> [$(date +"%Y-%m-%d %H:%M:%S")] {{message}}" 1>&2;
+
+# Wait for Stratus to start.
+_wait_for_stratus port="3000":
+    #!/bin/bash
+    just _log "Waiting Stratus to start on port {{port}} for 60 seconds"
+    wait-service --tcp 0.0.0.0:{{port}} -t 60 -- echo
+    if [ $? -eq 0 ]; then
+        just _log "Stratus on port {{port}} started"
+    else
+        just _log "Stratus on port {{port}} did not start fast enough"
+        cat stratus.log
+        exit 255
+    fi
