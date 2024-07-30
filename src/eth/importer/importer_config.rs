@@ -4,6 +4,7 @@ use std::time::Duration;
 use clap::Parser;
 use display_json::DebugAsJson;
 
+use crate::config::StratusConfig;
 use crate::eth::executor::Executor;
 use crate::eth::importer::Importer;
 use crate::eth::miner::Miner;
@@ -32,6 +33,28 @@ pub struct ImporterConfig {
 }
 
 impl ImporterConfig {
+    pub fn init_with_config(
+        config: &StratusConfig,
+        executor: &Arc<Executor>,
+        miner: &Arc<Miner>,
+        storage: &Arc<StratusStorage>,
+        chain: Option<Arc<BlockchainClient>>,
+    ) -> anyhow::Result<Option<Arc<Importer>>> {
+        if let Some(importer_config) = config.importer.as_ref() {
+            if let Some(chain) = chain {
+                return Ok(Some(importer_config.init(
+                    Arc::clone(executor),
+                    Arc::clone(miner),
+                    Arc::clone(storage),
+                    chain,
+                )?));
+            } else {
+                return Err(anyhow::anyhow!("chain is not initialized"));
+            }
+        }
+        Ok(None)
+    }
+
     pub fn init(
         &self,
         executor: Arc<Executor>,

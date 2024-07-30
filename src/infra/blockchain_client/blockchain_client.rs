@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -16,6 +17,7 @@ use super::pending_transaction::PendingTransaction;
 use crate::alias::EthersBytes;
 use crate::alias::EthersTransaction;
 use crate::alias::JsonValue;
+use crate::config::StratusConfig;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
@@ -38,6 +40,22 @@ pub struct BlockchainClient {
 }
 
 impl BlockchainClient {
+    pub async fn init_with_config(config: &StratusConfig) -> anyhow::Result<Option<Arc<Self>>> {
+        if config.importer.is_none() {
+            return Ok(None);
+        }
+
+        let importer_config = config.importer.as_ref().ok_or(anyhow::anyhow!("importer config is not set"))?;
+        Ok(Some(Arc::new(
+            BlockchainClient::new_http_ws(
+                &importer_config.external_rpc,
+                importer_config.external_rpc_ws.as_deref(),
+                importer_config.external_rpc_timeout,
+            )
+            .await?,
+        )))
+    }
+
     /// Creates a new RPC client connected only to HTTP.
     pub async fn new_http(http_url: &str, timeout: Duration) -> anyhow::Result<Self> {
         Self::new_http_ws(http_url, None, timeout).await

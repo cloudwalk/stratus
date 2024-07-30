@@ -17,6 +17,7 @@ use tokio::runtime::Runtime;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
+use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::ExternalRpcStorageConfig;
@@ -65,10 +66,6 @@ pub struct CommonConfig {
     /// Environment where the application is running.
     #[arg(long = "env", env = "ENV", default_value = "local")]
     pub env: Environment,
-
-    /// Stratus mode.
-    #[arg(long = "mode", env = "MODE", default_value = "leader")] // should we leave a default value?
-    pub mode: StratusMode,
 
     /// Number of threads to execute global async tasks.
     #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
@@ -496,33 +493,6 @@ impl FromStr for Environment {
 }
 
 // -----------------------------------------------------------------------------
-// Enum: Stratus Mode
-// -----------------------------------------------------------------------------
-#[derive(DebugAsJson, PartialEq, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
-pub enum StratusMode {
-    #[serde(rename = "leader")]
-    #[strum(to_string = "leader")]
-    Leader,
-
-    #[serde(rename = "follower")]
-    #[strum(to_string = "follower")]
-    Follower,
-}
-
-impl FromStr for StratusMode {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        let s = s.trim().to_lowercase();
-        match s.as_ref() {
-            "leader" => Ok(Self::Leader),
-            "follower" => Ok(Self::Follower),
-            s => Err(anyhow!("unknown stratus mode: \"{}\" - valid values are {:?}", s, StratusMode::VARIANTS)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
 // Enum: ValidatorMethodConfig
 // -----------------------------------------------------------------------------
 
@@ -553,15 +523,16 @@ pub trait ConfigChecks {
 
 impl ConfigChecks for StratusConfig {
     fn perform_checks(&self) -> anyhow::Result<()> {
-        match self.mode {
-            StratusMode::Leader =>
-                if self.importer.is_some() {
-                    return Err(anyhow::anyhow!("importer config must not be set when stratus mode is leader"));
-                },
-            StratusMode::Follower =>
-                if self.importer.is_none() {
-                    return Err(anyhow::anyhow!("importer config must be set when stratus mode is follower"));
-                },
+        if self.importer.is_some() {
+            // When importer is set, miner mode must be external.
+            if self.miner.block_mode != MinerMode::External {
+                return Err(anyhow::anyhow!("miner mode must be external when importer config is set"));
+            }
+        } else {
+            // When importer is not set, miner mode cannot be external.
+            if self.miner.block_mode == MinerMode::External {
+                return Err(anyhow::anyhow!("miner mode must not be external when importer config is not set"));
+            }
         }
         Ok(())
     }

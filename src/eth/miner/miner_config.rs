@@ -5,6 +5,7 @@ use std::time::Duration;
 use clap::Parser;
 use display_json::DebugAsJson;
 
+use crate::config::StratusConfig;
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
 use crate::ext::parse_duration;
@@ -21,6 +22,14 @@ pub struct MinerConfig {
 }
 
 impl MinerConfig {
+    pub fn init_with_config(&self, config: &StratusConfig, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
+        if config.importer.is_some() {
+            self.init_external_mode(storage)
+        } else {
+            self.init(storage)
+        }
+    }
+
     /// Inits [`BlockMiner`] with external mining mode, ignoring the configured value.
     pub fn init_external_mode(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
         self.init_with_mode(MinerMode::External, storage)
@@ -64,7 +73,7 @@ impl MinerConfig {
 // -----------------------------------------------------------------------------
 
 /// Indicates when the miner will mine new blocks.
-#[derive(Debug, Clone, Copy, strum::EnumIs, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, strum::EnumIs, serde::Serialize)]
 pub enum MinerMode {
     /// Mines a new block for each transaction execution.
     #[serde(rename = "automine")]

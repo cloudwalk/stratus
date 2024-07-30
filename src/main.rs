@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
 use stratus::config::StratusConfig;
-use stratus::config::StratusMode;
 use stratus::eth::consensus::simple_consensus::SimpleConsensus;
 use stratus::eth::consensus::Consensus;
+use stratus::eth::importer::ImporterConfig;
 use stratus::eth::rpc::serve_rpc;
 use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
-
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<StratusConfig>::init();
     global_services.runtime.block_on(run(global_services.config))
@@ -17,47 +16,15 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     // init services
     let storage = config.storage.init()?;
 
-    let miner = match config.mode {
-        StratusMode::Leader => config.miner.init(Arc::clone(&storage))?,
-        StratusMode::Follower => config.miner.init_external_mode(Arc::clone(&storage))?,
-    };
+    let miner = config.miner.init_with_config(&config, Arc::clone(&storage))?;
 
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
-    // init chain
-    let chain = match config.mode {
-        StratusMode::Leader => None,
-        StratusMode::Follower => {
-            let importer_config = config.importer.as_ref().ok_or(anyhow::anyhow!("importer config is not set"))?;
-            Some(Arc::new(
-                BlockchainClient::new_http_ws(
-                    importer_config.external_rpc.as_ref(),
-                    importer_config.external_rpc_ws.as_deref(),
-                    importer_config.external_rpc_timeout,
-                )
-                .await?,
-            ))
-        }
-    };
+    let chain = BlockchainClient::init_with_config(&config).await?;
 
-    // init consensus
     let consensus: Arc<dyn Consensus> = Arc::new(SimpleConsensus::new(Arc::clone(&storage), chain.clone()));
 
-    // init importer
-    match config.mode {
-        StratusMode::Leader => {}
-        StratusMode::Follower => match config.importer.as_ref() {
-            Some(importer_config) =>
-                if let Some(chain) = chain {
-                    importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), chain)?;
-                } else {
-                    return Err(anyhow::anyhow!("chain is not initialized"));
-                },
-            None => {
-                return Err(anyhow::anyhow!("importer config is not set"));
-            }
-        },
-    }
+    let _importer = ImporterConfig::init_with_config(&config, &executor, &miner, &storage, chain.clone())?;
 
     // init rpc server
     serve_rpc(
