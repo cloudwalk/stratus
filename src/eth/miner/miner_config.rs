@@ -6,7 +6,6 @@ use clap::Parser;
 use display_json::DebugAsJson;
 
 use crate::eth::miner::Miner;
-#[cfg(feature = "dev")]
 use crate::eth::storage::StratusStorage;
 use crate::ext::parse_duration;
 
