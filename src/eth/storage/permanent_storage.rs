@@ -67,7 +67,7 @@ pub trait PermanentStorage: Send + Sync + 'static {
 
     #[cfg(feature = "dev")]
     /// Resets all state to a specific block number.
-    fn reset(&self, number: BlockNumber) -> anyhow::Result<()>;
+    fn reset(&self) -> anyhow::Result<()>;
 }
 
 // -----------------------------------------------------------------------------

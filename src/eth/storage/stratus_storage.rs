@@ -477,13 +477,20 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     #[cfg(feature = "dev")]
-    pub fn reset(&self) -> Result<(), StratusError> {
+    /// Resets the storage to the genesis state used in dev-mode.
+    ///
+    /// TODO: For now it uses the dev genesis block and test accounts, but it should be refactored to support genesis.json files.
+    pub fn reset_to_genesis(&self) -> Result<(), StratusError> {
+        use crate::eth::primitives::test_accounts;
+
+        tracing::info!("reseting storage to genesis state");
+
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::reset").entered();
 
         // reset perm
-        tracing::debug!(storage = %label::PERM, "reseting storage");
-        timed(|| self.perm.reset(BlockNumber::ZERO)).with(|m| {
+        tracing::debug!(storage = %label::PERM, "reseting permanent storage");
+        timed(|| self.perm.reset()).with(|m| {
             metrics::inc_storage_reset(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to reset permanent storage");
@@ -491,7 +498,7 @@ impl StratusStorage {
         })?;
 
         // reset temp
-        tracing::debug!(storage = %label::TEMP, "reseting storage");
+        tracing::debug!(storage = %label::TEMP, "reseting temporary storage");
         timed(|| self.temp.reset()).with(|m| {
             metrics::inc_storage_reset(m.elapsed, label::TEMP, m.result.is_ok());
             if let Err(ref e) = m.result {
@@ -499,6 +506,14 @@ impl StratusStorage {
             }
         })?;
 
+        // genesis block
+        self.save_block(Block::genesis())?;
+
+        // test accounts
+        self.save_accounts(test_accounts())?;
+
+        // block number
+        self.set_mined_block_number(BlockNumber::ZERO)?;
         self.set_pending_block_number_as_next()?;
 
         Ok(())

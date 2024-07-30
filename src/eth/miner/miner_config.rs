@@ -6,11 +6,6 @@ use clap::Parser;
 use display_json::DebugAsJson;
 
 use crate::eth::miner::Miner;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::test_accounts;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::storage::StratusStorage;
 use crate::ext::parse_duration;
 
@@ -23,10 +18,6 @@ pub struct MinerConfig {
     /// Target block time.
     #[arg(long = "block-mode", env = "BLOCK_MODE", default_value = "automine")]
     pub block_mode: MinerMode,
-
-    /// Generates genesis block on startup when it does not exist.
-    #[arg(long = "enable-genesis", env = "ENABLE_GENESIS", default_value = "false")]
-    pub enable_genesis: bool,
 }
 
 impl MinerConfig {
@@ -47,21 +38,13 @@ impl MinerConfig {
         let miner = Miner::new(Arc::clone(&storage), mode);
         let miner = Arc::new(miner);
 
-        // enable genesis block
-        if self.enable_genesis {
-            let genesis = storage.read_block(&BlockFilter::Number(BlockNumber::ZERO))?;
-            if genesis.is_none() {
-                tracing::info!("enabling genesis block");
-                miner.commit(Block::genesis())?;
-            }
-        }
-
-        // enable test accounts
+        // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            let test_accounts = test_accounts();
-            tracing::info!(accounts = ?test_accounts, "enabling test accounts");
-            storage.save_accounts(test_accounts)?;
+            let genesis = storage.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
+            if mode.can_mine_new_blocks() && genesis.is_none() {
+                storage.reset_to_genesis()?;
+            }
         }
 
         // set block number
@@ -94,6 +77,17 @@ pub enum MinerMode {
     /// Does not automatically mines a new block. A call to `mine_*` must be executed to mine a new block.
     #[serde(rename = "external")]
     External,
+}
+
+impl MinerMode {
+    /// Checks if the mode allow to mine new blocks.
+    pub fn can_mine_new_blocks(&self) -> bool {
+        match self {
+            Self::Automine => true,
+            Self::Interval(_) => true,
+            Self::External => false,
+        }
+    }
 }
 
 impl FromStr for MinerMode {
