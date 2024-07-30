@@ -65,7 +65,7 @@ pub enum StratusError {
     // -------------------------------------------------------------------------
     // Transaction
     // -------------------------------------------------------------------------
-    #[error("Account at {address} it is not a contract.")]
+    #[error("Account at {address} is not a contract.")]
     #[strum(props(kind = "execution"))]
     TransactionAccountNotContract { address: Address },
 
