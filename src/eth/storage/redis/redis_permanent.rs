@@ -134,7 +134,10 @@ impl PermanentStorage for RedisPermanentStorage {
 
         // execute zadd commands
         for (key, value, score) in zadd_values {
-            let zadd: RedisVoid = conn.zadd(key, value, score);
+            let mut cmd = redis::cmd("ZADD");
+            cmd.arg(key).arg("NX").arg(score).arg(value);
+
+            let zadd: RedisVoid = cmd.exec(&mut conn);
             if let Err(e) = zadd {
                 return log_and_err!(reason = e, "failed to write block zadd to redis");
             }
@@ -243,9 +246,6 @@ impl PermanentStorage for RedisPermanentStorage {
     }
 
     fn read_account(&self, address: &Address, point_in_time: &crate::eth::storage::StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        // prepare keys
-
-        // execute and parse
         let mut conn = self.conn()?;
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => {
