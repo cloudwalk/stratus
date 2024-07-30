@@ -1,5 +1,6 @@
 use std::num::TryFromIntError;
 
+use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethereum_types::U64;
 
@@ -8,7 +9,7 @@ use crate::gen_newtype_try_from;
 
 /// Represents a transaction index or log index.
 #[derive(
-    Debug, derive_more::Display, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Hash, PartialOrd, Ord,
+    DebugAsJson, derive_more::Display, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Hash, PartialOrd, Ord,
 )]
 pub struct Index(pub u64);
 

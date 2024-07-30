@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use display_json::DebugAsJson;
 use ethabi::Token;
 use ethereum_types::U256;
 use fake::Dummy;
@@ -17,7 +18,19 @@ use crate::gen_newtype_from;
 
 /// Native token amount in wei.
 #[derive(
-    Debug, derive_more::Display, Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq, derive_more::Add, derive_more::Sub, serde::Serialize, serde::Deserialize,
+    DebugAsJson,
+    derive_more::Display,
+    Clone,
+    Copy,
+    Default,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+    derive_more::Add,
+    derive_more::Sub,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 pub struct Wei(pub U256);
 

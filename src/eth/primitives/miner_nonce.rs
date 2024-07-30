@@ -1,3 +1,4 @@
+use display_json::DebugAsJson;
 use ethereum_types::H64;
 use fake::Dummy;
 use fake::Faker;
@@ -5,7 +6,7 @@ use fake::Faker;
 use crate::gen_newtype_from;
 
 /// The nonce of an Ethereum block.
-#[derive(Debug, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MinerNonce(H64);
 
 impl MinerNonce {

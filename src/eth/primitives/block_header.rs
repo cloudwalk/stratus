@@ -1,3 +1,4 @@
+use display_json::DebugAsJson;
 use ethereum_types::H160;
 use ethereum_types::H256;
 use ethereum_types::H64;
@@ -32,7 +33,7 @@ const HASH_EMPTY_UNCLES: Hash = Hash::new(hex!("1dcc4de8dec75d7aab85b567b6ccd41a
 /// Special hash used in block mining to indicate no transaction root and no receipts root.
 const HASH_EMPTY_TRIE: Hash = Hash::new(hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"));
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BlockHeader {
     pub number: BlockNumber,
     pub hash: Hash,

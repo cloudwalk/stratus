@@ -1,3 +1,4 @@
+use display_json::DebugAsJson;
 use itertools::Itertools;
 use jsonrpsee::SubscriptionMessage;
 
@@ -12,7 +13,7 @@ use crate::eth::primitives::LogTopic;
 use crate::ext::to_json_value;
 
 /// Log that was emitted by the EVM and added to a block.
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct LogMined {
     /// Original log emitted by the EVM.
     pub log: Log,

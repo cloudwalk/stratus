@@ -1,6 +1,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
+use display_json::DebugAsJson;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
@@ -14,7 +15,7 @@ use sqlx::Decode;
 use crate::alias::RevmU256;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SlotValue(U256);
 
 impl SlotValue {

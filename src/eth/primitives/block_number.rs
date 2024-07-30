@@ -4,6 +4,7 @@ use std::ops::AddAssign;
 use std::str::FromStr;
 
 use anyhow::anyhow;
+use display_json::DebugAsJson;
 use ethereum_types::U64;
 use ethers_core::utils::keccak256;
 use fake::Dummy;
@@ -20,7 +21,7 @@ use crate::eth::primitives::Hash;
 use crate::gen_newtype_from;
 
 #[derive(
-    Debug,
+    DebugAsJson,
     derive_more::Display,
     Clone,
     Copy,

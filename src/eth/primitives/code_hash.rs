@@ -1,3 +1,4 @@
+use display_json::DebugAsJson;
 use ethereum_types::H256;
 use ethers_core::utils::keccak256;
 use fake::Dummy;
@@ -11,7 +12,7 @@ use crate::gen_newtype_from;
 /// Digest of the bytecode of a contract.
 /// In the case of an externally-owned account (EOA), bytecode is null
 /// and the code hash is fixed as the keccak256 hash of an empty string
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CodeHash(pub H256);
 
 impl Dummy<Faker> for CodeHash {
