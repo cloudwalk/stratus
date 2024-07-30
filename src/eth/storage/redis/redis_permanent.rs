@@ -19,6 +19,7 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StoragePointInTime;
 use crate::ext::from_json_str;
 use crate::ext::to_json_string;
+use crate::ext::to_json_value;
 use crate::log_and_err;
 
 type RedisVecOptString = RedisResult<Vec<Option<String>>>;
@@ -110,7 +111,6 @@ impl PermanentStorage for RedisPermanentStorage {
             if let Some(bytecode) = changes.bytecode.take() {
                 account.bytecode = bytecode;
             }
-
             let account_value = to_json_string(&account);
             mset_values.push((key_account(&account.address), account_value.clone()));
             zadd_values.push((key_account_history(&account.address), account_value, block.number().as_u64()));
@@ -118,7 +118,10 @@ impl PermanentStorage for RedisPermanentStorage {
             // slot
             for slot in changes.slots.into_values() {
                 if let Some(slot) = slot.take() {
-                    let slot_value = to_json_string(&slot);
+                    let mut slot_value = to_json_value(slot);
+                    slot_value.as_object_mut().unwrap().insert("block".to_owned(), to_json_value(block.number()));
+                    let slot_value = to_json_string(&slot_value);
+
                     mset_values.push((key_slot(&account.address, &slot.index), slot_value.clone()));
                     zadd_values.push((key_slot_history(&account.address, &slot.index), slot_value, block.number().as_u64()));
                 }
