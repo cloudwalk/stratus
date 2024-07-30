@@ -153,25 +153,6 @@ e2e network="stratus" block-mode="automine" test="":
         BLOCK_MODE={{block-mode}} npx hardhat test test/{{block-mode}}/*.test.ts --network {{network}} --grep "{{test}}"
     fi
 
-# E2E: Starts and execute Hardhat tests in Hardhat
-e2e-hardhat block-mode="automine" test="":
-    #!/bin/bash
-    if [ -d e2e ]; then
-        cd e2e
-    fi
-
-    echo "-> Starting Hardhat"
-    BLOCK_MODE={{block-mode}} npx hardhat node &
-
-    echo "-> Waiting Hardhat to start"
-    wait-service --tcp localhost:8545 -- echo
-
-    echo "-> Running E2E tests"
-    just e2e hardhat {{block-mode}} {{test}}
-
-    echo "-> Killing Hardhat"
-    killport 8545
-
 # E2E: Starts and execute Hardhat tests in Stratus
 e2e-stratus block-mode="automine" test="":
     #!/bin/bash
@@ -183,8 +164,8 @@ e2e-stratus block-mode="automine" test="":
     just build || exit 1
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
 
-    echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
+    echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
 
     echo "-> Running E2E tests"
     just e2e stratus {{block-mode}} {{test}}
@@ -205,8 +186,8 @@ e2e-stratus-rocks block-mode="automine" test="":
     just build || exit 1
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
 
-    echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
+    echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
 
     echo "-> Running E2E tests"
     just e2e stratus {{block-mode}} {{test}}
@@ -223,8 +204,8 @@ e2e-clock-stratus:
     just build || exit 1
     cargo run  --release --bin stratus --features dev -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
-    echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
+    echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
 
     echo "-> Validating block time"
     ./utils/block-time-check.sh
@@ -241,8 +222,8 @@ e2e-clock-stratus-rocks:
     just build || exit 1
     cargo run  --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
-    echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
+    echo "-> Waiting Stratus to start {{wait_service_timeout}} for seconds"
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
 
     echo "-> Validating block time"
     ./utils/block-time-check.sh
@@ -264,16 +245,6 @@ e2e-lint mode="--write":
 e2e-flamegraph:
     #!/bin/bash
 
-    # Start PostgreSQL
-    echo "Starting PostgreSQL"
-    docker compose down -v
-    docker compose up -d --force-recreate
-
-    # Wait for PostgreSQL
-    echo "Waiting for PostgreSQL to be ready"
-    wait-service --tcp 0.0.0.0:5432 -t {{wait_service_timeout}} -- echo
-    sleep 1
-
     # Start RPC mock server
     echo "Starting RPC mock server"
     killport 3003
@@ -287,8 +258,8 @@ e2e-flamegraph:
     sleep 1
 
     # Wait for RPC mock server
-    echo "Waiting for RPC mock server to be ready..."
-    wait-service --tcp 0.0.0.0:3003 -t {{wait_service_timeout}} -- echo
+    echo "Waiting for RPC mock server to start for {{wait_service_timeout}} seconds"
+    wait-service --tcp 0.0.0.0:3003 -t {{wait_service_timeout}} -- echo "RPC mock server started"
 
     # Run cargo flamegraph with necessary environment variables
     echo "Running cargo flamegraph"
@@ -318,13 +289,16 @@ e2e-importer-online-up:
     RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --enable-genesis --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus to start
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
+    echo "-> Waiting Stratus 1 to start for {{wait_service_timeout}} seconds"
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus 1 started"
 
     # Start Run With Importer binary
     RUST_LOG=info cargo run --release --bin run-with-importer --features dev -- --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
 
     # Wait for Run With Importer to start
-    wait-service --tcp 0.0.0.0:3001 -t {{wait_service_timeout}} -- echo
+    echo "-> Waiting Stratus 2 to start for {{wait_service_timeout}} seconds"
+    wait-service --tcp 0.0.0.0:3001 -t {{wait_service_timeout}} -- echo "Stratus 2 started"
+
 
     if [ -d e2e/cloudwalk-contracts ]; then
     (
@@ -439,8 +413,8 @@ contracts-test-stratus *args="":
     just build || exit 1
     just run -a 0.0.0.0:3000 > stratus.log &
 
-    echo "-> Waiting Stratus to start"
-    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
+    echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
+    wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo "Stratus started"
 
     echo "-> Running E2E Contracts tests"
     just e2e-contracts {{args}}
@@ -457,7 +431,7 @@ contracts-test-stratus-rocks *args="":
     just build || exit 1
     just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
-    echo "-> Waiting Stratus to start"
+    echo "-> Waiting Stratus to start for {{wait_service_timeout}} seconds"
     wait-service --tcp 0.0.0.0:3000 -t {{wait_service_timeout}} -- echo
 
     echo "-> Running E2E tests"
