@@ -280,13 +280,13 @@ e2e-importer-online-up:
     mkdir e2e_logs
 
     # Start Stratus with leader flag
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode leader --block-mode 1s --enable-genesis --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus with leader flag to start
     just _wait_for_stratus 3000
 
     # Start Stratus with follower flag
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode follower --enable-test-accounts --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
 
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
