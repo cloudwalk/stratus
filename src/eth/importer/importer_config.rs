@@ -4,7 +4,6 @@ use std::time::Duration;
 use clap::Parser;
 use display_json::DebugAsJson;
 
-use crate::config::StratusConfig;
 use crate::eth::executor::Executor;
 use crate::eth::importer::Importer;
 use crate::eth::miner::Miner;
@@ -33,52 +32,32 @@ pub struct ImporterConfig {
 }
 
 impl ImporterConfig {
-    pub fn init_with_config(
-        config: &StratusConfig,
+    pub fn init(
+        &self,
         executor: &Arc<Executor>,
         miner: &Arc<Miner>,
         storage: &Arc<StratusStorage>,
         chain: Option<Arc<BlockchainClient>>,
     ) -> anyhow::Result<Option<Arc<Importer>>> {
-        if let Some(importer_config) = config.importer.as_ref() {
-            if let Some(chain) = chain {
-                return Ok(Some(importer_config.init(
-                    Arc::clone(executor),
-                    Arc::clone(miner),
-                    Arc::clone(storage),
-                    chain,
-                )?));
-            } else {
-                return Err(anyhow::anyhow!("chain is not initialized"));
-            }
-        }
-        Ok(None)
-    }
+        if let Some(chain) = chain {
+            const TASK_NAME: &str = "importer::init";
+            tracing::info!(config = ?self, "creating importer");
 
-    pub fn init(
-        &self,
-        executor: Arc<Executor>,
-        miner: Arc<Miner>,
-        storage: Arc<StratusStorage>,
-        chain: Arc<BlockchainClient>,
-    ) -> anyhow::Result<Arc<Importer>> {
-        const TASK_NAME: &str = "importer::init";
-        tracing::info!(config = ?self, "creating importer");
+            let importer = Importer::new(Arc::clone(executor), Arc::clone(miner), Arc::clone(storage), chain, self.sync_interval);
+            let importer = Arc::new(importer);
 
-        let config = self.clone();
-
-        let importer = Importer::new(executor, miner, Arc::clone(&storage), chain, config.sync_interval);
-        let importer = Arc::new(importer);
-
-        spawn_named(TASK_NAME, {
-            let importer = Arc::clone(&importer);
-            async move {
-                if let Err(e) = importer.run_importer_online().await {
-                    tracing::error!(reason = ?e, "importer-online failed");
+            spawn_named(TASK_NAME, {
+                let importer = Arc::clone(&importer);
+                async move {
+                    if let Err(e) = importer.run_importer_online().await {
+                        tracing::error!(reason = ?e, "importer-online failed");
+                    }
                 }
-            }
-        });
+            });
 
-        Ok(importer)
+            Ok(Some(importer))
+        } else {
+            Err(anyhow::anyhow!("chain is not initialized"))
+        }
     }
 }

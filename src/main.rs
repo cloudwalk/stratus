@@ -3,7 +3,6 @@ use std::sync::Arc;
 use stratus::config::StratusConfig;
 use stratus::eth::consensus::simple_consensus::SimpleConsensus;
 use stratus::eth::consensus::Consensus;
-use stratus::eth::importer::ImporterConfig;
 use stratus::eth::rpc::serve_rpc;
 use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
@@ -24,7 +23,9 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
 
     let consensus: Arc<dyn Consensus> = Arc::new(SimpleConsensus::new(Arc::clone(&storage), chain.clone()));
 
-    let _importer = ImporterConfig::init_with_config(&config, &executor, &miner, &storage, chain.clone())?;
+    if let Some(importer_config) = &config.importer {
+        importer_config.init(&executor, &miner, &storage, chain.clone())?;
+    }
 
     // init rpc server
     serve_rpc(
