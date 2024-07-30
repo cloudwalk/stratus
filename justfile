@@ -97,18 +97,6 @@ rpc-downloader *args="":
 importer-offline *args="":
     cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} -- {{args}}
 
-# Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
-importer-online *args="":
-    cargo {{nightly_flag}} run --bin importer-online {{release_flag}} -- {{args}}
-
-# Bin: Validate Stratus storage slots matches reference slots
-state-validator *args="":
-    cargo {{nightly_flag}} run --bin state-validator {{release_flag}} -- {{args}}
-
-# Bin: `stratus` and `importer-online` in a single binary
-run-with-importer *args="":
-    cargo {{nightly_flag}} run --bin run-with-importer {{release_flag}} -- {{args}}
-
 # ------------------------------------------------------------------------------
 # Test tasks
 # ------------------------------------------------------------------------------
@@ -378,7 +366,7 @@ contracts-test-stratus *args="":
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run -a 0.0.0.0:3000 &
+    just run --mode leader -a 0.0.0.0:3000 &
 
     just _wait_for_stratus
 
@@ -395,7 +383,7 @@ contracts-test-stratus-rocks *args="":
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just run --mode leader -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
 
