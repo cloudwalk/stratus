@@ -476,13 +476,14 @@ impl StratusStorage {
     // General state
     // -------------------------------------------------------------------------
 
-    pub fn reset(&self, number: BlockNumber) -> Result<(), StratusError> {
+    #[cfg(feature = "dev")]
+    pub fn reset(&self) -> Result<(), StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::reset").entered();
 
         // reset perm
         tracing::debug!(storage = %label::PERM, "reseting storage");
-        timed(|| self.perm.reset_at(number)).with(|m| {
+        timed(|| self.perm.reset(BlockNumber::ZERO)).with(|m| {
             metrics::inc_storage_reset(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to reset permanent storage");
