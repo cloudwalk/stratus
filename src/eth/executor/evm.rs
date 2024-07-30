@@ -155,10 +155,16 @@ impl Evm {
                 account: state.into(),
             }),
 
+            // storage error
+            Err(EVMError::Database(e)) => {
+                tracing::warn!(reason = ?e, "evm storage error");
+                Err(e)
+            }
+
             // unexpected errors
             Err(e) => {
-                tracing::warn!(reason = ?e, "evm execution error");
-                Err(StratusError::TransactionFailed(e))
+                tracing::warn!(reason = ?e, "evm transaction error");
+                Err(StratusError::TransactionFailed(e.to_string()))
             }
         };
 
@@ -215,9 +221,9 @@ impl RevmSession {
 }
 
 impl Database for RevmSession {
-    type Error = anyhow::Error;
+    type Error = StratusError;
 
-    fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
+    fn basic(&mut self, revm_address: RevmAddress) -> Result<Option<AccountInfo>, StratusError> {
         self.metrics.account_reads += 1;
 
         // retrieve account
@@ -226,8 +232,8 @@ impl Database for RevmSession {
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.input.to {
-            if &address == to_address && not(account.is_contract()) && not(self.input.data.is_empty()) {
-                tracing::warn!(%address, "evm to_account does not have bytecode");
+            if account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
+                return Err(StratusError::TransactionAccountNotContract { address: *to_address });
             }
         }
 
@@ -243,11 +249,11 @@ impl Database for RevmSession {
         Ok(Some(revm_account))
     }
 
-    fn code_by_hash(&mut self, _: B256) -> anyhow::Result<RevmBytecode> {
+    fn code_by_hash(&mut self, _: B256) -> Result<RevmBytecode, StratusError> {
         todo!()
     }
 
-    fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
+    fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> Result<U256, StratusError> {
         self.metrics.slot_reads += 1;
 
         // convert slot
@@ -265,7 +271,10 @@ impl Database for RevmSession {
                 }
                 None => {
                     tracing::error!(reason = "reading slot without account loaded", %address, %index);
-                    return Err(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address));
+                    return Err(StratusError::Unexpected(anyhow!(
+                        "Account '{}' was expected to be loaded by EVM, but it was not",
+                        address
+                    )));
                 }
             };
         }
@@ -273,7 +282,7 @@ impl Database for RevmSession {
         Ok(slot.value.into())
     }
 
-    fn block_hash(&mut self, _: U256) -> anyhow::Result<B256> {
+    fn block_hash(&mut self, _: U256) -> Result<B256, StratusError> {
         todo!()
     }
 }

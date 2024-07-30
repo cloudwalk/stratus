@@ -15,6 +15,7 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::StoragePointInTime;
+use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::if_else;
 use crate::log_and_err;
@@ -148,5 +149,12 @@ impl EvmInput {
                 None => None,
             },
         })
+    }
+
+    /// Checks if the input is a contract call.
+    ///
+    /// It is when there is a `to` address and the `data` field is also populated.
+    pub fn is_contract_call(&self) -> bool {
+        self.to.is_some() && not(self.data.is_empty())
     }
 }
