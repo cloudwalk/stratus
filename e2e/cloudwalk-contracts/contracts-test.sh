@@ -28,10 +28,10 @@ test() {
 
     # test
     if [ -z "$test" ]; then
-        log "Executing: all tests"
+        log "Executing all tests"
         npx hardhat test --bail --network stratus test/$file.test.ts
     else
-        log "Executing: filtered tests by $test"
+        log "Executing filtered tests: $test"
         npx hardhat test --bail --network stratus test/$file.test.ts --grep $test
     fi
     result_code=$?
