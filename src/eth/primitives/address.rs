@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use anyhow::anyhow;
+use display_json::DebugAsJson;
 use ethabi::Token;
 use ethereum_types::H160;
 use ethers_core::types::NameOrAddress;
@@ -20,7 +21,7 @@ use crate::alias::RevmAddress;
 use crate::gen_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Address(pub H160);
 
 impl Address {

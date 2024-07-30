@@ -1,10 +1,11 @@
+use display_json::DebugAsJson;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 
 use crate::gen_newtype_from;
 
-#[derive(Debug, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Difficulty(U256);
 

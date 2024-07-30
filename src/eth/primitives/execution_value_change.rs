@@ -1,54 +1,35 @@
+// -----------------------------------------------------------------------------
+// Value Change
+// -----------------------------------------------------------------------------
+
+use std::fmt::Debug;
+
+use display_json::DebugAsJson;
+
+use crate::ext::to_json_string;
+
 /// Changes that happened to an account value during a transaction.
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionValueChange<T>
 where
-    T: PartialEq,
+    T: PartialEq + serde::Serialize,
 {
     original: ValueState<T>,
     modified: ValueState<T>,
 }
 
-impl<T: PartialEq> Default for ExecutionValueChange<T> {
-    fn default() -> Self {
-        Self {
-            original: ValueState::NotSet,
-            modified: ValueState::NotSet,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ValueState<T> {
-    Set(T),
-    NotSet,
-}
-
-impl<T> ValueState<T> {
-    pub fn is_set(&self) -> bool {
-        matches!(self, Self::Set(_))
-    }
-
-    pub fn take(self) -> Option<T> {
-        if let Self::Set(value) = self {
-            Some(value)
-        } else {
-            None
-        }
-    }
-
-    pub fn take_ref(&self) -> Option<&T> {
-        if let Self::Set(value) = self {
-            Some(value)
-        } else {
-            None
-        }
+impl<T> Debug for ExecutionValueChange<T>
+where
+    T: PartialEq + serde::Serialize,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&to_json_string(self))
     }
 }
 
 impl<T> ExecutionValueChange<T>
 where
-    T: PartialEq,
+    T: PartialEq + serde::Serialize,
 {
     /// Creates a new [`ExecutionValueChange`] only with original value.
     pub fn from_original(value: T) -> Self {
@@ -109,5 +90,38 @@ where
     /// Check if the value was modified.
     pub fn is_modified(&self) -> bool {
         self.modified.is_set() && (self.original != self.modified)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Value State
+// -----------------------------------------------------------------------------
+
+#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValueState<T> {
+    Set(T),
+    NotSet,
+}
+
+impl<T> ValueState<T> {
+    pub fn is_set(&self) -> bool {
+        matches!(self, Self::Set(_))
+    }
+
+    pub fn take(self) -> Option<T> {
+        if let Self::Set(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn take_ref(&self) -> Option<&T> {
+        if let Self::Set(value) = self {
+            Some(value)
+        } else {
+            None
+        }
     }
 }

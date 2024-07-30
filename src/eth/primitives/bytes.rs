@@ -1,8 +1,8 @@
-use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+use display_json::DebugAsJson;
 use revm::interpreter::analysis::to_analysed;
 
 use crate::alias::EthersBytes;
@@ -11,7 +11,7 @@ use crate::alias::RevmBytes;
 use crate::alias::RevmOutput;
 use crate::gen_newtype_from;
 
-#[derive(Clone, Default, Eq, PartialEq, fake::Dummy)]
+#[derive(DebugAsJson, Clone, Default, Eq, PartialEq, fake::Dummy)]
 pub struct Bytes(pub Vec<u8>);
 
 impl Display for Bytes {
@@ -21,12 +21,6 @@ impl Display for Bytes {
         } else {
             write!(f, "too long")
         }
-    }
-}
-
-impl Debug for Bytes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Bytes").field(&self.to_string()).finish()
     }
 }
 

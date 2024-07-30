@@ -1,8 +1,8 @@
-use std::fmt::Debug;
 use std::fmt::Display;
 use std::io::Read;
 use std::str::FromStr;
 
+use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethers_core::utils::keccak256;
 use fake::Dummy;
@@ -17,7 +17,7 @@ use sqlx::Decode;
 use crate::alias::RevmU256;
 use crate::gen_newtype_from;
 
-#[derive(Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(U256);
 
 impl SlotIndex {
@@ -58,12 +58,6 @@ impl Dummy<Faker> for SlotIndex {
 impl Display for SlotIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:#x}", self.0)
-    }
-}
-
-impl Debug for SlotIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SlotIndex({:#x})", self.0)
     }
 }
 

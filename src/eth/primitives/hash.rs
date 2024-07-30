@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use anyhow::anyhow;
+use display_json::DebugAsJson;
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
@@ -11,7 +12,7 @@ use sqlx::postgres::PgHasArrayType;
 
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Hash(pub H256);
 
