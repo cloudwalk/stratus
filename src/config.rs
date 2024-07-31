@@ -1,6 +1,5 @@
 //! Application configuration.
 
-use std::any::Any;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
@@ -8,6 +7,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::anyhow;
+use clap::ArgGroup;
 use clap::Parser;
 use display_json::DebugAsJson;
 use strum::VariantNames;
@@ -55,7 +55,6 @@ pub fn load_dotenv() {
 
 pub trait WithCommonConfig {
     fn common(&self) -> &CommonConfig;
-    fn as_any(&self) -> &dyn Any;
 }
 
 /// Configuration that can be used by any binary.
@@ -104,10 +103,6 @@ pub struct CommonConfig {
 
 impl WithCommonConfig for CommonConfig {
     fn common(&self) -> &CommonConfig {
-        self
-    }
-
-    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -163,10 +158,13 @@ impl CommonConfig {
 
 /// Configuration for main Stratus service.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
+#[clap(group = ArgGroup::new("role").required(true).args(&["leader", "follower"]))]
 pub struct StratusConfig {
-    /// Stratus mode.
-    #[arg(long = "mode", env = "MODE")]
-    pub mode: StratusMode,
+    #[arg(long = "leader", env = "LEADER", conflicts_with("follower"))]
+    pub leader: bool,
+
+    #[arg(long = "follower", env = "FOLLOWER", conflicts_with("leader"))]
+    pub follower: bool,
 
     #[clap(flatten)]
     pub rpc_server: RpcServerConfig,
@@ -191,10 +189,6 @@ pub struct StratusConfig {
 impl WithCommonConfig for StratusConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -236,10 +230,6 @@ pub struct RpcDownloaderConfig {
 impl WithCommonConfig for RpcDownloaderConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -291,10 +281,6 @@ impl WithCommonConfig for ImporterOfflineConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -343,10 +329,6 @@ impl WithCommonConfig for ImporterOnlineConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
@@ -377,10 +359,6 @@ pub struct RunWithImporterConfig {
 impl WithCommonConfig for RunWithImporterConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -423,10 +401,6 @@ impl WithCommonConfig for StateValidatorConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -456,10 +430,6 @@ pub struct IntegrationTestConfig {
 impl WithCommonConfig for IntegrationTestConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 
@@ -540,29 +510,5 @@ impl FromStr for ValidatorMethodConfig {
             "compare_tables" => Ok(Self::CompareTables),
             s => Ok(Self::Rpc { url: s.to_string() }),
         }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config: Configuration Checks
-// -----------------------------------------------------------------------------
-
-pub trait ConfigChecks {
-    fn perform_checks(&self) -> anyhow::Result<()>;
-}
-
-impl ConfigChecks for StratusConfig {
-    fn perform_checks(&self) -> anyhow::Result<()> {
-        match self.mode {
-            StratusMode::Leader =>
-                if self.importer.is_some() {
-                    return Err(anyhow::anyhow!("importer config must not be set when stratus mode is leader"));
-                },
-            StratusMode::Follower =>
-                if self.importer.is_none() {
-                    return Err(anyhow::anyhow!("importer config must be set when stratus mode is follower"));
-                },
-        }
-        Ok(())
     }
 }

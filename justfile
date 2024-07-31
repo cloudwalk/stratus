@@ -153,7 +153,7 @@ e2e-stratus block-mode="automine" test="":
 
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run -a 0.0.0.0:3000 --mode leader --block-mode {{block-mode}} > stratus.log &
+    just run -a 0.0.0.0:3000 --leader --block-mode {{block-mode}} > stratus.log &
 
     just _wait_for_stratus
 
@@ -174,7 +174,7 @@ e2e-stratus-rocks block-mode="automine" test="":
 
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run -a 0.0.0.0:3000 --mode leader --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --leader --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
 
@@ -191,7 +191,7 @@ e2e-clock-stratus:
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    cargo run  --release --bin stratus --features dev -- --mode leader --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev -- --leader --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
 
@@ -208,7 +208,7 @@ e2e-clock-stratus-rocks:
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    cargo run  --release --bin stratus --features dev -- --mode leader --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
 
@@ -273,13 +273,13 @@ e2e-importer-online-up:
     mkdir e2e_logs
 
     # Start Stratus with leader flag
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus with leader flag to start
     just _wait_for_stratus 3000
 
     # Start Stratus with follower flag
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- --mode follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
 
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
@@ -371,7 +371,7 @@ contracts-test-stratus *args="":
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run --mode leader -a 0.0.0.0:3000 &
+    just run --leader -a 0.0.0.0:3000 &
 
     just _wait_for_stratus
 
@@ -388,7 +388,7 @@ contracts-test-stratus-rocks *args="":
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run --mode leader -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just run --leader -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
 

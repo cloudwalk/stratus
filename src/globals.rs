@@ -9,8 +9,6 @@ use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
 
 use crate::config::load_dotenv;
-use crate::config::ConfigChecks;
-use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
 use crate::ext::spawn_signal_handler;
 use crate::infra;
@@ -53,11 +51,6 @@ where
         // parse configuration
         let config = T::parse();
         let common = config.common();
-
-        // stratus binary specific configuration checks
-        if let Some(stratus_config) = config.as_any().downcast_ref::<StratusConfig>() {
-            stratus_config.perform_checks().expect("stratus configuration checks failed");
-        }
 
         // init tokio
         let runtime = common.init_runtime().expect("failed to init tokio runtime");
