@@ -26,7 +26,7 @@ pub struct ImporterConfig {
     pub external_rpc: String,
 
     /// External RPC WS endpoint to sync blocks with Stratus.
-    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS")]
+    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS", conflicts_with("leader"),)]
     pub external_rpc_ws: Option<String>,
 
     /// Timeout for blockchain requests (importer online)
