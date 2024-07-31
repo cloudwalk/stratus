@@ -499,7 +499,7 @@ impl Consensus {
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
 
-        Ok((result.tx_hash, blockchain_client.http_url.clone())) //XXX HEX
+        Ok((result.tx_hash, blockchain_client.http_url.clone()))
     }
 
     pub async fn should_serve(&self) -> bool {
