@@ -466,33 +466,6 @@ impl FromStr for Environment {
 }
 
 // -----------------------------------------------------------------------------
-// Enum: Stratus Mode
-// -----------------------------------------------------------------------------
-#[derive(DebugAsJson, PartialEq, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
-pub enum StratusMode {
-    #[serde(rename = "leader")]
-    #[strum(to_string = "leader")]
-    Leader,
-
-    #[serde(rename = "follower")]
-    #[strum(to_string = "follower")]
-    Follower,
-}
-
-impl FromStr for StratusMode {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        let s = s.trim().to_lowercase();
-        match s.as_ref() {
-            "leader" => Ok(Self::Leader),
-            "follower" => Ok(Self::Follower),
-            s => Err(anyhow!("unknown stratus mode: \"{}\" - valid values are {:?}", s, StratusMode::VARIANTS)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
 // Enum: ValidatorMethodConfig
 // -----------------------------------------------------------------------------
 
