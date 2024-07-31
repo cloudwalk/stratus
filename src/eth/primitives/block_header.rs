@@ -13,7 +13,7 @@ use jsonrpsee::SubscriptionMessage;
 
 use crate::alias::EthersBlockVoid;
 use crate::alias::EthersBytes;
-use crate::eth::consensus::raft::append_entry;
+use crate::eth::consensus::append_entry;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;

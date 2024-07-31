@@ -7,7 +7,6 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::anyhow;
-use clap::ArgGroup;
 use clap::Parser;
 use display_json::DebugAsJson;
 use strum::VariantNames;
@@ -15,7 +14,6 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
 use crate::eth::executor::ExecutorConfig;
-use crate::eth::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
 use crate::eth::primitives::Address;
 use crate::eth::rpc::RpcServerConfig;
@@ -158,14 +156,7 @@ impl CommonConfig {
 
 /// Configuration for main Stratus service.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-#[clap(group = ArgGroup::new("mode").required(true).args(&["leader", "follower"]))]
 pub struct StratusConfig {
-    #[arg(long = "leader", env = "LEADER", conflicts_with("follower"))]
-    pub leader: bool,
-
-    #[arg(long = "follower", env = "FOLLOWER", conflicts_with("leader"))]
-    pub follower: bool,
-
     #[clap(flatten)]
     pub rpc_server: RpcServerConfig,
 
@@ -177,9 +168,6 @@ pub struct StratusConfig {
 
     #[clap(flatten)]
     pub miner: MinerConfig,
-
-    #[clap(flatten)]
-    pub importer: Option<ImporterConfig>,
 
     #[deref]
     #[clap(flatten)]
@@ -278,6 +266,126 @@ pub struct ImporterOfflineConfig {
 }
 
 impl WithCommonConfig for ImporterOfflineConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: ImporterOnline
+// -----------------------------------------------------------------------------
+
+/// Configuration for `importer-online` binary.
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
+pub struct ImporterOnlineConfig {
+    #[clap(flatten)]
+    pub base: ImporterOnlineBaseConfig,
+
+    #[clap(flatten)]
+    pub executor: ExecutorConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[clap(flatten)]
+    pub storage: StratusStorageConfig,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+}
+
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+pub struct ImporterOnlineBaseConfig {
+    /// External RPC HTTP endpoint to sync blocks with Stratus.
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
+    pub external_rpc: String,
+
+    /// External RPC WS endpoint to sync blocks with Stratus.
+    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS")]
+    pub external_rpc_ws: Option<String>,
+
+    /// Timeout for blockchain requests (importer online)
+    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
+    pub external_rpc_timeout: Duration,
+
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
+    pub sync_interval: Duration,
+}
+
+impl WithCommonConfig for ImporterOnlineConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
+pub struct RunWithImporterConfig {
+    #[clap(flatten)]
+    pub rpc_server: RpcServerConfig,
+
+    #[arg(long = "leader-node", env = "LEADER_NODE")]
+    pub leader_node: Option<String>, // to simulate this in use locally with other nodes, you need to add the node name into /etc/hostname
+
+    #[clap(flatten)]
+    pub online: ImporterOnlineBaseConfig,
+
+    #[clap(flatten)]
+    pub storage: StratusStorageConfig,
+
+    #[clap(flatten)]
+    pub executor: ExecutorConfig,
+
+    #[clap(flatten)]
+    pub miner: MinerConfig,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+}
+
+impl WithCommonConfig for RunWithImporterConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config: StateValidator
+// -----------------------------------------------------------------------------
+
+/// Configuration for `state-validator` binary.
+#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
+pub struct StateValidatorConfig {
+    /// How many slots to validate per batch. 0 means every slot.
+    #[arg(long = "max-samples", env = "MAX_SAMPLES", default_value_t = 0)]
+    pub sample_size: u64,
+
+    /// Seed to use when sampling. 0 for random seed.
+    #[arg(long = "seed", env = "SEED", default_value_t = 0, requires = "sample_size")]
+    pub seed: u64,
+
+    /// Validate in batches of n blocks.
+    #[arg(short = 'i', long = "interval", env = "INTERVAL", default_value = "1000")]
+    pub interval: u64,
+
+    /// What method to use when validating.
+    #[arg(short = 'm', long = "method", env = "METHOD")]
+    pub method: ValidatorMethodConfig,
+
+    /// How many concurrent validation tasks to run
+    #[arg(short = 'c', long = "concurrent-tasks", env = "CONCURRENT_TASKS", default_value_t = 10)]
+    pub concurrent_tasks: u16,
+
+    #[deref]
+    #[clap(flatten)]
+    pub common: CommonConfig,
+
+    #[clap(flatten)]
+    pub storage: StratusStorageConfig,
+}
+
+impl WithCommonConfig for StateValidatorConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }

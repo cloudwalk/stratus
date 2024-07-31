@@ -1,4 +1,4 @@
-name: E2E Importer
+name: E2E Generic
 
 on:
   pull_request:
@@ -17,24 +17,36 @@ on:
       - 'LICENSE'
       - 'CONTRIBUTING.md'
       - 'utils/slack-notifiers/**'
-
-  push: # Rebuild cache policy
-    branches:
-      - 'main'
-    paths:
-      - 'Cargo.lock'
-      - 'Cargo.toml'
+  workflow_dispatch:
 
 jobs:
-  importer_test:
+  e2e_generic:
     strategy:
       fail-fast: false
-    name: E2E Importer on BRLCToken
+      matrix:
+        include:
+          # - leader-restart: true
+          #   instances: 2
+          #   iterations: 1
+          # - leader-restart: true
+          #   instances: 3
+          #   iterations: 1
+          # - leader-restart: false
+          #   instances: 2
+          #   iterations: 1
+          # - leader-restart: false
+          #   instances: 3
+          #   iterations: 1
+          - leader-restart: true
+            instances: 1
+            iterations: 2
+
+    name: E2E Generic with (${{ matrix.instances }}, ${{ matrix.leader-restart }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.leader-restart }}-${{ matrix.instances }}-${{ matrix.iterations }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -57,13 +69,11 @@ jobs:
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
+      - name: Install jq
+        run: sudo apt-get install jq -y
+
       - name: Set up Just
         uses: extractions/setup-just@v2
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .tool-versions
 
       - name: Set up dependencies
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
@@ -71,16 +81,15 @@ jobs:
           cargo install killport || true
           cargo install wait-service || true
 
-      - name: Clone BRLCToken repository
+      - name: Clone all contracts
         run: just contracts-clone --token
 
-      - name: Flatten BRLCToken contract
+      - name: Flatten all contracts
         run: just contracts-flatten --token
 
       - name: Run e2e tests
-        run: just e2e-importer-online-up
+        run: just run-chaos-experiment stratus ${{ matrix.instances }} ${{ matrix.iterations }} ${{ matrix.leader-restart }} main
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error
           RELEASE: 1
-          RUST_BACKTRACE: 1

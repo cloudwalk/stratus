@@ -26,7 +26,6 @@ use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
 use crate::infra::tracing::TracingExt;
 use crate::log_and_err;
-use crate::GlobalState;
 
 #[derive(Debug)]
 pub struct BlockchainClient {
@@ -228,15 +227,10 @@ impl BlockchainClient {
     // -------------------------------------------------------------------------
 
     pub async fn subscribe_new_heads(&self) -> anyhow::Result<Subscription<ExternalBlock>> {
-        const TASK_NAME: &str = "blockchain::subscribe_new_heads";
         tracing::debug!("subscribing to newHeads event");
 
         let mut first_attempt = true;
         loop {
-            if GlobalState::is_shutdown_warn(TASK_NAME) {
-                return Err(anyhow::anyhow!("shutdown warning"));
-            };
-
             let ws_read = self.require_ws().await?;
             let result = ws_read
                 .subscribe::<ExternalBlock, Vec<JsonValue>>("eth_subscribe", vec![JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
