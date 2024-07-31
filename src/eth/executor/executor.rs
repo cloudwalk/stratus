@@ -119,14 +119,14 @@ impl Evms {
             evm_tx
         };
 
-        let tx_parallel = match config.strategy {
+        let tx_parallel = match config.executor_strategy {
             ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1), // should not really be used if strategy is serial, but keep 1 for fallback
-            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.num_evms),
+            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.executor_evms),
         };
         let tx_serial = spawn_evms("evm-tx-serial", 1);
         let tx_external = spawn_evms("evm-tx-external", 1);
-        let call_present = spawn_evms("evm-call-present", max(config.num_evms / 2, 1));
-        let call_past = spawn_evms("evm-call-past", max(config.num_evms / 4, 1));
+        let call_present = spawn_evms("evm-call-present", max(config.executor_evms / 2, 1));
+        let call_past = spawn_evms("evm-call-past", max(config.executor_evms / 4, 1));
 
         Evms {
             tx_parallel,
@@ -370,7 +370,7 @@ impl Executor {
         // execute according to the strategy
         const INFINITE_ATTEMPTS: usize = usize::MAX;
 
-        let tx_execution = match self.config.strategy {
+        let tx_execution = match self.config.executor_strategy {
             // Executes transactions in serial mode:
             // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
             // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.

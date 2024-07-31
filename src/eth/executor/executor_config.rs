@@ -12,22 +12,27 @@ use crate::eth::storage::StratusStorage;
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
-    #[arg(long = "chain-id", env = "CHAIN_ID")]
-    pub chain_id: u64,
+    #[arg(long = "executor-chain-id", alias = "chain-id", env = "EXECUTOR_CHAIN_ID")]
+    pub executor_chain_id: u64,
 
     /// Number of EVM instances to run.
     ///
     /// TODO: should be configured for each kind of EvmRoute instead of being a single value.
-    #[arg(long = "evms", env = "EVMS")]
-    pub num_evms: usize,
+    #[arg(long = "executor-evms", alias = "evms", env = "EXECUTOR_EVMS")]
+    pub executor_evms: usize,
 
     /// EVM execution strategy.
-    #[arg(long = "strategy", env = "STRATEGY", default_value = "serial")]
-    pub strategy: ExecutorStrategy,
+    #[arg(long = "executor-strategy", alias = "strategy", env = "EXECUTOR_STRATEGY", default_value = "serial")]
+    pub executor_strategy: ExecutorStrategy,
 
     /// Should reject contract transactions and calls to accounts that are not contracts?
-    #[arg(long = "reject-not-contract", env = "REJECT_NOT_CONTRACT", default_value = "true")]
-    pub reject_not_contract: bool,
+    #[arg(
+        long = "executor-reject-not-contract",
+        alias = "reject-not-contract",
+        env = "EXECUTOR_REJECT_NOT_CONTRACT",
+        default_value = "true"
+    )]
+    pub executor_reject_not_contract: bool,
 }
 
 impl ExecutorConfig {
@@ -36,7 +41,7 @@ impl ExecutorConfig {
     /// Note: Should be called only after async runtime is initialized.
     pub fn init(&self, storage: Arc<StratusStorage>, miner: Arc<Miner>) -> Arc<Executor> {
         let mut config = self.clone();
-        config.num_evms = max(config.num_evms, 1);
+        config.executor_evms = max(config.executor_evms, 1);
         tracing::info!(?config, "creating executor");
 
         let executor = Executor::new(storage, miner, config);

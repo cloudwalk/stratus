@@ -75,7 +75,7 @@ impl Evm {
         handler.set_instruction_table(instructions);
 
         // configure revm
-        let chain_id = config.chain_id;
+        let chain_id = config.executor_chain_id;
         let mut evm = RevmEvm::builder()
             .with_external_context(())
             .with_db(RevmSession::new(storage, config))
@@ -238,7 +238,7 @@ impl Database for RevmSession {
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.input.to {
             if account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
-                if self.config.reject_not_contract {
+                if self.config.executor_reject_not_contract {
                     return Err(StratusError::TransactionAccountNotContract { address: *to_address });
                 } else {
                     tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");

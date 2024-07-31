@@ -52,7 +52,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
             // config
             rpc_config.clone(),
             rpc_config.rpc_server,
-            rpc_config.executor.chain_id.into(),
+            rpc_config.executor.executor_chain_id.into(),
         )
         .await;
         GlobalState::shutdown_from(TASK_NAME, "rpc server finished unexpectedly");

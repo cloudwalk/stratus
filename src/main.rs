@@ -35,7 +35,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         // config
         config.clone(),
         config.rpc_server,
-        config.executor.chain_id.into(),
+        config.executor.executor_chain_id.into(),
     )
     .await?;
 
