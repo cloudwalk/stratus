@@ -100,8 +100,8 @@ pub fn init_config_and_data(
 ) {
     // init config
     let mut global_services = GlobalServices::<IntegrationTestConfig>::init();
-    global_services.config.executor.chain_id = 2009;
-    global_services.config.executor.num_evms = 8;
+    global_services.config.executor.executor_chain_id = 2009;
+    global_services.config.executor.executor_evms = 8;
 
     // init block data
     let block_json = fs::read_to_string(format!("tests/fixtures/snapshots/{}/block.json", block_number)).unwrap();

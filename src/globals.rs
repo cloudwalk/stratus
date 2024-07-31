@@ -43,6 +43,8 @@ where
         // apply env-var aliases
         env_alias("EXECUTOR_CHAIN_ID", "CHAIN_ID");
         env_alias("EXECUTOR_EVMS", "EVMS");
+        env_alias("EXECUTOR_EVMS", "NUM_EVMS");
+        env_alias("EXECUTOR_REJECT_NOT_CONTRACT", "REJECT_NOT_CONTRACT");
         env_alias("EXECUTOR_STRATEGY", "STRATEGY");
         env_alias("TRACING_LOG_FORMAT", "LOG_FORMAT");
         env_alias("TRACING_URL", "TRACING_COLLECTOR_URL");
