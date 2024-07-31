@@ -22,10 +22,10 @@ use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
+use crate::eth::executor::ExecutorConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionAccountChanges;
@@ -54,8 +54,8 @@ pub struct Evm {
 impl Evm {
     /// Creates a new instance of the Evm.
     #[allow(clippy::arc_with_non_send_sync)]
-    pub fn new(storage: Arc<StratusStorage>, chain_id: ChainId) -> Self {
-        tracing::info!(%chain_id, "creating revm");
+    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
+        tracing::info!(?config, "creating revm");
 
         // configure handler
         let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
@@ -75,15 +75,16 @@ impl Evm {
         handler.set_instruction_table(instructions);
 
         // configure revm
+        let chain_id = config.chain_id;
         let mut evm = RevmEvm::builder()
             .with_external_context(())
-            .with_db(RevmSession::new(storage))
+            .with_db(RevmSession::new(storage, config))
             .with_handler(handler)
             .build();
 
         // global general config
         let cfg_env = evm.cfg_mut();
-        cfg_env.chain_id = chain_id.into();
+        cfg_env.chain_id = chain_id;
         cfg_env.limit_contract_code_size = Some(usize::MAX);
 
         // global block config
@@ -188,6 +189,9 @@ impl Evm {
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 struct RevmSession {
+    /// Executor configuration.
+    config: ExecutorConfig,
+
     /// Service to communicate with the storage.
     storage: Arc<StratusStorage>,
 
@@ -203,8 +207,9 @@ struct RevmSession {
 
 impl RevmSession {
     /// Creates the base session to be used with REVM.
-    pub fn new(storage: Arc<StratusStorage>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
         Self {
+            config,
             storage,
             input: EvmInput::default(),
             storage_changes: HashMap::default(),
@@ -233,7 +238,11 @@ impl Database for RevmSession {
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.input.to {
             if account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
-                return Err(StratusError::TransactionAccountNotContract { address: *to_address });
+                if self.config.reject_not_contract {
+                    return Err(StratusError::TransactionAccountNotContract { address: *to_address });
+                } else {
+                    tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
+                }
             }
         }
 

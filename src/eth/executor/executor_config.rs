@@ -16,12 +16,18 @@ pub struct ExecutorConfig {
     pub chain_id: u64,
 
     /// Number of EVM instances to run.
+    ///
+    /// TODO: should be configured for each kind of EvmRoute instead of being a single value.
     #[arg(long = "evms", env = "EVMS")]
     pub num_evms: usize,
 
     /// EVM execution strategy.
     #[arg(long = "strategy", env = "STRATEGY", default_value = "serial")]
     pub strategy: ExecutorStrategy,
+
+    /// Should reject contract transactions and calls to accounts that are not contracts?
+    #[arg(long = "reject-not-contract", env = "REJECT_NOT_CONTRACT", default_value = "true")]
+    pub reject_not_contract: bool,
 }
 
 impl ExecutorConfig {
