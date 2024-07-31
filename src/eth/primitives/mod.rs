@@ -114,6 +114,28 @@ mod tests {
     type TransactionExecutionValueChangeSlot = ExecutionValueChange<Slot>;
     type TransactionExecutionValueChangeWei = ExecutionValueChange<Wei>;
 
+    // FIX: gen_test_serde!(Block);
+    // FIX: gen_test_serde!(EvmExecution);
+    // FIX: gen_test_serde!(ExecutionAccountChanges);
+    // FIX: gen_test_serde!(ExecutionChanges);
+    // FIX: gen_test_serde!(TransactionMined);
+    // TODO: gen_test_serde!(BlockFilter);
+    // TODO: gen_test_serde!(ExecutionConflict);
+    // TODO: gen_test_serde!(ExecutionConflicts);
+    // TODO: gen_test_serde!(ExecutionConflictsBuilder);
+    // TODO: gen_test_serde!(ExternalBlock);
+    // TODO: gen_test_serde!(ExternalReceipt);
+    // TODO: gen_test_serde!(ExternalReceipts);
+    // TODO: gen_test_serde!(ExternalTransaction);
+    // TODO: gen_test_serde!(ExternalTransactionExecution);
+    // TODO: gen_test_serde!(LocalTransactionExecution);
+    // TODO: gen_test_serde!(LogFilter);
+    // TODO: gen_test_serde!(LogFilterInput);
+    // TODO: gen_test_serde!(LogFilterInputTopic);
+    // TODO: gen_test_serde!(PendingBlock);
+    // TODO: gen_test_serde!(StratusError);
+    // TODO: gen_test_serde!(TransactionExecution);
+    // TODO: gen_test_serde!(TransactionStage);
     gen_test_serde!(Account);
     gen_test_serde!(Address);
     gen_test_serde!(BlockHeader);
