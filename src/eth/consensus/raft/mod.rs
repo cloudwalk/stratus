@@ -26,6 +26,7 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tonic::Request;
 
+use crate::eth::importer::ImporterConfig;
 use crate::eth::primitives::Hash;
 #[allow(unused_imports)]
 use crate::eth::primitives::TransactionExecution;
@@ -49,7 +50,6 @@ use append_entry::TransactionExecutionEntry;
 use self::append_log_entries_storage::AppendLogEntriesStorage;
 use self::log_entry::LogEntryData;
 use super::Consensus;
-use crate::config::RunWithImporterConfig;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::Bytes;
@@ -148,7 +148,7 @@ type PeerTuple = (Peer, JoinHandle<()>);
 
 pub struct Raft {
     broadcast_sender: broadcast::Sender<LogEntryData>, //propagates the blocks
-    importer_config: Option<RunWithImporterConfig>,    //HACK this is used with sync online only
+    importer_config: Option<ImporterConfig>,           //HACK this is used with sync online only
     storage: Arc<StratusStorage>,
     miner: Arc<Miner>,
     log_entries_storage: Arc<AppendLogEntriesStorage>,
@@ -175,7 +175,7 @@ impl Raft {
         miner: Arc<Miner>,
         log_storage_path: Option<String>,
         direct_peers: Vec<String>,
-        importer_config: Option<RunWithImporterConfig>,
+        importer_config: Option<ImporterConfig>,
         jsonrpc_address: SocketAddr,
         grpc_address: SocketAddr,
     ) -> Arc<Self> {
@@ -577,7 +577,7 @@ impl Raft {
 
     pub async fn get_chain_url(&self) -> anyhow::Result<(String, Option<String>)> {
         if let Some(importer_config) = self.importer_config.clone() {
-            return Ok((importer_config.online.external_rpc, importer_config.online.external_rpc_ws));
+            return Ok((importer_config.external_rpc, importer_config.external_rpc_ws));
         }
 
         if Self::is_follower() {
