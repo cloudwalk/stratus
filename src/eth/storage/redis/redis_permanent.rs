@@ -33,8 +33,11 @@ pub struct RedisPermanentStorage {
 }
 
 impl RedisPermanentStorage {
-    pub fn new() -> anyhow::Result<Self> {
-        let client = RedisClient::open("redis://127.0.0.1/")?;
+    pub fn new(url: &str) -> anyhow::Result<Self> {
+        let client = match RedisClient::open(url) {
+            Ok(client) => client,
+            Err(e) => return log_and_err!(reason = e, "failed to create redis client"),
+        };
         Ok(Self { client })
     }
 

@@ -19,6 +19,7 @@ use crate::eth::storage::redis::RedisPermanentStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StoragePointInTime;
+use crate::log_and_err;
 
 /// Permanent (committed) storage operations.
 pub trait PermanentStorage: Send + Sync + 'static {
@@ -84,7 +85,7 @@ pub struct PermanentStorageConfig {
     pub perm_storage_kind: PermanentStorageKind,
 
     /// Storage connection URL.
-    #[arg(long = "perm-storage-url", env = "PERM_STORAGE_URL")]
+    #[arg(long = "perm-storage-url", env = "PERM_STORAGE_URL", required_if_eq_any([("perm_storage_kind", "redis")]))]
     pub perm_storage_url: Option<String>,
 
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
@@ -112,7 +113,12 @@ impl PermanentStorageConfig {
         let perm: Box<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Box::<InMemoryPermanentStorage>::default(),
 
-            PermanentStorageKind::Redis => Box::new(RedisPermanentStorage::new()?),
+            PermanentStorageKind::Redis => {
+                let Some(url) = self.perm_storage_url.as_deref() else {
+                    return log_and_err!("redis connection url not provided when it was expected to be present");
+                };
+                Box::new(RedisPermanentStorage::new(url)?)
+            }
 
             PermanentStorageKind::Rocks => {
                 let prefix = self.rocks_path_prefix.clone();
