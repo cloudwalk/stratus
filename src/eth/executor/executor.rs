@@ -15,7 +15,6 @@ use crate::eth::executor::ExecutorConfig;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::CallInput;
-use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
@@ -82,11 +81,9 @@ struct Evms {
 impl Evms {
     /// Spawns EVM tasks in background.
     fn spawn(storage: Arc<StratusStorage>, config: &ExecutorConfig) -> Self {
-        let chain_id: ChainId = config.chain_id.into();
-
         // function executed by evm threads
-        fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, chain_id: ChainId, task_rx: crossbeam_channel::Receiver<EvmTask>) {
-            let mut evm = Evm::new(storage, chain_id);
+        fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<EvmTask>) {
+            let mut evm = Evm::new(storage, config);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
@@ -110,12 +107,13 @@ impl Evms {
             let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
 
             for evm_index in 1..=num_evms {
+                let evm_task_name = format!("{}-{}", task_name, evm_index);
                 let evm_storage = Arc::clone(&storage);
+                let evm_config = config.clone();
                 let evm_rx = evm_rx.clone();
-                let task_name = format!("{}-{}", task_name, evm_index);
-                let thread_name = task_name.clone();
+                let thread_name = evm_task_name.clone();
                 spawn_thread(&thread_name, move || {
-                    evm_loop(&task_name, evm_storage, chain_id, evm_rx);
+                    evm_loop(&evm_task_name, evm_storage, evm_config, evm_rx);
                 });
             }
             evm_tx
