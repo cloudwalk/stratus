@@ -17,10 +17,10 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let storage = config.storage.init()?;
 
     // Init miner
-    let miner = if config.leader {
-        config.miner.init(Arc::clone(&storage))?
-    } else {
+    let miner = if config.follower {
         config.miner.init_external_mode(Arc::clone(&storage))?
+    } else {
+        config.miner.init(Arc::clone(&storage))?
     };
 
     // Init executor
