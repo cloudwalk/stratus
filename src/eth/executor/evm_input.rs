@@ -89,7 +89,7 @@ impl EvmInput {
             value: input.value,
             data: input.input,
             gas_limit: Gas::MAX,
-            gas_price: Wei::ZERO, // XXX: use value from input?
+            gas_price: Wei::ZERO,
             nonce: Some(input.nonce),
             block_number: pending_block_number,
             block_timestamp: UnixTime::now(),
@@ -110,8 +110,8 @@ impl EvmInput {
             to: input.to.map_into(),
             value: input.value,
             data: input.data,
-            gas_limit: Gas::MAX,  // XXX: use value from input?
-            gas_price: Wei::ZERO, // XXX: use value from input?
+            gas_limit: Gas::MAX,
+            gas_price: Wei::ZERO,
             nonce: None,
             block_number: match point_in_time {
                 StoragePointInTime::Mined | StoragePointInTime::Pending => pending_block_number,

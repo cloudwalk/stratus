@@ -81,14 +81,14 @@ impl From<LogMined> for EthersLog {
             data: value.log.data.into(),
             log_index: Some(value.log_index.into()),
             removed: Some(false),
-            log_type: None, // TODO: what is this?,
+            log_type: None,
 
             // block / transaction
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.into()),
             transaction_hash: Some(value.transaction_hash.into()),
             transaction_index: Some(value.transaction_index.into()),
-            transaction_log_index: None, // TODO: what is this?
+            transaction_log_index: None,
         }
     }
 }
