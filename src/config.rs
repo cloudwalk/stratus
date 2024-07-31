@@ -158,7 +158,7 @@ impl CommonConfig {
 
 /// Configuration for main Stratus service.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-#[clap(group = ArgGroup::new("role").required(true).args(&["leader", "follower"]))]
+#[clap(group = ArgGroup::new("mode").required(true).args(&["leader", "follower"]))]
 pub struct StratusConfig {
     #[arg(long = "leader", env = "LEADER", conflicts_with("follower"))]
     pub leader: bool,
