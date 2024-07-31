@@ -14,6 +14,7 @@ use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct TransactionInputRocksdb {
+    pub tx_type: Option<u64>,
     pub chain_id: Option<ChainIdRocksdb>,
     pub hash: HashRocksdb,
     pub nonce: NonceRocksdb,
@@ -32,6 +33,7 @@ pub struct TransactionInputRocksdb {
 impl From<TransactionInput> for TransactionInputRocksdb {
     fn from(item: TransactionInput) -> Self {
         Self {
+            tx_type: item.tx_type.map(|inner| inner.as_u64()),
             chain_id: item.chain_id.map_into(),
             hash: HashRocksdb::from(item.hash),
             nonce: NonceRocksdb::from(item.nonce),
@@ -65,7 +67,7 @@ impl From<TransactionInputRocksdb> for TransactionInput {
             v: item.v.into(),
             r: U256(item.r),
             s: U256(item.s),
-            tx_type: None,
+            tx_type: item.tx_type.map_into(),
         }
     }
 }
