@@ -15,7 +15,6 @@ use crate::eth::executor::ExecutorConfig;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::CallInput;
-use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExternalBlock;
@@ -82,11 +81,9 @@ struct Evms {
 impl Evms {
     /// Spawns EVM tasks in background.
     fn spawn(storage: Arc<StratusStorage>, config: &ExecutorConfig) -> Self {
-        let chain_id: ChainId = config.chain_id.into();
-
         // function executed by evm threads
-        fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, chain_id: ChainId, task_rx: crossbeam_channel::Receiver<EvmTask>) {
-            let mut evm = Evm::new(storage, chain_id);
+        fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<EvmTask>) {
+            let mut evm = Evm::new(storage, config);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
@@ -110,25 +107,26 @@ impl Evms {
             let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
 
             for evm_index in 1..=num_evms {
+                let evm_task_name = format!("{}-{}", task_name, evm_index);
                 let evm_storage = Arc::clone(&storage);
+                let evm_config = config.clone();
                 let evm_rx = evm_rx.clone();
-                let task_name = format!("{}-{}", task_name, evm_index);
-                let thread_name = task_name.clone();
+                let thread_name = evm_task_name.clone();
                 spawn_thread(&thread_name, move || {
-                    evm_loop(&task_name, evm_storage, chain_id, evm_rx);
+                    evm_loop(&evm_task_name, evm_storage, evm_config, evm_rx);
                 });
             }
             evm_tx
         };
 
-        let tx_parallel = match config.strategy {
+        let tx_parallel = match config.executor_strategy {
             ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1), // should not really be used if strategy is serial, but keep 1 for fallback
-            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.num_evms),
+            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.executor_evms),
         };
         let tx_serial = spawn_evms("evm-tx-serial", 1);
         let tx_external = spawn_evms("evm-tx-external", 1);
-        let call_present = spawn_evms("evm-call-present", max(config.num_evms / 2, 1));
-        let call_past = spawn_evms("evm-call-past", max(config.num_evms / 4, 1));
+        let call_present = spawn_evms("evm-call-present", max(config.executor_evms / 2, 1));
+        let call_past = spawn_evms("evm-call-past", max(config.executor_evms / 4, 1));
 
         Evms {
             tx_parallel,
@@ -372,7 +370,7 @@ impl Executor {
         // execute according to the strategy
         const INFINITE_ATTEMPTS: usize = usize::MAX;
 
-        let tx_execution = match self.config.strategy {
+        let tx_execution = match self.config.executor_strategy {
             // Executes transactions in serial mode:
             // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
             // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.

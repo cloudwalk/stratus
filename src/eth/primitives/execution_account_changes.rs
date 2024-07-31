@@ -95,13 +95,8 @@ impl ExecutionAccountChanges {
         }
     }
 
-    /// Checks if the account was created by this transaction.
-    pub fn is_creation(&self) -> bool {
-        self.new_account
-    }
-
-    /// Checks if nonce, balance or bytecode were modified.
-    pub fn is_changed(&self) -> bool {
+    /// Checks if account nonce, balance or bytecode were modified.
+    pub fn is_account_modified(&self) -> bool {
         self.nonce.is_modified() || self.balance.is_modified() || self.bytecode.is_modified()
     }
 }

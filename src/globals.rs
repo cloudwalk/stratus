@@ -38,16 +38,19 @@ where
     where
         T: clap::Parser + WithCommonConfig + Debug,
     {
-        // translate renamed environment variables because clap does not support multiple aliases for env-vars
-        if let Ok(value) = env::var("TRACING_COLLECTOR_URL") {
-            env::set_var("TRACING_URL", value);
-        }
-        if let Ok(value) = env::var("LOG_FORMAT") {
-            env::set_var("TRACING_LOG_FORMAT", value);
-        }
+        // .dotfile support
+        load_dotenv();
+
+        // apply env-var aliases
+        env_alias("EXECUTOR_CHAIN_ID", "CHAIN_ID");
+        env_alias("EXECUTOR_EVMS", "EVMS");
+        env_alias("EXECUTOR_EVMS", "NUM_EVMS");
+        env_alias("EXECUTOR_REJECT_NOT_CONTRACT", "REJECT_NOT_CONTRACT");
+        env_alias("EXECUTOR_STRATEGY", "STRATEGY");
+        env_alias("TRACING_LOG_FORMAT", "LOG_FORMAT");
+        env_alias("TRACING_URL", "TRACING_COLLECTOR_URL");
 
         // parse configuration
-        load_dotenv();
         let config = T::parse();
         let common = config.common();
 
@@ -81,6 +84,13 @@ where
             runtime,
             _sentry_guard: sentry_guard,
         }
+    }
+}
+
+/// Translates an aliased environment variable to a canonical one.
+fn env_alias(canonical: &'static str, alias: &'static str) {
+    if let Ok(value) = env::var(alias) {
+        env::set_var(canonical, value);
     }
 }
 

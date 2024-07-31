@@ -19,6 +19,7 @@ use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StoragePointInTime;
 use crate::ext::from_json_str;
 use crate::ext::to_json_string;
+use crate::ext::to_json_value;
 use crate::log_and_err;
 
 type RedisVecOptString = RedisResult<Vec<Option<String>>>;
@@ -32,8 +33,11 @@ pub struct RedisPermanentStorage {
 }
 
 impl RedisPermanentStorage {
-    pub fn new() -> anyhow::Result<Self> {
-        let client = RedisClient::open("redis://127.0.0.1/")?;
+    pub fn new(url: &str) -> anyhow::Result<Self> {
+        let client = match RedisClient::open(url) {
+            Ok(client) => client,
+            Err(e) => return log_and_err!(reason = e, "failed to create redis client"),
+        };
         Ok(Self { client })
     }
 
@@ -97,30 +101,40 @@ impl PermanentStorage for RedisPermanentStorage {
         // changes
         for changes in block.compact_account_changes() {
             // account
-            let mut account = Account {
-                address: changes.address,
-                ..Account::default()
-            };
-            if let Some(nonce) = changes.nonce.take() {
-                account.nonce = nonce;
-            }
-            if let Some(balance) = changes.balance.take() {
-                account.balance = balance;
-            }
-            if let Some(bytecode) = changes.bytecode.take() {
-                account.bytecode = bytecode;
+            if changes.is_account_modified() {
+                let mut account = Account {
+                    address: changes.address,
+                    ..Account::default()
+                };
+                if let Some(nonce) = changes.nonce.take() {
+                    account.nonce = nonce;
+                }
+                if let Some(balance) = changes.balance.take() {
+                    account.balance = balance;
+                }
+                if let Some(bytecode) = changes.bytecode.take() {
+                    account.bytecode = bytecode;
+                }
+
+                // add block number to force slot modification
+                let mut account_value = to_json_value(&account);
+                account_value.as_object_mut().unwrap().insert("block".to_owned(), to_json_value(block.number()));
+                let account_value = to_json_string(&account_value);
+
+                mset_values.push((key_account(&account.address), account_value.clone()));
+                zadd_values.push((key_account_history(&account.address), account_value, block.number().as_u64()));
             }
 
-            let account_value = to_json_string(&account);
-            mset_values.push((key_account(&account.address), account_value.clone()));
-            zadd_values.push((key_account_history(&account.address), account_value, block.number().as_u64()));
-
-            // slot
+            // slots
             for slot in changes.slots.into_values() {
                 if let Some(slot) = slot.take() {
-                    let slot_value = to_json_string(&slot);
-                    mset_values.push((key_slot(&account.address, &slot.index), slot_value.clone()));
-                    zadd_values.push((key_slot_history(&account.address, &slot.index), slot_value, block.number().as_u64()));
+                    // add block number to force slot modification
+                    let mut slot_value = to_json_value(slot);
+                    slot_value.as_object_mut().unwrap().insert("block".to_owned(), to_json_value(block.number()));
+                    let slot_value = to_json_string(&slot_value);
+
+                    mset_values.push((key_slot(&changes.address, &slot.index), slot_value.clone()));
+                    zadd_values.push((key_slot_history(&changes.address, &slot.index), slot_value, block.number().as_u64()));
                 }
             }
         }
@@ -134,7 +148,10 @@ impl PermanentStorage for RedisPermanentStorage {
 
         // execute zadd commands
         for (key, value, score) in zadd_values {
-            let zadd: RedisVoid = conn.zadd(key, value, score);
+            let mut cmd = redis::cmd("ZADD");
+            cmd.arg(key).arg("NX").arg(score).arg(value);
+
+            let zadd: RedisVoid = cmd.exec(&mut conn);
             if let Err(e) = zadd {
                 return log_and_err!(reason = e, "failed to write block zadd to redis");
             }
@@ -243,9 +260,6 @@ impl PermanentStorage for RedisPermanentStorage {
     }
 
     fn read_account(&self, address: &Address, point_in_time: &crate::eth::storage::StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        // prepare keys
-
-        // execute and parse
         let mut conn = self.conn()?;
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => {

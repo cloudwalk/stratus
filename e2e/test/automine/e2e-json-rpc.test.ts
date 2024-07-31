@@ -82,7 +82,13 @@ describe("JSON-RPC", () => {
             (await sendExpect("eth_getBalance", [ALICE])).eq(TEST_BALANCE);
             (await sendExpect("eth_getBalance", [ALICE, "latest"])).eq(TEST_BALANCE);
         });
-        it("eth_getCode", () => {
+        describe("eth_getCode", () => {
+            it("contract code is available in the block it was deployed", async () => {
+                await sendReset();
+                const contract = await deployTestContractBalances();
+                (await sendExpect("eth_getCode", [contract.target, "latest"])).not.eq("0x");
+                (await sendExpect("eth_getCode", [contract.target, "0x1"])).not.eq("0x");
+            });
             it("code for non-existent contract is 0x", async () => {
                 (await sendExpect("eth_getCode", [ALICE.address, "latest"])).eq("0x");
             });
@@ -91,6 +97,7 @@ describe("JSON-RPC", () => {
 
     describe("Block", () => {
         it("eth_blockNumber", async function () {
+            await sendReset();
             (await sendExpect("eth_blockNumber")).eq(ZERO);
             await sendEvmMine();
             (await sendExpect("eth_blockNumber")).eq(ONE);

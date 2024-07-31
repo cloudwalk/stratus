@@ -4,10 +4,10 @@ use jsonrpsee::types::error::INVALID_PARAMS_CODE;
 use jsonrpsee::types::error::INVALID_REQUEST_CODE;
 use jsonrpsee::types::error::SERVER_IS_BUSY_CODE;
 use jsonrpsee::types::ErrorObjectOwned;
-use revm::primitives::EVMError;
 use strum::EnumProperty;
 
 use crate::alias::JsonValue;
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
@@ -65,6 +65,10 @@ pub enum StratusError {
     // -------------------------------------------------------------------------
     // Transaction
     // -------------------------------------------------------------------------
+    #[error("Account at {address} is not a contract.")]
+    #[strum(props(kind = "execution"))]
+    TransactionAccountNotContract { address: Address },
+
     #[error("Transaction execution conflicts: {0:?}.")]
     #[strum(props(kind = "execution"))]
     TransactionConflict(Box<ExecutionConflicts>),
@@ -75,7 +79,7 @@ pub enum StratusError {
 
     #[error("Failed to executed transaction in EVM: {0:?}.")]
     #[strum(props(kind = "execution"))]
-    TransactionFailed(EVMError<anyhow::Error>), // split this in multiple errors
+    TransactionFailed(String), // split this in multiple errors
 
     #[error("Failed to forward transaction to leader node.")]
     #[strum(props(kind = "execution"))]

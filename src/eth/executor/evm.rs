@@ -22,10 +22,10 @@ use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
+use crate::eth::executor::ExecutorConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ChainId;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionAccountChanges;
@@ -54,8 +54,8 @@ pub struct Evm {
 impl Evm {
     /// Creates a new instance of the Evm.
     #[allow(clippy::arc_with_non_send_sync)]
-    pub fn new(storage: Arc<StratusStorage>, chain_id: ChainId) -> Self {
-        tracing::info!(%chain_id, "creating revm");
+    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
+        tracing::info!(?config, "creating revm");
 
         // configure handler
         let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
@@ -75,15 +75,16 @@ impl Evm {
         handler.set_instruction_table(instructions);
 
         // configure revm
+        let chain_id = config.executor_chain_id;
         let mut evm = RevmEvm::builder()
             .with_external_context(())
-            .with_db(RevmSession::new(storage))
+            .with_db(RevmSession::new(storage, config))
             .with_handler(handler)
             .build();
 
         // global general config
         let cfg_env = evm.cfg_mut();
-        cfg_env.chain_id = chain_id.into();
+        cfg_env.chain_id = chain_id;
         cfg_env.limit_contract_code_size = Some(usize::MAX);
 
         // global block config
@@ -155,10 +156,16 @@ impl Evm {
                 account: state.into(),
             }),
 
+            // storage error
+            Err(EVMError::Database(e)) => {
+                tracing::warn!(reason = ?e, "evm storage error");
+                Err(e)
+            }
+
             // unexpected errors
             Err(e) => {
-                tracing::warn!(reason = ?e, "evm execution error");
-                Err(StratusError::TransactionFailed(e))
+                tracing::warn!(reason = ?e, "evm transaction error");
+                Err(StratusError::TransactionFailed(e.to_string()))
             }
         };
 
@@ -182,6 +189,9 @@ impl Evm {
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 struct RevmSession {
+    /// Executor configuration.
+    config: ExecutorConfig,
+
     /// Service to communicate with the storage.
     storage: Arc<StratusStorage>,
 
@@ -197,8 +207,9 @@ struct RevmSession {
 
 impl RevmSession {
     /// Creates the base session to be used with REVM.
-    pub fn new(storage: Arc<StratusStorage>) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
         Self {
+            config,
             storage,
             input: EvmInput::default(),
             storage_changes: HashMap::default(),
@@ -215,9 +226,9 @@ impl RevmSession {
 }
 
 impl Database for RevmSession {
-    type Error = anyhow::Error;
+    type Error = StratusError;
 
-    fn basic(&mut self, revm_address: RevmAddress) -> anyhow::Result<Option<AccountInfo>> {
+    fn basic(&mut self, revm_address: RevmAddress) -> Result<Option<AccountInfo>, StratusError> {
         self.metrics.account_reads += 1;
 
         // retrieve account
@@ -226,8 +237,12 @@ impl Database for RevmSession {
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.input.to {
-            if &address == to_address && not(account.is_contract()) && not(self.input.data.is_empty()) {
-                tracing::warn!(%address, "evm to_account does not have bytecode");
+            if account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
+                if self.config.executor_reject_not_contract {
+                    return Err(StratusError::TransactionAccountNotContract { address: *to_address });
+                } else {
+                    tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
+                }
             }
         }
 
@@ -243,11 +258,11 @@ impl Database for RevmSession {
         Ok(Some(revm_account))
     }
 
-    fn code_by_hash(&mut self, _: B256) -> anyhow::Result<RevmBytecode> {
+    fn code_by_hash(&mut self, _: B256) -> Result<RevmBytecode, StratusError> {
         todo!()
     }
 
-    fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> anyhow::Result<U256> {
+    fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> Result<U256, StratusError> {
         self.metrics.slot_reads += 1;
 
         // convert slot
@@ -265,7 +280,10 @@ impl Database for RevmSession {
                 }
                 None => {
                     tracing::error!(reason = "reading slot without account loaded", %address, %index);
-                    return Err(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address));
+                    return Err(StratusError::Unexpected(anyhow!(
+                        "Account '{}' was expected to be loaded by EVM, but it was not",
+                        address
+                    )));
                 }
             };
         }
@@ -273,7 +291,7 @@ impl Database for RevmSession {
         Ok(slot.value.into())
     }
 
-    fn block_hash(&mut self, _: U256) -> anyhow::Result<B256> {
+    fn block_hash(&mut self, _: U256) -> Result<B256, StratusError> {
         todo!()
     }
 }
