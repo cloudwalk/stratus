@@ -12,21 +12,21 @@ use crate::eth::storage::StratusStorage;
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct ExecutorConfig {
     /// Chain ID of the network.
-    #[arg(long = "chain-id", env = "CHAIN_ID")]
+    #[arg(long = "chain-id", env = "EXECUTOR_CHAIN_ID")]
     pub chain_id: u64,
 
     /// Number of EVM instances to run.
     ///
     /// TODO: should be configured for each kind of EvmRoute instead of being a single value.
-    #[arg(long = "evms", env = "EVMS")]
+    #[arg(long = "evms", env = "EXECUTOR_EVMS")]
     pub num_evms: usize,
 
     /// EVM execution strategy.
-    #[arg(long = "strategy", env = "STRATEGY", default_value = "serial")]
+    #[arg(long = "strategy", env = "EXECUTOR_STRATEGY", default_value = "serial")]
     pub strategy: ExecutorStrategy,
 
     /// Should reject contract transactions and calls to accounts that are not contracts?
-    #[arg(long = "reject-not-contract", env = "REJECT_NOT_CONTRACT", default_value = "true")]
+    #[arg(long = "reject-not-contract", env = "EXECUTOR_REJECT_NOT_CONTRACT", default_value = "true")]
     pub reject_not_contract: bool,
 }
 
