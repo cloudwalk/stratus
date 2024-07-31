@@ -97,18 +97,6 @@ rpc-downloader *args="":
 importer-offline *args="":
     cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} -- {{args}}
 
-# Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
-importer-online *args="":
-    cargo {{nightly_flag}} run --bin importer-online {{release_flag}} -- {{args}}
-
-# Bin: Validate Stratus storage slots matches reference slots
-state-validator *args="":
-    cargo {{nightly_flag}} run --bin state-validator {{release_flag}} -- {{args}}
-
-# Bin: `stratus` and `importer-online` in a single binary
-run-with-importer *args="":
-    cargo {{nightly_flag}} run --bin run-with-importer {{release_flag}} -- {{args}}
-
 # ------------------------------------------------------------------------------
 # Test tasks
 # ------------------------------------------------------------------------------
@@ -165,7 +153,7 @@ e2e-stratus block-mode="automine" test="":
 
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
+    just run -a 0.0.0.0:3000 --leader --block-mode {{block-mode}} > stratus.log &
 
     just _wait_for_stratus
 
@@ -186,7 +174,7 @@ e2e-stratus-rocks block-mode="automine" test="":
 
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --leader --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
 
@@ -203,7 +191,7 @@ e2e-clock-stratus:
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    cargo run  --release --bin stratus --features dev -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev -- --leader --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
 
@@ -220,7 +208,7 @@ e2e-clock-stratus-rocks:
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    cargo run  --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
 
@@ -278,22 +266,22 @@ e2e-importer-online:
 e2e-importer-online-up:
     #!/bin/bash
 
-    # Build Stratus and Run With Importer binaries
-    just _log "Building Stratus and Run With Importer binaries"
-    cargo build --release --bin stratus --bin run-with-importer --features dev
+    # Build Stratus binary
+    just _log "Building Stratus binary"
+    cargo build --release --bin stratus --features dev
 
     mkdir e2e_logs
 
-    # Start Stratus binary
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    # Start Stratus with leader flag
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
-    # Wait for Stratus to start
+    # Wait for Stratus with leader flag to start
     just _wait_for_stratus 3000
 
-    # Start Run With Importer binary
-    RUST_LOG=info cargo run --release --bin run-with-importer --features dev -- --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
+    # Start Stratus with follower flag
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
 
-    # Wait for Run With Importer to start
+    # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
 
     if [ -d e2e/cloudwalk-contracts ]; then
@@ -315,12 +303,8 @@ e2e-importer-online-up:
 e2e-importer-online-down:
     #!/bin/bash
 
-    # Kill run-with-importer
-    killport 3001
-    run_with_importer_pid=$(pgrep -f 'run-with-importer')
-    kill $run_with_importer_pid
-
     # Kill Stratus
+    killport 3001
     killport 3000
     stratus_pid=$(pgrep -f 'stratus')
     kill $stratus_pid
@@ -330,26 +314,6 @@ e2e-importer-online-down:
 
     # Delete zeppelin directory
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
-
-# ------------------------------------------------------------------------------
-# Chaos tests
-# ------------------------------------------------------------------------------
-
-# Chaos: Run chaos testing experiment
-run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" experiment="":
-    #!/bin/bash
-
-    just _log "Building Stratus"
-    cargo build --release --bin {{ bin }} --features dev
-
-    cd e2e/cloudwalk-contracts/integration
-    if [ ! -d node_modules ]; then
-        npm install
-    fi
-    cd ../../..
-
-    just _log "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
-    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}
 
 # ------------------------------------------------------------------------------
 # Hive tests
@@ -407,7 +371,7 @@ contracts-test-stratus *args="":
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run -a 0.0.0.0:3000 &
+    just run --leader -a 0.0.0.0:3000 &
 
     just _wait_for_stratus
 
@@ -424,7 +388,7 @@ contracts-test-stratus-rocks *args="":
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just run --leader -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
 

@@ -8,7 +8,7 @@ use nonempty::NonEmpty;
 use tokio::sync::broadcast;
 use tracing::Span;
 
-use crate::eth::consensus::append_entry;
+use crate::eth::consensus::raft::append_entry;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
@@ -474,11 +474,6 @@ mod interval_miner {
 
             if not(GlobalState::is_miner_enabled()) {
                 tracing::warn!("skipping mining block because block mining is disabled");
-                continue;
-            }
-
-            if not(GlobalState::is_leader()) {
-                tracing::warn!("skipping mining block because node is not a leader");
                 continue;
             }
 
