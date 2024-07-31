@@ -1,6 +1,8 @@
 use serde_json::json;
 
 use crate::alias::JsonValue;
+use crate::eth::rpc::RpcContext;
+use crate::eth::Consensus;
 
 // -----------------------------------------------------------------------------
 // Build constants
@@ -57,8 +59,20 @@ pub fn version() -> &'static str {
     }
 }
 
+pub fn is_leader() -> bool {
+    Consensus::is_leader()
+}
+
+pub fn current_term(ctx: &RpcContext) -> u64 {
+    ctx.consensus.current_term()
+}
+
+pub fn last_index(ctx: &RpcContext) -> u64 {
+    ctx.consensus.last_index()
+}
+
 /// Returns build info as JSON.
-pub fn as_json() -> JsonValue {
+pub fn as_json(ctx: &RpcContext) -> JsonValue {
     json!(
         {
             "build": {
@@ -84,6 +98,11 @@ pub fn as_json() -> JsonValue {
                 "version": RUST_VERSION,
                 "channel": RUST_CHANNEL,
                 "target": RUST_TARGET,
+            },
+            "consensus": {
+                "is_leader": is_leader(),
+                "current_term": current_term(ctx),
+                "last_index": last_index(ctx),
             }
         }
     )

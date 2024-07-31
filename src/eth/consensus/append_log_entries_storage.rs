@@ -141,7 +141,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::eth::consensus::raft::tests::factories::*;
+    use crate::eth::consensus::tests::factories::*;
 
     fn setup_storage() -> AppendLogEntriesStorage {
         let temp_dir = TempDir::new().unwrap();

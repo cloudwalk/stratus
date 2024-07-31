@@ -69,7 +69,7 @@ pub async fn serve_rpc(
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
     miner: Arc<Miner>,
-    consensus: Arc<dyn Consensus>,
+    consensus: Arc<Consensus>,
 
     // config
     app_config: impl serde::Serialize,
@@ -300,8 +300,8 @@ fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool 
 // Stratus - State
 // -----------------------------------------------------------------------------
 
-fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
-    Ok(build_info::as_json())
+fn stratus_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    Ok(build_info::as_json(ctx))
 }
 
 fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
@@ -621,7 +621,10 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     if ctx.consensus.should_forward() {
         tracing::info!(%tx_hash, "forwarding eth_sendRawTransaction to leader");
         return match Handle::current().block_on(ctx.consensus.forward(data)) {
-            Ok(hash) => Ok(hex_data(hash)),
+            Ok((hash, url)) => {
+                tracing::info!(%tx_hash, %url, "forwarded eth_sendRawTransaction to leader");
+                Ok(hex_data(hash))
+            }
             Err(e) => {
                 tracing::error!(reason = ?e, %tx_hash, "failed to forward eth_sendRawTransaction to leader");
                 Err(StratusError::TransactionForwardToLeaderFailed)
