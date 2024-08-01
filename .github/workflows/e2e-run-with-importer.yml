@@ -11,6 +11,7 @@ on:
       - '.github/workflows/comment-tag-report.yml'
       - '.github/workflows/pr-agent.yml'
       - '.github/workflows/build-binary.yml'
+      - '.github/workflows/outsider-contract-test.yml'
       - '.github/CODEOWNERS'
       - 'config/**'
       - 'README.md'
