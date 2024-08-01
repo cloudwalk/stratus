@@ -85,9 +85,13 @@ alias sqlx := db-compile
 # Additional binaries
 # ------------------------------------------------------------------------------
 
-# Bin: Stratus main service
+# Bin: Stratus main service as leader
 stratus *args="":
-    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- {{args}}
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
+
+# Bin: Stratus main service as follower
+stratus-with-importer *args="":
+    LOCAL_ENV_PATH=stratus-with-importer cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower {{args}}
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 rpc-downloader *args="":
