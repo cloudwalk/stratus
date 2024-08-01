@@ -21,7 +21,6 @@ pub struct ImporterConfig {
         long = "external-rpc",
         env = "EXTERNAL_RPC",
         conflicts_with("leader"),
-        requires_if("follower", "true")
     )]
     pub external_rpc: String,
 
