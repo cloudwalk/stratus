@@ -90,8 +90,8 @@ stratus *args="":
     cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
 # Bin: Stratus main service as follower
-stratus-with-importer *args="":
-    LOCAL_ENV_PATH=stratus-with-importer cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower {{args}}
+stratus-follower *args="":
+    LOCAL_ENV_PATH=stratus-follower cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower {{args}}
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 rpc-downloader *args="":
@@ -256,18 +256,18 @@ e2e-flamegraph:
     just _log "Running cargo flamegraph"
     cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
-e2e-importer-online:
+e2e-leader-follower:
     #!/bin/bash
 
-    just e2e-importer-online-up
+    just e2e-leader-follower-up
     result_code=$?
 
-    just e2e-importer-online-down
+    just e2e-leader-follower-down
 
     exit $result_code
 
-# E2E: Importer Online
-e2e-importer-online-up:
+# E2E: Leader & Follower Up
+e2e-leader-follower-up:
     #!/bin/bash
 
     # Build Stratus binary
@@ -292,7 +292,7 @@ e2e-importer-online-up:
     (
         cd e2e/cloudwalk-contracts/integration
         npm install
-        npx hardhat test test/importer.test.ts --network stratus --bail
+        npx hardhat test test/leader-follower.test.ts --network stratus --bail
         if [ $? -ne 0 ]; then
             just _log "Tests failed"
             exit 1
@@ -303,8 +303,8 @@ e2e-importer-online-up:
     )
     fi
 
-# E2E: Importer Online
-e2e-importer-online-down:
+# E2E: Leader & Follower Down
+e2e-leader-follower-down:
     #!/bin/bash
 
     # Kill Stratus

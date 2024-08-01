@@ -13,7 +13,7 @@ import {
     updateProviderUrl,
 } from "./helpers/rpc";
 
-describe("Importer integration test", function () {
+describe("Leader & Follower integration test", function () {
     before(async function () {
         await setDeployer();
     });
@@ -92,10 +92,10 @@ describe("Importer integration test", function () {
                 }
             });
 
-            it(`${params.name}: Validate transaction mined delay between Stratus and Importer`, async function () {
-                // Get Stratus timestamps
+            it(`${params.name}: Validate transaction mined delay between Stratus Leader & Follower`, async function () {
+                // Get Stratus Leader timestamps
                 updateProviderUrl("stratus");
-                const stratusTimestamps = await Promise.all(
+                const leaderTimestamps = await Promise.all(
                     txHashList.map(async (txHash) => {
                         const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
                         const block = await sendWithRetry("eth_getBlockByNumber", [receipt.blockNumber, false]);
@@ -103,9 +103,9 @@ describe("Importer integration test", function () {
                     }),
                 );
 
-                // Get Importer timestamps
-                updateProviderUrl("importer");
-                const importerTimestamps = await Promise.all(
+                // Get Stratus Follower timestamps
+                updateProviderUrl("stratus-follower");
+                const followerTimestamps = await Promise.all(
                     txHashList.map(async (txHash) => {
                         const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash], 20);
                         const block = await sendWithRetry("eth_getBlockByNumber", [receipt.blockNumber, false]);
@@ -113,32 +113,32 @@ describe("Importer integration test", function () {
                     }),
                 );
 
-                // Total time it took for Stratus to process all the blocks containing transactions
-                const stratusProcessingTime = stratusTimestamps[stratusTimestamps.length - 1] - stratusTimestamps[0];
+                // Total time it took for Stratus Leader to process all the blocks containing transactions
+                const leaderProcessingTime = leaderTimestamps[leaderTimestamps.length - 1] - leaderTimestamps[0];
 
-                // Total time it took for Importer to process all the blocks containing transactions
-                const importerProcessingTime =
-                    importerTimestamps[importerTimestamps.length - 1] - importerTimestamps[0];
+                // Total time it took for Stratus Follower to process all the blocks containing transactions
+                const followerProcessingTime =
+                    followerTimestamps[followerTimestamps.length - 1] - followerTimestamps[0];
 
                 console.log(`          ✔ Number of transactions sent: ${txHashList.length}`);
                 console.log(
-                    `          ✔ Stratus processing time: ${stratusProcessingTime}s | Importer processing time: ${importerProcessingTime}s`,
+                    `          ✔ Stratus Leader processing time: ${leaderProcessingTime}s | Stratus Follower processing time: ${followerProcessingTime}s`,
                 );
             });
 
-            it(`${params.name}: Validate all transactions were imported from Stratus to Importer`, async function () {
-                // Get Stratus transaction receipts
+            it(`${params.name}: Validate all transactions were imported from Stratus Leader to Follower`, async function () {
+                // Get Stratus Leader transaction receipts
                 updateProviderUrl("stratus");
-                const stratusReceipts = await Promise.all(
+                const leaderReceipts = await Promise.all(
                     txHashList.map(async (txHash) => {
                         const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
                         return receipt;
                     }),
                 );
 
-                // Get Importer transaction receipts
-                updateProviderUrl("importer");
-                const importerReceipts = await Promise.all(
+                // Get Stratus Follower transaction receipts
+                updateProviderUrl("stratus-follower");
+                const followerReceipts = await Promise.all(
                     txHashList.map(async (txHash) => {
                         const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
                         return receipt;
@@ -147,53 +147,53 @@ describe("Importer integration test", function () {
 
                 // Assert that all transactions were imported
                 for (let i = 0; i < txHashList.length; i++) {
-                    expect(stratusReceipts[i]).to.exist;
-                    expect(importerReceipts[i]).to.exist;
+                    expect(leaderReceipts[i]).to.exist;
+                    expect(followerReceipts[i]).to.exist;
                 }
             });
 
-            it(`${params.name}: Validate each transaction was imported into the same block between Stratus and Importer`, async function () {
-                // Get Stratus block numbers
+            it(`${params.name}: Validate each transaction was imported into the same block between Stratus Leader and Follower`, async function () {
+                // Get Stratus Leader block numbers
                 updateProviderUrl("stratus");
-                const stratusBlockNumbers = await Promise.all(
+                const leaderBlockNumbers = await Promise.all(
                     txHashList.map(async (txHash) => {
                         const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
                         return receipt.blockNumber;
                     }),
                 );
 
-                // Get Importer block numbers
-                updateProviderUrl("importer");
-                const importerBlockNumbers = await Promise.all(
+                // Get Stratus Follower block numbers
+                updateProviderUrl("stratus-follower");
+                const followerBlockNumbers = await Promise.all(
                     txHashList.map(async (txHash) => {
                         const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash], 20);
                         return receipt.blockNumber;
                     }),
                 );
 
-                // Assert that each transaction fell into the same block between Stratus and Importer
+                // Assert that each transaction fell into the same block between Stratus Leader and Follower
                 for (let i = 0; i < txHashList.length; i++) {
                     expect(
-                        stratusBlockNumbers[i],
-                        `Transaction ${txHashList[i]} did not fall into the same block between Stratus and Importer`,
-                    ).to.equal(importerBlockNumbers[i]);
+                        leaderBlockNumbers[i],
+                        `Transaction ${txHashList[i]} did not fall into the same block between Stratus Leader and Follower`,
+                    ).to.equal(followerBlockNumbers[i]);
                 }
             });
 
-            it(`${params.name}: Validate balances between Stratus and Importer`, async function () {
+            it(`${params.name}: Validate balances between Stratus Leader and Follower`, async function () {
                 for (let i = 0; i < wallets.length; i++) {
-                    // Get Stratus balance
+                    // Get Stratus Leader balance
                     updateProviderUrl("stratus");
-                    const stratusBalance = await brlcToken.balanceOf(wallets[i].address);
+                    const leaderBalance = await brlcToken.balanceOf(wallets[i].address);
 
-                    // Get Importer balance
-                    updateProviderUrl("importer");
-                    const importerBalance = await brlcToken.balanceOf(wallets[i].address);
+                    // Get Stratus Follower balance
+                    updateProviderUrl("stratus-follower");
+                    const followerBalance = await brlcToken.balanceOf(wallets[i].address);
 
                     // Assert that the balances are equal
-                    expect(stratusBalance).to.equal(
-                        importerBalance,
-                        `Wallet ${wallets[i].address} balances are not equal between Stratus and Importer`,
+                    expect(leaderBalance).to.equal(
+                        followerBalance,
+                        `Wallet ${wallets[i].address} balances are not equal between Stratus Leader and Follower`,
                     );
                 }
                 updateProviderUrl("stratus");
