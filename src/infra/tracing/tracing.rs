@@ -29,7 +29,6 @@ use tonic::metadata::MetadataKey;
 use tonic::metadata::MetadataMap;
 use tracing::span;
 use tracing::span::Attributes;
-use tracing::Event;
 use tracing::Span;
 use tracing::Subscriber;
 use tracing_serde::fields::AsMap;
@@ -52,6 +51,8 @@ use crate::ext::spawn_named;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::infra::build_info;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 use crate::infra::tracing::TracingConfig;
 use crate::infra::tracing::TracingLogFormat;
 use crate::infra::tracing::TracingProtocol;
@@ -310,18 +311,40 @@ where
             }
         });
 
+        // TODO: temporary metrics from events
+        let fields = to_json_value(event.field_map());
+        #[cfg(feature = "metrics")]
+        {
+            event_to_metrics(&fields);
+        }
+
         // parse metadata and event
         let log = TracingLog {
             timestamp: Utc::now(),
             level: meta.level().as_serde(),
             target: meta.target(),
             thread: std::thread::current(),
-            fields: event.field_map(),
+            fields,
             context,
         };
 
         writeln!(writer, "{}", to_json_string(&log))
     }
+}
+
+#[cfg(feature = "metrics")]
+fn event_to_metrics(json: &JsonValue) {
+    let Some(message) = json.as_object().and_then(|obj| obj.get("message")).and_then(|msg| msg.as_str()) else {
+        return;
+    };
+
+    // jsonrpsee active connections
+    let Some(message) = message.strip_prefix("Accepting new connection ") else {
+        return;
+    };
+    let Some((current, _)) = message.split_once('/') else { return };
+    let Ok(current) = current.parse::<u64>() else { return };
+    metrics::set_rpc_requests_active(current);
 }
 
 #[derive(derive_new::new)]
@@ -330,7 +353,8 @@ struct TracingLog<'a> {
     level: SerializeLevel<'a>,
     target: &'a str,
     thread: Thread,
-    fields: SerializeFieldMap<'a, Event<'a>>,
+    // fields: SerializeFieldMap<'a, Event<'a>>,
+    fields: JsonValue,
     context: Option<TracingLogContextField<'a>>,
 }
 
