@@ -157,7 +157,7 @@ e2e-stratus block-mode="automine" test="":
 
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run -a 0.0.0.0:3000 --leader --block-mode {{block-mode}} > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
 
     just _wait_for_stratus
 
@@ -178,7 +178,7 @@ e2e-stratus-rocks block-mode="automine" test="":
 
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run -a 0.0.0.0:3000 --leader --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
 
@@ -375,7 +375,7 @@ contracts-test-stratus *args="":
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run --leader -a 0.0.0.0:3000 &
+    just run -a 0.0.0.0:3000 &
 
     just _wait_for_stratus
 
@@ -392,7 +392,7 @@ contracts-test-stratus-rocks *args="":
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    just run --leader -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
 
