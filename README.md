@@ -5,7 +5,7 @@ Welcome to Stratus, the cutting-edge EVM executor and JSON-RPC server with custo
 ## Current storage implementations
 
 - In Memory
-- PostgreSQL
+- Redis
 - RocksDB (default)
 
 ## Performance Landscape
