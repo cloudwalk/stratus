@@ -1,0 +1,78 @@
+name: Outsider Contract Test
+
+on:
+  workflow_call:
+    inputs:
+      test_command:
+        description: 'The command to run the tests'
+        required: true
+        type: string
+      contract_name:
+        description: 'The name of the contract (optional, aesthetic only)'
+        required: false
+        type: string
+    
+jobs:
+  contract_test:
+    name: Test ${{ github.event.inputs.contract_name || 'contract'}} on Stratus
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - name: Get Stratus latest tag
+        id: get_tag
+        run: |
+          echo "latest=$(curl  "https://api.github.com/repos/cloudwalk/stratus/tags" | jq -r '.[0].name')" >> $GITHUB_OUTPUT
+      
+      - name: Checkout Stratus ${{ steps.get_tag.outputs.latest }}
+        uses: actions/checkout@v4
+        with:
+          repository: 'cloudwalk/stratus'
+          ref: ${{ steps.get_tag.outputs.latest }}
+          path: stratus
+
+      - name: Set up Rust
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.79
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: Stratus-${{ runner.os }}
+          shared-key: stable-release
+          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          cache-provider: "github"
+          cache-directories: "~/.cargo/bin/"
+
+      - name: Set up Just
+        uses: extractions/setup-just@v2
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
+      - name: Set up dependencies
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        run: |
+          cargo install killport || true
+          cargo install wait-service || true
+
+      - name: Run Stratus 
+        run: |
+          cd stratus
+          just contracts-test-outsider 3000
+          cd -
+        env:
+          RELEASE: 1
+          CARGO_PROFILE_RELEASE_DEBUG: 0
+          RUST_LOG: off
+          RUST_BACKTRACE: 1
+
+      - name: Run test command
+        run: ${{ github.event.inputs.test_command }}
+      
+      - name: Kill Stratus
+        run: killport 3000
+        timeout-minutes: 1
+        continue-on-error: true

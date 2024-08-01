@@ -437,6 +437,13 @@ contracts-test-stratus-rocks *args="":
 
     exit $result_code
 
+contracts-test-outsider port="3000":
+    #!/bin/bash
+    just _log "Starting Stratus"
+    just build "dev" || exit 1
+    just run -a 0.0.0.0:{{port}} --perm-storage=rocks > /dev/null &
+    just _wait_for_stratus {{port}}
+
 # Contracts: Run tests and generate coverage info. Use --html to open in browser.
 contracts-coverage *args="":
     cd e2e/cloudwalk-contracts && ./contracts-coverage.sh {{args}}
