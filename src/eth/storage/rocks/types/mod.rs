@@ -52,8 +52,8 @@ mod tests {
     use unix_time::UnixTimeRocksdb;
     use wei::WeiRocksdb;
 
-    use crate::gen_test_bincode;
     use super::*;
+    use crate::gen_test_bincode;
 
     gen_test_bincode!(AccountRocksdb);
     gen_test_bincode!(AddressRocksdb);
