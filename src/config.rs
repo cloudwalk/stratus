@@ -43,7 +43,10 @@ pub fn load_dotenv() {
             }
         }
         Ok(env) => format!("config/{}.env.{}", build_info::binary_name(), env),
-        Err(_) => format!("config/{}.env.local", build_info::binary_name()),
+        Err(e) => {
+            println!("{e}");
+            return;
+        }
     };
 
     // load .env file
