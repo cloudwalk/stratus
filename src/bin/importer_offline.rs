@@ -24,6 +24,7 @@ use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
+use stratus::eth::primitives::ExternalTransaction;
 use stratus::eth::storage::ExternalRpcStorage;
 use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::ext::spawn_named;
@@ -148,10 +149,13 @@ fn execute_block_importer(
         let mut transaction_count = 0;
         let instant_before_execution = Instant::now();
 
-        for block in blocks.into_iter() {
+        for mut block in blocks.into_iter() {
             if GlobalState::is_shutdown_warn(TASK_NAME) {
                 return Ok(());
             }
+
+            // fill missing transaction_type with `v`
+            block.transactions.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
 
             // re-execute (and import) block
             executor.execute_external_block(&block, &receipts)?;

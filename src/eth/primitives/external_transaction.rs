@@ -16,6 +16,19 @@ impl ExternalTransaction {
     pub fn hash(&self) -> Hash {
         self.0.hash.into()
     }
+
+    /// Fills the field transaction_type based on `v`
+    pub fn fill_missing_transaction_type(&mut self) {
+        // Don't try overriding if it's already set
+        if self.0.transaction_type.is_some() {
+            return;
+        }
+
+        let v = self.0.v.as_u64();
+        if [0, 1].contains(&v) {
+            self.0.transaction_type = Some(2.into());
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
