@@ -49,7 +49,6 @@ pub fn load_dotenv() {
         }
     };
 
-    // load .env file
     println!("reading env file | filename={}", env_filename);
 
     if let Err(e) = dotenvy::from_filename(env_filename) {
