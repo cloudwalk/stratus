@@ -12,7 +12,6 @@ use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
-use pin_project::pinned_drop;
 use tracing::field;
 use tracing::info_span;
 use tracing::Level;
@@ -40,68 +39,6 @@ use crate::infra::metrics;
 use crate::infra::tracing::new_cid;
 use crate::infra::tracing::SpanExt;
 use crate::infra::tracing::TracingExt;
-
-// -----------------------------------------------------------------------------
-// Active requests tracking
-// -----------------------------------------------------------------------------
-#[cfg(feature = "metrics")]
-mod active_requests {
-    use std::collections::HashMap;
-    use std::sync::atomic::AtomicU64;
-    use std::sync::atomic::Ordering;
-    use std::sync::Arc;
-    use std::sync::RwLock;
-
-    use lazy_static::lazy_static;
-
-    use crate::eth::rpc::RpcClientApp;
-    use crate::infra::metrics;
-
-    lazy_static! {
-        pub static ref COUNTERS: ActiveRequests = ActiveRequests::default();
-    }
-
-    #[derive(Default)]
-    pub struct ActiveRequests {
-        inner: RwLock<HashMap<String, Arc<AtomicU64>>>,
-    }
-
-    impl ActiveRequests {
-        pub fn inc(&self, client: &RpcClientApp, method: &str) {
-            let active = self.counter_for(client, method).fetch_add(1, Ordering::Relaxed) + 1;
-            metrics::set_rpc_requests_active(active, client, method);
-        }
-
-        pub fn dec(&self, client: &RpcClientApp, method: &str) {
-            let active = self
-                .counter_for(client, method)
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-                    let new = current.saturating_sub(1);
-                    Some(new)
-                })
-                .unwrap();
-            let active = active.saturating_sub(1);
-            metrics::set_rpc_requests_active(active, client, method);
-        }
-
-        fn counter_for(&self, client: &RpcClientApp, method: &str) -> Arc<AtomicU64> {
-            let id = format!("{}::{}", client, method);
-
-            // try to read counter
-            let active_requests_read = self.inner.read().unwrap();
-            if let Some(counter) = active_requests_read.get(&id) {
-                return Arc::clone(counter);
-            }
-            drop(active_requests_read);
-
-            // create a new counter
-            let mut active_requests_write = self.inner.write().unwrap();
-            let counter = Arc::new(AtomicU64::new(0));
-            active_requests_write.insert(id, Arc::clone(&counter));
-            counter
-        }
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Request handling
@@ -174,7 +111,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         #[cfg(feature = "metrics")]
         {
             let tx_ref = tx.as_ref();
-            active_requests::COUNTERS.inc(&client, &method);
             metrics::inc_rpc_requests_started(&client, &method, tx_ref.map(|tx| tx.contract), tx_ref.map(|tx| tx.function));
         }
         drop(middleware_enter);
@@ -198,7 +134,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 // -----------------------------------------------------------------------------
 
 /// https://blog.adamchalmers.com/pin-unpin/
-#[pin_project(PinnedDrop)]
+#[pin_project]
 pub struct RpcResponse<'a> {
     // identifiers
     client: RpcClientApp,
@@ -279,16 +215,6 @@ impl<'a> Future for RpcResponse<'a> {
         }
 
         response
-    }
-}
-
-#[pinned_drop]
-impl PinnedDrop for RpcResponse<'_> {
-    fn drop(self: std::pin::Pin<&mut Self>) {
-        #[cfg(feature = "metrics")]
-        {
-            active_requests::COUNTERS.dec(&self.client, &self.method);
-        }
     }
 }
 
