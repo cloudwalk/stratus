@@ -90,8 +90,8 @@ stratus *args="":
     cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
 # Bin: Stratus main service as follower
-stratus-follower *args="":
-    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower --external-rpc http://spec.testnet.cloudwalk.network:9934/ --external-rpc-ws ws://spec.testnet.cloudwalk.network:9946/ {{args}}
+stratus-follower external_rpc="http://spec.testnet.cloudwalk.network:9934/" external_rpc_ws="ws://spec.testnet.cloudwalk.network:9946/" *args="":
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower --external-rpc {{external_rpc}} --external-rpc-ws {{external_rpc_ws}} {{args}}
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 rpc-downloader *args="":
