@@ -53,7 +53,7 @@ jobs:
       - name: Build binaries
         run: |
           cargo build --release \
-            --bin stratus --bin importer-online \
+            --bin stratus \
             --features "$FEATURES"
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
@@ -69,19 +69,8 @@ jobs:
             path: target/release/stratus
             if-no-files-found: error
             retention-days: ${{ env.RETENTION_DAYS }}
-      
-      - name: Upload importer online
-        uses: actions/upload-artifact@v4
-        id: upload-iom
-        with:
-            name: importer-online-${{ github.sha }}
-            path: target/release/importer-online
-            if-no-files-found: error
-            retention-days: ${{ env.RETENTION_DAYS }}
 
       - name: Print outputs
         run: |
             echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
             echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
-            echo "Artifact ID: ${{ steps.upload-iom.outputs.artifact-id }} (importer online)"
-            echo "Artifact URL: ${{ steps.upload-iom.outputs.artifact-url }} (importer online)"
