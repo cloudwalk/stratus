@@ -8,6 +8,8 @@ export RUST_BACKTRACE := env("RUST_BACKTRACE", "0")
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
+external_rpc := "http://spec.testnet.cloudwalk.network:9934/"
+external_rpc_ws := "ws://spec.testnet.cloudwalk.network:9946/"
 
 # Project: Show available tasks
 default:
@@ -90,7 +92,7 @@ stratus *args="":
     cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
 # Bin: Stratus main service as follower
-stratus-follower external_rpc="http://spec.testnet.cloudwalk.network:9934/" external_rpc_ws="ws://spec.testnet.cloudwalk.network:9946/" *args="":
+stratus-follower external_rpc=external_rpc external_rpc_ws=external_rpc_ws *args="":
     cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower --external-rpc {{external_rpc}} --external-rpc-ws {{external_rpc_ws}} {{args}}
 
 # Bin: Download external RPC blocks and receipts to temporary storage
