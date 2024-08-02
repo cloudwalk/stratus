@@ -200,10 +200,7 @@ impl PermanentStorage for RedisPermanentStorage {
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
         // prepare keys
         let from_block = filter.from_block.as_u64();
-        let to_block = match filter.to_block {
-            Some(number) => number.as_u64(),
-            None => self.read_mined_block_number()?.as_u64(),
-        };
+        let to_block = filter.to_block.as_u64();
         let block_keys = (from_block..=to_block).map(key_block_by_number).collect_vec();
 
         // exit if no keys

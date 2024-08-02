@@ -673,19 +673,15 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     // parse params
     reject_unknown_client(ext.rpc_client())?;
     let (_, filter_input) = next_rpc_param_or_default::<LogFilterInput>(params.sequence())?;
-    let mut filter = filter_input.parse(&ctx.storage)?;
+    let filter = filter_input.parse(&ctx.storage)?;
 
-    // for this operation, the filter always need the end block specified to calculate the difference
-    if filter.to_block.is_none() {
-        filter.to_block = Some(ctx.storage.read_mined_block_number()?);
-    }
-    let blocks_in_range = filter.from_block.count_to(&filter.to_block.unwrap());
+    let blocks_in_range = filter.from_block.count_to(&filter.to_block);
 
     // track
     Span::with(|s| {
         s.rec_str("filter", &to_json_string(&filter));
         s.rec_str("filter_from", &filter.from_block);
-        s.rec_str("filter_to", &filter.to_block.unwrap());
+        s.rec_str("filter_to", &filter.to_block);
         s.rec_str("filter_range", &blocks_in_range);
     });
     tracing::info!(?filter, "reading logs");

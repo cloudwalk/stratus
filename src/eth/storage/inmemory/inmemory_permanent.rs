@@ -202,10 +202,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
             .logs
             .iter()
             .skip_while(|log| log.block_number < filter.from_block)
-            .take_while(|log| match filter.to_block {
-                Some(to_block) => log.block_number <= to_block,
-                None => true,
-            })
+            .take_while(|log| log.block_number <= filter.to_block)
             .filter(|log| filter.matches(log))
             .cloned()
             .collect();

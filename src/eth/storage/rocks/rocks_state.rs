@@ -251,11 +251,6 @@ impl RocksStorageState {
     pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>> {
         let addresses: HashSet<AddressRocksdb> = filter.addresses.iter().map(|&address| AddressRocksdb::from(address)).collect();
 
-        let end_block_range_filter = |number: BlockNumber| match filter.to_block.as_ref() {
-            Some(&last_block) => number <= last_block,
-            None => true,
-        };
-
         let iter = self
             .blocks_by_number
             .iter_from(BlockNumberRocksdb::from(filter.from_block), Direction::Forward)?;
@@ -265,7 +260,7 @@ impl RocksStorageState {
         for next in iter {
             let (number, block) = next?;
 
-            if !end_block_range_filter(number.into()) {
+            if number > filter.to_block.into() {
                 break;
             }
             let transactions_with_matching_addresses = block

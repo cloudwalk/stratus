@@ -10,7 +10,7 @@ use crate::ext::not;
 #[cfg_attr(test, derive(Default))]
 pub struct LogFilter {
     pub from_block: BlockNumber,
-    pub to_block: Option<BlockNumber>,
+    pub to_block: BlockNumber,
     pub addresses: Vec<Address>,
 
     /// Original payload received via RPC.
@@ -22,10 +22,7 @@ impl LogFilter {
     /// Checks if a log matches the filter.
     pub fn matches(&self, log: &LogMined) -> bool {
         // filter block range
-        if log.block_number < self.from_block {
-            return false;
-        }
-        if self.to_block.as_ref().is_some_and(|to_block| log.block_number > *to_block) {
+        if log.block_number < self.from_block || self.to_block < log.block_number {
             return false;
         }
 
