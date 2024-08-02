@@ -47,7 +47,7 @@ end
 def report_tag_comments
   raise "Please provide SLACK_WEBHOOK_URL" if ENV['SLACK_WEBHOOK_URL'].nil?
 
-  tags = %w[TODO FIXME HACK XXX OPTIMIZE BUG]
+  tags = %w[TODO FIXME HACK XXX OPTIMIZE]
 
   tags.each do |tag|
     generate_tag_file(tag)
