@@ -1,6 +1,8 @@
-//! Column Family (CF) versioning and snapshot testing.
+//! Column Family (CF) versioning.
 //!
 //! This allows our KV-store to have different versions on the Value.
+//!
+//! Versions are tested against snapshots to avoid breaking changes.
 
 use std::ops::Deref;
 use std::ops::DerefMut;
