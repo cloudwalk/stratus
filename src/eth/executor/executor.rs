@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use tracing::info_span;
 use tracing::Span;
 
+#[cfg(feature = "metrics")]
 use crate::eth::codegen;
 use crate::eth::executor::Evm;
 use crate::eth::executor::EvmExecutionResult;
