@@ -34,6 +34,7 @@ use crate::eth::rpc::RpcClientApp;
 use crate::event_with;
 use crate::ext::from_json_str;
 use crate::ext::to_json_value;
+#[cfg(feature = "metrics")]
 use crate::if_else;
 use crate::infra::metrics;
 use crate::infra::tracing::new_cid;
@@ -164,6 +165,8 @@ impl<'a> Future for RpcResponse<'a> {
             // trace response
             let response_success = response.is_success();
             let response_result: JsonValue = from_json_str(response.as_result());
+
+            #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
             let (level, error_code) = match response_result
                 .get("error")
                 .and_then(|v| v.get("code"))
