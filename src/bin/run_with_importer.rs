@@ -28,7 +28,7 @@ async fn run(config: RunWithImporterConfig) -> anyhow::Result<()> {
         config.storage.perm_storage.rocks_path_prefix.clone(),
         config.clone().candidate_peers.clone(),
         Some(config.clone()),
-        config.rpc_server.address,
+        config.rpc_server.rpc_address,
         config.grpc_server_address,
     ); // in development, with no leader configured, the current node ends up being the leader
     let (http_url, ws_url) = consensus.get_chain_url().await.expect("chain url not found");
