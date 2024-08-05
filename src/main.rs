@@ -21,7 +21,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.storage.perm_storage.rocks_path_prefix.clone(),
         config.clone().candidate_peers.clone(),
         None,
-        config.rpc_server.address,
+        config.rpc_server.rpc_address,
         config.grpc_server_address,
     ); // for now, we force None to initiate with the current node being the leader
 
