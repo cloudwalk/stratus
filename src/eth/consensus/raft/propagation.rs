@@ -8,14 +8,14 @@ use tokio::sync::broadcast;
 use tonic::Request;
 
 use super::Block;
-use super::Consensus;
 use super::LogEntryData;
 use super::Peer;
-use crate::eth::consensus::append_entry::AppendBlockCommitRequest;
-use crate::eth::consensus::append_entry::AppendBlockCommitResponse;
-use crate::eth::consensus::append_entry::AppendTransactionExecutionsRequest;
-use crate::eth::consensus::append_entry::AppendTransactionExecutionsResponse;
-use crate::eth::consensus::append_entry::StatusCode;
+use super::Raft;
+use crate::eth::consensus::raft::append_entry::AppendBlockCommitRequest;
+use crate::eth::consensus::raft::append_entry::AppendBlockCommitResponse;
+use crate::eth::consensus::raft::append_entry::AppendTransactionExecutionsRequest;
+use crate::eth::consensus::raft::append_entry::AppendTransactionExecutionsResponse;
+use crate::eth::consensus::raft::append_entry::StatusCode;
 use crate::eth::primitives::TransactionExecution;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -37,7 +37,7 @@ enum AppendResponse {
 }
 
 #[allow(dead_code)]
-pub async fn save_and_handle_log_entry(consensus: Arc<Consensus>, log_entry_data: LogEntryData) -> Result<()> {
+pub async fn save_and_handle_log_entry(consensus: Arc<Raft>, log_entry_data: LogEntryData) -> Result<()> {
     let last_index = consensus.log_entries_storage.get_last_index().unwrap_or(0);
     tracing::debug!(last_index, "Last index fetched");
 
@@ -69,8 +69,8 @@ pub async fn save_and_handle_log_entry(consensus: Arc<Consensus>, log_entry_data
 }
 
 #[allow(dead_code)]
-pub async fn handle_block_entry(consensus: Arc<Consensus>, block: Block) {
-    if Consensus::is_leader() {
+pub async fn handle_block_entry(consensus: Arc<Raft>, block: Block) {
+    if Raft::is_leader() {
         tracing::info!(number = block.header.number.as_u64(), "Leader received block to send to followers");
 
         let transaction_hashes: Vec<Vec<u8>> = block.transactions.iter().map(|tx| tx.input.hash.as_fixed_bytes().to_vec()).collect();
@@ -83,8 +83,8 @@ pub async fn handle_block_entry(consensus: Arc<Consensus>, block: Block) {
 }
 
 #[allow(dead_code)]
-pub async fn handle_transaction_executions(consensus: Arc<Consensus>) {
-    if Consensus::is_leader() {
+pub async fn handle_transaction_executions(consensus: Arc<Raft>) {
+    if Raft::is_leader() {
         let mut queue = consensus.transaction_execution_queue.lock().await;
         let executions = queue.drain(..).collect::<Vec<_>>();
         drop(queue);
@@ -97,7 +97,7 @@ pub async fn handle_transaction_executions(consensus: Arc<Consensus>) {
     }
 }
 
-pub async fn handle_peer_propagation(mut peer: Peer, consensus: Arc<Consensus>) {
+pub async fn handle_peer_propagation(mut peer: Peer, consensus: Arc<Raft>) {
     const TASK_NAME: &str = "consensus::propagate";
 
     let mut log_entry_queue: Vec<LogEntryData> = Vec::new();
@@ -153,8 +153,8 @@ pub async fn handle_peer_propagation(mut peer: Peer, consensus: Arc<Consensus>) 
     }
 }
 
-async fn append_entry_to_peer(consensus: Arc<Consensus>, peer: &mut Peer, entry_data: &LogEntryData) -> Result<(), anyhow::Error> {
-    if !Consensus::is_leader() {
+async fn append_entry_to_peer(consensus: Arc<Raft>, peer: &mut Peer, entry_data: &LogEntryData) -> Result<(), anyhow::Error> {
+    if !Raft::is_leader() {
         tracing::error!("append_entry_to_peer called on non-leader node");
         return Err(anyhow!("append_entry_to_peer called on non-leader node"));
     }
@@ -253,7 +253,7 @@ async fn append_entry_to_peer(consensus: Arc<Consensus>, peer: &mut Peer, entry_
 }
 
 async fn send_append_entry_request(
-    consensus: Arc<Consensus>,
+    consensus: Arc<Raft>,
     peer: &mut Peer,
     current_term: u64,
     prev_log_index: u64,
@@ -304,7 +304,7 @@ async fn send_append_entry_request(
 }
 
 #[allow(dead_code)]
-pub fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
+pub fn initialize_transaction_execution_queue(consensus: Arc<Raft>) {
     // XXX FIXME: deal with the scenario where a transactionHash arrives after the block;
     // in this case, before saving the block LogEntry, it should ALWAYS wait for all transaction hashes
 
@@ -329,7 +329,7 @@ pub fn initialize_transaction_execution_queue(consensus: Arc<Consensus>) {
 //TODO this broadcast needs to wait for majority of followers to confirm the log before sending the next one
 #[allow(dead_code)]
 pub fn initialize_append_entries_channel(
-    consensus: Arc<Consensus>,
+    consensus: Arc<Raft>,
     mut rx_pending_txs: broadcast::Receiver<TransactionExecution>,
     mut rx_blocks: broadcast::Receiver<Block>,
 ) {
@@ -341,7 +341,7 @@ pub fn initialize_append_entries_channel(
                     return;
                 },
                 Ok(tx) = rx_pending_txs.recv() => {
-                    if Consensus::is_leader() {
+                    if Raft::is_leader() {
                         tracing::info!(tx_hash = %tx.hash(), "received transaction execution to send to followers");
                         if tx.is_local() {
                             tracing::debug!(tx_hash = %tx.hash(), "skipping local transaction because only external transactions are supported for now");
