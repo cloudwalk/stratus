@@ -1,5 +1,6 @@
 //! Application configuration.
 
+use std::env;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
@@ -23,10 +24,12 @@ use crate::eth::storage::ExternalRpcStorageConfig;
 use crate::eth::storage::StratusStorageConfig;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
+use crate::infra::metrics::MetricsConfig;
+use crate::infra::sentry::SentryConfig;
 use crate::infra::tracing::TracingConfig;
 
 /// Loads .env files according to the binary and environment.
-pub fn load_dotenv() {
+pub fn load_dotenv_file() {
     // parse env manually because this is executed before clap
     let env = match std::env::var("ENV") {
         Ok(env) => Environment::from_str(env.as_str()),
@@ -47,6 +50,22 @@ pub fn load_dotenv() {
     if let Err(e) = dotenvy::from_filename(env_filename) {
         println!("env file error: {e}");
     }
+}
+
+/// Applies env-var aliases because Clap does not support this feature.
+pub fn load_env_aliases() {
+    fn env_alias(canonical: &'static str, alias: &'static str) {
+        if let Ok(value) = env::var(alias) {
+            env::set_var(canonical, value);
+        }
+    }
+    env_alias("EXECUTOR_CHAIN_ID", "CHAIN_ID");
+    env_alias("EXECUTOR_EVMS", "EVMS");
+    env_alias("EXECUTOR_EVMS", "NUM_EVMS");
+    env_alias("EXECUTOR_REJECT_NOT_CONTRACT", "REJECT_NOT_CONTRACT");
+    env_alias("EXECUTOR_STRATEGY", "STRATEGY");
+    env_alias("TRACING_LOG_FORMAT", "LOG_FORMAT");
+    env_alias("TRACING_URL", "TRACING_COLLECTOR_URL");
 }
 
 // -----------------------------------------------------------------------------
@@ -76,17 +95,11 @@ pub struct CommonConfig {
     #[clap(flatten)]
     pub tracing: TracingConfig,
 
-    /// Address where Prometheus metrics will be exposed.
-    #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
-    pub metrics_exporter_address: SocketAddr,
+    #[clap(flatten)]
+    pub sentry: Option<SentryConfig>,
 
-    // Address where Tokio Console GRPC server will be exposed.
-    #[arg(long = "tokio-console-address", env = "TRACING_TOKIO_CONSOLE_ADDRESS")]
-    pub tokio_console_address: Option<SocketAddr>,
-
-    /// Sentry URL where error events will be pushed.
-    #[arg(long = "sentry-url", env = "SENTRY_URL")]
-    pub sentry_url: Option<String>,
+    #[clap(flatten)]
+    pub metrics: MetricsConfig,
 
     /// Direct access to peers via IP address, why will be included on data propagation and leader election.
     #[arg(long = "candidate-peers", env = "CANDIDATE_PEERS", value_delimiter = ',')]
@@ -109,7 +122,7 @@ impl WithCommonConfig for CommonConfig {
 
 impl CommonConfig {
     /// Initializes Tokio runtime.
-    pub fn init_runtime(&self) -> anyhow::Result<Runtime> {
+    pub fn init_tokio_runtime(&self) -> anyhow::Result<Runtime> {
         println!(
             "creating tokio runtime | async_threads={} blocking_threads={}",
             self.num_async_threads, self.num_blocking_threads

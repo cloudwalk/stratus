@@ -1,4 +1,3 @@
-use std::env;
 use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
@@ -8,10 +7,9 @@ use sentry::ClientInitGuard;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
 
-use crate::config::load_dotenv;
+use crate::config;
 use crate::config::WithCommonConfig;
 use crate::ext::spawn_signal_handler;
-use crate::infra;
 use crate::infra::tracing::warn_task_cancellation;
 
 // -----------------------------------------------------------------------------
@@ -36,54 +34,39 @@ where
     where
         T: clap::Parser + WithCommonConfig + Debug,
     {
-        // .dotfile support
-        load_dotenv();
-
-        // apply env-var aliases
-        env_alias("EXECUTOR_CHAIN_ID", "CHAIN_ID");
-        env_alias("EXECUTOR_EVMS", "EVMS");
-        env_alias("EXECUTOR_EVMS", "NUM_EVMS");
-        env_alias("EXECUTOR_REJECT_NOT_CONTRACT", "REJECT_NOT_CONTRACT");
-        env_alias("EXECUTOR_STRATEGY", "STRATEGY");
-        env_alias("TRACING_LOG_FORMAT", "LOG_FORMAT");
-        env_alias("TRACING_URL", "TRACING_COLLECTOR_URL");
+        // env-var support
+        config::load_dotenv_file();
+        config::load_env_aliases();
 
         // parse configuration
         let config = T::parse();
         let common = config.common();
 
         // init tokio
-        let runtime = common.init_runtime().expect("failed to init tokio runtime");
+        let tokio = common.init_tokio_runtime().expect("failed to init tokio runtime");
 
         // init tracing
-        runtime
-            .block_on(infra::init_tracing(&common.tracing, common.sentry_url.as_deref(), common.tokio_console_address))
-            .expect("failed to init tracing");
+        tokio.block_on(async {
+            common.tracing.init(&common.sentry).expect("failed to init tracing");
+        });
 
-        // init metrics
-        infra::init_metrics(common.metrics_exporter_address).expect("failed to init metrics");
+        // init observability services
+        common.metrics.init().expect("failed to init metrics");
 
         // init sentry
         let sentry_guard = common
-            .sentry_url
+            .sentry
             .as_ref()
-            .map(|sentry_url| infra::init_sentry(sentry_url, common.env).expect("failed to init sentry"));
+            .map(|sentry_config| sentry_config.init(common.env).expect("failed to init sentry"));
 
         // init signal handler
-        runtime.block_on(spawn_signal_handler()).expect("failed to init signal handlers");
+        tokio.block_on(spawn_signal_handler()).expect("failed to init signal handlers");
 
         Self {
             config,
-            runtime,
+            runtime: tokio,
             _sentry_guard: sentry_guard,
         }
-    }
-}
-
-/// Translates an aliased environment variable to a canonical one.
-fn env_alias(canonical: &'static str, alias: &'static str) {
-    if let Ok(value) = env::var(alias) {
-        env::set_var(canonical, value);
     }
 }
 

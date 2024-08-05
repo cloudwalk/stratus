@@ -77,7 +77,7 @@ pub async fn serve_rpc(
     chain_id: ChainId,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-server";
-    tracing::info!(%rpc_config.address, %rpc_config.max_connections, "creating {}", TASK_NAME);
+    tracing::info!(%rpc_config.rpc_address, %rpc_config.rpc_max_connections, "creating {}", TASK_NAME);
 
     // configure subscriptions
     let subs = RpcSubscriptions::spawn(
@@ -121,8 +121,8 @@ pub async fn serve_rpc(
         .set_rpc_middleware(rpc_middleware)
         .set_http_middleware(http_middleware)
         .set_id_provider(RandomStringIdProvider::new(8))
-        .max_connections(rpc_config.max_connections)
-        .build(rpc_config.address)
+        .max_connections(rpc_config.rpc_max_connections)
+        .build(rpc_config.rpc_address)
         .await?;
 
     let handle_rpc_server = server.start(module);
@@ -799,7 +799,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     };
 
     // check subscription limits
-    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.max_subscriptions, &client).await {
+    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.rpc_max_subscriptions, &client).await {
         drop(method_enter);
         pending.reject(e).instrument(method_span).await;
         return Ok(());
