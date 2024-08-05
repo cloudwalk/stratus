@@ -10,18 +10,17 @@ use ethereum_types::H256;
 use rand::Rng;
 use tokio::sync::Mutex;
 
-use crate::eth::consensus::append_entry::AppendBlockCommitResponse;
-use crate::eth::consensus::append_entry::AppendTransactionExecutionsResponse;
-use crate::eth::consensus::append_entry::BlockEntry;
-use crate::eth::consensus::append_entry::Log;
-use crate::eth::consensus::append_entry::RequestVoteResponse;
-use crate::eth::consensus::append_entry::TransactionExecutionEntry;
-use crate::eth::consensus::log_entry::LogEntry;
-use crate::eth::consensus::Consensus;
-use crate::eth::consensus::LogEntryData;
-use crate::eth::consensus::Peer;
-use crate::eth::consensus::PeerAddress;
-use crate::eth::consensus::Role;
+use crate::eth::consensus::raft::append_entry::AppendBlockCommitResponse;
+use crate::eth::consensus::raft::append_entry::AppendTransactionExecutionsResponse;
+use crate::eth::consensus::raft::append_entry::BlockEntry;
+use crate::eth::consensus::raft::append_entry::Log;
+use crate::eth::consensus::raft::append_entry::RequestVoteResponse;
+use crate::eth::consensus::raft::append_entry::TransactionExecutionEntry;
+use crate::eth::consensus::raft::log_entry::LogEntry;
+use crate::eth::consensus::raft::LogEntryData;
+use crate::eth::consensus::raft::Peer;
+use crate::eth::consensus::raft::PeerAddress;
+use crate::eth::consensus::raft::Role;
 use crate::eth::storage::StratusStorage;
 
 static GLOBAL_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -107,7 +106,7 @@ pub fn create_mock_log_entry(index: u64, term: u64, data: LogEntryData) -> LogEn
     LogEntry { index, term, data }
 }
 
-pub fn create_mock_consensus() -> Arc<Consensus> {
+pub fn create_mock_consensus() -> Arc<Raft> {
     let (storage, _tmpdir) = StratusStorage::mock_new_rocksdb();
     storage.set_pending_block_number_as_next_if_not_set().unwrap();
     let (_log_entries_storage, tmpdir_log_entries) = StratusStorage::mock_new_rocksdb();
@@ -121,7 +120,7 @@ pub fn create_mock_consensus() -> Arc<Consensus> {
 
     let miner = Miner::new(Arc::clone(&storage), crate::eth::miner::MinerMode::External);
 
-    Consensus::new(
+    Raft::new(
         Arc::clone(&storage),
         miner.into(),
         tmpdir_log_entries_path,
@@ -139,6 +138,7 @@ use super::append_entry::AppendTransactionExecutionsRequest;
 use super::append_entry::StatusCode;
 use super::Hash;
 use super::Miner;
+use super::Raft;
 
 // Define a simple interceptor that does nothing
 #[allow(dead_code)] // HACK to avoid unused code warning
@@ -149,7 +149,7 @@ impl Interceptor for MockInterceptor {
     }
 }
 
-fn create_mock_leader_peer(consensus: Arc<Consensus>) -> (PeerAddress, Peer) {
+fn create_mock_leader_peer(consensus: Arc<Raft>) -> (PeerAddress, Peer) {
     let leader_address = PeerAddress::from_string("http://127.0.0.1:3000;3777".to_string()).unwrap();
     let client = MockAppendEntryServiceClient::new();
     let leader_peer = Peer {
@@ -162,9 +162,9 @@ fn create_mock_leader_peer(consensus: Arc<Consensus>) -> (PeerAddress, Peer) {
     (leader_address, leader_peer)
 }
 
-pub async fn create_follower_consensus_with_leader(term: Option<u64>) -> Arc<Consensus> {
+pub async fn create_follower_consensus_with_leader(term: Option<u64>) -> Arc<Raft> {
     let consensus = create_mock_consensus();
-    Consensus::set_role(Role::Follower);
+    Raft::set_role(Role::Follower);
 
     if let Some(term) = term {
         consensus.current_term.store(term, Ordering::SeqCst);
@@ -179,9 +179,9 @@ pub async fn create_follower_consensus_with_leader(term: Option<u64>) -> Arc<Con
     Arc::clone(&consensus)
 }
 
-pub fn create_leader_consensus() -> Arc<Consensus> {
+pub fn create_leader_consensus() -> Arc<Raft> {
     let consensus = create_mock_consensus();
-    Consensus::set_role(Role::Leader);
+    Raft::set_role(Role::Leader);
     zero_global_counter();
     consensus
 }

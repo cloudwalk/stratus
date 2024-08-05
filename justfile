@@ -8,6 +8,8 @@ export RUST_BACKTRACE := env("RUST_BACKTRACE", "0")
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
+external_rpc := "http://spec.testnet.cloudwalk.network:9934/"
+external_rpc_ws := "ws://spec.testnet.cloudwalk.network:9946/"
 
 # Project: Show available tasks
 default:
@@ -85,9 +87,13 @@ alias sqlx := db-compile
 # Additional binaries
 # ------------------------------------------------------------------------------
 
-# Bin: Stratus main service
+# Bin: Stratus main service as leader
 stratus *args="":
-    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- {{args}}
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
+
+# Bin: Stratus main service as follower
+stratus-follower external_rpc=external_rpc external_rpc_ws=external_rpc_ws *args="":
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower --external-rpc {{external_rpc}} --external-rpc-ws {{external_rpc_ws}} {{args}}
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 rpc-downloader *args="":
@@ -96,18 +102,6 @@ rpc-downloader *args="":
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 importer-offline *args="":
     cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} -- {{args}}
-
-# Bin: Import external RPC blocks from external RPC endpoint to Stratus storage
-importer-online *args="":
-    cargo {{nightly_flag}} run --bin importer-online {{release_flag}} -- {{args}}
-
-# Bin: Validate Stratus storage slots matches reference slots
-state-validator *args="":
-    cargo {{nightly_flag}} run --bin state-validator {{release_flag}} -- {{args}}
-
-# Bin: `stratus` and `importer-online` in a single binary
-run-with-importer *args="":
-    cargo {{nightly_flag}} run --bin run-with-importer {{release_flag}} -- {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -203,7 +197,7 @@ e2e-clock-stratus:
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    cargo run  --release --bin stratus --features dev -- --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev -- --leader --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
 
@@ -220,7 +214,7 @@ e2e-clock-stratus-rocks:
     #!/bin/bash
     just _log "Starting Stratus"
     just build "dev" || exit 1
-    cargo run  --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+    cargo run  --release --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
 
@@ -264,43 +258,43 @@ e2e-flamegraph:
     just _log "Running cargo flamegraph"
     cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
-e2e-importer-online:
+e2e-leader-follower:
     #!/bin/bash
 
-    just e2e-importer-online-up
+    just e2e-leader-follower-up
     result_code=$?
 
-    just e2e-importer-online-down
+    just e2e-leader-follower-down
 
     exit $result_code
 
-# E2E: Importer Online
-e2e-importer-online-up:
+# E2E: Leader & Follower Up
+e2e-leader-follower-up:
     #!/bin/bash
 
-    # Build Stratus and Run With Importer binaries
-    just _log "Building Stratus and Run With Importer binaries"
-    cargo build --release --bin stratus --bin run-with-importer --features dev
+    # Build Stratus binary
+    just _log "Building Stratus binary"
+    cargo build --release --bin stratus --features dev
 
     mkdir e2e_logs
 
-    # Start Stratus binary
-    RUST_LOG=info cargo run --release --bin stratus --features dev -- --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    # Start Stratus with leader flag
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
-    # Wait for Stratus to start
+    # Wait for Stratus with leader flag to start
     just _wait_for_stratus 3000
 
-    # Start Run With Importer binary
-    RUST_LOG=info cargo run --release --bin run-with-importer --features dev -- --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/run_with_importer.log &
+    # Start Stratus with follower flag
+    RUST_LOG=info cargo run --release --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
 
-    # Wait for Run With Importer to start
+    # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
 
     if [ -d e2e/cloudwalk-contracts ]; then
     (
         cd e2e/cloudwalk-contracts/integration
         npm install
-        npx hardhat test test/importer.test.ts --network stratus --bail
+        npx hardhat test test/leader-follower.test.ts --network stratus --bail
         if [ $? -ne 0 ]; then
             just _log "Tests failed"
             exit 1
@@ -311,16 +305,12 @@ e2e-importer-online-up:
     )
     fi
 
-# E2E: Importer Online
-e2e-importer-online-down:
+# E2E: Leader & Follower Down
+e2e-leader-follower-down:
     #!/bin/bash
 
-    # Kill run-with-importer
-    killport 3001
-    run_with_importer_pid=$(pgrep -f 'run-with-importer')
-    kill $run_with_importer_pid
-
     # Kill Stratus
+    killport 3001
     killport 3000
     stratus_pid=$(pgrep -f 'stratus')
     kill $stratus_pid
@@ -330,26 +320,6 @@ e2e-importer-online-down:
 
     # Delete zeppelin directory
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
-
-# ------------------------------------------------------------------------------
-# Chaos tests
-# ------------------------------------------------------------------------------
-
-# Chaos: Run chaos testing experiment
-run-chaos-experiment bin="" instances="" iterations="" enable-leader-restart="" experiment="":
-    #!/bin/bash
-
-    just _log "Building Stratus"
-    cargo build --release --bin {{ bin }} --features dev
-
-    cd e2e/cloudwalk-contracts/integration
-    if [ ! -d node_modules ]; then
-        npm install
-    fi
-    cd ../../..
-
-    just _log "Executing experiment {{ experiment }} {{ iterations }}x on {{ bin }} binary with {{ instances }} instance(s)"
-    ./chaos/experiments/{{ experiment }}.sh --bin {{ bin }} --instances {{ instances }} --iterations {{ iterations }} --enable-leader-restart {{ enable-leader-restart }}
 
 # ------------------------------------------------------------------------------
 # Hive tests
