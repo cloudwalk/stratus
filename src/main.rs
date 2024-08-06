@@ -26,36 +26,25 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     // Init executor
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
-    // Init chain
+    // Init importer
     let chain = if config.follower {
         let importer_config = config.importer.as_ref().ok_or(anyhow::anyhow!("importer config is not set"))?;
-        Some(Arc::new(
+        let chain = Arc::new(
             BlockchainClient::new_http_ws(
                 importer_config.external_rpc.as_ref(),
                 importer_config.external_rpc_ws.as_deref(),
                 importer_config.external_rpc_timeout,
             )
             .await?,
-        ))
+        );
+        importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), Arc::clone(&chain))?;
+        Some(chain)
     } else {
         None
     };
 
     // Init consensus
     let consensus: Arc<dyn Consensus> = Arc::new(SimpleConsensus::new(Arc::clone(&storage), chain.clone()));
-
-    // Init importer
-    if config.follower {
-        if let Some(importer_config) = &config.importer {
-            if let Some(chain) = chain {
-                importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), chain)?;
-            } else {
-                return Err(anyhow::anyhow!("chain is not initialized"));
-            }
-        } else {
-            return Err(anyhow::anyhow!("importer config is not set"));
-        }
-    }
 
     // Init RPC server
     serve_rpc(
