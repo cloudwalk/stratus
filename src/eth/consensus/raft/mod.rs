@@ -616,14 +616,19 @@ impl Consensus for Raft {
         self.should_serve().await
     }
 
-    fn should_forward(&self) -> bool {
-        self.should_forward()
-    }
-
     async fn forward(&self, transaction: Bytes) -> anyhow::Result<Hash> {
         let (tx_hash, url) = self.forward(transaction).await?;
         tracing::info!(%tx_hash, %url, "forwarded eth_sendRawTransaction to leader");
         Ok(tx_hash)
+    }
+
+    fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>> {
+        todo!();
+    }
+
+    /// Get the lag between this node and the leader.
+    async fn lag(&self) -> anyhow::Result<u64> {
+        todo!();
     }
 }
 

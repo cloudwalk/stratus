@@ -25,7 +25,7 @@ pub struct RpcContext {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
     pub storage: Arc<StratusStorage>,
-    pub consensus: Arc<dyn Consensus>,
+    pub consensus: Option<Arc<dyn Consensus>>,
     pub rpc_server: RpcServerConfig,
     pub subs: Arc<RpcSubscriptionsConnected>,
 }

@@ -4,6 +4,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use futures::try_join;
 use futures::StreamExt;
 use serde::Deserialize;
@@ -20,6 +21,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
+use crate::eth::Consensus;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::DisplayExt;
@@ -433,5 +435,16 @@ async fn fetch_receipt(chain: Arc<BlockchainClient>, block_number: BlockNumber, 
                 tracing::error!(reason = ?e, %block_number, %tx_hash, "failed to fetch receipt. retrying now.");
             }
         }
+    }
+}
+
+#[async_trait]
+impl Consensus for Importer {
+    async fn lag(&self) -> anyhow::Result<u64> {
+        Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number()?.as_u64())
+    }
+
+    fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>> {
+        Ok(&self.chain)
     }
 }

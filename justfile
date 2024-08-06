@@ -32,6 +32,8 @@ setup:
 # ------------------------------------------------------------------------------
 
 alias run := stratus
+alias run-follower := stratus-follower
+alias run-importer := stratus-follower
 
 # Stratus: Compile with debug options
 build features="":

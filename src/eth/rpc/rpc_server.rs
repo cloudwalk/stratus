@@ -69,7 +69,7 @@ pub async fn serve_rpc(
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
     miner: Arc<Miner>,
-    consensus: Arc<dyn Consensus>,
+    consensus: Option<Arc<dyn Consensus>>,
 
     // config
     app_config: impl serde::Serialize,
@@ -245,7 +245,12 @@ async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensio
         return Err(StratusError::StratusShutdown);
     }
 
-    let should_serve = context.consensus.should_serve().await;
+    let should_serve = if let Some(consensus) = &context.consensus {
+        consensus.should_serve().await
+    } else {
+        true
+    };
+
     if not(should_serve) {
         tracing::warn!("readiness check failed because consensus is not ready");
         metrics::set_consensus_is_ready(0_u64);
@@ -618,9 +623,9 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     }
 
     // forward transaction to the validator node
-    if ctx.consensus.should_forward() {
+    if let Some(consensus) = &ctx.consensus {
         tracing::info!(%tx_hash, "forwarding eth_sendRawTransaction to leader");
-        return match Handle::current().block_on(ctx.consensus.forward(data)) {
+        return match Handle::current().block_on(consensus.forward(data)) {
             Ok(hash) => Ok(hex_data(hash)),
             Err(e) => {
                 tracing::error!(reason = ?e, %tx_hash, "failed to forward eth_sendRawTransaction to leader");
