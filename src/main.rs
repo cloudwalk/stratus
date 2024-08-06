@@ -38,7 +38,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
             .await?,
         );
         importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), chain)?;
-        Some(chain);
+        Some(chain)
     } else {
         None
     };
