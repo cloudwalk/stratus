@@ -35,16 +35,23 @@ pub fn load_dotenv_file() {
         Ok(env) => Environment::from_str(env.as_str()),
         Err(_) => Ok(Environment::Local),
     };
-    let env = match env {
-        Ok(env) => env,
+
+    // determine the .env file to load
+    let env_filename = match env {
+        Ok(Environment::Local) => {
+            // local environment only
+            match std::env::var("LOCAL_ENV_PATH") {
+                Ok(local_path) => format!("config/{}.env.local", local_path),
+                Err(_) => format!("config/{}.env.local", build_info::binary_name()),
+            }
+        }
+        Ok(env) => format!("config/{}.env.{}", build_info::binary_name(), env),
         Err(e) => {
             println!("{e}");
             return;
         }
     };
 
-    // load .env file
-    let env_filename = format!("config/{}.env.{}", build_info::binary_name(), env);
     println!("reading env file | filename={}", env_filename);
 
     if let Err(e) = dotenvy::from_filename(env_filename) {
