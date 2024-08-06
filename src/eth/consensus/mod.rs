@@ -24,7 +24,7 @@ pub trait Consensus: Send + Sync {
         let should_serve = lag <= 3;
 
         if !should_serve {
-            tracing::info!(?lag, "validator and replica are too far appart");
+            tracing::info!(?lag, "validator and replica are too far apart");
         }
 
         return should_serve;
