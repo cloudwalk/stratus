@@ -1,11 +1,12 @@
-use crate::gen_newtype_from;
-use crate::gen_newtype_try_from;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
+
+use crate::gen_newtype_from;
+use crate::gen_newtype_try_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(pub U64);
@@ -60,7 +61,6 @@ fn create_chainid_with_valid_u64() {
 }
 #[test]
 fn conversion_from_u256_to_chainid_too_large() {
-    use ethereum_types::U256;
     let value = U256::from(u64::MAX) + 1;
     let result = ChainId::try_from(value);
     assert!(result.is_err());
@@ -147,7 +147,6 @@ fn compare_two_chainid_instances_for_equality() {
 // Converting a ChainId instance to U256
 #[test]
 fn convert_chainid_to_u256() {
-    use ethereum_types::U256;
     use std::convert::TryFrom;
 
     let u64_value = 100u64;
@@ -169,7 +168,6 @@ fn test_converting_chainid_with_zero_value() {
 // Handling errors during serialization and deserialization
 #[test]
 fn handle_errors_during_serialization_and_deserialization() {
-    use ethereum_types::U256;
     use std::convert::TryFrom;
 
     let valid_u256 = U256::from(100);
