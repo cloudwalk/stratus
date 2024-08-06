@@ -28,6 +28,7 @@ impl Consensus for SimpleConsensus {
     fn should_forward(&self) -> bool {
         self.blockchain_client.is_some()
     }
+
     async fn should_serve(&self) -> bool {
         let Some(blockchain_client) = &self.blockchain_client else {
             return true;
