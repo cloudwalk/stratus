@@ -152,7 +152,7 @@ fn generate_signatures_structs() {
 
 /// Generates the `signatures.rs` file containing a static PHF map with Solidity hashes and their description.
 fn generate_signature_module_content() -> String {
-    let signature_files = list_files("static/contracts/*.signatures");
+    let signature_files = list_files("static/contracts-signatures/*.signatures");
 
     let mut seen = HashSet::<SolidityId>::new();
     let mut signatures_4_bytes = phf_codegen::Map::<[u8; 4]>::new();
