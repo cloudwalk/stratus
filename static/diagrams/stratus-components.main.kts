@@ -73,7 +73,7 @@ componentsView.addAllElements()
 // -----------------------------------------------------------------------------
 // Exporters
 // -----------------------------------------------------------------------------
-fun export(exporter: AbstractDiagramExporter, view: ComponentView): File {
+private fun export(exporter: AbstractDiagramExporter, view: ComponentView): File {
     if (exporter is MermaidDiagramExporter) {
         view.enableAutomaticLayout(AutomaticLayout.RankDirection.LeftRight) // mermaid is bugged
     } else {
