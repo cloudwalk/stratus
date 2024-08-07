@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::atomic::AtomicU64;
@@ -249,9 +248,7 @@ impl RocksStorageState {
     }
 
     pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>> {
-        let addresses: HashSet<AddressRocksdb> = filter.addresses.iter().map(|&address| AddressRocksdb::from(address)).collect();
-
-        let end_block_range_filter = |number: BlockNumber| match filter.to_block.as_ref() {
+        let is_block_number_in_end_range = |number: BlockNumber| match filter.to_block.as_ref() {
             Some(&last_block) => number <= last_block,
             None => true,
         };
@@ -265,17 +262,11 @@ impl RocksStorageState {
         for next in iter {
             let (number, block) = next?;
 
-            if !end_block_range_filter(number.into()) {
+            if !is_block_number_in_end_range(number.into()) {
                 break;
             }
-            let transactions_with_matching_addresses = block
-                .transactions
-                .into_iter()
-                .filter(|transaction| transaction.input.to.is_some_and(|to| addresses.contains(&to)));
 
-            let logs = transactions_with_matching_addresses
-                .flat_map(|transaction| transaction.logs)
-                .map(LogMined::from);
+            let logs = block.transactions.into_iter().flat_map(|transaction| transaction.logs).map(LogMined::from);
 
             let filtered_logs = logs.filter(|log| filter.matches(log));
             logs_result.extend(filtered_logs);
@@ -599,6 +590,7 @@ impl fmt::Debug for RocksStorageState {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
     use std::fs;
 
     use fake::Fake;
