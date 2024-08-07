@@ -32,6 +32,10 @@
 <path d="M804.66,84.66L804.66,146.4"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
 <polygon points="189.66,152.16 185.34,140.64 193.98,140.64" style="fill:rgb(0,0,0)"/>
 <path d="M189.66,84.66L189.66,146.4"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<polygon points="727.785,152.16 723.465,140.64 732.105,140.64" style="fill:rgb(0,0,0)"/>
+<path d="M189.66,84.66L189.66,118.41L727.785,118.41L727.785,146.4"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
+<polygon points="47.16,335.91 35.64,340.23 35.64,331.59" style="fill:rgb(0,0,0)"/>
+<path d="M47.16,65.91L2.16,65.91L2.16,335.91L41.4,335.91"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
 <polygon points="266.535,212.16 262.215,200.64 270.855,200.64" style="fill:rgb(0,0,0)"/>
 <path d="M266.535,189.66L266.535,206.4"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
 <polygon points="508.41,170.91 496.89,175.23 496.89,166.59" style="fill:rgb(0,0,0)"/>

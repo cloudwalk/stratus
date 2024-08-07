@@ -40,12 +40,16 @@ TempStorage   : box "Temporary Storage" big big mono same width $bw2
 // -----------------------------------------------------------------------------
 
 // App
-arrow from RpcServer.e right $p // to RpcSubs
+arrow from RpcServer.e right to RpcSubs.w // to RpcSubs
 arrow from RpcServer.s down $p/2 then left $p * 2 then down $p * 2.5 // to Executor
 arrow from RpcServer.s down $p/2 then right $p * 2 then down $p * 2.5 // to Miner
 arrow from RpcServer.n up $p * 2 then right until even with AppLayer.e then right $p * 2 then down until even with Storage.c then to Storage.e // to Storage
+
 arrow from RpcSubs.s   down $p * 3 // to Miner
-arrow from Importer.s  down $p * 3 // to Executor
+
+arrow from Importer.s down $p * 3 // to Executor
+arrow from Importer.s down $p * 1.5 then right until even with Miner.c then to Miner.n // to Miner
+arrow from Importer.w left $p * 2 then down until even with Storage.c then to Storage.w // to Storage
 
 // Core
 arrow from Executor.s down $p  // to EVM
