@@ -190,21 +190,23 @@ impl RocksStorageState {
         let mut account_history_changes = Vec::new();
 
         for change in changes {
-            let address: AddressRocksdb = change.address.into();
-            let mut account_info_entry = accounts.get_or_insert_with(address, AccountRocksdb::default)?;
+            if change.is_account_modified() {
+                let address: AddressRocksdb = change.address.into();
+                let mut account_info_entry = accounts.get_or_insert_with(address, AccountRocksdb::default)?;
 
-            if let Some(nonce) = change.nonce.clone().take_modified() {
-                account_info_entry.nonce = nonce.into();
-            }
-            if let Some(balance) = change.balance.clone().take_modified() {
-                account_info_entry.balance = balance.into();
-            }
-            if let Some(bytecode) = change.bytecode.clone().take_modified() {
-                account_info_entry.bytecode = bytecode.map_into();
-            }
+                if let Some(nonce) = change.nonce.clone().take_modified() {
+                    account_info_entry.nonce = nonce.into();
+                }
+                if let Some(balance) = change.balance.clone().take_modified() {
+                    account_info_entry.balance = balance.into();
+                }
+                if let Some(bytecode) = change.bytecode.clone().take_modified() {
+                    account_info_entry.bytecode = bytecode.map_into();
+                }
 
-            account_changes.push((address, account_info_entry.clone()));
-            account_history_changes.push(((address, block_number.into()), account_info_entry));
+                account_changes.push((address, account_info_entry.clone()));
+                account_history_changes.push(((address, block_number.into()), account_info_entry));
+            }
         }
 
         accounts.prepare_batch_insertion(account_changes, batch)?;
