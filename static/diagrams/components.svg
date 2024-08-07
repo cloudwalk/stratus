@@ -31,10 +31,10 @@
 <text x="239.34" y="240.45" text-anchor="middle" font-family="monospace" fill="rgb(0,0,0)" font-size="156.25%" dominant-baseline="central">BlockchainClient</text>
 <polygon points="1086.84,75.45 1075.32,79.77 1075.32,71.13" style="fill:rgb(0,0,0)"/>
 <path d="M1064.34,75.45L1081.08,75.45"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
-<polygon points="876.84,139.2 872.52,127.68 881.16,127.68" style="fill:rgb(0,0,0)"/>
-<path d="M921.84,94.2L921.84,105.45L876.84,105.45L876.84,133.44"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
-<polygon points="966.84,139.2 962.52,127.68 971.16,127.68" style="fill:rgb(0,0,0)"/>
-<path d="M921.84,94.2L921.84,105.45L966.84,105.45L966.84,133.44"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
+<polygon points="876.84,161.7 872.52,150.18 881.16,150.18" style="fill:rgb(0,0,0)"/>
+<path d="M921.84,94.2L921.84,105.45L876.84,105.45L876.84,155.94"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
+<polygon points="966.84,161.7 962.52,150.18 971.16,150.18" style="fill:rgb(0,0,0)"/>
+<path d="M921.84,94.2L921.84,105.45L966.84,105.45L966.84,155.94"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
 <polygon points="1371.84,345.45 1383.36,341.13 1383.36,349.77" style="fill:rgb(0,0,0)"/>
 <path d="M921.84,56.7L921.84,11.7L1394.34,11.7L1416.84,11.7L1416.84,345.45L1377.6,345.45"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
 <polygon points="239.34,161.7 235.02,150.18 243.66,150.18" style="fill:rgb(0,0,0)"/>
