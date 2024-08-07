@@ -1,20 +1,23 @@
 // -----------------------------------------------------------------------------
 // Variables
 // -----------------------------------------------------------------------------
-$p    = 15px              // padding
+$p    = 15px              // padding-1
+$p2   = $p * 2            // padding-2
 $bw1  = 190px             // box-width-1
 $bw2  = 292.5px           // box-width-2
 $bw3  = 600px             // box-width-3
 $bh1  = 25px              // box-height-1
 $bh2  = 65px              // box-height-1
-$lw1  = $bw3 + $p * 2     // layer-width-1
-$lh1  = $bh1 + $p * 2     // layer-height-1
+$lw1  = $bw1 + $p2     // layer-width-1
+$lw3  = $bw3 + $p2     // layer-width-3
+$lh1  = $bh1 + $p2     // layer-height-1
 $lh2  = $bh1 * 2 + $p * 3 // layer-height-2
 
 // -----------------------------------------------------------------------------
 // App Layer
 // -----------------------------------------------------------------------------
-AppLayer      : box width $lw1 height $lh1 fill 0x55efc4
+AppLayer      : box  width $lw3 height $lh1 fill 0x55efc4
+text "App" big big mono ljust at AppLayer.nw + (-0, $p / 2)
 Importer      : box "Importer"          big big monospace width $bw1 height $bh1 fill white with .nw at AppLayer.nw + ($p, -$p); move $p
 RpcServer     : box "RPC Server"        big big monospace same; move $p
 RpcSubs       : box "RPC Subscriptions" big big monospace same
@@ -22,18 +25,28 @@ RpcSubs       : box "RPC Subscriptions" big big monospace same
 // -----------------------------------------------------------------------------
 // Core Layer
 // -----------------------------------------------------------------------------
-CoreLayer     : box with .nw at AppLayer.sw - (0, $p) width $lw1 height $lh2 fill 0x74b9ff
+CoreLayer     : box with .nw at AppLayer.sw + (0, -$p) width $lw3 height $lh2 fill 0x74b9ff
+text "Core" big big mono ljust at CoreLayer.nw + (-0, $p / 2)
 Executor      : box "Executor" big big mono width $bw2 height $bh1 fill white with .nw at CoreLayer.nw + ($p, -$p)
-EVM           : box "EVM"      big big mono same with .nw at Executor.sw - (0, $p);
+EVM           : box "EVM"      big big mono same with .nw at Executor.sw + (0, -$p);
 Miner         : box "Miner"    big big mono same width $bw2 height $bh2 with .nw at Executor.ne + ($p, 0);
 
 // -----------------------------------------------------------------------------
 // Storage Layer
 // -----------------------------------------------------------------------------
-StorageLayer  : box with .nw at CoreLayer.sw- (0, $p) width $lw1 height $lh2 fit fill 0xff7675
+StorageLayer  : box with .nw at CoreLayer.sw + (0, -$p) width $lw3 height $lh2 fit fill 0xff7675
+text "Storage" big big mono ljust at StorageLayer.nw + (-0, $p / 2)
 Storage       : box "Stratus Storage"   big big mono width $bw3 height $bh1 fill white with .nw at StorageLayer.nw + ($p, -$p); move $p
-PermStorage   : box "Permanent Storage" big big mono same width $bw2 with .nw at Storage.sw - (0, $p); move $p
+PermStorage   : box "Permanent Storage" big big mono same width $bw2 with .nw at Storage.sw + (0, -$p); move $p
 TempStorage   : box "Temporary Storage" big big mono same width $bw2
+
+// -----------------------------------------------------------------------------
+// Consensus Layer
+// -----------------------------------------------------------------------------
+ConsensusLayer: box with .e at CoreLayer.w + (-$p2, 0) width $lw1 height $lh2 fill 0xffeaa7
+text "Consensus" big big mono ljust at ConsensusLayer.nw + (-0, $p / 2)
+Consensus     : box "Consensus"        big big mono width $bw1 height $bh1 fill white with .nw at ConsensusLayer.nw + ($p, -$p)
+BlockchainClient   : box "BlockchainClient" big big mono width $bw1 height $bh1 fill white with .nw at Consensus.sw + (0, -$p)
 
 // -----------------------------------------------------------------------------
 // Connections
@@ -41,23 +54,28 @@ TempStorage   : box "Temporary Storage" big big mono same width $bw2
 
 // App
 arrow from RpcServer.e right to RpcSubs.w // to RpcSubs
-arrow from RpcServer.s down $p/2 then left $p * 2 then down $p * 2.5 // to Executor
-arrow from RpcServer.s down $p/2 then right $p * 2 then down $p * 2.5 // to Miner
-arrow from RpcServer.n up $p * 2 then right until even with AppLayer.e then right $p * 2 then down until even with Storage.c then to Storage.e // to Storage
+arrow from RpcServer.s down $p/2 then left $p2 then down $p * 1.5 // to Executor
+arrow from RpcServer.s down $p/2 then right $p2 then down $p * 1.5 // to Miner
+arrow from RpcServer.n up $p2 then right until even with AppLayer.e then right $p then down until even with Storage.c then to Storage.e // to Storage
+arrow from RpcServer.t up $p2 then left until even with Consensus.c then to Consensus.t // to Consensus
 
 arrow from RpcSubs.s   down $p * 3 // to Miner
 
 arrow from Importer.s down $p * 3 // to Executor
 arrow from Importer.s down $p * 1.5 then right until even with Miner.c then to Miner.n // to Miner
-arrow from Importer.w left $p * 2 then down until even with Storage.c then to Storage.w // to Storage
+arrow from Importer.w left $p2 then down until even with Storage.c then to Storage.w // to Storage
+arrow from Importer.w left left until even with BlockchainClient.w then left $p2 then down until even with BlockchainClient.c then to BlockchainClient.w // to BlockchainClient
 
 // Core
 arrow from Executor.s down $p  // to EVM
 arrow from Executor.e right $p // to Miner
-arrow from Executor.w left $p * 2 then down until even with Storage.c then to Storage.w // to Storage
+arrow from Executor.w left $p2 then down until even with Storage.c then to Storage.w // to Storage
 arrow from EVM.s   down $p * 3 // to Storage
 arrow from Miner.s down $p * 3 // to Storage
 
 // Storage
-arrow from Storage.s - ($p * 2, 0) down $p // to Perm
-arrow from Storage.s + ($p * 2, 0) down $p // to Temp
+arrow from Storage.s - ($p2, 0) down $p // to Perm
+arrow from Storage.s + ($p2, 0) down $p // to Temp
+
+// Consensus
+arrow from Consensus.s to BlockchainClient.t
