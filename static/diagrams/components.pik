@@ -54,8 +54,8 @@ BlockchainClient   : box "BlockchainClient" big big mono width $bw1 height $bh1 
 
 // App
 arrow from RpcServer.e right to RpcSubs.w // to RpcSubs
-arrow from RpcServer.s down $p/2 then left $p2 then down $p * 1.5 // to Executor
-arrow from RpcServer.s down $p/2 then right $p2 then down $p * 1.5 // to Miner
+arrow from RpcServer.s down $p/2 then left $p2 then down $p * 2.5 // to Executor
+arrow from RpcServer.s down $p/2 then right $p2 then down $p * 2.5 // to Miner
 arrow from RpcServer.n up $p2 then right until even with AppLayer.e then right $p then down until even with Storage.c then to Storage.e // to Storage
 arrow from RpcServer.t up $p2 then left until even with Consensus.c then to Consensus.t // to Consensus
 
