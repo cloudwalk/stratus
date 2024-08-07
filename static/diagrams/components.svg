@@ -1,0 +1,54 @@
+<svg xmlns='http://www.w3.org/2000/svg' style='font-size:initial;' class="pikchr" viewBox="0 0 1016.82 439.32">
+<path d="M24.66,107.16L969.66,107.16L969.66,24.66L24.66,24.66Z"  style="fill:rgb(85,239,196);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M47.16,84.66L332.16,84.66L332.16,47.16L47.16,47.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="189.66" y="65.91" text-anchor="middle" font-family="monospace" fill="rgb(0,0,0)" font-size="156.25%" dominant-baseline="central">Importer</text>
+<path d="M354.66,84.66L639.66,84.66L639.66,47.16L354.66,47.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="497.16" y="65.91" text-anchor="middle" font-family="monospace" fill="rgb(0,0,0)" font-size="156.25%" dominant-baseline="central">RPC Server</text>
+<path d="M662.16,84.66L947.16,84.66L947.16,47.16L662.16,47.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="804.66" y="65.91" text-anchor="middle" font-family="monospace" fill="rgb(0,0,0)" font-size="156.25%" dominant-baseline="central">RPC Subscriptions</text>
+<path d="M24.66,272.16L969.66,272.16L969.66,129.66L24.66,129.66Z"  style="fill:rgb(116,185,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M47.16,189.66L485.91,189.66L485.91,152.16L47.16,152.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="266.535" y="170.91" text-anchor="middle" font-family="monospace" fill="rgb(0,0,0)" font-size="156.25%" dominant-baseline="central">Executor</text>
+<path d="M47.16,249.66L485.91,249.66L485.91,212.16L47.16,212.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="266.535" y="230.91" text-anchor="middle" font-family="monospace" fill="rgb(0,0,0)" font-size="156.25%" dominant-baseline="central">EVM</text>
+<path d="M508.41,249.66L947.16,249.66L947.16,152.16L508.41,152.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="727.785" y="200.91" text-anchor="middle" font-family="monospace" fill="rgb(0,0,0)" font-size="156.25%" dominant-baseline="central">Miner</text>
+<path d="M24.66,437.16L969.66,437.16L969.66,294.66L24.66,294.66Z"  style="fill:rgb(255,118,117);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<path d="M47.16,354.66L947.16,354.66L947.16,317.16L47.16,317.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="497.16" y="335.91" text-anchor="middle" font-family="monospace" fill="rgb(0,0,0)" font-size="156.25%" dominant-baseline="central">Stratus Storage</text>
+<path d="M47.16,414.66L485.91,414.66L485.91,377.16L47.16,377.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="266.535" y="395.91" text-anchor="middle" font-family="monospace" fill="rgb(0,0,0)" font-size="156.25%" dominant-baseline="central">Permanent Storage</text>
+<path d="M508.41,414.66L947.16,414.66L947.16,377.16L508.41,377.16Z"  style="fill:rgb(255,255,255);stroke-width:2.16;stroke:rgb(0,0,0);" />
+<text x="727.785" y="395.91" text-anchor="middle" font-family="monospace" fill="rgb(0,0,0)" font-size="156.25%" dominant-baseline="central">Temporary Storage</text>
+<polygon points="662.16,65.91 650.64,70.23 650.64,61.59" style="fill:rgb(0,0,0)"/>
+<path d="M639.66,65.91L656.4,65.91"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<polygon points="452.16,152.16 447.84,140.64 456.48,140.64" style="fill:rgb(0,0,0)"/>
+<path d="M497.16,84.66L497.16,95.91L452.16,95.91L452.16,146.4"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
+<polygon points="542.16,152.16 537.84,140.64 546.48,140.64" style="fill:rgb(0,0,0)"/>
+<path d="M497.16,84.66L497.16,95.91L542.16,95.91L542.16,146.4"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
+<polygon points="947.16,335.91 958.68,331.59 958.68,340.23" style="fill:rgb(0,0,0)"/>
+<path d="M497.16,47.16L497.16,2.16L969.66,2.16L1014.66,2.16L1014.66,335.91L952.92,335.91"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
+<polygon points="804.66,152.16 800.34,140.64 808.98,140.64" style="fill:rgb(0,0,0)"/>
+<path d="M804.66,84.66L804.66,146.4"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<polygon points="189.66,152.16 185.34,140.64 193.98,140.64" style="fill:rgb(0,0,0)"/>
+<path d="M189.66,84.66L189.66,146.4"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<polygon points="727.785,152.16 723.465,140.64 732.105,140.64" style="fill:rgb(0,0,0)"/>
+<path d="M189.66,84.66L189.66,118.41L727.785,118.41L727.785,146.4"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
+<polygon points="47.16,335.91 35.64,340.23 35.64,331.59" style="fill:rgb(0,0,0)"/>
+<path d="M47.16,65.91L2.16,65.91L2.16,335.91L41.4,335.91"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
+<polygon points="266.535,212.16 262.215,200.64 270.855,200.64" style="fill:rgb(0,0,0)"/>
+<path d="M266.535,189.66L266.535,206.4"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<polygon points="508.41,170.91 496.89,175.23 496.89,166.59" style="fill:rgb(0,0,0)"/>
+<path d="M485.91,170.91L502.65,170.91"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<polygon points="47.16,335.91 35.64,340.23 35.64,331.59" style="fill:rgb(0,0,0)"/>
+<path d="M47.16,170.91L2.16,170.91L2.16,335.91L41.4,335.91"  style="fill:none;stroke-width:2.16;stroke-linejoin:round;stroke:rgb(0,0,0);" />
+<polygon points="266.535,317.16 262.215,305.64 270.855,305.64" style="fill:rgb(0,0,0)"/>
+<path d="M266.535,249.66L266.535,311.4"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<polygon points="727.785,317.16 723.465,305.64 732.105,305.64" style="fill:rgb(0,0,0)"/>
+<path d="M727.785,249.66L727.785,311.4"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<polygon points="452.16,377.16 447.84,365.64 456.48,365.64" style="fill:rgb(0,0,0)"/>
+<path d="M452.16,354.66L452.16,371.4"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+<polygon points="542.16,377.16 537.84,365.64 546.48,365.64" style="fill:rgb(0,0,0)"/>
+<path d="M542.16,354.66L542.16,371.4"  style="fill:none;stroke-width:2.16;stroke:rgb(0,0,0);" />
+</svg>
+
