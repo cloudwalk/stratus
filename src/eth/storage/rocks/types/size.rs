@@ -1,15 +1,13 @@
 use std::fmt::Debug;
 
-use ethereum_types::U64;
-
 use crate::eth::primitives::Size;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 #[serde(transparent)]
-pub struct SizeRocksdb(U64);
+pub struct SizeRocksdb(u64);
 
-gen_newtype_from!(self = SizeRocksdb, other = U64, u64);
+gen_newtype_from!(self = SizeRocksdb, other = u64);
 
 impl From<Size> for SizeRocksdb {
     fn from(value: Size) -> Self {
@@ -19,6 +17,6 @@ impl From<Size> for SizeRocksdb {
 
 impl From<SizeRocksdb> for Size {
     fn from(value: SizeRocksdb) -> Self {
-        value.0.as_u64().into()
+        value.0.into()
     }
 }

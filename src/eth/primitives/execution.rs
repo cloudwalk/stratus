@@ -95,11 +95,6 @@ impl EvmExecution {
             return Some(contract_address.to_owned());
         }
 
-        for changes in self.changes.values() {
-            if changes.bytecode.is_modified() {
-                return Some(changes.address);
-            }
-        }
         None
     }
 

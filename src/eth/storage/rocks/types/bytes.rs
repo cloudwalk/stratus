@@ -4,7 +4,7 @@ use std::ops::Deref;
 
 use crate::eth::primitives::Bytes;
 
-#[derive(Clone, Default, Eq, PartialEq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct BytesRocksdb(pub Vec<u8>);
 
 impl Deref for BytesRocksdb {

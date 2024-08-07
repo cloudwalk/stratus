@@ -28,8 +28,9 @@ fn print_build_directives() {
     println!("cargo:rerun-if-changed=src/");
     // used in signatures codegen
     println!("cargo:rerun-if-changed=static/");
-    // fixture files that are "inserted" into test code
-    println!("cargo:rerun-if-changed=tests/");
+    // fixture files that are "inserted" into stratus code
+    println!("cargo:rerun-if-changed=tests/fixtures/snapshots/");
+    println!("cargo:rerun-if-changed=tests/fixtures/blocks/");
     // retrigger database compile-time checks
     println!("cargo:rerun-if-changed=.sqlx/");
 }

@@ -7,7 +7,7 @@ use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct Difficulty(U256);
+pub struct Difficulty(pub U256);
 
 impl Dummy<Faker> for Difficulty {
     fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
@@ -19,6 +19,12 @@ impl Dummy<Faker> for Difficulty {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = Difficulty, other = u8, u16, u32, u64, u128, U256, usize, i32, [u8; 32]);
+
+impl From<[u64; 4]> for Difficulty {
+    fn from(value: [u64; 4]) -> Self {
+        Self(U256(value))
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
