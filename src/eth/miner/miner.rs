@@ -427,8 +427,12 @@ mod interval_miner_ticker {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         // sync to next second
-        let next_second = (Utc::now() + Duration::from_secs(1)).with_nanosecond(0).unwrap();
-        thread::sleep((next_second - Utc::now()).to_std().unwrap());
+        let next_second = (Utc::now() + Duration::from_secs(1))
+            .with_nanosecond(0)
+            .expect("nanosecond above is set to `0`, which is always less than 2 billion");
+
+        let time_to_sleep = (next_second - Utc::now()).to_std().unwrap_or_default();
+        thread::sleep(time_to_sleep);
 
         // prepare ticker
         let mut ticker = tokio::time::interval(block_time);
