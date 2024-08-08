@@ -59,10 +59,3 @@ impl From<FixedBytes<32>> for CodeHash {
         CodeHash::new(value.0.into())
     }
 }
-
-impl From<Vec<u8>> for CodeHash {
-    fn from(value: Vec<u8>) -> Self {
-        let value: &[u8; 32] = value.as_slice().try_into().unwrap();
-        CodeHash::new(value.into())
-    }
-}

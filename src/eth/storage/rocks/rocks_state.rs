@@ -148,11 +148,9 @@ impl RocksStorageState {
     }
 
     /// Get the filename of the database path.
-    ///
-    /// Should be checked on creation.
     #[cfg(feature = "metrics")]
     fn db_path_filename(&self) -> &str {
-        self.db.path().file_name().unwrap().to_str().unwrap()
+        self.db_path.rsplit('/').next().unwrap_or(&self.db_path)
     }
 
     pub fn preload_block_number(&self) -> Result<AtomicU64> {
@@ -588,17 +586,19 @@ impl fmt::Debug for RocksStorageState {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-    use std::fs;
 
     use fake::Fake;
     use fake::Faker;
+    use tempfile::tempdir;
 
     use super::*;
     use crate::eth::primitives::SlotValue;
 
     #[test]
     fn test_rocks_multi_get() {
-        let (db, _db_options) = create_or_open_db("./data/slots_test.rocksdb", &CF_OPTIONS_MAP).unwrap();
+        let test_dir = tempdir().unwrap();
+
+        let (db, _db_options) = create_or_open_db(test_dir.path(), &CF_OPTIONS_MAP).unwrap();
         let account_slots: RocksCfRef<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots").unwrap();
 
         let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
@@ -624,7 +624,5 @@ mod tests {
         for (idx, value) in result {
             assert_eq!(value, *slots.get(&idx).expect("should not be None"));
         }
-
-        fs::remove_dir_all("./data/slots_test.rocksdb").unwrap();
     }
 }
