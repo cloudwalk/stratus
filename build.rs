@@ -15,7 +15,6 @@ use vergen::EmitBuilder;
 fn main() {
     print_build_directives();
     generate_build_info();
-    generate_proto_structs();
     generate_contracts_structs();
     generate_signatures_structs();
 }
@@ -32,16 +31,6 @@ fn print_build_directives() {
     println!("cargo:rerun-if-changed=tests/");
     // retrigger database compile-time checks
     println!("cargo:rerun-if-changed=.sqlx/");
-}
-
-// -----------------------------------------------------------------------------
-// Code generation: Proto files
-// -----------------------------------------------------------------------------
-fn generate_proto_structs() {
-    tonic_build::configure()
-        .protoc_arg("--experimental_allow_proto3_optional")
-        .compile(&["static/proto/append_entry.proto"], &["static/proto"])
-        .expect("Compiling .proto structs should not fail");
 }
 
 // -----------------------------------------------------------------------------
