@@ -59,4 +59,6 @@ jobs:
           pr_reviewer.enable_review_labels_effort: "false"
           pr_reviewer.enable_review_labels_security: "false"
           pr_reviewer.extra_instructions: "${{ env.EXTRA_INSTRUCTIONS }}"
-          config.model: "gpt-4o"
+          config.model: "anthropic/claude-3-5-sonnet-20240620"
+          config.model_turbo: "anthropic/claude-3-5-sonnet-20240620"
+          anthropic.key: ${{ secrets.ANTHROPIC_KEY }}
