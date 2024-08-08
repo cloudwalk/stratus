@@ -148,11 +148,9 @@ impl RocksStorageState {
     }
 
     /// Get the filename of the database path.
-    ///
-    /// Should be checked on creation.
     #[cfg(feature = "metrics")]
     fn db_path_filename(&self) -> &str {
-        self.db.path().file_name().unwrap().to_str().unwrap()
+        self.db_path.rsplit('/').next().unwrap_or(&self.db_path)
     }
 
     pub fn preload_block_number(&self) -> Result<AtomicU64> {
