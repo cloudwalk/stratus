@@ -462,7 +462,6 @@ mod interval_miner_ticker {
             ticker.tick().await;
             loop {
                 if GlobalState::is_shutdown_warn(TASK_NAME) {
-                    println!("e");
                     return;
                 }
 
