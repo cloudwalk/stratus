@@ -181,18 +181,13 @@ impl RocksStorageState {
         block_number: BlockNumber,
         batch: &mut WriteBatch,
     ) -> Result<()> {
-        let accounts = self.accounts.clone();
-        let accounts_history = self.accounts_history.clone();
-        let account_slots = self.account_slots.clone();
-        let account_slots_history = self.account_slots_history.clone();
-
         let mut account_changes = Vec::new();
         let mut account_history_changes = Vec::new();
 
         for change in changes {
             if change.is_account_modified() {
                 let address: AddressRocksdb = change.address.into();
-                let mut account_info_entry = accounts.get_or_insert_with(address, AccountRocksdb::default)?;
+                let mut account_info_entry = self.accounts.get_or_insert_with(address, AccountRocksdb::default)?;
 
                 if let Some(nonce) = change.nonce.clone().take_modified() {
                     account_info_entry.nonce = nonce.into();
@@ -209,8 +204,8 @@ impl RocksStorageState {
             }
         }
 
-        accounts.prepare_batch_insertion(account_changes, batch)?;
-        accounts_history.prepare_batch_insertion(account_history_changes, batch)?;
+        self.accounts.prepare_batch_insertion(account_changes, batch)?;
+        self.accounts_history.prepare_batch_insertion(account_history_changes, batch)?;
 
         let mut slot_changes = Vec::new();
         let mut slot_history_changes = Vec::new();
@@ -225,8 +220,8 @@ impl RocksStorageState {
                 }
             }
         }
-        account_slots.prepare_batch_insertion(slot_changes, batch)?;
-        account_slots_history.prepare_batch_insertion(slot_history_changes, batch)?;
+        self.account_slots.prepare_batch_insertion(slot_changes, batch)?;
+        self.account_slots_history.prepare_batch_insertion(slot_history_changes, batch)?;
 
         Ok(())
     }
@@ -379,7 +374,7 @@ impl RocksStorageState {
 
         let mut txs_batch = vec![];
         let mut logs_batch = vec![];
-        for transaction in block.transactions.clone() {
+        for transaction in block.transactions.iter().cloned() {
             txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
             for log in transaction.logs {
                 logs_batch.push(((transaction.input.hash.into(), log.log_index.into()), transaction.block_number.into()));
