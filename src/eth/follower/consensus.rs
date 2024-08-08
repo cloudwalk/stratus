@@ -1,5 +1,3 @@
-pub mod raft;
-pub mod simple_consensus;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -7,6 +5,7 @@ use async_trait::async_trait;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
 use crate::eth::rpc::RpcClientApp;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 

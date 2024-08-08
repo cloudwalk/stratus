@@ -25,8 +25,8 @@ use tracing::Instrument;
 use tracing::Span;
 
 use crate::alias::JsonValue;
-use crate::eth::consensus::Consensus;
 use crate::eth::executor::Executor;
+use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;

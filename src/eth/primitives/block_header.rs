@@ -1,5 +1,4 @@
 use display_json::DebugAsJson;
-use ethereum_types::H160;
 use ethereum_types::H256;
 use ethereum_types::H64;
 use ethereum_types::U256;
@@ -13,7 +12,6 @@ use jsonrpsee::SubscriptionMessage;
 
 use crate::alias::EthersBlockVoid;
 use crate::alias::EthersBytes;
-use crate::eth::consensus::raft::append_entry;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -78,50 +76,6 @@ impl BlockHeader {
             total_difficulty: Difficulty::default(),
             nonce: MinerNonce::default(),
         }
-    }
-
-    pub fn to_append_entry_block_header(&self, transaction_hashes: Vec<Vec<u8>>) -> append_entry::BlockEntry {
-        append_entry::BlockEntry {
-            number: self.number.into(),
-            hash: self.hash.as_fixed_bytes().to_vec(),
-            transactions_root: self.transactions_root.as_fixed_bytes().to_vec(),
-            gas_used: self.gas_used.as_u64(),
-            gas_limit: self.gas_limit.as_u64(),
-            bloom: self.bloom.as_bytes().to_vec(),
-            timestamp: self.timestamp.as_u64(),
-            parent_hash: self.parent_hash.as_fixed_bytes().to_vec(),
-            author: self.author.to_fixed_bytes().to_vec(),
-            extra_data: self.extra_data.clone().0,
-            miner: self.miner.to_fixed_bytes().to_vec(),
-            receipts_root: self.receipts_root.as_fixed_bytes().to_vec(),
-            uncle_hash: self.uncle_hash.as_fixed_bytes().to_vec(),
-            size: self.size.into(),
-            state_root: self.state_root.as_fixed_bytes().to_vec(),
-            transaction_hashes,
-        }
-    }
-
-    pub fn from_append_entry_block(entry: append_entry::BlockEntry) -> anyhow::Result<Self> {
-        Ok(BlockHeader {
-            number: entry.number.into(),
-            hash: Hash::new_from_h256(H256::from_slice(&entry.hash)),
-            transactions_root: Hash::new_from_h256(H256::from_slice(&entry.transactions_root)),
-            gas_used: Gas::from(entry.gas_used),
-            gas_limit: Gas::from(entry.gas_limit),
-            bloom: LogsBloom::from_bytes(&entry.bloom),
-            timestamp: UnixTime::from(entry.timestamp),
-            parent_hash: Hash::new_from_h256(H256::from_slice(&entry.parent_hash)),
-            author: Address::new_from_h160(H160::from_slice(&entry.author)),
-            extra_data: Bytes(entry.extra_data),
-            miner: Address::new_from_h160(H160::from_slice(&entry.miner)),
-            difficulty: Difficulty::from(U256::zero()), // always 0x0
-            receipts_root: Hash::new_from_h256(H256::from_slice(&entry.receipts_root)),
-            uncle_hash: Hash::new_from_h256(H256::from_slice(&entry.uncle_hash)),
-            size: Size::from(entry.size),
-            state_root: Hash::new_from_h256(H256::from_slice(&entry.state_root)),
-            total_difficulty: Difficulty::from(U256::zero()), // always 0x0
-            nonce: MinerNonce::default(),                     // always 0x0000000000000000
-        })
     }
 }
 

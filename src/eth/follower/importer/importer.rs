@@ -13,8 +13,8 @@ use tokio::task::yield_now;
 use tokio::time::timeout;
 use tracing::Span;
 
-use crate::eth::consensus::Consensus;
 use crate::eth::executor::Executor;
+use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
