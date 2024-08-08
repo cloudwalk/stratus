@@ -252,7 +252,7 @@ impl Miner {
 fn mine_external_transactions(block_number: BlockNumber, txs: Vec<ExternalTransactionExecution>) -> anyhow::Result<Vec<TransactionMined>> {
     let mut mined_txs = Vec::with_capacity(txs.len());
     for tx in txs {
-        if tx.tx.block_number() != block_number {
+        if tx.tx.block_number()? != block_number {
             return log_and_err!("failed to mine external block because one of the transactions does not belong to the external block");
         }
         mined_txs.push(TransactionMined::from_external(tx.tx, tx.receipt, tx.evm_execution.execution)?);
