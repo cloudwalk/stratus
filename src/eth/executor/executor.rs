@@ -385,7 +385,6 @@ impl Executor {
                     self.locks.serial.clear_poison();
                     poison.into_inner()
                 });
-                tracing::info!("executor acquired serial execution lock");
 
                 // WORKAROUND: prevents interval miner mining blocks while a transaction is being executed.
                 // this can be removed when we implement conflict detection for block number
@@ -398,7 +397,6 @@ impl Executor {
                     tracing::info!("executor acquired mine_and_commit lock to prevent executor mining block");
                     miner_lock
                 } else {
-                    tracing::warn!("executor did not try to acquire mine_and_commit lock");
                     None
                 };
 

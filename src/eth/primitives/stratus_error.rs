@@ -79,7 +79,11 @@ pub enum StratusError {
 
     #[error("Failed to executed transaction in EVM: {0:?}.")]
     #[strum(props(kind = "execution"))]
-    TransactionFailed(String), // split this in multiple errors
+    TransactionEvmFailed(String), // split this in multiple errors
+
+    #[error("Failed to execute transaction in leader: {0:?}.")]
+    #[strum(props(kind = "execution"))]
+    TransactionLeaderFailed(ErrorObjectOwned),
 
     #[error("Failed to forward transaction to leader node.")]
     #[strum(props(kind = "execution"))]
@@ -170,7 +174,7 @@ impl StratusError {
 
             // Transaction
             Self::RpcTransactionInvalid { decode_error } => to_json_value(decode_error),
-            Self::TransactionFailed(e) => JsonValue::String(e.to_string()),
+            Self::TransactionEvmFailed(e) => JsonValue::String(e.to_string()),
             Self::TransactionReverted { output } => to_json_value(output),
 
             // Unexpected
@@ -196,6 +200,12 @@ impl From<anyhow::Error> for StratusError {
 // -----------------------------------------------------------------------------
 impl From<StratusError> for ErrorObjectOwned {
     fn from(value: StratusError) -> Self {
+        // return response from leader
+        if let StratusError::TransactionLeaderFailed(response) = value {
+            return response;
+        }
+
+        // generate response
         let data = match value.rpc_data() {
             serde_json::Value::String(data_str) => {
                 let data_str = data_str.trim_start_matches('\"').trim_end_matches('\"').replace("\\\"", "\"");

@@ -22,7 +22,7 @@ import { currentMiningIntervalInMs, currentNetwork, isStratus } from "./network"
 // -----------------------------------------------------------------------------
 // Constants
 // -----------------------------------------------------------------------------
-export const CHAIN_ID_DEC = 2008;
+export const CHAIN_ID_DEC = 3000;
 export const CHAIN_ID = toHex(CHAIN_ID_DEC);
 
 export const TX_PARAMS = { chainId: CHAIN_ID, gasPrice: 0, gasLimit: 1_000_000 };

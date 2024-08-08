@@ -638,10 +638,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
         // is follower
         Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
             Ok(hash) => Ok(hex_data(hash)),
-            Err(e) => {
-                tracing::error!(reason = ?e, %tx_hash, "failed to forward eth_sendRawTransaction to leader");
-                Err(StratusError::TransactionForwardToLeaderFailed)
-            }
+            Err(e) => Err(e),
         },
     }
 }

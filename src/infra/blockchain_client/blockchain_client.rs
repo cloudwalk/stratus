@@ -20,6 +20,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::StratusError;
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::RpcClientApp;
 use crate::ext::to_json_value;
@@ -211,8 +212,8 @@ impl BlockchainClient {
     // -------------------------------------------------------------------------
 
     /// Forwards a transaction to leader.
-    pub async fn send_raw_transaction(&self, tx: EthersBytes, rpc_client: RpcClientApp) -> anyhow::Result<Hash> {
-        tracing::debug!("sending raw transaction");
+    pub async fn send_raw_transaction_to_leader(&self, tx: EthersBytes, rpc_client: RpcClientApp) -> Result<Hash, StratusError> {
+        tracing::debug!("sending raw transaction to leader");
 
         let tx = to_json_value(tx);
         let rpc_client = to_json_value(rpc_client);
@@ -220,7 +221,11 @@ impl BlockchainClient {
 
         match result {
             Ok(hash) => Ok(hash),
-            Err(e) => log_and_err!(reason = e, "failed to send raw transaction"),
+            Err(ClientError::Call(response)) => Err(StratusError::TransactionLeaderFailed(response.into_owned())),
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to send raw transaction to leader");
+                Err(StratusError::TransactionForwardToLeaderFailed)
+            }
         }
     }
 
