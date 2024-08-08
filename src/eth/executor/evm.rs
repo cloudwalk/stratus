@@ -165,7 +165,7 @@ impl Evm {
             // unexpected errors
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm transaction error");
-                Err(StratusError::TransactionFailed(e.to_string()))
+                Err(StratusError::TransactionEvmFailed(e.to_string()))
             }
         };
 

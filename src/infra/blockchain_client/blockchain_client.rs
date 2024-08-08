@@ -12,7 +12,6 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
-use super::pending_transaction::PendingTransaction;
 use crate::alias::EthersBytes;
 use crate::alias::EthersTransaction;
 use crate::alias::JsonValue;
@@ -21,7 +20,9 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::StratusError;
 use crate::eth::primitives::Wei;
+use crate::eth::rpc::RpcClientApp;
 use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
 use crate::infra::tracing::TracingExt;
@@ -210,16 +211,21 @@ impl BlockchainClient {
     // RPC mutations
     // -------------------------------------------------------------------------
 
-    /// Sends a signed transaction.
-    pub async fn send_raw_transaction(&self, tx: EthersBytes) -> anyhow::Result<PendingTransaction<'_>> {
-        tracing::debug!("sending raw transaction");
+    /// Forwards a transaction to leader.
+    pub async fn send_raw_transaction_to_leader(&self, tx: EthersBytes, rpc_client: RpcClientApp) -> Result<Hash, StratusError> {
+        tracing::debug!("sending raw transaction to leader");
 
         let tx = to_json_value(tx);
-        let result = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx]).await;
+        let rpc_client = to_json_value(rpc_client);
+        let result = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx, rpc_client]).await;
 
         match result {
-            Ok(hash) => Ok(PendingTransaction::new(hash, self)),
-            Err(e) => log_and_err!(reason = e, "failed to send raw transaction"),
+            Ok(hash) => Ok(hash),
+            Err(ClientError::Call(response)) => Err(StratusError::TransactionLeaderFailed(response.into_owned())),
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to send raw transaction to leader");
+                Err(StratusError::TransactionForwardToLeaderFailed)
+            }
         }
     }
 

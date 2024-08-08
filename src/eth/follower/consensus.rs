@@ -4,6 +4,8 @@ use async_trait::async_trait;
 
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::StratusError;
+use crate::eth::rpc::RpcClientApp;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
@@ -29,23 +31,19 @@ pub trait Consensus: Send + Sync {
         return should_serve;
     }
 
-    /// Forward a transaction
-    async fn forward(&self, transaction: Bytes) -> anyhow::Result<Hash> {
+    /// Forwards a transaction to leader.
+    async fn forward_to_leader(&self, tx_hash: Hash, tx_data: Bytes, rpc_client: RpcClientApp) -> Result<Hash, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let blockchain_client = self.get_chain()?;
+        tracing::info!(%tx_hash, %rpc_client, "forwaring transaction to leader");
 
-        let result = blockchain_client.send_raw_transaction(transaction.into()).await?;
+        let hash = self.get_chain()?.send_raw_transaction_to_leader(tx_data.into(), rpc_client).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
 
-        let tx_hash = result.tx_hash;
-        let validator_url = &blockchain_client.http_url;
-        tracing::info!(%tx_hash, ?validator_url, "forwarded eth_sendRawTransaction to leader");
-
-        Ok(result.tx_hash)
+        Ok(hash)
     }
 
     fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>>;

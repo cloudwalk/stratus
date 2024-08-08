@@ -604,17 +604,17 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
 
     // parse params
     reject_unknown_client(ext.rpc_client())?;
-    let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
-    let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
+    let (_, tx_data) = next_rpc_param::<Bytes>(params.sequence())?;
+    let tx = parse_rpc_rlp::<TransactionInput>(&tx_data)?;
+    let tx_hash = tx.hash;
 
     // track
     Span::with(|s| {
-        s.rec_str("tx_hash", &tx.hash);
+        s.rec_str("tx_hash", &tx_hash);
         s.rec_str("tx_from", &tx.signer);
         s.rec_opt("tx_to", &tx.to);
         s.rec_str("tx_nonce", &tx.nonce);
     });
-    let tx_hash = tx.hash;
 
     // check feature
     if not(GlobalState::is_transactions_enabled()) {
@@ -622,35 +622,24 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
         return Err(StratusError::RpcTransactionDisabled);
     }
 
-    // forward transaction to the validator node
-    if let Some(consensus) = &ctx.consensus {
-        tracing::info!(%tx_hash, "forwarding eth_sendRawTransaction to leader");
-        return match Handle::current().block_on(consensus.forward(data)) {
-            Ok(hash) => Ok(hex_data(hash)),
+    // execute locally or forward to leader
+    match &ctx.consensus {
+        // is leader
+        None => match ctx.executor.execute_local_transaction(tx) {
+            Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
-                tracing::error!(reason = ?e, %tx_hash, "failed to forward eth_sendRawTransaction to leader");
-                Err(StratusError::TransactionForwardToLeaderFailed)
+                if e.is_internal() {
+                    tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
+                }
+                Err(e)
             }
-        };
-    }
+        },
 
-    // execute locally if leader
-    tracing::info!(%tx_hash, "executing eth_sendRawTransaction locally");
-    match ctx.executor.execute_local_transaction(tx) {
-        Ok(tx) => {
-            if tx.is_success() {
-                tracing::info!(tx_hash = %tx.hash(), tx_output = %tx.execution().output, "executed eth_sendRawTransaction with success");
-            } else {
-                tracing::warn!(tx_output = %tx.hash(), tx_output = %tx.execution().output, "executed eth_sendRawTransaction with failure");
-            }
-            Ok(hex_data(tx_hash))
-        }
-        Err(e) => {
-            if e.is_internal() {
-                tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
-            }
-            Err(e)
-        }
+        // is follower
+        Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+            Ok(hash) => Ok(hex_data(hash)),
+            Err(e) => Err(e),
+        },
     }
 }
 
