@@ -30,6 +30,7 @@ use crate::eth::importer::ImporterConfig;
 use crate::eth::primitives::Hash;
 #[allow(unused_imports)]
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::rpc::RpcClientApp;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -496,12 +497,12 @@ impl Raft {
             return Err(anyhow::anyhow!("blockchain client is not set, cannot forward transaction"));
         };
 
-        let result = blockchain_client.send_raw_transaction(transaction.into()).await?;
+        let tx_hash = blockchain_client.send_raw_transaction(transaction.into(), RpcClientApp::Unknown).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());
 
-        Ok((result.tx_hash, blockchain_client.http_url.clone())) //XXX HEX
+        Ok((tx_hash, blockchain_client.http_url.clone())) //XXX HEX
     }
 
     pub async fn should_serve(&self) -> bool {
@@ -616,7 +617,7 @@ impl Consensus for Raft {
         self.should_serve().await
     }
 
-    async fn forward(&self, transaction: Bytes) -> anyhow::Result<Hash> {
+    async fn forward_to_leader(&self, transaction: Bytes, _: RpcClientApp) -> anyhow::Result<Hash> {
         let (tx_hash, url) = self.forward(transaction).await?;
         tracing::info!(%tx_hash, %url, "forwarded eth_sendRawTransaction to leader");
         Ok(tx_hash)

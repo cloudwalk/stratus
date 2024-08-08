@@ -12,7 +12,6 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
-use super::pending_transaction::PendingTransaction;
 use crate::alias::EthersBytes;
 use crate::alias::EthersTransaction;
 use crate::alias::JsonValue;
@@ -22,6 +21,7 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
+use crate::eth::rpc::RpcClientApp;
 use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
 use crate::infra::tracing::TracingExt;
@@ -210,15 +210,16 @@ impl BlockchainClient {
     // RPC mutations
     // -------------------------------------------------------------------------
 
-    /// Sends a signed transaction.
-    pub async fn send_raw_transaction(&self, tx: EthersBytes) -> anyhow::Result<PendingTransaction<'_>> {
+    /// Forwards a transaction to leader.
+    pub async fn send_raw_transaction(&self, tx: EthersBytes, rpc_client: RpcClientApp) -> anyhow::Result<Hash> {
         tracing::debug!("sending raw transaction");
 
         let tx = to_json_value(tx);
-        let result = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx]).await;
+        let rpc_client = to_json_value(rpc_client);
+        let result = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx, rpc_client]).await;
 
         match result {
-            Ok(hash) => Ok(PendingTransaction::new(hash, self)),
+            Ok(hash) => Ok(hash),
             Err(e) => log_and_err!(reason = e, "failed to send raw transaction"),
         }
     }

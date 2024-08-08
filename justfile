@@ -31,7 +31,8 @@ setup:
 # Stratus tasks
 # ------------------------------------------------------------------------------
 
-alias run := stratus
+alias run          := stratus
+alias run-leader   := stratus
 alias run-follower := stratus-follower
 alias run-importer := stratus-follower
 

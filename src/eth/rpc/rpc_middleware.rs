@@ -77,7 +77,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         let middleware_enter = span.enter();
 
         // extract request data
-        let client = request.extensions.rpc_client();
+        let mut client = request.extensions.rpc_client();
         let method = request.method_name().to_owned();
         let tx = match method.as_str() {
             "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(request.params()).ok(),
@@ -85,6 +85,9 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
             _ => None,
         };
+        if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.clone()) {
+            client = tx_client;
+        }
 
         // trace request
         Span::with(|s| {
@@ -226,6 +229,7 @@ impl<'a> Future for RpcResponse<'a> {
 // -----------------------------------------------------------------------------
 
 struct TransactionTracingIdentifiers {
+    pub client: Option<RpcClientApp>,
     pub hash: Option<Hash>,
     pub contract: ContractName,
     pub function: SoliditySignature,
@@ -235,11 +239,14 @@ struct TransactionTracingIdentifiers {
 }
 
 impl TransactionTracingIdentifiers {
-    // eth_sendRawTransction
+    // eth_sendRawTransaction
     fn from_transaction(params: Params) -> anyhow::Result<Self> {
-        let (_, data) = next_rpc_param::<Bytes>(params.sequence())?;
-        let tx = parse_rpc_rlp::<TransactionInput>(&data)?;
+        let (params, tx_data) = next_rpc_param::<Bytes>(params.sequence())?;
+        let tx = parse_rpc_rlp::<TransactionInput>(&tx_data)?;
+        let client = next_rpc_param::<RpcClientApp>(params);
+
         Ok(Self {
+            client: client.map(|(_, client)| client).ok(),
             hash: Some(tx.hash),
             contract: codegen::contract_name_for_o11y(&tx.to),
             function: codegen::function_sig_for_o11y(&tx.input),
@@ -253,6 +260,7 @@ impl TransactionTracingIdentifiers {
     fn from_call(params: Params) -> anyhow::Result<Self> {
         let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
         Ok(Self {
+            client: None,
             hash: None,
             contract: codegen::contract_name_for_o11y(&call.to),
             function: codegen::function_sig_for_o11y(&call.data),
@@ -266,6 +274,7 @@ impl TransactionTracingIdentifiers {
     fn from_transaction_query(params: Params) -> anyhow::Result<Self> {
         let (_, hash) = next_rpc_param::<Hash>(params.sequence())?;
         Ok(Self {
+            client: None,
             hash: Some(hash),
             contract: metrics::LABEL_MISSING,
             function: metrics::LABEL_MISSING,

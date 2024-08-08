@@ -80,6 +80,19 @@ impl serde::Serialize for RpcClientApp {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for RpcClientApp {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "unknown" => Ok(Self::Unknown),
+            _ => Ok(Self::Identified(value)),
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------

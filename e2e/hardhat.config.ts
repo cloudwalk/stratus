@@ -17,7 +17,7 @@ export function defineBlockMiningIntervalInMs(blockMintingModeTitle?: string): n
     return undefined;
 }
 
-const STRATUS_PORT = process.env.STRATUS_PORT || 3000; // Default to 3000 if not set
+const STRATUS_PORT = process.env.STRATUS_PORT || 3001; // Default to 3000 if not set
 
 const config: HardhatUserConfig = {
     solidity: {
