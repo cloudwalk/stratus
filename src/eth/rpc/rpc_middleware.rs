@@ -86,6 +86,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             _ => None,
         };
         if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.clone()) {
+            request.extensions_mut().insert(tx_client.clone());
             client = tx_client;
         }
 
