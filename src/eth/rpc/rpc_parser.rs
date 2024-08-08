@@ -58,6 +58,8 @@ where
 }
 
 /// Decode an RPC parameter encoded in RLP.
+///
+/// https://ethereum.org/en/developers/docs/data-structures-and-encoding/rlp
 pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, StratusError> {
     match rlp::decode::<T>(value) {
         Ok(trx) => Ok(trx),
