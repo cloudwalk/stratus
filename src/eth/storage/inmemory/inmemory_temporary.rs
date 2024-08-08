@@ -24,7 +24,7 @@ use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
 
 /// Number of previous blocks to keep inmemory to detect conflicts between different blocks.
-const MAX_BLOCKS: usize = 64;
+pub const MAX_BLOCKS: usize = 64;
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {
