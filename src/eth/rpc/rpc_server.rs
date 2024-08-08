@@ -26,6 +26,7 @@ use tracing::Span;
 
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
+use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
@@ -49,7 +50,6 @@ use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StoragePointInTime;
 use crate::eth::storage::StratusStorage;
-use crate::eth::Consensus;
 use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;

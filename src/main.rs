@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use stratus::config::StratusConfig;
-use stratus::eth::consensus::Consensus;
+use stratus::eth::follower::consensus::Consensus;
 use stratus::eth::rpc::serve_rpc;
 use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;

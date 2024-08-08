@@ -5,7 +5,7 @@ use clap::Parser;
 use display_json::DebugAsJson;
 
 use crate::eth::executor::Executor;
-use crate::eth::importer::Importer;
+use crate::eth::follower::importer::Importer;
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
 use crate::ext::parse_duration;
