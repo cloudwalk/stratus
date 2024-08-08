@@ -36,11 +36,7 @@ impl ExecutionConflictsBuilder {
 
     /// Builds the list of tracked conflicts into a non-empty list of conflicts.
     pub fn build(self) -> Option<ExecutionConflicts> {
-        if self.0.is_empty() {
-            None
-        } else {
-            Some(ExecutionConflicts(NonEmpty::from_vec(self.0).unwrap()))
-        }
+        NonEmpty::from_vec(self.0).map(ExecutionConflicts)
     }
 }
 
