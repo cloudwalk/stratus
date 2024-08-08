@@ -59,8 +59,12 @@ impl EvmExecution {
         }
 
         // generate sender changes incrementing the nonce
-        let mut sender_changes = ExecutionAccountChanges::from_original_values(sender);
-        let sender_next_nonce = sender_changes.nonce.take_original_ref().unwrap().next();
+        let mut sender_changes = ExecutionAccountChanges::from_original_values(sender); // NOTE: don't change from_original_values without updating .expect() below
+        let sender_next_nonce = sender_changes
+            .nonce
+            .take_original_ref()
+            .expect("from_original_values populates original values, so taking original ref here will succeed")
+            .next();
         sender_changes.nonce.set_modified(sender_next_nonce);
 
         // crete execution and apply costs

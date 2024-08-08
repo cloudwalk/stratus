@@ -1,9 +1,9 @@
+use anyhow::Context;
+use anyhow::Result;
+
 use crate::alias::EthersTransaction;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
-
-use anyhow::Context;
-use anyhow::Result;
 
 #[derive(Debug, Clone, Default, derive_more::Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
