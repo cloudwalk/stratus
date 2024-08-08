@@ -21,8 +21,8 @@ pub const RUST_VERSION: &str = env!("VERGEN_RUSTC_SEMVER");
 pub const RUST_CHANNEL: &str = env!("VERGEN_RUSTC_CHANNEL");
 pub const RUST_TARGET: &str = env!("VERGEN_RUSTC_HOST_TRIPLE");
 
-const VERSION_WITH_BRANCH: &str = const_format::formatcp!("{}::{}", GIT_BRANCH, GIT_COMMIT);
-const VERSION_WITH_DESCRIBE: &str = const_format::formatcp!("{}::{}", GIT_DESCRIBE, GIT_COMMIT);
+const VERSION_WITH_BRANCH: &str = const_format::formatcp!("{GIT_BRANCH}::{GIT_COMMIT}");
+const VERSION_WITH_DESCRIBE: &str = const_format::formatcp!("{GIT_DESCRIBE}::{GIT_COMMIT}");
 
 /// Returns the current service name.
 ///
