@@ -22,13 +22,6 @@ import {
     sendReset,
 } from "../helpers/rpc";
 
-describe("aaa", () => {
-    it("watwut", async() => {
-        let txSigned = await ALICE.signWeiTransfer(BOB.address, TEST_TRANSFER);
-        await sendRawTransaction(txSigned);
-    })
-})
-
 describe("Transaction: serial transfer", () => {
     var _tx: Transaction;
     var _txHash: string;
