@@ -178,3 +178,170 @@ impl From<Address> for [u8; 20] {
         H160::from(value).0
     }
 }
+
+
+#[test]
+fn test_deref_address() {
+    let address = Address::new([0u8; 20]);
+    let h160: &H160 = &*address;
+    assert_eq!(h160, &H160::zero());
+}
+
+#[test]
+fn test_display_address() {
+    let address = Address::new([0u8; 20]);
+    assert_eq!(format!("{}", address), "0x0000000000000000000000000000000000000000");
+}
+
+#[test]
+fn test_try_from_vec_u8_valid() {
+    let bytes = vec![0u8; 20];
+    let address = Address::try_from(bytes).unwrap();
+    assert_eq!(address.0, H160::zero());
+}
+
+#[test]
+fn test_from_name_or_address() {
+    let name_or_address = NameOrAddress::Address(H160::zero());
+    let address: Address = name_or_address.into();
+    assert_eq!(address.0, H160::zero());
+}
+
+#[test]
+fn test_address_new_from_h160() {
+    let h160 = H160::zero();
+    let address = Address::new_from_h160(h160);
+    assert_eq!(address.0, h160);
+}
+
+#[test]
+fn test_address_new() {
+    let bytes = [0u8; 20];
+    let address = Address::new(bytes);
+    assert_eq!(address.0, H160::zero());
+}
+
+#[test]
+fn create_address_from_20_byte_array() {
+    let bytes = hex!("a9a55a81a4c085ec0c31585aed4cfb09d78dfd53");
+    let address = Address::new(bytes);
+    assert_eq!(address.0, bytes.into());
+}
+
+#[test]
+fn create_address_from_invalid_byte_array() {
+    let bytes = vec![1, 2, 3, 4, 5];
+    let result = Address::try_from(bytes);
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "array of bytes to be converted to address must have exactly 20 bytes");
+}
+
+#[test]
+fn check_if_address_is_coinbase() {
+    let coinbase_address = Address::COINBASE;
+    let non_coinbase_address = Address::new([1; 20]);
+
+    assert!(coinbase_address.is_coinbase());
+    assert!(!non_coinbase_address.is_coinbase());
+}
+
+#[test]
+fn display_address_as_hex_string() {
+    use hex_literal::hex;
+
+    let address = Address::new(hex!("a9a55a81a4c085ec0c31585aed4cfb09d78dfd53"));
+    assert_eq!(format!("{}", address), "0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53");
+}
+
+#[test]
+fn convert_name_to_address_should_panic() {
+    let name = NameOrAddress::Name("John Doe".to_string());
+    
+    // The conversion from Name to Address should panic
+    assert!(std::panic::catch_unwind(|| {
+        let _address: Address = name.into();
+    }).is_err());
+}
+
+#[test]
+fn test_is_zero_address() {
+    let zero_address = Address::ZERO;
+    let non_zero_address = Address::new([1; 20]);
+
+    assert!(zero_address.is_zero());
+    assert!(!non_zero_address.is_zero());
+}
+
+#[test]
+fn test_from_str_valid_address() {
+    let address_str = "0x0000000000000000000000000000000000000000";
+    let address: Address = address_str.parse().unwrap();
+    assert_eq!(address.0, H160::zero());
+}
+
+#[test]
+fn test_is_ignored_address() {
+    let coinbase_address = Address::COINBASE;
+    let zero_address = Address::ZERO;
+    let non_ignored_address = Address::new([1; 20]);
+
+    assert!(coinbase_address.is_ignored());
+    assert!(zero_address.is_ignored());
+    assert!(!non_ignored_address.is_ignored());
+}
+
+#[test]
+fn test_from_str_invalid_address() {
+    let address_str = "invalid_address";
+    let result: Result<Address, _> = address_str.parse();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_address_to_h160_conversion() {
+    let address = Address::new([1; 20]);
+    let h160: H160 = address.into();
+    assert_eq!(h160, H160([1; 20]));
+}
+
+#[test]
+fn test_from_revm_address() {
+    // Assuming RevmAddress is a type alias for H160
+    let revm_address = H160::zero();
+    let address: Address = revm_address.into();
+    assert_eq!(address.0, H160::zero());
+}
+
+#[test]
+fn test_address_to_token_conversion() {
+    let address_bytes = hex!("a9a55a81a4c085ec0c31585aed4cfb09d78dfd53");
+    let address = Address::new(address_bytes);
+    let token: Token = address.into();
+        
+    assert_eq!(token, Token::Address(H160::from(address_bytes)));
+}
+
+#[test]
+fn test_address_to_byte_array_conversion() {
+    let address_bytes = [1u8; 20];
+    let address = Address::new(address_bytes);
+    let byte_array: [u8; 20] = address.into();
+    assert_eq!(byte_array, address_bytes);
+}
+
+#[test]
+fn test_address_to_revm_address_conversion() {
+    let address_bytes = [1u8; 20];
+    let address = Address::new(address_bytes);
+    let revm_address: RevmAddress = address.into();
+    
+    assert_eq!(revm_address, revm::primitives::Address(address_bytes.into()));
+}
+
+#[test]
+fn test_serde_deserialize() {
+    let json = "\"0x0101010101010101010101010101010101010101\"";
+    let address: Address = serde_json::from_str(json).unwrap();
+    let expected_address = Address::new([1u8; 20]);
+    assert_eq!(address, expected_address);
+}
