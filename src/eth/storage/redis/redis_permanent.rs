@@ -18,6 +18,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StoragePointInTime;
 use crate::ext::from_json_str;
+use crate::ext::to_json_object;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::log_and_err;
@@ -117,8 +118,8 @@ impl PermanentStorage for RedisPermanentStorage {
                 }
 
                 // add block number to force slot modification
-                let mut account_value = to_json_value(&account);
-                account_value.as_object_mut().unwrap().insert("block".to_owned(), to_json_value(block.number()));
+                let mut account_value = to_json_object(&account);
+                account_value.insert("block".to_owned(), to_json_value(block.number()));
                 let account_value = to_json_string(&account_value);
 
                 mset_values.push((key_account(&account.address), account_value.clone()));
