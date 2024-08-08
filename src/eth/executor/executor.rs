@@ -356,16 +356,18 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
-    pub fn execute_local_transaction(&self, tx_input: TransactionInput) -> Result<TransactionExecution, StratusError> {
+    pub fn execute_local_transaction(&self, tx: TransactionInput) -> Result<TransactionExecution, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
+        tracing::info!(tx_hash = %tx.hash, "executing local transaction");
+
         // track
         Span::with(|s| {
-            s.rec_str("tx_hash", &tx_input.hash);
-            s.rec_str("tx_from", &tx_input.signer);
-            s.rec_opt("tx_to", &tx_input.to);
-            s.rec_str("tx_nonce", &tx_input.nonce);
+            s.rec_str("tx_hash", &tx.hash);
+            s.rec_str("tx_from", &tx.signer);
+            s.rec_opt("tx_to", &tx.to);
+            s.rec_str("tx_nonce", &tx.nonce);
         });
 
         // execute according to the strategy
@@ -401,18 +403,18 @@ impl Executor {
                 };
 
                 // execute transaction
-                self.execute_local_transaction_attempts(tx_input.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
+                self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
             }
 
             // Executes transactions in parallel mode:
             // * Conflict detection prevents data corruption.
             ExecutorStrategy::Paralell => {
-                let parallel_attempt = self.execute_local_transaction_attempts(tx_input.clone(), EvmRoute::Parallel, 1);
+                let parallel_attempt = self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Parallel, 1);
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
                     Err(e) =>
                         if let StratusError::TransactionConflict(_) = e {
-                            self.execute_local_transaction_attempts(tx_input.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
+                            self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
                         } else {
                             Err(e)
                         },
@@ -423,7 +425,7 @@ impl Executor {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            let function = codegen::function_sig_for_o11y(&tx_input.input);
+            let function = codegen::function_sig_for_o11y(&tx.input);
             match &tx_execution {
                 Ok(tx_execution) => {
                     metrics::inc_executor_local_transaction(start.elapsed(), true, function);

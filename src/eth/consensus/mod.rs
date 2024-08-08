@@ -32,11 +32,13 @@ pub trait Consensus: Send + Sync {
     }
 
     /// Forwards a transaction to leader.
-    async fn forward_to_leader(&self, transaction: Bytes, rpc_client: RpcClientApp) -> anyhow::Result<Hash> {
+    async fn forward_to_leader(&self, tx_hash: Hash, tx_data: Bytes, rpc_client: RpcClientApp) -> anyhow::Result<Hash> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let hash = self.get_chain()?.send_raw_transaction(transaction.into(), rpc_client).await?;
+        tracing::info!(%tx_hash, %rpc_client, "forwaring transaction to leader");
+
+        let hash = self.get_chain()?.send_raw_transaction(tx_data.into(), rpc_client).await?;
 
         #[cfg(feature = "metrics")]
         metrics::inc_consensus_forward(start.elapsed());

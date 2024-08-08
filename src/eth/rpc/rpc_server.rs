@@ -625,28 +625,18 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     // execute locally or forward to leader
     match &ctx.consensus {
         // is leader
-        None => {
-            tracing::info!(%tx_hash, "executing eth_sendRawTransaction locally");
-            match ctx.executor.execute_local_transaction(tx) {
-                Ok(tx) => {
-                    if tx.is_success() {
-                        tracing::info!(tx_hash = %tx.hash(), tx_output = %tx.execution().output, "executed eth_sendRawTransaction with success");
-                    } else {
-                        tracing::warn!(tx_output = %tx.hash(), tx_output = %tx.execution().output, "executed eth_sendRawTransaction with failure");
-                    }
-                    Ok(hex_data(tx_hash))
+        None => match ctx.executor.execute_local_transaction(tx) {
+            Ok(_) => Ok(hex_data(tx_hash)),
+            Err(e) => {
+                if e.is_internal() {
+                    tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
                 }
-                Err(e) => {
-                    if e.is_internal() {
-                        tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
-                    }
-                    Err(e)
-                }
+                Err(e)
             }
-        }
+        },
 
         // is follower
-        Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_data, ext.rpc_client())) {
+        Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
             Ok(hash) => Ok(hex_data(hash)),
             Err(e) => {
                 tracing::error!(reason = ?e, %tx_hash, "failed to forward eth_sendRawTransaction to leader");

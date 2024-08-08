@@ -617,7 +617,7 @@ impl Consensus for Raft {
         self.should_serve().await
     }
 
-    async fn forward_to_leader(&self, transaction: Bytes, _: RpcClientApp) -> anyhow::Result<Hash> {
+    async fn forward_to_leader(&self, _: Hash, transaction: Bytes, _: RpcClientApp) -> anyhow::Result<Hash> {
         let (tx_hash, url) = self.forward(transaction).await?;
         tracing::info!(%tx_hash, %url, "forwarded eth_sendRawTransaction to leader");
         Ok(tx_hash)
