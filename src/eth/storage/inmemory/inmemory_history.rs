@@ -39,13 +39,9 @@ where
     }
 
     /// Resets changes to the specified block number.
-    pub fn reset_at(&self, block_number: BlockNumber) -> Option<InMemoryHistory<T>> {
+    pub fn reset_at(&self, block_number: BlockNumber) -> Option<Self> {
         let history = self.0.iter().filter(|x| x.block_number <= block_number).cloned().collect_vec();
-        if history.is_empty() {
-            None
-        } else {
-            Some(Self(NonEmpty::from_vec(history).unwrap()))
-        }
+        NonEmpty::from_vec(history).map(Self)
     }
 
     /// Returns the value at the given point in time.
