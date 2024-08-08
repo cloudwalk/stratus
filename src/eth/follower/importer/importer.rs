@@ -14,6 +14,7 @@ use tokio::time::timeout;
 use tracing::Span;
 
 use crate::eth::executor::Executor;
+use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
@@ -21,7 +22,6 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
-use crate::eth::Consensus;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::DisplayExt;

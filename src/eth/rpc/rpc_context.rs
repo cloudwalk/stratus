@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
+use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::ChainId;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StratusStorage;
-use crate::eth::Consensus;
 
 pub struct RpcContext {
     // app config
