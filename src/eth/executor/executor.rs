@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use anyhow::anyhow;
+use cfg_if::cfg_if;
 use tracing::info_span;
 use tracing::Span;
 
@@ -222,14 +223,12 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Reexecutes an external block locally and imports it to the temporary storage.
-    #[tracing::instrument(name = "executor::external_block", skip_all, fields(block_number))]
     pub fn execute_external_block(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
+        // track
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), EvmExecutionMetrics::default());
-
-        Span::with(|s| {
-            s.rec_str("block_number", &block.number());
-        });
+        #[cfg(feature = "tracing")]
+        let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
         tracing::info!(block_number = %block.number(), "reexecuting external block");
 
         // track pending block number
@@ -264,7 +263,6 @@ impl Executor {
     ///
     /// This function wraps `reexecute_external_tx_inner` and returns back the payload
     /// to facilitate re-execution of parallel transactions that failed
-    #[tracing::instrument(name = "executor::external_transaction", skip_all, fields(tx_hash))]
     fn execute_external_transaction(
         &self,
         tx: &ExternalTransaction,
@@ -272,13 +270,11 @@ impl Executor {
         block: &ExternalBlock,
         #[cfg(feature = "metrics")] block_metrics: &mut EvmExecutionMetrics,
     ) -> anyhow::Result<()> {
+        // track
         #[cfg(feature = "metrics")]
         let start = metrics::now();
-
-        // track
-        Span::with(|s| {
-            s.rec_str("tx_hash", &tx.hash);
-        });
+        #[cfg(feature = "tracing")]
+        let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash).entered();
         tracing::info!(block_number = %block.number(), tx_hash = %tx.hash(), "reexecuting external transaction");
 
         // when transaction externally failed, create fake transaction instead of reexecuting
@@ -328,23 +324,28 @@ impl Executor {
             }
         };
 
+        // keep metrics info to avoid cloning when saving
+        cfg_if! {
+            if #[cfg(feature = "metrics")] {
+                let tx_metrics = tx_execution.evm_execution.metrics;
+                let tx_gas = tx_execution.evm_execution.execution.gas;
+            }
+        }
+
         // persist state
         let tx_execution = TransactionExecution::External(tx_execution);
-        self.miner.save_execution(tx_execution.clone())?;
+        self.miner.save_execution(tx_execution)?;
 
         // track metrics
-
         #[cfg(feature = "metrics")]
         {
-            let evm_execution = tx_execution.execution();
-            let evm_metrics = tx_execution.metrics();
-            *block_metrics += *evm_metrics;
+            *block_metrics += tx_metrics;
 
             let function = codegen::function_sig_for_o11y(&tx.0.input);
             metrics::inc_executor_external_transaction(start.elapsed(), function);
-            metrics::inc_executor_external_transaction_account_reads(evm_metrics.account_reads, function);
-            metrics::inc_executor_external_transaction_slot_reads(evm_metrics.slot_reads, function);
-            metrics::inc_executor_external_transaction_gas(evm_execution.gas.as_u64() as usize, function);
+            metrics::inc_executor_external_transaction_account_reads(tx_metrics.account_reads, function);
+            metrics::inc_executor_external_transaction_slot_reads(tx_metrics.slot_reads, function);
+            metrics::inc_executor_external_transaction_gas(tx_gas.as_u64() as usize, function);
         }
 
         Ok(())
@@ -394,7 +395,6 @@ impl Executor {
                         self.locks.serial.clear_poison();
                         poison.into_inner()
                     }));
-                    tracing::info!("executor acquired mine_and_commit lock to prevent executor mining block");
                     miner_lock
                 } else {
                     None

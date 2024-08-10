@@ -5,6 +5,8 @@ use std::sync::Mutex;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
 use tokio::sync::broadcast;
+use tracing::field;
+use tracing::info_span;
 use tracing::Span;
 
 use crate::eth::miner::MinerMode;
@@ -37,7 +39,7 @@ pub struct Miner {
     pub mode: MinerMode,
 
     /// Broadcasts pending transactions events.
-    pub notifier_pending_txs: broadcast::Sender<TransactionExecution>,
+    pub notifier_pending_txs: broadcast::Sender<Hash>,
 
     /// Broadcasts new mined blocks events.
     pub notifier_blocks: broadcast::Sender<Block>,
@@ -90,11 +92,10 @@ impl Miner {
     }
 
     /// Persists a transaction execution.
-    #[tracing::instrument(name = "miner::save_execution", skip_all, fields(tx_hash))]
     pub fn save_execution(&self, tx_execution: TransactionExecution) -> Result<(), StratusError> {
-        Span::with(|s| {
-            s.rec_str("tx_hash", &tx_execution.hash());
-        });
+        // track
+        #[cfg(feature = "tracing")]
+        let _span = info_span!("miner::save_execution", tx_hash = %tx_execution.hash()).entered();
 
         // if automine is enabled, only one transaction can enter the block at time.
         let _save_execution_lock = if self.mode.is_automine() {
@@ -104,10 +105,11 @@ impl Miner {
         };
 
         // save execution to temporary storage
-        self.storage.save_execution(tx_execution.clone())?;
+        let tx_hash = tx_execution.hash();
+        self.storage.save_execution(tx_execution)?;
 
         // if automine is enabled, automatically mines a block
-        let _ = self.notifier_pending_txs.send(tx_execution);
+        let _ = self.notifier_pending_txs.send(tx_hash);
         if self.mode.is_automine() {
             self.mine_local_and_commit()?;
         }
@@ -118,7 +120,6 @@ impl Miner {
     /// Same as [`Self::mine_external`], but automatically commits the block instead of returning it.
     pub fn mine_external_and_commit(&self) -> anyhow::Result<()> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock().unwrap();
-        tracing::info!("miner acquired mine and commit lock for external block");
 
         let block = self.mine_external()?;
         self.commit(block)
@@ -127,13 +128,14 @@ impl Miner {
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
-    #[tracing::instrument(name = "miner::mine_external", skip_all, fields(block_number))]
     pub fn mine_external(&self) -> anyhow::Result<Block> {
+        // track
+        #[cfg(feature = "tracing")]
+        let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
         tracing::debug!("mining external block");
 
         // lock
         let _mine_lock = self.locks.mine.lock().unwrap();
-        tracing::info!("miner acquired mine lock for external block");
 
         // mine
         let block = self.storage.finish_pending_block()?;
@@ -151,13 +153,17 @@ impl Miner {
         let mined_txs = mine_external_transactions(block.number, external_txs)?;
         let block = block_from_external(external_block, mined_txs);
 
-        block.inspect(|block| Span::with(|s| s.rec_str("block_number", &block.number())))
+        #[cfg(feature = "tracing")]
+        if let Ok(ref block) = block {
+            Span::with(|s| s.rec_str("block_number", &block.number()));
+        }
+
+        block
     }
 
     /// Same as [`Self::mine_external_mixed`], but automatically commits the block instead of returning it.
     pub fn mine_external_mixed_and_commit(&self) -> anyhow::Result<()> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock().unwrap();
-        tracing::info!("miner acquired mine and commit lock for external mixed local block");
 
         let block = self.mine_external_mixed()?;
         self.commit(block)
@@ -172,7 +178,6 @@ impl Miner {
 
         // lock
         let _mine_lock = self.locks.mine.lock().unwrap();
-        tracing::info!("miner acquired mining lock for external mixed block");
 
         // mine
         let block = self.storage.finish_pending_block()?;
@@ -204,7 +209,6 @@ impl Miner {
     /// mainly used when is_automine is enabled.
     pub fn mine_local_and_commit(&self) -> anyhow::Result<()> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock().unwrap();
-        tracing::info!("miner acquired mine and commit lock for local block");
 
         let block = self.mine_local()?;
         self.commit(block)
@@ -219,7 +223,6 @@ impl Miner {
 
         // lock
         let _mine_lock = self.locks.mine.lock().unwrap();
-        tracing::info!("miner acquired mining lock for local block");
 
         // mine
         let block = self.storage.finish_pending_block()?;
@@ -240,9 +243,10 @@ impl Miner {
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    #[tracing::instrument(name = "miner::commit", skip_all, fields(block_number))]
     pub fn commit(&self, block: Block) -> anyhow::Result<()> {
-        Span::with(|s| s.rec_str("block_number", &block.number()));
+        // track
+        #[cfg(feature = "tracing")]
+        let _span = info_span!("miner::commit", block_number = %block.number()).entered();
         tracing::info!(block_number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
 
         // lock
@@ -407,7 +411,6 @@ mod interval_miner {
     #[inline(always)]
     fn mine_and_commit(miner: &Miner) {
         let _mine_and_commit_lock = miner.locks.mine_and_commit.lock().unwrap();
-        tracing::info!("miner acquired mine and commit lock for interval local block");
 
         // mine
         let block = loop {

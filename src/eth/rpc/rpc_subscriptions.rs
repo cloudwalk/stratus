@@ -17,11 +17,11 @@ use tokio::time::Duration;
 
 use crate::eth::primitives::Block;
 use crate::eth::primitives::DateTimeNow;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionExecution;
 use crate::eth::rpc::RpcClientApp;
 use crate::ext::not;
 use crate::ext::spawn_named;
@@ -59,11 +59,7 @@ pub struct RpcSubscriptions {
 
 impl RpcSubscriptions {
     /// Creates a new subscription manager that automatically spawns all necessary tasks in background.
-    pub fn spawn(
-        rx_pending_txs: broadcast::Receiver<TransactionExecution>,
-        rx_blocks: broadcast::Receiver<Block>,
-        rx_logs: broadcast::Receiver<LogMined>,
-    ) -> Self {
+    pub fn spawn(rx_pending_txs: broadcast::Receiver<Hash>, rx_blocks: broadcast::Receiver<Block>, rx_logs: broadcast::Receiver<LogMined>) -> Self {
         let connected = Arc::new(RpcSubscriptionsConnected::default());
 
         Self::spawn_subscriptions_cleaner(Arc::clone(&connected));
@@ -146,10 +142,7 @@ impl RpcSubscriptions {
     }
 
     /// Spawns a new task that notifies subscribers about new executed transactions.
-    fn spawn_new_pending_txs_notifier(
-        subs: Arc<RpcSubscriptionsConnected>,
-        mut rx_tx_hash: broadcast::Receiver<TransactionExecution>,
-    ) -> JoinHandle<anyhow::Result<()>> {
+    fn spawn_new_pending_txs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_tx_hash: broadcast::Receiver<Hash>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::newPendingTransactions";
         spawn_named(TASK_NAME, async move {
             loop {
@@ -157,7 +150,7 @@ impl RpcSubscriptions {
                     return Ok(());
                 }
 
-                let tx = match timeout(NOTIFIER_SHUTDOWN_CHECK_INTERVAL, rx_tx_hash.recv()).await {
+                let tx_hash = match timeout(NOTIFIER_SHUTDOWN_CHECK_INTERVAL, rx_tx_hash.recv()).await {
                     Ok(Ok(tx)) => tx,
                     Ok(Err(_channel_closed)) => break,
                     Err(_timed_out) => continue,
@@ -165,7 +158,7 @@ impl RpcSubscriptions {
 
                 let interested_subs = subs.pending_txs.read().await;
                 let interested_subs = interested_subs.values().collect_vec();
-                Self::notify(interested_subs, tx.hash().to_string());
+                Self::notify(interested_subs, tx_hash.to_string());
             }
             warn_task_rx_closed(TASK_NAME);
             Ok(())
