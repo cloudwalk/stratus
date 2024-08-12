@@ -92,7 +92,7 @@ impl Miner {
     }
 
     /// Persists a transaction execution.
-    pub fn save_execution(&self, tx_execution: TransactionExecution) -> Result<(), StratusError> {
+    pub fn save_execution(&self, tx_execution: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // track
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::save_execution", tx_hash = %tx_execution.hash()).entered();
@@ -106,7 +106,7 @@ impl Miner {
 
         // save execution to temporary storage
         let tx_hash = tx_execution.hash();
-        self.storage.save_execution(tx_execution)?;
+        self.storage.save_execution(tx_execution, check_conflicts)?;
 
         // if automine is enabled, automatically mines a block
         let _ = self.notifier_pending_txs.send(tx_hash);

@@ -36,7 +36,7 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
 
     /// Saves a re-executed transaction to the pending mined block.
-    fn save_execution(&self, tx: TransactionExecution) -> Result<(), StratusError>;
+    fn save_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError>;
 
     /// Retrieves the pending transactions of the pending block.
     fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>>;
