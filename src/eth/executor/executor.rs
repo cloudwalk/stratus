@@ -246,7 +246,7 @@ impl Executor {
                 tx,
                 receipt,
                 block_number,
-                block_timpestamp,
+                block_timestamp,
                 #[cfg(feature = "metrics")]
                 &mut block_metrics,
             )?;
