@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use stratus::config::StratusConfig;
-use stratus::eth::follower::consensus::Consensus;
 use stratus::eth::rpc::serve_rpc;
-use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use stratus::NodeMode;
@@ -29,20 +27,10 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // Init importer
-    let consensus: Option<Arc<dyn Consensus>> = match GlobalState::get_node_mode() {
-        NodeMode::Follower => {
-            let importer_config = config.importer.as_ref().ok_or(anyhow::anyhow!("importer config is not set"))?;
-            let chain = Arc::new(
-                BlockchainClient::new_http_ws(
-                    importer_config.external_rpc.as_ref(),
-                    importer_config.external_rpc_ws.as_deref(),
-                    importer_config.external_rpc_timeout,
-                )
-                .await?,
-            );
-            Some(importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), Arc::clone(&chain))?)
-        }
-        NodeMode::Leader => None,
+    let consensus = if let Some(importer_config) = &config.importer {
+        importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage)).await?
+    } else {
+        None
     };
 
     // Init RPC server
