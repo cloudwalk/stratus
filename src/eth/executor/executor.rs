@@ -235,7 +235,7 @@ impl Executor {
 
         // track pending block
         let block_number = block.number();
-        let block_timpestamp = block.timestamp();
+        let block_timestamp = block.timestamp();
         self.storage.set_pending_external_block(block.clone())?;
         self.storage.set_pending_block_number(block_number)?;
 
