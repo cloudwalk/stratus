@@ -324,12 +324,12 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
-    pub fn save_execution(&self, tx: TransactionExecution) -> Result<(), StratusError> {
+    pub fn save_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.hash()).entered();
         tracing::debug!(storage = %label::TEMP, tx_hash = %tx.hash(), "saving execution");
 
-        timed(|| self.temp.save_execution(tx))
+        timed(|| self.temp.save_execution(tx, check_conflicts))
             .with(|m| {
                 metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
                 if let Err(ref e) = m.result {

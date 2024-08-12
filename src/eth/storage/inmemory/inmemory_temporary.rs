@@ -145,11 +145,13 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    fn save_execution(&self, tx: TransactionExecution) -> Result<(), StratusError> {
+    fn save_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // check conflicts
         let mut states = self.lock_write();
-        if let Some(conflicts) = check_conflicts(&states, tx.execution()) {
-            return Err(StratusError::TransactionConflict(conflicts.into()));
+        if check_conflicts {
+            if let Some(conflicts) = do_check_conflicts(&states, tx.execution()) {
+                return Err(StratusError::TransactionConflict(conflicts.into()));
+            }
         }
 
         // save account changes
@@ -226,12 +228,12 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
         let states = self.lock_read();
-        Ok(read_account(&states, address))
+        Ok(do_read_account(&states, address))
     }
 
     fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
         let states = self.lock_read();
-        Ok(read_slot(&states, address, index))
+        Ok(do_read_slot(&states, address, index))
     }
 
     // -------------------------------------------------------------------------
@@ -248,7 +250,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 // -----------------------------------------------------------------------------
 // Implementations without lock
 // -----------------------------------------------------------------------------
-fn read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address) -> Option<Account> {
+fn do_read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address) -> Option<Account> {
     // search all
     for state in states.iter() {
         let Some(account) = state.accounts.get(address) else { continue };
@@ -271,7 +273,7 @@ fn read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Addr
     None
 }
 
-fn read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address, index: &SlotIndex) -> Option<Slot> {
+fn do_read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address, index: &SlotIndex) -> Option<Slot> {
     // search all
     for state in states.iter() {
         let Some(account) = state.accounts.get(address) else { continue };
@@ -286,12 +288,12 @@ fn read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address
     None
 }
 
-fn check_conflicts(states: &NonEmpty<InMemoryTemporaryStorageState>, execution: &EvmExecution) -> Option<ExecutionConflicts> {
+fn do_check_conflicts(states: &NonEmpty<InMemoryTemporaryStorageState>, execution: &EvmExecution) -> Option<ExecutionConflicts> {
     let mut conflicts = ExecutionConflictsBuilder::default();
 
     for (address, change) in &execution.changes {
         // check account info conflicts
-        if let Some(account) = read_account(states, address) {
+        if let Some(account) = do_read_account(states, address) {
             if let Some(expected) = change.nonce.take_original_ref() {
                 let original = &account.nonce;
                 if expected != original {
@@ -309,7 +311,7 @@ fn check_conflicts(states: &NonEmpty<InMemoryTemporaryStorageState>, execution: 
         // check slots conflicts
         for (slot_index, slot_change) in &change.slots {
             if let Some(expected) = slot_change.take_original_ref() {
-                let Some(original) = read_slot(states, address, slot_index) else {
+                let Some(original) = do_read_slot(states, address, slot_index) else {
                     continue;
                 };
                 if expected.value != original.value {
