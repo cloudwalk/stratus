@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use stratus::config::StratusConfig;
-use stratus::eth::follower::consensus::Consensus;
 use stratus::eth::rpc::serve_rpc;
-use stratus::infra::BlockchainClient;
 use stratus::GlobalServices;
+use stratus::GlobalState;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<StratusConfig>::init();
+    GlobalState::initialize_node_mode(&global_services.config);
     global_services.runtime.block_on(run(global_services.config))
 }
 
@@ -16,27 +16,14 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let storage = config.storage.init()?;
 
     // Init miner
-    let miner = if config.follower {
-        config.miner.init_external_mode(Arc::clone(&storage))?
-    } else {
-        config.miner.init(Arc::clone(&storage))?
-    };
+    let miner = config.miner.init(Arc::clone(&storage))?;
 
     // Init executor
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // Init importer
-    let consensus: Option<Arc<dyn Consensus>> = if config.follower {
-        let importer_config = config.importer.as_ref().ok_or(anyhow::anyhow!("importer config is not set"))?;
-        let chain = Arc::new(
-            BlockchainClient::new_http_ws(
-                importer_config.external_rpc.as_ref(),
-                importer_config.external_rpc_ws.as_deref(),
-                importer_config.external_rpc_timeout,
-            )
-            .await?,
-        );
-        Some(importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), Arc::clone(&chain))?)
+    let consensus = if let Some(importer_config) = &config.importer {
+        importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage)).await?
     } else {
         None
     };
