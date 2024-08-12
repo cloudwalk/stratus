@@ -1,11 +1,10 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::sync::RwLock;
 use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
-
-use nonempty::NonEmpty;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -29,7 +28,7 @@ const MAX_BLOCKS: usize = 64;
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {
     /// TODO: very inneficient, it is O(N), but it should be 0(1)
-    pub states: RwLock<NonEmpty<InMemoryTemporaryStorageState>>,
+    pub states: RwLock<VecDeque<InMemoryTemporaryStorageState>>,
 }
 
 impl InMemoryTemporaryStorage {
@@ -38,12 +37,12 @@ impl InMemoryTemporaryStorage {
     }
 
     /// Locks inner state for reading.
-    pub fn lock_read(&self) -> RwLockReadGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
+    pub fn lock_read(&self) -> RwLockReadGuard<'_, VecDeque<InMemoryTemporaryStorageState>> {
         self.states.read().unwrap()
     }
 
     /// Locks inner state for writing.
-    pub fn lock_write(&self) -> RwLockWriteGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
+    pub fn lock_write(&self) -> RwLockWriteGuard<'_, VecDeque<InMemoryTemporaryStorageState>> {
         self.states.write().unwrap()
     }
 }
@@ -51,9 +50,10 @@ impl InMemoryTemporaryStorage {
 impl Default for InMemoryTemporaryStorage {
     fn default() -> Self {
         tracing::info!("creating inmemory temporary storage");
-        Self {
-            states: RwLock::new(NonEmpty::new(InMemoryTemporaryStorageState::default())),
-        }
+        let mut states = VecDeque::with_capacity(MAX_BLOCKS);
+        states.push_front(InMemoryTemporaryStorageState::default());
+
+        Self { states: RwLock::new(states) }
     }
 }
 
@@ -88,13 +88,6 @@ impl InMemoryTemporaryStorageState {
     }
 }
 
-impl InMemoryTemporaryStorageState {
-    pub fn reset(&mut self) {
-        self.block = None;
-        self.accounts.clear();
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct InMemoryTemporaryAccount {
     pub info: Account,
@@ -118,10 +111,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         let mut states = self.lock_write();
-        match states.head.block.as_mut() {
+        match head_mut(&mut states).block.as_mut() {
             Some(block) => block.number = number,
             None => {
-                states.head.block = Some(PendingBlock::new(number));
+                head_mut(&mut states).block = Some(PendingBlock::new(number));
             }
         }
         Ok(())
@@ -129,7 +122,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn read_pending_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         let states = self.lock_read();
-        match &states.head.block {
+        match &head(&states).block {
             Some(block) => Ok(Some(block.number)),
             None => Ok(None),
         }
@@ -141,7 +134,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
         let mut states = self.lock_write();
-        states.head.require_pending_block_mut()?.external_block = Some(block);
+        head_mut(&mut states).require_pending_block_mut()?.external_block = Some(block);
         Ok(())
     }
 
@@ -157,8 +150,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         // save account changes
         let changes = tx.execution().changes.values();
         for change in changes {
-            let account = states
-                .head
+            let head = head_mut(&mut states);
+            let account = head
                 .accounts
                 .entry(change.address)
                 .or_insert_with(|| InMemoryTemporaryAccount::new(change.address));
@@ -185,37 +178,40 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // save execution
-        states.head.require_pending_block_mut()?.push_transaction(tx);
+        head_mut(&mut states).require_pending_block_mut()?.push_transaction(tx);
 
         Ok(())
     }
 
     fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
         let states = self.lock_read();
-        let Some(ref pending_block) = states.head.block else { return Ok(vec![]) };
+        let Some(ref pending_block) = head(&states).block else { return Ok(vec![]) };
         Ok(pending_block.tx_executions.clone().into_iter().map(|(_, tx)| tx.clone()).collect())
     }
 
     /// TODO: we cannot allow more than one pending block. Where to put this check?
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
         let mut states = self.lock_write();
-        let finished_block = states.head.require_pending_block()?.clone();
+        let finished_block = head(&states).require_pending_block()?.clone();
 
         // remove last state if reached limit
         if states.len() + 1 >= MAX_BLOCKS {
-            let _ = states.pop();
+            let _ = states.pop_back();
         }
 
         // create new state
-        states.insert(0, InMemoryTemporaryStorageState::default());
-        states.head.block = Some(PendingBlock::new(finished_block.number.next()));
+        let next_block = PendingBlock::new(finished_block.number.next());
+        states.push_front(InMemoryTemporaryStorageState {
+            block: Some(next_block),
+            ..InMemoryTemporaryStorageState::default()
+        });
 
         Ok(finished_block)
     }
 
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>> {
         let states = self.lock_read();
-        let Some(ref pending_block) = states.head.block else { return Ok(None) };
+        let Some(ref pending_block) = head(&states).block else { return Ok(None) };
         match pending_block.tx_executions.get(hash) {
             Some(tx) => Ok(Some(tx.clone())),
             None => Ok(None),
@@ -240,9 +236,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Global state
     // -------------------------------------------------------------------------
     fn reset(&self) -> anyhow::Result<()> {
-        let mut state = self.lock_write();
-        state.tail.clear();
-        state.head.reset();
+        let mut states = self.lock_write();
+        states.clear();
+        states.push_front(InMemoryTemporaryStorageState::default());
         Ok(())
     }
 }
@@ -250,7 +246,18 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 // -----------------------------------------------------------------------------
 // Implementations without lock
 // -----------------------------------------------------------------------------
-fn do_read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address) -> Option<Account> {
+
+/// Returns the head element reference.
+fn head(states: &VecDeque<InMemoryTemporaryStorageState>) -> &InMemoryTemporaryStorageState {
+    states.front().expect("states is never empty")
+}
+
+/// Returns the head element mutable reference.
+fn head_mut(states: &mut VecDeque<InMemoryTemporaryStorageState>) -> &mut InMemoryTemporaryStorageState {
+    states.front_mut().expect("states is never empty")
+}
+
+fn do_read_account(states: &VecDeque<InMemoryTemporaryStorageState>, address: &Address) -> Option<Account> {
     // search all
     for state in states.iter() {
         let Some(account) = state.accounts.get(address) else { continue };
@@ -273,7 +280,7 @@ fn do_read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &A
     None
 }
 
-fn do_read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address, index: &SlotIndex) -> Option<Slot> {
+fn do_read_slot(states: &VecDeque<InMemoryTemporaryStorageState>, address: &Address, index: &SlotIndex) -> Option<Slot> {
     // search all
     for state in states.iter() {
         let Some(account) = state.accounts.get(address) else { continue };
@@ -288,7 +295,7 @@ fn do_read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Addr
     None
 }
 
-fn do_check_conflicts(states: &NonEmpty<InMemoryTemporaryStorageState>, execution: &EvmExecution) -> Option<ExecutionConflicts> {
+fn do_check_conflicts(states: &VecDeque<InMemoryTemporaryStorageState>, execution: &EvmExecution) -> Option<ExecutionConflicts> {
     let mut conflicts = ExecutionConflictsBuilder::default();
 
     for (address, change) in &execution.changes {
