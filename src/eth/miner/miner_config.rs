@@ -23,7 +23,7 @@ pub struct MinerConfig {
 }
 
 impl MinerConfig {
-    /// Inits [`Miner`] with the appropriate miner mode based on the node mode.
+    /// Inits [`Miner`] with the appropriate mining mode based on the node mode.
     pub fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
         tracing::info!(config = ?self, "creating block miner");
 
@@ -35,7 +35,7 @@ impl MinerConfig {
         self.init_with_mode(mode, storage)
     }
 
-    /// Inits [`Miner`] with a specific miner mode, regardless of node mode.
+    /// Inits [`Miner`] with a specific mining mode, regardless of node mode.
     pub fn init_with_mode(&self, mode: MinerMode, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
         tracing::info!(config = ?self, mode = ?mode, "creating block miner with specific mode");
 
