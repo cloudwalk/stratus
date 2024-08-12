@@ -164,11 +164,12 @@ impl Importer {
             };
 
             #[cfg(feature = "metrics")]
-            let start = metrics::now();
+            let (start, block_number, block_tx_len) = (metrics::now(), block.number(), block.transactions.len());
 
             // execute and mine
             let receipts = ExternalReceipts::from(receipts);
-            if let Err(e) = executor.execute_external_block(&block, &receipts) {
+            let receipts_len = receipts.len();
+            if let Err(e) = executor.execute_external_block(block, receipts) {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
                 return log_and_err!(reason = e, message);
             };
@@ -177,13 +178,13 @@ impl Importer {
             #[cfg(feature = "metrics")]
             {
                 let duration = start.elapsed();
-                let tps = calculate_tps(duration, block.transactions.len());
+                let tps = calculate_tps(duration, block_tx_len);
 
                 tracing::info!(
                     tps,
-                    duraton = %duration.to_string_ext(),
-                    block_number = %block.number(),
-                    receipts = receipts.len(),
+                    %block_number,
+                    duration = %duration.to_string_ext(),
+                    %receipts_len,
                     "reexecuted external block",
                 );
             }
@@ -195,7 +196,7 @@ impl Importer {
 
             #[cfg(feature = "metrics")]
             {
-                metrics::inc_n_importer_online_transactions_total(receipts.len() as u64);
+                metrics::inc_n_importer_online_transactions_total(receipts_len as u64);
                 metrics::inc_import_online_mined_block(start.elapsed());
             }
         }

@@ -136,34 +136,35 @@ fn execute_block_importer(
         }
 
         // imports block transactions
-        let receipts = ExternalReceipts::from(receipts);
-        let mut transaction_count = 0;
-        let instant_before_execution = Instant::now();
+        let mut receipts = ExternalReceipts::from(receipts);
+        let receipts_len = receipts.len();
+        let mut tx_len = 0;
 
+        let before_blocks_execution = Instant::now();
         for block in blocks.into_iter() {
             if GlobalState::is_shutdown_warn(TASK_NAME) {
                 return Ok(());
             }
 
             // re-execute (and import) block
-            executor.execute_external_block(&block, &receipts)?;
-            transaction_count += block.transactions.len();
+            tx_len += block.transactions.len();
+            receipts = executor.execute_external_block(block, receipts)?;
 
             // mine and save block
             let mined_block = miner.mine_external()?;
             miner.commit(mined_block.clone())?;
         }
+        let block_execution_duration = before_blocks_execution.elapsed();
 
-        let duration = instant_before_execution.elapsed();
-        let (tps, bpm) = calculate_tps_and_bpm(duration, transaction_count, blocks_len);
+        let (tps, bpm) = calculate_tps_and_bpm(block_execution_duration, tx_len, blocks_len);
 
         tracing::info!(
             tps,
             blocks_per_minute = format_args!("{bpm:.2}"),
-            ?duration,
+            ?block_execution_duration,
             %block_start,
             %block_end,
-            receipts = receipts.len(),
+            %receipts_len,
             "reexecuted blocks batch",
         );
     }

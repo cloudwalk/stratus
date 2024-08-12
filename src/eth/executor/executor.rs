@@ -1,4 +1,5 @@
 use std::cmp::max;
+use std::mem;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -225,10 +226,13 @@ impl Executor {
     // -------------------------------------------------------------------------
 
     /// Reexecutes an external block locally and imports it to the temporary storage.
-    pub fn execute_external_block(&self, block: &ExternalBlock, receipts: &ExternalReceipts) -> anyhow::Result<()> {
+    ///
+    /// Returns the remaining receipts that were not consumed by the execution.
+    pub fn execute_external_block(&self, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<ExternalReceipts> {
         // track
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), EvmExecutionMetrics::default());
+
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
         tracing::info!(block_number = %block.number(), "reexecuting external block");
@@ -236,12 +240,13 @@ impl Executor {
         // track pending block
         let block_number = block.number();
         let block_timestamp = block.timestamp();
-        self.storage.set_pending_external_block(block.clone())?;
+        let block_transactions = mem::take(&mut block.transactions);
+        self.storage.set_pending_external_block(block)?;
         self.storage.set_pending_block_number(block_number)?;
 
         // determine how to execute each transaction
-        for tx in &block.transactions {
-            let receipt = receipts.try_get(&tx.hash())?;
+        for tx in block_transactions {
+            let receipt = receipts.try_take(&tx.hash())?;
             self.execute_external_transaction(
                 tx,
                 receipt,
@@ -260,7 +265,7 @@ impl Executor {
             metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
         }
 
-        Ok(())
+        Ok(receipts)
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
@@ -269,15 +274,16 @@ impl Executor {
     /// to facilitate re-execution of parallel transactions that failed
     fn execute_external_transaction(
         &self,
-        tx: &ExternalTransaction,
-        receipt: &ExternalReceipt,
+        tx: ExternalTransaction,
+        receipt: ExternalReceipt,
         block_number: BlockNumber,
         block_timestamp: UnixTime,
         #[cfg(feature = "metrics")] block_metrics: &mut EvmExecutionMetrics,
     ) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
-        let start = metrics::now();
+        let (start, tx_function) = (metrics::now(), codegen::function_sig_for_o11y(&tx.0.input));
+
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash).entered();
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
@@ -288,8 +294,8 @@ impl Executor {
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
-                let evm_input = EvmInput::from_external(tx, receipt, block_number, block_timestamp)?;
-                let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
+                let evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
+                let evm_execution = self.evms.execute(evm_input, EvmRoute::External);
 
                 // handle re-execution result
                 let mut evm_execution = match evm_execution {
@@ -303,10 +309,10 @@ impl Executor {
                 };
 
                 // update execution with receipt
-                evm_execution.execution.apply_receipt(receipt)?;
+                evm_execution.execution.apply_receipt(&receipt)?;
 
                 // ensure it matches receipt before saving
-                if let Err(e) = evm_execution.execution.compare_with_receipt(receipt) {
+                if let Err(e) = evm_execution.execution.compare_with_receipt(&receipt) {
                     let json_tx = to_json_string(&tx);
                     let json_receipt = to_json_string(&receipt);
                     let json_execution_logs = to_json_string(&evm_execution.execution.logs);
@@ -314,18 +320,18 @@ impl Executor {
                     return Err(e);
                 };
 
-                ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_execution)
+                ExternalTransactionExecution::new(tx, receipt, evm_execution)
             }
             //
-            // failed external transaction, re-cretea from receipt without re-executing
+            // failed external transaction, re-create from receipt without re-executing
             false => {
                 let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Pending)?;
-                let execution = EvmExecution::from_failed_external_transaction(sender, receipt, block_timestamp)?;
+                let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
                 let evm_result = EvmExecutionResult {
                     execution,
                     metrics: EvmExecutionMetrics::default(),
                 };
-                ExternalTransactionExecution::new(tx.clone(), receipt.clone(), evm_result)
+                ExternalTransactionExecution::new(tx, receipt, evm_result)
             }
         };
 
@@ -346,11 +352,10 @@ impl Executor {
         {
             *block_metrics += tx_metrics;
 
-            let function = codegen::function_sig_for_o11y(&tx.0.input);
-            metrics::inc_executor_external_transaction(start.elapsed(), function);
-            metrics::inc_executor_external_transaction_account_reads(tx_metrics.account_reads, function);
-            metrics::inc_executor_external_transaction_slot_reads(tx_metrics.slot_reads, function);
-            metrics::inc_executor_external_transaction_gas(tx_gas.as_u64() as usize, function);
+            metrics::inc_executor_external_transaction(start.elapsed(), tx_function);
+            metrics::inc_executor_external_transaction_account_reads(tx_metrics.account_reads, tx_function);
+            metrics::inc_executor_external_transaction_slot_reads(tx_metrics.slot_reads, tx_function);
+            metrics::inc_executor_external_transaction_gas(tx_gas.as_u64() as usize, tx_function);
         }
 
         Ok(())
