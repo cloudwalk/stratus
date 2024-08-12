@@ -23,10 +23,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let storage = config.storage.init()?;
 
     // Init miner
-    let miner = match GlobalState::get_node_mode() {
-        NodeMode::Follower => config.miner.init_external_mode(Arc::clone(&storage))?,
-        NodeMode::Leader => config.miner.init(Arc::clone(&storage))?,
-    };
+    let miner = config.miner.init(Arc::clone(&storage))?;
 
     // Init executor
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
