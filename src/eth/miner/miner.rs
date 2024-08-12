@@ -2,6 +2,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use itertools::Itertools;
 use keccak_hasher::KeccakHasher;
 use nonempty::NonEmpty;
 use tokio::sync::broadcast;
@@ -244,29 +245,42 @@ impl Miner {
 
     /// Persists a mined block to permanent storage and prepares new block.
     pub fn commit(&self, block: Block) -> anyhow::Result<()> {
+        let block_number = block.number();
+
         // track
         #[cfg(feature = "tracing")]
-        let _span = info_span!("miner::commit", block_number = %block.number()).entered();
-        tracing::info!(block_number = %block.number(), transactions_len = %block.transactions.len(), "commiting block");
+        let _span = info_span!("miner::commit", %block_number).entered();
+        tracing::info!(%block_number, transactions_len = %block.transactions.len(), "commiting block");
 
         // lock
         let _commit_lock = self.locks.commit.lock().unwrap();
-        tracing::info!(block_number = %block.number(), "miner acquired commit lock");
+        tracing::info!(%block_number, "miner acquired commit lock");
 
-        // extract fields to use in notifications
-        let block_number = block.number();
-        let block_header = block.header.clone();
-        let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
+        // extract fields to use in notifications if have subscribers
+        let block_header = if self.notifier_blocks.receiver_count() > 0 {
+            Some(block.header.clone())
+        } else {
+            None
+        };
+        let block_logs = if self.notifier_logs.receiver_count() > 0 {
+            Some(block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec())
+        } else {
+            None
+        };
 
         // save storage
         self.storage.save_block(block)?;
         self.storage.set_mined_block_number(block_number)?;
 
         // notify
-        for log in block_logs {
-            let _ = self.notifier_logs.send(log);
+        if let Some(block_logs) = block_logs {
+            for log in block_logs {
+                let _ = self.notifier_logs.send(log);
+            }
         }
-        let _ = self.notifier_blocks.send(block_header);
+        if let Some(block_header) = block_header {
+            let _ = self.notifier_blocks.send(block_header);
+        }
 
         Ok(())
     }
