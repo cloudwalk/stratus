@@ -108,7 +108,6 @@ impl Miner {
         };
 
         // save execution to temporary storage
-        let tx_hash = tx_execution.hash();
         self.storage.save_execution(tx_execution, check_conflicts)?;
 
         // notify
