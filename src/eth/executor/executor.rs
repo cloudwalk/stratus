@@ -334,7 +334,7 @@ impl Executor {
 
         // persist state
         let tx_execution = TransactionExecution::External(tx_execution);
-        self.miner.save_execution(tx_execution)?;
+        self.miner.save_execution(tx_execution, false)?;
 
         // track metrics
         #[cfg(feature = "metrics")]
@@ -497,7 +497,7 @@ impl Executor {
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
             let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-            match self.miner.save_execution(tx_execution.clone()) {
+            match self.miner.save_execution(tx_execution.clone(), true) {
                 Ok(_) => {
                     return Ok(tx_execution);
                 }
