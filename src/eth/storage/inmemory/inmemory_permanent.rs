@@ -17,7 +17,6 @@ use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
-use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -64,41 +63,6 @@ impl InMemoryPermanentStorage {
     /// Locks inner state for writing.
     fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryPermanentStorageState> {
         self.state.write().unwrap()
-    }
-
-    // -------------------------------------------------------------------------
-    // Snapshot methods
-    // -------------------------------------------------------------------------
-
-    /// Dump a snapshot of an execution previous state that can be used in tests.
-    pub fn dump_snapshot(changes: Vec<ExecutionAccountChanges>) -> InMemoryPermanentStorageState {
-        let mut state = InMemoryPermanentStorageState::default();
-        for change in changes {
-            // save account
-            let mut account = InMemoryPermanentAccount::new_empty(change.address);
-            account.balance = InMemoryHistory::new_at_zero(change.balance.take_original().unwrap_or_default());
-            account.nonce = InMemoryHistory::new_at_zero(change.nonce.take_original().unwrap_or_default());
-            account.bytecode = InMemoryHistory::new_at_zero(change.bytecode.take_original().unwrap_or_default());
-
-            // save slots
-            for (index, slot) in change.slots {
-                let slot = slot.take_original().unwrap_or_default();
-                let slot_history = InMemoryHistory::new_at_zero(slot);
-                account.slots.insert(index, slot_history);
-            }
-
-            state.accounts.insert(change.address, account);
-        }
-        state
-    }
-
-    /// Creates a new InMemoryPermanentStorage from a snapshot dump.
-    pub fn from_snapshot(state: InMemoryPermanentStorageState) -> Self {
-        tracing::info!("creating inmemory permanent storage from snapshot");
-        Self {
-            state: RwLock::new(state),
-            block_number: AtomicU64::new(0),
-        }
     }
 
     // -------------------------------------------------------------------------

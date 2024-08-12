@@ -276,10 +276,6 @@ pub struct ImporterOfflineConfig {
     #[arg(short = 'b', long = "blocks-by-fetch", env = "BLOCKS_BY_FETCH", default_value = "10000")]
     pub blocks_by_fetch: usize,
 
-    /// Export selected blocks to fixtures snapshots to be used in tests.
-    #[arg(long = "export-snapshot", env = "EXPORT_SNAPSHOT", value_delimiter = ',')]
-    pub export_snapshot: Vec<u64>,
-
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 

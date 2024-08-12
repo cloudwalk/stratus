@@ -9,27 +9,22 @@
 //! arrive.
 
 use std::cmp::min;
-use std::fs;
 use std::sync::Arc;
 
 use anyhow::anyhow;
 use futures::try_join;
 use futures::StreamExt;
-use itertools::Itertools;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
 use stratus::eth::miner::Miner;
 use stratus::eth::miner::MinerMode;
-use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalBlock;
 use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::storage::ExternalRpcStorage;
-use stratus::eth::storage::InMemoryPermanentStorage;
 use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
-use stratus::ext::to_json_string_pretty;
 use stratus::log_and_err;
 use stratus::utils::calculate_tps_and_bpm;
 use stratus::utils::DropTimer;
@@ -57,9 +52,6 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let miner = config.miner.init_with_mode(MinerMode::External, Arc::clone(&storage))?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
-    // init block snapshots to export
-    let block_snapshots = config.export_snapshot.into_iter().map_into().collect();
-
     // init block range
     let block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),
@@ -85,7 +77,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     });
 
     let block_importer = spawn_thread("block-importer", || {
-        if let Err(e) = execute_block_importer(executor, miner, backlog_rx, block_snapshots) {
+        if let Err(e) = execute_block_importer(executor, miner, backlog_rx) {
             tracing::error!(reason = ?e, "'block-importer' task failed");
         }
     });
@@ -109,7 +101,6 @@ fn execute_block_importer(
     miner: Arc<Miner>,
     // data
     mut backlog_rx: mpsc::Receiver<BacklogTask>,
-    blocks_to_export_snapshot: Vec<BlockNumber>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-executor";
     let _timer = DropTimer::start("importer-offline::execute_block_importer");
@@ -160,9 +151,6 @@ fn execute_block_importer(
 
             // mine and save block
             let mined_block = miner.mine_external()?;
-            if blocks_to_export_snapshot.contains(&mined_block.number()) {
-                export_snapshot(&block, &receipts, &mined_block)?;
-            }
             miner.commit(mined_block.clone())?;
         }
 
@@ -258,24 +246,4 @@ async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpcStorage>) -> anyh
         Ok(None) => Ok(BlockNumber::ZERO),
         Err(e) => Err(e),
     }
-}
-
-// -----------------------------------------------------------------------------
-// Snapshot exporter
-// -----------------------------------------------------------------------------
-fn export_snapshot(external_block: &ExternalBlock, external_receipts: &ExternalReceipts, mined_block: &Block) -> anyhow::Result<()> {
-    // generate snapshot
-    let state_snapshot = InMemoryPermanentStorage::dump_snapshot(mined_block.compact_account_changes());
-    let receipts_snapshot = external_receipts.filter_block(external_block.number());
-
-    // create dir
-    let dir = format!("tests/fixtures/snapshots/{}/", mined_block.number());
-    fs::create_dir_all(&dir)?;
-
-    // write json
-    fs::write(format!("{}/block.json", dir), to_json_string_pretty(external_block))?;
-    fs::write(format!("{}/receipts.json", dir), to_json_string_pretty(&receipts_snapshot))?;
-    fs::write(format!("{}/snapshot.json", dir), to_json_string_pretty(&state_snapshot))?;
-
-    Ok(())
 }
