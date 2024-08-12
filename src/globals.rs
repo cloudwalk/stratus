@@ -8,6 +8,7 @@ use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
 
 use crate::config;
+use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
 use crate::ext::spawn_signal_handler;
 use crate::infra::tracing::warn_task_cancellation;
@@ -186,6 +187,12 @@ impl GlobalState {
     // -------------------------------------------------------------------------
     // Node Mode
     // -------------------------------------------------------------------------
+
+    /// Initializes the node mode based on the StratusConfig.
+    pub fn initialize_node_mode(config: &StratusConfig) {
+        let mode = if config.follower { NodeMode::Follower } else { NodeMode::Leader };
+        Self::set_node_mode(mode);
+    }
 
     /// Sets the current node mode.
     pub fn set_node_mode(mode: NodeMode) {

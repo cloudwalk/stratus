@@ -4,15 +4,10 @@ use stratus::config::StratusConfig;
 use stratus::eth::rpc::serve_rpc;
 use stratus::GlobalServices;
 use stratus::GlobalState;
-use stratus::NodeMode;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<StratusConfig>::init();
-    GlobalState::set_node_mode(if global_services.config.follower {
-        NodeMode::Follower
-    } else {
-        NodeMode::Leader
-    });
+    GlobalState::initialize_node_mode(&global_services.config);
     global_services.runtime.block_on(run(global_services.config))
 }
 
