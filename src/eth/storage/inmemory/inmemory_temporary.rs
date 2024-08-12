@@ -148,9 +148,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // save account changes
+        let head = head_mut(&mut states);
         let changes = tx.execution().changes.values();
         for change in changes {
-            let head = head_mut(&mut states);
             let account = head
                 .accounts
                 .entry(change.address)
