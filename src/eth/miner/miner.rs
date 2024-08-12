@@ -42,7 +42,7 @@ pub struct Miner {
     pub notifier_pending_txs: broadcast::Sender<Hash>,
 
     /// Broadcasts new mined blocks events.
-    pub notifier_blocks: broadcast::Sender<Block>,
+    pub notifier_blocks: broadcast::Sender<BlockHeader>,
 
     /// Broadcasts transaction logs events.
     pub notifier_logs: broadcast::Sender<LogMined>,
@@ -255,16 +255,18 @@ impl Miner {
 
         // extract fields to use in notifications
         let block_number = block.number();
+        let block_header = block.header.clone();
         let block_logs: Vec<LogMined> = block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect();
 
-        self.storage.save_block(block.clone())?;
+        // save storage
+        self.storage.save_block(block)?;
         self.storage.set_mined_block_number(block_number)?;
 
         // notify
         for log in block_logs {
             let _ = self.notifier_logs.send(log);
         }
-        let _ = self.notifier_blocks.send(block);
+        let _ = self.notifier_blocks.send(block_header);
 
         Ok(())
     }
