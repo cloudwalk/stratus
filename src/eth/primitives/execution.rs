@@ -10,7 +10,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionResult;
-use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
@@ -51,7 +50,7 @@ pub struct EvmExecution {
 
 impl EvmExecution {
     /// Creates an execution from an external transaction that failed.
-    pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
+    pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt, block_timestamp: UnixTime) -> anyhow::Result<Self> {
         if receipt.is_success() {
             return log_and_err!("cannot create failed execution for successful transaction");
         }
@@ -66,7 +65,7 @@ impl EvmExecution {
 
         // crete execution and apply costs
         let mut execution = Self {
-            block_timestamp: block.timestamp(),
+            block_timestamp,
             receipt_applied: false,
             result: ExecutionResult::new_reverted(), // assume it reverted
             output: Bytes::default(),                // we cannot really know without performing an eth_call to the external system
