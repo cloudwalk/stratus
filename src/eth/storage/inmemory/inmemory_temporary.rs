@@ -111,11 +111,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         let mut states = self.lock_write();
-        match head_mut(&mut states).block.as_mut() {
+        let head = head_mut(&mut states);
+
+        match head.block.as_mut() {
             Some(block) => block.number = number,
-            None => {
-                head_mut(&mut states).block = Some(PendingBlock::new(number));
-            }
+            None => head.block = Some(PendingBlock::new(number)),
         }
         Ok(())
     }
