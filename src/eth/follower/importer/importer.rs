@@ -189,7 +189,7 @@ impl Importer {
                 );
             }
 
-            if let Err(e) = miner.mine_external_mixed_and_commit() {
+            if let Err(e) = miner.mine_external_and_commit() {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
                 return log_and_err!(reason = e, message);
             };

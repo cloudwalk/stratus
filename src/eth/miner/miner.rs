@@ -162,50 +162,6 @@ impl Miner {
         block
     }
 
-    /// Same as [`Self::mine_external_mixed`], but automatically commits the block instead of returning it.
-    pub fn mine_external_mixed_and_commit(&self) -> anyhow::Result<()> {
-        let _mine_and_commit_lock = self.locks.mine_and_commit.lock().unwrap();
-
-        let block = self.mine_external_mixed()?;
-        self.commit(block)
-    }
-
-    /// Mines external block and external transactions.
-    ///
-    /// Local transactions are allowed to be part of the block if failed, but not succesful ones.
-    #[tracing::instrument(name = "miner::mine_external_mixed", skip_all, fields(block_number))]
-    pub fn mine_external_mixed(&self) -> anyhow::Result<Block> {
-        tracing::debug!("mining external mixed block");
-
-        // lock
-        let _mine_lock = self.locks.mine.lock().unwrap();
-
-        // mine
-        let block = self.storage.finish_pending_block()?;
-        let (local_txs, external_txs) = block.split_transactions();
-
-        // validate
-        let Some(external_block) = block.external_block else {
-            return log_and_err!("failed to mine external mixed block because there is no external block being reexecuted");
-        };
-
-        // mine external transactions
-        let mined_txs = mine_external_transactions(block.number, external_txs)?;
-        let mut block = block_from_external(external_block, mined_txs)?;
-
-        // mine local transactions
-        for tx in local_txs {
-            if tx.is_success() {
-                return log_and_err!("failed to mine mixed block because one of the local execution is a success");
-            }
-            block.push_execution(tx.input, tx.result);
-        }
-
-        Span::with(|s| s.rec_str("block_number", &block.number()));
-
-        Ok(block)
-    }
-
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
     /// mainly used when is_automine is enabled.
     pub fn mine_local_and_commit(&self) -> anyhow::Result<()> {
