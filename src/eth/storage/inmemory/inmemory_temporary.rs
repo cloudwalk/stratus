@@ -178,7 +178,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // save execution
-        head_mut(&mut states).require_pending_block_mut()?.push_transaction(tx);
+        head.require_pending_block_mut()?.push_transaction(tx);
 
         Ok(())
     }
