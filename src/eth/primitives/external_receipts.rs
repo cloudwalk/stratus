@@ -19,8 +19,8 @@ impl ExternalReceipts {
     }
 
     /// Tries to take a receipt by its hash.
-    pub fn try_get(&self, tx_hash: &Hash) -> anyhow::Result<&ExternalReceipt> {
-        match self.get(tx_hash) {
+    pub fn try_take(&mut self, tx_hash: &Hash) -> anyhow::Result<ExternalReceipt> {
+        match self.take(tx_hash) {
             Some(receipt) => Ok(receipt),
             None => {
                 tracing::error!(%tx_hash, "receipt is missing for hash");
@@ -30,8 +30,8 @@ impl ExternalReceipts {
     }
 
     /// Takes a receipt by its hash.
-    pub fn get(&self, hash: &Hash) -> Option<&ExternalReceipt> {
-        self.0.get(hash)
+    pub fn take(&mut self, hash: &Hash) -> Option<ExternalReceipt> {
+        self.0.remove(hash)
     }
 
     /// Returns the number of receipts.
