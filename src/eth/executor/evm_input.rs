@@ -6,7 +6,6 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
-use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
@@ -132,7 +131,7 @@ impl EvmInput {
     /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
     ///
     /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
-    pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block: &ExternalBlock) -> anyhow::Result<Self> {
+    pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block_number: BlockNumber, block_timestamp: UnixTime) -> anyhow::Result<Self> {
         Ok(Self {
             from: tx.0.from.into(),
             to: tx.0.to.map_into(),
@@ -142,8 +141,8 @@ impl EvmInput {
             gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.0.gas.try_into()?),
             gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.0.gas_price.map_into().unwrap_or(Wei::ZERO)),
             point_in_time: StoragePointInTime::Pending,
-            block_number: block.number(),
-            block_timestamp: block.timestamp(),
+            block_number,
+            block_timestamp,
             chain_id: match tx.0.chain_id {
                 Some(chain_id) => Some(chain_id.try_into()?),
                 None => None,

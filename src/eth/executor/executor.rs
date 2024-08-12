@@ -16,6 +16,7 @@ use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockFilter;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
@@ -27,6 +28,7 @@ use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::UnixTime;
 use crate::eth::storage::StoragePointInTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
@@ -231,10 +233,11 @@ impl Executor {
         let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
         tracing::info!(block_number = %block.number(), "reexecuting external block");
 
-        // track pending block number
-        let storage = &self.storage;
-        storage.set_pending_external_block(block.clone())?;
-        storage.set_pending_block_number(block.number())?;
+        // track pending block
+        let block_number = block.number();
+        let block_timestamp = block.timestamp();
+        self.storage.set_pending_external_block(block.clone())?;
+        self.storage.set_pending_block_number(block_number)?;
 
         // determine how to execute each transaction
         for tx in &block.transactions {
@@ -242,7 +245,8 @@ impl Executor {
             self.execute_external_transaction(
                 tx,
                 receipt,
-                block,
+                block_number,
+                block_timestamp,
                 #[cfg(feature = "metrics")]
                 &mut block_metrics,
             )?;
@@ -267,7 +271,8 @@ impl Executor {
         &self,
         tx: &ExternalTransaction,
         receipt: &ExternalReceipt,
-        block: &ExternalBlock,
+        block_number: BlockNumber,
+        block_timestamp: UnixTime,
         #[cfg(feature = "metrics")] block_metrics: &mut EvmExecutionMetrics,
     ) -> anyhow::Result<()> {
         // track
@@ -275,7 +280,7 @@ impl Executor {
         let start = metrics::now();
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash).entered();
-        tracing::info!(block_number = %block.number(), tx_hash = %tx.hash(), "reexecuting external transaction");
+        tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
@@ -283,7 +288,7 @@ impl Executor {
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
-                let evm_input = EvmInput::from_external(tx, receipt, block)?;
+                let evm_input = EvmInput::from_external(tx, receipt, block_number, block_timestamp)?;
                 let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
 
                 // handle re-execution result
@@ -292,7 +297,7 @@ impl Executor {
                     Err(e) => {
                         let json_tx = to_json_string(&tx);
                         let json_receipt = to_json_string(&receipt);
-                        tracing::error!(reason = ?e, block_number = %block.number(), tx_hash = %tx.hash(), %json_tx, %json_receipt, "failed to reexecute external transaction");
+                        tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, "failed to reexecute external transaction");
                         return Err(e.into());
                     }
                 };
@@ -305,7 +310,7 @@ impl Executor {
                     let json_tx = to_json_string(&tx);
                     let json_receipt = to_json_string(&receipt);
                     let json_execution_logs = to_json_string(&evm_execution.execution.logs);
-                    tracing::error!(reason = %"mismatch reexecuting transaction", block_number = %block.number(), tx_hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
+                    tracing::error!(reason = %"mismatch reexecuting transaction", %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
                     return Err(e);
                 };
 
@@ -315,7 +320,7 @@ impl Executor {
             // failed external transaction, re-cretea from receipt without re-executing
             false => {
                 let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Pending)?;
-                let execution = EvmExecution::from_failed_external_transaction(sender, receipt, block)?;
+                let execution = EvmExecution::from_failed_external_transaction(sender, receipt, block_timestamp)?;
                 let evm_result = EvmExecutionResult {
                     execution,
                     metrics: EvmExecutionMetrics::default(),
