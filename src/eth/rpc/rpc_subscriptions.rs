@@ -15,7 +15,7 @@ use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio::time::Duration;
 
-use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::DateTimeNow;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
@@ -59,7 +59,7 @@ pub struct RpcSubscriptions {
 
 impl RpcSubscriptions {
     /// Creates a new subscription manager that automatically spawns all necessary tasks in background.
-    pub fn spawn(rx_pending_txs: broadcast::Receiver<Hash>, rx_blocks: broadcast::Receiver<Block>, rx_logs: broadcast::Receiver<LogMined>) -> Self {
+    pub fn spawn(rx_pending_txs: broadcast::Receiver<Hash>, rx_blocks: broadcast::Receiver<BlockHeader>, rx_logs: broadcast::Receiver<LogMined>) -> Self {
         let connected = Arc::new(RpcSubscriptionsConnected::default());
 
         Self::spawn_subscriptions_cleaner(Arc::clone(&connected));
@@ -166,7 +166,7 @@ impl RpcSubscriptions {
     }
 
     /// Spawns a new task that notifies subscribers about new created blocks.
-    fn spawn_new_heads_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_block: broadcast::Receiver<Block>) -> JoinHandle<anyhow::Result<()>> {
+    fn spawn_new_heads_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_block: broadcast::Receiver<BlockHeader>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::newHeads";
         spawn_named(TASK_NAME, async move {
             loop {
@@ -174,7 +174,7 @@ impl RpcSubscriptions {
                     return Ok(());
                 }
 
-                let block = match timeout(NOTIFIER_SHUTDOWN_CHECK_INTERVAL, rx_block.recv()).await {
+                let block_header = match timeout(NOTIFIER_SHUTDOWN_CHECK_INTERVAL, rx_block.recv()).await {
                     Ok(Ok(block)) => block,
                     Ok(Err(_channel_closed)) => break,
                     Err(_timed_out) => continue,
@@ -182,7 +182,7 @@ impl RpcSubscriptions {
 
                 let interested_subs = subs.new_heads.read().await;
                 let interested_subs = interested_subs.values().collect_vec();
-                Self::notify(interested_subs, block.header);
+                Self::notify(interested_subs, block_header);
             }
             warn_task_rx_closed(TASK_NAME);
             Ok(())
