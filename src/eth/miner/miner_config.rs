@@ -8,6 +8,8 @@ use display_json::DebugAsJson;
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
 use crate::ext::parse_duration;
+use crate::GlobalState;
+use crate::NodeMode;
 
 // -----------------------------------------------------------------------------
 // Config
@@ -21,18 +23,21 @@ pub struct MinerConfig {
 }
 
 impl MinerConfig {
-    /// Inits [`BlockMiner`] with external mining mode, ignoring the configured value.
-    pub fn init_external_mode(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
-        self.init_with_mode(MinerMode::External, storage)
-    }
-
-    /// Inits [`BlockMiner`] with the configured mining mode.
+    /// Inits [`Miner`] with the appropriate mining mode based on the node mode.
     pub fn init(&self, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
-        self.init_with_mode(self.block_mode, storage)
+        tracing::info!(config = ?self, "creating block miner");
+
+        let mode = match GlobalState::get_node_mode() {
+            NodeMode::Follower => MinerMode::External,
+            NodeMode::Leader => self.block_mode,
+        };
+
+        self.init_with_mode(mode, storage)
     }
 
-    fn init_with_mode(&self, mode: MinerMode, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
-        tracing::info!(config = ?self, "creating block miner");
+    /// Inits [`Miner`] with a specific mining mode, regardless of node mode.
+    pub fn init_with_mode(&self, mode: MinerMode, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
+        tracing::info!(config = ?self, mode = ?mode, "creating block miner with specific mode");
 
         // create miner
         let miner = Miner::new(Arc::clone(&storage), mode);

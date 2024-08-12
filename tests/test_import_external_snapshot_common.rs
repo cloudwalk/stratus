@@ -9,6 +9,7 @@ use fancy_duration::AsFancyDuration;
 use itertools::Itertools;
 use stratus::alias::JsonValue;
 use stratus::config::IntegrationTestConfig;
+use stratus::eth::miner::MinerMode;
 use stratus::eth::primitives::Account;
 use stratus::eth::primitives::Address;
 use stratus::eth::primitives::ExternalBlock;
@@ -151,7 +152,7 @@ pub async fn execute_test(
 
     // init services
     let storage = Arc::new(StratusStorage::new(Box::<InMemoryTemporaryStorage>::default(), Box::new(perm_storage)));
-    let miner = config.miner.init_external_mode(Arc::clone(&storage)).unwrap();
+    let miner = config.miner.init_with_mode(MinerMode::External, Arc::clone(&storage)).unwrap();
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // execute and mine
