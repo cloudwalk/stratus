@@ -8,3 +8,4 @@ pub mod utils;
 
 pub use globals::GlobalServices;
 pub use globals::GlobalState;
+pub use globals::NodeMode;

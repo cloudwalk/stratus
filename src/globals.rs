@@ -71,6 +71,16 @@ where
 }
 
 // -----------------------------------------------------------------------------
+// Node mode
+// -----------------------------------------------------------------------------
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NodeMode {
+    Leader,
+    Follower,
+}
+
+// -----------------------------------------------------------------------------
 // Global state
 // -----------------------------------------------------------------------------
 
@@ -85,6 +95,9 @@ static MINER_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Unknown clients can interact with the application?
 static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Current node mode.
+static IS_LEADER: AtomicBool = AtomicBool::new(false);
 
 pub struct GlobalState;
 
@@ -167,5 +180,33 @@ impl GlobalState {
     /// Checks if the unknown client is enabled.
     pub fn is_unknown_client_enabled() -> bool {
         UNKNOWN_CLIENT_ENABLED.load(Ordering::Relaxed)
+    }
+
+    // -------------------------------------------------------------------------
+    // Node Mode
+    // -------------------------------------------------------------------------
+
+    /// Sets the current node mode.
+    pub fn set_node_mode(mode: NodeMode) {
+        IS_LEADER.store(matches!(mode, NodeMode::Leader), Ordering::Relaxed);
+    }
+
+    /// Gets the current node mode.
+    pub fn get_node_mode() -> NodeMode {
+        if IS_LEADER.load(Ordering::Relaxed) {
+            NodeMode::Leader
+        } else {
+            NodeMode::Follower
+        }
+    }
+
+    /// Checks if the node is in follower mode.
+    pub fn is_follower() -> bool {
+        !IS_LEADER.load(Ordering::Relaxed)
+    }
+
+    /// Checks if the node is in leader mode.
+    pub fn is_leader() -> bool {
+        IS_LEADER.load(Ordering::Relaxed)
     }
 }
