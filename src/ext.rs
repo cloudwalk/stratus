@@ -37,7 +37,7 @@ pub fn not(value: bool) -> bool {
 /// Extracts only the basename of a Rust type instead of the full qualification.
 pub fn type_basename<T>() -> &'static str {
     let name: &'static str = std::any::type_name::<T>();
-    name.split("::").last().unwrap()
+    name.rsplit("::").next().unwrap_or(name)
 }
 
 // -----------------------------------------------------------------------------
@@ -288,6 +288,17 @@ pub fn to_json_string_pretty<V: serde::Serialize>(value: &V) -> String {
 /// Serializes any serializable value to [`serde_json::Value`] without having to check for errors.
 pub fn to_json_value<V: serde::Serialize>(value: V) -> serde_json::Value {
     serde_json::to_value(value).expect_infallible()
+}
+
+/// Serializes any serializable value to [`serde_json::Map`] without having to check for errors.
+pub fn to_json_object<V: serde::Serialize>(value: V) -> serde_json::Map<String, serde_json::Value> {
+    match serde_json::to_value(value).expect_infallible() {
+        serde_json::Value::Object(map) => map,
+        _ => unreachable!(
+            "to_json_object called with type {} which didn't serialize to a JSON object",
+            type_basename::<V>(),
+        ),
+    }
 }
 
 /// Deserializes any deserializable value from [`&str`] without having to check for errors.

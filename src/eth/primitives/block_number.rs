@@ -59,7 +59,7 @@ impl BlockNumber {
     }
 
     /// Returns the next block number.
-    pub fn next(&self) -> Self {
+    pub fn next_block_number(&self) -> Self {
         Self(self.0 + 1)
     }
 

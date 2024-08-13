@@ -33,7 +33,7 @@ use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcClientApp;
 use crate::event_with;
 use crate::ext::from_json_str;
-use crate::ext::to_json_value;
+use crate::ext::to_json_string;
 #[cfg(feature = "metrics")]
 use crate::if_else;
 use crate::infra::metrics;
@@ -103,7 +103,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             rpc_client = %client,
             rpc_id = %request.id,
             rpc_method = %method,
-            rpc_params = %to_json_value(&request.params),
+            rpc_params = %to_json_string(&request.params),
             rpc_tx_hash = %tx.as_ref().and_then(|tx|tx.hash).or_empty(),
             rpc_tx_contract = %tx.as_ref().map(|tx|tx.contract).or_empty(),
             rpc_tx_function = %tx.as_ref().map(|tx|tx.function).or_empty(),

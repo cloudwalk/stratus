@@ -93,9 +93,11 @@ impl From<LogMined> for EthersLog {
     }
 }
 
-impl From<LogMined> for SubscriptionMessage {
-    fn from(value: LogMined) -> Self {
+impl TryFrom<LogMined> for SubscriptionMessage {
+    type Error = serde_json::Error;
+
+    fn try_from(value: LogMined) -> Result<Self, Self::Error> {
         let ethers_log = Into::<EthersLog>::into(value);
-        Self::from_json(&ethers_log).unwrap()
+        Self::from_json(&ethers_log)
     }
 }

@@ -115,7 +115,7 @@ impl StratusStorage {
         match mined_block {
             Some(_) => {
                 tracing::info!(block_number = %mined_number, reason = %"set in storage and block exist", "resume from MINED + 1");
-                Ok(mined_number.next())
+                Ok(mined_number.next_block_number())
             }
             None => {
                 tracing::info!(block_number = %mined_number, reason = %"set in storage but block does not exist", "resume from MINED");
@@ -174,7 +174,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::set_pending_block_number_as_next").entered();
 
         let last_mined_block = self.read_mined_block_number()?;
-        self.set_pending_block_number(last_mined_block.next())?;
+        self.set_pending_block_number(last_mined_block.next_block_number())?;
         Ok(())
     }
 
@@ -374,7 +374,7 @@ impl StratusStorage {
 
         // check mined number
         let mined_number = self.read_mined_block_number()?;
-        if not(block_number.is_zero()) && block_number != mined_number.next() {
+        if not(block_number.is_zero()) && block_number != mined_number.next_block_number() {
             tracing::error!(%block_number, %mined_number, "failed to save block because mismatch with mined block number");
             return Err(StratusError::StorageMinedNumberConflict {
                 new: block_number,

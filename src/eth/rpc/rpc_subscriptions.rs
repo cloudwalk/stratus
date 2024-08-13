@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -222,12 +223,23 @@ impl RpcSubscriptions {
     // Helpers
     // -------------------------------------------------------------------------
 
-    fn notify(subs: Vec<&Subscription>, msg: impl Into<SubscriptionMessage>) {
+    fn notify<T>(subs: Vec<&Subscription>, msg: T)
+    where
+        T: TryInto<SubscriptionMessage>,
+        T::Error: fmt::Debug,
+    {
         if subs.is_empty() {
             return;
         }
 
-        let msg = msg.into();
+        let msg = match msg.try_into() {
+            Ok(msg) => msg,
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to convert message into subscription message");
+                return;
+            }
+        };
+
         for sub in subs {
             if not(sub.is_active()) {
                 continue;
