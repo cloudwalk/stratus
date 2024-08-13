@@ -101,6 +101,10 @@ static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 /// Current node mode.
 static IS_LEADER: AtomicBool = AtomicBool::new(false);
 
+/// Constants for node modes.
+pub const LEADER_MODE: &str = "leader";
+pub const FOLLOWER_MODE: &str = "follower";
+
 pub struct GlobalState;
 
 impl GlobalState {
