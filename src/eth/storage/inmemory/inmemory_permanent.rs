@@ -187,12 +187,9 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
         // save transactions
         for transaction in block.transactions.clone() {
-            state.transactions.insert(transaction.input.hash, transaction.clone());
-            if transaction.is_success() {
-                for log in transaction.logs {
-                    state.logs.push(log);
-                }
-            }
+            let tx_logs = transaction.logs.clone();
+            state.transactions.insert(transaction.input.hash, transaction);
+            state.logs.extend(tx_logs);
         }
 
         // save block account changes
