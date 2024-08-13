@@ -76,7 +76,7 @@ where
 // -----------------------------------------------------------------------------
 
 #[repr(u8)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display, strum::EnumString)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display)]
 pub enum NodeMode {
     #[strum(to_string = "leader")]
     Leader,
