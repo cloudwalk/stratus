@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::anyhow;
-use itertools::Itertools;
 
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 
@@ -12,26 +10,15 @@ use crate::eth::primitives::Hash;
 pub struct ExternalReceipts(HashMap<Hash, ExternalReceipt>);
 
 impl ExternalReceipts {
-    /// Generates a new collection of receipts only with receipts of the specified block number.
-    pub fn filter_block(&self, number: BlockNumber) -> ExternalReceipts {
-        let receipts = self.0.values().filter(|receipt| receipt.block_number() == number).cloned().collect_vec();
-        ExternalReceipts::from(receipts)
-    }
-
-    /// Tries to take a receipt by its hash.
-    pub fn try_take(&mut self, tx_hash: &Hash) -> anyhow::Result<ExternalReceipt> {
-        match self.take(tx_hash) {
+    /// Tries to remove a receipt by its hash.
+    pub fn try_remove(&mut self, tx_hash: &Hash) -> anyhow::Result<ExternalReceipt> {
+        match self.0.remove(tx_hash) {
             Some(receipt) => Ok(receipt),
             None => {
                 tracing::error!(%tx_hash, "receipt is missing for hash");
                 Err(anyhow!("receipt missing for hash {}", tx_hash))
             }
         }
-    }
-
-    /// Takes a receipt by its hash.
-    pub fn take(&mut self, hash: &Hash) -> Option<ExternalReceipt> {
-        self.0.remove(hash)
     }
 
     /// Returns the number of receipts.

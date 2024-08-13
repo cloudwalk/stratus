@@ -126,11 +126,11 @@ fn execute_block_importer(
         // track operation
         let block_start = block_start.number();
         let block_end = block_end.number();
-        let blocks_len = blocks.len();
+        let batch_blocks_len = blocks.len();
         tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "reexecuting blocks");
 
         // ensure block range have no gaps
-        if block_start.count_to(&block_end) != blocks_len as u64 {
+        if block_start.count_to(&block_end) != batch_blocks_len as u64 {
             let message = GlobalState::shutdown_from(TASK_NAME, "received block range with gaps to reexecute");
             return log_and_err!(message);
         }
@@ -138,30 +138,29 @@ fn execute_block_importer(
         // imports block transactions
         let mut receipts = ExternalReceipts::from(receipts);
         let receipts_len = receipts.len();
-        let mut tx_len = 0;
+        let mut batch_tx_len = 0;
 
-        let before_blocks_execution = Instant::now();
+        let before_block = Instant::now();
         for block in blocks.into_iter() {
             if GlobalState::is_shutdown_warn(TASK_NAME) {
                 return Ok(());
             }
 
             // re-execute (and import) block
-            tx_len += block.transactions.len();
-            receipts = executor.execute_external_block(block, receipts)?;
+            batch_tx_len += block.transactions.len();
+            executor.execute_external_block(block, &mut receipts)?;
 
             // mine and save block
-            let mined_block = miner.mine_external()?;
-            miner.commit(mined_block.clone())?;
+            miner.mine_external_and_commit()?;
         }
-        let block_execution_duration = before_blocks_execution.elapsed();
+        let batch_duration = before_block.elapsed();
 
-        let (tps, bpm) = calculate_tps_and_bpm(block_execution_duration, tx_len, blocks_len);
+        let (tps, bpm) = calculate_tps_and_bpm(batch_duration, batch_tx_len, batch_blocks_len);
 
         tracing::info!(
             tps,
             blocks_per_minute = format_args!("{bpm:.2}"),
-            ?block_execution_duration,
+            ?batch_duration,
             %block_start,
             %block_end,
             %receipts_len,

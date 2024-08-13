@@ -228,7 +228,7 @@ impl Executor {
     /// Reexecutes an external block locally and imports it to the temporary storage.
     ///
     /// Returns the remaining receipts that were not consumed by the execution.
-    pub fn execute_external_block(&self, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<ExternalReceipts> {
+    pub fn execute_external_block(&self, mut block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), EvmExecutionMetrics::default());
@@ -246,7 +246,7 @@ impl Executor {
 
         // determine how to execute each transaction
         for tx in block_transactions {
-            let receipt = receipts.try_take(&tx.hash())?;
+            let receipt = receipts.try_remove(&tx.hash())?;
             self.execute_external_transaction(
                 tx,
                 receipt,
@@ -265,7 +265,7 @@ impl Executor {
             metrics::inc_executor_external_block_slot_reads(block_metrics.slot_reads);
         }
 
-        Ok(receipts)
+        Ok(())
     }
 
     /// Reexecutes an external transaction locally ensuring it produces the same output.
