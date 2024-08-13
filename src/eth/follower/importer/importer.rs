@@ -347,7 +347,7 @@ impl Importer {
             while blocks_to_fetch > 0 {
                 blocks_to_fetch -= 1;
                 tasks.push(fetch_block_and_receipts(Arc::clone(&chain), importer_block_number));
-                importer_block_number = importer_block_number.next();
+                importer_block_number = importer_block_number.next_block_number();
             }
 
             // keep fetching in order

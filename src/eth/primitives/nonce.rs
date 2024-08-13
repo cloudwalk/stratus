@@ -22,7 +22,7 @@ impl Nonce {
     }
 
     /// Returns the next nonce.
-    pub fn next(&self) -> Self {
+    pub fn next_nonce(&self) -> Self {
         Self(self.0 + 1)
     }
 

@@ -110,7 +110,7 @@ async fn download(
 ) -> anyhow::Result<()> {
     // calculate current block
     let mut current = match rpc_storage.read_max_block_number_in_range(start, end_inclusive).await? {
-        Some(number) => number.next(),
+        Some(number) => number.next_block_number(),
         None => start,
     };
     tracing::info!(%start, current = %current, end = %end_inclusive, "starting download task (might skip)");
@@ -170,7 +170,7 @@ async fn download(
                 continue;
             }
 
-            current = current.next();
+            current = current.next_block_number();
             break;
         }
     }

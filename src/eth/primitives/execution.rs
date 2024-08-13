@@ -64,7 +64,7 @@ impl EvmExecution {
             .nonce
             .take_original_ref()
             .expect("from_original_values populates original values, so taking original ref here will succeed")
-            .next();
+            .next_nonce();
         sender_changes.nonce.set_modified(sender_next_nonce);
 
         // crete execution and apply costs

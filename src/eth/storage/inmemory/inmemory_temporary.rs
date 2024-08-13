@@ -208,7 +208,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         // create new state
         states.insert(0, InMemoryTemporaryStorageState::default());
-        states.head.block = Some(PendingBlock::new(finished_block.number.next()));
+        states.head.block = Some(PendingBlock::new(finished_block.number.next_block_number()));
 
         Ok(finished_block)
     }
