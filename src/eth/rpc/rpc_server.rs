@@ -53,7 +53,6 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
-use crate::globals::ModeString;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -316,7 +315,7 @@ fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<Jso
 }
 
 fn stratus_mode(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
-    let mode = GlobalState::get_node_mode().as_str();
+    let mode = GlobalState::get_node_mode().to_string();
 
     Ok(json!({
         "mode": mode

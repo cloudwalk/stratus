@@ -76,23 +76,13 @@ where
 // -----------------------------------------------------------------------------
 
 #[repr(u8)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display, strum::EnumString)]
 pub enum NodeMode {
+    #[strum(to_string = "leader")]
     Leader,
+
+    #[strum(to_string = "follower")]
     Follower,
-}
-
-pub trait ModeString {
-    fn as_str(&self) -> &'static str;
-}
-
-impl ModeString for NodeMode {
-    fn as_str(&self) -> &'static str {
-        match self {
-            NodeMode::Leader => "leader",
-            NodeMode::Follower => "follower",
-        }
-    }
 }
 
 // -----------------------------------------------------------------------------
