@@ -115,8 +115,7 @@ pub async fn serve_rpc(
         .layer_fn(RpcHttpMiddleware::new)
         .layer(ProxyGetRequestLayer::new("/health", "stratus_health").unwrap())
         .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap())
-        .layer(ProxyGetRequestLayer::new("/config", "stratus_config").unwrap())
-        .layer(ProxyGetRequestLayer::new("/mode", "stratus_mode").unwrap());
+        .layer(ProxyGetRequestLayer::new("/config", "stratus_config").unwrap());
 
     // serve module
     let server = Server::builder()
