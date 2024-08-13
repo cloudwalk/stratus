@@ -57,6 +57,7 @@ use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
+use crate::NodeMode;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -114,7 +115,8 @@ pub async fn serve_rpc(
         .layer_fn(RpcHttpMiddleware::new)
         .layer(ProxyGetRequestLayer::new("/health", "stratus_health").unwrap())
         .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap())
-        .layer(ProxyGetRequestLayer::new("/config", "stratus_config").unwrap());
+        .layer(ProxyGetRequestLayer::new("/config", "stratus_config").unwrap())
+        .layer(ProxyGetRequestLayer::new("/mode", "stratus_mode").unwrap());
 
     // serve module
     let server = Server::builder()
@@ -168,6 +170,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     // stratus state
     module.register_method("stratus_version", stratus_version)?;
     module.register_method("stratus_config", stratus_config)?;
+    module.register_method("stratus_mode", stratus_mode)?;
 
     module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
 
@@ -311,6 +314,17 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<Json
 
 fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     Ok(ctx.app_config.clone())
+}
+
+fn stratus_mode(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    let mode = match GlobalState::get_node_mode() {
+        NodeMode::Leader => "leader",
+        NodeMode::Follower => "follower",
+    };
+
+    Ok(json!({
+        "mode": mode
+    }))
 }
 
 async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
