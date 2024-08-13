@@ -4,9 +4,11 @@ use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
 use sentry::ClientInitGuard;
+use serde::Serialize;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
 
+use crate::alias::JsonValue;
 use crate::config;
 use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
@@ -103,6 +105,15 @@ static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Current node mode.
 static IS_LEADER: AtomicBool = AtomicBool::new(false);
+
+#[derive(Serialize)]
+pub struct StratusGlobalState {
+    is_leader: bool,
+    is_shutdown: bool,
+    transactions_enabled: bool,
+    miner_enabled: bool,
+    unknown_client_enabled: bool,
+}
 
 pub struct GlobalState;
 
@@ -219,5 +230,23 @@ impl GlobalState {
     /// Checks if the node is in leader mode.
     pub fn is_leader() -> bool {
         IS_LEADER.load(Ordering::Relaxed)
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal State
+    // -------------------------------------------------------------------------
+
+    pub fn get_internal_state() -> StratusGlobalState {
+        StratusGlobalState {
+            is_leader: Self::is_leader(),
+            is_shutdown: Self::is_shutdown(),
+            transactions_enabled: Self::is_transactions_enabled(),
+            miner_enabled: Self::is_miner_enabled(),
+            unknown_client_enabled: Self::is_unknown_client_enabled(),
+        }
+    }
+
+    pub fn get_internal_state_as_json() -> JsonValue {
+        serde_json::to_value(Self::get_internal_state()).unwrap_or_default()
     }
 }
