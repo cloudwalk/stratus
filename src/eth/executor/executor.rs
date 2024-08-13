@@ -194,7 +194,7 @@ pub struct Executor {
     /// Executor inner locks.
     locks: ExecutorLocks,
 
-    // Executor configuration.
+    /// Executor configuration.
     config: ExecutorConfig,
 
     /// Channels to send transactions to background EVMs.

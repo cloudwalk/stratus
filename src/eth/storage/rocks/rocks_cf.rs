@@ -163,6 +163,19 @@ where
         self.db.put_cf(&cf, serialized_key, serialized_value).map_err(Into::into)
     }
 
+    /// Deletes an entry from the database by key
+    pub fn delete(&self, key: &K) -> Result<()> {
+        self.delete_impl(key)
+            .with_context(|| format!("when trying to delete value from CF: '{}'", self.column_family))
+    }
+
+    fn delete_impl(&self, key: &K) -> Result<()> {
+        let serialized_key = self.serialize_key_with_context(key)?;
+        let cf = self.handle();
+
+        self.db.delete_cf(&cf, serialized_key).map_err(Into::into)
+    }
+
     pub fn prepare_batch_insertion<I>(&self, changes: I, batch: &mut WriteBatch) -> Result<()>
     where
         I: IntoIterator<Item = (K, V)>,
@@ -203,12 +216,26 @@ where
         })
     }
 
+    pub fn iter_start(&self) -> RocksCfIterator<K, V> {
+        let cf = self.handle();
+
+        let iter = self.db.iterator_cf(&cf, IteratorMode::Start);
+        RocksCfIterator::new(iter, &self.column_family)
+    }
+
+    pub fn iter_end(&self) -> RocksCfIterator<K, V> {
+        let cf = self.handle();
+
+        let iter = self.db.iterator_cf(&cf, IteratorMode::End);
+        RocksCfIterator::new(iter, &self.column_family)
+    }
+
     pub fn iter_from(&self, start_key: K, direction: rocksdb::Direction) -> Result<RocksCfIterator<K, V>> {
         let cf = self.handle();
         let serialized_key = self.serialize_key_with_context(&start_key)?;
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::From(&serialized_key, direction));
-        Ok(RocksCfIterator::<K, V>::new(iter, &self.column_family))
+        Ok(RocksCfIterator::new(iter, &self.column_family))
     }
 
     pub fn first_value(&self) -> Result<Option<V>> {

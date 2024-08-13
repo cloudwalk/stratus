@@ -43,6 +43,7 @@ use crate::eth::storage::rocks::types::IndexRocksdb;
 use crate::eth::storage::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::StoragePointInTime;
+use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 use crate::utils::GIGABYTE;
@@ -452,6 +453,89 @@ impl RocksStorageState {
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
         self.logs.clear().context("when clearing logs")?;
+        Ok(())
+    }
+
+    pub fn revert_state_to_block(&self, target_number: BlockNumberRocksdb) -> Result<()> {
+        // clear current state, it will be reconstructed
+        self.accounts.clear()?;
+        self.account_slots.clear()?;
+
+        // whether or not a block should be kept
+        let should_keep_block = |block_number| block_number <= target_number;
+
+        // go through historical accounts, clean all after target_number and reconstruct current accounts state
+        let mut accounts = HashMap::<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)>::new();
+        for next in self.accounts_history.iter_start() {
+            let ((address, account_block_number), account) = next?;
+
+            if not(should_keep_block(account_block_number)) {
+                self.accounts_history.delete(&(address, account_block_number))?;
+            } else if accounts
+                .get(&address)
+                .map(|(previous_number, _)| previous_number < &account_block_number)
+                .unwrap_or(true)
+            {
+                accounts.insert(address, (account_block_number, account));
+            }
+        }
+
+        // go through historical slots, clean all after target_number and reconstruct current slots state
+        let mut account_slots = HashMap::<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)>::new();
+        for next in self.account_slots_history.iter_start() {
+            let ((address, index, slot_block_number), slot_value) = next?;
+            let key = (address, index);
+
+            if not(should_keep_block(slot_block_number)) {
+                self.account_slots_history.delete(&(address, index, slot_block_number))?;
+            } else if account_slots
+                .get(&key)
+                .map(|(previous_number, _)| previous_number < &slot_block_number)
+                .unwrap_or(true)
+            {
+                account_slots.insert(key, (slot_block_number, slot_value));
+            }
+        }
+
+        // write new reconstructed state (accounts and slots)
+        let mut batch = WriteBatch::default();
+
+        let accounts_without_number = accounts.into_iter().map(|(address, (_, account))| (address, account));
+        self.accounts.prepare_batch_insertion(accounts_without_number, &mut batch)?;
+
+        let slots_without_number = account_slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value));
+        self.account_slots.prepare_batch_insertion(slots_without_number, &mut batch)?;
+
+        self.write_in_batch_for_multiple_cfs(batch)?;
+
+        // truncate the rest of column families
+        for next in self.transactions.iter_start() {
+            let (hash, block) = next?;
+            if not(should_keep_block(block)) {
+                self.transactions.delete(&hash)?;
+            }
+        }
+        for next in self.logs.iter_start() {
+            let (key, block) = next?;
+            if block > target_number {
+                self.logs.delete(&key)?;
+            }
+        }
+        for next in self.blocks_by_hash.iter_start() {
+            let (hash, block) = next?;
+            if not(should_keep_block(block)) {
+                self.blocks_by_hash.delete(&hash)?;
+            }
+        }
+        for next in self.blocks_by_number.iter_end() {
+            let (block, _) = next?;
+            if not(should_keep_block(block)) {
+                self.blocks_by_number.delete(&block)?;
+            } else {
+                break; // blocks are ordered by key, so we can stop early here
+            }
+        }
+
         Ok(())
     }
 }
