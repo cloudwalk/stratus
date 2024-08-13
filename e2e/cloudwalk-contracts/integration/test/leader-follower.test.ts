@@ -14,6 +14,20 @@ import {
 } from "./helpers/rpc";
 
 describe("Leader & Follower integration test", function () {
+    it("Validate node modes for leader and follower", async function () {
+        // Check Stratus Leader node mode
+        updateProviderUrl("stratus");
+        const leaderMode = await sendWithRetry("stratus_mode", []);
+        expect(leaderMode.mode).to.equal("leader");
+
+        // Check Stratus Follower node mode
+        updateProviderUrl("stratus-follower");
+        const followerMode = await sendWithRetry("stratus_mode", []);
+        expect(followerMode.mode).to.equal("follower");
+
+        updateProviderUrl("stratus");
+    });
+
     before(async function () {
         await setDeployer();
     });
