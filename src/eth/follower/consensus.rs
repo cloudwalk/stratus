@@ -36,7 +36,7 @@ pub trait Consensus: Send + Sync {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        tracing::info!(%tx_hash, %rpc_client, "forwaring transaction to leader");
+        tracing::info!(%tx_hash, %rpc_client, "forwarding transaction to leader");
 
         let hash = self.get_chain()?.send_raw_transaction_to_leader(tx_data.into(), rpc_client).await?;
 

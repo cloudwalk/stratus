@@ -1,7 +1,6 @@
 //! Application configuration.
 
 use std::env;
-use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -107,14 +106,6 @@ pub struct CommonConfig {
 
     #[clap(flatten)]
     pub metrics: MetricsConfig,
-
-    /// Direct access to peers via IP address, why will be included on data propagation and leader election.
-    #[arg(long = "candidate-peers", env = "CANDIDATE_PEERS", value_delimiter = ',')]
-    pub candidate_peers: Vec<String>,
-
-    // Address for the GRPC Server
-    #[arg(long = "grpc-server-address", env = "GRPC_SERVER_ADDRESS", default_value = "0.0.0.0:3777")]
-    pub grpc_server_address: SocketAddr,
 
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
