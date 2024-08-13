@@ -4,9 +4,11 @@ use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
 use sentry::ClientInitGuard;
+use serde_json::json;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
 
+use crate::alias::JsonValue;
 use crate::config;
 use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
@@ -76,9 +78,12 @@ where
 // -----------------------------------------------------------------------------
 
 #[repr(u8)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display)]
 pub enum NodeMode {
+    #[strum(to_string = "leader")]
     Leader,
+
+    #[strum(to_string = "follower")]
     Follower,
 }
 
@@ -216,5 +221,19 @@ impl GlobalState {
     /// Checks if the node is in leader mode.
     pub fn is_leader() -> bool {
         IS_LEADER.load(Ordering::Relaxed)
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal State
+    // -------------------------------------------------------------------------
+
+    pub fn get_internal_state_as_json() -> JsonValue {
+        json!({
+            "is_leader": Self::is_leader(),
+            "is_shutdown": Self::is_shutdown(),
+            "transactions_enabled": Self::is_transactions_enabled(),
+            "miner_enabled": Self::is_miner_enabled(),
+            "unknown_client_enabled": Self::is_unknown_client_enabled(),
+        })
     }
 }

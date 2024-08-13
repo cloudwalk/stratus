@@ -7,13 +7,26 @@ import {
     configureBRLC,
     deployBRLC,
     deployer,
-    send,
     sendWithRetry,
     setDeployer,
     updateProviderUrl,
 } from "./helpers/rpc";
 
 describe("Leader & Follower integration test", function () {
+    it("Validate node modes for leader and follower", async function () {
+        // Check Stratus Leader node mode
+        updateProviderUrl("stratus");
+        const leaderMode = await sendWithRetry("stratus_state", []);
+        expect(leaderMode.is_leader).to.equal(true);
+
+        // Check Stratus Follower node mode
+        updateProviderUrl("stratus-follower");
+        const followerMode = await sendWithRetry("stratus_state", []);
+        expect(followerMode.is_leader).to.equal(false);
+
+        updateProviderUrl("stratus");
+    });
+
     before(async function () {
         await setDeployer();
     });
