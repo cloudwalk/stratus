@@ -82,6 +82,19 @@ pub enum NodeMode {
     Follower,
 }
 
+pub trait ModeString {
+    fn as_str(&self) -> &'static str;
+}
+
+impl ModeString for NodeMode {
+    fn as_str(&self) -> &'static str {
+        match self {
+            NodeMode::Leader => "leader",
+            NodeMode::Follower => "follower",
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Global state
 // -----------------------------------------------------------------------------
@@ -100,10 +113,6 @@ static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Current node mode.
 static IS_LEADER: AtomicBool = AtomicBool::new(false);
-
-/// Constants for node modes.
-pub const LEADER_MODE: &str = "leader";
-pub const FOLLOWER_MODE: &str = "follower";
 
 pub struct GlobalState;
 
