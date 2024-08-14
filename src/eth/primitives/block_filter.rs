@@ -100,10 +100,7 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
             }
 
             // unhandled type
-            a => {
-                println!("{:?}", a);
-                Err(serde::de::Error::custom("block filter must be a string or integer"))
-            }
+            _ => Err(serde::de::Error::custom("block filter must be a string or integer")),
         }
     }
 }
