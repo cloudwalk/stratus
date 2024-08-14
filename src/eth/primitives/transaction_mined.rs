@@ -1,5 +1,6 @@
 use std::hash::Hash as HashTrait;
 
+use display_json::DebugAsJson;
 use itertools::Itertools;
 
 use crate::alias::EthersReceipt;
@@ -17,7 +18,7 @@ use crate::ext::OptionExt;
 use crate::if_else;
 
 /// Transaction that was executed by the EVM and added to a block.
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct TransactionMined {
     /// Transaction input received through RPC.
     pub input: TransactionInput,

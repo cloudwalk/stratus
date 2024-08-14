@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use display_json::DebugAsJson;
+
 use super::CodeHash;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -9,9 +11,11 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
+#[cfg(test)]
+use crate::ext::ordered_map;
 
 /// Changes that happened to an account during a transaction.
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionAccountChanges {
     pub new_account: bool,
     pub address: Address,
@@ -21,6 +25,7 @@ pub struct ExecutionAccountChanges {
     // TODO: bytecode related information should be grouped in a Bytecode struct
     pub bytecode: ExecutionValueChange<Option<Bytes>>,
     pub code_hash: CodeHash, // TODO: should be wrapped in a ExecutionValueChange
+    #[cfg_attr(test, serde(serialize_with = "ordered_map"))]
     pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,
 }
 

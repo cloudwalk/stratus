@@ -82,6 +82,7 @@ impl TransactionExecution {
 }
 
 #[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy, PartialEq))]
 pub struct LocalTransactionExecution {
     pub input: TransactionInput,
     pub result: EvmExecutionResult,

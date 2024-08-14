@@ -7,6 +7,7 @@ use crate::eth::primitives::LogMined;
 use crate::ext::not;
 
 #[derive(Clone, DebugAsJson, serde::Serialize, Eq, Hash, PartialEq)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 #[cfg_attr(test, derive(Default))]
 pub struct LogFilter {
     pub from_block: BlockNumber,
@@ -14,7 +15,7 @@ pub struct LogFilter {
     pub addresses: Vec<Address>,
 
     /// Original payload received via RPC.
-    #[serde(skip)]
+    #[cfg_attr(not(test), serde(skip))]
     pub original_input: LogFilterInput,
 }
 

@@ -1,6 +1,7 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use display_json::DebugAsJson;
 use serde_with::formats::PreferMany;
 use serde_with::serde_as;
 use serde_with::DefaultOnNull;
@@ -17,7 +18,8 @@ use crate::eth::storage::StratusStorage;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
 #[serde_as]
-#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash)]
+#[derive(DebugAsJson, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct LogFilterInput {
     #[serde(rename = "fromBlock", default)]
     pub from_block: Option<BlockFilter>,
@@ -78,7 +80,8 @@ impl LogFilterInput {
 }
 
 #[serde_as]
-#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash)]
+#[derive(DebugAsJson, Clone, Default, serde::Deserialize, serde::Serialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(fake::Dummy))]
 // This nested type is necessary to fine-tune how we want serde to deserialize the topics field
 pub struct LogFilterInputTopic(#[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")] pub Vec<Option<LogTopic>>);
 

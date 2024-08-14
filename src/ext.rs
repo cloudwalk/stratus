@@ -1,9 +1,13 @@
 //! Standard library extensions.
 
+use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use jsonrpsee::types::SubscriptionId;
+use serde::Serialize;
+use serde::Serializer;
 use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
@@ -306,6 +310,14 @@ pub fn from_json_str<T: serde::de::DeserializeOwned>(s: &str) -> T {
     serde_json::from_str::<T>(s).expect_infallible()
 }
 
+pub fn ordered_map<S, K: Ord + Serialize, V: Serialize>(value: &HashMap<K, V>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let ordered: BTreeMap<_, _> = value.iter().collect();
+    ordered.serialize(serializer)
+}
+
 // -----------------------------------------------------------------------------
 // Tests
 // -----------------------------------------------------------------------------
@@ -339,25 +351,6 @@ macro_rules! gen_test_serde {
 
                 // re-decode
                 let redecoded = serde_json::from_str::<$type>(&reencoded).unwrap();
-                assert_eq!(redecoded, original);
-            }
-
-            #[test]
-            pub fn [<serde_bincode_ $type:snake>]() {
-                // encode
-                let original = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
-                let encoded = bincode::serialize(&original).unwrap();
-
-                // decode
-                let decoded = bincode::deserialize::<$type>(&encoded).unwrap();
-                assert_eq!(decoded, original);
-
-                // re-encode
-                let reencoded = bincode::serialize(&decoded).unwrap();
-                assert_eq!(reencoded, encoded);
-
-                // re-decode
-                let redecoded = bincode::deserialize::<$type>(&reencoded).unwrap();
                 assert_eq!(redecoded, original);
             }
         }

@@ -1,10 +1,13 @@
 use std::fmt::Display;
 
+use display_json::DebugAsJson;
+
 use crate::alias::JsonValue;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Hash)]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Hash)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub enum BlockFilter {
     /// Information from the last mined block.
     #[default]
@@ -59,9 +62,9 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
             serde_json::Value::String(value) => {
                 match value.as_str() {
                     // parse special keywords
-                    "latest" => Ok(Self::Latest),
-                    "pending" => Ok(Self::Pending),
-                    "earliest" => Ok(Self::Earliest),
+                    "latest" | "Latest" => Ok(Self::Latest),
+                    "pending" | "Pending" => Ok(Self::Pending),
+                    "earliest" | "Earliest" => Ok(Self::Earliest),
 
                     // parse hash (64: H256 without 0x prefix; 66: H256 with 0x prefix)
                     s if s.len() == 64 || s.len() == 66 => {
@@ -73,6 +76,31 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
                         let number: BlockNumber = s.parse().map_err(serde::de::Error::custom)?;
                         Ok(Self::Number(number))
                     }
+                }
+            }
+
+            serde_json::Value::Object(map) => {
+                if map.len() != 1 {
+                    return Err(serde::de::Error::custom("value was an object with an unexpected number of fields"));
+                }
+                let Some((key, value)) = map.iter().next() else {
+                    return Err(serde::de::Error::custom("value was an object with no fields"));
+                };
+                let Some(value_str) = value.as_str() else {
+                    return Err(serde::de::Error::custom("value was an object with non-str fields"));
+                };
+                match key.as_str() {
+                    "Hash" => {
+                        let hash: Hash = value_str.parse().map_err(serde::de::Error::custom)?;
+                        Ok(Self::Hash(hash))
+                    }
+                    "Number" => {
+                        let number: BlockNumber = value_str.parse().map_err(serde::de::Error::custom)?;
+                        Ok(Self::Number(number))
+                    }
+                    _ => Err(serde::de::Error::custom(
+                        "value was an object but its field was neither \"Hash\" nor \"Number\"",
+                    )),
                 }
             }
 
