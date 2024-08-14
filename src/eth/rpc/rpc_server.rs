@@ -316,7 +316,7 @@ fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<Jso
 }
 
 fn stratus_state(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
-    Ok(GlobalState::get_internal_state_as_json())
+    Ok(GlobalState::get_global_state_as_json())
 }
 
 async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
