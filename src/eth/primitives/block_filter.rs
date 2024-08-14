@@ -98,7 +98,9 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
                         let number: BlockNumber = value_str.parse().map_err(serde::de::Error::custom)?;
                         Ok(Self::Number(number))
                     }
-                    _ => Err(serde::de::Error::custom("value was an object but its field was neither \"Hash\" nor \"Number\"")),
+                    _ => Err(serde::de::Error::custom(
+                        "value was an object but its field was neither \"Hash\" nor \"Number\"",
+                    )),
                 }
             }
 
