@@ -236,7 +236,7 @@ impl GlobalState {
     // JSON State
     // -------------------------------------------------------------------------
 
-    pub fn get_internal_state_as_json() -> JsonValue {
+    pub fn get_global_state_as_json() -> JsonValue {
         let state = GlobalState {
             is_leader: Self::is_leader(),
             is_shutdown: Self::is_shutdown(),
