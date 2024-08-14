@@ -4,6 +4,8 @@ use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
 use sentry::ClientInitGuard;
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json::json;
 use tokio::runtime::Runtime;
 use tokio_util::sync::CancellationToken;
@@ -106,7 +108,14 @@ static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 /// Current node mode.
 static IS_LEADER: AtomicBool = AtomicBool::new(false);
 
-pub struct GlobalState;
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GlobalState {
+    pub is_leader: bool,
+    pub is_shutdown: bool,
+    pub transactions_enabled: bool,
+    pub miner_enabled: bool,
+    pub unknown_client_enabled: bool,
+}
 
 impl GlobalState {
     // -------------------------------------------------------------------------
@@ -224,16 +233,18 @@ impl GlobalState {
     }
 
     // -------------------------------------------------------------------------
-    // Internal State
+    // JSON State
     // -------------------------------------------------------------------------
 
-    pub fn get_internal_state_as_json() -> JsonValue {
-        json!({
-            "is_leader": Self::is_leader(),
-            "is_shutdown": Self::is_shutdown(),
-            "transactions_enabled": Self::is_transactions_enabled(),
-            "miner_enabled": Self::is_miner_enabled(),
-            "unknown_client_enabled": Self::is_unknown_client_enabled(),
-        })
+    pub fn get_global_state_as_json() -> JsonValue {
+        let state = GlobalState {
+            is_leader: Self::is_leader(),
+            is_shutdown: Self::is_shutdown(),
+            transactions_enabled: Self::is_transactions_enabled(),
+            miner_enabled: Self::is_miner_enabled(),
+            unknown_client_enabled: Self::is_unknown_client_enabled(),
+        };
+
+        json!(state)
     }
 }
