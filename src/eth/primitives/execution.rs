@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::fmt::Debug;
 
 use anyhow::anyhow;
 use anyhow::Ok;
+use display_json::DebugAsJson;
 use hex_literal::hex;
 
 use crate::eth::primitives::Account;
@@ -16,12 +16,14 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
+#[cfg(test)]
+use crate::ext::ordered_map;
 use crate::log_and_err;
 
 pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
 
 /// Output of a transaction executed in the EVM.
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct EvmExecution {
     /// Assumed block timestamp during the execution.
     pub block_timestamp: UnixTime,
@@ -42,7 +44,8 @@ pub struct EvmExecution {
     pub gas: Gas,
 
     /// Storage changes that happened during the transaction execution.
-    pub changes: HashMap<Address, ExecutionAccountChanges>,
+    #[cfg_attr(test, serde(serialize_with = "ordered_map"))]
+    pub changes: ExecutionChanges,
 
     /// The contract address if the executed transaction deploys a contract.
     pub deployed_contract_address: Option<Address>,

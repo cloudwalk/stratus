@@ -114,30 +114,22 @@ mod tests {
     type TransactionExecutionValueChangeSlot = ExecutionValueChange<Slot>;
     type TransactionExecutionValueChangeWei = ExecutionValueChange<Wei>;
 
-    // FIX: gen_test_serde!(Block);
-    // FIX: gen_test_serde!(EvmExecution);
-    // FIX: gen_test_serde!(ExecutionAccountChanges);
-    // FIX: gen_test_serde!(ExecutionChanges);
-    // FIX: gen_test_serde!(TransactionMined);
-    // TODO: gen_test_serde!(BlockFilter);
-    // TODO: gen_test_serde!(ExecutionConflict);
-    // TODO: gen_test_serde!(ExecutionConflicts);
-    // TODO: gen_test_serde!(ExecutionConflictsBuilder);
-    // TODO: gen_test_serde!(ExternalBlock);
-    // TODO: gen_test_serde!(ExternalReceipt);
-    // TODO: gen_test_serde!(ExternalReceipts);
-    // TODO: gen_test_serde!(ExternalTransaction);
-    // TODO: gen_test_serde!(ExternalTransactionExecution);
-    // TODO: gen_test_serde!(LocalTransactionExecution);
-    // TODO: gen_test_serde!(LogFilter);
-    // TODO: gen_test_serde!(LogFilterInput);
-    // TODO: gen_test_serde!(LogFilterInputTopic);
-    // TODO: gen_test_serde!(PendingBlock);
-    // TODO: gen_test_serde!(StratusError);
-    // TODO: gen_test_serde!(TransactionExecution);
-    // TODO: gen_test_serde!(TransactionStage);
+    // TODO: Test external structs and internal structs that contain external strtucts that do no implement faker::Dummy
+    // gen_test_serde!(ExecutionConflicts);
+    // gen_test_serde!(ExecutionConflictsBuilder);
+    // gen_test_serde!(ExternalBlock);
+    // gen_test_serde!(ExternalReceipt);
+    // gen_test_serde!(ExternalReceipts);
+    // gen_test_serde!(ExternalTransaction);
+    // gen_test_serde!(ExternalTransactionExecution);
+    // gen_test_serde!(PendingBlock);
+    // gen_test_serde!(TransactionExecution);
+    // gen_test_serde!(TransactionStage);
+
     gen_test_serde!(Account);
     gen_test_serde!(Address);
+    gen_test_serde!(Block);
+    gen_test_serde!(BlockFilter);
     gen_test_serde!(BlockHeader);
     gen_test_serde!(BlockNumber);
     gen_test_serde!(Bytes);
@@ -148,12 +140,19 @@ mod tests {
     gen_test_serde!(Difficulty);
     gen_test_serde!(EcdsaRs);
     gen_test_serde!(EcdsaV);
+    gen_test_serde!(EvmExecution);
     gen_test_serde!(EvmExecutionMetrics);
+    gen_test_serde!(ExecutionAccountChanges);
+    gen_test_serde!(ExecutionConflict);
     gen_test_serde!(ExecutionResult);
     gen_test_serde!(Gas);
     gen_test_serde!(Hash);
     gen_test_serde!(Index);
+    gen_test_serde!(LocalTransactionExecution);
     gen_test_serde!(Log);
+    gen_test_serde!(LogFilter);
+    gen_test_serde!(LogFilterInput);
+    gen_test_serde!(LogFilterInputTopic);
     gen_test_serde!(LogMined);
     gen_test_serde!(LogTopic);
     gen_test_serde!(MinerNonce);
@@ -168,6 +167,7 @@ mod tests {
     gen_test_serde!(TransactionExecutionValueChangeSlot);
     gen_test_serde!(TransactionExecutionValueChangeWei);
     gen_test_serde!(TransactionInput);
+    gen_test_serde!(TransactionMined);
     gen_test_serde!(UnixTime);
     gen_test_serde!(Wei);
 }

@@ -41,6 +41,7 @@ impl ExecutionConflictsBuilder {
 }
 
 #[derive(DebugAsJson, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy, PartialEq))]
 pub enum ExecutionConflict {
     /// Account nonce mismatch.
     Nonce { address: Address, expected: Nonce, actual: Nonce },
