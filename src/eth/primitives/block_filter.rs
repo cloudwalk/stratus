@@ -79,25 +79,25 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
                 }
             }
 
-            serde_json::Value::Object(map) =>
-                if let Some((key, value)) = map.iter().next() {
-                    let Some(value_str) = value.as_str() else {
-                        return Err(serde::de::Error::custom("block filter must be a string or integer"));
-                    };
-                    match key.as_str() {
-                        "Hash" => {
-                            let hash: Hash = value_str.parse().map_err(serde::de::Error::custom)?;
-                            Ok(Self::Hash(hash))
-                        }
-                        "Number" => {
-                            let number: BlockNumber = value_str.parse().map_err(serde::de::Error::custom)?;
-                            Ok(Self::Number(number))
-                        }
-                        _ => Err(serde::de::Error::custom("block filter must be a string or integer")),
+            serde_json::Value::Object(map) => {
+                let Some((key, value)) = map.iter().next() else {
+                    return Err(serde::de::Error::custom("value was an object with no fields"));
+                };
+                let Some(value_str) = value.as_str() else {
+                    return Err(serde::de::Error::custom("value was an object with non-str fields"));
+                };
+                match key.as_str() {
+                    "Hash" => {
+                        let hash: Hash = value_str.parse().map_err(serde::de::Error::custom)?;
+                        Ok(Self::Hash(hash))
                     }
-                } else {
-                    Err(serde::de::Error::custom("block filter must be a string or integer"))
-                },
+                    "Number" => {
+                        let number: BlockNumber = value_str.parse().map_err(serde::de::Error::custom)?;
+                        Ok(Self::Number(number))
+                    }
+                    _ => Err(serde::de::Error::custom("block filter must be a string or integer")),
+                }
+            }
 
             // unhandled type
             a => {
