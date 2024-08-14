@@ -193,7 +193,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>> {
         let states = self.lock_read();
         let Some(ref pending_block) = states.head.block else { return Ok(vec![]) };
-        Ok(pending_block.tx_executions.clone().into_iter().map(|(_, tx)| tx.clone()).collect())
+        Ok(pending_block.transactions.clone().into_iter().map(|(_, tx)| tx.clone()).collect())
     }
 
     /// TODO: we cannot allow more than one pending block. Where to put this check?
@@ -216,7 +216,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>> {
         let states = self.lock_read();
         let Some(ref pending_block) = states.head.block else { return Ok(None) };
-        match pending_block.tx_executions.get(hash) {
+        match pending_block.transactions.get(hash) {
             Some(tx) => Ok(Some(tx.clone())),
             None => Ok(None),
         }
