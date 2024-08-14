@@ -29,11 +29,6 @@ pub struct Block {
 }
 
 impl Block {
-    /// Creates a new block with the given number assuming the current system timestamp as the block timestamp.
-    pub fn new_at_now(number: BlockNumber) -> Self {
-        Self::new(number, UnixTime::now())
-    }
-
     /// Creates a new block with the given number and timestamp.
     pub fn new(number: BlockNumber, timestamp: UnixTime) -> Self {
         Self {

@@ -91,7 +91,7 @@ impl EvmInput {
             gas_price: Wei::ZERO,
             nonce: Some(input.nonce),
             block_number: pending_block_number,
-            block_timestamp: UnixTime::now(),
+            block_timestamp: UnixTime::now(), // TODO: this should come from the pending block
             point_in_time: StoragePointInTime::Pending,
             chain_id: input.chain_id,
         }

@@ -4,7 +4,6 @@ use std::sync::Mutex;
 
 use itertools::Itertools;
 use keccak_hasher::KeccakHasher;
-use nonempty::NonEmpty;
 use tokio::sync::broadcast;
 use tracing::field;
 use tracing::info_span;
@@ -24,6 +23,7 @@ use crate::eth::primitives::Size;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::UnixTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::spawn_thread;
@@ -136,33 +136,29 @@ impl Miner {
         // track
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
-        tracing::debug!("mining external block");
 
         // lock
         let _mine_lock = self.locks.mine.lock().unwrap();
 
-        // mine
+        // mine block
         let block = self.storage.finish_pending_block()?;
-        let (local_txs, external_txs) = block.split_transactions();
-
-        // validate
+        Span::with(|s| s.rec_str("block_number", &block.number));
         let Some(external_block) = block.external_block else {
             return log_and_err!("failed to mine external block because there is no external block being reexecuted");
         };
-        if not(local_txs.is_empty()) {
-            return log_and_err!("failed to mine external block because one of the transactions is a local transaction");
+
+        // mine transactions
+        let mut external_txs = Vec::with_capacity(block.transactions.len());
+        for tx in block.transactions.into_values() {
+            if let TransactionExecution::External(tx) = tx {
+                external_txs.push(tx);
+            } else {
+                return log_and_err!("failed to mine external block because one of the transactions is not an external transaction");
+            }
         }
+        let mined_external_txs = mine_external_transactions(block.number, external_txs)?;
 
-        // mine external transactions
-        let mined_txs = mine_external_transactions(block.number, external_txs)?;
-        let block = block_from_external(external_block, mined_txs);
-
-        #[cfg(feature = "tracing")]
-        if let Ok(ref block) = block {
-            Span::with(|s| s.rec_str("block_number", &block.number()));
-        }
-
-        block
+        block_from_external(external_block, mined_external_txs)
     }
 
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
@@ -177,29 +173,28 @@ impl Miner {
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
-    #[tracing::instrument(name = "miner::mine_local", skip_all, fields(block_number))]
     pub fn mine_local(&self) -> anyhow::Result<Block> {
-        tracing::debug!("mining local block");
+        #[cfg(feature = "tracing")]
+        let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
 
         // lock
         let _mine_lock = self.locks.mine.lock().unwrap();
 
-        // mine
+        // mine block
         let block = self.storage.finish_pending_block()?;
-        let (local_txs, external_txs) = block.split_transactions();
+        Span::with(|s| s.rec_str("block_number", &block.number));
 
-        // validate
-        if not(external_txs.is_empty()) {
-            return log_and_err!("failed to mine local block because one of the transactions is an external transaction");
+        // mine transactions
+        let mut local_txs = Vec::with_capacity(block.transactions.len());
+        for tx in block.transactions.into_values() {
+            if let TransactionExecution::Local(tx) = tx {
+                local_txs.push(tx);
+            } else {
+                return log_and_err!("failed to mine local block because one of the transactions is not a local transaction");
+            }
         }
 
-        // mine local transactions
-        let block = match NonEmpty::from_vec(local_txs) {
-            Some(local_txs) => block_from_local(block.number, local_txs),
-            None => Ok(Block::new_at_now(block.number)),
-        };
-
-        block.inspect(|block| Span::with(|s| s.rec_str("block_number", &block.number())))
+        block_from_local(block.number, local_txs)
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
@@ -267,13 +262,12 @@ fn block_from_external(external_block: ExternalBlock, mined_txs: Vec<Transaction
     })
 }
 
-pub fn block_from_local(number: BlockNumber, txs: NonEmpty<LocalTransactionExecution>) -> anyhow::Result<Block> {
-    // init block
-    let block_timestamp = txs
-        .minimum_by(|tx1, tx2| tx1.result.execution.block_timestamp.cmp(&tx2.result.execution.block_timestamp))
-        .result
-        .execution
-        .block_timestamp;
+pub fn block_from_local(number: BlockNumber, txs: Vec<LocalTransactionExecution>) -> anyhow::Result<Block> {
+    // TODO: block timestamp should be set in the PendingBlock instead of being retrieved from the execution
+    let block_timestamp = match txs.first() {
+        Some(tx) => tx.result.execution.block_timestamp,
+        None => UnixTime::now(),
+    };
 
     let mut block = Block::new(number, block_timestamp);
     block.transactions.reserve(txs.len());
