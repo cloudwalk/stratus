@@ -80,6 +80,9 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
             }
 
             serde_json::Value::Object(map) => {
+                if map.len() != 1 {
+                    return Err(serde::de::Error::custom("value was an object with an unexpected number of fields"));
+                }
                 let Some((key, value)) = map.iter().next() else {
                     return Err(serde::de::Error::custom("value was an object with no fields"));
                 };
@@ -95,7 +98,7 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
                         let number: BlockNumber = value_str.parse().map_err(serde::de::Error::custom)?;
                         Ok(Self::Number(number))
                     }
-                    _ => Err(serde::de::Error::custom("block filter must be a string or integer")),
+                    _ => Err(serde::de::Error::custom("value was an object but its field was neither \"Hash\" nor \"Number\"")),
                 }
             }
 
