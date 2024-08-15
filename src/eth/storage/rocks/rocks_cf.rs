@@ -178,6 +178,15 @@ where
         self.db.delete_cf(&cf, serialized_key).map_err(Into::into)
     }
 
+    pub fn prepare_and_write_batch_with_context<I>(&self, changes: I) -> Result<()>
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        let mut batch = WriteBatch::default();
+        self.prepare_batch_insertion(changes, &mut batch)?;
+        self.write_batch_with_context(batch)
+    }
+
     pub fn prepare_batch_insertion<I>(&self, changes: I, batch: &mut WriteBatch) -> Result<()>
     where
         I: IntoIterator<Item = (K, V)>,

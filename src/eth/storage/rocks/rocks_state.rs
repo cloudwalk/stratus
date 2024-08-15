@@ -480,9 +480,7 @@ impl RocksStorageState {
             }
         }
         let accounts_without_number = accounts.into_iter().map(|(address, (_, account))| (address, account));
-        let mut batch = WriteBatch::default();
-        self.accounts.prepare_batch_insertion(accounts_without_number, &mut batch)?;
-        self.accounts.write_batch_with_context(batch)?;
+        self.accounts.prepare_and_write_batch_with_context(accounts_without_number)?;
 
         // go through historical slots, clean all after target_number and reconstruct current slots state
         let mut account_slots = HashMap::<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)>::new();
@@ -501,9 +499,7 @@ impl RocksStorageState {
             }
         }
         let slots_without_number = account_slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value));
-        let mut batch = WriteBatch::default();
-        self.account_slots.prepare_batch_insertion(slots_without_number, &mut batch)?;
-        self.account_slots.write_batch_with_context(batch)?;
+        self.account_slots.prepare_and_write_batch_with_context(slots_without_number)?;
 
         // truncate the rest of column families
         for next in self.transactions.iter_start() {
