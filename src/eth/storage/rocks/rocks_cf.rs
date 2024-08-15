@@ -154,6 +154,7 @@ where
             .with_context(|| format!("when trying to insert value in CF: '{}'", self.column_family))
     }
 
+    #[inline]
     fn insert_impl(&self, key: K, value: V) -> Result<()> {
         let cf = self.handle();
 
@@ -169,6 +170,7 @@ where
             .with_context(|| format!("when trying to delete value from CF: '{}'", self.column_family))
     }
 
+    #[inline]
     fn delete_impl(&self, key: &K) -> Result<()> {
         let serialized_key = self.serialize_key_with_context(key)?;
         let cf = self.handle();
@@ -184,6 +186,7 @@ where
             .with_context(|| format!("when trying to prepare batch insertion for CF: '{}'", self.column_family))
     }
 
+    #[inline]
     fn prepare_batch_insertion_impl<I>(&self, changes: I, batch: &mut WriteBatch) -> Result<()>
     where
         I: IntoIterator<Item = (K, V)>,
