@@ -29,7 +29,6 @@ use crate::eth::primitives::Wei;
 use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StoragePointInTime;
-use crate::ext::not;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentStorageState {
@@ -174,16 +173,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
                 continue;
             };
 
-            let tx_logs = block
-                .transactions
-                .iter()
-                .flat_map(|tx| &tx.logs)
-                .take_while(|log| filter.matches(log))
-                .collect_vec();
-
-            if not(tx_logs.is_empty()) {
-                filtered_logs.extend(tx_logs);
-            }
+            let tx_logs = block.transactions.iter().flat_map(|tx| &tx.logs).take_while(|log| filter.matches(log));
+            filtered_logs.extend(tx_logs);
         }
 
         Ok(filtered_logs.into_iter().cloned().collect_vec())
