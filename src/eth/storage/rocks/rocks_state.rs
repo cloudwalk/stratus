@@ -43,6 +43,7 @@ use crate::eth::storage::rocks::types::IndexRocksdb;
 use crate::eth::storage::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::StoragePointInTime;
+use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 use crate::utils::GIGABYTE;
@@ -427,7 +428,7 @@ impl RocksStorageState {
 
         let mut batch = WriteBatch::default();
         self.accounts.prepare_batch_insertion(accounts, &mut batch)?;
-        self.accounts.write_batch_with_context(batch)
+        self.accounts.apply_batch_with_context(batch)
     }
 
     /// Writes slots to state (does not write to slot history)
@@ -439,7 +440,7 @@ impl RocksStorageState {
 
         let mut batch = WriteBatch::default();
         self.account_slots.prepare_batch_insertion(slots, &mut batch)?;
-        self.account_slots.write_batch_with_context(batch)
+        self.account_slots.apply_batch_with_context(batch)
     }
 
     /// Clears in-memory state.
@@ -452,6 +453,97 @@ impl RocksStorageState {
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
         self.logs.clear().context("when clearing logs")?;
+        Ok(())
+    }
+
+    pub fn revert_state_to_block(&self, target_number: BlockNumberRocksdb) -> Result<()> {
+        // clear current state, it will be reconstructed
+        tracing::info!("clearing current account state");
+        self.accounts.clear()?;
+        tracing::info!("clearing current slots state");
+        self.account_slots.clear()?;
+
+        // whether or not a block should be kept
+        let should_keep_block = |block_number| block_number <= target_number;
+
+        tracing::info!("starting iteration through historical accounts to clean values after target_block and reconstruct current accounts state");
+        let mut accounts = HashMap::<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)>::new();
+        let mut history_accounts_count = 0;
+        for next in self.accounts_history.iter_start() {
+            history_accounts_count += 1;
+            let ((address, account_block_number), account) = next?;
+
+            if not(should_keep_block(account_block_number)) {
+                self.accounts_history.delete(&(address, account_block_number))?;
+            } else if accounts
+                .get(&address)
+                .map(|(previous_number, _)| previous_number < &account_block_number)
+                .unwrap_or(true)
+            {
+                accounts.insert(address, (account_block_number, account));
+            }
+        }
+        tracing::info!(%history_accounts_count, "iterated through all historical accounts");
+
+        let accounts_len = accounts.len();
+        let accounts_without_number = accounts.into_iter().map(|(address, (_, account))| (address, account));
+        tracing::info!(%accounts_len, "saving reprocessed accounts");
+        self.accounts.prepare_and_apply_insertion_batch_with_context(accounts_without_number)?;
+
+        tracing::info!("starting iteration through historical slots to clean values after target_block and reconstruct current slots state");
+        let mut slots = HashMap::<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)>::new();
+        let mut history_slots_count = 0;
+        for next in self.account_slots_history.iter_start() {
+            history_slots_count += 1;
+            let ((address, index, slot_block_number), slot_value) = next?;
+            let key = (address, index);
+
+            if not(should_keep_block(slot_block_number)) {
+                self.account_slots_history.delete(&(address, index, slot_block_number))?;
+            } else if slots.get(&key).map(|(previous_number, _)| previous_number < &slot_block_number).unwrap_or(true) {
+                slots.insert(key, (slot_block_number, slot_value));
+            }
+        }
+        tracing::info!(%history_slots_count, "iterated through all historical slots");
+
+        let slots_len = slots.len();
+        let slots_without_number = slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value));
+
+        tracing::info!(%slots_len, "saving reprocessed slots");
+        self.account_slots.prepare_and_apply_insertion_batch_with_context(slots_without_number)?;
+
+        // truncate the rest of column families
+        tracing::info!("cleaning values in transactions CF");
+        for next in self.transactions.iter_start() {
+            let (hash, block) = next?;
+            if not(should_keep_block(block)) {
+                self.transactions.delete(&hash)?;
+            }
+        }
+        tracing::info!("cleaning values in logs CF");
+        for next in self.logs.iter_start() {
+            let (key, block) = next?;
+            if block > target_number {
+                self.logs.delete(&key)?;
+            }
+        }
+        tracing::info!("cleaning values in blocks_by_hash CF");
+        for next in self.blocks_by_hash.iter_start() {
+            let (hash, block) = next?;
+            if not(should_keep_block(block)) {
+                self.blocks_by_hash.delete(&hash)?;
+            }
+        }
+        tracing::info!("cleaning values in blocks_by_number CF");
+        for next in self.blocks_by_number.iter_end() {
+            let (block, _) = next?;
+            if not(should_keep_block(block)) {
+                self.blocks_by_number.delete(&block)?;
+            } else {
+                break; // blocks are ordered by key, so we can stop early here
+            }
+        }
+
         Ok(())
     }
 }

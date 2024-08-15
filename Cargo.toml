@@ -147,6 +147,10 @@ path = "src/bin/rpc_downloader.rs"
 name = "importer-offline"
 path = "src/bin/importer_offline.rs"
 
+[[bin]]
+name = "rocks-revert-to-block"
+path = "src/bin/rocks_revert_to_block.rs"
+
 # ------------------------------------------------------------------------------
 # Features
 # ------------------------------------------------------------------------------
