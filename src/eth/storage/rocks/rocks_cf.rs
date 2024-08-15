@@ -96,7 +96,7 @@ where
             let (key, _) = item.context("when reading an element from the iterator")?;
             batch.delete_cf(&cf, key);
         }
-        self.write_batch_with_context(batch)?;
+        self.apply_batch_with_context(batch)?;
         Ok(())
     }
 
@@ -178,13 +178,19 @@ where
         self.db.delete_cf(&cf, serialized_key).map_err(Into::into)
     }
 
-    pub fn prepare_and_write_batch_with_context<I>(&self, changes: I) -> Result<()>
+    pub fn apply_batch_with_context(&self, batch: WriteBatch) -> Result<()> {
+        self.db
+            .write(batch)
+            .with_context(|| format!("failed to apply operation batch to column family '{}'", self.column_family))
+    }
+
+    pub fn prepare_and_apply_insertion_batch_with_context<I>(&self, changes: I) -> Result<()>
     where
         I: IntoIterator<Item = (K, V)>,
     {
         let mut batch = WriteBatch::default();
         self.prepare_batch_insertion(changes, &mut batch)?;
-        self.write_batch_with_context(batch)
+        self.apply_batch_with_context(batch)
     }
 
     pub fn prepare_batch_insertion<I>(&self, changes: I, batch: &mut WriteBatch) -> Result<()>
@@ -192,7 +198,7 @@ where
         I: IntoIterator<Item = (K, V)>,
     {
         self.prepare_batch_insertion_impl(changes, batch)
-            .with_context(|| format!("when trying to prepare batch insertion for CF: '{}'", self.column_family))
+            .with_context(|| format!("failed to prepare batch insertion for CF: '{}'", self.column_family))
     }
 
     #[inline]
@@ -205,7 +211,7 @@ where
         for (key, value) in changes {
             let serialized_key = self.serialize_key_with_context(&key)?;
             let serialized_value = self.serialize_value_with_context(&value)?;
-            // Add serialized key-value pair to the batch
+            // add the insertion operation to the batch
             batch.put_cf(&cf, serialized_key, serialized_value);
         }
         Ok(())
@@ -348,12 +354,6 @@ where
 
     fn serialize_value_with_context(&self, value: &V) -> Result<Vec<u8>> {
         serialize_with_context(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family))
-    }
-
-    pub fn write_batch_with_context(&self, batch: WriteBatch) -> Result<()> {
-        self.db
-            .write(batch)
-            .with_context(|| format!("failed to write batch to column family '{}'", self.column_family))
     }
 }
 
