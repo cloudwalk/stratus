@@ -479,6 +479,10 @@ impl RocksStorageState {
                 accounts.insert(address, (account_block_number, account));
             }
         }
+        let accounts_without_number = accounts.into_iter().map(|(address, (_, account))| (address, account));
+        let mut batch = WriteBatch::default();
+        self.accounts.prepare_batch_insertion(accounts_without_number, &mut batch)?;
+        self.accounts.write_batch_with_context(batch)?;
 
         // go through historical slots, clean all after target_number and reconstruct current slots state
         let mut account_slots = HashMap::<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)>::new();
@@ -496,17 +500,10 @@ impl RocksStorageState {
                 account_slots.insert(key, (slot_block_number, slot_value));
             }
         }
-
-        // write new reconstructed state (accounts and slots)
-        let mut batch = WriteBatch::default();
-
-        let accounts_without_number = accounts.into_iter().map(|(address, (_, account))| (address, account));
-        self.accounts.prepare_batch_insertion(accounts_without_number, &mut batch)?;
-
         let slots_without_number = account_slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value));
+        let mut batch = WriteBatch::default();
         self.account_slots.prepare_batch_insertion(slots_without_number, &mut batch)?;
-
-        self.write_in_batch_for_multiple_cfs(batch)?;
+        self.account_slots.write_batch_with_context(batch)?;
 
         // truncate the rest of column families
         for next in self.transactions.iter_start() {
