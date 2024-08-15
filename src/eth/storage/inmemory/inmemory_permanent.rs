@@ -173,7 +173,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
                 continue;
             };
 
-            let tx_logs = block.transactions.iter().flat_map(|tx| &tx.logs).take_while(|log| filter.matches(log));
+            let tx_logs = block.transactions.iter().flat_map(|tx| &tx.logs).filter(|log| filter.matches(log));
             filtered_logs.extend(tx_logs);
         }
 
