@@ -5,8 +5,6 @@ use std::sync::Mutex;
 use itertools::Itertools;
 use keccak_hasher::KeccakHasher;
 use tokio::sync::broadcast;
-use tracing::field;
-use tracing::info_span;
 use tracing::Span;
 
 use crate::eth::miner::MinerMode;
@@ -30,6 +28,13 @@ use crate::ext::spawn_thread;
 use crate::ext::DisplayExt;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "tracing")] {
+        use tracing::field;
+        use tracing::info_span;
+    }
+}
 
 pub struct Miner {
     pub locks: MinerLocks,

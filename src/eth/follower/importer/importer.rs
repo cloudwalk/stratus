@@ -168,6 +168,7 @@ impl Importer {
 
             // execute and mine
             let mut receipts = ExternalReceipts::from(receipts);
+            #[cfg(feature = "metrics")]
             let receipts_len = receipts.len();
             if let Err(e) = executor.execute_external_block(block, &mut receipts) {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
