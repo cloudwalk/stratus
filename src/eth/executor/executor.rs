@@ -316,7 +316,7 @@ impl Executor {
                     let json_tx = to_json_string(&tx);
                     let json_receipt = to_json_string(&receipt);
                     let json_execution_logs = to_json_string(&evm_execution.execution.logs);
-                    tracing::error!(reason = %"mismatch reexecuting transaction", %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
+                    tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
                     return Err(e);
                 };
 
