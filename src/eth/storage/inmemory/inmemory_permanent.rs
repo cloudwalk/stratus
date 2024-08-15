@@ -9,6 +9,7 @@ use std::sync::RwLockReadGuard;
 use std::sync::RwLockWriteGuard;
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -32,10 +33,9 @@ use crate::eth::storage::StoragePointInTime;
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentStorageState {
     pub accounts: HashMap<Address, InMemoryPermanentAccount>,
-    pub transactions: HashMap<Hash, TransactionMined>,
+    pub transactions: HashMap<Hash, Arc<Block>>,
     pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
     pub blocks_by_hash: IndexMap<Hash, Arc<Block>>,
-    pub logs: Vec<LogMined>,
 }
 
 #[derive(Debug)]
@@ -76,7 +76,6 @@ impl InMemoryPermanentStorage {
         state.transactions.clear();
         state.blocks_by_hash.clear();
         state.blocks_by_number.clear();
-        state.logs.clear();
     }
 }
 
@@ -152,28 +151,33 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         let state_lock = self.lock_read();
-
-        match state_lock.transactions.get(hash) {
-            Some(transaction) => Ok(Some(transaction.clone())),
-            None => Ok(None),
-        }
+        let Some(block) = state_lock.transactions.get(hash) else { return Ok(None) };
+        Ok(block.transactions.iter().find(|tx| &tx.input.hash == hash).cloned())
     }
 
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        let state_lock = self.lock_read();
+        let state = self.lock_read();
 
-        let logs = state_lock
-            .logs
-            .iter()
-            .skip_while(|log| log.block_number < filter.from_block)
-            .take_while(|log| match filter.to_block {
-                Some(to_block) => log.block_number <= to_block,
-                None => true,
-            })
-            .filter(|log| filter.matches(log))
-            .cloned()
-            .collect();
-        Ok(logs)
+        // determine block start and end
+        let start = filter.from_block.as_u64();
+        let end = match filter.to_block {
+            Some(to_block) => to_block.as_u64(),
+            None => self.block_number.load(Ordering::Relaxed),
+        };
+
+        // iterate blocks filtering logs
+        let mut filtered_logs = Vec::new();
+        for block_number in start..=end {
+            let block_number = BlockNumber::from(block_number);
+            let Some(block) = state.blocks_by_number.get(&block_number) else {
+                continue;
+            };
+
+            let tx_logs = block.transactions.iter().flat_map(|tx| &tx.logs).filter(|log| filter.matches(log));
+            filtered_logs.extend(tx_logs);
+        }
+
+        Ok(filtered_logs.into_iter().cloned().collect_vec())
     }
 
     fn save_block(&self, block: Block) -> anyhow::Result<()> {
@@ -186,10 +190,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         state.blocks_by_hash.insert(block.hash(), Arc::clone(&block));
 
         // save transactions
-        for transaction in block.transactions.clone() {
-            let tx_logs = transaction.logs.clone();
-            state.transactions.insert(transaction.input.hash, transaction);
-            state.logs.extend(tx_logs);
+        for tx in &block.transactions {
+            state.transactions.insert(tx.input.hash, Arc::clone(&block));
         }
 
         // save block account changes
