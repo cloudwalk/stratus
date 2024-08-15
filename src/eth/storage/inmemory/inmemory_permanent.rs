@@ -34,7 +34,7 @@ use crate::ext::not;
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentStorageState {
     pub accounts: HashMap<Address, InMemoryPermanentAccount>,
-    pub transactions: HashMap<Hash, TransactionMined>,
+    pub transactions: HashMap<Hash, Arc<Block>>,
     pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
     pub blocks_by_hash: IndexMap<Hash, Arc<Block>>,
 }
@@ -152,11 +152,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
         let state_lock = self.lock_read();
-
-        match state_lock.transactions.get(hash) {
-            Some(transaction) => Ok(Some(transaction.clone())),
-            None => Ok(None),
-        }
+        let Some(block) = state_lock.transactions.get(hash) else { return Ok(None) };
+        Ok(block.transactions.iter().find(|tx| &tx.input.hash == hash).cloned())
     }
 
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
@@ -203,7 +200,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
         // save transactions
         for transaction in block.transactions.clone() {
-            state.transactions.insert(transaction.input.hash, transaction);
+            state.transactions.insert(transaction.input.hash, Arc::clone(&block));
         }
 
         // save block account changes
