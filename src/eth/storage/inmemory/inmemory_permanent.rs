@@ -190,8 +190,8 @@ impl PermanentStorage for InMemoryPermanentStorage {
         state.blocks_by_hash.insert(block.hash(), Arc::clone(&block));
 
         // save transactions
-        for transaction in block.transactions.clone() {
-            state.transactions.insert(transaction.input.hash, Arc::clone(&block));
+        for tx in &block.transactions {
+            state.transactions.insert(tx.input.hash, Arc::clone(&block));
         }
 
         // save block account changes
