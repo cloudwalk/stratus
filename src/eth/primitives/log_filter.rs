@@ -96,6 +96,8 @@ mod tests {
     use crate::eth::primitives::Log;
     use crate::eth::primitives::LogFilterInputTopic;
     use crate::eth::primitives::LogTopic;
+    use crate::eth::storage::InMemoryPermanentStorage;
+    use crate::eth::storage::InMemoryTemporaryStorage;
     use crate::eth::storage::StratusStorage;
     use crate::utils::test_utils::fake_first;
     use crate::utils::test_utils::fake_list;
@@ -105,12 +107,14 @@ mod tests {
     fn build_filter(addresses: Vec<Address>, topics_nested: Vec<Vec<Option<LogTopic>>>) -> LogFilter {
         let topics_map = |topics: Vec<Option<LogTopic>>| LogFilterInputTopic(topics.into_iter().collect());
 
+        let storage = StratusStorage::new(Box::new(InMemoryTemporaryStorage::default()), Box::new(InMemoryPermanentStorage::default()));
+
         LogFilterInput {
             address: addresses,
             topics: topics_nested.into_iter().map(topics_map).collect(),
             ..LogFilterInput::default()
         }
-        .parse(&Arc::new(StratusStorage::mock_new()))
+        .parse(&Arc::new(storage))
         .unwrap()
     }
 

@@ -33,10 +33,6 @@ pub struct InMemoryTemporaryStorage {
 }
 
 impl InMemoryTemporaryStorage {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Locks inner state for reading.
     pub fn lock_read(&self) -> RwLockReadGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
         self.states.read().unwrap()
