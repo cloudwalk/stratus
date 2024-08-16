@@ -19,6 +19,7 @@ const_format = "=0.2.32"
 const-hex = "=1.12.0"
 derive_more = "=0.99.17"
 derive-new = "=0.6.0"
+hash_hasher = "=2.0.3"
 hex_fmt = "=0.3.0"
 hex-literal = "=0.4.1"
 humantime = "=2.1.0"
@@ -146,6 +147,10 @@ path = "src/bin/rpc_downloader.rs"
 [[bin]]
 name = "importer-offline"
 path = "src/bin/importer_offline.rs"
+
+[[bin]]
+name = "rocks-revert-to-block"
+path = "src/bin/rocks_revert_to_block.rs"
 
 # ------------------------------------------------------------------------------
 # Features

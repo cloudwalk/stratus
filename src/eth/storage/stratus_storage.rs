@@ -29,14 +29,6 @@ use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
 
-cfg_if::cfg_if! {
-    if #[cfg(test)] {
-        use crate::eth::storage::InMemoryPermanentStorage;
-        use crate::eth::storage::InMemoryTemporaryStorage;
-        use crate::eth::storage::RocksPermanentStorage;
-    }
-}
-
 mod label {
     pub(super) const TEMP: &str = "temporary";
     pub(super) const PERM: &str = "permanent";
@@ -58,33 +50,6 @@ impl StratusStorage {
     /// Creates a new storage with the specified temporary and permanent implementations.
     pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>) -> Self {
         Self { temp, perm }
-    }
-
-    /// Creates an inmemory stratus storage for testing.
-    #[cfg(test)]
-    pub fn mock_new() -> Self {
-        Self {
-            temp: Box::new(InMemoryTemporaryStorage::new()),
-            perm: Box::new(InMemoryPermanentStorage::new()),
-        }
-    }
-
-    /// Creates an inmemory stratus storage for testing.
-    #[cfg(test)]
-    pub fn mock_new_rocksdb() -> (Self, tempfile::TempDir) {
-        // Create a unique temporary directory within the ./data directory
-        let temp_dir = tempfile::TempDir::new().expect("Failed to create temp dir");
-        let temp_path = temp_dir.path().to_str().expect("Failed to get temp path").to_string();
-
-        let rocks_permanent_storage = RocksPermanentStorage::new(Some(temp_path.clone())).expect("Failed to create RocksPermanentStorage");
-
-        (
-            Self {
-                temp: Box::new(InMemoryTemporaryStorage::new()),
-                perm: Box::new(rocks_permanent_storage),
-            },
-            temp_dir,
-        )
     }
 
     // -------------------------------------------------------------------------
