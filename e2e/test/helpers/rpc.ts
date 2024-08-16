@@ -344,8 +344,6 @@ export async function subscribeAndGetEventWithContract(
     return event;
 }
 
-
-
 // Prepares a signed transaction to interact with a contract
 export async function prepareSignedTx(props: {
     contract: BaseContract;
@@ -355,7 +353,7 @@ export async function prepareSignedTx(props: {
     custom_nonce?: number;
 }): Promise<string> {
     const { contract, account, methodName, methodParameters, custom_nonce } = props;
-    const nonce = custom_nonce || await sendGetNonce(account);
+    const nonce = custom_nonce || (await sendGetNonce(account));
     const tx = await (contract.connect(account.signer()) as Contract)[methodName].populateTransaction(
         ...methodParameters,
         {

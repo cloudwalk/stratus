@@ -307,7 +307,8 @@ describe("JSON-RPC", () => {
                 sendEvmMine();
                 contract.waitForDeployment();
 
-                { // eth_call should not really change the state
+                {
+                    // eth_call should not really change the state
                     const data = contract.interface.encodeFunctionData("add", [ALICE.address, 5]);
                     const transaction = { to: contract.target, data: data };
                     await send("eth_call", [transaction, "latest"]);
@@ -324,7 +325,7 @@ describe("JSON-RPC", () => {
             });
 
             // FIXME: this test is intermitent
-            //        it sometimes receive undefined ad current balance, 
+            //        it sometimes receive undefined ad current balance,
             //        because Stratus claims the contract.target address is not a contract
             // it("Works when using the field 'input' instead of 'data'", async () => {
             //     // deploy
@@ -474,7 +475,12 @@ describe("JSON-RPC", () => {
                 await sendReset();
                 const waitTimeInMilliseconds = 40;
                 const automaticallySendEVMMines = true;
-                const response = await subscribeAndGetEventWithContract("logs", waitTimeInMilliseconds, 2, automaticallySendEVMMines);
+                const response = await subscribeAndGetEventWithContract(
+                    "logs",
+                    waitTimeInMilliseconds,
+                    2,
+                    automaticallySendEVMMines,
+                );
                 expect(response).to.not.be.undefined;
 
                 const params = response.params;
