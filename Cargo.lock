@@ -1714,6 +1714,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hash_hasher"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74721d007512d0cb3338cd20f0654ac913920061a4c4d0d8708edb3f2a698c0c"
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4872,6 +4878,7 @@ dependencies = [
  "futures-timer",
  "futures-util",
  "glob",
+ "hash_hasher",
  "hex-literal",
  "hex_fmt",
  "humantime",
