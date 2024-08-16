@@ -32,6 +32,15 @@ pub struct InMemoryTemporaryStorage {
     pub states: RwLock<NonEmpty<InMemoryTemporaryStorageState>>,
 }
 
+impl Default for InMemoryTemporaryStorage {
+    fn default() -> Self {
+        tracing::info!("creating inmemory temporary storage");
+        Self {
+            states: RwLock::new(NonEmpty::new(InMemoryTemporaryStorageState::default())),
+        }
+    }
+}
+
 impl InMemoryTemporaryStorage {
     /// Locks inner state for reading.
     pub fn lock_read(&self) -> RwLockReadGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
@@ -41,15 +50,6 @@ impl InMemoryTemporaryStorage {
     /// Locks inner state for writing.
     pub fn lock_write(&self) -> RwLockWriteGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
         self.states.write().unwrap()
-    }
-}
-
-impl Default for InMemoryTemporaryStorage {
-    fn default() -> Self {
-        tracing::info!("creating inmemory temporary storage");
-        Self {
-            states: RwLock::new(NonEmpty::new(InMemoryTemporaryStorageState::default())),
-        }
     }
 }
 
@@ -63,7 +63,7 @@ pub struct InMemoryTemporaryStorageState {
     pub block: Option<PendingBlock>,
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
-    pub accounts: HashMap<Address, InMemoryTemporaryAccount>,
+    pub accounts: HashMap<Address, InMemoryTemporaryAccount, hash_hasher::HashBuildHasher>,
 }
 
 impl InMemoryTemporaryStorageState {
@@ -94,7 +94,7 @@ impl InMemoryTemporaryStorageState {
 #[derive(Debug, Clone)]
 pub struct InMemoryTemporaryAccount {
     pub info: Account,
-    pub slots: HashMap<SlotIndex, Slot>,
+    pub slots: HashMap<SlotIndex, Slot, hash_hasher::HashBuildHasher>,
 }
 
 impl InMemoryTemporaryAccount {

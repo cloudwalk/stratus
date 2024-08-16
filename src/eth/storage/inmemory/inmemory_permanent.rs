@@ -32,8 +32,8 @@ use crate::eth::storage::StoragePointInTime;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct InMemoryPermanentStorageState {
-    pub accounts: HashMap<Address, InMemoryPermanentAccount>,
-    pub transactions: HashMap<Hash, Arc<Block>>,
+    pub accounts: HashMap<Address, InMemoryPermanentAccount, hash_hasher::HashBuildHasher>,
+    pub transactions: HashMap<Hash, Arc<Block>, hash_hasher::HashBuildHasher>,
     pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
     pub blocks_by_hash: IndexMap<Hash, Arc<Block>>,
 }
@@ -256,7 +256,7 @@ pub struct InMemoryPermanentAccount {
     pub nonce: InMemoryHistory<Nonce>,
     pub bytecode: InMemoryHistory<Option<Bytes>>,
     pub code_hash: InMemoryHistory<CodeHash>,
-    pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>>,
+    pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>, hash_hasher::HashBuildHasher>,
 }
 
 impl InMemoryPermanentAccount {
@@ -275,28 +275,6 @@ impl InMemoryPermanentAccount {
             code_hash: InMemoryHistory::new_at_zero(CodeHash::default()),
             slots: HashMap::default(),
         }
-    }
-
-    /// Resets all account changes to the specified block number.
-    pub fn reset_at(&mut self, block_number: BlockNumber) {
-        // SAFETY: ok to unwrap because all historical values starts at block 0
-        self.balance = self.balance.reset_at(block_number).expect("never empty");
-        self.nonce = self.nonce.reset_at(block_number).expect("never empty");
-        self.bytecode = self.bytecode.reset_at(block_number).expect("never empty");
-
-        // SAFETY: not ok to unwrap because slot value does not start at block 0
-        let mut new_slots = HashMap::with_capacity(self.slots.len());
-        for (slot_index, slot_history) in self.slots.iter() {
-            if let Some(new_slot_history) = slot_history.reset_at(block_number) {
-                new_slots.insert(*slot_index, new_slot_history);
-            }
-        }
-        self.slots = new_slots;
-    }
-
-    /// Checks current account is a contract.
-    pub fn is_contract(&self) -> bool {
-        self.bytecode.get_current().is_some()
     }
 
     /// Converts itself to an account at a point-in-time.
