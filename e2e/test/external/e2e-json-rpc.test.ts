@@ -337,4 +337,57 @@ describe("JSON-RPC", () => {
             });
         });
     });
+
+    describe("Evm", () => {
+        async function latest(): Promise<{ timestamp: number; block_number: number }> {
+            const block = await send("eth_getBlockByNumber", ["latest", false]);
+            return { timestamp: parseInt(block.timestamp, 16), block_number: parseInt(block.number, 16) };
+        }
+
+        it("evm_mine", async () => {
+            let prev_number = (await latest()).block_number;
+            await sendEvmMine();
+            expect((await latest()).block_number).eq(prev_number + 1);
+        });
+
+        describe("evm_setNextBlockTimestamp", () => {
+            let target = Math.floor(Date.now() / 1000) + 10;
+            it("sets the next block timestamp", async () => {
+                await send("evm_setNextBlockTimestamp", [target]);
+                await sendEvmMine();
+                expect((await latest()).timestamp).eq(target);
+            });
+
+            it("offsets subsequent timestamps", async () => {
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+                await sendEvmMine();
+                expect((await latest()).timestamp).to.be.greaterThan(target);
+            });
+
+            it("resets the changes when sending 0", async () => {
+                await send("evm_setNextBlockTimestamp", [0]);
+                let mined_timestamp = Math.floor(Date.now() / 1000);
+                await sendEvmMine();
+                let latest_timestamp = (await latest()).timestamp;
+                expect(latest_timestamp)
+                    .gte(mined_timestamp)
+                    .lte(Math.floor(Date.now() / 1000));
+            });
+
+            it("handle negative offsets", async () => {
+                const past = Math.floor(Date.now() / 1000);
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+                await send("evm_setNextBlockTimestamp", [past]);
+                await sendEvmMine();
+                expect((await latest()).timestamp).eq(past);
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+                await sendEvmMine();
+                expect((await latest()).timestamp)
+                    .to.be.greaterThan(past)
+                    .lessThan(Math.floor(Date.now() / 1000));
+
+                await send("evm_setNextBlockTimestamp", [0]);
+            });
+        });
+    });
 });
