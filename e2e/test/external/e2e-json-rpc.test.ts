@@ -26,6 +26,7 @@ import {
     sendRawTransaction,
     sendReset,
     toHex,
+    toPaddedHex,
 } from "../helpers/rpc";
 
 describe("JSON-RPC", () => {
@@ -291,6 +292,48 @@ describe("JSON-RPC", () => {
                 expect(txReceiptAfterMining).to.not.be.null;
                 expect(txReceiptAfterMining?.status).eq(REVERSAL);
                 expect(actualTxHash).eq(expectedTxHash);
+            });
+        });
+    });
+
+    describe("Call", () => {
+        describe("eth_call", () => {
+            it("Returns an expected result when sending calls", async () => {
+                // deploy
+                const contract = await deployTestContractBalances();
+                sendEvmMine();
+                contract.waitForDeployment();
+
+                { // eth_call should not really change the state
+                    const data = contract.interface.encodeFunctionData("add", [ALICE.address, 5]);
+                    const transaction = { to: contract.target, data: data };
+                    await send("eth_call", [transaction, "latest"]);
+                    sendEvmMine();
+                }
+
+                const data = contract.interface.encodeFunctionData("get", [ALICE.address]);
+                const transaction = { to: contract.target, data: data };
+                const currentAliceBalance = await send("eth_call", [transaction, "latest"]);
+
+                // validate
+                const expectedAliceBalance = toPaddedHex(0, 32);
+                expect(currentAliceBalance).eq(expectedAliceBalance);
+            });
+
+            it("Works when using the field 'input' instead of 'data'", async () => {
+                // deploy
+                const contract = await deployTestContractBalances();
+                sendEvmMine();
+                contract.waitForDeployment();
+
+                const data = contract.interface.encodeFunctionData("get", [ALICE.address]);
+                const transaction = { to: contract.target, input: data };
+                const currentAliceBalance = await send("eth_call", [transaction, "latest"]);
+                console.debug("currentAliceBalance", currentAliceBalance);
+
+                // validate
+                const expectedAliceBalance = toPaddedHex(0, 32);
+                expect(currentAliceBalance).eq(expectedAliceBalance);
             });
         });
     });
