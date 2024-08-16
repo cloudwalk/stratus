@@ -45,12 +45,6 @@ pub struct InMemoryPermanentStorage {
 }
 
 impl InMemoryPermanentStorage {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl InMemoryPermanentStorage {
     // -------------------------------------------------------------------------
     // Lock methods
     // -------------------------------------------------------------------------
