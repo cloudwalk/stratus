@@ -92,6 +92,13 @@ alias sqlx := db-compile
 stratus *args="":
     cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
+# Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
+# To produce a flamegraph of the memory usage use jeprof:
+#   * Diferential flamegraph: jeprof <binary> --base=./jeprof.<...>.i0.heap ./jeprof.<...>.i<n>.heap --collapsed | flamegraph.pl > leak.svg
+#   * Point in time flamegraph: jeprof <binary> ./jeprof.<...>.i<n>.heap --collapsed | flamegraph.pl > leak.svg
+stratus-memory-profiling *args="":
+    _RJEM_MALLOC_CONF=prof:true,prof_final:true,prof_leak:true,prof_gdump:true,lg_prof_interval:32 cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev,jeprof -- --leader {{args}}
+
 # Bin: Stratus main service as follower
 stratus-follower *args="":
     LOCAL_ENV_PATH=stratus-follower cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower {{args}}
@@ -418,4 +425,3 @@ contracts-coverage-erase:
     cd e2e/cloudwalk-contracts/repos || exit 1
     just _log "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
-

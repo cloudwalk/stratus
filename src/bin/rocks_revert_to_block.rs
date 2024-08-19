@@ -9,7 +9,12 @@ use stratus::config::RocksRevertToBlockConfig;
 use stratus::eth::storage::RocksPermanentStorage;
 use stratus::utils::DropTimer;
 use stratus::GlobalServices;
+#[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
+use tikv_jemallocator::Jemalloc;
 
+#[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<RocksRevertToBlockConfig>::init();
     run(global_services.config)
