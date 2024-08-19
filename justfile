@@ -92,9 +92,12 @@ alias sqlx := db-compile
 stratus *args="":
     cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
-# Bin: Stratus main service as leader (memory-profiling)
+# Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
+# To produce a flamegraph of the memory usage use jeprof:
+#   * Diferential flamegraph: jeprof <binary> --base=./jeprof.<...>.i0.heap ./jeprof.<...>.i<n>.heap --collapsed | flamegraph.pl > leak.svg
+#   * Point in time flamegraph: jeprof <binary> ./jeprof.<...>.i<n>.heap --collapsed | flamegraph.pl > leak.svg
 stratus-memory-profiling *args="":
-    _RJEM_MALLOC_CONF=prof:true,lg_prof_interval:32,lg_prof_sample:19 cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev,jeprof -- --leader {{args}}
+    _RJEM_MALLOC_CONF=prof:true,prof_final:true,prof_leak:true,prof_gdump:true,lg_prof_interval:32 cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev,jeprof -- --leader {{args}}
 
 # Bin: Stratus main service as follower
 stratus-follower *args="":
