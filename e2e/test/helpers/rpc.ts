@@ -287,11 +287,22 @@ function addMessageListener(
 }
 
 /// Execute an async contract operation
-async function asyncContractOperation(contract: TestContractBalances) {
+async function asyncContractOperation(contract: TestContractBalances, shouldMine: boolean = false) {
     let nonce = await sendGetNonce(CHARLIE.address);
     const contractOps = contract.connect(CHARLIE.signer());
-    await contractOps.add(CHARLIE.address, 10, { nonce: nonce++ });
-
+    if (shouldMine) {
+        const signedTx = await prepareSignedTx({
+            contract,
+            account: CHARLIE,
+            methodName: "add",
+            methodParameters: [CHARLIE.address, 10],
+            custom_nonce: nonce++,
+        });
+        await sendRawTransaction(signedTx);
+        sendEvmMine();
+    } else {
+        await contractOps.add(CHARLIE.address, 10, { nonce: nonce++ });
+    }
     return new Promise((resolve) => setTimeout(resolve, 1000));
 }
 
@@ -316,8 +327,10 @@ export async function subscribeAndGetEventWithContract(
     subscription: string,
     waitTimeInMilliseconds: number,
     messageToReturn: number = 1,
+    shouldMine: boolean = false,
 ): Promise<any> {
     const contract = await deployTestContractBalances();
+    if (shouldMine) sendEvmMine();
     const contractAddress = await contract.getAddress();
     const socket = openWebSocketConnection();
     addOpenListener(socket, subscription, { address: contractAddress });
@@ -337,9 +350,10 @@ export async function prepareSignedTx(props: {
     account: Account;
     methodName: string;
     methodParameters: any[];
+    custom_nonce?: number;
 }): Promise<string> {
-    const { contract, account, methodName, methodParameters } = props;
-    const nonce = await sendGetNonce(account);
+    const { contract, account, methodName, methodParameters, custom_nonce } = props;
+    const nonce = custom_nonce || (await sendGetNonce(account));
     const tx = await (contract.connect(account.signer()) as Contract)[methodName].populateTransaction(
         ...methodParameters,
         {
