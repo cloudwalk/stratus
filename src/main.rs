@@ -4,7 +4,6 @@ use stratus::config::StratusConfig;
 use stratus::eth::rpc::serve_rpc;
 use stratus::GlobalServices;
 use stratus::GlobalState;
-
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 use tikv_jemallocator::Jemalloc;
 
