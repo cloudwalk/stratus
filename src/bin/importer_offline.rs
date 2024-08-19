@@ -30,9 +30,14 @@ use stratus::utils::calculate_tps_and_bpm;
 use stratus::utils::DropTimer;
 use stratus::GlobalServices;
 use stratus::GlobalState;
+#[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
+use tikv_jemallocator::Jemalloc;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
+#[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 /// Number of tasks in the backlog. Each task contains `--blocks-by-fetch` blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 50;
 

@@ -17,7 +17,12 @@ use stratus::infra::BlockchainClient;
 use stratus::log_and_err;
 use stratus::utils::DropTimer;
 use stratus::GlobalServices;
+#[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
+use tikv_jemallocator::Jemalloc;
 
+#[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 /// Number of blocks each parallel download will process.
 const BLOCKS_BY_TASK: usize = 1_000;
 
