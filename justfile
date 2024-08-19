@@ -90,11 +90,11 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service as leader
 stratus *args="":
-    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev, -- --leader {{args}}
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
 # Bin: Stratus main service as leader (memory-profiling)
 stratus-memory-profiling *args="":
-    _RJEM_MALLOC_CONF=prof:true,lg_prof_interval:32,lg_prof_sample:19 cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
+    _RJEM_MALLOC_CONF=prof:true,lg_prof_interval:32,lg_prof_sample:19 cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev,jeprof -- --leader {{args}}
 
 # Bin: Stratus main service as follower
 stratus-follower *args="":

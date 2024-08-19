@@ -181,7 +181,7 @@ path = "src/bin/rocks_revert_to_block.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["metrics", "tracing", "jeprof"]
+default = ["metrics", "tracing"]
 
 # Application is running in develoment mode.
 dev = []
@@ -195,7 +195,7 @@ tracing = []
 # Use Jemalloc as the global allocator
 jemalloc = ["dep:tikv-jemallocator"]
 
-# Use Jemalloc as the global allocator
+# Use Jemalloc as the global allocator with profiling enabled
 jeprof = ["tikv-jemallocator/profiling"]
 
 # ------------------------------------------------------------------------------
