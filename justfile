@@ -90,7 +90,11 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service as leader
 stratus *args="":
-    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev, -- --leader {{args}}
+
+# Bin: Stratus main service as leader (memory-profiling)
+stratus-memory-profiling *args="":
+    _RJEM_MALLOC_CONF=prof:true,lg_prof_interval:32,lg_prof_sample:19 cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
 # Bin: Stratus main service as follower
 stratus-follower *args="":
@@ -418,4 +422,3 @@ contracts-coverage-erase:
     cd e2e/cloudwalk-contracts/repos || exit 1
     just _log "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
-

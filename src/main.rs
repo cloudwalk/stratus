@@ -5,6 +5,13 @@ use stratus::eth::rpc::serve_rpc;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 
+#[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<StratusConfig>::init();
     GlobalState::initialize_node_mode(&global_services.config);
