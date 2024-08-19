@@ -159,6 +159,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_health", stratus_health)?;
 
     // stratus admin
+    module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
     module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
     module.register_method("stratus_disableTransactions", stratus_disable_transactions)?;
     module.register_method("stratus_enableMiner", stratus_enable_miner)?;
@@ -271,6 +272,20 @@ async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensio
 fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     ctx.storage.reset_to_genesis()?;
     Ok(to_json_value(true))
+}
+
+fn stratus_shutdown_importer(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+    if !GlobalState::is_follower() {
+        return false;
+    }
+
+    if GlobalState::is_importer_shutdown() {
+        return true;
+    }
+
+    const TASK_NAME: &str = "rpc-server::importer-shutdown";
+    GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
+    GlobalState::is_importer_shutdown()
 }
 
 fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {

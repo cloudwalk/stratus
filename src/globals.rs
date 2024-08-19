@@ -96,6 +96,9 @@ pub enum NodeMode {
 // Stratus is running or being shut-down?
 static STRATUS_SHUTDOWN: Lazy<CancellationToken> = Lazy::new(CancellationToken::new);
 
+/// Importer is running or being shut-down?
+static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(false);
+
 /// Transaction should be accepted?
 static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
 
@@ -112,6 +115,7 @@ static IS_LEADER: AtomicBool = AtomicBool::new(false);
 pub struct GlobalState {
     pub is_leader: bool,
     pub is_shutdown: bool,
+    pub is_importer_shutdown: bool,
     pub transactions_enabled: bool,
     pub miner_enabled: bool,
     pub unknown_client_enabled: bool,
@@ -119,7 +123,7 @@ pub struct GlobalState {
 
 impl GlobalState {
     // -------------------------------------------------------------------------
-    // Shutdown
+    // Application Shutdown
     // -------------------------------------------------------------------------
 
     /// Shutdown the application.
@@ -154,6 +158,38 @@ impl GlobalState {
     pub async fn wait_shutdown_warn(task_name: &str) {
         Self::wait_shutdown().await;
         warn_task_cancellation(task_name);
+    }
+
+    // -------------------------------------------------------------------------
+    // Importer Shutdown
+    // -------------------------------------------------------------------------
+
+    /// Shutdown the importer.
+    ///
+    /// Returns the formatted reason for importer shutdown.
+    pub fn shutdown_importer_from(caller: &str, reason: &str) -> String {
+        tracing::warn!(%caller, %reason, "importer is shutting down");
+        IMPORTER_SHUTDOWN.store(true, Ordering::SeqCst);
+        format!("{} {}", caller, reason)
+    }
+
+    /// Checks if the importer is being shutdown.
+    pub fn is_importer_shutdown() -> bool {
+        IMPORTER_SHUTDOWN.load(Ordering::SeqCst)
+    }
+
+    /// Checks if the importer is being shutdown. Emits a warning with the task name in case it is.
+    pub fn is_importer_shutdown_warn(task_name: &str) -> bool {
+        let shutdown = Self::is_importer_shutdown();
+        if shutdown {
+            warn_task_cancellation(task_name);
+        }
+        shutdown
+    }
+
+    /// Resets the importer shutdown state.
+    pub fn reset_importer_shutdown() {
+        IMPORTER_SHUTDOWN.store(false, Ordering::SeqCst);
     }
 
     // -------------------------------------------------------------------------
@@ -240,6 +276,7 @@ impl GlobalState {
         let state = GlobalState {
             is_leader: Self::is_leader(),
             is_shutdown: Self::is_shutdown(),
+            is_importer_shutdown: Self::is_importer_shutdown(),
             transactions_enabled: Self::is_transactions_enabled(),
             miner_enabled: Self::is_miner_enabled(),
             unknown_client_enabled: Self::is_unknown_client_enabled(),
