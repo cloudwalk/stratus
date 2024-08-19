@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 
+use anyhow::Result;
 use ethereum_types::U256;
 use futures::join;
 use itertools::Itertools;
@@ -17,6 +18,7 @@ use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::json;
+use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::select;
 use tracing::field;
@@ -27,6 +29,7 @@ use tracing::Span;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
+use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
@@ -159,6 +162,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_health", stratus_health)?;
 
     // stratus admin
+    module.register_async_method("stratus_initImporter", stratus_init_importer)?;
     module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
     module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
     module.register_method("stratus_disableTransactions", stratus_disable_transactions)?;
@@ -272,6 +276,59 @@ async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensio
 fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     ctx.storage.reset_to_genesis()?;
     Ok(to_json_value(true))
+}
+
+// TODO: improve intermediate steps state
+// TODO: improve error handling
+// TODO: allow receiving custom importer configuration via params
+// FIX: update consensus on context
+// TODO: refactor and clean up
+// TODO: add e2e tests
+async fn stratus_init_importer(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    if !GlobalState::is_follower() {
+        return Ok(json!(false));
+    }
+
+    if !GlobalState::is_importer_shutdown() {
+        return Ok(json!(false));
+    }
+
+    GlobalState::reset_importer_shutdown();
+
+    let app_config: Value = match serde_json::from_value(ctx.app_config.clone()) {
+        Ok(config) => config,
+        Err(_) => {
+            tracing::error!("Failed to parse app_config");
+            return Ok(json!(false));
+        }
+    };
+
+    let importer_config: ImporterConfig = match app_config.get("importer") {
+        Some(importer_value) => match serde_json::from_value(importer_value.clone()) {
+            Ok(config) => config,
+            Err(_) => {
+                tracing::error!("Failed to parse importer configuration");
+                return Ok(json!(false));
+            }
+        },
+        None => {
+            tracing::error!("Importer configuration not found in app_config");
+            return Ok(json!(false));
+        }
+    };
+
+    let _consensus = match importer_config
+        .init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage))
+        .await
+    {
+        Ok(consensus) => consensus,
+        Err(e) => {
+            tracing::error!("Failed to initialize importer: {}", e);
+            return Ok(json!(false));
+        }
+    };
+
+    Ok(json!(true))
 }
 
 fn stratus_shutdown_importer(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
