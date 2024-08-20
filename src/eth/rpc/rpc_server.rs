@@ -280,11 +280,10 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 
 // TODO: improve intermediate steps state
 // TODO: improve error handling
-// TODO: allow receiving custom importer configuration via params
 // FIX: update consensus on context
 // TODO: refactor and clean up
 // TODO: add e2e tests
-async fn stratus_init_importer(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if !GlobalState::is_follower() {
         return Ok(json!(false));
     }
@@ -292,8 +291,6 @@ async fn stratus_init_importer(_: Params<'_>, ctx: Arc<RpcContext>, _: Extension
     if !GlobalState::is_importer_shutdown() {
         return Ok(json!(false));
     }
-
-    GlobalState::reset_importer_shutdown();
 
     let app_config: Value = match serde_json::from_value(ctx.app_config.clone()) {
         Ok(config) => config,
@@ -316,6 +313,17 @@ async fn stratus_init_importer(_: Params<'_>, ctx: Arc<RpcContext>, _: Extension
             return Ok(json!(false));
         }
     };
+
+    let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
+    let (_, external_rpc_ws) = next_rpc_param::<String>(params)?;
+
+    let importer_config = ImporterConfig {
+        external_rpc,
+        external_rpc_ws: Some(external_rpc_ws),
+        ..importer_config
+    };
+
+    GlobalState::reset_importer_shutdown();
 
     let _consensus = match importer_config
         .init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage))
