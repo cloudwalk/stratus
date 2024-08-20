@@ -12,8 +12,8 @@ _log message:
 # Wait for Stratus to start.
 _wait_for_stratus port="3000":
     #!/bin/bash
-    just _log "Waiting 60 seconds for Stratus on port {{port}} to start"
-    wait-service --tcp 0.0.0.0:{{port}} -t 60 -- echo
+    just _log "Waiting 120 seconds for Stratus on port {{port}} to start"
+    wait-service --tcp 0.0.0.0:{{port}} -t 120 -- echo
     if [ $? -eq 0 ]; then
         just _log "Stratus on port {{port}} started"
     else
