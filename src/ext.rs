@@ -208,6 +208,8 @@ pub fn spawn_named<T>(name: &str, task: impl std::future::Future<Output = T> + S
 where
     T: Send + 'static,
 {
+    info_task_spawn(name);
+
     tokio::task::Builder::new()
         .name(name)
         .spawn(task)

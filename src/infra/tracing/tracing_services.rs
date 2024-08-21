@@ -358,7 +358,7 @@ pub fn new_cid() -> String {
 /// Emits an info message that a task was spawned to backgroud.
 #[track_caller]
 pub fn info_task_spawn(name: &str) {
-    tracing::info!(%name, "spawning task");
+    tracing::info!(parent: None, %name, "spawning task");
 }
 
 /// Emits an warning that a task is exiting because it received a cancenllation signal.
