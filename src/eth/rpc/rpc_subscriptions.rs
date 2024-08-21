@@ -235,7 +235,7 @@ impl RpcSubscriptions {
         let msg = match msg.try_into() {
             Ok(msg) => msg,
             Err(e) => {
-                tracing::error!(reason = ?e, "failed to convert message into subscription message");
+                tracing::error!(parent: None, reason = ?e, "failed to convert message into subscription message");
                 return;
             }
         };
