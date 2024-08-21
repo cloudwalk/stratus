@@ -304,7 +304,7 @@ describe("JSON-RPC", () => {
             it("Returns an expected result when sending calls", async () => {
                 // deploy
                 const contract = await deployTestContractBalances();
-                sendEvmMine();
+                await sendEvmMine();
                 contract.waitForDeployment();
 
                 {
@@ -312,7 +312,7 @@ describe("JSON-RPC", () => {
                     const data = contract.interface.encodeFunctionData("add", [ALICE.address, 5]);
                     const transaction = { to: contract.target, data: data };
                     await send("eth_call", [transaction, "latest"]);
-                    sendEvmMine();
+                    await sendEvmMine();
                 }
 
                 const data = contract.interface.encodeFunctionData("get", [ALICE.address]);
@@ -324,23 +324,20 @@ describe("JSON-RPC", () => {
                 expect(currentAliceBalance).eq(expectedAliceBalance);
             });
 
-            // FIXME: this test is intermitent
-            //        it sometimes receive undefined ad current balance,
-            //        because Stratus claims the contract.target address is not a contract
-            // it("Works when using the field 'input' instead of 'data'", async () => {
-            //     // deploy
-            //     const contract = await deployTestContractBalances();
-            //     sendEvmMine();
-            //     contract.waitForDeployment();
+            it("Works when using the field 'input' instead of 'data'", async () => {
+                // deploy
+                const contract = await deployTestContractBalances();
+                await sendEvmMine();
+                contract.waitForDeployment();
 
-            //     const data = contract.interface.encodeFunctionData("get", [ALICE.address]);
-            //     const transaction = { to: contract.target, input: data };
-            //     const currentAliceBalance = await send("eth_call", [transaction, "latest"]);
+                const data = contract.interface.encodeFunctionData("get", [ALICE.address]);
+                const transaction = { to: contract.target, input: data };
+                const currentAliceBalance = await send("eth_call", [transaction, "latest"]);
 
-            //     // validate
-            //     const expectedAliceBalance = toPaddedHex(0, 32);
-            //     expect(currentAliceBalance).eq(expectedAliceBalance);
-            // });
+                // validate
+                const expectedAliceBalance = toPaddedHex(0, 32);
+                expect(currentAliceBalance).eq(expectedAliceBalance);
+            });
         });
     });
 
