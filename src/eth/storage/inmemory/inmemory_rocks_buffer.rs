@@ -67,7 +67,6 @@ impl PermanentStorage for InmemoryRocksBuffer {
         point_in_time: &crate::eth::storage::StoragePointInTime,
     ) -> anyhow::Result<Option<crate::eth::primitives::Slot>> {
         let states = self.read()?;
-        // First, check if the slot exists in the in-memory states
         for state in states.iter().rev() {
             if let Some(account) = state.accounts.get(address) {
                 if let Some(slot) = account.slots.get(index) {
@@ -76,7 +75,6 @@ impl PermanentStorage for InmemoryRocksBuffer {
             }
         }
 
-        // If not found in memory, fall back to RocksDB storage
         self.rocks.read_slot(address, index, point_in_time)
     }
 
@@ -90,14 +88,12 @@ impl PermanentStorage for InmemoryRocksBuffer {
         point_in_time: &crate::eth::storage::StoragePointInTime,
     ) -> anyhow::Result<Option<crate::eth::primitives::Account>> {
         let states = self.read()?;
-        // First, check if the account exists in the in-memory states
         for state in states.iter().rev() {
             if let Some(account) = state.accounts.get(address) {
                 return Ok(Some(account.info.clone()));
             }
         }
 
-        // If not found in memory, fall back to RocksDB storage
         self.rocks.read_account(address, point_in_time)
     }
 
