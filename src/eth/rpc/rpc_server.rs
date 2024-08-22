@@ -286,9 +286,7 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 // TODO: improve error handling
 // TODO: refactor and clean up
 // TODO: add e2e tests
-// TODO: currently leader and follower in eth_sendRawTransaction are defined by consensus being None or not.
-// May need to change this so that we can have a more explicit way to define leader and follower there.
-// Also, this would allow us to set consensus to None when shutting down importer.
+// TODO: currently leader and follower in eth_sendRawTransaction and stratus_health are defined by consensus being None or not. Need to make it more explicit.
 #[cfg(feature = "dev")]
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if !GlobalState::is_follower() {
