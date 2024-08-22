@@ -124,7 +124,7 @@ impl PermanentStorage for InmemoryRocksBuffer {
     }
 
     fn set_mined_block_number(&self, _number: crate::eth::primitives::BlockNumber) -> anyhow::Result<()> {
-        todo!();
+        Ok(())
     }
 
     fn read_mined_block_number(&self) -> anyhow::Result<crate::eth::primitives::BlockNumber> {
