@@ -18,6 +18,7 @@ use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::json;
+#[cfg(feature = "dev")]
 use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::select;
@@ -29,6 +30,7 @@ use tracing::Span;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
+#[cfg(feature = "dev")]
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::Address;
@@ -156,14 +158,14 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("hardhat_reset", stratus_reset)?;
         module.register_blocking_method("stratus_reset", stratus_reset)?;
+        module.register_async_method("stratus_initImporter", stratus_init_importer)?;
+        module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
     }
 
     // stratus status
     module.register_method("stratus_health", stratus_health)?;
 
     // stratus admin
-    module.register_async_method("stratus_initImporter", stratus_init_importer)?;
-    module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
     module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
     module.register_method("stratus_disableTransactions", stratus_disable_transactions)?;
     module.register_method("stratus_enableMiner", stratus_enable_miner)?;
@@ -287,6 +289,7 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 // TODO: currently leader and follower in eth_sendRawTransaction are defined by consensus being None or not.
 // May need to change this so that we can have a more explicit way to define leader and follower there.
 // Also, this would allow us to set consensus to None when shutting down importer.
+#[cfg(feature = "dev")]
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if !GlobalState::is_follower() {
         return Ok(json!(false));
@@ -356,6 +359,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     Ok(json!(true))
 }
 
+#[cfg(feature = "dev")]
 fn stratus_shutdown_importer(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
     if !GlobalState::is_follower() {
         return false;
