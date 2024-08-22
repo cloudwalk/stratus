@@ -57,6 +57,11 @@ impl InmemoryRocksBuffer {
 }
 
 impl PermanentStorage for InmemoryRocksBuffer {
+    #[cfg(feature = "dev")]
+    fn reset(&self) -> anyhow::Result<()> {
+        todo!();
+    }
+
     fn read_logs(&self, _filter: &crate::eth::primitives::LogFilter) -> anyhow::Result<Vec<crate::eth::primitives::LogMined>> {
         todo!();
     }
