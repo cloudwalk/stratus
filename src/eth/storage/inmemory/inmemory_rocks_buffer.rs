@@ -1,13 +1,14 @@
-use std::{collections::HashMap, sync::RwLock};
+use std::collections::HashMap;
+use std::sync::RwLock;
 
 use anyhow::anyhow;
 
-use crate::eth::{
-    primitives::{Account, Address, Block},
-    storage::{PermanentStorage, RocksPermanentStorage},
-};
-
 use super::inmemory_temporary::InMemoryTemporaryAccount;
+use crate::eth::primitives::Account;
+use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
+use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::RocksPermanentStorage;
 
 struct InmemoryBufferState {
     block: Block,
