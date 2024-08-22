@@ -47,6 +47,9 @@ where
         let config = T::parse();
         let common = config.common();
 
+        // Set the unknown_client_enabled value
+        GlobalState::set_unknown_client_enabled(common.unknown_client_enabled);
+
         // init tokio
         let tokio = common.init_tokio_runtime().expect("failed to init tokio runtime");
 
