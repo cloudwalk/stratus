@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::sync::RwLock;
 
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
@@ -25,7 +26,7 @@ pub struct RpcContext {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
     pub storage: Arc<StratusStorage>,
-    pub consensus: Option<Arc<dyn Consensus>>,
+    pub consensus: RwLock<Option<Arc<dyn Consensus>>>,
     pub rpc_server: RpcServerConfig,
     pub subs: Arc<RpcSubscriptionsConnected>,
 }

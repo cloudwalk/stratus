@@ -100,7 +100,7 @@ pub async fn serve_rpc(
         executor,
         storage,
         miner,
-        consensus,
+        consensus: consensus.into(),
         rpc_server: rpc_config.clone(),
 
         // subscriptions
@@ -159,7 +159,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     }
 
     // stratus status
-    module.register_async_method("stratus_health", stratus_health)?;
+    module.register_method("stratus_health", stratus_health)?;
 
     // stratus admin
     module.register_async_method("stratus_initImporter", stratus_init_importer)?;
@@ -180,7 +180,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // blockchain
     module.register_method("net_version", net_version)?;
-    module.register_async_method("net_listening", net_listening)?;
+    module.register_method("net_listening", net_listening)?;
     module.register_method("eth_chainId", eth_chain_id)?;
     module.register_method("web3_clientVersion", web3_client_version)?;
 
@@ -246,16 +246,18 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
-async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensions: Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_health(_: Params<'_>, context: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_shutdown() {
         tracing::warn!("liveness check failed because of shutdown");
         return Err(StratusError::StratusShutdown);
     }
 
-    let should_serve = if let Some(consensus) = &context.consensus {
-        consensus.should_serve().await
-    } else {
-        true
+    let should_serve = {
+        let consensus_lock = context.consensus.read().unwrap();
+        match consensus_lock.as_ref() {
+            Some(consensus) => tokio::task::block_in_place(|| Handle::current().block_on(consensus.should_serve())),
+            None => true,
+        }
     };
 
     if not(should_serve) {
@@ -280,9 +282,11 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 
 // TODO: improve intermediate steps state
 // TODO: improve error handling
-// FIX: update consensus on context
 // TODO: refactor and clean up
 // TODO: add e2e tests
+// TODO: currently leader and follower in eth_sendRawTransaction are defined by consensus being None or not.
+// May need to change this so that we can have a more explicit way to define leader and follower there.
+// Also, this would allow us to set consensus to None when shutting down importer.
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if !GlobalState::is_follower() {
         return Ok(json!(false));
@@ -325,7 +329,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
 
     GlobalState::reset_importer_shutdown();
 
-    let _consensus = match importer_config
+    let consensus = match importer_config
         .init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage))
         .await
     {
@@ -335,6 +339,19 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
             return Ok(json!(false));
         }
     };
+
+    {
+        let mut consensus_lock = ctx.consensus.write().unwrap();
+        match consensus {
+            Some(consensus) => {
+                *consensus_lock = Some(consensus);
+            }
+            None => {
+                tracing::error!("Failed to update consensus: consensus is None");
+                return Ok(json!(false));
+            }
+        }
+    }
 
     Ok(json!(true))
 }
@@ -415,8 +432,8 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Ext
 // Blockchain
 // -----------------------------------------------------------------------------
 
-async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    let net_listening = stratus_health(params, arc, ext).await;
+fn net_listening(params: Params<'_>, context: &RpcContext, ext: &Extensions) -> Result<JsonValue, StratusError> {
+    let net_listening = stratus_health(params, context, ext);
 
     tracing::info!(net_listening = ?net_listening, "network listening status");
 
@@ -709,7 +726,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     }
 
     // execute locally or forward to leader
-    match &ctx.consensus {
+    match ctx.consensus.read().unwrap().as_ref() {
         // is leader
         None => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
