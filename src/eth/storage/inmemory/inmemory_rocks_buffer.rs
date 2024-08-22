@@ -1,5 +1,7 @@
 use std::{collections::HashMap, sync::RwLock};
 
+use anyhow::anyhow;
+
 use crate::eth::{
     primitives::{Account, Address, Block},
     storage::{PermanentStorage, RocksPermanentStorage},
@@ -43,6 +45,16 @@ pub struct InmemoryRocksBuffer {
     states: RwLock<Vec<InmemoryBufferState>>,
 }
 
+impl InmemoryRocksBuffer {
+    fn read(&self) -> anyhow::Result<std::sync::RwLockReadGuard<'_, Vec<InmemoryBufferState>>> {
+        self.states.read().map_err(|_| anyhow!("failed to acquire lock"))
+    }
+
+    fn write(&self) -> anyhow::Result<std::sync::RwLockWriteGuard<'_, Vec<InmemoryBufferState>>> {
+        self.states.write().map_err(|_| anyhow!("failed to acquire lock"))
+    }
+}
+
 impl PermanentStorage for InmemoryRocksBuffer {
     fn read_logs(&self, _filter: &crate::eth::primitives::LogFilter) -> anyhow::Result<Vec<crate::eth::primitives::LogMined>> {
         todo!();
@@ -54,7 +66,7 @@ impl PermanentStorage for InmemoryRocksBuffer {
         index: &crate::eth::primitives::SlotIndex,
         point_in_time: &crate::eth::storage::StoragePointInTime,
     ) -> anyhow::Result<Option<crate::eth::primitives::Slot>> {
-        let states = self.states.read().unwrap();
+        let states = self.read()?;
         // First, check if the slot exists in the in-memory states
         for state in states.iter().rev() {
             if let Some(account) = state.accounts.get(address) {
@@ -77,7 +89,7 @@ impl PermanentStorage for InmemoryRocksBuffer {
         address: &crate::eth::primitives::Address,
         point_in_time: &crate::eth::storage::StoragePointInTime,
     ) -> anyhow::Result<Option<crate::eth::primitives::Account>> {
-        let states = self.states.read().unwrap();
+        let states = self.read()?;
         // First, check if the account exists in the in-memory states
         for state in states.iter().rev() {
             if let Some(account) = state.accounts.get(address) {
@@ -90,7 +102,7 @@ impl PermanentStorage for InmemoryRocksBuffer {
     }
 
     fn save_block(&self, block: crate::eth::primitives::Block) -> anyhow::Result<()> {
-        let mut states = self.states.write().unwrap();
+        let mut states = self.write()?;
         states.push(InmemoryBufferState::from(block));
 
         if states.len() > 2 {
@@ -114,7 +126,7 @@ impl PermanentStorage for InmemoryRocksBuffer {
     }
 
     fn read_mined_block_number(&self) -> anyhow::Result<crate::eth::primitives::BlockNumber> {
-        let states = self.states.read().unwrap();
+        let states = self.read()?;
         if let Some(last_state) = states.last() {
             Ok(last_state.block.number())
         } else {
