@@ -163,7 +163,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     }
 
     // stratus status
-    module.register_method("stratus_health", stratus_health)?;
+    module.register_async_method("stratus_health", stratus_health)?;
 
     // stratus admin
     module.register_method("stratus_enableTransactions", stratus_enable_transactions)?;
@@ -182,7 +182,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // blockchain
     module.register_method("net_version", net_version)?;
-    module.register_method("net_listening", net_listening)?;
+    module.register_async_method("net_listening", net_listening)?;
     module.register_method("eth_chainId", eth_chain_id)?;
     module.register_method("web3_clientVersion", web3_client_version)?;
 
@@ -248,7 +248,7 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
-fn stratus_health(_: Params<'_>, context: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_shutdown() {
         tracing::warn!("liveness check failed because of shutdown");
         return Err(StratusError::StratusShutdown);
@@ -436,8 +436,8 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Ext
 // Blockchain
 // -----------------------------------------------------------------------------
 
-fn net_listening(params: Params<'_>, context: &RpcContext, ext: &Extensions) -> Result<JsonValue, StratusError> {
-    let net_listening = stratus_health(params, context, ext);
+async fn net_listening(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    let net_listening = stratus_health(params, ctx, ext).await;
 
     tracing::info!(net_listening = ?net_listening, "network listening status");
 
