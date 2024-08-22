@@ -1,5 +1,6 @@
 mod inmemory_history;
 mod inmemory_permanent;
+mod inmemory_rocks_buffer;
 mod inmemory_temporary;
 
 pub use inmemory_history::InMemoryHistory;
