@@ -110,6 +110,10 @@ pub struct CommonConfig {
     /// Prevents clap from breaking when passing `nocapture` options in tests.
     #[arg(long = "nocapture")]
     pub nocapture: bool,
+
+    /// Enables or disables unknown client interactions.
+    #[arg(long = "unknown-client-enabled", env = "UNKNOWN_CLIENT_ENABLED", default_value = "true")]
+    pub unknown_client_enabled: bool,
 }
 
 impl WithCommonConfig for CommonConfig {
