@@ -250,12 +250,10 @@ async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensio
 
     let should_serve = match GlobalState::get_node_mode() {
         NodeMode::Leader => true,
-        NodeMode::Follower =>
-            if let Some(consensus) = &context.consensus {
-                consensus.should_serve().await
-            } else {
-                false
-            },
+        NodeMode::Follower => match &context.consensus {
+            Some(consensus) => consensus.should_serve().await,
+            None => false,
+        },
     };
 
     if not(should_serve) {
