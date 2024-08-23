@@ -34,6 +34,10 @@ pub enum StratusError {
     #[strum(props(kind = "client_request"))]
     RpcBlockRangeInvalid { actual: u64, max: u64 },
 
+    #[error("Consensus is temporarily unavailable for follower node.")]
+    #[strum(props(kind = "server_state"))]
+    RpcConsensusUnavailable,
+
     #[error("Denied because client did not identify itself.")]
     #[strum(props(kind = "client_request"))]
     RpcClientMissing,

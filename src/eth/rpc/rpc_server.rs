@@ -634,9 +634,8 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     }
 
     // execute locally or forward to leader
-    match &ctx.consensus {
-        // is leader
-        None => match ctx.executor.execute_local_transaction(tx) {
+    match GlobalState::get_node_mode() {
+        NodeMode::Leader => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
                 if e.is_internal() {
@@ -646,10 +645,15 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
             }
         },
 
-        // is follower
-        Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
-            Ok(hash) => Ok(hex_data(hash)),
-            Err(e) => Err(e),
+        NodeMode::Follower => match &ctx.consensus {
+            Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+                Ok(hash) => Ok(hex_data(hash)),
+                Err(e) => Err(e),
+            },
+            None => {
+                tracing::error!("consensus is None for follower node");
+                Err(StratusError::RpcConsensusUnavailable)
+            }
         },
     }
 }
