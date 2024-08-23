@@ -31,8 +31,6 @@ describe("Leader & Follower integration test", function () {
         // Check Stratus Follower health
         const followerHealth = await sendWithRetry("stratus_health", []);
         expect(followerHealth).to.equal(true);
-
-        updateProviderUrl("stratus");
     });
 
     before(async function () {
@@ -46,6 +44,8 @@ describe("Leader & Follower integration test", function () {
 
             expect(deployer.address).to.equal(await brlcToken.mainMinter());
             expect(await brlcToken.isMinter(deployer.address)).to.be.true;
+
+            updateProviderUrl("stratus");
         });
     });
 
