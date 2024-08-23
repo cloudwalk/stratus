@@ -19,10 +19,18 @@ describe("Leader & Follower integration test", function () {
         const leaderMode = await sendWithRetry("stratus_state", []);
         expect(leaderMode.is_leader).to.equal(true);
 
+        // Check Stratus Leader health
+        const leaderHealth = await sendWithRetry("stratus_health", []);
+        expect(leaderHealth).to.equal(true);
+
         // Check Stratus Follower node mode
         updateProviderUrl("stratus-follower");
         const followerMode = await sendWithRetry("stratus_state", []);
         expect(followerMode.is_leader).to.equal(false);
+
+        // Check Stratus Follower health
+        const followerHealth = await sendWithRetry("stratus_health", []);
+        expect(followerHealth).to.equal(true);
 
         updateProviderUrl("stratus");
     });
