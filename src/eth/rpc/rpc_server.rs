@@ -57,6 +57,7 @@ use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
+use crate::NodeMode;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -247,10 +248,12 @@ async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensio
         return Err(StratusError::StratusShutdown);
     }
 
-    let should_serve = if let Some(consensus) = &context.consensus {
-        consensus.should_serve().await
-    } else {
-        true
+    let should_serve = match GlobalState::get_node_mode() {
+        NodeMode::Leader => true,
+        NodeMode::Follower => match &context.consensus {
+            Some(consensus) => consensus.should_serve().await,
+            None => false,
+        },
     };
 
     if not(should_serve) {
@@ -629,9 +632,8 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     }
 
     // execute locally or forward to leader
-    match &ctx.consensus {
-        // is leader
-        None => match ctx.executor.execute_local_transaction(tx) {
+    match GlobalState::get_node_mode() {
+        NodeMode::Leader => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
                 if e.is_internal() {
@@ -641,10 +643,15 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
             }
         },
 
-        // is follower
-        Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
-            Ok(hash) => Ok(hex_data(hash)),
-            Err(e) => Err(e),
+        NodeMode::Follower => match &ctx.consensus {
+            Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+                Ok(hash) => Ok(hex_data(hash)),
+                Err(e) => Err(e),
+            },
+            None => {
+                tracing::error!("unable to forward transaction because consensus is unavailable for follower node");
+                Err(StratusError::RpcConsensusUnavailable)
+            }
         },
     }
 }
