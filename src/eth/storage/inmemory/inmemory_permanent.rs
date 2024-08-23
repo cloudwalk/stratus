@@ -99,7 +99,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
     // -------------------------------------------------------------------------
     // State operations
-    // ------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
 
     fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         let state = self.lock_read();

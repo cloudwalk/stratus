@@ -82,7 +82,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
     // -------------------------------------------------------------------------
     // State operations
-    // ------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
 
     fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
         self.state.read_account(address, point_in_time)
