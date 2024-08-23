@@ -57,6 +57,7 @@ use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
+use crate::NodeMode;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -247,10 +248,14 @@ async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensio
         return Err(StratusError::StratusShutdown);
     }
 
-    let should_serve = if let Some(consensus) = &context.consensus {
-        consensus.should_serve().await
-    } else {
-        true
+    let should_serve = match GlobalState::get_node_mode() {
+        NodeMode::Leader => true,
+        NodeMode::Follower =>
+            if let Some(consensus) = &context.consensus {
+                consensus.should_serve().await
+            } else {
+                false
+            },
     };
 
     if not(should_serve) {
