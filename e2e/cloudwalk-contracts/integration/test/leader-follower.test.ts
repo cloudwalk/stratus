@@ -31,14 +31,18 @@ describe("Leader & Follower integration test", function () {
         // Check Stratus Follower health
         const followerHealth = await sendWithRetry("stratus_health", []);
         expect(followerHealth).to.equal(true);
+
+        updateProviderUrl("stratus");
     });
 
     before(async function () {
         await setDeployer();
     });
 
-    describe("Deploy and configure BRLC contract", function () {
+    describe("Deploy and configure BRLC contract via Transaction Forward to Leader node", function () {
         it("Validate deployer is main minter", async function () {
+            updateProviderUrl("stratus-follower");
+
             await deployBRLC();
             await configureBRLC();
 
