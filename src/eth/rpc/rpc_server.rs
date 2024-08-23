@@ -62,6 +62,7 @@ use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
+use crate::NodeMode;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -254,11 +255,14 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
         return Err(StratusError::StratusShutdown);
     }
 
-    let should_serve = {
-        let consensus_lock = context.consensus.read().unwrap();
-        match consensus_lock.as_ref() {
-            Some(consensus) => tokio::task::block_in_place(|| Handle::current().block_on(consensus.should_serve())),
-            None => true,
+    let should_serve = match GlobalState::get_node_mode() {
+        NodeMode::Leader => true,
+        NodeMode::Follower => {
+            let consensus_lock = context.consensus.read().unwrap();
+            match consensus_lock.as_ref() {
+                Some(consensus) => tokio::task::block_in_place(|| Handle::current().block_on(consensus.should_serve())),
+                None => false,
+            }
         }
     };
 
@@ -728,9 +732,8 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     }
 
     // execute locally or forward to leader
-    match ctx.consensus.read().unwrap().as_ref() {
-        // is leader
-        None => match ctx.executor.execute_local_transaction(tx) {
+    match GlobalState::get_node_mode() {
+        NodeMode::Leader => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
                 if e.is_internal() {
@@ -739,11 +742,15 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
                 Err(e)
             }
         },
-
-        // is follower
-        Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
-            Ok(hash) => Ok(hex_data(hash)),
-            Err(e) => Err(e),
+        NodeMode::Follower => match ctx.consensus.read().unwrap().as_ref() {
+            Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+                Ok(hash) => Ok(hex_data(hash)),
+                Err(e) => Err(e),
+            },
+            None => {
+                tracing::error!("unable to forward transaction because consensus is unavailable for follower node");
+                Err(StratusError::RpcConsensusUnavailable)
+            }
         },
     }
 }

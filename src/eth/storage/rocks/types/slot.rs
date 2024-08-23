@@ -6,7 +6,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SlotValueRocksdb(U256);
 
 impl SlotValueRocksdb {
