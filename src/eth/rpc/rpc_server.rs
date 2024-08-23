@@ -649,7 +649,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
                 Err(e) => Err(e),
             },
             None => {
-                tracing::error!("consensus is None for follower node");
+                tracing::error!("unable to forward transaction because consensus is unavailable for follower node");
                 Err(StratusError::RpcConsensusUnavailable)
             }
         },
