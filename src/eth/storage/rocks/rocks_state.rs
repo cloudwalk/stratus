@@ -469,8 +469,8 @@ impl RocksStorageState {
             account: AccountRocksdb,
         }
 
-        let mut history_accounts_count = 0;
-        let mut accounts_count = 0;
+        let mut history_accounts_count = 0_u64;
+        let mut accounts_count = 0_u64;
         let mut last_account: Option<LastHistoricalAccount> = None;
 
         tracing::info!("starting iteration through historical accounts to clean values after target_block and reconstruct current accounts state");
@@ -510,8 +510,8 @@ impl RocksStorageState {
             value: SlotValueRocksdb,
         }
 
-        let mut history_slots_count = 0;
-        let mut slots_count = 0;
+        let mut history_slots_count = 0_u64;
+        let mut slots_count = 0_u64;
         let mut last_slot: Option<LastHistoricalSlot> = None;
 
         tracing::info!("starting iteration through historical slots to clean values after target_block and reconstruct current slots state");
