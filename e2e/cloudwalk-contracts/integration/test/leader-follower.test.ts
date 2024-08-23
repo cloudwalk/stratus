@@ -39,7 +39,7 @@ describe("Leader & Follower integration test", function () {
         await setDeployer();
     });
 
-    describe("Deploy and configure BRLC contract via Transaction Forward to Leader node", function () {
+    describe("Deploy and configure BRLC contract using transaction forwarding from follower to leader", function () {
         it("Validate deployer is main minter", async function () {
             updateProviderUrl("stratus-follower");
 
