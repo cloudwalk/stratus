@@ -39,7 +39,7 @@ use tokio::time::Instant;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 /// Number of tasks in the backlog. Each task contains `--blocks-by-fetch` blocks and all receipts for them.
-const BACKLOG_SIZE: usize = 50;
+const BACKLOG_SIZE: usize = 10;
 
 type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
 
