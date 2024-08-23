@@ -1,3 +1,5 @@
+/// Batch writer with capacity for flushing temporarily.
+mod rocks_batch_writer;
 /// Data manipulation for column families.
 mod rocks_cf;
 /// Settings and tweaks for the database and column families.
