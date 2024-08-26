@@ -21,6 +21,9 @@ export const FAKE_32_BYTES = "0xabcdef1234567890abcdef1234567890abcdef1234567890
 export const FAKE_16_BYTES = "0xabcdef1234567890abcdef1234567890";
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+export const CHAIN_ID_DEC = 2008;
+export const CHAIN_ID = toHex(CHAIN_ID_DEC);
+
 /* Contracts instances */
 export let brlcToken: BRLCToken;
 export let pixCashier: PixCashier;
@@ -232,4 +235,9 @@ export async function sendWithRetry(methodName: string, params: any[], maxAttemp
         }
     }
     throw new Error(`Failed to get a non-null response from ${methodName} after ${maxAttempts} attempts.`);
+}
+
+// Converts a number to Blockchain hex representation (prefixed with 0x).
+export function toHex(number: number | bigint): string {
+    return "0x" + number.toString(16);
 }

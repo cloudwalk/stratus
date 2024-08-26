@@ -100,7 +100,7 @@ pub enum NodeMode {
 static STRATUS_SHUTDOWN: Lazy<CancellationToken> = Lazy::new(CancellationToken::new);
 
 /// Importer is running or being shut-down?
-static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(false);
+static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(true);
 
 /// Transaction should be accepted?
 static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -172,7 +172,7 @@ impl GlobalState {
     /// Returns the formatted reason for importer shutdown.
     pub fn shutdown_importer_from(caller: &str, reason: &str) -> String {
         tracing::warn!(%caller, %reason, "importer is shutting down");
-        IMPORTER_SHUTDOWN.store(true, Ordering::SeqCst);
+        Self::set_importer_shutdown(true);
         format!("{} {}", caller, reason)
     }
 
@@ -190,9 +190,9 @@ impl GlobalState {
         shutdown
     }
 
-    /// Resets the importer shutdown state.
-    pub fn reset_importer_shutdown() {
-        IMPORTER_SHUTDOWN.store(false, Ordering::SeqCst);
+    /// Sets the importer shutdown state.
+    pub fn set_importer_shutdown(shutdown: bool) {
+        IMPORTER_SHUTDOWN.store(shutdown, Ordering::SeqCst);
     }
 
     // -------------------------------------------------------------------------
@@ -243,7 +243,12 @@ impl GlobalState {
 
     /// Initializes the node mode based on the StratusConfig.
     pub fn initialize_node_mode(config: &StratusConfig) {
-        let mode = if config.follower { NodeMode::Follower } else { NodeMode::Leader };
+        let mode = if config.follower {
+            Self::set_importer_shutdown(false);
+            NodeMode::Follower
+        } else {
+            NodeMode::Leader
+        };
         Self::set_node_mode(mode);
     }
 

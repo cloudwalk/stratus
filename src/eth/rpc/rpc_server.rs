@@ -331,7 +331,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         ..importer_config
     };
 
-    GlobalState::reset_importer_shutdown();
+    GlobalState::set_importer_shutdown(false);
 
     let consensus = match importer_config
         .init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage))
@@ -361,7 +361,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
 }
 
 #[cfg(feature = "dev")]
-fn stratus_shutdown_importer(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
     if !GlobalState::is_follower() {
         return false;
     }
@@ -370,8 +370,16 @@ fn stratus_shutdown_importer(_: Params<'_>, _: &RpcContext, _: &Extensions) -> b
         return true;
     }
 
+    {
+        tracing::info!("Attempting to clear consensus.");
+        let mut consensus_lock = ctx.consensus.write().unwrap();
+        *consensus_lock = None;
+        tracing::info!("Consensus has been cleared.");
+    }
+
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
+
     GlobalState::is_importer_shutdown()
 }
 
@@ -742,12 +750,21 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
             }
         },
         NodeMode::Follower => match ctx.consensus.read().unwrap().as_ref() {
-            Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
-                Ok(hash) => Ok(hex_data(hash)),
-                Err(e) => Err(e),
-            },
+            Some(consensus) => {
+                tracing::info!("Consensus is available for follower node, attempting to forward transaction.");
+                match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+                    Ok(hash) => {
+                        tracing::info!("Transaction successfully forwarded to leader. Hash: {:?}", hash);
+                        Ok(hex_data(hash))
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to forward transaction to leader: {:?}", e);
+                        Err(e)
+                    }
+                }
+            }
             None => {
-                tracing::error!("unable to forward transaction because consensus is unavailable for follower node");
+                tracing::error!("Unable to forward transaction because consensus is unavailable for follower node");
                 Err(StratusError::RpcConsensusUnavailable)
             }
         },

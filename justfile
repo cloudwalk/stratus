@@ -266,18 +266,8 @@ e2e-flamegraph:
     just _log "Running cargo flamegraph"
     cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
-e2e-leader-follower:
-    #!/bin/bash
-
-    just e2e-leader-follower-up
-    result_code=$?
-
-    just e2e-leader-follower-down
-
-    exit $result_code
-
 # E2E: Leader & Follower Up
-e2e-leader-follower-up:
+e2e-leader-follower-up test="transactions":
     #!/bin/bash
 
     # Build Stratus binary
@@ -302,7 +292,7 @@ e2e-leader-follower-up:
     (
         cd e2e/cloudwalk-contracts/integration
         npm install
-        npx hardhat test test/leader-follower.test.ts --network stratus --bail
+        npx hardhat test test/leader-follower-{{test}}.test.ts --network stratus --bail --show-stack-traces
         if [ $? -ne 0 ]; then
             just _log "Tests failed"
             exit 1

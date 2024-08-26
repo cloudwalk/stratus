@@ -12,7 +12,7 @@ import {
     updateProviderUrl,
 } from "./helpers/rpc";
 
-describe("Leader & Follower integration test", function () {
+describe("Leader & Follower transactions integration test", function () {
     it("Validate node modes for leader and follower", async function () {
         // Check Stratus Leader node mode
         updateProviderUrl("stratus");
