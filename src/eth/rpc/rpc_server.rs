@@ -289,7 +289,6 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 // TODO: improve intermediate steps state
 // TODO: improve error handling
 // TODO: refactor and clean up
-// TODO: add e2e tests
 #[cfg(feature = "dev")]
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if !GlobalState::is_follower() {

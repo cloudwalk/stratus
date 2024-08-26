@@ -267,7 +267,7 @@ e2e-flamegraph:
     cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
 # E2E: Leader & Follower Up
-e2e-leader-follower-up test="transactions":
+e2e-leader-follower-up test="brlc":
     #!/bin/bash
 
     # Build Stratus binary

@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [transactions, importer]
+        test: [brlc, importer]
     name: E2E Leader & Follower on ${{ matrix.test }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
