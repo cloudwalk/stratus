@@ -258,7 +258,7 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
     let should_serve = match GlobalState::get_node_mode() {
         NodeMode::Leader => true,
         NodeMode::Follower => {
-            let consensus_lock = context.consensus.read().unwrap();
+            let consensus_lock = context.consensus.read().map_err(|_| StratusError::ConsensusLockFailed)?;
             match consensus_lock.as_ref() {
                 Some(consensus) => tokio::task::block_in_place(|| Handle::current().block_on(consensus.should_serve())),
                 None => false,
