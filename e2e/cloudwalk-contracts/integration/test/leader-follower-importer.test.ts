@@ -5,8 +5,6 @@ import { ALICE, BOB } from "./helpers/account";
 import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
 
 describe("Leader & Follower importer integration test", function () {
-    let txHash: string;
-
     it("Validate initial Leader state and health", async function () {
         updateProviderUrl("stratus");
         const leaderNode = await sendWithRetry("stratus_state", []);
@@ -62,21 +60,21 @@ describe("Leader & Follower importer integration test", function () {
         expect(parseInt(leaderBlock, 16)).to.be.greaterThan(parseInt(followerBlock, 16));
     });
 
+    let txHash1: string;
     it("Transactions on Leader should still succeed after Importer shutdown", async function () {
         updateProviderUrl("stratus");
         const nonceResponse = await sendAndGetFullResponse("eth_getTransactionCount", [ALICE.address, "latest"]);
         const nonce = parseInt(nonceResponse.data.result, 16);
         const signedTx = await ALICE.signWeiTransfer(BOB.address, 1, nonce);
-        txHash = keccak256(signedTx);
+        txHash1 = keccak256(signedTx);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
-        expect(txResponse.data.result).to.equal(txHash);
+        expect(txResponse.data.result).to.equal(txHash1);
     });
 
     it("Previous transaction on Leader should not appear on Follower when Importer is shutdown", async function () {
         updateProviderUrl("stratus-follower");
-        const txResponseFollower = await getTransactionByHashUntilConfirmed(txHash);
+        const txResponseFollower = await getTransactionByHashUntilConfirmed(txHash1);
         expect(txResponseFollower.data.result).to.equal(null);
-        txHash = "";
     });
 
     it("Transactions on Follower should fail when Importer is shutdown", async function () {
@@ -154,38 +152,38 @@ describe("Leader & Follower importer integration test", function () {
         expect(leaderHealth).to.equal(true);
     });
 
+    let txHash2: string;
     it("Transactions on Leader should succeed after Importer restart", async function () {
         updateProviderUrl("stratus");
         const nonceResponse = await sendAndGetFullResponse("eth_getTransactionCount", [ALICE.address, "latest"]);
         const nonce = parseInt(nonceResponse.data.result, 16);
         const signedTx = await ALICE.signWeiTransfer(BOB.address, 1, nonce);
-        txHash = keccak256(signedTx);
+        txHash2 = keccak256(signedTx);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
-        expect(txResponse.data.result).to.equal(txHash);
+        expect(txResponse.data.result).to.equal(txHash2);
     });
 
     it("Previous transaction on Leader should appear on Follower when Importer is running", async function () {
         updateProviderUrl("stratus-follower");
-        const txResponseFollower = await getTransactionByHashUntilConfirmed(txHash);
-        expect(txResponseFollower.data.result.hash).to.equal(txHash);
-        txHash = "";
+        const txResponseFollower = await getTransactionByHashUntilConfirmed(txHash2);
+        expect(txResponseFollower.data.result.hash).to.equal(txHash2);
     });
 
+    let txHash3: string;
     it("Transactions on Follower should succeed and be forwarded to Leader after Importer restart", async function () {
         updateProviderUrl("stratus-follower");
         const nonceResponse = await sendAndGetFullResponse("eth_getTransactionCount", [BOB.address, "latest"]);
         const nonce = parseInt(nonceResponse.data.result, 16);
         const signedTx = await BOB.signWeiTransfer(ALICE.address, 1, nonce);
-        txHash = keccak256(signedTx);
+        txHash3 = keccak256(signedTx);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
-        expect(txResponse.data.result).to.equal(txHash);
+        expect(txResponse.data.result).to.equal(txHash3);
     });
 
     it("Previous transaction on Follower should forward and exist on Leader", async function () {
         updateProviderUrl("stratus");
-        const txResponseLeader = await getTransactionByHashUntilConfirmed(txHash);
-        expect(txResponseLeader.data.result.hash).to.equal(txHash);
-        txHash = "";
+        const txResponseLeader = await getTransactionByHashUntilConfirmed(txHash3);
+        expect(txResponseLeader.data.result.hash).to.equal(txHash3);
     });
 });
 
