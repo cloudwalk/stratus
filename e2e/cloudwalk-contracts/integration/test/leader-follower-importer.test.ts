@@ -100,6 +100,14 @@ describe("Leader & Follower importer integration test", function () {
         expect(responseInvalidFollower.data.error.code).to.equal(-32602);
         expect(responseInvalidFollower.data.error.message).to.equal("Expected String parameter, but received nothing.");
 
+        // Init command to Follower with invalid addresses should fail
+        const responseInvalidAddressFollower = await sendAndGetFullResponse("stratus_initImporter", [
+            "http://0.0.0.0:9999/",
+            "ws://0.0.0.0:9999/",
+        ]);
+        expect(responseInvalidAddressFollower.data.error.code).to.equal(-32603);
+        expect(responseInvalidAddressFollower.data.error.message).to.equal("Failed to initialize importer.");
+
         // Init command to Follower with addresses should succeed
         const responseValidFollower = await sendAndGetFullResponse("stratus_initImporter", [
             "http://0.0.0.0:3000/",
