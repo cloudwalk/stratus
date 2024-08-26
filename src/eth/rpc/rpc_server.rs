@@ -286,8 +286,6 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
     Ok(to_json_value(true))
 }
 
-// TODO: improve intermediate steps state
-// TODO: refactor and clean up
 #[cfg(feature = "dev")]
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if not(GlobalState::is_follower()) {
@@ -340,6 +338,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         Ok(consensus) => consensus,
         Err(e) => {
             tracing::error!("failed to initialize importer: {}", e);
+            GlobalState::set_importer_shutdown(true);
             return Err(StratusError::ImporterInitError);
         }
     };
@@ -352,6 +351,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
             }
             None => {
                 tracing::error!("failed to update consensus: consensus is None");
+                GlobalState::set_importer_shutdown(true);
                 return Err(StratusError::ConsensusUpdateError);
             }
         }

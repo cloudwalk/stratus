@@ -178,7 +178,7 @@ impl GlobalState {
 
     /// Checks if the importer is being shutdown.
     pub fn is_importer_shutdown() -> bool {
-        IMPORTER_SHUTDOWN.load(Ordering::SeqCst)
+        IMPORTER_SHUTDOWN.load(Ordering::Relaxed)
     }
 
     /// Checks if the importer is being shutdown. Emits a warning with the task name in case it is.
@@ -192,7 +192,7 @@ impl GlobalState {
 
     /// Sets the importer shutdown state.
     pub fn set_importer_shutdown(shutdown: bool) {
-        IMPORTER_SHUTDOWN.store(shutdown, Ordering::SeqCst);
+        IMPORTER_SHUTDOWN.store(shutdown, Ordering::Relaxed);
     }
 
     // -------------------------------------------------------------------------
