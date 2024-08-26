@@ -15,7 +15,6 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::ExternalRpcStorage;
-use crate::ext::not;
 use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
 use crate::ext::SleepReason;
@@ -38,10 +37,6 @@ impl PostgresExternalRpcStorage {
     /// Creates a new [`PostgresExternalRpcStorage`].
     pub async fn new(config: PostgresExternalRpcStorageConfig) -> anyhow::Result<Self> {
         tracing::info!(?config, "creating postgres external rpc storage");
-
-        if not(config.url.contains('?')) {
-            tracing::warn!(url = config.url, "url isn't identified with '?app=NAME' query parameter");
-        }
 
         let result = PgPoolOptions::new()
             .min_connections(config.connections)

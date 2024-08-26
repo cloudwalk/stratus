@@ -34,6 +34,10 @@ fn main() -> anyhow::Result<()> {
 async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     let _timer = DropTimer::start("rpc-downloader");
 
+    if not(config.external_rpc.contains("app=") || config.external_rpc.contains("/app/")) {
+        tracing::warn!(url = config.external_rpc, "url isn't identified with '?app=NAME' query parameter");
+    }
+
     let rpc_storage = config.rpc_storage.init().await?;
     let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc, config.external_rpc_timeout).await?);
 
