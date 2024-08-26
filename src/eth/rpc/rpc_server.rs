@@ -291,11 +291,11 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 // TODO: refactor and clean up
 #[cfg(feature = "dev")]
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    if !GlobalState::is_follower() {
+    if not(GlobalState::is_follower()) {
         return Ok(json!(false));
     }
 
-    if !GlobalState::is_importer_shutdown() {
+    if not(GlobalState::is_importer_shutdown()) {
         return Ok(json!(false));
     }
 
@@ -370,16 +370,14 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     }
 
     {
-        tracing::info!("Attempting to clear consensus.");
         let mut consensus_lock = ctx.consensus.write().unwrap();
         *consensus_lock = None;
-        tracing::info!("Consensus has been cleared.");
     }
 
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
 
-    GlobalState::is_importer_shutdown()
+    return true;
 }
 
 fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
