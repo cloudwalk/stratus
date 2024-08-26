@@ -2,11 +2,7 @@ import { expect } from "chai";
 import { keccak256 } from "ethers";
 
 import { ALICE, BOB } from "./helpers/account";
-import {
-    sendAndGetFullResponse,
-    sendWithRetry,
-    updateProviderUrl,
-} from "./helpers/rpc";
+import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
 
 describe("Leader & Follower importer integration test", function () {
     it("Validate initial states", async function () {
@@ -28,24 +24,24 @@ describe("Leader & Follower importer integration test", function () {
     });
 
     it("Shutdown importer", async function () {
-       // Send shutdown command to Follower
-       updateProviderUrl("stratus-follower");
-       await sendWithRetry("stratus_shutdownImporter", []);
+        // Send shutdown command to Follower
+        updateProviderUrl("stratus-follower");
+        await sendWithRetry("stratus_shutdownImporter", []);
 
-       // Validate Follower state and health
-       const followerNode = await sendWithRetry("stratus_state", []);
-       expect(followerNode.is_leader).to.equal(false);
-       expect(followerNode.is_importer_shutdown).to.equal(true);
-       const followerHealth = await sendAndGetFullResponse("stratus_health", []);
-       expect(followerHealth.data.error.code).eq(-32009);
+        // Validate Follower state and health
+        const followerNode = await sendWithRetry("stratus_state", []);
+        expect(followerNode.is_leader).to.equal(false);
+        expect(followerNode.is_importer_shutdown).to.equal(true);
+        const followerHealth = await sendAndGetFullResponse("stratus_health", []);
+        expect(followerHealth.data.error.code).eq(-32009);
 
-       // Validate Leader state and health
-       updateProviderUrl("stratus");
-       const leaderNode = await sendWithRetry("stratus_state", []);
-       expect(leaderNode.is_leader).to.equal(true);
-       expect(leaderNode.is_importer_shutdown).to.equal(true);
-       const leaderHealth = await sendAndGetFullResponse("stratus_health", []);
-       expect(leaderHealth.data.result).to.equal(true);
+        // Validate Leader state and health
+        updateProviderUrl("stratus");
+        const leaderNode = await sendWithRetry("stratus_state", []);
+        expect(leaderNode.is_leader).to.equal(true);
+        expect(leaderNode.is_importer_shutdown).to.equal(true);
+        const leaderHealth = await sendAndGetFullResponse("stratus_health", []);
+        expect(leaderHealth.data.result).to.equal(true);
     });
 
     it("(Importer Shutdown) Validate Follower is not importing blocks from Leader", async function () {
@@ -78,7 +74,6 @@ describe("Leader & Follower importer integration test", function () {
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(txResponse.data.error.code).to.equal(-32009);
     });
-    
 
     it("Restart importer and validate states", async function () {
         // Send init command to Follower
@@ -95,7 +90,7 @@ describe("Leader & Follower importer integration test", function () {
         expect(followerNode.is_importer_shutdown).to.equal(false);
         const followerHealth = await sendWithRetry("stratus_health", []);
         expect(followerHealth).to.equal(true);
-        
+
         // Validate Leader state and health
         updateProviderUrl("stratus");
         const leaderNode = await sendWithRetry("stratus_state", []);
@@ -119,7 +114,7 @@ describe("Leader & Follower importer integration test", function () {
         updateProviderUrl("stratus-follower");
         const txResponseFollower = await getTransactionByHashUntilConfirmed(txHash);
         expect(txResponseFollower.data.result.hash).to.equal(txHash);
-     });
+    });
 
     it("(Importer Restarted) Validate Follower is able to receive Transactions", async function () {
         // Transactions on Follower should succeed
@@ -182,7 +177,7 @@ async function getTransactionByHashUntilConfirmed(txHash: string, maxRetries: nu
 
     while (retries < maxRetries) {
         txResponse = await sendAndGetFullResponse("eth_getTransactionByHash", [txHash]);
-        
+
         if (txResponse.data.result) {
             return txResponse;
         }
@@ -193,4 +188,3 @@ async function getTransactionByHashUntilConfirmed(txHash: string, maxRetries: nu
 
     return txResponse;
 }
-
