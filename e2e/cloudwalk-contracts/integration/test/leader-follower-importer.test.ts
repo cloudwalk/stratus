@@ -24,9 +24,16 @@ describe("Leader & Follower importer integration test", function () {
     });
 
     it("Shutdown importer", async function () {
+        // Shutdown command to Leader should fail
+        updateProviderUrl("stratus");
+        const responseLeader = await sendAndGetFullResponse("stratus_shutdownImporter", []);
+        expect(responseLeader.data.error.code).eq(-32009);
+        expect(responseLeader.data.error.message).eq("Stratus node is not a follower.");
+
         // Send shutdown command to Follower
         updateProviderUrl("stratus-follower");
-        await sendWithRetry("stratus_shutdownImporter", []);
+        const responseFollower = await sendAndGetFullResponse("stratus_shutdownImporter", []);
+        expect(responseFollower.data.result).to.equal(true);
 
         // Validate Follower state and health
         const followerNode = await sendWithRetry("stratus_state", []);
@@ -34,6 +41,7 @@ describe("Leader & Follower importer integration test", function () {
         expect(followerNode.is_importer_shutdown).to.equal(true);
         const followerHealth = await sendAndGetFullResponse("stratus_health", []);
         expect(followerHealth.data.error.code).eq(-32009);
+        expect(followerHealth.data.error.message).eq("Stratus is not ready to start servicing requests.");
 
         // Validate Leader state and health
         updateProviderUrl("stratus");
@@ -72,13 +80,40 @@ describe("Leader & Follower importer integration test", function () {
         const nonce = parseInt(nonceResponse.data.result, 16);
         const signedTx = await BOB.signWeiTransfer(ALICE.address, 1, nonce);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
-        expect(txResponse.data.error.code).to.equal(-32009);
+        expect(txResponse.data.error.code).to.equal(-32603);
+        expect(txResponse.data.error.message).to.equal("Consensus is temporarily unavailable for follower node.");
     });
 
     it("Restart importer and validate states", async function () {
-        // Send init command to Follower
+        // Init command to Leader should fail
+        updateProviderUrl("stratus");
+        const responseLeader = await sendAndGetFullResponse("stratus_initImporter", [
+            "http://0.0.0.0:3000/",
+            "ws://0.0.0.0:3000/",
+        ]);
+        expect(responseLeader.data.error.code).to.equal(-32009);
+        expect(responseLeader.data.error.message).to.equal("Stratus node is not a follower.");
+
+        // Init command to Follower without addresses should fail
         updateProviderUrl("stratus-follower");
-        await sendWithRetry("stratus_initImporter", ["http://0.0.0.0:3000/", "ws://0.0.0.0:3000/"]);
+        const responseInvalidFollower = await sendAndGetFullResponse("stratus_initImporter", []);
+        expect(responseInvalidFollower.data.error.code).to.equal(-32602);
+        expect(responseInvalidFollower.data.error.message).to.equal("Expected String parameter, but received nothing.");
+
+        // Init command to Follower with addresses should succeed
+        const responseValidFollower = await sendAndGetFullResponse("stratus_initImporter", [
+            "http://0.0.0.0:3000/",
+            "ws://0.0.0.0:3000/",
+        ]);
+        expect(responseValidFollower.data.result).to.equal(true);
+
+        // Init command to Follower when Importer is already running should fail
+        const responseSecondInitFollower = await sendAndGetFullResponse("stratus_initImporter", [
+            "http://0.0.0.0:3000/",
+            "ws://0.0.0.0:3000/",
+        ]);
+        expect(responseSecondInitFollower.data.error.code).to.equal(-32603);
+        expect(responseSecondInitFollower.data.error.message).to.equal("Importer is already running.");
 
         // Wait until Follower is in sync with Leader
         await waitForFollowerToSyncWithLeader();
