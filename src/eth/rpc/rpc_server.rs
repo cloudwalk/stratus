@@ -301,7 +301,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     let app_config: Value = match serde_json::from_value(ctx.app_config.clone()) {
         Ok(config) => config,
         Err(e) => {
-            tracing::error!("failed to parse app_config: {}", e);
+            tracing::error!(reason = ?e, "failed to parse app_config");
             return Err(StratusError::AppConfigParseError);
         }
     };
@@ -310,7 +310,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         Some(importer_value) => match serde_json::from_value(importer_value.clone()) {
             Ok(config) => config,
             Err(e) => {
-                tracing::error!("failed to parse importer configuration: {}", e);
+                tracing::error!(reason = ?e, "failed to parse importer configuration");
                 return Err(StratusError::ImporterConfigParseError);
             }
         },
@@ -337,7 +337,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     {
         Ok(consensus) => consensus,
         Err(e) => {
-            tracing::error!("failed to initialize importer: {}", e);
+            tracing::error!(reason = ?e, "failed to initialize importer");
             GlobalState::set_importer_shutdown(true);
             return Err(StratusError::ImporterInitError);
         }
