@@ -360,9 +360,9 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
 }
 
 #[cfg(feature = "dev")]
-fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
+fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     if not(GlobalState::is_follower()) {
-        return false;
+        return Ok(json!(false));
     }
 
     {
@@ -373,7 +373,7 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
 
-    return true;
+    return Ok(json!(true));
 }
 
 fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
