@@ -287,23 +287,24 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 }
 
 // TODO: improve intermediate steps state
-// TODO: improve error handling
 // TODO: refactor and clean up
 #[cfg(feature = "dev")]
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if not(GlobalState::is_follower()) {
-        return Ok(json!(false));
+        tracing::error!("node is currently not a follower");
+        return Err(StratusError::StratusNotFollower);
     }
 
     if not(GlobalState::is_importer_shutdown()) {
-        return Ok(json!(false));
+        tracing::error!("importer is already running");
+        return Err(StratusError::ImporterAlreadyRunning);
     }
 
     let app_config: Value = match serde_json::from_value(ctx.app_config.clone()) {
         Ok(config) => config,
         Err(_) => {
-            tracing::error!("Failed to parse app_config");
-            return Ok(json!(false));
+            tracing::error!("failed to parse app_config");
+            return Err(StratusError::AppConfigParseError);
         }
     };
 
@@ -311,13 +312,13 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         Some(importer_value) => match serde_json::from_value(importer_value.clone()) {
             Ok(config) => config,
             Err(_) => {
-                tracing::error!("Failed to parse importer configuration");
-                return Ok(json!(false));
+                tracing::error!("failed to parse importer configuration");
+                return Err(StratusError::ImporterConfigParseError);
             }
         },
         None => {
-            tracing::error!("Importer configuration not found in app_config");
-            return Ok(json!(false));
+            tracing::error!("importer configuration not found in app_config");
+            return Err(StratusError::ImporterConfigNotFound);
         }
     };
 
@@ -336,8 +337,8 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     {
         Ok(consensus) => consensus,
         Err(e) => {
-            tracing::error!("Failed to initialize importer: {}", e);
-            return Ok(json!(false));
+            tracing::error!("failed to initialize importer: {}", e);
+            return Err(StratusError::ImporterInitError);
         }
     };
 
@@ -348,8 +349,8 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
                 *consensus_lock = Some(consensus);
             }
             None => {
-                tracing::error!("Failed to update consensus: consensus is None");
-                return Ok(json!(false));
+                tracing::error!("failed to update consensus: consensus is None");
+                return Err(StratusError::ConsensusUpdateError);
             }
         }
     }
@@ -362,7 +363,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
 #[cfg(feature = "dev")]
 fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     if not(GlobalState::is_follower()) {
-        return Ok(json!(false));
+        return Err(StratusError::StratusNotFollower);
     }
 
     {
@@ -758,7 +759,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
             }
             None => {
                 tracing::error!("Unable to forward transaction because consensus is unavailable for follower node");
-                Err(StratusError::RpcConsensusUnavailable)
+                Err(StratusError::ConsensusUnavailable)
             }
         },
     }

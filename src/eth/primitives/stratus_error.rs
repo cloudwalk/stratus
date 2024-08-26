@@ -34,10 +34,6 @@ pub enum StratusError {
     #[strum(props(kind = "client_request"))]
     RpcBlockRangeInvalid { actual: u64, max: u64 },
 
-    #[error("Consensus is temporarily unavailable for follower node.")]
-    #[strum(props(kind = "server_state"))]
-    RpcConsensusUnavailable,
-
     #[error("Denied because client did not identify itself.")]
     #[strum(props(kind = "client_request"))]
     RpcClientMissing,
@@ -117,6 +113,43 @@ pub enum StratusError {
     StoragePendingNumberConflict { new: BlockNumber, pending: BlockNumber },
 
     // -------------------------------------------------------------------------
+    // Importer
+    // -------------------------------------------------------------------------
+    #[error("Importer is already running.")]
+    #[strum(props(kind = "internal"))]
+    ImporterAlreadyRunning,
+
+    #[error("Failed to parse importer configuration.")]
+    #[strum(props(kind = "internal"))]
+    ImporterConfigParseError,
+
+    #[error("Importer configuration not found in app_config.")]
+    #[strum(props(kind = "internal"))]
+    ImporterConfigNotFound,
+
+    #[error("Failed to initialize importer.")]
+    #[strum(props(kind = "internal"))]
+    ImporterInitError,
+
+    // -------------------------------------------------------------------------
+    // Consensus
+    // -------------------------------------------------------------------------
+    #[error("Consensus is temporarily unavailable for follower node.")]
+    #[strum(props(kind = "server_state"))]
+    ConsensusUnavailable,
+
+    #[error("Failed to update consensus.")]
+    #[strum(props(kind = "server_state"))]
+    ConsensusUpdateError,
+
+    // -------------------------------------------------------------------------
+    // AppConfig
+    // -------------------------------------------------------------------------
+    #[error("Failed to parse app_config.")]
+    #[strum(props(kind = "internal"))]
+    AppConfigParseError,
+
+    // -------------------------------------------------------------------------
     // Unexpected
     // -------------------------------------------------------------------------
     #[error("Unexpected channel {channel} closed.")]
@@ -137,6 +170,10 @@ pub enum StratusError {
     #[error("Stratus is shutting down.")]
     #[strum(props(kind = "server_state"))]
     StratusShutdown,
+
+    #[error("Stratus node is not a follower.")]
+    #[strum(props(kind = "server_state"))]
+    StratusNotFollower,
 }
 
 impl StratusError {
