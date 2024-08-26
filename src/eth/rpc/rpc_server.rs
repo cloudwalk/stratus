@@ -747,19 +747,10 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
         NodeMode::Follower => {
             let consensus_lock = ctx.consensus.read().map_err(|_| StratusError::ConsensusLockFailed)?;
             match consensus_lock.as_ref() {
-                Some(consensus) => {
-                    tracing::info!("consensus is available for follower node, attempting to forward transaction.");
-                    match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
-                        Ok(hash) => {
-                            tracing::info!("transaction successfully forwarded to leader. Hash: {:?}", hash);
-                            Ok(hex_data(hash))
-                        }
-                        Err(e) => {
-                            tracing::error!("failed to forward transaction to leader: {:?}", e);
-                            Err(e)
-                        }
-                    }
-                }
+                Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+                    Ok(hash) => Ok(hex_data(hash)),
+                    Err(e) => Err(e),
+                },
                 None => {
                     tracing::error!("unable to forward transaction because consensus is temporarily unavailable for follower node");
                     Err(StratusError::ConsensusUnavailable)
