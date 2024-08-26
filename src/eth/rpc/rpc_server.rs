@@ -744,25 +744,28 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
                 Err(e)
             }
         },
-        NodeMode::Follower => match ctx.consensus.read().unwrap().as_ref() {
-            Some(consensus) => {
-                tracing::info!("Consensus is available for follower node, attempting to forward transaction.");
-                match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
-                    Ok(hash) => {
-                        tracing::info!("Transaction successfully forwarded to leader. Hash: {:?}", hash);
-                        Ok(hex_data(hash))
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to forward transaction to leader: {:?}", e);
-                        Err(e)
+        NodeMode::Follower => {
+            let consensus_lock = ctx.consensus.read().map_err(|_| StratusError::ConsensusLockFailed)?;
+            match consensus_lock.as_ref() {
+                Some(consensus) => {
+                    tracing::info!("consensus is available for follower node, attempting to forward transaction.");
+                    match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+                        Ok(hash) => {
+                            tracing::info!("transaction successfully forwarded to leader. Hash: {:?}", hash);
+                            Ok(hex_data(hash))
+                        }
+                        Err(e) => {
+                            tracing::error!("failed to forward transaction to leader: {:?}", e);
+                            Err(e)
+                        }
                     }
                 }
+                None => {
+                    tracing::error!("unable to forward transaction because consensus is unavailable for follower node");
+                    Err(StratusError::ConsensusUnavailable)
+                }
             }
-            None => {
-                tracing::error!("Unable to forward transaction because consensus is unavailable for follower node");
-                Err(StratusError::ConsensusUnavailable)
-            }
-        },
+        }
     }
 }
 
