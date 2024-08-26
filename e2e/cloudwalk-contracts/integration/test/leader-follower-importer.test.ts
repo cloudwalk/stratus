@@ -5,16 +5,18 @@ import { ALICE, BOB } from "./helpers/account";
 import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
 
 describe("Leader & Follower importer integration test", function () {
-    it("Validate initial states", async function () {
-        // Validate initial Leader state and health
+    let txHash: string;
+
+    it("Validate initial Leader state and health", async function () {
         updateProviderUrl("stratus");
         const leaderNode = await sendWithRetry("stratus_state", []);
         expect(leaderNode.is_leader).to.equal(true);
         expect(leaderNode.is_importer_shutdown).to.equal(true);
         const leaderHealth = await sendWithRetry("stratus_health", []);
         expect(leaderHealth).to.equal(true);
+    });
 
-        // Validate initial Follower state and health
+    it("Validate initial Follower state and health", async function () {
         updateProviderUrl("stratus-follower");
         const followerNode = await sendWithRetry("stratus_state", []);
         expect(followerNode.is_leader).to.equal(false);
@@ -23,27 +25,30 @@ describe("Leader & Follower importer integration test", function () {
         expect(followerHealth).to.equal(true);
     });
 
-    it("Shutdown importer", async function () {
-        // Shutdown command to Leader should fail
+    it("Shutdown command to Leader should fail", async function () {
         updateProviderUrl("stratus");
         const responseLeader = await sendAndGetFullResponse("stratus_shutdownImporter", []);
         expect(responseLeader.data.error.code).eq(-32009);
         expect(responseLeader.data.error.message).eq("Stratus node is not a follower.");
+    });
 
-        // Shutdown command to Follower should succeed
+    it("Shutdown command to Follower should succeed", async function () {
         updateProviderUrl("stratus-follower");
         const responseFollower = await sendAndGetFullResponse("stratus_shutdownImporter", []);
         expect(responseFollower.data.result).to.equal(true);
+    });
 
-        // Validate Follower state and health
+    it("Validate Follower state and health after shutdown", async function () {
+        updateProviderUrl("stratus-follower");
         const followerNode = await sendWithRetry("stratus_state", []);
         expect(followerNode.is_leader).to.equal(false);
         expect(followerNode.is_importer_shutdown).to.equal(true);
         const followerHealth = await sendAndGetFullResponse("stratus_health", []);
         expect(followerHealth.data.error.code).eq(-32009);
         expect(followerHealth.data.error.message).eq("Stratus is not ready to start servicing requests.");
+    });
 
-        // Validate Leader state and health
+    it("Validate Leader state and health after Follower shutdown", async function () {
         updateProviderUrl("stratus");
         const leaderNode = await sendWithRetry("stratus_state", []);
         expect(leaderNode.is_leader).to.equal(true);
@@ -52,29 +57,29 @@ describe("Leader & Follower importer integration test", function () {
         expect(leaderHealth.data.result).to.equal(true);
     });
 
-    it("(Importer Shutdown) Validate Follower is not importing blocks from Leader", async function () {
-        // Validate Leader block is ahead of Follower
+    it("Validate Leader block is ahead of Follower after Importer shutdown", async function () {
         const { leaderBlock, followerBlock } = await waitForLeaderToBeAhead();
         expect(parseInt(leaderBlock, 16)).to.be.greaterThan(parseInt(followerBlock, 16));
     });
 
-    it("(Importer Shutdown) Validate Leader is able to receive Transactions", async function () {
-        // Transactions on Leader should still succeed
+    it("Transactions on Leader should still succeed after Importer shutdown", async function () {
         updateProviderUrl("stratus");
         const nonceResponse = await sendAndGetFullResponse("eth_getTransactionCount", [ALICE.address, "latest"]);
         const nonce = parseInt(nonceResponse.data.result, 16);
         const signedTx = await ALICE.signWeiTransfer(BOB.address, 1, nonce);
-        const txHash = keccak256(signedTx);
+        txHash = keccak256(signedTx);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(txResponse.data.result).to.equal(txHash);
+    });
 
-        // Previous transaction on Leader should not appear on Follower when Importer is shutdown
+    it("Previous transaction on Leader should not appear on Follower when Importer is shutdown", async function () {
         updateProviderUrl("stratus-follower");
         const txResponseFollower = await getTransactionByHashUntilConfirmed(txHash);
         expect(txResponseFollower.data.result).to.equal(null);
+        txHash = "";
     });
 
-    it("(Importer Shutdown) Validate Follower is unable to receive Transactions", async function () {
+    it("Transactions on Follower should fail when Importer is shutdown", async function () {
         updateProviderUrl("stratus-follower");
         const nonceResponse = await sendAndGetFullResponse("eth_getTransactionCount", [BOB.address, "latest"]);
         const nonce = parseInt(nonceResponse.data.result, 16);
@@ -84,8 +89,7 @@ describe("Leader & Follower importer integration test", function () {
         expect(txResponse.data.error.message).to.equal("Consensus is temporarily unavailable for follower node.");
     });
 
-    it("Restart importer and validate states", async function () {
-        // Init command to Leader should fail
+    it("Init command to Leader should fail", async function () {
         updateProviderUrl("stratus");
         const responseLeader = await sendAndGetFullResponse("stratus_initImporter", [
             "http://0.0.0.0:3000/",
@@ -93,48 +97,55 @@ describe("Leader & Follower importer integration test", function () {
         ]);
         expect(responseLeader.data.error.code).to.equal(-32009);
         expect(responseLeader.data.error.message).to.equal("Stratus node is not a follower.");
+    });
 
-        // Init command to Follower without addresses should fail
+    it("Init command to Follower without addresses should fail", async function () {
         updateProviderUrl("stratus-follower");
         const responseInvalidFollower = await sendAndGetFullResponse("stratus_initImporter", []);
         expect(responseInvalidFollower.data.error.code).to.equal(-32602);
         expect(responseInvalidFollower.data.error.message).to.equal("Expected String parameter, but received nothing.");
+    });
 
-        // Init command to Follower with invalid addresses should fail
+    it("Init command to Follower with invalid addresses should fail", async function () {
         const responseInvalidAddressFollower = await sendAndGetFullResponse("stratus_initImporter", [
             "http://0.0.0.0:9999/",
             "ws://0.0.0.0:9999/",
         ]);
         expect(responseInvalidAddressFollower.data.error.code).to.equal(-32603);
         expect(responseInvalidAddressFollower.data.error.message).to.equal("Failed to initialize importer.");
+    });
 
-        // Init command to Follower with addresses should succeed
+    it("Init command to Follower with valid addresses should succeed", async function () {
         const responseValidFollower = await sendAndGetFullResponse("stratus_initImporter", [
             "http://0.0.0.0:3000/",
             "ws://0.0.0.0:3000/",
         ]);
         expect(responseValidFollower.data.result).to.equal(true);
+    });
 
-        // Init command to Follower when Importer is already running should fail
+    it("Init command to Follower when Importer is already running should fail", async function () {
         const responseSecondInitFollower = await sendAndGetFullResponse("stratus_initImporter", [
             "http://0.0.0.0:3000/",
             "ws://0.0.0.0:3000/",
         ]);
         expect(responseSecondInitFollower.data.error.code).to.equal(-32603);
         expect(responseSecondInitFollower.data.error.message).to.equal("Importer is already running.");
+    });
 
-        // Wait until Follower is in sync with Leader
+    it("Wait until Follower is in sync with Leader", async function () {
         await waitForFollowerToSyncWithLeader();
+    });
 
-        // Validate Follower state and health
+    it("Validate Follower state and health after Importer restart", async function () {
         updateProviderUrl("stratus-follower");
         const followerNode = await sendWithRetry("stratus_state", []);
         expect(followerNode.is_leader).to.equal(false);
         expect(followerNode.is_importer_shutdown).to.equal(false);
         const followerHealth = await sendWithRetry("stratus_health", []);
         expect(followerHealth).to.equal(true);
+    });
 
-        // Validate Leader state and health
+    it("Validate Leader state and health after Importer restart", async function () {
         updateProviderUrl("stratus");
         const leaderNode = await sendWithRetry("stratus_state", []);
         expect(leaderNode.is_leader).to.equal(true);
@@ -143,36 +154,38 @@ describe("Leader & Follower importer integration test", function () {
         expect(leaderHealth).to.equal(true);
     });
 
-    it("(Importer Restarted) Validate Leader is able to receive Transactions", async function () {
-        // Transactions on Leader should succeed
+    it("Transactions on Leader should succeed after Importer restart", async function () {
         updateProviderUrl("stratus");
         const nonceResponse = await sendAndGetFullResponse("eth_getTransactionCount", [ALICE.address, "latest"]);
         const nonce = parseInt(nonceResponse.data.result, 16);
         const signedTx = await ALICE.signWeiTransfer(BOB.address, 1, nonce);
-        const txHash = keccak256(signedTx);
+        txHash = keccak256(signedTx);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(txResponse.data.result).to.equal(txHash);
+    });
 
-        // Previous transaction on Leader should appear on Follower when Importer is running
+    it("Previous transaction on Leader should appear on Follower when Importer is running", async function () {
         updateProviderUrl("stratus-follower");
         const txResponseFollower = await getTransactionByHashUntilConfirmed(txHash);
         expect(txResponseFollower.data.result.hash).to.equal(txHash);
+        txHash = "";
     });
 
-    it("(Importer Restarted) Validate Follower is able to receive Transactions", async function () {
-        // Transactions on Follower should succeed and be forwarded to Leader
+    it("Transactions on Follower should succeed and be forwarded to Leader after Importer restart", async function () {
         updateProviderUrl("stratus-follower");
         const nonceResponse = await sendAndGetFullResponse("eth_getTransactionCount", [BOB.address, "latest"]);
         const nonce = parseInt(nonceResponse.data.result, 16);
         const signedTx = await BOB.signWeiTransfer(ALICE.address, 1, nonce);
-        const txHash = keccak256(signedTx);
+        txHash = keccak256(signedTx);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(txResponse.data.result).to.equal(txHash);
+    });
 
-        // Previous transaction on Follower should forward and exist on Leader
+    it("Previous transaction on Follower should forward and exist on Leader", async function () {
         updateProviderUrl("stratus");
         const txResponseLeader = await getTransactionByHashUntilConfirmed(txHash);
         expect(txResponseLeader.data.result.hash).to.equal(txHash);
+        txHash = "";
     });
 });
 
