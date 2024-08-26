@@ -761,7 +761,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
                     }
                 }
                 None => {
-                    tracing::error!("unable to forward transaction because consensus is unavailable for follower node");
+                    tracing::error!("unable to forward transaction because consensus is temporarily unavailable for follower node");
                     Err(StratusError::ConsensusUnavailable)
                 }
             }
