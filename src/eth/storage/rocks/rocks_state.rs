@@ -469,17 +469,13 @@ impl RocksStorageState {
             account: AccountRocksdb,
         }
 
-        let mut history_accounts_count = 0;
-        let mut accounts_count = 0;
+        let mut history_accounts_count = 0_u64;
+        let mut accounts_count = 0_u64;
         let mut last_account: Option<LastHistoricalAccount> = None;
 
         tracing::info!("starting iteration through historical accounts to clean values after target_block and reconstruct current accounts state");
         for next in self.accounts_history.iter_start() {
             let ((address, account_block_number), account) = next?;
-
-            if should_delete_block(account_block_number) {
-                bufwriter.delete(&self.accounts_history, (address, account_block_number))?;
-            }
 
             if let Some(last) = last_account {
                 let is_different_account = last.address != address;
@@ -491,7 +487,15 @@ impl RocksStorageState {
                 }
             }
 
-            last_account = Some(LastHistoricalAccount { address, account });
+            if should_delete_block(account_block_number) {
+                bufwriter.delete(&self.accounts_history, (address, account_block_number))?;
+                // skip last_account for next iteration because its block shall be ignored
+                last_account = None;
+            } else {
+                // update last_account for next iteration
+                last_account = Some(LastHistoricalAccount { address, account });
+            }
+
             history_accounts_count += 1;
         }
 
@@ -510,17 +514,13 @@ impl RocksStorageState {
             value: SlotValueRocksdb,
         }
 
-        let mut history_slots_count = 0;
-        let mut slots_count = 0;
+        let mut history_slots_count = 0_u64;
+        let mut slots_count = 0_u64;
         let mut last_slot: Option<LastHistoricalSlot> = None;
 
         tracing::info!("starting iteration through historical slots to clean values after target_block and reconstruct current slots state");
         for next in self.account_slots_history.iter_start() {
             let ((address, index, slot_block_number), value) = next?;
-
-            if should_delete_block(slot_block_number) {
-                bufwriter.delete(&self.account_slots_history, (address, index, slot_block_number))?;
-            }
 
             if let Some(last) = last_slot {
                 let is_different_slot = last.address != address || last.index != index;
@@ -532,7 +532,15 @@ impl RocksStorageState {
                 }
             }
 
-            last_slot = Some(LastHistoricalSlot { address, index, value });
+            if should_delete_block(slot_block_number) {
+                bufwriter.delete(&self.account_slots_history, (address, index, slot_block_number))?;
+                // skip last_slot for next iteration because its block shall be ignored
+                last_slot = None;
+            } else {
+                // update last_slot for next iteration
+                last_slot = Some(LastHistoricalSlot { address, index, value });
+            }
+
             history_slots_count += 1;
         }
 
