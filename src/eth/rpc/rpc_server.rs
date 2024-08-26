@@ -365,10 +365,6 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
         return false;
     }
 
-    if GlobalState::is_importer_shutdown() {
-        return true;
-    }
-
     {
         let mut consensus_lock = ctx.consensus.write().unwrap();
         *consensus_lock = None;
