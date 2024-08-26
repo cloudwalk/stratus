@@ -331,6 +331,8 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         ..importer_config
     };
 
+    GlobalState::set_importer_shutdown(false);
+
     let consensus = match importer_config
         .init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage))
         .await
@@ -354,8 +356,6 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
             }
         }
     }
-
-    GlobalState::set_importer_shutdown(false);
 
     Ok(json!(true))
 }
