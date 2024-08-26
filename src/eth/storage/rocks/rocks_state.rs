@@ -477,10 +477,6 @@ impl RocksStorageState {
         for next in self.accounts_history.iter_start() {
             let ((address, account_block_number), account) = next?;
 
-            if should_delete_block(account_block_number) {
-                bufwriter.delete(&self.accounts_history, (address, account_block_number))?;
-            }
-
             if let Some(last) = last_account {
                 let is_different_account = last.address != address;
                 // if reached a new account, insert the previous as it is the most up-to-date for that address,
@@ -491,7 +487,15 @@ impl RocksStorageState {
                 }
             }
 
-            last_account = Some(LastHistoricalAccount { address, account });
+            if should_delete_block(account_block_number) {
+                bufwriter.delete(&self.accounts_history, (address, account_block_number))?;
+                // skip last_account for next iteration because its block shall be ignored
+                last_account = None;
+            } else {
+                // update last_account for next iteration
+                last_account = Some(LastHistoricalAccount { address, account });
+            }
+
             history_accounts_count += 1;
         }
 
@@ -518,10 +522,6 @@ impl RocksStorageState {
         for next in self.account_slots_history.iter_start() {
             let ((address, index, slot_block_number), value) = next?;
 
-            if should_delete_block(slot_block_number) {
-                bufwriter.delete(&self.account_slots_history, (address, index, slot_block_number))?;
-            }
-
             if let Some(last) = last_slot {
                 let is_different_slot = last.address != address || last.index != index;
                 // if reached a new slot, insert the previous as it is the most up-to-date for that account
@@ -532,7 +532,15 @@ impl RocksStorageState {
                 }
             }
 
-            last_slot = Some(LastHistoricalSlot { address, index, value });
+            if should_delete_block(slot_block_number) {
+                bufwriter.delete(&self.account_slots_history, (address, index, slot_block_number))?;
+                // skip last_slot for next iteration because its block shall be ignored
+                last_slot = None;
+            } else {
+                // update last_slot for next iteration
+                last_slot = Some(LastHistoricalSlot { address, index, value });
+            }
+
             history_slots_count += 1;
         }
 
