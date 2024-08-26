@@ -30,7 +30,7 @@ describe("Leader & Follower importer integration test", function () {
         expect(responseLeader.data.error.code).eq(-32009);
         expect(responseLeader.data.error.message).eq("Stratus node is not a follower.");
 
-        // Send shutdown command to Follower
+        // Shutdown command to Follower should succeed
         updateProviderUrl("stratus-follower");
         const responseFollower = await sendAndGetFullResponse("stratus_shutdownImporter", []);
         expect(responseFollower.data.result).to.equal(true);
@@ -68,7 +68,7 @@ describe("Leader & Follower importer integration test", function () {
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(txResponse.data.result).to.equal(txHash);
 
-        // Previous transaction on Leader should not appear on Follower
+        // Previous transaction on Leader should not appear on Follower when Importer is shutdown
         updateProviderUrl("stratus-follower");
         const txResponseFollower = await getTransactionByHashUntilConfirmed(txHash);
         expect(txResponseFollower.data.result).to.equal(null);
@@ -145,14 +145,14 @@ describe("Leader & Follower importer integration test", function () {
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(txResponse.data.result).to.equal(txHash);
 
-        // Previous transaction on Leader should appear on Follower
+        // Previous transaction on Leader should appear on Follower when Importer is running
         updateProviderUrl("stratus-follower");
         const txResponseFollower = await getTransactionByHashUntilConfirmed(txHash);
         expect(txResponseFollower.data.result.hash).to.equal(txHash);
     });
 
     it("(Importer Restarted) Validate Follower is able to receive Transactions", async function () {
-        // Transactions on Follower should succeed
+        // Transactions on Follower should succeed and be forwarded to Leader
         updateProviderUrl("stratus-follower");
         const nonceResponse = await sendAndGetFullResponse("eth_getTransactionCount", [BOB.address, "latest"]);
         const nonce = parseInt(nonceResponse.data.result, 16);
@@ -161,7 +161,7 @@ describe("Leader & Follower importer integration test", function () {
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(txResponse.data.result).to.equal(txHash);
 
-        // Previous transaction on Follower should forward to Leader
+        // Previous transaction on Follower should forward and exist on Leader
         updateProviderUrl("stratus");
         const txResponseLeader = await getTransactionByHashUntilConfirmed(txHash);
         expect(txResponseLeader.data.result.hash).to.equal(txHash);
