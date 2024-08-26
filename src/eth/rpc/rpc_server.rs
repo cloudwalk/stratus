@@ -361,7 +361,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
 
 #[cfg(feature = "dev")]
 fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
-    if !GlobalState::is_follower() {
+    if not(GlobalState::is_follower()) {
         return false;
     }
 
