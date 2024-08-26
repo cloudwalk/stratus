@@ -343,7 +343,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     };
 
     {
-        let mut consensus_lock = ctx.consensus.write().unwrap();
+        let mut consensus_lock = ctx.consensus.write().map_err(|_| StratusError::ConsensusLockFailed)?;
         match consensus {
             Some(consensus) => {
                 *consensus_lock = Some(consensus);
@@ -367,7 +367,7 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     }
 
     {
-        let mut consensus_lock = ctx.consensus.write().unwrap();
+        let mut consensus_lock = ctx.consensus.write().map_err(|_| StratusError::ConsensusLockFailed)?;
         *consensus_lock = None;
     }
 

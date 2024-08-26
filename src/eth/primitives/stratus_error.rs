@@ -142,6 +142,10 @@ pub enum StratusError {
     #[strum(props(kind = "server_state"))]
     ConsensusUpdateError,
 
+    #[error("Failed to acquire lock on consensus.")]
+    #[strum(props(kind = "server_state"))]
+    ConsensusLockFailed,
+
     // -------------------------------------------------------------------------
     // AppConfig
     // -------------------------------------------------------------------------
