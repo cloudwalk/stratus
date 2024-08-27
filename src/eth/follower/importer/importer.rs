@@ -95,6 +95,15 @@ impl Importer {
     }
 
     // -----------------------------------------------------------------------------
+    // Shutdown
+    // -----------------------------------------------------------------------------
+
+    /// Checks if the importer should shutdown
+    fn should_shutdown(task_name: &str) -> bool {
+        GlobalState::is_shutdown_warn(task_name) || GlobalState::is_importer_shutdown_warn(task_name)
+    }
+
+    // -----------------------------------------------------------------------------
     // Execution
     // -----------------------------------------------------------------------------
 
@@ -150,7 +159,7 @@ impl Importer {
         const TASK_NAME: &str = "block-executor";
 
         loop {
-            if GlobalState::is_shutdown_warn(TASK_NAME) {
+            if Self::should_shutdown(TASK_NAME) {
                 return Ok(());
             }
 
@@ -236,7 +245,7 @@ impl Importer {
 
         // keep reading websocket subscription or polling via http.
         loop {
-            if GlobalState::is_shutdown_warn(TASK_NAME) {
+            if Self::should_shutdown(TASK_NAME) {
                 return Ok(());
             }
 
@@ -251,26 +260,26 @@ impl Importer {
                         continue;
                     }
                     Ok(None) => {
-                        if !GlobalState::is_shutdown_warn(TASK_NAME) {
+                        if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
                         }
                         true
                     }
                     Ok(Some(Err(e))) => {
-                        if !GlobalState::is_shutdown_warn(TASK_NAME) {
+                        if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
                         }
                         true
                     }
                     Err(_) => {
-                        if !GlobalState::is_shutdown_warn(TASK_NAME) {
+                        if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
                         }
                         true
                     }
                 };
 
-                if GlobalState::is_shutdown_warn(TASK_NAME) {
+                if Self::should_shutdown(TASK_NAME) {
                     return Ok(());
                 }
 
@@ -284,14 +293,14 @@ impl Importer {
                             sub_new_heads = Some(sub);
                         }
                         Err(e) =>
-                            if !GlobalState::is_shutdown_warn(TASK_NAME) {
+                            if !Self::should_shutdown(TASK_NAME) {
                                 tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
                             },
                     }
                 }
             }
 
-            if GlobalState::is_shutdown_warn(TASK_NAME) {
+            if Self::should_shutdown(TASK_NAME) {
                 return Ok(());
             }
 
@@ -308,7 +317,7 @@ impl Importer {
                     traced_sleep(sync_interval, SleepReason::SyncData).await;
                 }
                 Err(e) =>
-                    if !GlobalState::is_shutdown_warn(TASK_NAME) {
+                    if !Self::should_shutdown(TASK_NAME) {
                         tracing::error!(reason = ?e, "failed to retrieve block number. retrying now.");
                     },
             }
@@ -328,7 +337,7 @@ impl Importer {
         const TASK_NAME: &str = "external-block-fetcher";
 
         loop {
-            if GlobalState::is_shutdown_warn(TASK_NAME) {
+            if Self::should_shutdown(TASK_NAME) {
                 return Ok(());
             }
 

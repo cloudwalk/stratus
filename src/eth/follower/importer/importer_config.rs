@@ -15,7 +15,7 @@ use crate::infra::BlockchainClient;
 use crate::GlobalState;
 use crate::NodeMode;
 
-#[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize)]
+#[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
 #[group(requires_all = ["external_rpc"])]
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus.
