@@ -140,8 +140,8 @@ let states = self.read()?;
         Ok(())
     }
 
-    fn save_accounts(&self, _accounts: Vec<Account>) -> anyhow::Result<()> {
-        todo!();
+    fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+        self.rocks.save_accounts(accounts)
     }
 
     fn read_transaction(&self, _hash: &crate::eth::primitives::Hash) -> anyhow::Result<Option<crate::eth::primitives::TransactionMined>> {
