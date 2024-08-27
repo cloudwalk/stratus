@@ -6,7 +6,7 @@ use super::index::IndexRocksdb;
 use super::log::LogRocksdb;
 use crate::eth::primitives::LogMined;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct LogMinedRockdb {
     pub log: LogRocksdb,
     pub transaction_hash: HashRocksdb,

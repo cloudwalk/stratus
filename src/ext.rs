@@ -356,3 +356,18 @@ macro_rules! gen_test_serde {
         }
     };
 }
+
+/// Generates unit test that checks that bincode's serialization and deserialization are compatible
+#[macro_export]
+macro_rules! gen_test_bincode {
+    ($type:ty) => {
+        paste::paste! {
+            #[test]
+            pub fn [<bincode_ $type:snake>]() {
+                let value = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
+                let binary = bincode::serialize(&value).unwrap();
+                assert_eq!(bincode::deserialize::<$type>(&binary).unwrap(), value);
+            }
+        }
+    };
+}

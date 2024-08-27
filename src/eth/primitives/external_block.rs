@@ -12,7 +12,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, derive_more:: Deref, derive_more::DerefMut, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, derive_more::Deref, derive_more::DerefMut, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
 pub struct ExternalBlock(#[deref] pub EthersBlockExternalTransaction);
 

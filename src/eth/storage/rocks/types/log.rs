@@ -1,16 +1,16 @@
 use std::fmt::Debug;
 
-use ethereum_types::H256;
-
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
 use crate::eth::primitives::Log;
 use crate::ext::OptionExt;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+type LogTopic = [u8; 32];
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct LogRocksdb {
     pub address: AddressRocksdb,
-    pub topics: (Option<H256>, Option<H256>, Option<H256>, Option<H256>),
+    pub topics: (Option<LogTopic>, Option<LogTopic>, Option<LogTopic>, Option<LogTopic>),
     pub data: BytesRocksdb,
 }
 

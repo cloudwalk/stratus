@@ -11,7 +11,7 @@ use super::miner_nonce::MinerNonceRocksdb;
 use super::size::SizeRocksdb;
 use super::unix_time::UnixTimeRocksdb;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct BlockHeaderRocksdb {
     pub number: BlockNumberRocksdb,
     pub hash: HashRocksdb,
