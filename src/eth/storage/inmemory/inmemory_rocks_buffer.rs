@@ -47,6 +47,13 @@ pub struct InmemoryRocksBuffer {
 }
 
 impl InmemoryRocksBuffer {
+    pub fn new(rocks_path_prefix: Option<String>) -> anyhow::Result<Self> {
+        Ok(Self {
+            states: Default::default(),
+            rocks: RocksPermanentStorage::new(rocks_path_prefix)?
+        })
+    }
+
     fn read(&self) -> anyhow::Result<std::sync::RwLockReadGuard<'_, Vec<InmemoryBufferState>>> {
         self.states.read().map_err(|_| anyhow!("failed to acquire lock"))
     }

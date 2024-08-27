@@ -7,3 +7,4 @@ pub use inmemory_history::InMemoryHistory;
 pub use inmemory_permanent::InMemoryPermanentStorage;
 pub use inmemory_permanent::InMemoryPermanentStorageState;
 pub use inmemory_temporary::InMemoryTemporaryStorage;
+pub use inmemory_rocks_buffer::InmemoryRocksBuffer;
