@@ -103,7 +103,6 @@ pub enum PermanentStorageKind {
     #[serde(rename = "rocks")]
     Rocks,
 
-
     #[serde(rename = "rocks_buffer")]
     RocksBuffer,
 }
