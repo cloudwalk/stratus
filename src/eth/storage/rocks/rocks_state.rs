@@ -477,11 +477,14 @@ impl RocksStorageState {
         for next in self.accounts_history.iter_start() {
             let ((address, account_block_number), account) = next?;
 
+            // this can only be `Some` if account in last iteration was in valid range
             if let Some(last) = last_account {
+                // if reached a new account, insert the previous as it is the most up-to-date for that address
                 let is_different_account = last.address != address;
-                // if reached a new account, insert the previous as it is the most up-to-date for that address,
-                // considering that it's ordered by block number too
-                if is_different_account {
+                // if last was in valid block range, but this one isn't that's the most up-to-date in the valid range
+                let is_last_account_before_target_block = should_delete_block(account_block_number);
+
+                if is_last_account_before_target_block || is_different_account {
                     bufwriter.insert(&self.accounts, last.address, last.account)?;
                     accounts_count += 1;
                 }
@@ -522,11 +525,14 @@ impl RocksStorageState {
         for next in self.account_slots_history.iter_start() {
             let ((address, index, slot_block_number), value) = next?;
 
+            // this can only be `Some` if slot in last iteration was in valid range
             if let Some(last) = last_slot {
+                // if reached a new account, insert the previous as it is the most up-to-date for that address
                 let is_different_slot = last.address != address || last.index != index;
-                // if reached a new slot, insert the previous as it is the most up-to-date for that account
-                // and index, considering that it's ordered by block number too
-                if is_different_slot {
+                // if last was in valid block range, but this one isn't that's the most up-to-date in the valid range
+                let is_last_slot_before_target_block = should_delete_block(slot_block_number);
+
+                if is_last_slot_before_target_block || is_different_slot {
                     bufwriter.insert(&self.account_slots, (last.address, last.index), last.value)?;
                     slots_count += 1;
                 }
