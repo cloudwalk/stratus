@@ -47,7 +47,7 @@ impl MinerConfig {
         #[cfg(feature = "dev")]
         {
             let genesis = storage.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
-            if mode.can_mine_new_blocks() && genesis.is_none() {
+            if genesis.is_none() {
                 storage.reset_to_genesis()?;
             }
         }

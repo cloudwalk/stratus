@@ -15,6 +15,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::inmemory::InmemoryRocksBuffer;
 use crate::eth::storage::redis::RedisPermanentStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::RocksPermanentStorage;
@@ -101,6 +102,9 @@ pub enum PermanentStorageKind {
 
     #[serde(rename = "rocks")]
     Rocks,
+
+    #[serde(rename = "rocks_buffer")]
+    RocksBuffer,
 }
 
 impl PermanentStorageConfig {
@@ -121,6 +125,11 @@ impl PermanentStorageConfig {
             PermanentStorageKind::Rocks => {
                 let prefix = self.rocks_path_prefix.clone();
                 Box::new(RocksPermanentStorage::new(prefix)?)
+            }
+
+            PermanentStorageKind::RocksBuffer => {
+                let prefix = self.rocks_path_prefix.clone();
+                Box::new(InmemoryRocksBuffer::new(prefix)?)
             }
         };
         Ok(perm)
