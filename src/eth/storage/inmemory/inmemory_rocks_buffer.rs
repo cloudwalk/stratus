@@ -91,8 +91,26 @@ impl PermanentStorage for InmemoryRocksBuffer {
         self.rocks.read_slot(address, index, point_in_time)
     }
 
-    fn read_block(&self, _block_filter: &crate::eth::primitives::BlockFilter) -> anyhow::Result<Option<crate::eth::primitives::Block>> {
-        todo!();
+    fn read_block(&self, block_filter: &crate::eth::primitives::BlockFilter) -> anyhow::Result<Option<crate::eth::primitives::Block>> {
+let states = self.read()?;
+        match block_filter {
+            crate::eth::primitives::BlockFilter::Latest | crate::eth::primitives::BlockFilter::Pending => {
+                states.last().map(|state| Ok(Some(state.block.clone()))).unwrap_or_else(|| self.rocks.read_block(block_filter))
+            },
+            crate::eth::primitives::BlockFilter::Earliest => {
+                states.first().map(|state| Ok(Some(state.block.clone()))).unwrap_or_else(|| self.rocks.read_block(block_filter))
+            },
+            crate::eth::primitives::BlockFilter::Number(number) => {
+                states.iter().find(|state| state.block.number() == *number)
+                    .map(|state| Ok(Some(state.block.clone())))
+                    .unwrap_or_else(|| self.rocks.read_block(block_filter))
+            },
+            crate::eth::primitives::BlockFilter::Hash(hash) => {
+                states.iter().find(|state| state.block.hash() == *hash)
+                    .map(|state| Ok(Some(state.block.clone())))
+                    .unwrap_or_else(|| self.rocks.read_block(block_filter))
+            },
+        }
     }
 
     fn read_account(
