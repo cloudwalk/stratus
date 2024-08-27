@@ -49,7 +49,7 @@ pub struct InmemoryRocksBuffer {
 impl InmemoryRocksBuffer {
     pub fn new(rocks_path_prefix: Option<String>) -> anyhow::Result<Self> {
         Ok(Self {
-            states: Default::default(),
+            states: RwLock::default(),
             rocks: RocksPermanentStorage::new(rocks_path_prefix)?,
         })
     }
