@@ -144,6 +144,7 @@ impl FromStr for PermanentStorageKind {
             "inmemory" => Ok(Self::InMemory),
             "redis" => Ok(Self::Redis),
             "rocks" => Ok(Self::Rocks),
+            "rocks_buffer" => Ok(Self::RocksBuffer),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
     }
