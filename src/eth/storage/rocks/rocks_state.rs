@@ -18,6 +18,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use sugars::hmap;
 
+use super::rocks_batch_writer::write_in_batch_for_multiple_cfs_impl;
+use super::rocks_batch_writer::BufferedBatchWriter;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
@@ -43,7 +45,6 @@ use crate::eth::storage::rocks::types::IndexRocksdb;
 use crate::eth::storage::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::StoragePointInTime;
-use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 use crate::utils::GIGABYTE;
@@ -413,12 +414,7 @@ impl RocksStorageState {
 
     /// Write to DB in a batch
     pub fn write_in_batch_for_multiple_cfs(&self, batch: WriteBatch) -> Result<()> {
-        let batch_len = batch.len();
-        let result = self.db.write(batch).context("failed to write in batch to multiple column families");
-
-        result.inspect_err(|e| {
-            tracing::error!(reason = ?e, batch_len, "failed to write batch to DB");
-        })
+        write_in_batch_for_multiple_cfs_impl(&self.db, batch)
     }
 
     /// Writes accounts to state (does not write to account history)
@@ -456,93 +452,139 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn revert_state_to_block(&self, target_number: BlockNumberRocksdb) -> Result<()> {
-        // clear current state, it will be reconstructed
-        tracing::info!("clearing current account state");
+    /// Revert state to target block, removing all effect from blocks after it.
+    pub fn revert_state_to_block(&self, target_block: BlockNumberRocksdb) -> Result<()> {
+        tracing::info!("clearing current account state (it will be reconstructed)");
         self.accounts.clear()?;
-        tracing::info!("clearing current slots state");
+        tracing::info!("clearing current slots state (it will be reconstructed)");
         self.account_slots.clear()?;
 
-        // whether or not a block should be kept
-        let should_keep_block = |block_number| block_number <= target_number;
+        // all data from blocks after `target_block` should be deleted
+        let should_delete_block = |block_number| block_number > target_block;
+
+        let mut bufwriter = BufferedBatchWriter::new(1024 * 2);
+
+        struct LastHistoricalAccount {
+            address: AddressRocksdb,
+            account: AccountRocksdb,
+        }
+
+        let mut history_accounts_count = 0_u64;
+        let mut accounts_count = 0_u64;
+        let mut last_account: Option<LastHistoricalAccount> = None;
 
         tracing::info!("starting iteration through historical accounts to clean values after target_block and reconstruct current accounts state");
-        let mut accounts = HashMap::<AddressRocksdb, (BlockNumberRocksdb, AccountRocksdb)>::new();
-        let mut history_accounts_count = 0;
         for next in self.accounts_history.iter_start() {
-            history_accounts_count += 1;
             let ((address, account_block_number), account) = next?;
 
-            if not(should_keep_block(account_block_number)) {
-                self.accounts_history.delete(&(address, account_block_number))?;
-            } else if accounts
-                .get(&address)
-                .map(|(previous_number, _)| previous_number < &account_block_number)
-                .unwrap_or(true)
-            {
-                accounts.insert(address, (account_block_number, account));
+            if let Some(last) = last_account {
+                let is_different_account = last.address != address;
+                // if reached a new account, insert the previous as it is the most up-to-date for that address,
+                // considering that it's ordered by block number too
+                if is_different_account {
+                    bufwriter.insert(&self.accounts, last.address, last.account)?;
+                    accounts_count += 1;
+                }
             }
-        }
-        tracing::info!(%history_accounts_count, "iterated through all historical accounts");
 
-        let accounts_len = accounts.len();
-        let accounts_without_number = accounts.into_iter().map(|(address, (_, account))| (address, account));
-        tracing::info!(%accounts_len, "saving reprocessed accounts");
-        self.accounts.prepare_and_apply_insertion_batch_with_context(accounts_without_number)?;
+            if should_delete_block(account_block_number) {
+                bufwriter.delete(&self.accounts_history, (address, account_block_number))?;
+                // skip last_account for next iteration because its block shall be ignored
+                last_account = None;
+            } else {
+                // update last_account for next iteration
+                last_account = Some(LastHistoricalAccount { address, account });
+            }
+
+            history_accounts_count += 1;
+        }
+
+        // always insert last seen account
+        if let Some(last) = last_account {
+            bufwriter.insert(&self.accounts, last.address, last.account)?;
+            accounts_count += 1;
+        }
+
+        bufwriter.flush(&self.db)?;
+        tracing::info!(%history_accounts_count, %accounts_count, "finished historical accounts iteration");
+
+        struct LastHistoricalSlot {
+            address: AddressRocksdb,
+            index: SlotIndexRocksdb,
+            value: SlotValueRocksdb,
+        }
+
+        let mut history_slots_count = 0_u64;
+        let mut slots_count = 0_u64;
+        let mut last_slot: Option<LastHistoricalSlot> = None;
 
         tracing::info!("starting iteration through historical slots to clean values after target_block and reconstruct current slots state");
-        let mut slots = HashMap::<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, SlotValueRocksdb)>::new();
-        let mut history_slots_count = 0;
         for next in self.account_slots_history.iter_start() {
-            history_slots_count += 1;
-            let ((address, index, slot_block_number), slot_value) = next?;
-            let key = (address, index);
+            let ((address, index, slot_block_number), value) = next?;
 
-            if not(should_keep_block(slot_block_number)) {
-                self.account_slots_history.delete(&(address, index, slot_block_number))?;
-            } else if slots.get(&key).map(|(previous_number, _)| previous_number < &slot_block_number).unwrap_or(true) {
-                slots.insert(key, (slot_block_number, slot_value));
+            if let Some(last) = last_slot {
+                let is_different_slot = last.address != address || last.index != index;
+                // if reached a new slot, insert the previous as it is the most up-to-date for that account
+                // and index, considering that it's ordered by block number too
+                if is_different_slot {
+                    bufwriter.insert(&self.account_slots, (last.address, last.index), last.value)?;
+                    slots_count += 1;
+                }
             }
+
+            if should_delete_block(slot_block_number) {
+                bufwriter.delete(&self.account_slots_history, (address, index, slot_block_number))?;
+                // skip last_slot for next iteration because its block shall be ignored
+                last_slot = None;
+            } else {
+                // update last_slot for next iteration
+                last_slot = Some(LastHistoricalSlot { address, index, value });
+            }
+
+            history_slots_count += 1;
         }
-        tracing::info!(%history_slots_count, "iterated through all historical slots");
 
-        let slots_len = slots.len();
-        let slots_without_number = slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value));
+        // always insert last seen slot
+        if let Some(last) = last_slot {
+            bufwriter.insert(&self.account_slots, (last.address, last.index), last.value)?;
+            slots_count += 1;
+        }
 
-        tracing::info!(%slots_len, "saving reprocessed slots");
-        self.account_slots.prepare_and_apply_insertion_batch_with_context(slots_without_number)?;
+        bufwriter.flush(&self.db)?;
+        tracing::info!(%history_slots_count, %slots_count, "finished historical slots iteration");
 
-        // truncate the rest of column families
-        tracing::info!("cleaning values in transactions CF");
+        tracing::info!("cleaning values in transactions column family");
         for next in self.transactions.iter_start() {
             let (hash, block) = next?;
-            if not(should_keep_block(block)) {
-                self.transactions.delete(&hash)?;
+            if should_delete_block(block) {
+                bufwriter.delete(&self.transactions, hash)?;
             }
         }
-        tracing::info!("cleaning values in logs CF");
+        bufwriter.flush(&self.db)?;
+
+        tracing::info!("cleaning values in logs column family");
         for next in self.logs.iter_start() {
             let (key, block) = next?;
-            if block > target_number {
-                self.logs.delete(&key)?;
+            if block > target_block {
+                bufwriter.delete(&self.logs, key)?;
             }
         }
-        tracing::info!("cleaning values in blocks_by_hash CF");
+        bufwriter.flush(&self.db)?;
+
+        tracing::info!("cleaning values in blocks_by_hash column family");
         for next in self.blocks_by_hash.iter_start() {
             let (hash, block) = next?;
-            if not(should_keep_block(block)) {
-                self.blocks_by_hash.delete(&hash)?;
+            if should_delete_block(block) {
+                bufwriter.delete(&self.blocks_by_hash, hash)?;
             }
         }
-        tracing::info!("cleaning values in blocks_by_number CF");
-        for next in self.blocks_by_number.iter_end() {
-            let (block, _) = next?;
-            if not(should_keep_block(block)) {
-                self.blocks_by_number.delete(&block)?;
-            } else {
-                break; // blocks are ordered by key, so we can stop early here
-            }
+        bufwriter.flush(&self.db)?;
+
+        tracing::info!("cleaning values in blocks_by_number column family");
+        for block in self.blocks_by_number.iter_from(target_block + 1, Direction::Forward)?.keys() {
+            bufwriter.delete(&self.blocks_by_number, block?)?;
         }
+        bufwriter.flush(&self.db)?;
 
         Ok(())
     }

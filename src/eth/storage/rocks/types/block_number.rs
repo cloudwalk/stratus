@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::ops::Add;
 
 use ethereum_types::U64;
 
@@ -30,5 +31,13 @@ impl From<BlockNumberRocksdb> for BlockNumber {
 impl From<BlockNumberRocksdb> for u64 {
     fn from(value: BlockNumberRocksdb) -> Self {
         value.0.as_u64()
+    }
+}
+
+impl Add<u64> for BlockNumberRocksdb {
+    type Output = Self;
+
+    fn add(self, other: u64) -> Self {
+        BlockNumberRocksdb(self.0 + other)
     }
 }

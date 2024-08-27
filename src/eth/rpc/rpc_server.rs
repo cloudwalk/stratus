@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 
+use anyhow::Result;
 use ethereum_types::U256;
 use futures::join;
 use itertools::Itertools;
@@ -17,6 +18,8 @@ use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::json;
+#[cfg(feature = "dev")]
+use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::select;
 use tracing::field;
@@ -27,6 +30,8 @@ use tracing::Span;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
+#[cfg(feature = "dev")]
+use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
@@ -57,6 +62,7 @@ use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
+use crate::NodeMode;
 
 // -----------------------------------------------------------------------------
 // Server
@@ -97,7 +103,7 @@ pub async fn serve_rpc(
         executor,
         storage,
         miner,
-        consensus,
+        consensus: consensus.into(),
         rpc_server: rpc_config.clone(),
 
         // subscriptions
@@ -153,6 +159,8 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("hardhat_reset", stratus_reset)?;
         module.register_blocking_method("stratus_reset", stratus_reset)?;
+        module.register_async_method("stratus_initImporter", stratus_init_importer)?;
+        module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
     }
 
     // stratus status
@@ -241,16 +249,21 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
-async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensions: Extensions) -> Result<JsonValue, StratusError> {
+async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_shutdown() {
         tracing::warn!("liveness check failed because of shutdown");
         return Err(StratusError::StratusShutdown);
     }
 
-    let should_serve = if let Some(consensus) = &context.consensus {
-        consensus.should_serve().await
-    } else {
-        true
+    let should_serve = match GlobalState::get_node_mode() {
+        NodeMode::Leader => true,
+        NodeMode::Follower => {
+            let consensus_lock = context.consensus.read().map_err(|_| StratusError::ConsensusLockFailed)?;
+            match consensus_lock.as_ref() {
+                Some(consensus) => tokio::task::block_in_place(|| Handle::current().block_on(consensus.should_serve())),
+                None => false,
+            }
+        }
     };
 
     if not(should_serve) {
@@ -271,6 +284,98 @@ async fn stratus_health(_params: Params<'_>, context: Arc<RpcContext>, _extensio
 fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     ctx.storage.reset_to_genesis()?;
     Ok(to_json_value(true))
+}
+
+#[cfg(feature = "dev")]
+async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    if not(GlobalState::is_follower()) {
+        tracing::error!("node is currently not a follower");
+        return Err(StratusError::StratusNotFollower);
+    }
+
+    if not(GlobalState::is_importer_shutdown()) {
+        tracing::error!("importer is already running");
+        return Err(StratusError::ImporterAlreadyRunning);
+    }
+
+    let app_config: Value = match serde_json::from_value(ctx.app_config.clone()) {
+        Ok(config) => config,
+        Err(e) => {
+            tracing::error!(reason = ?e, "failed to parse app_config");
+            return Err(StratusError::AppConfigParseError);
+        }
+    };
+
+    let importer_config: ImporterConfig = match app_config.get("importer") {
+        Some(importer_value) => match serde_json::from_value(importer_value.clone()) {
+            Ok(config) => config,
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to parse importer configuration");
+                return Err(StratusError::ImporterConfigParseError);
+            }
+        },
+        None => {
+            tracing::error!("importer configuration not found in app_config");
+            return Err(StratusError::ImporterConfigNotFound);
+        }
+    };
+
+    let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
+    let (_, external_rpc_ws) = next_rpc_param::<String>(params)?;
+
+    let importer_config = ImporterConfig {
+        external_rpc,
+        external_rpc_ws: Some(external_rpc_ws),
+        ..importer_config
+    };
+
+    GlobalState::set_importer_shutdown(false);
+
+    let consensus = match importer_config
+        .init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage))
+        .await
+    {
+        Ok(consensus) => consensus,
+        Err(e) => {
+            tracing::error!(reason = ?e, "failed to initialize importer");
+            GlobalState::set_importer_shutdown(true);
+            return Err(StratusError::ImporterInitError);
+        }
+    };
+
+    {
+        let mut consensus_lock = ctx.consensus.write().map_err(|_| StratusError::ConsensusLockFailed)?;
+        match consensus {
+            Some(consensus) => {
+                *consensus_lock = Some(consensus);
+            }
+            None => {
+                tracing::error!("failed to update consensus: consensus is None");
+                GlobalState::set_importer_shutdown(true);
+                return Err(StratusError::ConsensusUpdateError);
+            }
+        }
+    }
+
+    Ok(json!(true))
+}
+
+#[cfg(feature = "dev")]
+fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    if not(GlobalState::is_follower()) {
+        tracing::error!("node is currently not a follower");
+        return Err(StratusError::StratusNotFollower);
+    }
+
+    {
+        let mut consensus_lock = ctx.consensus.write().map_err(|_| StratusError::ConsensusLockFailed)?;
+        *consensus_lock = None;
+    }
+
+    const TASK_NAME: &str = "rpc-server::importer-shutdown";
+    GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
+
+    return Ok(json!(true));
 }
 
 fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
@@ -335,8 +440,8 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Ext
 // Blockchain
 // -----------------------------------------------------------------------------
 
-async fn net_listening(params: Params<'_>, arc: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    let net_listening = stratus_health(params, arc, ext).await;
+async fn net_listening(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    let net_listening = stratus_health(params, ctx, ext).await;
 
     tracing::info!(net_listening = ?net_listening, "network listening status");
 
@@ -629,9 +734,8 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     }
 
     // execute locally or forward to leader
-    match &ctx.consensus {
-        // is leader
-        None => match ctx.executor.execute_local_transaction(tx) {
+    match GlobalState::get_node_mode() {
+        NodeMode::Leader => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
                 if e.is_internal() {
@@ -640,12 +744,19 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
                 Err(e)
             }
         },
-
-        // is follower
-        Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
-            Ok(hash) => Ok(hex_data(hash)),
-            Err(e) => Err(e),
-        },
+        NodeMode::Follower => {
+            let consensus_lock = ctx.consensus.read().map_err(|_| StratusError::ConsensusLockFailed)?;
+            match consensus_lock.as_ref() {
+                Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+                    Ok(hash) => Ok(hex_data(hash)),
+                    Err(e) => Err(e),
+                },
+                None => {
+                    tracing::error!("unable to forward transaction because consensus is temporarily unavailable for follower node");
+                    Err(StratusError::ConsensusUnavailable)
+                }
+            }
+        }
     }
 }
 

@@ -12,17 +12,25 @@ import {
     updateProviderUrl,
 } from "./helpers/rpc";
 
-describe("Leader & Follower integration test", function () {
+describe("Leader & Follower BRLC integration test", function () {
     it("Validate node modes for leader and follower", async function () {
         // Check Stratus Leader node mode
         updateProviderUrl("stratus");
         const leaderMode = await sendWithRetry("stratus_state", []);
         expect(leaderMode.is_leader).to.equal(true);
 
+        // Check Stratus Leader health
+        const leaderHealth = await sendWithRetry("stratus_health", []);
+        expect(leaderHealth).to.equal(true);
+
         // Check Stratus Follower node mode
         updateProviderUrl("stratus-follower");
         const followerMode = await sendWithRetry("stratus_state", []);
         expect(followerMode.is_leader).to.equal(false);
+
+        // Check Stratus Follower health
+        const followerHealth = await sendWithRetry("stratus_health", []);
+        expect(followerHealth).to.equal(true);
 
         updateProviderUrl("stratus");
     });
@@ -31,13 +39,17 @@ describe("Leader & Follower integration test", function () {
         await setDeployer();
     });
 
-    describe("Deploy and configure BRLC contract", function () {
+    describe("Deploy and configure BRLC contract using transaction forwarding from follower to leader", function () {
         it("Validate deployer is main minter", async function () {
+            updateProviderUrl("stratus-follower");
+
             await deployBRLC();
             await configureBRLC();
 
             expect(deployer.address).to.equal(await brlcToken.mainMinter());
             expect(await brlcToken.isMinter(deployer.address)).to.be.true;
+
+            updateProviderUrl("stratus");
         });
     });
 

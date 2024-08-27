@@ -113,6 +113,47 @@ pub enum StratusError {
     StoragePendingNumberConflict { new: BlockNumber, pending: BlockNumber },
 
     // -------------------------------------------------------------------------
+    // Importer
+    // -------------------------------------------------------------------------
+    #[error("Importer is already running.")]
+    #[strum(props(kind = "internal"))]
+    ImporterAlreadyRunning,
+
+    #[error("Failed to parse importer configuration.")]
+    #[strum(props(kind = "client_request"))]
+    ImporterConfigParseError,
+
+    #[error("Importer configuration not found in app_config.")]
+    #[strum(props(kind = "client_request"))]
+    ImporterConfigNotFound,
+
+    #[error("Failed to initialize importer.")]
+    #[strum(props(kind = "internal"))]
+    ImporterInitError,
+
+    // -------------------------------------------------------------------------
+    // Consensus
+    // -------------------------------------------------------------------------
+    #[error("Consensus is temporarily unavailable for follower node.")]
+    #[strum(props(kind = "internal"))]
+    ConsensusUnavailable,
+
+    #[error("Failed to update consensus.")]
+    #[strum(props(kind = "internal"))]
+    ConsensusUpdateError,
+
+    #[error("Failed to acquire lock on consensus.")]
+    #[strum(props(kind = "internal"))]
+    ConsensusLockFailed,
+
+    // -------------------------------------------------------------------------
+    // AppConfig
+    // -------------------------------------------------------------------------
+    #[error("Failed to parse app_config.")]
+    #[strum(props(kind = "client_request"))]
+    AppConfigParseError,
+
+    // -------------------------------------------------------------------------
     // Unexpected
     // -------------------------------------------------------------------------
     #[error("Unexpected channel {channel} closed.")]
@@ -133,6 +174,10 @@ pub enum StratusError {
     #[error("Stratus is shutting down.")]
     #[strum(props(kind = "server_state"))]
     StratusShutdown,
+
+    #[error("Stratus node is not a follower.")]
+    #[strum(props(kind = "server_state"))]
+    StratusNotFollower,
 }
 
 impl StratusError {
