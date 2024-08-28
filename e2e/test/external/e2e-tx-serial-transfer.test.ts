@@ -99,7 +99,8 @@ describe("Transaction up to EIP-155: serial transfer", () => {
         expect(receipt.logs.length).eq(0, "receipt.logs size");
         expect(receipt.cumulativeGasUsed).not.eq(null, "receipt.cumulativeGasUsed");
         expect(receipt.effectiveGasPrice).not.eq(null, "receipt.effectiveGasPrice");
-        expect(receipt.logsBloom).not.eq(null, "receipt.logsBloom");    });
+        expect(receipt.logsBloom).not.eq(null, "receipt.logsBloom");
+    });
     it("Sender nonce increased", async () => {
         expect(await send("eth_getTransactionCount", [ALICE, "latest"])).eq(ONE);
     });
