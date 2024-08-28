@@ -172,7 +172,7 @@ e2e-stratus block-mode="automine" test="":
     just _wait_for_stratus
 
     just _log "Running E2E tests"
-    just e2e stratus {{block-mode}} {{test}}
+    just e2e stratus {{block-mode}} "{{test}}"
     result_code=$?
 
     just _log "Killing Stratus"
@@ -193,7 +193,7 @@ e2e-stratus-rocks block-mode="automine" test="":
     just _wait_for_stratus
 
     just _log "Running E2E tests"
-    just e2e stratus {{block-mode}} {{test}}
+    just e2e stratus {{block-mode}} "{{test}}"
     result_code=$?
 
     just _log "Killing Stratus"
