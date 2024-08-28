@@ -10,8 +10,6 @@ use ethers_core::types::NameOrAddress;
 use fake::Dummy;
 use fake::Faker;
 use hex_literal::hex;
-use sqlx::database::HasArguments;
-use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
@@ -115,7 +113,7 @@ impl TryFrom<Vec<u8>> for Address {
 // sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Address {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
         let value = <[u8; 20] as Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
@@ -140,7 +138,7 @@ impl AsRef<[u8]> for Address {
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Address {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
         self.0 .0.encode(buf)
     }
 }

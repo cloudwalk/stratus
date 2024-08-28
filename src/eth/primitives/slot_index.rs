@@ -7,8 +7,6 @@ use ethereum_types::U256;
 use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::database::HasArguments;
-use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
@@ -129,7 +127,7 @@ impl From<SlotIndex> for ethereum_types::U256 {
 // sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotIndex {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
         let value = <[u8; 32] as Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
@@ -142,11 +140,11 @@ impl sqlx::Type<sqlx::Postgres> for SlotIndex {
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SlotIndex {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
         <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode((*self).into(), buf)
     }
 
-    fn encode(self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull
+    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError>
     where
         Self: Sized,
     {
