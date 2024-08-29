@@ -3,8 +3,6 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
-#[cfg(feature = "dev")]
-use std::thread::current;
 
 use anyhow::Result;
 use ethereum_types::U256;
