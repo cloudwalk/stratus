@@ -62,7 +62,7 @@ impl MinerConfig {
                 Arc::clone(&miner).spawn_interval_miner()?;
             }
         } else {
-            return Err(StratusError::AppConfigParseError.into());
+            return Err(StratusError::MinerModeLockFailed.into());
         }
 
         Ok(miner)
