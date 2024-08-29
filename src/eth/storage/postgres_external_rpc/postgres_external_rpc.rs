@@ -2,8 +2,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use itertools::Itertools;
+use log::LevelFilter;
+use sqlx::postgres::PgConnectOptions;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::BigDecimal;
+use sqlx::ConnectOptions;
 use sqlx::PgPool;
 
 use crate::alias::JsonValue;
@@ -31,6 +34,7 @@ pub struct PostgresExternalRpcStorageConfig {
     pub url: String,
     pub connections: u32,
     pub acquire_timeout: Duration,
+    pub slow_query_warn_threshold: Duration,
 }
 
 impl PostgresExternalRpcStorage {
@@ -38,11 +42,17 @@ impl PostgresExternalRpcStorage {
     pub async fn new(config: PostgresExternalRpcStorageConfig) -> anyhow::Result<Self> {
         tracing::info!(?config, "creating postgres external rpc storage");
 
+        let options = config
+            .url
+            .as_str()
+            .parse::<PgConnectOptions>()?
+            .log_slow_statements(LevelFilter::Warn, config.slow_query_warn_threshold);
+
         let result = PgPoolOptions::new()
             .min_connections(config.connections)
             .max_connections(config.connections)
             .acquire_timeout(config.acquire_timeout)
-            .connect(&config.url)
+            .connect_with(options)
             .await;
 
         let pool = match result {

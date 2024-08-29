@@ -4719,6 +4719,7 @@ dependencies = [
  "jsonrpsee",
  "keccak-hasher",
  "lazy_static",
+ "log",
  "metrics",
  "metrics-exporter-prometheus",
  "nanoid",
