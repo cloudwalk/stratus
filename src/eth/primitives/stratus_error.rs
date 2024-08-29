@@ -58,6 +58,10 @@ pub enum StratusError {
     #[strum(props(kind = "server_state"))]
     RpcTransactionDisabled,
 
+    #[error("Transaction processing is enabled.")]
+    #[strum(props(kind = "server_state"))]
+    RpcTransactionEnabled,
+
     #[error("Failed to decode transaction RLP data.")]
     #[strum(props(kind = "client_request"))]
     RpcTransactionInvalid { decode_error: String },
@@ -112,6 +116,25 @@ pub enum StratusError {
     #[strum(props(kind = "internal"))]
     StoragePendingNumberConflict { new: BlockNumber, pending: BlockNumber },
 
+    #[error("There are ({pending_txs}) pending transactions.")]
+    #[strum(props(kind = "internal"))]
+    PendingTransactionsExist { pending_txs: usize },
+
+    // -------------------------------------------------------------------------
+    // Miner
+    // -------------------------------------------------------------------------
+    #[error("Requested miner mode conflicts with current miner mode.")]
+    #[strum(props(kind = "internal"))]
+    MinerModeConflict,
+
+    #[error("Failed to acquire lock on miner mode.")]
+    #[strum(props(kind = "internal"))]
+    MinerModeLockFailed,
+
+    #[error("Miner mode change to ({miner_mode}) is unsupported.")]
+    #[strum(props(kind = "internal"))]
+    MinerModeChangeUnsupported { miner_mode: &'static str },
+
     // -------------------------------------------------------------------------
     // Importer
     // -------------------------------------------------------------------------
@@ -137,6 +160,10 @@ pub enum StratusError {
     #[error("Consensus is temporarily unavailable for follower node.")]
     #[strum(props(kind = "internal"))]
     ConsensusUnavailable,
+
+    #[error("Consensus is set.")]
+    #[strum(props(kind = "internal"))]
+    ConsensusSet,
 
     #[error("Failed to update consensus.")]
     #[strum(props(kind = "internal"))]

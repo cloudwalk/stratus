@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
+#[cfg(feature = "dev")]
+use std::thread::current;
 
 use anyhow::Result;
 use ethereum_types::U256;
@@ -33,6 +35,8 @@ use crate::eth::follower::consensus::Consensus;
 #[cfg(feature = "dev")]
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::Miner;
+#[cfg(feature = "dev")]
+use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Bytes;
@@ -161,6 +165,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("stratus_reset", stratus_reset)?;
         module.register_async_method("stratus_initImporter", stratus_init_importer)?;
         module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
+        module.register_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
     }
 
     // stratus status
@@ -374,6 +379,75 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
 
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
+
+    return Ok(json!(true));
+}
+
+// TODO: improve rwlock usage on executor, remove unwrap and treat poison
+// TODO: add e2e
+// TODO: validate paths
+#[cfg(feature = "dev")]
+fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    if GlobalState::is_transactions_enabled() {
+        tracing::error!("cannot change miner mode while transactions are enabled");
+        return Err(StratusError::RpcTransactionEnabled);
+    }
+
+    let (_, mode) = next_rpc_param::<MinerMode>(params.sequence())?;
+
+    {
+        let current_miner_mode = ctx.miner.mode.read().map_err(|_| StratusError::MinerModeLockFailed)?;
+        if *current_miner_mode == mode {
+            tracing::error!(requested = ?mode, current = ?current_miner_mode, "miner mode conflict");
+            return Err(StratusError::MinerModeConflict);
+        }
+    }
+
+    match mode {
+        MinerMode::External => {
+            tracing::info!("changing miner mode to External");
+
+            let pending_txs = ctx.storage.pending_transactions()?;
+            if not(pending_txs.is_empty()) {
+                tracing::error!(pending_txs = ?pending_txs.len(), "cannot change miner mode to External with pending transactions");
+                return Err(StratusError::PendingTransactionsExist {
+                    pending_txs: pending_txs.len(),
+                });
+            }
+
+            const TASK_NAME: &str = "rpc-server::miner-shutdown";
+            GlobalState::shutdown_miner_from(TASK_NAME, "received miner shutdown request");
+
+            {
+                let mut miner_mode_lock = ctx.miner.mode.write().map_err(|_| StratusError::MinerModeLockFailed)?;
+                *miner_mode_lock = mode;
+            }
+        }
+        MinerMode::Interval(duration) => {
+            tracing::info!(duration = ?duration, "changing miner mode to Interval");
+
+            {
+                let consensus_lock = ctx.consensus.read().map_err(|_| StratusError::MinerModeLockFailed)?;
+                if consensus_lock.is_some() {
+                    tracing::error!("cannot change miner mode to Interval with consensus set");
+                    return Err(StratusError::ConsensusSet);
+                }
+            }
+
+            GlobalState::set_miner_shutdown(false);
+
+            {
+                let mut miner_mode_lock = ctx.miner.mode.write().map_err(|_| StratusError::MinerModeLockFailed)?;
+                *miner_mode_lock = mode;
+            }
+
+            Arc::clone(&ctx.miner).spawn_interval_miner()?;
+        }
+        MinerMode::Automine => {
+            tracing::error!("automine mode is not supported");
+            return Err(StratusError::MinerModeChangeUnsupported { miner_mode: "automine" });
+        }
+    }
 
     return Ok(json!(true));
 }

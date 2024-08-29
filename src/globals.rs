@@ -102,6 +102,9 @@ static STRATUS_SHUTDOWN: Lazy<CancellationToken> = Lazy::new(CancellationToken::
 /// Importer is running or being shut-down?
 static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(true);
 
+/// Miner is running or being shut-down?
+static MINER_SHUTDOWN: AtomicBool = AtomicBool::new(true);
+
 /// Transaction should be accepted?
 static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
 
@@ -119,6 +122,7 @@ pub struct GlobalState {
     pub is_leader: bool,
     pub is_shutdown: bool,
     pub is_importer_shutdown: bool,
+    pub is_miner_shutdown: bool,
     pub transactions_enabled: bool,
     pub miner_enabled: bool,
     pub unknown_client_enabled: bool,
@@ -223,6 +227,34 @@ impl GlobalState {
         MINER_ENABLED.load(Ordering::Relaxed)
     }
 
+    /// Shutdown the miner.
+    ///
+    /// Returns the formatted reason for miner shutdown.
+    pub fn shutdown_miner_from(caller: &str, reason: &str) -> String {
+        tracing::warn!(%caller, %reason, "miner is shutting down");
+        Self::set_miner_shutdown(true);
+        format!("{} {}", caller, reason)
+    }
+
+    /// Checks if the miner is being shutdown.
+    pub fn is_miner_shutdown() -> bool {
+        MINER_SHUTDOWN.load(Ordering::Relaxed)
+    }
+
+    /// Checks if the miner is being shutdown. Emits a warning with the task name in case it is.
+    pub fn is_miner_shutdown_warn(task_name: &str) -> bool {
+        let shutdown = Self::is_miner_shutdown();
+        if shutdown {
+            warn_task_cancellation(task_name);
+        }
+        shutdown
+    }
+
+    /// Sets the miner shutdown state.
+    pub fn set_miner_shutdown(shutdown: bool) {
+        MINER_SHUTDOWN.store(shutdown, Ordering::Relaxed);
+    }
+
     // -------------------------------------------------------------------------
     // Unknown Client
     // -------------------------------------------------------------------------
@@ -285,6 +317,7 @@ impl GlobalState {
             is_leader: Self::is_leader(),
             is_shutdown: Self::is_shutdown(),
             is_importer_shutdown: Self::is_importer_shutdown(),
+            is_miner_shutdown: Self::is_miner_shutdown(),
             transactions_enabled: Self::is_transactions_enabled(),
             miner_enabled: Self::is_miner_enabled(),
             unknown_client_enabled: Self::is_unknown_client_enabled(),

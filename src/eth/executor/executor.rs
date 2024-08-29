@@ -399,7 +399,8 @@ impl Executor {
 
                 // WORKAROUND: prevents interval miner mining blocks while a transaction is being executed.
                 // this can be removed when we implement conflict detection for block number
-                let _miner_lock = if self.miner.mode.is_interval() {
+                let _miner_lock = if self.miner.mode.read().unwrap().is_interval() {
+                    // TODO: add poison handling
                     let miner_lock = Some(self.miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
                         tracing::warn!("miner mine_and_commit lock was poisoned");
                         self.locks.serial.clear_poison();

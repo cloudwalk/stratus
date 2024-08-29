@@ -6,6 +6,7 @@ use clap::Parser;
 use display_json::DebugAsJson;
 
 use crate::eth::miner::Miner;
+use crate::eth::primitives::StratusError;
 use crate::eth::storage::StratusStorage;
 use crate::ext::parse_duration;
 use crate::GlobalState;
@@ -56,8 +57,12 @@ impl MinerConfig {
         storage.set_pending_block_number_as_next_if_not_set()?;
 
         // enable interval miner
-        if miner.mode().is_interval() {
-            Arc::clone(&miner).spawn_interval_miner()?;
+        if let Ok(mode_lock) = miner.mode() {
+            if mode_lock.is_interval() {
+                Arc::clone(&miner).spawn_interval_miner()?;
+            }
+        } else {
+            return Err(StratusError::AppConfigParseError.into());
         }
 
         Ok(miner)
@@ -69,7 +74,7 @@ impl MinerConfig {
 // -----------------------------------------------------------------------------
 
 /// Indicates when the miner will mine new blocks.
-#[derive(Debug, Clone, Copy, strum::EnumIs, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, strum::EnumIs, serde::Serialize, serde::Deserialize)]
 pub enum MinerMode {
     /// Mines a new block for each transaction execution.
     #[serde(rename = "automine")]
