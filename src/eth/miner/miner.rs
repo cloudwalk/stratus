@@ -99,7 +99,7 @@ impl Miner {
 
     /// Returns the mode the miner is running.
     pub fn mode(&self) -> Result<RwLockReadGuard<'_, MinerMode>, StratusError> {
-        self.mode.read().map_err(|_| StratusError::AppConfigParseError) // TODO: add poison handling
+        self.mode.read().map_err(|_| StratusError::MinerModeLockFailed) // TODO: add poison handling
     }
 
     /// Persists a transaction execution.
