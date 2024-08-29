@@ -83,7 +83,7 @@ impl Miner {
     /// Spawns a new thread that keep mining blocks in the specified interval.
     pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
         // validate
-        let mode_lock = self.mode.read().map_err(|_| anyhow::anyhow!("failed to acquire read lock on mode"))?;
+        let mode_lock = self.mode.read().map_err(|_| StratusError::MinerModeLockFailed)?;
         let MinerMode::Interval(block_time) = *mode_lock else {
             return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
         };
@@ -111,7 +111,7 @@ impl Miner {
         let _span = info_span!("miner::save_execution", %tx_hash).entered();
 
         {
-            let mode_lock = self.mode.read().map_err(|_| StratusError::AppConfigParseError)?;
+            let mode_lock = self.mode.read().map_err(|_| StratusError::MinerModeLockFailed)?;
 
             // if automine is enabled, only one transaction can enter the block at time.
             let _save_execution_lock = if mode_lock.is_automine() {
@@ -128,7 +128,7 @@ impl Miner {
         let _ = self.notifier_pending_txs.send(tx_hash);
 
         {
-            let mode_lock = self.mode.read().map_err(|_| StratusError::AppConfigParseError)?;
+            let mode_lock = self.mode.read().map_err(|_| StratusError::MinerModeLockFailed)?;
 
             // if automine is enabled, automatically mines a block
             if mode_lock.is_automine() {
