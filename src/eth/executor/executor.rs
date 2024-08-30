@@ -402,7 +402,7 @@ impl Executor {
                 let _miner_lock = if self.miner.mode.is_interval() {
                     let miner_lock = Some(self.miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
                         tracing::warn!("miner mine_and_commit lock was poisoned");
-                        self.locks.serial.clear_poison();
+                        self.miner.locks.mine_and_commit.clear_poison();
                         poison.into_inner()
                     }));
                     miner_lock
