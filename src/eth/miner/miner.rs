@@ -86,10 +86,9 @@ impl Miner {
 
         // validate
         {
-            let mode_lock = self.mode.read().map_err(|poison| {
+            let mode_lock = self.mode.read().map_err(|_| {
                 tracing::error!("miner mode read lock was poisoned");
                 self.mode.clear_poison();
-                drop(poison.into_inner());
                 StratusError::MinerModeLockFailed
             })?;
 
@@ -122,7 +121,6 @@ impl Miner {
             let mode_lock = self.mode.read().map_err(|poison| {
                 tracing::error!("miner mode read lock was poisoned");
                 self.mode.clear_poison();
-                drop(poison.into_inner());
                 StratusError::MinerModeLockFailed
             })?;
             mode_lock.is_automine()

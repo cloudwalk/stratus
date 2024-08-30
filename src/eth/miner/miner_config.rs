@@ -59,7 +59,6 @@ impl MinerConfig {
         let mode_lock = miner.mode.read().map_err(|poison| {
             tracing::error!("miner mode read lock was poisoned");
             miner.mode.clear_poison();
-            drop(poison.into_inner());
             StratusError::MinerModeLockFailed
         })?;
 

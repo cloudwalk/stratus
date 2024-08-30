@@ -264,7 +264,6 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
             let consensus_lock = context.consensus.read().map_err(|poison| {
                 tracing::error!("consensus read lock was poisoned");
                 context.consensus.clear_poison();
-                drop(poison.into_inner());
                 StratusError::ConsensusLockFailed
             })?;
             match consensus_lock.as_ref() {
@@ -355,7 +354,6 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         let mut consensus_lock = ctx.consensus.write().map_err(|poison| {
             tracing::error!("consensus write lock was poisoned");
             ctx.consensus.clear_poison();
-            drop(poison.into_inner());
             StratusError::ConsensusLockFailed
         })?;
 
@@ -385,7 +383,6 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
         let mut consensus_lock = ctx.consensus.write().map_err(|poison| {
             tracing::error!("consensus write lock was poisoned");
             ctx.consensus.clear_poison();
-            drop(poison.into_inner());
             StratusError::ConsensusLockFailed
         })?;
         *consensus_lock = None;
@@ -412,7 +409,6 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
         let current_miner_mode = ctx.miner.mode.read().map_err(|poison| {
             tracing::error!("miner mode read lock was poisoned");
             ctx.miner.mode.clear_poison();
-            drop(poison.into_inner());
             StratusError::MinerModeLockFailed
         })?;
 
@@ -438,7 +434,6 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
                 let mut miner_mode_lock = ctx.miner.mode.write().map_err(|poison| {
                     tracing::error!("miner mode write lock was poisoned");
                     ctx.miner.mode.clear_poison();
-                    drop(poison.into_inner());
                     StratusError::MinerModeLockFailed
                 })?;
                 *miner_mode_lock = mode;
@@ -454,7 +449,6 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
                 let consensus_lock = ctx.consensus.read().map_err(|poison| {
                     tracing::error!("consensus read lock was poisoned");
                     ctx.consensus.clear_poison();
-                    drop(poison.into_inner());
                     StratusError::MinerModeLockFailed
                 })?;
                 if consensus_lock.is_some() {
@@ -467,7 +461,6 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
                 let mut miner_mode_lock = ctx.miner.mode.write().map_err(|poison| {
                     tracing::error!("miner mode write lock was poisoned");
                     ctx.miner.mode.clear_poison();
-                    drop(poison.into_inner());
                     StratusError::MinerModeLockFailed
                 })?;
                 GlobalState::set_interval_miner_shutdown(false);
@@ -855,7 +848,6 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
             let consensus_lock = ctx.consensus.read().map_err(|poison| {
                 tracing::error!("consensus read lock was poisoned");
                 ctx.consensus.clear_poison();
-                drop(poison.into_inner());
                 StratusError::ConsensusLockFailed
             })?;
             match consensus_lock.as_ref() {
