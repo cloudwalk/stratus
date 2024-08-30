@@ -3,7 +3,6 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 
 use display_json::DebugAsJson;
-use revm::interpreter::analysis::to_analysed;
 
 use crate::alias::EthersBytes;
 use crate::alias::RevmBytecode;
@@ -127,6 +126,6 @@ impl From<Bytes> for RevmBytes {
 
 impl From<Bytes> for RevmBytecode {
     fn from(value: Bytes) -> Self {
-        to_analysed(RevmBytecode::new_raw(value.0.into()))
+        RevmBytecode::new_raw(value.0.into())
     }
 }
