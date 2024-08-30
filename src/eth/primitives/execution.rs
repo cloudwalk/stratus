@@ -123,8 +123,8 @@ impl EvmExecution {
 
         // compare logs length
         if self.logs.len() != receipt.logs.len() {
-            tracing::trace!("execution logs: {:#?}", self.logs);
-            tracing::trace!("receipt logs: {:#?}", receipt.logs);
+            tracing::trace!(logs = ?self.logs, "execution logs");
+            tracing::trace!(logs = ?receipt.logs, "receipt logs");
             return log_and_err!(format!(
                 "logs length mismatch | hash={} execution={} receipt={}",
                 receipt.hash(),
