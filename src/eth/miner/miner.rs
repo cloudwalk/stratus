@@ -351,7 +351,7 @@ pub fn block_from_local(number: BlockNumber, txs: Vec<LocalTransactionExecution>
 }
 
 fn should_shutdown(task_name: &str) -> bool {
-    GlobalState::is_shutdown_warn(task_name) || GlobalState::is_miner_shutdown_warn(task_name)
+    GlobalState::is_shutdown_warn(task_name) || GlobalState::is_interval_miner_shutdown_warn(task_name)
 }
 
 // -----------------------------------------------------------------------------
