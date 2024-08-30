@@ -176,9 +176,6 @@ impl RocksStorageState {
 
     /// Updates the in-memory state with changes from transaction execution
     fn prepare_batch_with_execution_changes(&self, changes: &[ExecutionAccountChanges], block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
-        let mut account_changes = Vec::new();
-        let mut account_history_changes = Vec::new();
-
         for change in changes {
             if change.is_account_modified() {
                 let address: AddressRocksdb = change.address.into();
@@ -194,29 +191,22 @@ impl RocksStorageState {
                     account_info_entry.bytecode = bytecode.map_into();
                 }
 
-                account_changes.push((address, account_info_entry.clone()));
-                account_history_changes.push(((address, block_number.into()), account_info_entry));
+                self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
+                self.accounts_history
+                    .prepare_batch_insertion([((address, block_number.into()), account_info_entry)], batch)?;
             }
-        }
 
-        self.accounts.prepare_batch_insertion(account_changes, batch)?;
-        self.accounts_history.prepare_batch_insertion(account_history_changes, batch)?;
-
-        let mut slot_changes = Vec::new();
-        let mut slot_history_changes = Vec::new();
-
-        for change in changes {
             for (slot_index, slot_change) in &change.slots {
                 if let Some(slot) = slot_change.take_modified_ref() {
                     let address: AddressRocksdb = change.address.into();
                     let slot_index = *slot_index;
-                    slot_changes.push(((address, slot_index.into()), slot.value.into()));
-                    slot_history_changes.push(((address, slot_index.into(), block_number.into()), slot.value.into()));
+                    self.account_slots
+                        .prepare_batch_insertion([((address, slot_index.into()), slot.value.into())], batch)?;
+                    self.account_slots_history
+                        .prepare_batch_insertion([((address, slot_index.into(), block_number.into()), slot.value.into())], batch)?;
                 }
             }
         }
-        self.account_slots.prepare_batch_insertion(slot_changes, batch)?;
-        self.account_slots_history.prepare_batch_insertion(slot_history_changes, batch)?;
 
         Ok(())
     }
