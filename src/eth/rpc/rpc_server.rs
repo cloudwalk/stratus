@@ -463,16 +463,14 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
                 }
             }
 
-            GlobalState::set_interval_miner_shutdown(false);
-
             {
                 let mut miner_mode_lock = ctx.miner.mode.write().map_err(|poison| {
                     tracing::error!("miner mode write lock was poisoned");
                     ctx.miner.mode.clear_poison();
                     drop(poison.into_inner());
-                    GlobalState::set_interval_miner_shutdown(true);
                     StratusError::MinerModeLockFailed
                 })?;
+                GlobalState::set_interval_miner_shutdown(false);
                 *miner_mode_lock = mode;
             }
 
