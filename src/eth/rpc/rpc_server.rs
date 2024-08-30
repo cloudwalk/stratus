@@ -434,9 +434,6 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
                 });
             }
 
-            const TASK_NAME: &str = "rpc-server::miner-shutdown";
-            GlobalState::shutdown_miner_from(TASK_NAME, "received miner shutdown request");
-
             {
                 let mut miner_mode_lock = ctx.miner.mode.write().map_err(|poison| {
                     tracing::error!("miner mode write lock was poisoned");
@@ -445,6 +442,9 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
                     StratusError::MinerModeLockFailed
                 })?;
                 *miner_mode_lock = mode;
+
+                const TASK_NAME: &str = "rpc-server::miner-shutdown";
+                GlobalState::shutdown_interval_miner_from(TASK_NAME, "received miner shutdown request");
             }
         }
         MinerMode::Interval(duration) => {
@@ -470,6 +470,7 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
                     tracing::error!("miner mode write lock was poisoned");
                     ctx.miner.mode.clear_poison();
                     drop(poison.into_inner());
+                    GlobalState::set_interval_miner_shutdown(true);
                     StratusError::MinerModeLockFailed
                 })?;
                 *miner_mode_lock = mode;

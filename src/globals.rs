@@ -230,7 +230,7 @@ impl GlobalState {
     /// Shutdown the miner.
     ///
     /// Returns the formatted reason for miner shutdown.
-    pub fn shutdown_miner_from(caller: &str, reason: &str) -> String {
+    pub fn shutdown_interval_miner_from(caller: &str, reason: &str) -> String {
         tracing::warn!(%caller, %reason, "miner is shutting down");
         Self::set_interval_miner_shutdown(true);
         format!("{} {}", caller, reason)
