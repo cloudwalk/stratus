@@ -661,9 +661,12 @@ impl RocksStorageState {
         // The stats are cumulative since opening the db
         // we can get the average in the time interval with: avg = (new_sum - sum)/(new_count - count)
 
-        let Ok(mut prev_values) = self.prev_stats.lock() else {
-            bail!("mutex in get_histogram_average_in_interval is poisoned")
-        };
+        let mut prev_values = self.prev_stats.lock().unwrap_or_else(|poison| {
+            tracing::error!("mutex in get_histogram_average_in_interval is poisoned");
+            self.prev_stats.clear_poison();
+            poison.into_inner()
+        });
+
         let (prev_sum, prev_count): (Sum, Count) = *prev_values.get(&(hist as u32)).unwrap_or(&(0, 0));
         let data = self.db_options.get_histogram_data(hist);
         let data_count = data.count();
