@@ -732,6 +732,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+    use crate::eth::primitives::BlockHeader;
     use crate::eth::primitives::SlotValue;
 
     #[test]
@@ -764,5 +765,38 @@ mod tests {
         for (idx, value) in result {
             assert_eq!(value, *slots.get(&idx).expect("should not be None"));
         }
+    }
+
+    #[test]
+    fn regression_test_read_logs_without_providing_filter_address() {
+        let test_dir = tempdir().unwrap();
+
+        let state = RocksStorageState::new(test_dir.path().display().to_string()).unwrap();
+
+        assert_eq!(state.read_logs(&LogFilter::default()).unwrap(), vec![]);
+
+        // 100 blocks with 1 transaction, with 2 logs, total: 200 logs
+        for number in 0..100 {
+            let block = Block {
+                header: BlockHeader {
+                    number: number.into(),
+                    ..Faker.fake()
+                },
+                transactions: vec![TransactionMined {
+                    logs: vec![Faker.fake(), Faker.fake()],
+                    ..Faker.fake()
+                }],
+            };
+
+            state.save_block(block).unwrap();
+        }
+
+        let filter = LogFilter {
+            // address is empty
+            addresses: vec![],
+            ..Default::default()
+        };
+
+        assert_eq!(state.read_logs(&filter).unwrap().len(), 200);
     }
 }
