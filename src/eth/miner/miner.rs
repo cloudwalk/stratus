@@ -110,48 +110,42 @@ impl Miner {
     }
 
     /// Persists a transaction execution.
-    pub fn save_execution(&self, tx_execution: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
+        pub fn save_execution(&self, tx_execution: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         let tx_hash = tx_execution.hash();
-
+    
         // track
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::save_execution", %tx_hash).entered();
-
-        {
+    
+        // Check if automine is enabled
+        let is_automine = {
             let mode_lock = self.mode.read().map_err(|poison| {
                 tracing::error!("miner mode read lock was poisoned");
                 self.mode.clear_poison();
                 drop(poison.into_inner());
                 StratusError::MinerModeLockFailed
             })?;
-
-            // if automine is enabled, only one transaction can enter the block at time.
-            let _save_execution_lock = if mode_lock.is_automine() {
-                Some(self.locks.save_execution.lock().map_to_lock_error("save_execution")?)
-            } else {
-                None
-            };
-        }
-
+            mode_lock.is_automine()
+        };
+    
+        // if automine is enabled, only one transaction can enter the block at a time.
+        let _save_execution_lock = if is_automine {
+            Some(self.locks.save_execution.lock().map_to_lock_error("save_execution")?)
+        } else {
+            None
+        };
+    
         // save execution to temporary storage
         self.storage.save_execution(tx_execution, check_conflicts)?;
-
+    
         // notify
         let _ = self.notifier_pending_txs.send(tx_hash);
-
-        {
-            let mode_lock = self.mode.read().unwrap_or_else(|poison| {
-                tracing::error!("miner mode read lock was poisoned");
-                self.mode.clear_poison();
-                poison.into_inner()
-            });
-
-            // if automine is enabled, automatically mines a block
-            if mode_lock.is_automine() {
-                self.mine_local_and_commit()?;
-            }
+    
+        // if automine is enabled, automatically mines a block
+        if is_automine {
+            self.mine_local_and_commit()?;
         }
-
+    
         Ok(())
     }
 
