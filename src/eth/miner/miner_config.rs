@@ -56,7 +56,7 @@ impl MinerConfig {
         // set block number
         storage.set_pending_block_number_as_next_if_not_set()?;
 
-        let mode_lock = miner.mode.read().map_err(|poison| {
+        let mode_lock = miner.mode.read().map_err(|_| {
             tracing::error!("miner mode read lock was poisoned");
             miner.mode.clear_poison();
             StratusError::MinerModeLockFailed

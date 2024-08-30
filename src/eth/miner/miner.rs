@@ -118,7 +118,7 @@ impl Miner {
 
         // Check if automine is enabled
         let is_automine = {
-            let mode_lock = self.mode.read().map_err(|poison| {
+            let mode_lock = self.mode.read().map_err(|_| {
                 tracing::error!("miner mode read lock was poisoned");
                 self.mode.clear_poison();
                 StratusError::MinerModeLockFailed
