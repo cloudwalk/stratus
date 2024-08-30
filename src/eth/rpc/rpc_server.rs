@@ -397,7 +397,6 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     return Ok(json!(true));
 }
 
-// TODO: improve rwlock usage on executor, remove unwrap and treat poison
 // TODO: add e2e
 // TODO: validate paths
 #[cfg(feature = "dev")]
