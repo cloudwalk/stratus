@@ -326,7 +326,7 @@ macro_rules! log_and_err {
 
 /// Dynamic event logging based on the provided level.
 ///
-/// https://github.com/tokio-rs/tracing/issues/2730#issuecomment-1943022805
+/// <https://github.com/tokio-rs/tracing/issues/2730#issuecomment-1943022805>
 #[macro_export]
 macro_rules! event_with {
     ($lvl:ident, $($arg:tt)+) => {

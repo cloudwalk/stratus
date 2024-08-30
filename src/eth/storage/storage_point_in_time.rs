@@ -4,18 +4,18 @@ use crate::infra::metrics::MetricLabelValue;
 /// EVM storage point-in-time indicator.
 #[derive(Debug, strum::Display, Clone, Copy, Default, strum::EnumIs, serde::Serialize)]
 pub enum StoragePointInTime {
-    /// State of [`Account`] or [`Slot`] at the pending block being mined.
+    /// State of `Account` or `Slot` at the pending block being mined.
     ///
-    /// If state did not change, then it is the same as the [`Mined`] state.
+    /// If state did not change, then it is the same as the `Mined` state.
     #[strum(to_string = "pending")]
     Pending,
 
-    /// State of [`Account`] or [`Slot`] at the last mined block.
+    /// State of `Account` or `Slot` at the last mined block.
     #[default]
     #[strum(to_string = "mined")]
     Mined,
 
-    /// State of [`Account`] or [`Slot`] at some specific mined block in the past.
+    /// State of `Account` or `Slot` at some specific mined block in the past.
     #[strum(to_string = "mined-past")]
     MinedPast(BlockNumber),
 }

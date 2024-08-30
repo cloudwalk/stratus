@@ -208,7 +208,6 @@ pub struct Executor {
 }
 
 impl Executor {
-    /// Creates a new [`Executor`].
     pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating executor");
         let evms = Evms::spawn(Arc::clone(&storage), &config);
