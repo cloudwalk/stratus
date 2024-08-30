@@ -82,7 +82,6 @@ pub struct Importer {
 }
 
 impl Importer {
-    /// Creates a new [`Importer`].
     pub fn new(executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>, sync_interval: Duration) -> Self {
         tracing::info!("creating importer");
         Self {

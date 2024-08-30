@@ -64,7 +64,6 @@ pub struct MinerLocks {
 }
 
 impl Miner {
-    /// Creates a new [`BlockMiner`].
     pub fn new(storage: Arc<StratusStorage>, mode: MinerMode) -> Self {
         tracing::info!(?mode, "creating block miner");
         Self {
