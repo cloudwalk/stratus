@@ -195,7 +195,7 @@ impl StratusError {
             Some("execution") => CALL_EXECUTION_FAILED_CODE,
             Some("internal") => INTERNAL_ERROR_CODE,
             Some(kind) => {
-                tracing::warn!("stratus error with unhandled kind: {kind}");
+                tracing::warn!(kind, "stratus error with unhandled kind");
                 INTERNAL_ERROR_CODE
             }
             None => {
