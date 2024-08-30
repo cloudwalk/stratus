@@ -12,6 +12,7 @@ use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
 
+use crate::eth::primitives::StratusError;
 use crate::infra::tracing::info_task_spawn;
 use crate::log_and_err;
 use crate::GlobalState;
@@ -122,13 +123,12 @@ impl<T> OptionExt<T> for Option<T> {
 // Result
 // -----------------------------------------------------------------------------
 
-/// Extensions for `Result<T, E>`.
-pub trait ResultExt<T, E> {
+pub trait SerdeResultExt<T, E> {
     /// Unwraps a result informing that this operation is expected to be infallible.
     fn expect_infallible(self) -> T;
 }
 
-impl<T> ResultExt<T, serde_json::Error> for Result<T, serde_json::Error>
+impl<T> SerdeResultExt<T, serde_json::Error> for Result<T, serde_json::Error>
 where
     T: Sized,
 {
@@ -137,6 +137,16 @@ where
             tracing::error!(reason = ?e, "serde serialization/deserialization that should be infallible");
         }
         self.expect("serde serialization/deserialization that should be infallible")
+    }
+}
+
+pub trait MutexResultExt<T, E> {
+    fn map_to_lock_error(self, function_name: &str) -> Result<T, StratusError>;
+}
+
+impl<T> MutexResultExt<T, std::sync::PoisonError<T>> for Result<T, std::sync::PoisonError<T>> {
+    fn map_to_lock_error(self, function_name: &str) -> Result<T, StratusError> {
+        self.map_err(|_| StratusError::Unexpected(anyhow::anyhow!("accessed poisoned Mutex at function `{function_name}`")))
     }
 }
 

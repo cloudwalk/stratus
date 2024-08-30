@@ -391,7 +391,7 @@ impl Executor {
             ExecutorStrategy::Serial => {
                 // acquire serial execution lock
                 let _serial_lock = self.locks.serial.lock().unwrap_or_else(|poison| {
-                    tracing::warn!("executor serial lock was poisoned");
+                    tracing::error!("executor serial lock was poisoned");
                     self.locks.serial.clear_poison();
                     poison.into_inner()
                 });
@@ -400,7 +400,7 @@ impl Executor {
                 // this can be removed when we implement conflict detection for block number
                 let _miner_lock = if self.miner.mode.is_interval() {
                     let miner_lock = Some(self.miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
-                        tracing::warn!("miner mine_and_commit lock was poisoned");
+                        tracing::error!("miner mine_and_commit lock was poisoned");
                         self.miner.locks.mine_and_commit.clear_poison();
                         poison.into_inner()
                     }));
