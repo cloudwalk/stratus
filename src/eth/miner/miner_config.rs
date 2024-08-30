@@ -56,16 +56,21 @@ impl MinerConfig {
         // set block number
         storage.set_pending_block_number_as_next_if_not_set()?;
 
+        let mode_lock = miner.mode.read().map_err(|poison| {
+            tracing::error!("miner mode read lock was poisoned");
+            miner.mode.clear_poison();
+            drop(poison.into_inner());
+            StratusError::MinerModeLockFailed
+        })?;
+
         // enable interval miner
-        if let Ok(mode_lock) = miner.mode() {
-            if mode_lock.is_interval() {
-                Arc::clone(&miner).spawn_interval_miner()?;
-            }
-        } else {
-            return Err(StratusError::MinerModeLockFailed.into());
+        if mode_lock.is_interval() {
+            Arc::clone(&miner).spawn_interval_miner()?;
         }
 
-        Ok(miner)
+        drop(mode_lock);
+
+        Ok(Arc::clone(&miner))
     }
 }
 

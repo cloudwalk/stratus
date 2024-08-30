@@ -2,7 +2,6 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
-use std::sync::RwLockReadGuard;
 
 use itertools::Itertools;
 use keccak_hasher::KeccakHasher;
@@ -81,12 +80,24 @@ impl Miner {
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
     pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
+        let block_time;
+
         // validate
-        let mode_lock = self.mode.read().map_err(|_| StratusError::MinerModeLockFailed)?;
-        let MinerMode::Interval(block_time) = *mode_lock else {
-            return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
-        };
-        tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
+        {
+            let mode_lock = self.mode.read().map_err(|poison| {
+                tracing::error!("miner mode read lock was poisoned");
+                self.mode.clear_poison();
+                drop(poison.into_inner());
+                StratusError::MinerModeLockFailed
+            })?;
+
+            let MinerMode::Interval(bt) = *mode_lock else {
+                return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
+            };
+
+            block_time = bt;
+            tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
+        }
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::channel();
@@ -94,11 +105,6 @@ impl Miner {
         spawn_thread("miner-miner", move || interval_miner::run(miner_clone, ticks_rx));
         spawn_thread("miner-ticker", move || interval_miner_ticker::run(block_time, ticks_tx));
         Ok(())
-    }
-
-    /// Returns the mode the miner is running.
-    pub fn mode(&self) -> Result<RwLockReadGuard<'_, MinerMode>, StratusError> {
-        self.mode.read().map_err(|_| StratusError::MinerModeLockFailed) // TODO: add poison handling
     }
 
     /// Persists a transaction execution.
@@ -110,7 +116,12 @@ impl Miner {
         let _span = info_span!("miner::save_execution", %tx_hash).entered();
 
         {
-            let mode_lock = self.mode.read().map_err(|_| StratusError::MinerModeLockFailed)?;
+            let mode_lock = self.mode.read().map_err(|poison| {
+                tracing::error!("miner mode read lock was poisoned");
+                self.mode.clear_poison();
+                drop(poison.into_inner());
+                StratusError::MinerModeLockFailed
+            })?;
 
             // if automine is enabled, only one transaction can enter the block at time.
             let _save_execution_lock = if mode_lock.is_automine() {
@@ -127,7 +138,11 @@ impl Miner {
         let _ = self.notifier_pending_txs.send(tx_hash);
 
         {
-            let mode_lock = self.mode.read().map_err(|_| StratusError::MinerModeLockFailed)?;
+            let mode_lock = self.mode.read().unwrap_or_else(|poison| {
+                tracing::error!("miner mode read lock was poisoned");
+                self.mode.clear_poison();
+                poison.into_inner()
+            });
 
             // if automine is enabled, automatically mines a block
             if mode_lock.is_automine() {
