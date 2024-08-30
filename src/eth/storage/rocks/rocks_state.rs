@@ -417,16 +417,6 @@ impl RocksStorageState {
         write_in_batch_for_multiple_cfs_impl(&self.db, batch)
     }
 
-    /// Writes accounts to state (does not write to account history)
-    #[allow(dead_code)]
-    fn write_accounts(&self, accounts: Vec<Account>) -> Result<()> {
-        let accounts = accounts.into_iter().map(Into::into);
-
-        let mut batch = WriteBatch::default();
-        self.accounts.prepare_batch_insertion(accounts, &mut batch)?;
-        self.accounts.apply_batch_with_context(batch)
-    }
-
     /// Writes slots to state (does not write to slot history)
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn write_slots(&self, slots: Vec<(Address, Slot)>) -> Result<()> {
