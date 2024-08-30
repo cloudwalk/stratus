@@ -58,6 +58,10 @@ pub struct ExternalRpcStorageConfig {
     /// External RPC storage timeout when opening a connection.
     #[arg(long = "external-rpc-storage-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_STORAGE_TIMEOUT")]
     pub external_rpc_storage_timeout: Duration,
+
+    /// External RPC threshold in seconds for warning slow queries.
+    #[arg(long = "external-rpc-slow-query-warn-threshold", value_parser=parse_duration, env = "EXTERNAL_RPC_SLOW_QUERY_WARN_THRESHOLD", default_value = "1s")]
+    pub external_rpc_slow_query_warn_threshold: Duration,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -70,16 +74,16 @@ impl ExternalRpcStorageConfig {
     pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpcStorage>> {
         tracing::info!(config = ?self, "creating external rpc storage");
 
-        match self.external_rpc_storage_kind {
-            ExternalRpcStorageKind::Postgres { ref url } => {
-                let config = PostgresExternalRpcStorageConfig {
-                    url: url.to_owned(),
-                    connections: self.external_rpc_storage_connections,
-                    acquire_timeout: self.external_rpc_storage_timeout,
-                };
-                Ok(Arc::new(PostgresExternalRpcStorage::new(config).await?))
-            }
-        }
+        let ExternalRpcStorageKind::Postgres { url } = &self.external_rpc_storage_kind;
+
+        let config = PostgresExternalRpcStorageConfig {
+            url: url.to_owned(),
+            connections: self.external_rpc_storage_connections,
+            acquire_timeout: self.external_rpc_storage_timeout,
+            slow_query_warn_threshold: self.external_rpc_slow_query_warn_threshold,
+        };
+
+        Ok(Arc::new(PostgresExternalRpcStorage::new(config).await?))
     }
 }
 

@@ -115,7 +115,7 @@ impl Miner {
 
             // if automine is enabled, only one transaction can enter the block at time.
             let _save_execution_lock = if mode_lock.is_automine() {
-                Some(self.locks.save_execution.lock().unwrap())
+                Some(self.locks.save_execution.lock().expect("fatal, save_execution lock poisoned"))
             } else {
                 None
             };

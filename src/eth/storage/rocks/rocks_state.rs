@@ -175,53 +175,43 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    fn prepare_batch_state_update_with_execution_changes(
-        &self,
-        changes: &[ExecutionAccountChanges],
-        block_number: BlockNumber,
-        batch: &mut WriteBatch,
-    ) -> Result<()> {
-        let mut account_changes = Vec::new();
-        let mut account_history_changes = Vec::new();
-
+    fn prepare_batch_with_execution_changes<C>(&self, changes: C, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()>
+    where
+        C: IntoIterator<Item = ExecutionAccountChanges>,
+    {
         for change in changes {
+            let block_number = block_number.into();
+            let address: AddressRocksdb = change.address.into();
+
             if change.is_account_modified() {
-                let address: AddressRocksdb = change.address.into();
                 let mut account_info_entry = self.accounts.get_or_insert_with(address, AccountRocksdb::default)?;
 
-                if let Some(nonce) = change.nonce.clone().take_modified() {
+                if let Some(nonce) = change.nonce.take_modified() {
                     account_info_entry.nonce = nonce.into();
                 }
-                if let Some(balance) = change.balance.clone().take_modified() {
+                if let Some(balance) = change.balance.take_modified() {
                     account_info_entry.balance = balance.into();
                 }
-                if let Some(bytecode) = change.bytecode.clone().take_modified() {
+                if let Some(bytecode) = change.bytecode.take_modified() {
                     account_info_entry.bytecode = bytecode.map_into();
                 }
 
-                account_changes.push((address, account_info_entry.clone()));
-                account_history_changes.push(((address, block_number.into()), account_info_entry));
+                self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
+                self.accounts_history
+                    .prepare_batch_insertion([((address, block_number), account_info_entry)], batch)?;
             }
-        }
 
-        self.accounts.prepare_batch_insertion(account_changes, batch)?;
-        self.accounts_history.prepare_batch_insertion(account_history_changes, batch)?;
-
-        let mut slot_changes = Vec::new();
-        let mut slot_history_changes = Vec::new();
-
-        for change in changes {
             for (slot_index, slot_change) in &change.slots {
                 if let Some(slot) = slot_change.take_modified_ref() {
-                    let address: AddressRocksdb = change.address.into();
-                    let slot_index = *slot_index;
-                    slot_changes.push(((address, slot_index.into()), slot.value.into()));
-                    slot_history_changes.push(((address, slot_index.into(), block_number.into()), slot.value.into()));
+                    let slot_index = (*slot_index).into();
+                    let slot_value = slot.value.into();
+
+                    self.account_slots.prepare_batch_insertion([((address, slot_index), slot_value)], batch)?;
+                    self.account_slots_history
+                        .prepare_batch_insertion([((address, slot_index, block_number), slot_value)], batch)?;
                 }
             }
         }
-        self.account_slots.prepare_batch_insertion(slot_changes, batch)?;
-        self.account_slots_history.prepare_batch_insertion(slot_history_changes, batch)?;
 
         Ok(())
     }
@@ -406,7 +396,7 @@ impl RocksStorageState {
         let block_by_hash = (block_hash.into(), number.into());
         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
 
-        self.prepare_batch_state_update_with_execution_changes(&account_changes, number, &mut batch)?;
+        self.prepare_batch_with_execution_changes(account_changes, number, &mut batch)?;
 
         self.write_in_batch_for_multiple_cfs(batch)?;
         Ok(())
@@ -417,18 +407,8 @@ impl RocksStorageState {
         write_in_batch_for_multiple_cfs_impl(&self.db, batch)
     }
 
-    /// Writes accounts to state (does not write to account history)
-    #[allow(dead_code)]
-    fn write_accounts(&self, accounts: Vec<Account>) -> Result<()> {
-        let accounts = accounts.into_iter().map(Into::into);
-
-        let mut batch = WriteBatch::default();
-        self.accounts.prepare_batch_insertion(accounts, &mut batch)?;
-        self.accounts.apply_batch_with_context(batch)
-    }
-
     /// Writes slots to state (does not write to slot history)
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn write_slots(&self, slots: Vec<(Address, Slot)>) -> Result<()> {
         let slots = slots
             .into_iter()
@@ -437,6 +417,16 @@ impl RocksStorageState {
         let mut batch = WriteBatch::default();
         self.account_slots.prepare_batch_insertion(slots, &mut batch)?;
         self.account_slots.apply_batch_with_context(batch)
+    }
+
+    #[cfg(test)]
+    pub fn read_all_accounts(&self) -> Result<Vec<AccountRocksdb>> {
+        self.accounts.iter_start().map(|result| Ok(result?.1)).collect()
+    }
+
+    #[cfg(test)]
+    pub fn read_all_historical_accounts(&self) -> Result<Vec<AccountRocksdb>> {
+        self.accounts_history.iter_start().map(|result| Ok(result?.1)).collect()
     }
 
     /// Clears in-memory state.
@@ -732,6 +722,8 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+    use crate::eth::primitives::BlockHeader;
+    use crate::eth::primitives::ExecutionValueChange;
     use crate::eth::primitives::SlotValue;
 
     #[test]
@@ -764,5 +756,85 @@ mod tests {
         for (idx, value) in result {
             assert_eq!(value, *slots.get(&idx).expect("should not be None"));
         }
+    }
+
+    #[test]
+    fn regression_test_read_logs_without_providing_filter_address() {
+        let test_dir = tempdir().unwrap();
+
+        let state = RocksStorageState::new(test_dir.path().display().to_string()).unwrap();
+
+        assert_eq!(state.read_logs(&LogFilter::default()).unwrap(), vec![]);
+
+        // 100 blocks with 1 transaction, with 2 logs, total: 200 logs
+        for number in 0..100 {
+            let block = Block {
+                header: BlockHeader {
+                    number: number.into(),
+                    ..Faker.fake()
+                },
+                transactions: vec![TransactionMined {
+                    logs: vec![Faker.fake(), Faker.fake()],
+                    ..Faker.fake()
+                }],
+            };
+
+            state.save_block(block).unwrap();
+        }
+
+        let filter = LogFilter {
+            // address is empty
+            addresses: vec![],
+            ..Default::default()
+        };
+
+        assert_eq!(state.read_logs(&filter).unwrap().len(), 200);
+    }
+
+    #[test]
+    fn regression_test_saving_account_changes_for_accounts_that_didnt_change() {
+        let test_dir = tempdir().unwrap();
+        let state = RocksStorageState::new(test_dir.path().display().to_string()).unwrap();
+
+        let change_base = ExecutionAccountChanges {
+            new_account: false,
+            address: Faker.fake(),
+            nonce: ExecutionValueChange::from_original(Faker.fake()),
+            balance: ExecutionValueChange::from_original(Faker.fake()),
+            bytecode: ExecutionValueChange::from_original(Faker.fake()),
+            code_hash: Faker.fake(),
+            slots: HashMap::new(),
+        };
+
+        // 4 changes for the same address, the first isn't modified, the other three are
+        let changes = [
+            ExecutionAccountChanges { ..change_base.clone() },
+            ExecutionAccountChanges {
+                nonce: ExecutionValueChange::from_modified(Faker.fake()),
+                ..change_base.clone()
+            },
+            ExecutionAccountChanges {
+                balance: ExecutionValueChange::from_modified(Faker.fake()),
+                ..change_base.clone()
+            },
+            ExecutionAccountChanges {
+                bytecode: ExecutionValueChange::from_modified(Faker.fake()),
+                ..change_base
+            },
+        ];
+
+        let mut batch = WriteBatch::default();
+        // add accounts in separate blocks so they show up in history
+        state.prepare_batch_with_execution_changes([changes[0].clone()], 1.into(), &mut batch).unwrap();
+        state.prepare_batch_with_execution_changes([changes[1].clone()], 2.into(), &mut batch).unwrap();
+        state.prepare_batch_with_execution_changes([changes[2].clone()], 3.into(), &mut batch).unwrap();
+        state.prepare_batch_with_execution_changes([changes[3].clone()], 4.into(), &mut batch).unwrap();
+        state.write_in_batch_for_multiple_cfs(batch).unwrap();
+
+        let accounts = state.read_all_accounts().unwrap();
+        assert_eq!(accounts.len(), 1);
+
+        let history = state.read_all_historical_accounts().unwrap();
+        assert_eq!(history.len(), 3);
     }
 }
