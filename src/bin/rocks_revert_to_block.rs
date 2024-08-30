@@ -5,7 +5,11 @@
 //! By reverting the state to a previous block, the final state must be the same as when that block
 //! was just processed, that is, before the next ones were processed.
 
+use std::cmp::Ordering;
+
+use anyhow::bail;
 use stratus::config::RocksRevertToBlockConfig;
+use stratus::eth::storage::PermanentStorage;
 use stratus::eth::storage::RocksPermanentStorage;
 use stratus::utils::DropTimer;
 use stratus::GlobalServices;
@@ -25,8 +29,23 @@ fn run(config: RocksRevertToBlockConfig) -> anyhow::Result<()> {
 
     let rocks = RocksPermanentStorage::new(config.rocks_path_prefix)?;
 
-    if let Err(err) = rocks.revert_state_to_block(config.block_number.into()) {
-        tracing::error!(target_block = config.block_number, reason = ?err, "failed to revert block state to target block");
+    let target_block = config.block_number;
+    let current_block = rocks.read_mined_block_number()?.as_u64();
+
+    match target_block.cmp(&current_block) {
+        Ordering::Less => {
+            // ok!
+        }
+        Ordering::Equal => {
+            tracing::warn!("block target is equal to current block, reprocessing current state regardless");
+        }
+        Ordering::Greater => {
+            bail!("block number to revert to is greater than the current block number, exiting");
+        }
+    }
+
+    if let Err(err) = rocks.revert_state_to_block(target_block.into()) {
+        tracing::error!(target_block, reason = ?err, "failed to revert block state to target block");
     }
 
     Ok(())
