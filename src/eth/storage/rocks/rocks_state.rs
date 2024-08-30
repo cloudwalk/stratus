@@ -719,6 +719,7 @@ impl fmt::Debug for RocksStorageState {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::iter;
 
     use fake::Fake;
     use fake::Faker;
@@ -737,9 +738,9 @@ mod tests {
         let account_slots: RocksCfRef<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots").unwrap();
 
         let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
-        let extra_slots: HashMap<SlotIndex, SlotValue> = (0..1000)
-            .map(|_| (Faker.fake(), Faker.fake()))
+        let extra_slots: HashMap<SlotIndex, SlotValue> = iter::repeat_with(|| (Faker.fake(), Faker.fake()))
             .filter(|(key, _)| !slots.contains_key(key))
+            .take(1000)
             .collect();
 
         let mut batch = WriteBatch::default();
