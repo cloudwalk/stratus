@@ -28,6 +28,7 @@ pub struct RocksPermanentStorage {
 impl RocksPermanentStorage {
     pub fn new(rocks_path_prefix: Option<String>) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
+
         let path = if let Some(prefix) = rocks_path_prefix {
             // run some checks on the given prefix
             if prefix.is_empty() {
@@ -48,6 +49,7 @@ impl RocksPermanentStorage {
 
         let state = RocksStorageState::new(path)?;
         let block_number = state.preload_block_number()?;
+
         Ok(Self { state, block_number })
     }
 
@@ -56,12 +58,15 @@ impl RocksPermanentStorage {
     // -------------------------------------------------------------------------
 
     pub fn clear(&self) -> anyhow::Result<()> {
-        self.state.clear()?;
+        self.state.clear().inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to clear RocksPermanent DB");
+        })?;
         self.block_number.store(0, Ordering::SeqCst);
         Ok(())
     }
 
     pub fn revert_state_to_block(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        // don't log here, this is binary-specific and will be logged in the binary
         self.state.revert_state_to_block(block_number.into())
     }
 }
@@ -85,15 +90,21 @@ impl PermanentStorage for RocksPermanentStorage {
     // -------------------------------------------------------------------------
 
     fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
-        self.state.read_account(address, point_in_time)
+        self.state.read_account(address, point_in_time).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to read account in RocksPermanent");
+        })
     }
 
     fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
-        self.state.read_slot(address, index, point_in_time)
+        self.state.read_slot(address, index, point_in_time).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to read slot in RocksPermanent");
+        })
     }
 
     fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
-        let block = self.state.read_block(selection);
+        let block = self.state.read_block(selection).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to read block in RocksPermanent");
+        });
         if let Ok(Some(block)) = &block {
             tracing::trace!(?selection, ?block, "block found");
         }
@@ -101,28 +112,40 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
-        self.state.read_transaction(hash)
+        self.state.read_transaction(hash).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to read transaction in RocksPermanent");
+        })
     }
 
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
-        self.state.read_logs(filter)
+        self.state.read_logs(filter).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to read log in RocksPermanent");
+        })
     }
 
     fn save_block(&self, block: Block) -> anyhow::Result<()> {
         #[cfg(feature = "metrics")]
         {
-            self.state.export_metrics()?;
+            self.state.export_metrics().inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to export metrics in RocksPermanent");
+            })?;
         }
-        self.state.save_block(block)
+        self.state.save_block(block).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to save block in RocksPermanent");
+        })
     }
 
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
-        self.state.save_accounts(accounts)
+        self.state.save_accounts(accounts).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to save accounts in RocksPermanent");
+        })
     }
 
     #[cfg(feature = "dev")]
     fn reset(&self) -> anyhow::Result<()> {
         self.block_number.store(0u64, Ordering::SeqCst);
-        self.state.reset()
+        self.state.reset().inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to reset in RocksPermanent");
+        })
     }
 }

@@ -391,7 +391,7 @@ impl Executor {
             ExecutorStrategy::Serial => {
                 // acquire serial execution lock
                 let _serial_lock = self.locks.serial.lock().unwrap_or_else(|poison| {
-                    tracing::warn!("executor serial lock was poisoned");
+                    tracing::error!("executor serial lock was poisoned");
                     self.locks.serial.clear_poison();
                     poison.into_inner()
                 });
