@@ -394,6 +394,7 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     return Ok(json!(true));
 }
 
+// FIX: interval miner mode parsing
 // TODO: add e2e
 // TODO: validate paths
 #[cfg(feature = "dev")]
