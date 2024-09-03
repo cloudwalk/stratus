@@ -241,3 +241,23 @@ export async function sendWithRetry(methodName: string, params: any[], maxAttemp
 export function toHex(number: number | bigint): string {
     return "0x" + number.toString(16);
 }
+
+export async function waitForFollowerToSyncWithLeader() {
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    await delay(3000);
+
+    while (true) {
+        updateProviderUrl("stratus");
+        const leaderBlock = await sendWithRetry("eth_blockNumber", []);
+
+        updateProviderUrl("stratus-follower");
+        const followerBlock = await sendWithRetry("eth_blockNumber", []);
+
+        if (parseInt(leaderBlock, 16) === parseInt(followerBlock, 16)) {
+            return { leaderBlock, followerBlock };
+        }
+
+        await delay(1000);
+    }
+}

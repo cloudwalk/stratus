@@ -2,7 +2,12 @@ import { expect } from "chai";
 import { keccak256 } from "ethers";
 
 import { ALICE, BOB } from "./helpers/account";
-import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
+import {
+    sendAndGetFullResponse,
+    sendWithRetry,
+    updateProviderUrl,
+    waitForFollowerToSyncWithLeader,
+} from "./helpers/rpc";
 
 describe("Leader & Follower importer integration test", function () {
     it("Validate initial Leader state and health", async function () {
@@ -199,24 +204,6 @@ async function waitForLeaderToBeAhead() {
         const followerBlock = await sendWithRetry("eth_blockNumber", []);
 
         if (parseInt(leaderBlock, 16) > parseInt(followerBlock, 16) + blocksAhead) {
-            return { leaderBlock, followerBlock };
-        }
-
-        await delay(1000);
-    }
-}
-
-async function waitForFollowerToSyncWithLeader() {
-    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-    while (true) {
-        updateProviderUrl("stratus");
-        const leaderBlock = await sendWithRetry("eth_blockNumber", []);
-
-        updateProviderUrl("stratus-follower");
-        const followerBlock = await sendWithRetry("eth_blockNumber", []);
-
-        if (parseInt(leaderBlock, 16) === parseInt(followerBlock, 16)) {
             return { leaderBlock, followerBlock };
         }
 
