@@ -5,6 +5,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use itertools::Itertools;
 use revm::primitives::AccountInfo;
+use revm::primitives::AnalysisKind;
 use revm::primitives::EVMError;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
 use revm::primitives::InvalidTransaction;
@@ -86,6 +87,7 @@ impl Evm {
         let cfg_env = evm.cfg_mut();
         cfg_env.chain_id = chain_id;
         cfg_env.limit_contract_code_size = Some(usize::MAX);
+        cfg_env.perf_analyse_created_bytecodes = AnalysisKind::Raw;
 
         // global block config
         let block_env = evm.block_mut();
