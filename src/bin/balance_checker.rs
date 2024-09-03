@@ -131,7 +131,6 @@ fn get_balance(
 ) -> Result<U256> {
     // Create the ERC20 balanceOf function call
     let formated_data = format!("70a08231000000000000000000000000{}", address);
-    println!("{}", formated_data);
 
     let data = hex::decode(formated_data)?;
 
