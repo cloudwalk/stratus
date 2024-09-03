@@ -1,12 +1,13 @@
 use clap::Parser;
 use csv::ReaderBuilder;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use anyhow::Result;
-use ethereum_types::{Address, U256};
+use ethereum_types::{U256};
 use stratus::eth::executor::{Executor, ExecutorConfig};
 use stratus::eth::miner::Miner;
-use stratus::eth::primitives::{BlockFilter, CallInput};
+use stratus::eth::primitives::{Address, BlockFilter, CallInput};
 use stratus::eth::storage::{InMemoryTemporaryStorage, RocksPermanentStorage, StoragePointInTime, StratusStorage};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -27,7 +28,7 @@ struct Opt {
 
     /// Contract address for the ERC20 token
     #[arg(short, long)]
-    contract: Address,
+    contract: String,
 }
 
 fn main() -> Result<()> {
@@ -45,7 +46,7 @@ fn main() -> Result<()> {
     // Check balances
     let total_balance = rt.block_on(check_balances(
         addresses,
-        opt.contract,
+        Address::from_str(&opt.contract)?,
         block_number,
     ))?;
 
@@ -111,7 +112,10 @@ let mut total_balance = U256::zero();
             Ok(Ok(balance)) => {
                 total_balance += balance;
             }
-            _ => continue
+            any => {
+                println!("{:?}", any);
+                panic!();
+            }
         }
     }
 
@@ -126,12 +130,15 @@ fn get_balance(
     bar: ProgressBar
 ) -> Result<U256> {
     // Create the ERC20 balanceOf function call
-    let data = hex::decode(format!("70a08231000000000000000000000000{}", address))?;
+    let formated_data = format!("70a08231000000000000000000000000{}", address);
+    println!("{}", formated_data);
+
+    let data = hex::decode(formated_data)?;
 
     let result = executor.execute_local_call(
         CallInput {
             from: None,
-            to: Some(contract.into()),
+            to: Some(contract),
             value: 0.into(),
             data: data.into(),
         },
