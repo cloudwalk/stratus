@@ -9,8 +9,6 @@ use ethereum_types::U64;
 use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::database::HasArguments;
-use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
@@ -182,7 +180,7 @@ impl From<BlockNumber> for [u8; 8] {
 // sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for BlockNumber {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
         let value = <BigDecimal as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.try_into()?)
     }
@@ -195,7 +193,7 @@ impl sqlx::Type<sqlx::Postgres> for BlockNumber {
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for BlockNumber {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
         BigDecimal::from(u64::from(*self)).encode(buf)
     }
 }
