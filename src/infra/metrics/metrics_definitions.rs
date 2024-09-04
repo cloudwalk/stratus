@@ -130,7 +130,10 @@ metrics! {
     histogram_counter executor_local_call_slot_reads{function},
 
     "Gas spent executing a local call."
-    histogram_counter executor_local_call_gas{function}
+    histogram_counter executor_local_call_gas{function},
+
+    "Count types of errors when executing a transaction."
+    counter executor_transaction_error_types{error_type}
 }
 
 metrics! {
