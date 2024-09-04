@@ -74,6 +74,20 @@ describe("Miner mode change integration test", function () {
         expect(response.data.error.message).eq("Miner mode param is invalid.");
     });
 
+    it("Miner change on Leader with same mode should fail", async function () {
+        updateProviderUrl("stratus");
+        const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["1s"]);
+        expect(response.data.error.code).eq(-32603);
+        expect(response.data.error.message).eq("Requested miner mode conflicts with current miner mode.");
+    });
+
+    it("Miner change on Follower with same mode should fail", async function () {
+        updateProviderUrl("stratus-follower");
+        const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
+        expect(response.data.error.code).eq(-32603);
+        expect(response.data.error.message).eq("Requested miner mode conflicts with current miner mode.");
+    });
+
     it("Miner change on Leader to Automine should fail because it is not supported", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["automine"]);
