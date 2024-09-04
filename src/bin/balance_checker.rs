@@ -118,7 +118,7 @@ let mut total_balance = U256::zero();
             }
         }
     }
-    storage.p
+
     Ok(total_balance)
 }
 
