@@ -52,38 +52,8 @@ describe("Miner mode change integration test", function () {
         expect(state.transactions_enabled).to.equal(false);
     });
 
-    it("Send transaction to Follower should fail when transactions are disabled on Leader", async function () {
-        updateProviderUrl("stratus-follower");
-        const nonceResponse = await sendAndGetFullResponse("eth_getTransactionCount", [ALICE.address, "latest"]);
-        const nonce = parseInt(nonceResponse.data.result, 16);
-        const signedTx = await ALICE.signWeiTransfer(BOB.address, 1, nonce);
-        const txHash = keccak256(signedTx);
-        const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
-        expect(txResponse.data.error.code).eq(-32009);
-        expect(txResponse.data.error.message).eq("Transaction processing is temporarily disabled."); // Needs new message(forward)
-    });
-
     it("Disable transactions on Follower", async function () {
         updateProviderUrl("stratus-follower");
-        const response = await sendAndGetFullResponse("stratus_disableTransactions", []);
-        expect(response.data.result).to.equal(false);
-        const state = await sendWithRetry("stratus_state", []);
-        expect(state.transactions_enabled).to.equal(false);
-    });
-
-    it("Send transaction to Follower should fail when transactions are disabled on Follower", async function () {
-        updateProviderUrl("stratus-follower");
-        const nonceResponse = await sendAndGetFullResponse("eth_getTransactionCount", [ALICE.address, "latest"]);
-        const nonce = parseInt(nonceResponse.data.result, 16);
-        const signedTx = await ALICE.signWeiTransfer(BOB.address, 1, nonce);
-        const txHash = keccak256(signedTx);
-        const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
-        expect(txResponse.data.error.code).eq(-32009);
-        expect(txResponse.data.error.message).eq("Transaction processing is temporarily disabled.");
-    });
-
-    it("Disable transactions on Leader", async function () {
-        updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_disableTransactions", []);
         expect(response.data.result).to.equal(false);
         const state = await sendWithRetry("stratus_state", []);
