@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 use std::ops::Deref;
+#[cfg(feature = "dev")]
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -394,9 +396,6 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     return Ok(json!(true));
 }
 
-// FIX: interval miner mode parsing
-// TODO: add e2e
-// TODO: validate paths
 #[cfg(feature = "dev")]
 fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
@@ -404,7 +403,12 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
         return Err(StratusError::RpcTransactionEnabled);
     }
 
-    let (_, mode) = next_rpc_param::<MinerMode>(params.sequence())?;
+    let (_, mode_str) = next_rpc_param::<String>(params.sequence())?;
+
+    let mode = MinerMode::from_str(&mode_str).map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse miner mode");
+        StratusError::MinerModeParamInvalid
+    })?;
 
     {
         let current_miner_mode = ctx.miner.mode.read().map_err(|_| {

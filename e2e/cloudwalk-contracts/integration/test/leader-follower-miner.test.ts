@@ -64,14 +64,14 @@ describe("Miner mode change integration test", function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", []);
         expect(response.data.error.code).eq(-32602);
-        expect(response.data.error.message).eq("Expected MinerMode parameter, but received nothing.");
+        expect(response.data.error.message).eq("Expected String parameter, but received nothing.");
     });
 
     it("Miner change on Leader with invalid params should fail", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["invalidMode"]);
-        expect(response.data.error.code).eq(-32602);
-        expect(response.data.error.message).eq("Failed to decode MinerMode parameter.");
+        expect(response.data.error.code).eq(-32603);
+        expect(response.data.error.message).eq("Miner mode param is invalid.");
     });
 
     it("Miner change on Leader to Automine should fail because it is not supported", async function () {
