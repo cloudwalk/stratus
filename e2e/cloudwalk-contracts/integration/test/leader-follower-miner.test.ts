@@ -180,6 +180,7 @@ describe("Miner mode change integration test", function () {
         expect(response.data.result).to.equal(true);
         const state = await sendWithRetry("stratus_state", []);
         expect(state.is_interval_miner_shutdown).to.equal(false);
+        expect(state.is_importer_shutdown).to.equal(true);
     });
 
     it("Validate Follower with Interval Miner is mining a block every second", async function () {
