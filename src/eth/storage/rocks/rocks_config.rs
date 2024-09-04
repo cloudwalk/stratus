@@ -37,6 +37,9 @@ impl DbConfig {
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
         opts.increase_parallelism(16);
+        opts.set_paranoid_checks(false);
+        opts.set_skip_stats_update_on_db_open(true);
+        opts.set_skip_checking_sst_file_sizes_on_db_open(false);
 
         // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
         #[cfg(feature = "metrics")]
