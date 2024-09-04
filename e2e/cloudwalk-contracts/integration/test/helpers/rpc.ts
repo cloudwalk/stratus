@@ -261,3 +261,41 @@ export async function waitForFollowerToSyncWithLeader() {
         await delay(1000);
     }
 }
+
+export async function waitForLeaderToBeAhead() {
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const blocksAhead = 10;
+
+    while (true) {
+        updateProviderUrl("stratus");
+        const leaderBlock = await sendWithRetry("eth_blockNumber", []);
+
+        updateProviderUrl("stratus-follower");
+        const followerBlock = await sendWithRetry("eth_blockNumber", []);
+
+        if (parseInt(leaderBlock, 16) > parseInt(followerBlock, 16) + blocksAhead) {
+            return { leaderBlock, followerBlock };
+        }
+
+        await delay(1000);
+    }
+}
+
+export async function getTransactionByHashUntilConfirmed(txHash: string, maxRetries: number = 3) {
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    let txResponse = null;
+    let retries = 0;
+
+    while (retries < maxRetries) {
+        txResponse = await sendAndGetFullResponse("eth_getTransactionByHash", [txHash]);
+
+        if (txResponse.data.result) {
+            return txResponse;
+        }
+
+        retries++;
+        await delay(1000);
+    }
+
+    return txResponse;
+}

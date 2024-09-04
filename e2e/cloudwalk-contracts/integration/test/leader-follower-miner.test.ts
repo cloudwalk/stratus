@@ -167,4 +167,19 @@ describe("Miner mode change integration test", function () {
         const state = await sendWithRetry("stratus_state", []);
         expect(state.is_interval_miner_shutdown).to.equal(false);
     });
+
+    it("Validate Follower with Interval Miner is mining a block every second", async function () {
+        updateProviderUrl("stratus-follower");
+
+        let initialBlockNumberHex = await sendWithRetry("eth_blockNumber", []);
+        let initialBlockNumber = parseInt(initialBlockNumberHex, 16);
+
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+
+        let newBlockNumberHex = await sendWithRetry("eth_blockNumber", []);
+        let newBlockNumber = parseInt(newBlockNumberHex, 16);
+
+        expect(newBlockNumber).to.be.greaterThan(initialBlockNumber);
+        expect(newBlockNumber - initialBlockNumber).to.be.closeTo(10, 1);
+    });
 });
