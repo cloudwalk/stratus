@@ -29,6 +29,7 @@ use tracing::info_span;
 use tracing::Instrument;
 use tracing::Span;
 
+use super::rpc_method_wrapper::call_error_metrics_wrapper;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
@@ -205,8 +206,8 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("eth_getTransactionByHash", eth_get_transaction_by_hash)?;
     module.register_blocking_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
     module.register_blocking_method("eth_estimateGas", eth_estimate_gas)?;
-    module.register_blocking_method("eth_call", eth_call)?;
-    module.register_blocking_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
+    module.register_blocking_method("eth_call", call_error_metrics_wrapper(eth_call))?;
+    module.register_blocking_method("eth_sendRawTransaction", call_error_metrics_wrapper(eth_send_raw_transaction))?;
 
     // logs
     module.register_blocking_method("eth_getLogs", eth_get_logs)?;

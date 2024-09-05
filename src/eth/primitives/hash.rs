@@ -6,8 +6,7 @@ use display_json::DebugAsJson;
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::database::HasValueRef;
-use sqlx::error::BoxDynError;
+use sqlx::encode::IsNull;
 use sqlx::postgres::PgHasArrayType;
 
 use crate::gen_newtype_from;
@@ -84,21 +83,21 @@ impl FromStr for Hash {
 // sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Hash {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let value = <[u8; 32] as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.into())
     }
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Hash {
-    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull
+    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError>
     where
         Self: Sized,
     {
         <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
     }
 
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::database::HasArguments<'q>>::ArgumentBuffer) -> sqlx::encode::IsNull {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
         <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
     }
 }

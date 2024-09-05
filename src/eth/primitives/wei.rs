@@ -5,8 +5,6 @@ use ethabi::Token;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::database::HasArguments;
-use sqlx::database::HasValueRef;
 use sqlx::encode::IsNull;
 use sqlx::error::BoxDynError;
 use sqlx::postgres::PgHasArrayType;
@@ -79,7 +77,7 @@ impl TryFrom<BigDecimal> for Wei {
 // sqlx traits
 // -----------------------------------------------------------------------------
 impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Wei {
-    fn decode(value: <sqlx::Postgres as HasValueRef<'r>>::ValueRef) -> Result<Self, BoxDynError> {
+    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
         let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value)?;
         Ok(value.try_into()?)
     }
@@ -92,17 +90,17 @@ impl sqlx::Type<sqlx::Postgres> for Wei {
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Wei {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull {
+    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
         match BigDecimal::try_from(*self) {
             Ok(res) => res.encode(buf),
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to encode gas");
-                IsNull::Yes
+                Ok(IsNull::Yes)
             }
         }
     }
 
-    fn encode(self, buf: &mut <sqlx::Postgres as HasArguments<'q>>::ArgumentBuffer) -> IsNull
+    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError>
     where
         Self: Sized,
     {
@@ -110,7 +108,7 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Wei {
             Ok(res) => res.encode(buf),
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to encode gas");
-                IsNull::Yes
+                Ok(IsNull::Yes)
             }
         }
     }

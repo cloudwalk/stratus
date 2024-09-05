@@ -21,7 +21,7 @@ use crate::ext::to_json_value;
 /// * server_state:   request is valid, global server rules rejects it.
 /// * execution:      request is valid, but failed in executor/evm.
 /// * internal:       request is valid, but a an internal component failed.
-#[derive(Debug, thiserror::Error, strum::EnumProperty)]
+#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
 pub enum StratusError {
     // -------------------------------------------------------------------------
     // RPC
