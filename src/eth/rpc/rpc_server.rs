@@ -294,8 +294,6 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
     Ok(to_json_value(true))
 }
 
-// TODO: Add e2e
-// TODO: Handle edge cases
 async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     tracing::info!("starting process to change node to leader");
 
@@ -332,8 +330,6 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     Ok(json!(true))
 }
 
-// TODO: Handle edge cases
-// TODO: Add validation to pending txs and block mining
 async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     tracing::info!("starting process to change node to follower");
 
@@ -341,6 +337,11 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         tracing::info!("node is already in follower mode, no changes made");
         return Ok(json!(true));
     }
+
+    // TODO: check if transactions are disabled
+    // TODO: check if there are no more pending transactions
+    GlobalState::set_miner_enabled(false);
+    // TODO: check if miner is not mining
 
     tracing::info!("changing miner mode to external");
     let change_miner_mode_result = stratus_change_miner_mode(Params::new(Some("external")), &ctx, &ext);
@@ -367,6 +368,8 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
             return Err(e);
         }
     }
+
+    GlobalState::set_transactions_enabled(true);
 
     Ok(json!(true))
 }
