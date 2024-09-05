@@ -305,7 +305,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     }
 
     tracing::info!("shutting down importer");
-    let shutdown_importer_result = stratus_shutdown_importer(Params::None, &ctx, &ext);
+    let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), &ctx, &ext);
     if let Err(e) = shutdown_importer_result {
         tracing::error!(reason = ?e, "failed to shutdown importer");
         return Err(e);
@@ -313,7 +313,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     tracing::info!("importer shutdown successfully");
 
     tracing::info!("changing miner mode to interval(1s)");
-    let change_miner_mode_result = stratus_change_miner_mode(Params::Array(vec![json!("1s")]), &ctx, &ext);
+    let change_miner_mode_result = stratus_change_miner_mode(Params::new(Some("1s")), &ctx, &ext);
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
         return Err(e);
@@ -337,7 +337,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     }
 
     tracing::info!("changing miner mode to external");
-    let change_miner_mode_result = stratus_change_miner_mode(Params::Array(vec![json!("external")]), &ctx, &ext);
+    let change_miner_mode_result = stratus_change_miner_mode(Params::new(Some("external")), &ctx, &ext);
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
         return Err(e);
@@ -345,7 +345,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     tracing::info!("miner mode changed to external successfully");
 
     tracing::info!("initializing importer");
-    let init_importer_result = stratus_init_importer(params.clone(), ctx.clone(), ext).await;
+    let init_importer_result = stratus_init_importer(params.clone(), Arc::clone(&ctx), ext).await;
     if let Err(e) = init_importer_result {
         tracing::error!(reason = ?e, "failed to initialize importer");
         return Err(e);
@@ -455,7 +455,7 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
 
-    return Ok(json!(true));
+    Ok(json!(true))
 }
 
 fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
@@ -541,7 +541,7 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
         }
     }
 
-    return Ok(json!(true));
+    Ok(json!(true))
 }
 
 fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
