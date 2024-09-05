@@ -315,15 +315,17 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
         }
     }
 
+    GlobalState::set_miner_enabled(true);
+
     tracing::info!("changing miner mode to interval(1s)");
     let change_miner_mode_result = stratus_change_miner_mode(Params::new(Some("1s")), &ctx, &ext);
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
+        GlobalState::set_miner_enabled(false);
         return Err(e);
     }
     tracing::info!("miner mode changed to interval(1s) successfully");
 
-    tracing::info!("changing node mode to leader");
     GlobalState::set_node_mode(NodeMode::Leader);
     tracing::info!("node mode changed to leader successfully");
 
@@ -351,9 +353,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     }
     tracing::info!("miner mode changed to external successfully");
 
-    tracing::info!("changing node mode to follower");
     GlobalState::set_node_mode(NodeMode::Follower);
-    tracing::info!("node mode changed to follower successfully");
 
     tracing::info!("initializing importer");
     let init_importer_result = stratus_init_importer(params, Arc::clone(&ctx), ext).await;
@@ -368,6 +368,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
             return Err(e);
         }
     }
+    tracing::info!("node mode changed to follower successfully");
 
     Ok(json!(true))
 }
