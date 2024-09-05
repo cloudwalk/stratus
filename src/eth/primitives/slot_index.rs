@@ -16,7 +16,7 @@ use crate::alias::RevmU256;
 use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
-pub struct SlotIndex(U256);
+pub struct SlotIndex(pub U256);
 
 impl SlotIndex {
     pub const ZERO: SlotIndex = SlotIndex(U256::zero());
@@ -79,6 +79,12 @@ impl From<Vec<u8>> for SlotIndex {
             U256::from_big_endian(&bytes[0..32])
         };
         SlotIndex(u256)
+    }
+}
+
+impl From<[u64; 4]> for SlotIndex {
+    fn from(value: [u64; 4]) -> Self {
+        Self(U256(value))
     }
 }
 
