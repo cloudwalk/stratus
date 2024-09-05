@@ -1,6 +1,7 @@
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::RwLock;
 
 use anyhow::anyhow;
 use itertools::Itertools;
@@ -30,6 +31,7 @@ use crate::ext::DisplayExt;
 use crate::ext::MutexResultExt;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
+use crate::GlobalState;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "tracing")] {
@@ -44,7 +46,7 @@ pub struct Miner {
     storage: Arc<StratusStorage>,
 
     /// Mode the block miner is running.
-    pub mode: MinerMode,
+    pub mode: RwLock<MinerMode>,
 
     /// Broadcasts pending transactions events.
     pub notifier_pending_txs: broadcast::Sender<Hash>,
@@ -71,7 +73,7 @@ impl Miner {
         Self {
             locks: MinerLocks::default(),
             storage,
-            mode,
+            mode: mode.into(),
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
@@ -80,22 +82,30 @@ impl Miner {
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
     pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
+        let block_time;
+
         // validate
-        let MinerMode::Interval(block_time) = self.mode else {
-            return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
-        };
-        tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
+        {
+            let mode_lock = self.mode.read().map_err(|_| {
+                tracing::error!("miner mode read lock was poisoned");
+                self.mode.clear_poison();
+                StratusError::MinerModeLockFailed
+            })?;
+
+            let MinerMode::Interval(bt) = *mode_lock else {
+                return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
+            };
+
+            block_time = bt;
+            tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
+        }
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::channel();
-        spawn_thread("miner-miner", move || interval_miner::run(Arc::clone(&self), ticks_rx));
+        let miner_clone = Arc::clone(&self);
+        spawn_thread("miner-miner", move || interval_miner::run(miner_clone, ticks_rx));
         spawn_thread("miner-ticker", move || interval_miner_ticker::run(block_time, ticks_tx));
         Ok(())
-    }
-
-    /// Returns the mode the miner is running.
-    pub fn mode(&self) -> &MinerMode {
-        &self.mode
     }
 
     /// Persists a transaction execution.
@@ -106,8 +116,18 @@ impl Miner {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::save_execution", %tx_hash).entered();
 
-        // if automine is enabled, only one transaction can enter the block at time.
-        let _save_execution_lock = if self.mode.is_automine() {
+        // Check if automine is enabled
+        let is_automine = {
+            let mode_lock = self.mode.read().map_err(|_| {
+                tracing::error!("miner mode read lock was poisoned");
+                self.mode.clear_poison();
+                StratusError::MinerModeLockFailed
+            })?;
+            mode_lock.is_automine()
+        };
+
+        // if automine is enabled, only one transaction can enter the block at a time.
+        let _save_execution_lock = if is_automine {
             Some(self.locks.save_execution.lock().map_to_lock_error("save_execution")?)
         } else {
             None
@@ -120,7 +140,7 @@ impl Miner {
         let _ = self.notifier_pending_txs.send(tx_hash);
 
         // if automine is enabled, automatically mines a block
-        if self.mode.is_automine() {
+        if is_automine {
             self.mine_local_and_commit()?;
         }
 
@@ -339,6 +359,10 @@ pub fn block_from_local(number: BlockNumber, txs: Vec<LocalTransactionExecution>
     Ok(block)
 }
 
+fn should_shutdown(task_name: &str) -> bool {
+    GlobalState::is_shutdown_warn(task_name) || GlobalState::is_interval_miner_shutdown_warn(task_name)
+}
+
 // -----------------------------------------------------------------------------
 // Miner
 // -----------------------------------------------------------------------------
@@ -350,6 +374,7 @@ mod interval_miner {
 
     use tokio::time::Instant;
 
+    use crate::eth::miner::miner::should_shutdown;
     use crate::eth::miner::Miner;
     use crate::ext::not;
     use crate::infra::tracing::warn_task_rx_closed;
@@ -359,7 +384,7 @@ mod interval_miner {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         loop {
-            if GlobalState::is_shutdown_warn(TASK_NAME) {
+            if should_shutdown(TASK_NAME) {
                 break;
             }
 
@@ -425,8 +450,8 @@ mod interval_miner_ticker {
     use tokio::runtime::Handle;
     use tokio::time::Instant;
 
+    use crate::eth::miner::miner::should_shutdown;
     use crate::infra::tracing::warn_task_rx_closed;
-    use crate::GlobalState;
 
     pub fn run(block_time: Duration, ticks_tx: mpsc::Sender<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
@@ -448,7 +473,7 @@ mod interval_miner_ticker {
         runtime.block_on(async {
             ticker.tick().await;
             loop {
-                if GlobalState::is_shutdown_warn(TASK_NAME) {
+                if should_shutdown(TASK_NAME) {
                     return;
                 }
 

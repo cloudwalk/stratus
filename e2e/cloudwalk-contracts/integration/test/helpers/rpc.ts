@@ -241,3 +241,61 @@ export async function sendWithRetry(methodName: string, params: any[], maxAttemp
 export function toHex(number: number | bigint): string {
     return "0x" + number.toString(16);
 }
+
+export async function waitForFollowerToSyncWithLeader() {
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    await delay(3000);
+
+    while (true) {
+        updateProviderUrl("stratus");
+        const leaderBlock = await sendWithRetry("eth_blockNumber", []);
+
+        updateProviderUrl("stratus-follower");
+        const followerBlock = await sendWithRetry("eth_blockNumber", []);
+
+        if (parseInt(leaderBlock, 16) === parseInt(followerBlock, 16)) {
+            return { leaderBlock, followerBlock };
+        }
+
+        await delay(1000);
+    }
+}
+
+export async function waitForLeaderToBeAhead() {
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const blocksAhead = 10;
+
+    while (true) {
+        updateProviderUrl("stratus");
+        const leaderBlock = await sendWithRetry("eth_blockNumber", []);
+
+        updateProviderUrl("stratus-follower");
+        const followerBlock = await sendWithRetry("eth_blockNumber", []);
+
+        if (parseInt(leaderBlock, 16) > parseInt(followerBlock, 16) + blocksAhead) {
+            return { leaderBlock, followerBlock };
+        }
+
+        await delay(1000);
+    }
+}
+
+export async function getTransactionByHashUntilConfirmed(txHash: string, maxRetries: number = 3) {
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    let txResponse = null;
+    let retries = 0;
+
+    while (retries < maxRetries) {
+        txResponse = await sendAndGetFullResponse("eth_getTransactionByHash", [txHash]);
+
+        if (txResponse.data.result) {
+            return txResponse;
+        }
+
+        retries++;
+        await delay(1000);
+    }
+
+    return txResponse;
+}

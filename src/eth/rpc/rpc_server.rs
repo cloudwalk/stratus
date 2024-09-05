@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 use std::ops::Deref;
+#[cfg(feature = "dev")]
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -34,6 +36,8 @@ use crate::eth::follower::consensus::Consensus;
 #[cfg(feature = "dev")]
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::Miner;
+#[cfg(feature = "dev")]
+use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Bytes;
@@ -162,6 +166,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("stratus_reset", stratus_reset)?;
         module.register_async_method("stratus_initImporter", stratus_init_importer)?;
         module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
+        module.register_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
     }
 
     // stratus status
@@ -259,7 +264,11 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
     let should_serve = match GlobalState::get_node_mode() {
         NodeMode::Leader => true,
         NodeMode::Follower => {
-            let consensus_lock = context.consensus.read().map_err(|_| StratusError::ConsensusLockFailed)?;
+            let consensus_lock = context.consensus.read().map_err(|_| {
+                tracing::error!("consensus read lock was poisoned");
+                context.consensus.clear_poison();
+                StratusError::ConsensusLockFailed
+            })?;
             match consensus_lock.as_ref() {
                 Some(consensus) => tokio::task::block_in_place(|| Handle::current().block_on(consensus.should_serve())),
                 None => false,
@@ -345,7 +354,12 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     };
 
     {
-        let mut consensus_lock = ctx.consensus.write().map_err(|_| StratusError::ConsensusLockFailed)?;
+        let mut consensus_lock = ctx.consensus.write().map_err(|_| {
+            tracing::error!("consensus write lock was poisoned");
+            ctx.consensus.clear_poison();
+            StratusError::ConsensusLockFailed
+        })?;
+
         match consensus {
             Some(consensus) => {
                 *consensus_lock = Some(consensus);
@@ -369,12 +383,103 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     }
 
     {
-        let mut consensus_lock = ctx.consensus.write().map_err(|_| StratusError::ConsensusLockFailed)?;
+        let mut consensus_lock = ctx.consensus.write().map_err(|_| {
+            tracing::error!("consensus write lock was poisoned");
+            ctx.consensus.clear_poison();
+            StratusError::ConsensusLockFailed
+        })?;
         *consensus_lock = None;
     }
 
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
+
+    return Ok(json!(true));
+}
+
+#[cfg(feature = "dev")]
+fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    if GlobalState::is_transactions_enabled() {
+        tracing::error!("cannot change miner mode while transactions are enabled");
+        return Err(StratusError::RpcTransactionEnabled);
+    }
+
+    let (_, mode_str) = next_rpc_param::<String>(params.sequence())?;
+
+    let mode = MinerMode::from_str(&mode_str).map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse miner mode");
+        StratusError::MinerModeParamInvalid
+    })?;
+
+    {
+        let current_miner_mode = ctx.miner.mode.read().map_err(|_| {
+            tracing::error!("miner mode read lock was poisoned");
+            ctx.miner.mode.clear_poison();
+            StratusError::MinerModeLockFailed
+        })?;
+
+        if *current_miner_mode == mode {
+            tracing::error!(requested = ?mode, current = ?current_miner_mode, "miner mode conflict");
+            return Err(StratusError::MinerModeConflict);
+        }
+    }
+
+    match mode {
+        MinerMode::External => {
+            tracing::info!("changing miner mode to External");
+
+            let pending_txs = ctx.storage.pending_transactions()?;
+            if not(pending_txs.is_empty()) {
+                tracing::error!(pending_txs = ?pending_txs.len(), "cannot change miner mode to External with pending transactions");
+                return Err(StratusError::PendingTransactionsExist {
+                    pending_txs: pending_txs.len(),
+                });
+            }
+
+            {
+                let mut miner_mode_lock = ctx.miner.mode.write().map_err(|_| {
+                    tracing::error!("miner mode write lock was poisoned");
+                    ctx.miner.mode.clear_poison();
+                    StratusError::MinerModeLockFailed
+                })?;
+                *miner_mode_lock = mode;
+
+                const TASK_NAME: &str = "rpc-server::miner-shutdown";
+                GlobalState::shutdown_interval_miner_from(TASK_NAME, "received miner shutdown request");
+            }
+        }
+        MinerMode::Interval(duration) => {
+            tracing::info!(duration = ?duration, "changing miner mode to Interval");
+
+            {
+                let consensus_lock = ctx.consensus.read().map_err(|_| {
+                    tracing::error!("consensus read lock was poisoned");
+                    ctx.consensus.clear_poison();
+                    StratusError::MinerModeLockFailed
+                })?;
+                if consensus_lock.is_some() {
+                    tracing::error!("cannot change miner mode to Interval with consensus set");
+                    return Err(StratusError::ConsensusSet);
+                }
+            }
+
+            {
+                let mut miner_mode_lock = ctx.miner.mode.write().map_err(|_| {
+                    tracing::error!("miner mode write lock was poisoned");
+                    ctx.miner.mode.clear_poison();
+                    StratusError::MinerModeLockFailed
+                })?;
+                GlobalState::set_interval_miner_shutdown(false);
+                *miner_mode_lock = mode;
+            }
+
+            Arc::clone(&ctx.miner).spawn_interval_miner()?;
+        }
+        MinerMode::Automine => {
+            tracing::error!("automine mode is not supported");
+            return Err(StratusError::MinerModeChangeUnsupported { miner_mode: "automine" });
+        }
+    }
 
     return Ok(json!(true));
 }
@@ -746,7 +851,11 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
             }
         },
         NodeMode::Follower => {
-            let consensus_lock = ctx.consensus.read().map_err(|_| StratusError::ConsensusLockFailed)?;
+            let consensus_lock = ctx.consensus.read().map_err(|_| {
+                tracing::error!("consensus read lock was poisoned");
+                ctx.consensus.clear_poison();
+                StratusError::ConsensusLockFailed
+            })?;
             match consensus_lock.as_ref() {
                 Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
                     Ok(hash) => Ok(hex_data(hash)),
