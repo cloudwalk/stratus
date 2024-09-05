@@ -294,8 +294,8 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
     Ok(to_json_value(true))
 }
 
-// Add e2e
-// handle edge cases
+// TODO: Add e2e
+// TODO: Handle edge cases
 async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     tracing::info!("starting process to change node to leader");
 
@@ -327,7 +327,8 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     Ok(json!(true))
 }
 
-// handle edge cases
+// TODO: Handle edge cases
+// TODO: Add validation to pending txs and block mining
 async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     tracing::info!("starting process to change node to follower");
 
@@ -471,6 +472,8 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     Ok(json!(true))
 }
 
+
+// TODO: disable miner before changing mode from interval to external. here or in change to follower endpoint
 fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
         tracing::error!("cannot change miner mode while transactions are enabled");
