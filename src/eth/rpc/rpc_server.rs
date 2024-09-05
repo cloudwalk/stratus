@@ -327,6 +327,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     Ok(json!(true))
 }
 
+// handle edge cases
 #[cfg(feature = "dev")]
 async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     log::info!("starting process to change node to follower");
