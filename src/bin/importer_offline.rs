@@ -77,13 +77,13 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let storage_loader = execute_external_rpc_storage_loader(rpc_storage, config.blocks_by_fetch, config.paralellism, block_start, block_end, backlog_tx);
     spawn_named("storage-loader", async move {
         if let Err(e) = storage_loader.await {
-            tracing::error!(reason = ?e, "'storage-loader' task failed");
+            tracing::error!(parent: None, reason = ?e, "'storage-loader' task failed");
         }
     });
 
     let block_importer = spawn_thread("block-importer", || {
         if let Err(e) = execute_block_importer(executor, miner, backlog_rx) {
-            tracing::error!(reason = ?e, "'block-importer' task failed");
+            tracing::error!(parent: None, reason = ?e, "'block-importer' task failed");
         }
     });
 
@@ -118,7 +118,7 @@ fn execute_block_importer(
 
         // receive blocks to execute
         let Some((blocks, receipts)) = backlog_rx.blocking_recv() else {
-            tracing::info!("{} has no more blocks to reexecute", TASK_NAME);
+            tracing::info!(parent: None, "{} has no more blocks to reexecute", TASK_NAME);
             return Ok(());
         };
 
@@ -132,7 +132,7 @@ fn execute_block_importer(
         let block_start = block_start.number();
         let block_end = block_end.number();
         let batch_blocks_len = blocks.len();
-        tracing::info!(%block_start, %block_end, receipts = %receipts.len(), "reexecuting blocks");
+        tracing::info!(parent: None, %block_start, %block_end, receipts = %receipts.len(), "reexecuting blocks");
 
         // ensure block range have no gaps
         if block_start.count_to(&block_end) != batch_blocks_len as u64 {
@@ -163,6 +163,7 @@ fn execute_block_importer(
         let (tps, bpm) = calculate_tps_and_bpm(batch_duration, batch_tx_len, batch_blocks_len);
 
         tracing::info!(
+            parent: None,
             tps,
             blocks_per_minute = format_args!("{bpm:.2}"),
             ?batch_duration,
@@ -188,7 +189,7 @@ async fn execute_external_rpc_storage_loader(
     backlog: mpsc::Sender<BacklogTask>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-loader";
-    tracing::info!(%start, %end, "creating task {}", TASK_NAME);
+    tracing::info!(parent: None, %start, %end, "creating task {}", TASK_NAME);
 
     // prepare loads to be executed in parallel
     let mut tasks = Vec::new();
@@ -211,7 +212,7 @@ async fn execute_external_rpc_storage_loader(
         // retrieve next batch of loaded blocks
         // if finished, do not cancel, it is expected to finish
         let Some(result) = tasks.next().await else {
-            tracing::info!("{} has no more blocks to process", TASK_NAME);
+            tracing::info!(parent: None, "{} has no more blocks to process", TASK_NAME);
             return Ok(());
         };
 
@@ -238,7 +239,7 @@ async fn execute_external_rpc_storage_loader(
 }
 
 async fn load_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpcStorage>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BacklogTask> {
-    tracing::info!(%block_start, %block_end, "loading blocks and receipts");
+    tracing::info!(parent: None, %block_start, %block_end, "loading blocks and receipts");
     let blocks_task = rpc_storage.read_blocks_in_range(block_start, block_end);
     let receipts_task = rpc_storage.read_receipts_in_range(block_start, block_end);
     try_join!(blocks_task, receipts_task)
