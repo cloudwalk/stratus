@@ -306,11 +306,16 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 
     tracing::info!("shutting down importer");
     let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), &ctx, &ext);
-    if let Err(e) = shutdown_importer_result {
-        tracing::error!(reason = ?e, "failed to shutdown importer");
-        return Err(e);
+    match shutdown_importer_result {
+        Ok(_) => tracing::info!("importer shutdown successfully"),
+        Err(StratusError::ImporterAlreadyShutdown) => {
+            tracing::warn!("importer is already shutdown, continuing");
+        }
+        Err(e) => {
+            tracing::error!(reason = ?e, "failed to shutdown importer");
+            return Err(e);
+        }
     }
-    tracing::info!("importer shutdown successfully");
 
     tracing::info!("changing miner mode to interval(1s)");
     let change_miner_mode_result = stratus_change_miner_mode(Params::new(Some("1s")), &ctx, &ext);
