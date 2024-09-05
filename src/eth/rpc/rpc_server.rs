@@ -345,7 +345,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     tracing::info!("miner mode changed to external successfully");
 
     tracing::info!("initializing importer");
-    let init_importer_result = stratus_init_importer(params.clone(), Arc::clone(&ctx), ext).await;
+    let init_importer_result = stratus_init_importer(params, Arc::clone(&ctx), ext).await;
     if let Err(e) = init_importer_result {
         tracing::error!(reason = ?e, "failed to initialize importer");
         return Err(e);
