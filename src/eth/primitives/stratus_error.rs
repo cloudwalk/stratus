@@ -146,6 +146,10 @@ pub enum StratusError {
     #[strum(props(kind = "internal"))]
     ImporterAlreadyRunning,
 
+    #[error("Importer is already shutdown.")]
+    #[strum(props(kind = "internal"))]
+    ImporterAlreadyShutdown,
+
     #[error("Failed to parse importer configuration.")]
     #[strum(props(kind = "client_request"))]
     ImporterConfigParseError,

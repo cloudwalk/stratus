@@ -444,6 +444,18 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
         return Err(StratusError::StratusNotFollower);
     }
 
+    if GlobalState::is_importer_shutdown() {
+        let consensus_lock = ctx.consensus.read().map_err(|_| {
+            tracing::error!("consensus read lock was poisoned");
+            ctx.consensus.clear_poison();
+            StratusError::ConsensusLockFailed
+        })?;
+        if consensus_lock.is_none() {
+            tracing::error!("importer is already shut down");
+            return Err(StratusError::ImporterAlreadyShutdown);
+        }
+    }
+
     {
         let mut consensus_lock = ctx.consensus.write().map_err(|_| {
             tracing::error!("consensus write lock was poisoned");

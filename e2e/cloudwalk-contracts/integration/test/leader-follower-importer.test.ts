@@ -43,6 +43,13 @@ describe("Leader & Follower importer integration test", function () {
         expect(responseFollower.data.result).to.equal(true);
     });
 
+    it("Shutdown command to Follower when Importer is already shutdown should fail", async function () {
+        updateProviderUrl("stratus-follower");
+        const responseFollower = await sendAndGetFullResponse("stratus_shutdownImporter", []);
+        expect(responseFollower.data.error.code).to.equal(-32603);
+        expect(responseFollower.data.error.message).to.equal("Importer is already shutdown.");
+    });
+
     it("Validate Follower state and health after shutdown", async function () {
         updateProviderUrl("stratus-follower");
         const followerNode = await sendWithRetry("stratus_state", []);
