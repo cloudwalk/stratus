@@ -315,13 +315,12 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
         }
     }
 
-    GlobalState::set_miner_enabled(true);
+    GlobalState::set_miner_enabled(false);
 
     tracing::info!("changing miner mode to interval(1s)");
     let change_miner_mode_result = stratus_change_miner_mode(Params::new(Some("1s")), &ctx, &ext);
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
-        GlobalState::set_miner_enabled(false);
         return Err(e);
     }
     tracing::info!("miner mode changed to interval(1s) successfully");
@@ -484,11 +483,15 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     Ok(json!(true))
 }
 
-// TODO: disable miner before changing mode from interval to external. here or in change to follower endpoint
 fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
         tracing::error!("cannot change miner mode while transactions are enabled");
         return Err(StratusError::RpcTransactionEnabled);
+    }
+
+    if GlobalState::is_miner_enabled() {
+        tracing::error!("cannot change miner mode while miner is enabled");
+        return Err(StratusError::MinerEnabled);
     }
 
     let (_, mode_str) = next_rpc_param::<String>(params.sequence())?;
@@ -567,6 +570,8 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
             return Err(StratusError::MinerModeChangeUnsupported { miner_mode: "automine" });
         }
     }
+
+    GlobalState::set_miner_enabled(true);
 
     Ok(json!(true))
 }
