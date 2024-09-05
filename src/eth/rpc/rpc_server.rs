@@ -369,8 +369,6 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         }
     }
 
-    GlobalState::set_transactions_enabled(true);
-
     Ok(json!(true))
 }
 
