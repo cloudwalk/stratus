@@ -304,6 +304,11 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     log::info!("starting process to change node to leader");
 
+    if GlobalState::get_node_mode() == NodeMode::Leader {
+        log::info!("node is already in leader mode, no changes made");
+        return Ok(json!(true));
+    }
+
     log::info!("shutting down importer");
     let shutdown_importer_result = stratus_shutdown_importer(Params::None, &ctx, ext);
     if let Err(e) = shutdown_importer_result {
@@ -331,6 +336,11 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 #[cfg(feature = "dev")]
 async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     log::info!("starting process to change node to follower");
+
+    if GlobalState::get_node_mode() == NodeMode::Follower {
+        log::info!("node is already in follower mode, no changes made");
+        return Ok(json!(true));
+    }
 
     log::info!("changing miner mode to external");
     let change_miner_mode_result = stratus_change_miner_mode(Params::Array(vec![json!("external")]), &ctx, ext);
