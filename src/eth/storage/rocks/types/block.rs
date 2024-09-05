@@ -12,7 +12,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct BlockRocksdb {
     pub header: BlockHeaderRocksdb,
     pub transactions: Vec<TransactionMinedRocksdb>,

@@ -18,12 +18,26 @@ use serde::Deserialize;
 use serde::Serialize;
 use sugars::hmap;
 
+use super::cf_versions::CfAccountSlotsHistoryValue;
+use super::cf_versions::CfAccountSlotsValue;
+use super::cf_versions::CfAccountsHistoryValue;
+use super::cf_versions::CfAccountsValue;
+use super::cf_versions::CfBlocksByHashValue;
+use super::cf_versions::CfBlocksByNumberValue;
+use super::cf_versions::CfLogsValue;
+use super::cf_versions::CfTransactionsValue;
 use super::rocks_batch_writer::write_in_batch_for_multiple_cfs_impl;
 use super::rocks_batch_writer::BufferedBatchWriter;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
 use super::rocks_db::create_or_open_db;
+use super::types::AccountRocksdb;
+use super::types::AddressRocksdb;
+use super::types::BlockNumberRocksdb;
+use super::types::HashRocksdb;
+use super::types::IndexRocksdb;
+use super::types::SlotIndexRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -36,13 +50,6 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::rocks::types::AccountRocksdb;
-use crate::eth::storage::rocks::types::AddressRocksdb;
-use crate::eth::storage::rocks::types::BlockNumberRocksdb;
-use crate::eth::storage::rocks::types::BlockRocksdb;
-use crate::eth::storage::rocks::types::HashRocksdb;
-use crate::eth::storage::rocks::types::IndexRocksdb;
-use crate::eth::storage::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::StoragePointInTime;
 use crate::ext::OptionExt;
@@ -96,14 +103,14 @@ where
 pub struct RocksStorageState {
     db: Arc<DB>,
     db_path: String,
-    accounts: RocksCfRef<AddressRocksdb, AccountRocksdb>,
-    accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), AccountRocksdb>,
-    account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
-    account_slots_history: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), SlotValueRocksdb>,
-    transactions: RocksCfRef<HashRocksdb, BlockNumberRocksdb>,
-    blocks_by_number: RocksCfRef<BlockNumberRocksdb, BlockRocksdb>,
-    blocks_by_hash: RocksCfRef<HashRocksdb, BlockNumberRocksdb>,
-    logs: RocksCfRef<(HashRocksdb, IndexRocksdb), BlockNumberRocksdb>,
+    accounts: RocksCfRef<AddressRocksdb, CfAccountsValue>,
+    accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), CfAccountsHistoryValue>,
+    account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), CfAccountSlotsValue>,
+    account_slots_history: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), CfAccountSlotsHistoryValue>,
+    transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
+    blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
+    blocks_by_hash: RocksCfRef<HashRocksdb, CfBlocksByHashValue>,
+    logs: RocksCfRef<(HashRocksdb, IndexRocksdb), CfLogsValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -170,7 +177,6 @@ impl RocksStorageState {
         self.blocks_by_number.clear()?;
         self.blocks_by_hash.clear()?;
         self.logs.clear()?;
-
         Ok(())
     }
 
@@ -184,7 +190,8 @@ impl RocksStorageState {
             let address: AddressRocksdb = change.address.into();
 
             if change.is_account_modified() {
-                let mut account_info_entry = self.accounts.get_or_insert_with(address, AccountRocksdb::default)?;
+                let address: AddressRocksdb = change.address.into();
+                let mut account_info_entry = self.accounts.get_or_insert_with(address, || AccountRocksdb::default().into())?;
 
                 if let Some(nonce) = change.nonce.take_modified() {
                     account_info_entry.nonce = nonce.into();
@@ -198,17 +205,18 @@ impl RocksStorageState {
 
                 self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
                 self.accounts_history
-                    .prepare_batch_insertion([((address, block_number), account_info_entry)], batch)?;
+                    .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
             }
 
             for (slot_index, slot_change) in &change.slots {
                 if let Some(slot) = slot_change.take_modified_ref() {
                     let slot_index = (*slot_index).into();
-                    let slot_value = slot.value.into();
+                    let slot_value: SlotValueRocksdb = slot.value.into();
 
-                    self.account_slots.prepare_batch_insertion([((address, slot_index), slot_value)], batch)?;
+                    self.account_slots
+                        .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
                     self.account_slots_history
-                        .prepare_batch_insertion([((address, slot_index, block_number), slot_value)], batch)?;
+                        .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
                 }
             }
         }
@@ -226,9 +234,13 @@ impl RocksStorageState {
                 .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash));
         };
 
-        tracing::trace!(%tx_hash, "transaction found");
-        match block.transactions.into_iter().find(|tx| &Hash::from(tx.input.hash) == tx_hash) {
-            Some(tx) => Ok(Some(tx.into())),
+        let transaction = block.into_inner().transactions.into_iter().find(|tx| &Hash::from(tx.input.hash) == tx_hash);
+
+        match transaction {
+            Some(tx) => {
+                tracing::trace!(%tx_hash, "transaction found");
+                Ok(Some(tx.into()))
+            }
             None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
                 .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
         }
@@ -253,7 +265,12 @@ impl RocksStorageState {
                 break;
             }
 
-            let logs = block.transactions.into_iter().flat_map(|transaction| transaction.logs).map(LogMined::from);
+            let logs = block
+                .into_inner()
+                .transactions
+                .into_iter()
+                .flat_map(|transaction| transaction.logs)
+                .map(LogMined::from);
 
             let filtered_logs = logs.filter(|log| filter.matches(log));
             logs_result.extend(filtered_logs);
@@ -277,7 +294,7 @@ impl RocksStorageState {
 
                 Ok(Some(Slot {
                     index: *index,
-                    value: account_slot_value.into(),
+                    value: account_slot_value.into_inner().into(),
                 }))
             }
             StoragePointInTime::MinedPast(number) => {
@@ -292,7 +309,7 @@ impl RocksStorageState {
                     if rocks_index == (*index).into() && rocks_address == (*address).into() {
                         return Ok(Some(Slot {
                             index: rocks_index.into(),
-                            value: value.into(),
+                            value: value.into_inner().into(),
                         }));
                     }
                 }
@@ -347,14 +364,15 @@ impl RocksStorageState {
                 },
         };
 
-        block.map(Option::map_into)
+        block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         for account in accounts {
             let (key, value) = account.into();
+            let value: CfAccountsValue = value.into();
             self.accounts.insert(key, value.clone())?;
-            self.accounts_history.insert((key, 0.into()), value)?;
+            self.accounts_history.insert((key, 0u64.into()), value.into_inner().into())?;
         }
         Ok(())
     }
@@ -421,12 +439,12 @@ impl RocksStorageState {
 
     #[cfg(test)]
     pub fn read_all_accounts(&self) -> Result<Vec<AccountRocksdb>> {
-        self.accounts.iter_start().map(|result| Ok(result?.1)).collect()
+        self.accounts.iter_start().map(|result| Ok(result?.1.into_inner())).collect()
     }
 
     #[cfg(test)]
     pub fn read_all_historical_accounts(&self) -> Result<Vec<AccountRocksdb>> {
-        self.accounts_history.iter_start().map(|result| Ok(result?.1)).collect()
+        self.accounts_history.iter_start().map(|result| Ok(result?.1.into_inner())).collect()
     }
 
     /// Clears in-memory state.
@@ -466,6 +484,7 @@ impl RocksStorageState {
         tracing::info!("starting iteration through historical accounts to clean values after target_block and reconstruct current accounts state");
         for next in self.accounts_history.iter_start() {
             let ((address, account_block_number), account) = next?;
+            let account = account.into_inner();
 
             // this can only be `Some` if account in last iteration was in valid range
             if let Some(last) = last_account {
@@ -475,7 +494,7 @@ impl RocksStorageState {
                 let is_last_account_before_target_block = should_delete_block(account_block_number);
 
                 if is_last_account_before_target_block || is_different_account {
-                    bufwriter.insert(&self.accounts, last.address, last.account)?;
+                    bufwriter.insert(&self.accounts, last.address, last.account.into())?;
                     accounts_count += 1;
                 }
             }
@@ -494,7 +513,7 @@ impl RocksStorageState {
 
         // always insert last seen account
         if let Some(last) = last_account {
-            bufwriter.insert(&self.accounts, last.address, last.account)?;
+            bufwriter.insert(&self.accounts, last.address, last.account.into())?;
             accounts_count += 1;
         }
 
@@ -523,7 +542,7 @@ impl RocksStorageState {
                 let is_last_slot_before_target_block = should_delete_block(slot_block_number);
 
                 if is_last_slot_before_target_block || is_different_slot {
-                    bufwriter.insert(&self.account_slots, (last.address, last.index), last.value)?;
+                    bufwriter.insert(&self.account_slots, (last.address, last.index), last.value.into())?;
                     slots_count += 1;
                 }
             }
@@ -534,7 +553,11 @@ impl RocksStorageState {
                 last_slot = None;
             } else {
                 // update last_slot for next iteration
-                last_slot = Some(LastHistoricalSlot { address, index, value });
+                last_slot = Some(LastHistoricalSlot {
+                    address,
+                    index,
+                    value: value.into_inner(),
+                });
             }
 
             history_slots_count += 1;
@@ -542,7 +565,7 @@ impl RocksStorageState {
 
         // always insert last seen slot
         if let Some(last) = last_slot {
-            bufwriter.insert(&self.account_slots, (last.address, last.index), last.value)?;
+            bufwriter.insert(&self.account_slots, (last.address, last.index), last.value.into())?;
             slots_count += 1;
         }
 
@@ -552,7 +575,7 @@ impl RocksStorageState {
         tracing::info!("cleaning values in transactions column family");
         for next in self.transactions.iter_start() {
             let (hash, block) = next?;
-            if should_delete_block(block) {
+            if should_delete_block(block.into_inner()) {
                 bufwriter.delete(&self.transactions, hash)?;
             }
         }
@@ -561,7 +584,7 @@ impl RocksStorageState {
         tracing::info!("cleaning values in logs column family");
         for next in self.logs.iter_start() {
             let (key, block) = next?;
-            if block > target_block {
+            if should_delete_block(block.into_inner()) {
                 bufwriter.delete(&self.logs, key)?;
             }
         }
@@ -570,7 +593,7 @@ impl RocksStorageState {
         tracing::info!("cleaning values in blocks_by_hash column family");
         for next in self.blocks_by_hash.iter_start() {
             let (hash, block) = next?;
-            if should_delete_block(block) {
+            if should_delete_block(block.into_inner()) {
                 bufwriter.delete(&self.blocks_by_hash, hash)?;
             }
         }
