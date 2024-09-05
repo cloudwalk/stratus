@@ -472,7 +472,6 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     Ok(json!(true))
 }
 
-
 // TODO: disable miner before changing mode from interval to external. here or in change to follower endpoint
 fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
