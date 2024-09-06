@@ -302,6 +302,11 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
         return Ok(json!(true));
     }
 
+    if GlobalState::is_transactions_enabled() {
+        tracing::error!("transactions are currently enabled, cannot change node mode");
+        return Err(StratusError::RpcTransactionEnabled);
+    }
+
     tracing::info!("shutting down importer");
     let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), &ctx, &ext);
     match shutdown_importer_result {
@@ -339,7 +344,11 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         return Ok(json!(true));
     }
 
-    // TODO: check if transactions are disabled
+    if GlobalState::is_transactions_enabled() {
+        tracing::error!("transactions are currently enabled, cannot change node mode");
+        return Err(StratusError::RpcTransactionEnabled);
+    }
+
     // TODO: check if there are no more pending transactions
     GlobalState::set_miner_enabled(false);
     // TODO: check if miner is not mining
