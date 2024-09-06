@@ -47,8 +47,8 @@ fn main() -> anyhow::Result<()> {
     let max_block: BlockNumberRocksdb = args.max_block.into();
     println!("Starting state comparison");
     while let (Some(result1), Some(result2)) = (iter1.next(), iter2.next()) {
-        let ((address1, slot_index1, block_number1), value1) = result1.context("Error iterating over db1")?;
-        let ((address2, slot_index2, block_number2), value2) = result2.context("Error iterating over db2")?;
+        let Ok(((address1, slot_index1, block_number1), value1)) = result1.context("Error iterating over db1") else { continue };
+        let Ok(((address2, slot_index2, block_number2), value2)) = result2.context("Error iterating over db2") else { continue };
 
         if block_number1 > max_block && block_number2 > max_block {
             progress_bar.inc(1);
