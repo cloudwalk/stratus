@@ -7,7 +7,7 @@ mod rocks_batch_writer;
 pub mod rocks_permanent;
 
 /// State handler for DB and column families.
-pub mod rocks_state;
+mod rocks_state;
 
 /// CFs versionated by value variant.
 mod cf_versions;
