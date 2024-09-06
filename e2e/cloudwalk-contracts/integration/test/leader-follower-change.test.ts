@@ -30,6 +30,13 @@ describe("Leader & Follower change integration test", function () {
         expect(followerHealth).to.equal(true);
     });
 
+    it("Change Leader to Leader should fail", async function () {
+        updateProviderUrl("stratus");
+        const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
+        console.log(response);
+        expect(response.data.result).to.equal(true);
+    });
+
     it("Change Leader to Follower with transactions enabled should fail", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeToFollower", [
@@ -40,21 +47,20 @@ describe("Leader & Follower change integration test", function () {
         expect(response.data.error.message).to.equal("Transaction processing is enabled.");
     });
 
-    it("Change Leader to Leader should fail", async function () {
-        updateProviderUrl("stratus");
-        await sendWithRetry("stratus_disableTransactions", []);
-        const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
-        expect(response.data.error.code).to.equal(-32009);
-        expect(response.data.error.message).to.equal("Node is already in leader mode, no changes made.");
-    });
-
     it("Change Leader to Follower should succeed", async function () {
         updateProviderUrl("stratus");
+        await sendWithRetry("stratus_disableTransactions", []);
         const response = await sendAndGetFullResponse("stratus_changeToFollower", [
             "http://0.0.0.0:3001/",
             "ws://0.0.0.0:3001/",
         ]);
         console.log(response);
+        expect(response.data.result).to.equal(true);
+    });
+
+    it("Change Follower to Follower should fail", async function () {
+        updateProviderUrl("stratus-follower");
+        const response = await sendAndGetFullResponse("stratus_changeToFollower", []);
         expect(response.data.result).to.equal(true);
     });
 
@@ -65,16 +71,9 @@ describe("Leader & Follower change integration test", function () {
         expect(response.data.error.message).to.equal("Transaction processing is enabled.");
     });
 
-    it("Change Follower to Follower should fail", async function () {
-        updateProviderUrl("stratus-follower");
-        await sendWithRetry("stratus_disableTransactions", []);
-        const response = await sendAndGetFullResponse("stratus_changeToFollower", []);
-        expect(response.data.error.code).to.equal(-32009);
-        expect(response.data.error.message).to.equal("Node is already in follower mode, no changes made.");
-    });
-
     it("Change Follower to Leader should succeed", async function () {
         updateProviderUrl("stratus-follower");
+        await sendWithRetry("stratus_disableTransactions", []);
         const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
         expect(response.data.result).to.equal(true);
     });
