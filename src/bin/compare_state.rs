@@ -28,7 +28,10 @@ fn main() -> anyhow::Result<()> {
     println!("Opening databases");
 
     let db1 = DB::open_for_read_only(&Options::default(), &args.db1_path, false)?;
+    println!("Opened db1");
     let db2 = DB::open_for_read_only(&Options::default(), &args.db2_path, false)?;
+    println!("Opened db2");
+
     let cf1: RocksCfRef<(Address, SlotIndex, BlockNumber), SlotValue> = RocksCfRef::new(db1.into(), "account_slots_history")?;
     let cf2: RocksCfRef<(Address, SlotIndex, BlockNumber), SlotValue> = RocksCfRef::new(db2.into(), "account_slots_history")?;
     let num_keys1 = cf1.property_int_value(ESTIMATE_NUM_KEYS).unwrap().unwrap_or(0);
