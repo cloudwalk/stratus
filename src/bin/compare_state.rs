@@ -52,7 +52,7 @@ fn main() -> anyhow::Result<()> {
         }
 
         if (address1, slot_index1, block_number1) != (address2, slot_index2, block_number2) {
-            println!("Mismatch in entry order:");
+            println!("Mismatched entries:");
             println!("  DB1: address: {:?}, slot: {:?}, block: {:?}", address1, slot_index1, block_number1);
             println!("  DB2: address: {:?}, slot: {:?}, block: {:?}", address2, slot_index2, block_number2);
             differences += 1;
