@@ -39,6 +39,8 @@ fn main() -> anyhow::Result<()> {
             continue;
         }
 
+        // If block_numberA > max_block but block_numberB < max_block then cfB does not have the entry for that (and presumably future) blocks
+        // Therefore cfB is already in another slot nad cfA need to iterate from that slot.
         if block_number1 > args.max_block {
             iter1 = cf1.iter_from((address2, slot_index2, block_number2), rocksdb::Direction::Forward)?;
             continue;
