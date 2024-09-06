@@ -24,12 +24,11 @@ struct Args {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-
     println!("Opening databases");
 
-    let db1 = DB::open_for_read_only(&Options::default(), &args.db1_path, false)?;
+    let db1 = DB::open_cf_for_read_only(&Options::default(), &args.db1_path, ["account_slots_history"], false)?;
     println!("Opened db1");
-    let db2 = DB::open_for_read_only(&Options::default(), &args.db2_path, false)?;
+    let db2 = DB::open_cf_for_read_only(&Options::default(), &args.db2_path, ["account_slots_history"], false)?;
     println!("Opened db2");
 
     let cf1: RocksCfRef<(Address, SlotIndex, BlockNumber), SlotValue> = RocksCfRef::new(db1.into(), "account_slots_history")?;
