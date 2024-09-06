@@ -19,7 +19,7 @@ impl From<SlotValueRocksdb> for SlotValue {
 }
 
 #[derive(Clone, Debug, Copy, Default, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize, fake::Dummy)]
-pub struct SlotIndexRocksdb([u64; 4]);
+pub struct SlotIndexRocksdb(pub [u64; 4]);
 
 impl From<SlotIndex> for SlotIndexRocksdb {
     fn from(item: SlotIndex) -> Self {
