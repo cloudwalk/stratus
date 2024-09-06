@@ -65,6 +65,8 @@ fn main() -> anyhow::Result<()> {
                 "Difference found at address: {:?}, slot: {:?}, block: {:?}",
                 address1, slot_index1, block_number1
             );
+            println!("  Value 1: {:?}", value1);
+            println!("  Value 2: {:?}", value2);
             differences += 1;
         }
     }
