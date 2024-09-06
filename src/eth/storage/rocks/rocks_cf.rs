@@ -387,7 +387,7 @@ where
 }
 
 /// An iterator over K-V pairs in a CF.
-pub(super) struct RocksCfIter<'a, K, V> {
+pub struct RocksCfIter<'a, K, V> {
     iter: DBIteratorWithThreadMode<'a, DB>,
     column_family: &'a str,
     _marker: PhantomData<(K, V)>,
