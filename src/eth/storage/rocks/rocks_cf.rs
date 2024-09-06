@@ -10,6 +10,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
+use rocksdb::properties::PropName;
 use rocksdb::BoundColumnFamily;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
@@ -362,7 +363,7 @@ where
         serialize_with_context(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family))
     }
 
-    pub fn property_int_value(&self, name: &str) -> anyhow::Result<Option<u64>> {
+    pub fn property_int_value(&self, name: &PropName) -> anyhow::Result<Option<u64>> {
         let handle = self.handle();
         Ok(self.db.property_int_value_cf(&handle, name)?)
     }
