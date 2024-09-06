@@ -18,4 +18,4 @@ mod rocks_config;
 /// Functionalities related to the whole database.
 mod rocks_db;
 /// All types to be serialized and desserialized in the db.
-mod types;
+pub mod types;

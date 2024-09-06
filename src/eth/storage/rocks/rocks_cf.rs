@@ -304,24 +304,12 @@ where
 
     #[cfg(feature = "metrics")]
     pub fn export_metrics(&self) {
-        let cur_size_active_mem_table = self
-            .property_int_value(rocksdb::properties::CUR_SIZE_ACTIVE_MEM_TABLE)
-            .unwrap_or_default();
-        let cur_size_all_mem_tables = self
-            .property_int_value(rocksdb::properties::CUR_SIZE_ALL_MEM_TABLES)
-            .unwrap_or_default();
-        let size_all_mem_tables = self
-            .property_int_value(rocksdb::properties::SIZE_ALL_MEM_TABLES)
-            .unwrap_or_default();
-        let block_cache_usage = self
-            .property_int_value(rocksdb::properties::BLOCK_CACHE_USAGE)
-            .unwrap_or_default();
-        let block_cache_capacity = self
-            .property_int_value(rocksdb::properties::BLOCK_CACHE_CAPACITY)
-            .unwrap_or_default();
-        let background_errors = self
-            .property_int_value(rocksdb::properties::BACKGROUND_ERRORS)
-            .unwrap_or_default();
+        let cur_size_active_mem_table = self.property_int_value(rocksdb::properties::CUR_SIZE_ACTIVE_MEM_TABLE).unwrap_or_default();
+        let cur_size_all_mem_tables = self.property_int_value(rocksdb::properties::CUR_SIZE_ALL_MEM_TABLES).unwrap_or_default();
+        let size_all_mem_tables = self.property_int_value(rocksdb::properties::SIZE_ALL_MEM_TABLES).unwrap_or_default();
+        let block_cache_usage = self.property_int_value(rocksdb::properties::BLOCK_CACHE_USAGE).unwrap_or_default();
+        let block_cache_capacity = self.property_int_value(rocksdb::properties::BLOCK_CACHE_CAPACITY).unwrap_or_default();
+        let background_errors = self.property_int_value(rocksdb::properties::BACKGROUND_ERRORS).unwrap_or_default();
 
         let cf_name = &self.column_family;
         if let Some(cur_size_active_mem_table) = cur_size_active_mem_table {
