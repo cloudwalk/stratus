@@ -353,8 +353,9 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     GlobalState::set_miner_enabled(false);
     // TODO: check if miner is not mining
 
-    tracing::info!("changing miner mode to external");
-    let change_miner_mode_result = stratus_change_miner_mode(Params::new(Some("external")), &ctx, &ext);
+    let external_param = json!(["external"]).to_string();
+    let final_param = Params::new(Some(&external_param));
+    let change_miner_mode_result = stratus_change_miner_mode(final_param, &ctx, &ext);
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
         return Err(e);
@@ -400,6 +401,8 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         }
     };
 
+    // If failed to parse, then this is being called by changeToFollower endpoint.
+    // Needs workaround to get the importer configuration.
     let importer_config: ImporterConfig = match app_config.get("importer") {
         Some(importer_value) => match serde_json::from_value(importer_value.clone()) {
             Ok(config) => config,
