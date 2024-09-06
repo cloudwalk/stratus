@@ -303,30 +303,23 @@ where
 
     #[cfg(feature = "metrics")]
     pub fn export_metrics(&self) {
-        let handle = self.handle();
         let cur_size_active_mem_table = self
-            .db
-            .property_int_value_cf(&handle, rocksdb::properties::CUR_SIZE_ACTIVE_MEM_TABLE)
+            .property_int_value(rocksdb::properties::CUR_SIZE_ACTIVE_MEM_TABLE)
             .unwrap_or_default();
         let cur_size_all_mem_tables = self
-            .db
-            .property_int_value_cf(&handle, rocksdb::properties::CUR_SIZE_ALL_MEM_TABLES)
+            .property_int_value(rocksdb::properties::CUR_SIZE_ALL_MEM_TABLES)
             .unwrap_or_default();
         let size_all_mem_tables = self
-            .db
-            .property_int_value_cf(&handle, rocksdb::properties::SIZE_ALL_MEM_TABLES)
+            .property_int_value(rocksdb::properties::SIZE_ALL_MEM_TABLES)
             .unwrap_or_default();
         let block_cache_usage = self
-            .db
-            .property_int_value_cf(&handle, rocksdb::properties::BLOCK_CACHE_USAGE)
+            .property_int_value(rocksdb::properties::BLOCK_CACHE_USAGE)
             .unwrap_or_default();
         let block_cache_capacity = self
-            .db
-            .property_int_value_cf(&handle, rocksdb::properties::BLOCK_CACHE_CAPACITY)
+            .property_int_value(rocksdb::properties::BLOCK_CACHE_CAPACITY)
             .unwrap_or_default();
         let background_errors = self
-            .db
-            .property_int_value_cf(&handle, rocksdb::properties::BACKGROUND_ERRORS)
+            .property_int_value(rocksdb::properties::BACKGROUND_ERRORS)
             .unwrap_or_default();
 
         let cf_name = &self.column_family;
@@ -367,6 +360,11 @@ where
 
     fn serialize_value_with_context(&self, value: &V) -> Result<Vec<u8>> {
         serialize_with_context(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family))
+    }
+
+    pub fn property_int_value(&self, name: &str) -> anyhow::Result<Option<u64>> {
+        let handle = self.handle();
+        Ok(self.db.property_int_value_cf(&handle, name)?)
     }
 }
 

@@ -1,5 +1,6 @@
 use anyhow::Context;
 use clap::Parser;
+use rocksdb::properties::ESTIMATE_NUM_KEYS;
 use rocksdb::Options;
 use rocksdb::DB;
 use stratus::eth::primitives::Address;
@@ -26,20 +27,25 @@ fn main() -> anyhow::Result<()> {
 
     let db1 = DB::open_for_read_only(&Options::default(), &args.db1_path, false)?;
     let db2 = DB::open_for_read_only(&Options::default(), &args.db2_path, false)?;
-
     let cf1: RocksCfRef<(Address, SlotIndex, BlockNumber), SlotValue> = RocksCfRef::new(db1.into(), "account_slots_history")?;
     let cf2: RocksCfRef<(Address, SlotIndex, BlockNumber), SlotValue> = RocksCfRef::new(db2.into(), "account_slots_history")?;
+    let num_keys1 = cf1.property_int_value(ESTIMATE_NUM_KEYS).unwrap().unwrap_or(0);
+    let num_keys2 = cf2.property_int_value(ESTIMATE_NUM_KEYS).unwrap().unwrap_or(0);
+    let num_keys = std::cmp::max(num_keys1, num_keys2);
 
     let mut differences = 0;
 
     let mut iter1 = cf1.iter_start();
     let mut iter2 = cf2.iter_start();
 
+    let progress_bar = indicatif::ProgressBar::new(num_keys);
+
     while let (Some(result1), Some(result2)) = (iter1.next(), iter2.next()) {
         let ((address1, slot_index1, block_number1), value1) = result1.context("Error iterating over db1")?;
         let ((address2, slot_index2, block_number2), value2) = result2.context("Error iterating over db2")?;
 
         if block_number1 > args.max_block && block_number2 > args.max_block {
+            progress_bar.inc(1);
             continue;
         }
 
@@ -47,11 +53,13 @@ fn main() -> anyhow::Result<()> {
         // Therefore cfB is already in another slot and cfA need to iterate from that slot.
         if block_number1 > args.max_block {
             iter1 = cf1.iter_from((address2, slot_index2, block_number2), rocksdb::Direction::Forward)?;
+            progress_bar.inc(1);
             continue;
         }
 
         if block_number2 > args.max_block {
             iter2 = cf2.iter_from((address1, slot_index1, block_number1), rocksdb::Direction::Forward)?;
+            progress_bar.inc(1);
             continue;
         }
 
@@ -69,6 +77,8 @@ fn main() -> anyhow::Result<()> {
             println!("  Value 2: {:?}", value2);
             differences += 1;
         }
+
+        progress_bar.inc(1);
     }
 
     // Check for any remaining entries in either database
@@ -78,6 +88,7 @@ fn main() -> anyhow::Result<()> {
             println!("Extra entry in db1: address: {:?}, slot: {:?}, block: {:?}", address, slot_index, block_number);
             differences += 1;
         }
+        progress_bar.inc(1);
     }
 
     for result in iter2 {
@@ -86,8 +97,10 @@ fn main() -> anyhow::Result<()> {
             println!("Extra entry in db2: address: {:?}, slot: {:?}, block: {:?}", address, slot_index, block_number);
             differences += 1;
         }
+        progress_bar.inc(1);
     }
 
+    progress_bar.finish();
     println!("Total differences found: {}", differences);
 
     Ok(())

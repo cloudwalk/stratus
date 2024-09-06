@@ -114,6 +114,7 @@ sqlx = { version = "=0.8.2", features = [
 
 # test
 fake = { version = "=2.9.2", features = ["chrono", "derive"] }
+indicatif = "0.17.8"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
