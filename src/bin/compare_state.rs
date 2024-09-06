@@ -25,6 +25,8 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
+    println!("Opening databases");
+
     let db1 = DB::open_for_read_only(&Options::default(), &args.db1_path, false)?;
     let db2 = DB::open_for_read_only(&Options::default(), &args.db2_path, false)?;
     let cf1: RocksCfRef<(Address, SlotIndex, BlockNumber), SlotValue> = RocksCfRef::new(db1.into(), "account_slots_history")?;
@@ -40,6 +42,7 @@ fn main() -> anyhow::Result<()> {
 
     let progress_bar = indicatif::ProgressBar::new(num_keys);
 
+    println!("Starting state comparison");
     while let (Some(result1), Some(result2)) = (iter1.next(), iter2.next()) {
         let ((address1, slot_index1, block_number1), value1) = result1.context("Error iterating over db1")?;
         let ((address2, slot_index2, block_number2), value2) = result2.context("Error iterating over db2")?;
