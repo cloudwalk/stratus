@@ -455,7 +455,7 @@ where
 /// This iterator doesn't deserialize values, but the underlying RocksDB iterator still reads them.
 ///
 /// Created by calling `.keys()` on a `RocksCfIter`.
-pub(super) struct RocksCfKeysIter<'a, K> {
+pub struct RocksCfKeysIter<'a, K> {
     iter: DBIteratorWithThreadMode<'a, DB>,
     column_family: &'a str,
     _marker: PhantomData<K>,

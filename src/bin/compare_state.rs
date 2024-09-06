@@ -1,8 +1,12 @@
 use anyhow::Context;
 use clap::Parser;
-use rocksdb::{DB, Options};
+use rocksdb::Options;
+use rocksdb::DB;
+use stratus::eth::primitives::Address;
+use stratus::eth::primitives::BlockNumber;
+use stratus::eth::primitives::SlotIndex;
+use stratus::eth::primitives::SlotValue;
 use stratus::eth::storage::rocks::rocks_cf::RocksCfRef;
-use stratus::eth::primitives::{Address, BlockNumber, SlotIndex, SlotValue};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -57,13 +61,16 @@ fn main() -> anyhow::Result<()> {
             println!("  DB2: address: {:?}, slot: {:?}, block: {:?}", address2, slot_index2, block_number2);
             differences += 1;
         } else if value1 != value2 {
-            println!("Difference found at address: {:?}, slot: {:?}, block: {:?}", address1, slot_index1, block_number1);
+            println!(
+                "Difference found at address: {:?}, slot: {:?}, block: {:?}",
+                address1, slot_index1, block_number1
+            );
             differences += 1;
         }
     }
 
     // Check for any remaining entries in either database
-    while let Some(result) = iter1.next() {
+    for result in iter1 {
         let ((address, slot_index, block_number), _) = result.context("Error iterating over remaining db1 entries")?;
         if block_number <= args.max_block {
             println!("Extra entry in db1: address: {:?}, slot: {:?}, block: {:?}", address, slot_index, block_number);
@@ -71,7 +78,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    while let Some(result) = iter2.next() {
+    for result in iter2 {
         let ((address, slot_index, block_number), _) = result.context("Error iterating over remaining db2 entries")?;
         if block_number <= args.max_block {
             println!("Extra entry in db2: address: {:?}, slot: {:?}, block: {:?}", address, slot_index, block_number);
