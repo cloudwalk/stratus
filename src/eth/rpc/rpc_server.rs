@@ -428,7 +428,7 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
         MinerMode::External => {
             tracing::info!("changing miner mode to External");
 
-            let pending_txs = ctx.storage.pending_transactions()?;
+            let pending_txs = ctx.storage.pending_transactions();
             if not(pending_txs.is_empty()) {
                 tracing::error!(pending_txs = ?pending_txs.len(), "cannot change miner mode to External with pending transactions");
                 return Err(StratusError::PendingTransactionsExist {

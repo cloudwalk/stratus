@@ -305,8 +305,8 @@ impl StratusStorage {
     }
 
     /// Retrieves pending transactions being mined.
-    pub fn pending_transactions(&self) -> Result<Vec<TransactionExecution>, StratusError> {
-        self.temp.pending_transactions().map_err(Into::into)
+    pub fn pending_transactions(&self) -> Vec<TransactionExecution> {
+        self.temp.pending_transactions()
     }
 
     pub fn finish_pending_block(&self) -> Result<PendingBlock, StratusError> {
