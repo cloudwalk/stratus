@@ -59,6 +59,12 @@ fn main() -> anyhow::Result<()> {
     let old_db_iter = cf2.iter_start();
 
     let progress_bar = indicatif::ProgressBar::new(num_keys);
+    progress_bar.set_style(
+        indicatif::ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
     let max_block: BlockNumberRocksdb = args.max_block.into();
     println!("Starting state comparison");
     for result in progress_bar.wrap_iter(old_db_iter) {
