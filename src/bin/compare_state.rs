@@ -68,13 +68,14 @@ fn main() -> anyhow::Result<()> {
             .unwrap()
             .progress_chars("#>-"),
     );
-    let max_block: BlockNumberRocksdb = args.max_block.into();
+
+
     println!("Starting state comparison");
 
     old_db_iter.par_bridge().try_for_each(|result| -> anyhow::Result<()> {
         let ((address, slot_index, block_number), value_old) = result.context("Error iterating over db2")?;
 
-        if BlockNumberRocksdb::from(block_number.0.as_u64()) > max_block {
+        if block_number.0.as_u64() > max_block {
             return Ok(());
         }
 
