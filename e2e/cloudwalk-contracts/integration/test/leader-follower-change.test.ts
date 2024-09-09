@@ -43,7 +43,7 @@ describe("Leader & Follower change integration test", function () {
             "http://0.0.0.0:3001/",
             "ws://0.0.0.0:3001/",
             "2s",
-            "100ms"
+            "100ms",
         ]);
         expect(response.data.error.code).to.equal(-32009);
         expect(response.data.error.message).to.equal("Transaction processing is enabled.");
@@ -56,7 +56,7 @@ describe("Leader & Follower change integration test", function () {
             "http://0.0.0.0:3001/",
             "ws://0.0.0.0:3001/",
             "2s",
-            "100ms"
+            "100ms",
         ]);
         console.log(response);
         expect(response.data.result).to.equal(true);
