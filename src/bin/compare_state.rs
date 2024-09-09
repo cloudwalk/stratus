@@ -1,11 +1,9 @@
-use rayon::prelude::*;
-
-
 use anyhow::Context;
 use clap::Parser;
 use ethereum_types::H160;
 use ethereum_types::U256;
 use ethereum_types::U64;
+use rayon::prelude::*;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
 use rocksdb::Options;
 use rocksdb::DB;
@@ -69,13 +67,12 @@ fn main() -> anyhow::Result<()> {
             .progress_chars("#>-"),
     );
 
-
     println!("Starting state comparison");
 
     old_db_iter.par_bridge().try_for_each(|result| -> anyhow::Result<()> {
         let ((address, slot_index, block_number), value_old) = result.context("Error iterating over db2")?;
 
-        if block_number.0.as_u64() > max_block {
+        if block_number.0.as_u64() > args.max_block {
             return Ok(());
         }
 
@@ -86,17 +83,13 @@ fn main() -> anyhow::Result<()> {
         );
 
         match cf1.get(&key)? {
-            Some(value_new) => {
+            Some(value_new) =>
                 if value_new != SlotValue::from(value_old.0).into() {
-                    println!(
-                        "Difference found at address: {:?}, slot: {:?}, block: {:?}",
-                        address, slot_index, block_number
-                    );
+                    println!("Difference found at address: {:?}, slot: {:?}, block: {:?}", address, slot_index, block_number);
                     println!("  Value old: {:?}", value_old);
                     println!("  Value new: {:?}", value_new);
                     differences.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                }
-            }
+                },
             None => {
                 println!("Entry missing in new DB:");
                 println!("  Old DB: address: {:?}, slot: {:?}, block: {:?}", address, slot_index, block_number);
