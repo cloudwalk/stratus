@@ -516,7 +516,7 @@ impl Consensus {
 
             let Ok(validator_block_number) = blockchain_client.fetch_block_number().await else {
                 tracing::error!("unable to fetch latest block number");
-                return false;
+                return true;
             };
 
             let Ok(current_block_number) = self.storage.read_mined_block_number() else {
