@@ -19,7 +19,6 @@ use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::json;
-use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::select;
 use tracing::field;
@@ -57,6 +56,7 @@ use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StoragePointInTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
+use crate::ext::parse_duration;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::infra::build_info;
@@ -322,8 +322,9 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 
     GlobalState::set_miner_enabled(false);
 
-    tracing::info!("changing miner mode to interval(1s)");
-    let change_miner_mode_result = stratus_change_miner_mode(Params::new(Some("1s")), &ctx, &ext);
+    let interval_param = json!(["1s"]).to_string();
+    let final_param = Params::new(Some(&interval_param));
+    let change_miner_mode_result = stratus_change_miner_mode(final_param, &ctx, &ext);
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
         return Err(e);
@@ -393,37 +394,26 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         return Err(StratusError::ImporterAlreadyRunning);
     }
 
-    let app_config: Value = match serde_json::from_value(ctx.app_config.clone()) {
-        Ok(config) => config,
-        Err(e) => {
-            tracing::error!(reason = ?e, "failed to parse app_config");
-            return Err(StratusError::AppConfigParseError);
-        }
-    };
-
-    // If failed to parse, then this is being called by changeToFollower endpoint.
-    // Needs workaround to get the importer configuration.
-    let importer_config: ImporterConfig = match app_config.get("importer") {
-        Some(importer_value) => match serde_json::from_value(importer_value.clone()) {
-            Ok(config) => config,
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to parse importer configuration");
-                return Err(StratusError::ImporterConfigParseError);
-            }
-        },
-        None => {
-            tracing::error!("importer configuration not found in app_config");
-            return Err(StratusError::ImporterConfigNotFound);
-        }
-    };
-
     let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
-    let (_, external_rpc_ws) = next_rpc_param::<String>(params)?;
+    let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
+    let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
+    let (_, raw_sync_interval) = next_rpc_param::<String>(params)?;
+
+    let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
+        StratusError::ImporterConfigParseError
+    })?;
+
+    let sync_interval = parse_duration(&raw_sync_interval).map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse sync_interval");
+        StratusError::ImporterConfigParseError
+    })?;
 
     let importer_config = ImporterConfig {
         external_rpc,
         external_rpc_ws: Some(external_rpc_ws),
-        ..importer_config
+        external_rpc_timeout,
+        sync_interval,
     };
 
     GlobalState::set_importer_shutdown(false);

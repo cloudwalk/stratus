@@ -106,6 +106,8 @@ describe("Leader & Follower importer integration test", function () {
         const responseLeader = await sendAndGetFullResponse("stratus_initImporter", [
             "http://0.0.0.0:3000/",
             "ws://0.0.0.0:3000/",
+            "2s",
+            "100ms"
         ]);
         expect(responseLeader.data.error.code).to.equal(-32009);
         expect(responseLeader.data.error.message).to.equal("Stratus node is not a follower.");
@@ -122,15 +124,19 @@ describe("Leader & Follower importer integration test", function () {
         const responseInvalidAddressFollower = await sendAndGetFullResponse("stratus_initImporter", [
             "http://0.0.0.0:9999/",
             "ws://0.0.0.0:9999/",
+            "2s",
+            "100ms"
         ]);
         expect(responseInvalidAddressFollower.data.error.code).to.equal(-32603);
         expect(responseInvalidAddressFollower.data.error.message).to.equal("Failed to initialize importer.");
     });
 
-    it("Init command to Follower with valid addresses should succeed", async function () {
+    it("Init command to Follower with valid params should succeed", async function () {
         const responseValidFollower = await sendAndGetFullResponse("stratus_initImporter", [
             "http://0.0.0.0:3000/",
             "ws://0.0.0.0:3000/",
+            "2s",
+            "100ms"
         ]);
         expect(responseValidFollower.data.result).to.equal(true);
     });
@@ -139,6 +145,8 @@ describe("Leader & Follower importer integration test", function () {
         const responseSecondInitFollower = await sendAndGetFullResponse("stratus_initImporter", [
             "http://0.0.0.0:3000/",
             "ws://0.0.0.0:3000/",
+            "2s",
+            "100ms"
         ]);
         expect(responseSecondInitFollower.data.error.code).to.equal(-32603);
         expect(responseSecondInitFollower.data.error.message).to.equal("Importer is already running.");
