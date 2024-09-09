@@ -7,7 +7,6 @@ use rocksdb::properties::ESTIMATE_NUM_KEYS;
 use rocksdb::Options;
 use rocksdb::DB;
 use stratus::eth::primitives::Address;
-use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::SlotIndex;
 use stratus::eth::primitives::SlotValue;
 use stratus::eth::storage::rocks::cf_versions::CfAccountSlotsHistoryValue;
@@ -26,7 +25,7 @@ struct Args {
     old_db_path: String,
 
     #[arg(short, long)]
-    max_block: BlockNumber,
+    max_block: u64,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Hash, Eq, PartialEq)]
