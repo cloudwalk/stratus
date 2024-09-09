@@ -158,10 +158,6 @@ pub enum StratusError {
     #[strum(props(kind = "client_request"))]
     ImporterConfigParseError,
 
-    #[error("Importer configuration not found in app_config.")]
-    #[strum(props(kind = "client_request"))]
-    ImporterConfigNotFound,
-
     #[error("Failed to initialize importer.")]
     #[strum(props(kind = "internal"))]
     ImporterInitError,
@@ -184,13 +180,6 @@ pub enum StratusError {
     #[error("Failed to acquire lock on consensus.")]
     #[strum(props(kind = "internal"))]
     ConsensusLockFailed,
-
-    // -------------------------------------------------------------------------
-    // AppConfig
-    // -------------------------------------------------------------------------
-    #[error("Failed to parse app_config.")]
-    #[strum(props(kind = "client_request"))]
-    AppConfigParseError,
 
     // -------------------------------------------------------------------------
     // Unexpected
