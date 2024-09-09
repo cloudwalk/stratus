@@ -115,10 +115,12 @@ sqlx = { version = "=0.8.2", features = [
 # test
 fake = { version = "=2.9.2", features = ["chrono", "derive"] }
 indicatif = "0.17.8"
+rayon = "1.10.0"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
 # ------------------------------------------------------------------------------
+
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
 revm = { version = "=9.0.0", features = ["asm-keccak"] }

@@ -1,3 +1,6 @@
+use rayon::prelude::*;
+
+
 use anyhow::Context;
 use clap::Parser;
 use ethereum_types::H160;
@@ -54,7 +57,7 @@ fn main() -> anyhow::Result<()> {
     let num_keys2 = cf2.property_int_value(ESTIMATE_NUM_KEYS).unwrap().unwrap_or(0);
     let num_keys = std::cmp::max(num_keys1, num_keys2);
 
-    let mut differences = 0;
+    let differences = std::sync::atomic::AtomicUsize::new(0);
 
     let old_db_iter = cf2.iter_start();
 
@@ -67,13 +70,12 @@ fn main() -> anyhow::Result<()> {
     );
     let max_block: BlockNumberRocksdb = args.max_block.into();
     println!("Starting state comparison");
-    for result in progress_bar.wrap_iter(old_db_iter) {
-        let Ok(((address, slot_index, block_number), value_old)) = result.context("Error iterating over db2") else {
-            continue;
-        };
+
+    old_db_iter.par_bridge().try_for_each(|result| -> anyhow::Result<()> {
+        let ((address, slot_index, block_number), value_old) = result.context("Error iterating over db2")?;
 
         if BlockNumberRocksdb::from(block_number.0.as_u64()) > max_block {
-            continue;
+            return Ok(());
         }
 
         let key = (
@@ -91,19 +93,22 @@ fn main() -> anyhow::Result<()> {
                     );
                     println!("  Value old: {:?}", value_old);
                     println!("  Value new: {:?}", value_new);
-                    differences += 1;
+                    differences.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
             }
             None => {
                 println!("Entry missing in new DB:");
                 println!("  Old DB: address: {:?}, slot: {:?}, block: {:?}", address, slot_index, block_number);
-                differences += 1;
+                differences.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         }
-    }
+
+        progress_bar.inc(1);
+        Ok(())
+    })?;
 
     progress_bar.finish();
-    println!("Total differences found: {}", differences);
+    println!("Total differences found: {}", differences.load(std::sync::atomic::Ordering::Relaxed));
 
     Ok(())
 }
