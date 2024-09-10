@@ -141,11 +141,11 @@ where
 }
 
 pub trait MutexResultExt<T, E> {
-    fn map_to_lock_error(self, function_name: &str) -> Result<T, StratusError>;
+    fn map_lock_error(self, function_name: &str) -> Result<T, StratusError>;
 }
 
 impl<T> MutexResultExt<T, std::sync::PoisonError<T>> for Result<T, std::sync::PoisonError<T>> {
-    fn map_to_lock_error(self, function_name: &str) -> Result<T, StratusError> {
+    fn map_lock_error(self, function_name: &str) -> Result<T, StratusError> {
         self.map_err(|_| StratusError::Unexpected(anyhow::anyhow!("accessed poisoned Mutex at function `{function_name}`")))
     }
 }
