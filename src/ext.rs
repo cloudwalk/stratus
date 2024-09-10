@@ -123,12 +123,12 @@ impl<T> OptionExt<T> for Option<T> {
 // Result
 // -----------------------------------------------------------------------------
 
-pub trait SerdeResultExt<T, E> {
+pub trait SerdeResultExt<T> {
     /// Unwraps a result informing that this operation is expected to be infallible.
     fn expect_infallible(self) -> T;
 }
 
-impl<T> SerdeResultExt<T, serde_json::Error> for Result<T, serde_json::Error>
+impl<T> SerdeResultExt<T> for Result<T, serde_json::Error>
 where
     T: Sized,
 {
@@ -140,11 +140,11 @@ where
     }
 }
 
-pub trait MutexResultExt<T, E> {
+pub trait MutexResultExt<T> {
     fn map_lock_error(self, function_name: &str) -> Result<T, StratusError>;
 }
 
-impl<T> MutexResultExt<T, std::sync::PoisonError<T>> for Result<T, std::sync::PoisonError<T>> {
+impl<T> MutexResultExt<T> for Result<T, std::sync::PoisonError<T>> {
     fn map_lock_error(self, function_name: &str) -> Result<T, StratusError> {
         self.map_err(|_| StratusError::Unexpected(anyhow::anyhow!("accessed poisoned Mutex at function `{function_name}`")))
     }
