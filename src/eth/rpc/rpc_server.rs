@@ -165,7 +165,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("hardhat_reset", stratus_reset)?;
         module.register_blocking_method("stratus_reset", stratus_reset)?;
-        module.register_async_method("stratus_initImporter", stratus_init_importer)?;
         module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
         module.register_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
     }
@@ -180,6 +179,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
+    module.register_async_method("stratus_initImporter", stratus_init_importer)?;
     module.register_method("stratus_changeToFollower", stratus_change_to_follower)?;
 
     // stratus state
@@ -299,7 +299,6 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
     Ok(to_json_value(true))
 }
 
-#[cfg(feature = "dev")]
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if not(GlobalState::is_follower()) {
         tracing::error!("node is currently not a follower");
