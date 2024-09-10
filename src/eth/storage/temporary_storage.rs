@@ -39,7 +39,7 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     fn save_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError>;
 
     /// Retrieves the pending transactions of the pending block.
-    fn pending_transactions(&self) -> anyhow::Result<Vec<TransactionExecution>>;
+    fn pending_transactions(&self) -> Vec<TransactionExecution>;
 
     /// Finishes the mining of the pending block and starts a new block.
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock>;

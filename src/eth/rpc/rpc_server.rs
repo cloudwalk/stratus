@@ -187,6 +187,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_state", stratus_state)?;
 
     module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
+    module.register_method("stratus_pendingTransactionsCount", stratus_pending_transactions_count)?;
 
     // blockchain
     module.register_method("net_version", net_version)?;
@@ -429,7 +430,7 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
         MinerMode::External => {
             tracing::info!("changing miner mode to External");
 
-            let pending_txs = ctx.storage.pending_transactions()?;
+            let pending_txs = ctx.storage.pending_transactions();
             if not(pending_txs.is_empty()) {
                 tracing::error!(pending_txs = ?pending_txs.len(), "cannot change miner mode to External with pending transactions");
                 return Err(StratusError::PendingTransactionsExist {
@@ -513,6 +514,11 @@ fn stratus_enable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
 fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
     GlobalState::set_miner_enabled(false);
     GlobalState::is_miner_enabled()
+}
+
+/// Returns the count of executed transactions waiting to enter the next block.
+fn stratus_pending_transactions_count(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> usize {
+    ctx.storage.pending_transactions().len()
 }
 
 // -----------------------------------------------------------------------------
