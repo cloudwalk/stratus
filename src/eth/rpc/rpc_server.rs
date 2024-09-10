@@ -20,8 +20,6 @@ use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::json;
-#[cfg(feature = "dev")]
-use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::select;
 use tracing::field;
@@ -310,15 +308,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         return Err(StratusError::ImporterAlreadyRunning);
     }
 
-    let app_config: Value = match serde_json::from_value(ctx.app_config.clone()) {
-        Ok(config) => config,
-        Err(e) => {
-            tracing::error!(reason = ?e, "failed to parse app_config");
-            return Err(StratusError::AppConfigParseError);
-        }
-    };
-
-    let importer_config: ImporterConfig = match app_config.get("importer") {
+    let importer_config: ImporterConfig = match ctx.app_config.get("importer") {
         Some(importer_value) => match serde_json::from_value(importer_value.clone()) {
             Ok(config) => config,
             Err(e) => {
