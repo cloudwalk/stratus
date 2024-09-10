@@ -2,9 +2,9 @@
 
 use std::collections::HashMap;
 use std::ops::Deref;
-#[cfg(feature = "dev")]
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result;
 use ethereum_types::U256;
@@ -31,10 +31,8 @@ use super::rpc_method_wrapper::call_error_metrics_wrapper;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
-#[cfg(feature = "dev")]
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::Miner;
-#[cfg(feature = "dev")]
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
@@ -59,9 +57,12 @@ use crate::eth::rpc::RpcSubscriptions;
 use crate::eth::storage::StoragePointInTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
+use crate::ext::parse_duration;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
+use crate::ext::traced_sleep;
 use crate::ext::SerdeResultExt;
+use crate::ext::SleepReason;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -163,9 +164,6 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("hardhat_reset", stratus_reset)?;
         module.register_blocking_method("stratus_reset", stratus_reset)?;
-        module.register_async_method("stratus_initImporter", stratus_init_importer)?;
-        module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
-        module.register_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
     }
 
     // stratus status
@@ -178,6 +176,11 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
+    module.register_async_method("stratus_changeToLeader", stratus_change_to_leader)?;
+    module.register_async_method("stratus_changeToFollower", stratus_change_to_follower)?;
+    module.register_async_method("stratus_initImporter", stratus_init_importer)?;
+    module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
+    module.register_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
 
     // stratus state
     module.register_method("stratus_version", stratus_version)?;
@@ -296,7 +299,112 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
     Ok(to_json_value(true))
 }
 
-#[cfg(feature = "dev")]
+async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    const WAIT_DELAY: Duration = Duration::from_secs(5);
+    tracing::info!("starting process to change node to leader");
+
+    if GlobalState::get_node_mode() == NodeMode::Leader {
+        tracing::info!("node is already in leader mode, no changes made");
+        return Ok(json!(true));
+    }
+
+    if GlobalState::is_transactions_enabled() {
+        tracing::error!("transactions are currently enabled, cannot change node mode");
+        return Err(StratusError::RpcTransactionEnabled);
+    }
+
+    tracing::info!("shutting down importer");
+    let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), &ctx, &ext);
+    match shutdown_importer_result {
+        Ok(_) => tracing::info!("importer shutdown successfully"),
+        Err(StratusError::ImporterAlreadyShutdown) => {
+            tracing::warn!("importer is already shutdown, continuing");
+        }
+        Err(e) => {
+            tracing::error!(reason = ?e, "failed to shutdown importer");
+            return Err(e);
+        }
+    }
+
+    tracing::info!("wait for importer to shutdown");
+    traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
+
+    GlobalState::set_miner_enabled(false);
+
+    let interval_param = json!(["1s"]).to_string();
+    let final_param = Params::new(Some(&interval_param));
+    let change_miner_mode_result = stratus_change_miner_mode(final_param, &ctx, &ext);
+    if let Err(e) = change_miner_mode_result {
+        tracing::error!(reason = ?e, "failed to change miner mode");
+        return Err(e);
+    }
+    tracing::info!("miner mode changed to interval(1s) successfully");
+
+    GlobalState::set_node_mode(NodeMode::Leader);
+    tracing::info!("node mode changed to leader successfully");
+
+    Ok(json!(true))
+}
+
+async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    const WAIT_DELAY: Duration = Duration::from_secs(5);
+    tracing::info!("starting process to change node to follower");
+
+    if GlobalState::get_node_mode() == NodeMode::Follower {
+        tracing::info!("node is already in follower mode, no changes made");
+        return Ok(json!(true));
+    }
+
+    if GlobalState::is_transactions_enabled() {
+        tracing::error!("transactions are currently enabled, cannot change node mode");
+        return Err(StratusError::RpcTransactionEnabled);
+    }
+
+    tracing::info!("wait for pending transactions to be mined");
+    traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
+
+    let pending_txs = ctx.storage.pending_transactions();
+    if not(pending_txs.is_empty()) {
+        tracing::error!(pending_txs = ?pending_txs.len(), "cannot change to follower mode with pending transactions");
+        return Err(StratusError::PendingTransactionsExist {
+            pending_txs: pending_txs.len(),
+        });
+    }
+
+    GlobalState::set_miner_enabled(false);
+
+    let external_param = json!(["external"]).to_string();
+    let final_param = Params::new(Some(&external_param));
+    let change_miner_mode_result = stratus_change_miner_mode(final_param, &ctx, &ext);
+    if let Err(e) = change_miner_mode_result {
+        tracing::error!(reason = ?e, "failed to change miner mode");
+        return Err(e);
+    }
+
+    tracing::info!("wait for miner mode to change to external");
+    traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
+    tracing::info!("miner mode changed to external successfully");
+
+    GlobalState::set_node_mode(NodeMode::Follower);
+
+    tracing::info!("initializing importer");
+    let init_importer_result = stratus_init_importer(params, Arc::clone(&ctx), ext).await;
+    match init_importer_result {
+        Ok(_) => tracing::info!("importer initialized successfully"),
+        Err(StratusError::ImporterAlreadyRunning) => {
+            tracing::warn!("importer is already running, continuing");
+        }
+        Err(e) => {
+            tracing::error!(reason = ?e, "failed to initialize importer, reverting node mode to leader");
+            GlobalState::set_node_mode(NodeMode::Leader);
+            return Err(e);
+        }
+    }
+    tracing::info!("node mode changed to follower successfully");
+
+    Ok(json!(true))
+}
+
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if not(GlobalState::is_follower()) {
         tracing::error!("node is currently not a follower");
@@ -308,27 +416,26 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         return Err(StratusError::ImporterAlreadyRunning);
     }
 
-    let importer_config: ImporterConfig = match ctx.app_config.get("importer") {
-        Some(importer_value) => match serde_json::from_value(importer_value.clone()) {
-            Ok(config) => config,
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to parse importer configuration");
-                return Err(StratusError::ImporterConfigParseError);
-            }
-        },
-        None => {
-            tracing::error!("importer configuration not found in app_config");
-            return Err(StratusError::ImporterConfigNotFound);
-        }
-    };
-
     let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
-    let (_, external_rpc_ws) = next_rpc_param::<String>(params)?;
+    let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
+    let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
+    let (_, raw_sync_interval) = next_rpc_param::<String>(params)?;
+
+    let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
+        StratusError::ImporterConfigParseError
+    })?;
+
+    let sync_interval = parse_duration(&raw_sync_interval).map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse sync_interval");
+        StratusError::ImporterConfigParseError
+    })?;
 
     let importer_config = ImporterConfig {
         external_rpc,
         external_rpc_ws: Some(external_rpc_ws),
-        ..importer_config
+        external_rpc_timeout,
+        sync_interval,
     };
 
     GlobalState::set_importer_shutdown(false);
@@ -367,11 +474,22 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     Ok(json!(true))
 }
 
-#[cfg(feature = "dev")]
 fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     if not(GlobalState::is_follower()) {
         tracing::error!("node is currently not a follower");
         return Err(StratusError::StratusNotFollower);
+    }
+
+    if GlobalState::is_importer_shutdown() {
+        let consensus_lock = ctx.consensus.read().map_err(|_| {
+            tracing::error!("consensus read lock was poisoned");
+            ctx.consensus.clear_poison();
+            StratusError::ConsensusLockFailed
+        })?;
+        if consensus_lock.is_none() {
+            tracing::error!("importer is already shut down");
+            return Err(StratusError::ImporterAlreadyShutdown);
+        }
     }
 
     {
@@ -386,14 +504,18 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
 
-    return Ok(json!(true));
+    Ok(json!(true))
 }
 
-#[cfg(feature = "dev")]
 fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
         tracing::error!("cannot change miner mode while transactions are enabled");
         return Err(StratusError::RpcTransactionEnabled);
+    }
+
+    if GlobalState::is_miner_enabled() {
+        tracing::error!("cannot change miner mode while miner is enabled");
+        return Err(StratusError::MinerEnabled);
     }
 
     let (_, mode_str) = next_rpc_param::<String>(params.sequence())?;
@@ -473,7 +595,9 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
         }
     }
 
-    return Ok(json!(true));
+    GlobalState::set_miner_enabled(true);
+
+    Ok(json!(true))
 }
 
 fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
