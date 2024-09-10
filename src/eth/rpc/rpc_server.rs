@@ -60,6 +60,7 @@ use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
+use crate::ext::SerdeResultExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -185,6 +186,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_state", stratus_state)?;
 
     module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
+    module.register_method("stratus_pendingTransactionsCount", stratus_pending_transactions_count)?;
 
     // blockchain
     module.register_method("net_version", net_version)?;
@@ -530,7 +532,7 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
         MinerMode::External => {
             tracing::info!("changing miner mode to External");
 
-            let pending_txs = ctx.storage.pending_transactions()?;
+            let pending_txs = ctx.storage.pending_transactions();
             if not(pending_txs.is_empty()) {
                 tracing::error!(pending_txs = ?pending_txs.len(), "cannot change miner mode to External with pending transactions");
                 return Err(StratusError::PendingTransactionsExist {
@@ -618,6 +620,11 @@ fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool 
     GlobalState::is_miner_enabled()
 }
 
+/// Returns the count of executed transactions waiting to enter the next block.
+fn stratus_pending_transactions_count(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> usize {
+    ctx.storage.pending_transactions().len()
+}
+
 // -----------------------------------------------------------------------------
 // Stratus - State
 // -----------------------------------------------------------------------------
@@ -637,11 +644,15 @@ fn stratus_state(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonVa
 async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     reject_unknown_client(ext.rpc_client())?;
 
-    let (pending_txs, new_heads, logs) = join!(ctx.subs.new_heads.read(), ctx.subs.pending_txs.read(), ctx.subs.logs.read());
+    // NOTE: this is a workaround for holding only one lock at a time
+    let pending_txs = serde_json::to_value(ctx.subs.new_heads.read().await.values().collect_vec()).expect_infallible();
+    let new_heads = serde_json::to_value(ctx.subs.pending_txs.read().await.values().collect_vec()).expect_infallible();
+    let logs = serde_json::to_value(ctx.subs.logs.read().await.values().flat_map(HashMap::values).collect_vec()).expect_infallible();
+
     let response = json!({
-        "newPendingTransactions": pending_txs.values().collect_vec(),
-        "newHeads": new_heads.values().collect_vec(),
-        "logs": logs.values().flat_map(HashMap::values).collect_vec()
+        "newPendingTransactions": pending_txs,
+        "newHeads": new_heads,
+        "logs": logs,
     });
     Ok(response)
 }
