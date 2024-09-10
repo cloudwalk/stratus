@@ -180,6 +180,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
+    module.register_method("stratus_changeToFollower", stratus_change_to_follower)?;
 
     // stratus state
     module.register_method("stratus_version", stratus_version)?;
@@ -516,11 +517,6 @@ fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool 
     GlobalState::is_miner_enabled()
 }
 
-/// Returns the count of executed transactions waiting to enter the next block.
-fn stratus_pending_transactions_count(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> usize {
-    ctx.storage.pending_transactions().len()
-}
-
 // -----------------------------------------------------------------------------
 // Stratus - State
 // -----------------------------------------------------------------------------
@@ -551,6 +547,11 @@ async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Ext
         "logs": logs,
     });
     Ok(response)
+}
+
+/// Returns the count of executed transactions waiting to enter the next block.
+fn stratus_pending_transactions_count(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> usize {
+    ctx.storage.pending_transactions().len()
 }
 
 // -----------------------------------------------------------------------------
