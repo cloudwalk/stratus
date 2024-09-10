@@ -3,13 +3,12 @@ use std::fmt::Display;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics::MetricLabelValue;
 
-#[derive(Debug, Clone, Default, strum::EnumIs, PartialEq)]
+#[derive(Debug, Clone, strum::EnumIs, PartialEq)]
 pub enum RpcClientApp {
     /// Client application identified itself.
     Identified(String),
 
     /// Client application is unknown.
-    #[default]
     Unknown,
 }
 

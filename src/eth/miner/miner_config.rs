@@ -6,7 +6,6 @@ use clap::Parser;
 use display_json::DebugAsJson;
 
 use crate::eth::miner::Miner;
-use crate::eth::primitives::StratusError;
 use crate::eth::storage::StratusStorage;
 use crate::ext::parse_duration;
 use crate::GlobalState;
@@ -56,18 +55,10 @@ impl MinerConfig {
         // set block number
         storage.set_pending_block_number_as_next_if_not_set()?;
 
-        let mode_lock = miner.mode.read().map_err(|_| {
-            tracing::error!("miner mode read lock was poisoned");
-            miner.mode.clear_poison();
-            StratusError::MinerModeLockFailed
-        })?;
-
         // enable interval miner
-        if mode_lock.is_interval() {
+        if mode.is_interval() {
             Arc::clone(&miner).spawn_interval_miner()?;
         }
-
-        drop(mode_lock);
 
         Ok(Arc::clone(&miner))
     }
