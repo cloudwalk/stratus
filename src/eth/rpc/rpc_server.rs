@@ -375,6 +375,9 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         tracing::error!(reason = ?e, "failed to change miner mode");
         return Err(e);
     }
+
+    tracing::info!("wait for miner mode to change to external");
+    traced_sleep(Duration::from_secs(10), SleepReason::SyncData).await;
     tracing::info!("miner mode changed to external successfully");
 
     GlobalState::set_node_mode(NodeMode::Follower);
