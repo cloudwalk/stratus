@@ -147,6 +147,9 @@ pub trait MutexResultExt<T> {
 impl<T> MutexResultExt<T> for Result<T, std::sync::PoisonError<T>> {
     fn map_lock_error(self, function_name: &str) -> Result<T, StratusError> {
         self.map_err(|_| StratusError::Unexpected(anyhow::anyhow!("accessed poisoned Mutex at function `{function_name}`")))
+            .inspect_err(|err| {
+                tracing::error!(reason = ?err, "FATAL: Mutex is poisoned");
+            })
     }
 }
 
