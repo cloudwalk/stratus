@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result;
 use ethereum_types::U256;
@@ -350,9 +351,18 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         return Err(StratusError::RpcTransactionEnabled);
     }
 
-    // TODO: check if there are no more pending transactions
+    tracing::info!("wait for pending transactions to be mined");
+    tokio::time::sleep(Duration::from_secs(4)).await;
+
+    let pending_txs = ctx.storage.pending_transactions()?;
+    if not(pending_txs.is_empty()) {
+        tracing::error!(pending_txs = ?pending_txs.len(), "cannot change to follower mode with pending transactions");
+        return Err(StratusError::PendingTransactionsExist {
+            pending_txs: pending_txs.len(),
+        });
+    }
+
     GlobalState::set_miner_enabled(false);
-    // TODO: check if miner is not mining
 
     let external_param = json!(["external"]).to_string();
     let final_param = Params::new(Some(&external_param));
