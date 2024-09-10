@@ -60,7 +60,9 @@ use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
+use crate::ext::traced_sleep;
 use crate::ext::SerdeResultExt;
+use crate::ext::SleepReason;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -354,7 +356,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     }
 
     tracing::info!("wait for pending transactions to be mined");
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    traced_sleep(Duration::from_secs(4), SleepReason::SyncData).await;
 
     let pending_txs = ctx.storage.pending_transactions();
     if not(pending_txs.is_empty()) {
