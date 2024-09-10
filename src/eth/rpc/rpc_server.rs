@@ -63,6 +63,7 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
+use crate::ext::SerdeResultExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -539,11 +540,15 @@ fn stratus_state(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonVa
 async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     reject_unknown_client(ext.rpc_client())?;
 
-    let (pending_txs, new_heads, logs) = join!(ctx.subs.new_heads.read(), ctx.subs.pending_txs.read(), ctx.subs.logs.read());
+    // NOTE: this is a workaround for holding only one lock at a time
+    let pending_txs = serde_json::to_value(ctx.subs.new_heads.read().await.values().collect_vec()).expect_infallible();
+    let new_heads = serde_json::to_value(ctx.subs.pending_txs.read().await.values().collect_vec()).expect_infallible();
+    let logs = serde_json::to_value(ctx.subs.logs.read().await.values().flat_map(HashMap::values).collect_vec()).expect_infallible();
+
     let response = json!({
-        "newPendingTransactions": pending_txs.values().collect_vec(),
-        "newHeads": new_heads.values().collect_vec(),
-        "logs": logs.values().flat_map(HashMap::values).collect_vec()
+        "newPendingTransactions": pending_txs,
+        "newHeads": new_heads,
+        "logs": logs,
     });
     Ok(response)
 }
