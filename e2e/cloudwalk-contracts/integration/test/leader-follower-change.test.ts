@@ -33,7 +33,6 @@ describe("Leader & Follower change integration test", function () {
     it("Change Leader to Leader should fail", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
-        console.log(response);
         expect(response.data.result).to.equal(true);
     });
 
@@ -58,8 +57,15 @@ describe("Leader & Follower change integration test", function () {
             "2s",
             "100ms",
         ]);
-        console.log(response);
         expect(response.data.result).to.equal(true);
+    });
+
+    it("Validate new Follower health after change", async function () {
+        updateProviderUrl("stratus");
+        await sendAndGetFullResponse("stratus_changeToLeader", []);
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        const response = await sendWithRetry("stratus_health", []);
+        expect(response).to.equal(true);
     });
 
     it("Change Follower to Follower should fail", async function () {
@@ -80,5 +86,13 @@ describe("Leader & Follower change integration test", function () {
         await sendWithRetry("stratus_disableTransactions", []);
         const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
         expect(response.data.result).to.equal(true);
+    });
+
+    it("Validate new Leader health after change", async function () {
+        updateProviderUrl("stratus-follower");
+        await sendAndGetFullResponse("stratus_changeToLeader", []);
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        const response = await sendWithRetry("stratus_health", []);
+        expect(response).to.equal(true);
     });
 });

@@ -343,6 +343,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 }
 
 async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    const WAIT_DELAY: Duration = Duration::from_secs(5);
     tracing::info!("starting process to change node to follower");
 
     if GlobalState::get_node_mode() == NodeMode::Follower {
@@ -356,7 +357,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     }
 
     tracing::info!("wait for pending transactions to be mined");
-    traced_sleep(Duration::from_secs(4), SleepReason::SyncData).await;
+    traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
 
     let pending_txs = ctx.storage.pending_transactions();
     if not(pending_txs.is_empty()) {
@@ -377,7 +378,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     }
 
     tracing::info!("wait for miner mode to change to external");
-    traced_sleep(Duration::from_secs(10), SleepReason::SyncData).await;
+    traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
     tracing::info!("miner mode changed to external successfully");
 
     GlobalState::set_node_mode(NodeMode::Follower);
