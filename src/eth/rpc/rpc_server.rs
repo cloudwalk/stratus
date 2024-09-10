@@ -186,6 +186,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_state", stratus_state)?;
 
     module.register_async_method("stratus_getSubscriptions", stratus_get_subscriptions)?;
+    module.register_method("stratus_pendingTransactionsCount", stratus_pending_transactions_count)?;
 
     // blockchain
     module.register_method("net_version", net_version)?;
@@ -512,6 +513,11 @@ fn stratus_enable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
 fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
     GlobalState::set_miner_enabled(false);
     GlobalState::is_miner_enabled()
+}
+
+/// Returns the count of executed transactions waiting to enter the next block.
+fn stratus_pending_transactions_count(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> usize {
+    ctx.storage.pending_transactions().len()
 }
 
 // -----------------------------------------------------------------------------
