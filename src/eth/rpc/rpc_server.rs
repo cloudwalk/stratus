@@ -2,9 +2,9 @@
 
 use std::collections::HashMap;
 use std::ops::Deref;
-#[cfg(feature = "dev")]
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result;
 use ethereum_types::U256;
@@ -20,7 +20,6 @@ use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use serde_json::json;
-#[cfg(feature = "dev")]
 use serde_json::Value;
 use tokio::runtime::Handle;
 use tokio::select;
@@ -33,10 +32,8 @@ use super::rpc_method_wrapper::call_error_metrics_wrapper;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
-#[cfg(feature = "dev")]
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::Miner;
-#[cfg(feature = "dev")]
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
@@ -67,6 +64,7 @@ use crate::ext::SerdeResultExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
+use crate::log_and_err;
 use crate::GlobalState;
 use crate::NodeMode;
 
@@ -180,7 +178,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
     module.register_async_method("stratus_initImporter", stratus_init_importer)?;
-    module.register_method("stratus_changeToFollower", stratus_change_to_follower)?;
+    module.register_async_method("stratus_changeToFollower", stratus_change_to_follower)?;
 
     // stratus state
     module.register_method("stratus_version", stratus_version)?;
@@ -399,7 +397,6 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     return Ok(json!(true));
 }
 
-#[cfg(feature = "dev")]
 fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
         tracing::error!("cannot change miner mode while transactions are enabled");
@@ -514,6 +511,30 @@ fn stratus_enable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
 fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
     GlobalState::set_miner_enabled(false);
     GlobalState::is_miner_enabled()
+}
+
+/// Demotes leader to follower, `params` are the same as `stratus_init_importer`
+async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    if GlobalState::is_transactions_enabled() {
+        log_and_err!("cannot change to follower while transactions are enabled")?;
+    }
+
+    // Give time for all transactions to be processed, and for a block to be mined with all of them
+    tokio::time::sleep(Duration::from_secs(4)).await;
+
+    stratus_change_miner_mode(Params::new(Some("interval")), &ctx, &ext)?;
+
+    // // do we need this code if the function above already checks for pending transactions?
+    // let pending_txs = stratus_pending_transactions_count(Params::new(None), &ctx, &ext);
+    // if pending_txs != 0 {
+    //     log_and_err!(format!("cannot change to follower with pending transactions, expected 0, found {pending_txs}"))?;
+    // }
+
+    // set up importer from the node which will be the next leader
+    // // PROBLEM: if this fails, the operation itself isn't atomic anymore, because there is another failure point at the `stratus_change_miner_mode` call
+    stratus_init_importer(params, ctx, ext).await?;
+
+    Ok(json!(true))
 }
 
 // -----------------------------------------------------------------------------
