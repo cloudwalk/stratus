@@ -300,6 +300,7 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 }
 
 async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    const WAIT_DELAY: Duration = Duration::from_secs(5);
     tracing::info!("starting process to change node to leader");
 
     if GlobalState::get_node_mode() == NodeMode::Leader {
@@ -324,6 +325,9 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
             return Err(e);
         }
     }
+
+    tracing::info!("wait for importer to shutdown");
+    traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
 
     GlobalState::set_miner_enabled(false);
 
