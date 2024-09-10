@@ -377,6 +377,7 @@ mod interval_miner {
     use crate::eth::miner::miner::should_shutdown;
     use crate::eth::miner::Miner;
     use crate::ext::not;
+    use crate::ext::MutexExt;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
@@ -411,11 +412,7 @@ mod interval_miner {
 
     #[inline(always)]
     fn mine_and_commit(miner: &Miner) {
-        let _mine_and_commit_lock = miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
-            tracing::error!("mutex in mine_and_commit is poisoned");
-            miner.locks.mine_and_commit.clear_poison();
-            poison.into_inner()
-        });
+        let _mine_and_commit_lock = miner.locks.mine_and_commit.lock_or_clear("mutex in mine_and_commit is poisoned");
 
         // mine
         let block = loop {
