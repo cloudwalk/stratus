@@ -99,5 +99,5 @@ fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp
     if let Some(app) = try_path(uri) {
         return app;
     }
-    RpcClientApp::default()
+    RpcClientApp::Unknown
 }
