@@ -60,9 +60,9 @@ describe("Leader & Follower change integration test", function () {
         expect(response.data.result).to.equal(true);
     });
 
+    // This health check after the change validates if the node went down due to block state mismatch error
     it("Validate new Follower health after change", async function () {
         updateProviderUrl("stratus");
-        await sendAndGetFullResponse("stratus_changeToLeader", []);
         await new Promise((resolve) => setTimeout(resolve, 10000));
         const response = await sendWithRetry("stratus_health", []);
         expect(response).to.equal(true);
@@ -88,9 +88,9 @@ describe("Leader & Follower change integration test", function () {
         expect(response.data.result).to.equal(true);
     });
 
+    // This health check after the change validates if the node went down due to block state mismatch error
     it("Validate new Leader health after change", async function () {
         updateProviderUrl("stratus-follower");
-        await sendAndGetFullResponse("stratus_changeToLeader", []);
         await new Promise((resolve) => setTimeout(resolve, 10000));
         const response = await sendWithRetry("stratus_health", []);
         expect(response).to.equal(true);
