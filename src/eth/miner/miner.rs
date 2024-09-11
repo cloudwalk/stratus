@@ -81,24 +81,23 @@ impl Miner {
     }
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
-    pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
-        let block_time;
-
-        // validate
-        {
+    pub fn start_if_interval(self: &Arc<Self>) -> anyhow::Result<()> {
+        let block_time = {
             let mode_lock = self.mode.read().map_err(|_| {
                 tracing::error!("miner mode read lock was poisoned");
                 self.mode.clear_poison();
                 StratusError::MinerModeLockFailed
             })?;
 
-            let MinerMode::Interval(bt) = *mode_lock else {
-                return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
+            let MinerMode::Interval(block_time) = *mode_lock else {
+                // Don't do anything
+                return Ok(());
             };
 
-            block_time = bt;
-            tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
-        }
+            block_time
+        };
+
+        tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::channel();

@@ -39,10 +39,6 @@ impl MinerConfig {
     pub fn init_with_mode(&self, mode: MinerMode, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
         tracing::info!(config = ?self, mode = ?mode, "creating block miner with specific mode");
 
-        // create miner
-        let miner = Miner::new(Arc::clone(&storage), mode);
-        let miner = Arc::new(miner);
-
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
@@ -55,12 +51,12 @@ impl MinerConfig {
         // set block number
         storage.set_pending_block_number_as_next_if_not_set()?;
 
-        // enable interval miner
-        if mode.is_interval() {
-            Arc::clone(&miner).spawn_interval_miner()?;
-        }
+        // create miner
+        let miner = Miner::new(Arc::clone(&storage), mode);
+        let miner = Arc::new(miner);
+        miner.start_if_interval()?;
 
-        Ok(Arc::clone(&miner))
+        Ok(miner)
     }
 }
 

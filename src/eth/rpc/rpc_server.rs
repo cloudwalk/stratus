@@ -541,10 +541,10 @@ fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, Str
                     StratusError::MinerModeLockFailed
                 })?;
                 GlobalState::set_interval_miner_shutdown(false);
-                *miner_mode_lock = mode;
+                *miner_mode_lock = MinerMode::Interval(duration);
             }
 
-            Arc::clone(&ctx.miner).spawn_interval_miner()?;
+            ctx.miner.start_if_interval()?;
         }
         MinerMode::Automine => {
             tracing::error!("automine mode is not supported");
