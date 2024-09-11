@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::sync::Mutex;
+use std::sync::MutexGuard;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -123,12 +125,12 @@ impl<T> OptionExt<T> for Option<T> {
 // Result
 // -----------------------------------------------------------------------------
 
-pub trait SerdeResultExt<T, E> {
+pub trait SerdeResultExt<T> {
     /// Unwraps a result informing that this operation is expected to be infallible.
     fn expect_infallible(self) -> T;
 }
 
-impl<T> SerdeResultExt<T, serde_json::Error> for Result<T, serde_json::Error>
+impl<T> SerdeResultExt<T> for Result<T, serde_json::Error>
 where
     T: Sized,
 {
@@ -140,13 +142,31 @@ where
     }
 }
 
-pub trait MutexResultExt<T, E> {
-    fn map_to_lock_error(self, function_name: &str) -> Result<T, StratusError>;
+pub trait MutexResultExt<T> {
+    fn map_lock_error(self, function_name: &str) -> Result<T, StratusError>;
 }
 
-impl<T> MutexResultExt<T, std::sync::PoisonError<T>> for Result<T, std::sync::PoisonError<T>> {
-    fn map_to_lock_error(self, function_name: &str) -> Result<T, StratusError> {
+impl<T> MutexResultExt<T> for Result<T, std::sync::PoisonError<T>> {
+    fn map_lock_error(self, function_name: &str) -> Result<T, StratusError> {
         self.map_err(|_| StratusError::Unexpected(anyhow::anyhow!("accessed poisoned Mutex at function `{function_name}`")))
+            .inspect_err(|err| {
+                tracing::error!(reason = ?err, "FATAL: Mutex is poisoned");
+            })
+    }
+}
+
+pub trait MutexExt<T> {
+    fn lock_or_clear<'a>(&'a self, error_message: &str) -> MutexGuard<'a, T>;
+}
+
+impl<T> MutexExt<T> for Mutex<T> {
+    fn lock_or_clear<'a>(&'a self, error_message: &str) -> MutexGuard<'a, T> {
+        self.lock().unwrap_or_else(|poison_err| {
+            // TODO: remove this format!() after Rust-Analyzer bug is fixed
+            tracing::error!("Fatal: failed to lock mutex, {error_message}");
+            self.clear_poison();
+            poison_err.into_inner()
+        })
     }
 }
 

@@ -128,7 +128,7 @@ impl Miner {
 
         // if automine is enabled, only one transaction can enter the block at a time.
         let _save_execution_lock = if is_automine {
-            Some(self.locks.save_execution.lock().map_to_lock_error("save_execution")?)
+            Some(self.locks.save_execution.lock().map_lock_error("save_execution")?)
         } else {
             None
         };
@@ -149,7 +149,7 @@ impl Miner {
 
     /// Same as [`Self::mine_external`], but automatically commits the block instead of returning it.
     pub fn mine_external_and_commit(&self) -> anyhow::Result<()> {
-        let _mine_and_commit_lock = self.locks.mine_and_commit.lock().map_to_lock_error("mine_external_and_commit")?;
+        let _mine_and_commit_lock = self.locks.mine_and_commit.lock().map_lock_error("mine_external_and_commit")?;
 
         let block = self.mine_external()?;
         self.commit(block)
@@ -164,7 +164,7 @@ impl Miner {
         let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
 
         // lock
-        let _mine_lock = self.locks.mine.lock().map_to_lock_error("mine_external")?;
+        let _mine_lock = self.locks.mine.lock().map_lock_error("mine_external")?;
 
         // mine block
         let block = self.storage.finish_pending_block()?;
@@ -190,7 +190,7 @@ impl Miner {
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
     /// mainly used when is_automine is enabled.
     pub fn mine_local_and_commit(&self) -> anyhow::Result<()> {
-        let _mine_and_commit_lock = self.locks.mine_and_commit.lock().map_to_lock_error("mine_local_and_commit")?;
+        let _mine_and_commit_lock = self.locks.mine_and_commit.lock().map_lock_error("mine_local_and_commit")?;
 
         let block = self.mine_local()?;
         self.commit(block)
@@ -204,7 +204,7 @@ impl Miner {
         let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
 
         // lock
-        let _mine_lock = self.locks.mine.lock().map_to_lock_error("mine_local")?;
+        let _mine_lock = self.locks.mine.lock().map_lock_error("mine_local")?;
 
         // mine block
         let block = self.storage.finish_pending_block()?;
@@ -233,7 +233,7 @@ impl Miner {
         tracing::info!(%block_number, transactions_len = %block.transactions.len(), "commiting block");
 
         // lock
-        let _commit_lock = self.locks.commit.lock().map_to_lock_error("commit")?;
+        let _commit_lock = self.locks.commit.lock().map_lock_error("commit")?;
 
         tracing::info!(%block_number, "miner acquired commit lock");
 
@@ -377,6 +377,7 @@ mod interval_miner {
     use crate::eth::miner::miner::should_shutdown;
     use crate::eth::miner::Miner;
     use crate::ext::not;
+    use crate::ext::MutexExt;
     use crate::infra::tracing::warn_task_rx_closed;
     use crate::GlobalState;
 
@@ -411,11 +412,7 @@ mod interval_miner {
 
     #[inline(always)]
     fn mine_and_commit(miner: &Miner) {
-        let _mine_and_commit_lock = miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
-            tracing::error!("mutex in mine_and_commit is poisoned");
-            miner.locks.mine_and_commit.clear_poison();
-            poison.into_inner()
-        });
+        let _mine_and_commit_lock = miner.locks.mine_and_commit.lock_or_clear("mutex in mine_and_commit is poisoned");
 
         // mine
         let block = loop {

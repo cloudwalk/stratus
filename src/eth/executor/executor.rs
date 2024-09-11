@@ -34,6 +34,7 @@ use crate::eth::storage::StoragePointInTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
+use crate::ext::MutexExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_tx_closed;
@@ -390,11 +391,7 @@ impl Executor {
             // * Conflict detection runs, but it should never trigger because of the Mutex.
             ExecutorStrategy::Serial => {
                 // acquire serial execution lock
-                let _serial_lock = self.locks.serial.lock().unwrap_or_else(|poison| {
-                    tracing::error!("executor serial lock was poisoned");
-                    self.locks.serial.clear_poison();
-                    poison.into_inner()
-                });
+                let _serial_lock = self.locks.serial.lock_or_clear("executor serial lock was poisoned");
 
                 // WORKAROUND: prevents interval miner mining blocks while a transaction is being executed.
                 // this can be removed when we implement conflict detection for block number
@@ -406,11 +403,7 @@ impl Executor {
                     });
 
                     if mode_lock.is_interval() {
-                        let miner_lock = Some(self.miner.locks.mine_and_commit.lock().unwrap_or_else(|poison| {
-                            tracing::error!("miner mine_and_commit lock was poisoned");
-                            self.miner.locks.mine_and_commit.clear_poison();
-                            poison.into_inner()
-                        }));
+                        let miner_lock = Some(self.miner.locks.mine_and_commit.lock_or_clear("miner mine_and_commit lock was poisoned"));
                         miner_lock
                     } else {
                         None
