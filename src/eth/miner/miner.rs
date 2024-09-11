@@ -107,7 +107,7 @@ impl Miner {
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::channel();
-        let miner_clone = Arc::clone(&self);
+        let miner_clone = Arc::clone(self);
         spawn_thread("miner-miner", move || interval_miner::run(miner_clone, ticks_rx));
         spawn_thread("miner-ticker", move || interval_miner_ticker::run(block_time, ticks_tx));
         Ok(())

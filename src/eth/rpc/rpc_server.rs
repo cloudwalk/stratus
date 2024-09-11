@@ -471,7 +471,7 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
     change_miner_mode(mode, ctx)
 }
 
-/// Tries changing miner mode, returns `Ok(true)` if changed, and `Ok(false)` if no changing was necessary
+/// Tries changing miner mode, returns `Ok(true)` if changed, and `Ok(false)` if no changing was necessary.
 ///
 /// This function also enables the miner after changing it.
 fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, StratusError> {
@@ -502,11 +502,9 @@ fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue,
                 });
             }
 
-            {
-                ctx.miner.set_mode(MinerMode::External);
-                const TASK_NAME: &str = "rpc-server::miner-shutdown";
-                GlobalState::shutdown_interval_miner_from(TASK_NAME, "received miner shutdown request");
-            }
+            ctx.miner.set_mode(MinerMode::External);
+            const TASK_NAME: &str = "rpc-server::miner-shutdown";
+            GlobalState::shutdown_interval_miner_from(TASK_NAME, "received miner shutdown request");
         }
         MinerMode::Interval(duration) => {
             tracing::info!(duration = ?duration, "changing miner mode to Interval");
@@ -523,11 +521,8 @@ fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue,
                 }
             }
 
-            {
-                GlobalState::set_interval_miner_shutdown(false);
-                ctx.miner.set_mode(MinerMode::Interval(duration));
-            }
-
+            GlobalState::set_interval_miner_shutdown(false);
+            ctx.miner.set_mode(MinerMode::Interval(duration));
             ctx.miner.start_if_interval()?;
         }
         MinerMode::Automine => {
