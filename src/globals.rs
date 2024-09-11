@@ -118,15 +118,7 @@ static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 static IS_LEADER: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GlobalState {
-    pub is_leader: bool,
-    pub is_shutdown: bool,
-    pub is_importer_shutdown: bool,
-    pub is_interval_miner_shutdown: bool,
-    pub transactions_enabled: bool,
-    pub miner_enabled: bool,
-    pub unknown_client_enabled: bool,
-}
+pub struct GlobalState;
 
 impl GlobalState {
     // -------------------------------------------------------------------------
@@ -314,16 +306,14 @@ impl GlobalState {
     // -------------------------------------------------------------------------
 
     pub fn get_global_state_as_json() -> JsonValue {
-        let state = GlobalState {
-            is_leader: Self::is_leader(),
-            is_shutdown: Self::is_shutdown(),
-            is_importer_shutdown: Self::is_importer_shutdown(),
-            is_interval_miner_shutdown: Self::is_interval_miner_shutdown(),
-            transactions_enabled: Self::is_transactions_enabled(),
-            miner_enabled: Self::is_miner_enabled(),
-            unknown_client_enabled: Self::is_unknown_client_enabled(),
-        };
-
-        json!(state)
+        json!({
+            "is_leader": Self::is_leader(),
+            "is_shutdown": Self::is_shutdown(),
+            "is_importer_shutdown": Self::is_importer_shutdown(),
+            "is_interval_miner_shutdown": Self::is_interval_miner_shutdown(),
+            "transactions_enabled": Self::is_transactions_enabled(),
+            "miner_enabled": Self::is_miner_enabled(),
+            "unknown_client_enabled": Self::is_unknown_client_enabled(),
+        })
     }
 }
