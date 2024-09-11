@@ -135,10 +135,6 @@ pub enum StratusError {
     #[strum(props(kind = "internal"))]
     MinerModeChangeUnsupported { miner_mode: &'static str },
 
-    #[error("Miner mode param is invalid.")]
-    #[strum(props(kind = "internal"))]
-    MinerModeParamInvalid,
-
     #[error("Miner is enabled.")]
     #[strum(props(kind = "internal"))]
     MinerEnabled,
@@ -153,10 +149,6 @@ pub enum StratusError {
     #[error("Importer is already shutdown.")]
     #[strum(props(kind = "internal"))]
     ImporterAlreadyShutdown,
-
-    #[error("Failed to parse importer configuration.")]
-    #[strum(props(kind = "client_request"))]
-    ImporterConfigParseError,
 
     #[error("Failed to initialize importer.")]
     #[strum(props(kind = "internal"))]
