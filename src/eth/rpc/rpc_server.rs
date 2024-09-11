@@ -402,7 +402,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     Ok(json!(true))
 }
 
-async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+async fn init_importer(importer_config: ImporterConfig, ctx: Arc<RpcContext>) -> Result<JsonValue, StratusError> {
     if not(GlobalState::is_follower()) {
         tracing::error!("node is currently not a follower");
         return Err(StratusError::StratusNotFollower);
@@ -412,28 +412,6 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         tracing::error!("importer is already running");
         return Err(StratusError::ImporterAlreadyRunning);
     }
-
-    let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
-    let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
-    let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
-    let (_, raw_sync_interval) = next_rpc_param::<String>(params)?;
-
-    let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
-        tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
-        StratusError::ImporterConfigParseError
-    })?;
-
-    let sync_interval = parse_duration(&raw_sync_interval).map_err(|e| {
-        tracing::error!(reason = ?e, "failed to parse sync_interval");
-        StratusError::ImporterConfigParseError
-    })?;
-
-    let importer_config = ImporterConfig {
-        external_rpc,
-        external_rpc_ws: Some(external_rpc_ws),
-        external_rpc_timeout,
-        sync_interval,
-    };
 
     GlobalState::set_importer_shutdown(false);
 
@@ -469,6 +447,32 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     }
 
     Ok(json!(true))
+}
+
+async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
+    let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
+    let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
+    let (_, raw_sync_interval) = next_rpc_param::<String>(params)?;
+
+    let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
+        StratusError::ImporterConfigParseError
+    })?;
+
+    let sync_interval = parse_duration(&raw_sync_interval).map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse sync_interval");
+        StratusError::ImporterConfigParseError
+    })?;
+
+    let importer_config = ImporterConfig {
+        external_rpc,
+        external_rpc_ws: Some(external_rpc_ws),
+        external_rpc_timeout,
+        sync_interval,
+    };
+
+    init_importer(importer_config, ctx).await
 }
 
 fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
