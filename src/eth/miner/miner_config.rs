@@ -45,18 +45,6 @@ impl MinerConfig {
     pub fn init_with_mode(&self, mode: MinerMode, storage: Arc<StratusStorage>) -> anyhow::Result<Arc<Miner>> {
         tracing::info!(config = ?self, mode = ?mode, "creating block miner with specific mode");
 
-        // create genesis block and accounts if necessary
-        #[cfg(feature = "dev")]
-        {
-            let genesis = storage.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
-            if genesis.is_none() {
-                storage.reset_to_genesis()?;
-            }
-        }
-
-        // set block number
-        storage.set_pending_block_number_as_next_if_not_set()?;
-
         // create miner
         let miner = Miner::new(Arc::clone(&storage), mode);
         let miner = Arc::new(miner);

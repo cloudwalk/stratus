@@ -107,7 +107,7 @@ mod tests {
     fn build_filter(addresses: Vec<Address>, topics_nested: Vec<Vec<Option<LogTopic>>>) -> LogFilter {
         let topics_map = |topics: Vec<Option<LogTopic>>| LogFilterInputTopic(topics.into_iter().collect());
 
-        let storage = StratusStorage::new(Box::<InMemoryTemporaryStorage>::default(), Box::<InMemoryPermanentStorage>::default());
+        let storage = StratusStorage::new(Box::<InMemoryTemporaryStorage>::default(), Box::<InMemoryPermanentStorage>::default()).unwrap();
 
         LogFilterInput {
             address: addresses,

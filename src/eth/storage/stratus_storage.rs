@@ -48,8 +48,21 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Creates a new storage with the specified temporary and permanent implementations.
-    pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>) -> Self {
-        Self { temp, perm }
+    pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>) -> Result<Self, StratusError> {
+        let this = Self { temp, perm };
+
+        // create genesis block and accounts if necessary
+        #[cfg(feature = "dev")]
+        {
+            let genesis = this.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
+            if genesis.is_none() {
+                this.reset_to_genesis()?;
+            }
+        }
+
+        this.set_pending_block_number_as_next_if_not_set()?;
+
+        Ok(this)
     }
 
     // -------------------------------------------------------------------------
@@ -522,7 +535,7 @@ impl StratusStorageConfig {
     pub fn init(&self) -> Result<Arc<StratusStorage>, StratusError> {
         let temp_storage = self.temp_storage.init()?;
         let perm_storage = self.perm_storage.init()?;
-        let storage = StratusStorage::new(temp_storage, perm_storage);
+        let storage = StratusStorage::new(temp_storage, perm_storage)?;
 
         Ok(Arc::new(storage))
     }
