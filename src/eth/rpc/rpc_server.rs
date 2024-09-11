@@ -471,6 +471,9 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
     change_miner_mode(mode, ctx)
 }
 
+/// Tries changing miner mode, returns `Ok(true)` if changed, and `Ok(false)` if no changing was necessary
+///
+/// This function also enables the miner after changing it.
 fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
         tracing::error!("cannot change miner mode while transactions are enabled");
@@ -482,13 +485,9 @@ fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue,
         return Err(StratusError::MinerEnabled);
     }
 
-    {
-        let current_miner_mode = ctx.miner.mode();
-
-        if current_miner_mode == new_mode {
-            tracing::error!(requested = ?new_mode, current = ?current_miner_mode, "miner mode conflict");
-            return Err(StratusError::MinerModeConflict);
-        }
+    if ctx.miner.mode() == new_mode {
+        tracing::warn!(?new_mode, current = ?new_mode, "miner mode already set, skipping");
+        return Ok(json!(false));
     }
 
     match new_mode {
@@ -538,7 +537,6 @@ fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue,
     }
 
     ctx.miner.enable();
-
     Ok(json!(true))
 }
 
