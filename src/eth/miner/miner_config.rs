@@ -7,6 +7,7 @@ use display_json::DebugAsJson;
 
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
+use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::GlobalState;
 use crate::NodeMode;
@@ -28,7 +29,12 @@ impl MinerConfig {
         tracing::info!(config = ?self, "creating block miner");
 
         let mode = match GlobalState::get_node_mode() {
-            NodeMode::Follower => MinerMode::External,
+            NodeMode::Follower => {
+                if not(self.block_mode.is_external()) {
+                    tracing::warn!(block_mode = ?self.block_mode, "ignoring block-mode, follower miner can only start as external");
+                }
+                MinerMode::External
+            }
             NodeMode::Leader => self.block_mode,
         };
 
