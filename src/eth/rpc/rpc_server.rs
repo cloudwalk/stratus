@@ -457,12 +457,12 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
 
     let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
-        StratusError::RpcParameterInvalid
+        StratusError::ImporterConfigParseError
     })?;
 
     let sync_interval = parse_duration(&raw_sync_interval).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse sync_interval");
-        StratusError::RpcParameterInvalid
+        StratusError::ImporterConfigParseError
     })?;
 
     let importer_config = ImporterConfig {
@@ -512,7 +512,7 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
     let (_, mode_str) = next_rpc_param::<String>(params.sequence())?;
     let mode = MinerMode::from_str(&mode_str).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse miner mode");
-        StratusError::RpcParameterInvalid
+        StratusError::MinerModeParamInvalid
     })?;
 
     change_miner_mode(mode, ctx)
