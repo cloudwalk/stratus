@@ -20,7 +20,7 @@ pub trait RpcExtensionsExt {
 
 impl RpcExtensionsExt for Extensions {
     fn rpc_client(&self) -> RpcClientApp {
-        self.get::<RpcClientApp>().cloned().unwrap_or_default()
+        self.get::<RpcClientApp>().cloned().unwrap_or(RpcClientApp::Unknown)
     }
 
     fn enter_middleware_span(&self) -> Option<tracing::span::Entered<'_>> {
