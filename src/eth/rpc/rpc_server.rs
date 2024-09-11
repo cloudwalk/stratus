@@ -402,53 +402,6 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     Ok(json!(true))
 }
 
-async fn init_importer(importer_config: ImporterConfig, ctx: Arc<RpcContext>) -> Result<JsonValue, StratusError> {
-    if not(GlobalState::is_follower()) {
-        tracing::error!("node is currently not a follower");
-        return Err(StratusError::StratusNotFollower);
-    }
-
-    if not(GlobalState::is_importer_shutdown()) {
-        tracing::error!("importer is already running");
-        return Err(StratusError::ImporterAlreadyRunning);
-    }
-
-    GlobalState::set_importer_shutdown(false);
-
-    let consensus = match importer_config
-        .init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage))
-        .await
-    {
-        Ok(consensus) => consensus,
-        Err(e) => {
-            tracing::error!(reason = ?e, "failed to initialize importer");
-            GlobalState::set_importer_shutdown(true);
-            return Err(StratusError::ImporterInitError);
-        }
-    };
-
-    {
-        let mut consensus_lock = ctx.consensus.write().map_err(|_| {
-            tracing::error!("consensus write lock was poisoned");
-            ctx.consensus.clear_poison();
-            StratusError::ConsensusLockFailed
-        })?;
-
-        match consensus {
-            Some(consensus) => {
-                *consensus_lock = Some(consensus);
-            }
-            None => {
-                tracing::error!("failed to update consensus: consensus is None");
-                GlobalState::set_importer_shutdown(true);
-                return Err(StratusError::ConsensusUpdateError);
-            }
-        }
-    }
-
-    Ok(json!(true))
-}
-
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
     let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
@@ -472,7 +425,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         sync_interval,
     };
 
-    init_importer(importer_config, ctx).await
+    importer_config.init_follower_importer(ctx).await
 }
 
 fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {

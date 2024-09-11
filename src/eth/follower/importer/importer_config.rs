@@ -3,12 +3,16 @@ use std::time::Duration;
 
 use clap::Parser;
 use display_json::DebugAsJson;
+use serde_json::json;
 
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::Importer;
 use crate::eth::miner::Miner;
+use crate::eth::primitives::StratusError;
+use crate::eth::rpc::RpcContext;
 use crate::eth::storage::StratusStorage;
+use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::spawn_named;
 use crate::infra::BlockchainClient;
@@ -61,5 +65,49 @@ impl ImporterConfig {
         });
 
         Ok(Some(importer))
+    }
+
+    pub async fn init_follower_importer(&self, ctx: Arc<RpcContext>) -> Result<serde_json::Value, StratusError> {
+        if not(GlobalState::is_follower()) {
+            tracing::error!("node is currently not a follower");
+            return Err(StratusError::StratusNotFollower);
+        }
+
+        if not(GlobalState::is_importer_shutdown()) {
+            tracing::error!("importer is already running");
+            return Err(StratusError::ImporterAlreadyRunning);
+        }
+
+        GlobalState::set_importer_shutdown(false);
+
+        let consensus = match self.init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage)).await {
+            Ok(consensus) => consensus,
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to initialize importer");
+                GlobalState::set_importer_shutdown(true);
+                return Err(StratusError::ImporterInitError);
+            }
+        };
+
+        {
+            let mut consensus_lock = ctx.consensus.write().map_err(|_| {
+                tracing::error!("consensus write lock was poisoned");
+                ctx.consensus.clear_poison();
+                StratusError::ConsensusLockFailed
+            })?;
+
+            match consensus {
+                Some(consensus) => {
+                    *consensus_lock = Some(consensus);
+                }
+                None => {
+                    tracing::error!("failed to update consensus: consensus is None");
+                    GlobalState::set_importer_shutdown(true);
+                    return Err(StratusError::ConsensusUpdateError);
+                }
+            }
+        }
+
+        Ok(json!(true))
     }
 }
