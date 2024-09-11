@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -45,6 +47,9 @@ pub struct Miner {
 
     storage: Arc<StratusStorage>,
 
+    /// Miner is enabled by default, but can be disabled.
+    is_enabled: AtomicBool,
+
     /// Mode the block miner is running.
     pub mode: RwLock<MinerMode>,
 
@@ -73,6 +78,7 @@ impl Miner {
         Self {
             locks: MinerLocks::default(),
             storage,
+            is_enabled: AtomicBool::new(true),
             mode: mode.into(),
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
@@ -105,6 +111,18 @@ impl Miner {
         spawn_thread("miner-miner", move || interval_miner::run(miner_clone, ticks_rx));
         spawn_thread("miner-ticker", move || interval_miner_ticker::run(block_time, ticks_tx));
         Ok(())
+    }
+
+    pub fn enable(&self) {
+        self.is_enabled.store(true, Ordering::Relaxed);
+    }
+
+    pub fn disable(&self) {
+        self.is_enabled.store(false, Ordering::Relaxed);
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.is_enabled.load(Ordering::Relaxed)
     }
 
     /// Persists a transaction execution.
@@ -378,7 +396,6 @@ mod interval_miner {
     use crate::ext::not;
     use crate::ext::MutexExt;
     use crate::infra::tracing::warn_task_rx_closed;
-    use crate::GlobalState;
 
     pub fn run(miner: Arc<Miner>, ticks_rx: mpsc::Receiver<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
@@ -397,7 +414,7 @@ mod interval_miner {
                 }
             };
 
-            if not(GlobalState::is_miner_enabled()) {
+            if not(miner.is_enabled()) {
                 tracing::warn!("skipping mining block because block mining is disabled");
                 continue;
             }

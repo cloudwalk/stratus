@@ -330,7 +330,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     tracing::info!("wait for importer to shutdown");
     traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
 
-    GlobalState::set_miner_enabled(false);
+    ctx.miner.disable();
 
     let change_miner_mode_result = change_miner_mode(MinerMode::Interval(LEADER_MINER_INTERVAL), &ctx);
     if let Err(e) = change_miner_mode_result {
@@ -370,7 +370,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         });
     }
 
-    GlobalState::set_miner_enabled(false);
+    ctx.miner.disable();
 
     let change_miner_mode_result = change_miner_mode(MinerMode::External, &ctx);
     if let Err(e) = change_miner_mode_result {
@@ -477,7 +477,7 @@ fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, Str
         return Err(StratusError::RpcTransactionEnabled);
     }
 
-    if GlobalState::is_miner_enabled() {
+    if ctx.miner.is_enabled() {
         tracing::error!("cannot change miner mode while miner is enabled");
         return Err(StratusError::MinerEnabled);
     }
@@ -552,7 +552,7 @@ fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, Str
         }
     }
 
-    GlobalState::set_miner_enabled(true);
+    ctx.miner.enable();
 
     Ok(json!(true))
 }
@@ -577,14 +577,14 @@ fn stratus_disable_transactions(_: Params<'_>, _: &RpcContext, _: &Extensions) -
     GlobalState::is_transactions_enabled()
 }
 
-fn stratus_enable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
-    GlobalState::set_miner_enabled(true);
-    GlobalState::is_miner_enabled()
+fn stratus_enable_miner(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
+    ctx.miner.enable();
+    true
 }
 
-fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
-    GlobalState::set_miner_enabled(false);
-    GlobalState::is_miner_enabled()
+fn stratus_disable_miner(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
+    ctx.miner.disable();
+    false
 }
 
 /// Returns the count of executed transactions waiting to enter the next block.
@@ -604,8 +604,8 @@ fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<Jso
     Ok(ctx.app_config.clone())
 }
 
-fn stratus_state(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
-    Ok(GlobalState::get_global_state_as_json())
+fn stratus_state(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    Ok(GlobalState::get_global_state_as_json(ctx))
 }
 
 async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
