@@ -542,7 +542,7 @@ fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, Str
             tracing::info!("changing miner mode to External");
 
             let pending_txs = ctx.storage.pending_transactions();
-            if !pending_txs.is_empty() {
+            if not(pending_txs.is_empty()) {
                 tracing::error!(pending_txs = ?pending_txs.len(), "cannot change miner mode to External with pending transactions");
                 return Err(StratusError::PendingTransactionsExist {
                     pending_txs: pending_txs.len(),
