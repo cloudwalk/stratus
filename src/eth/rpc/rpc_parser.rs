@@ -29,7 +29,7 @@ impl RpcExtensionsExt for Extensions {
 }
 
 /// Extracts the next RPC parameter. Fails if parameter not present.
-pub fn next_rpc_param<'a, T>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), StratusError>
+pub fn next_rpc_param<'a, T>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence<'a>, T), StratusError>
 where
     T: serde::Deserialize<'a>,
 {
@@ -46,7 +46,7 @@ where
 }
 
 /// Extract the next RPC parameter. Assumes default value if not present.
-pub fn next_rpc_param_or_default<'a, T>(params: ParamsSequence<'a>) -> Result<(ParamsSequence, T), StratusError>
+pub fn next_rpc_param_or_default<'a, T>(params: ParamsSequence<'a>) -> Result<(ParamsSequence<'a>, T), StratusError>
 where
     T: serde::Deserialize<'a> + Default,
 {
