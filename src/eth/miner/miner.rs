@@ -51,7 +51,7 @@ pub struct Miner {
     is_enabled: AtomicBool,
 
     /// Mode the block miner is running.
-    pub mode: RwLock<MinerMode>,
+    mode: RwLock<MinerMode>,
 
     /// Broadcasts pending transactions events.
     pub notifier_pending_txs: broadcast::Sender<Hash>,
@@ -123,6 +123,22 @@ impl Miner {
 
     pub fn is_enabled(&self) -> bool {
         self.is_enabled.load(Ordering::Relaxed)
+    }
+
+    pub fn mode(&self) -> MinerMode {
+        *self.mode.read().unwrap_or_else(|poison_error| {
+            tracing::error!("miner mode read lock was poisoned");
+            self.mode.clear_poison();
+            poison_error.into_inner()
+        })
+    }
+
+    pub fn set_mode(&self, new_mode: MinerMode) {
+        *self.mode.write().unwrap_or_else(|poison_error| {
+            tracing::error!("miner mode write lock was poisoned");
+            self.mode.clear_poison();
+            poison_error.into_inner()
+        }) = new_mode;
     }
 
     /// Persists a transaction execution.

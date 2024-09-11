@@ -471,7 +471,7 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
     change_miner_mode(mode, ctx)
 }
 
-fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, StratusError> {
+fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
         tracing::error!("cannot change miner mode while transactions are enabled");
         return Err(StratusError::RpcTransactionEnabled);
@@ -483,19 +483,15 @@ fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, Str
     }
 
     {
-        let current_miner_mode = ctx.miner.mode.read().map_err(|_| {
-            tracing::error!("miner mode read lock was poisoned");
-            ctx.miner.mode.clear_poison();
-            StratusError::MinerModeLockFailed
-        })?;
+        let current_miner_mode = ctx.miner.mode();
 
-        if *current_miner_mode == mode {
-            tracing::error!(requested = ?mode, current = ?current_miner_mode, "miner mode conflict");
+        if current_miner_mode == new_mode {
+            tracing::error!(requested = ?new_mode, current = ?current_miner_mode, "miner mode conflict");
             return Err(StratusError::MinerModeConflict);
         }
     }
 
-    match mode {
+    match new_mode {
         MinerMode::External => {
             tracing::info!("changing miner mode to External");
 
@@ -508,13 +504,7 @@ fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, Str
             }
 
             {
-                let mut miner_mode_lock = ctx.miner.mode.write().map_err(|_| {
-                    tracing::error!("miner mode write lock was poisoned");
-                    ctx.miner.mode.clear_poison();
-                    StratusError::MinerModeLockFailed
-                })?;
-                *miner_mode_lock = mode;
-
+                ctx.miner.set_mode(MinerMode::External);
                 const TASK_NAME: &str = "rpc-server::miner-shutdown";
                 GlobalState::shutdown_interval_miner_from(TASK_NAME, "received miner shutdown request");
             }
@@ -535,13 +525,8 @@ fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, Str
             }
 
             {
-                let mut miner_mode_lock = ctx.miner.mode.write().map_err(|_| {
-                    tracing::error!("miner mode write lock was poisoned");
-                    ctx.miner.mode.clear_poison();
-                    StratusError::MinerModeLockFailed
-                })?;
                 GlobalState::set_interval_miner_shutdown(false);
-                *miner_mode_lock = MinerMode::Interval(duration);
+                ctx.miner.set_mode(MinerMode::Interval(duration));
             }
 
             ctx.miner.start_if_interval()?;
