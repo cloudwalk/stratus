@@ -331,9 +331,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 
     GlobalState::set_miner_enabled(false);
 
-    let interval_param = json!(["1s"]).to_string();
-    let final_param = Params::new(Some(&interval_param));
-    let change_miner_mode_result = stratus_change_miner_mode(final_param, &ctx, &ext);
+    let change_miner_mode_result = change_miner_mode(MinerMode::Interval(Duration::from_secs(1)), &ctx);
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
         return Err(e);
@@ -373,9 +371,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
 
     GlobalState::set_miner_enabled(false);
 
-    let external_param = json!(["external"]).to_string();
-    let final_param = Params::new(Some(&external_param));
-    let change_miner_mode_result = stratus_change_miner_mode(final_param, &ctx, &ext);
+    let change_miner_mode_result = change_miner_mode(MinerMode::External, &ctx);
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
         return Err(e);
@@ -508,6 +504,16 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
 }
 
 fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    let (_, mode_str) = next_rpc_param::<String>(params.sequence())?;
+    let mode = MinerMode::from_str(&mode_str).map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse miner mode");
+        StratusError::MinerModeParamInvalid
+    })?;
+
+    change_miner_mode(mode, ctx)
+}
+
+fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
         tracing::error!("cannot change miner mode while transactions are enabled");
         return Err(StratusError::RpcTransactionEnabled);
@@ -517,13 +523,6 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
         tracing::error!("cannot change miner mode while miner is enabled");
         return Err(StratusError::MinerEnabled);
     }
-
-    let (_, mode_str) = next_rpc_param::<String>(params.sequence())?;
-
-    let mode = MinerMode::from_str(&mode_str).map_err(|e| {
-        tracing::error!(reason = ?e, "failed to parse miner mode");
-        StratusError::MinerModeParamInvalid
-    })?;
 
     {
         let current_miner_mode = ctx.miner.mode.read().map_err(|_| {
@@ -543,7 +542,7 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
             tracing::info!("changing miner mode to External");
 
             let pending_txs = ctx.storage.pending_transactions();
-            if not(pending_txs.is_empty()) {
+            if !pending_txs.is_empty() {
                 tracing::error!(pending_txs = ?pending_txs.len(), "cannot change miner mode to External with pending transactions");
                 return Err(StratusError::PendingTransactionsExist {
                     pending_txs: pending_txs.len(),
