@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -45,8 +47,11 @@ pub struct Miner {
 
     storage: Arc<StratusStorage>,
 
+    /// Miner is enabled by default, but can be disabled.
+    is_enabled: AtomicBool,
+
     /// Mode the block miner is running.
-    pub mode: RwLock<MinerMode>,
+    mode: RwLock<MinerMode>,
 
     /// Broadcasts pending transactions events.
     pub notifier_pending_txs: broadcast::Sender<Hash>,
@@ -73,6 +78,7 @@ impl Miner {
         Self {
             locks: MinerLocks::default(),
             storage,
+            is_enabled: AtomicBool::new(true),
             mode: mode.into(),
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
@@ -81,31 +87,58 @@ impl Miner {
     }
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
-    pub fn spawn_interval_miner(self: Arc<Self>) -> anyhow::Result<()> {
-        let block_time;
-
-        // validate
-        {
+    pub fn start_if_interval(self: &Arc<Self>) -> anyhow::Result<()> {
+        let block_time = {
             let mode_lock = self.mode.read().map_err(|_| {
                 tracing::error!("miner mode read lock was poisoned");
                 self.mode.clear_poison();
                 StratusError::MinerModeLockFailed
             })?;
 
-            let MinerMode::Interval(bt) = *mode_lock else {
-                return log_and_err!("cannot spawn interval miner because it does not have a block time defined");
+            let MinerMode::Interval(block_time) = *mode_lock else {
+                // Don't do anything
+                return Ok(());
             };
 
-            block_time = bt;
-            tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
-        }
+            block_time
+        };
+
+        tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::channel();
-        let miner_clone = Arc::clone(&self);
+        let miner_clone = Arc::clone(self);
         spawn_thread("miner-miner", move || interval_miner::run(miner_clone, ticks_rx));
         spawn_thread("miner-ticker", move || interval_miner_ticker::run(block_time, ticks_tx));
         Ok(())
+    }
+
+    pub fn enable(&self) {
+        self.is_enabled.store(true, Ordering::Relaxed);
+    }
+
+    pub fn disable(&self) {
+        self.is_enabled.store(false, Ordering::Relaxed);
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.is_enabled.load(Ordering::Relaxed)
+    }
+
+    pub fn mode(&self) -> MinerMode {
+        *self.mode.read().unwrap_or_else(|poison_error| {
+            tracing::error!("miner mode read lock was poisoned");
+            self.mode.clear_poison();
+            poison_error.into_inner()
+        })
+    }
+
+    pub fn set_mode(&self, new_mode: MinerMode) {
+        *self.mode.write().unwrap_or_else(|poison_error| {
+            tracing::error!("miner mode write lock was poisoned");
+            self.mode.clear_poison();
+            poison_error.into_inner()
+        }) = new_mode;
     }
 
     /// Persists a transaction execution.
@@ -379,7 +412,6 @@ mod interval_miner {
     use crate::ext::not;
     use crate::ext::MutexExt;
     use crate::infra::tracing::warn_task_rx_closed;
-    use crate::GlobalState;
 
     pub fn run(miner: Arc<Miner>, ticks_rx: mpsc::Receiver<Instant>) {
         const TASK_NAME: &str = "interval-miner-ticker";
@@ -398,7 +430,7 @@ mod interval_miner {
                 }
             };
 
-            if not(GlobalState::is_miner_enabled()) {
+            if not(miner.is_enabled()) {
                 tracing::warn!("skipping mining block because block mining is disabled");
                 continue;
             }

@@ -7,6 +7,7 @@ use display_json::DebugAsJson;
 
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
+use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::GlobalState;
 use crate::NodeMode;
@@ -28,7 +29,12 @@ impl MinerConfig {
         tracing::info!(config = ?self, "creating block miner");
 
         let mode = match GlobalState::get_node_mode() {
-            NodeMode::Follower => MinerMode::External,
+            NodeMode::Follower => {
+                if not(self.block_mode.is_external()) {
+                    tracing::warn!(block_mode = ?self.block_mode, "ignoring block-mode, follower miner can only start as external");
+                }
+                MinerMode::External
+            }
             NodeMode::Leader => self.block_mode,
         };
 
@@ -42,25 +48,9 @@ impl MinerConfig {
         // create miner
         let miner = Miner::new(Arc::clone(&storage), mode);
         let miner = Arc::new(miner);
+        miner.start_if_interval()?;
 
-        // create genesis block and accounts if necessary
-        #[cfg(feature = "dev")]
-        {
-            let genesis = storage.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
-            if genesis.is_none() {
-                storage.reset_to_genesis()?;
-            }
-        }
-
-        // set block number
-        storage.set_pending_block_number_as_next_if_not_set()?;
-
-        // enable interval miner
-        if mode.is_interval() {
-            Arc::clone(&miner).spawn_interval_miner()?;
-        }
-
-        Ok(Arc::clone(&miner))
+        Ok(miner)
     }
 }
 

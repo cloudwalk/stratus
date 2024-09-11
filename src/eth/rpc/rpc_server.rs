@@ -334,7 +334,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     tracing::info!("wait for importer to shutdown");
     traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
 
-    GlobalState::set_miner_enabled(false);
+    ctx.miner.disable();
 
     let change_miner_mode_result = change_miner_mode(MinerMode::Interval(LEADER_MINER_INTERVAL), &ctx);
     if let Err(e) = change_miner_mode_result {
@@ -374,7 +374,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         });
     }
 
-    GlobalState::set_miner_enabled(false);
+    ctx.miner.disable();
 
     let change_miner_mode_result = change_miner_mode(MinerMode::External, &ctx);
     if let Err(e) = change_miner_mode_result {
@@ -475,31 +475,26 @@ fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extension
     change_miner_mode(mode, ctx)
 }
 
-fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, StratusError> {
+/// Tries changing miner mode, returns `Ok(true)` if changed, and `Ok(false)` if no changing was necessary.
+///
+/// This function also enables the miner after changing it.
+fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
         tracing::error!("cannot change miner mode while transactions are enabled");
         return Err(StratusError::RpcTransactionEnabled);
     }
 
-    if GlobalState::is_miner_enabled() {
+    if ctx.miner.is_enabled() {
         tracing::error!("cannot change miner mode while miner is enabled");
         return Err(StratusError::MinerEnabled);
     }
 
-    {
-        let current_miner_mode = ctx.miner.mode.read().map_err(|_| {
-            tracing::error!("miner mode read lock was poisoned");
-            ctx.miner.mode.clear_poison();
-            StratusError::MinerModeLockFailed
-        })?;
-
-        if *current_miner_mode == mode {
-            tracing::error!(requested = ?mode, current = ?current_miner_mode, "miner mode conflict");
-            return Err(StratusError::MinerModeConflict);
-        }
+    if ctx.miner.mode() == new_mode {
+        tracing::warn!(?new_mode, current = ?new_mode, "miner mode already set, skipping");
+        return Ok(json!(false));
     }
 
-    match mode {
+    match new_mode {
         MinerMode::External => {
             tracing::info!("changing miner mode to External");
 
@@ -511,17 +506,9 @@ fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, Str
                 });
             }
 
-            {
-                let mut miner_mode_lock = ctx.miner.mode.write().map_err(|_| {
-                    tracing::error!("miner mode write lock was poisoned");
-                    ctx.miner.mode.clear_poison();
-                    StratusError::MinerModeLockFailed
-                })?;
-                *miner_mode_lock = mode;
-
-                const TASK_NAME: &str = "rpc-server::miner-shutdown";
-                GlobalState::shutdown_interval_miner_from(TASK_NAME, "received miner shutdown request");
-            }
+            ctx.miner.set_mode(MinerMode::External);
+            const TASK_NAME: &str = "rpc-server::miner-shutdown";
+            GlobalState::shutdown_interval_miner_from(TASK_NAME, "received miner shutdown request");
         }
         MinerMode::Interval(duration) => {
             tracing::info!(duration = ?duration, "changing miner mode to Interval");
@@ -538,17 +525,9 @@ fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, Str
                 }
             }
 
-            {
-                let mut miner_mode_lock = ctx.miner.mode.write().map_err(|_| {
-                    tracing::error!("miner mode write lock was poisoned");
-                    ctx.miner.mode.clear_poison();
-                    StratusError::MinerModeLockFailed
-                })?;
-                GlobalState::set_interval_miner_shutdown(false);
-                *miner_mode_lock = mode;
-            }
-
-            Arc::clone(&ctx.miner).spawn_interval_miner()?;
+            GlobalState::set_interval_miner_shutdown(false);
+            ctx.miner.set_mode(MinerMode::Interval(duration));
+            ctx.miner.start_if_interval()?;
         }
         MinerMode::Automine => {
             tracing::error!("automine mode is not supported");
@@ -556,8 +535,7 @@ fn change_miner_mode(mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, Str
         }
     }
 
-    GlobalState::set_miner_enabled(true);
-
+    ctx.miner.enable();
     Ok(json!(true))
 }
 
@@ -581,14 +559,14 @@ fn stratus_disable_transactions(_: Params<'_>, _: &RpcContext, _: &Extensions) -
     GlobalState::is_transactions_enabled()
 }
 
-fn stratus_enable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
-    GlobalState::set_miner_enabled(true);
-    GlobalState::is_miner_enabled()
+fn stratus_enable_miner(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
+    ctx.miner.enable();
+    true
 }
 
-fn stratus_disable_miner(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
-    GlobalState::set_miner_enabled(false);
-    GlobalState::is_miner_enabled()
+fn stratus_disable_miner(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
+    ctx.miner.disable();
+    false
 }
 
 /// Returns the count of executed transactions waiting to enter the next block.
@@ -608,8 +586,8 @@ fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<Jso
     Ok(ctx.app_config.clone())
 }
 
-fn stratus_state(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
-    Ok(GlobalState::get_global_state_as_json())
+fn stratus_state(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    Ok(GlobalState::get_global_state_as_json(ctx))
 }
 
 async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {

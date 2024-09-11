@@ -14,6 +14,7 @@ use crate::alias::JsonValue;
 use crate::config;
 use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
+use crate::eth::rpc::RpcContext;
 use crate::ext::spawn_signal_handler;
 use crate::infra::tracing::warn_task_cancellation;
 
@@ -108,9 +109,6 @@ static INTERVAL_MINER_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 /// Transaction should be accepted?
 static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
 
-/// Miner should mine new blocks?
-static MINER_ENABLED: AtomicBool = AtomicBool::new(true);
-
 /// Unknown clients can interact with the application?
 static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 
@@ -118,15 +116,7 @@ static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 static IS_LEADER: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GlobalState {
-    pub is_leader: bool,
-    pub is_shutdown: bool,
-    pub is_importer_shutdown: bool,
-    pub is_interval_miner_shutdown: bool,
-    pub transactions_enabled: bool,
-    pub miner_enabled: bool,
-    pub unknown_client_enabled: bool,
-}
+pub struct GlobalState;
 
 impl GlobalState {
     // -------------------------------------------------------------------------
@@ -217,16 +207,6 @@ impl GlobalState {
     // Miner
     // -------------------------------------------------------------------------
 
-    /// Enables or disables the miner.
-    pub fn set_miner_enabled(enabled: bool) {
-        MINER_ENABLED.store(enabled, Ordering::Relaxed);
-    }
-
-    /// Checks if the miner is enabled.
-    pub fn is_miner_enabled() -> bool {
-        MINER_ENABLED.load(Ordering::Relaxed)
-    }
-
     /// Shutdown the miner.
     ///
     /// Returns the formatted reason for miner shutdown.
@@ -313,17 +293,15 @@ impl GlobalState {
     // JSON State
     // -------------------------------------------------------------------------
 
-    pub fn get_global_state_as_json() -> JsonValue {
-        let state = GlobalState {
-            is_leader: Self::is_leader(),
-            is_shutdown: Self::is_shutdown(),
-            is_importer_shutdown: Self::is_importer_shutdown(),
-            is_interval_miner_shutdown: Self::is_interval_miner_shutdown(),
-            transactions_enabled: Self::is_transactions_enabled(),
-            miner_enabled: Self::is_miner_enabled(),
-            unknown_client_enabled: Self::is_unknown_client_enabled(),
-        };
-
-        json!(state)
+    pub fn get_global_state_as_json(ctx: &RpcContext) -> JsonValue {
+        json!({
+            "is_leader": Self::is_leader(),
+            "is_shutdown": Self::is_shutdown(),
+            "is_importer_shutdown": Self::is_importer_shutdown(),
+            "is_interval_miner_shutdown": Self::is_interval_miner_shutdown(),
+            "transactions_enabled": Self::is_transactions_enabled(),
+            "miner_enabled": ctx.miner.is_enabled(),
+            "unknown_client_enabled": Self::is_unknown_client_enabled(),
+        })
     }
 }
