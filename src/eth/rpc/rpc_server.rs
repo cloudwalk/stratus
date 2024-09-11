@@ -300,6 +300,7 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 }
 
 async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    const LEADER_MINER_INTERVAL: Duration = Duration::from_secs(1);
     const WAIT_DELAY: Duration = Duration::from_secs(5);
     tracing::info!("starting process to change node to leader");
 
@@ -331,7 +332,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 
     GlobalState::set_miner_enabled(false);
 
-    let change_miner_mode_result = change_miner_mode(MinerMode::Interval(Duration::from_secs(1)), &ctx);
+    let change_miner_mode_result = change_miner_mode(MinerMode::Interval(LEADER_MINER_INTERVAL), &ctx);
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
         return Err(e);
