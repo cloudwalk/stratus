@@ -80,6 +80,8 @@ jsonrpsee = { version = "=0.23.2", features = ["server", "client"] }
 reqwest = { version = "=0.12.4", features = ["json"] }
 tonic = "=0.11.0"
 tower = "=0.4.13"
+tower-http = { version = "=0.5.2", features = ["cors"] }
+http = "=1.1.0"
 
 # observability
 console-subscriber = "=0.2.0"

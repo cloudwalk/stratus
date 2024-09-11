@@ -9,6 +9,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use ethereum_types::U256;
 use futures::join;
+use http::Method;
 use itertools::Itertools;
 use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RandomStringIdProvider;
@@ -22,6 +23,8 @@ use jsonrpsee::PendingSubscriptionSink;
 use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::select;
+use tower_http::cors::Any;
+use tower_http::cors::CorsLayer;
 use tracing::field;
 use tracing::info_span;
 use tracing::Instrument;
@@ -67,7 +70,6 @@ use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
 use crate::NodeMode;
-
 // -----------------------------------------------------------------------------
 // Server
 // -----------------------------------------------------------------------------
@@ -119,8 +121,10 @@ pub async fn serve_rpc(
     module = register_methods(module)?;
 
     // configure middleware
+    let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
     let http_middleware = tower::ServiceBuilder::new()
+        .layer(cors)
         .layer_fn(RpcHttpMiddleware::new)
         .layer(ProxyGetRequestLayer::new("/health", "stratus_health").unwrap())
         .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap())
