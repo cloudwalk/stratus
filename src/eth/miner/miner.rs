@@ -129,14 +129,17 @@ impl Miner {
         Ok(())
     }
 
+    // Unpause interval miner (if in interval mode)
     pub fn unpause(&self) {
         self.is_paused.store(false, Ordering::Relaxed);
     }
 
+    // Pause interval miner (if in interval mode)
     pub fn pause(&self) {
         self.is_paused.store(true, Ordering::Relaxed);
     }
 
+    // Whether or not interval miner is paused (means nothing if not in interval mode)
     pub fn is_paused(&self) -> bool {
         self.is_paused.load(Ordering::Relaxed)
     }
