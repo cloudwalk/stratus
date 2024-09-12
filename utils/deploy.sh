@@ -144,20 +144,20 @@ if [ "$change_to_leader_result" != "true" ]; then
     exit 1
 fi
 
-# Enable transactions on Leader
-enable_leader_tx=$(send_request "http://$LEADER_ADDRESS" "stratus_enableTransactions" "[]")
-log "Enabling transactions on Leader..." "$LEADER_ADDRESS" "$enable_leader_tx"
+# Enable transactions on new Leader
+enable_leader_tx=$(send_request "http://$FOLLOWER_ADDRESS" "stratus_enableTransactions" "[]")
+log "Enabling transactions on Leader..." "$FOLLOWER_ADDRESS" "$enable_leader_tx"
 enable_leader_tx_result=$(echo $enable_leader_tx | jq -r '.result')
 if [ "$enable_leader_tx_result" != "true" ]; then
-    log "Error: Failed to enable transactions on Leader." "$LEADER_ADDRESS" "$enable_leader_tx"
+    log "Error: Failed to enable transactions on Leader." "$FOLLOWER_ADDRESS" "$enable_leader_tx"
     exit 1
 fi
 
-# Enable transactions on Follower
-enable_follower_tx=$(send_request "http://$FOLLOWER_ADDRESS" "stratus_enableTransactions" "[]")
-log "Enabling transactions on Follower..." "$FOLLOWER_ADDRESS" "$enable_follower_tx"
+# Enable transactions on new Follower
+enable_follower_tx=$(send_request "http://$LEADER_ADDRESS" "stratus_enableTransactions" "[]")
+log "Enabling transactions on Follower..." "$LEADER_ADDRESS" "$enable_follower_tx"
 enable_follower_tx_result=$(echo $enable_follower_tx | jq -r '.result')
 if [ "$enable_follower_tx_result" != "true" ]; then
-    log "Error: Failed to enable transactions on Follower." "$FOLLOWER_ADDRESS" "$enable_follower_tx"
+    log "Error: Failed to enable transactions on Follower." "$LEADER_ADDRESS" "$enable_follower_tx"
     exit 1
 fi
