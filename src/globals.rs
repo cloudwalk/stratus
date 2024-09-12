@@ -263,7 +263,7 @@ impl GlobalState {
             "is_importer_shutdown": Self::is_importer_shutdown(),
             "is_interval_miner_running": ctx.miner.is_interval_miner_running(),
             "transactions_enabled": Self::is_transactions_enabled(),
-            "miner_enabled": ctx.miner.is_enabled(),
+            "miner_paused": ctx.miner.is_paused(),
             "unknown_client_enabled": Self::is_unknown_client_enabled(),
         })
     }

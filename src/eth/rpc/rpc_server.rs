@@ -334,7 +334,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     tracing::info!("wait for importer to shutdown");
     traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
 
-    ctx.miner.disable();
+    ctx.miner.pause();
 
     let change_miner_mode_result = change_miner_mode(MinerMode::Interval(LEADER_MINER_INTERVAL), &ctx).await;
     if let Err(e) = change_miner_mode_result {
@@ -375,7 +375,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     }
 
     // Miner is disabled, but will be re-enabled if `change_miner_mode` succeeds
-    ctx.miner.disable();
+    ctx.miner.pause();
 
     let change_miner_mode_result = change_miner_mode(MinerMode::External, &ctx).await;
     if let Err(e) = change_miner_mode_result {
@@ -485,8 +485,8 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
         return Err(StratusError::RpcTransactionEnabled);
     }
 
-    if ctx.miner.is_enabled() {
-        tracing::error!("cannot change miner mode while miner is enabled");
+    if not(ctx.miner.is_paused()) {
+        tracing::error!("cannot change miner mode if miner isn't paused");
         return Err(StratusError::MinerEnabled);
     }
 
@@ -535,7 +535,7 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
         }
     }
 
-    ctx.miner.enable();
+    ctx.miner.unpause();
     Ok(json!(true))
 }
 
@@ -560,12 +560,12 @@ fn stratus_disable_transactions(_: Params<'_>, _: &RpcContext, _: &Extensions) -
 }
 
 fn stratus_enable_miner(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
-    ctx.miner.enable();
+    ctx.miner.unpause();
     true
 }
 
 fn stratus_disable_miner(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
-    ctx.miner.disable();
+    ctx.miner.pause();
     false
 }
 

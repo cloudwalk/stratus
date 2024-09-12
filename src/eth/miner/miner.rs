@@ -51,7 +51,7 @@ pub struct Miner {
     storage: Arc<StratusStorage>,
 
     /// Miner is enabled by default, but can be disabled.
-    is_enabled: AtomicBool,
+    is_paused: AtomicBool,
 
     /// Mode the block miner is running.
     mode: RwLock<MinerMode>,
@@ -90,7 +90,7 @@ impl Miner {
         Self {
             locks: MinerLocks::default(),
             storage,
-            is_enabled: AtomicBool::new(true),
+            is_paused: AtomicBool::new(false),
             mode: mode.into(),
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
@@ -129,16 +129,16 @@ impl Miner {
         Ok(())
     }
 
-    pub fn enable(&self) {
-        self.is_enabled.store(true, Ordering::Relaxed);
+    pub fn unpause(&self) {
+        self.is_paused.store(false, Ordering::Relaxed);
     }
 
-    pub fn disable(&self) {
-        self.is_enabled.store(false, Ordering::Relaxed);
+    pub fn pause(&self) {
+        self.is_paused.store(true, Ordering::Relaxed);
     }
 
-    pub fn is_enabled(&self) -> bool {
-        self.is_enabled.load(Ordering::Relaxed)
+    pub fn is_paused(&self) -> bool {
+        self.is_paused.load(Ordering::Relaxed)
     }
 
     pub fn mode(&self) -> MinerMode {
@@ -443,7 +443,6 @@ mod interval_miner {
     use tokio_util::sync::CancellationToken;
 
     use crate::eth::miner::Miner;
-    use crate::ext::not;
     use crate::ext::MutexExt;
     use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
@@ -466,8 +465,8 @@ mod interval_miner {
                 }
             };
 
-            if not(miner.is_enabled()) {
-                tracing::warn!("skipping mining block because block mining is disabled");
+            if miner.is_paused() {
+                tracing::warn!("skipping mining block because block mining is paused");
                 continue;
             }
 
