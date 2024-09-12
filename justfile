@@ -288,7 +288,17 @@ e2e-leader-follower-up test="brlc":
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
 
-    if [ -d e2e/cloudwalk-contracts ]; then
+    if [ "{{test}}" = "deploy" ]; then
+        just _log "Running deploy script"
+        ./utils/deploy.sh
+        if [ $? -ne 0 ]; then
+            just _log "Deploy script failed"
+            exit 1
+        else
+            just _log "Deploy script ran successfully"
+            exit 0
+        fi
+    elif [ -d e2e/cloudwalk-contracts ]; then
     (
         cd e2e/cloudwalk-contracts/integration
         npm install
