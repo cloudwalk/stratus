@@ -87,7 +87,7 @@ fn main() -> anyhow::Result<()> {
                 if value_new != SlotValue::from(value_old.0).into() {
                     println!("Difference found at address: {:?}, slot: {:?}, block: {:?}", address, slot_index, block_number);
                     println!("  Value old: {:?}", value_old);
-                    println!("  Value new: {:?}", value_new);
+                    println!("  Value new: {:?}", U256(value_new.into_inner().0));
                     differences.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 },
             None => {

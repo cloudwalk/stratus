@@ -4,7 +4,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 
 #[derive(Clone, Debug, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
-pub struct SlotValueRocksdb([u64; 4]);
+pub struct SlotValueRocksdb(pub [u64; 4]);
 
 impl From<SlotValue> for SlotValueRocksdb {
     fn from(item: SlotValue) -> Self {
