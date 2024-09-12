@@ -48,7 +48,10 @@ impl MinerConfig {
         // create miner
         let miner = Miner::new(Arc::clone(&storage), mode);
         let miner = Arc::new(miner);
-        miner.start_if_interval().await?;
+
+        if let MinerMode::Interval(block_time) = mode {
+            miner.start_interval_mining(block_time).await;
+        }
 
         Ok(miner)
     }

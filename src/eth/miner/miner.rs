@@ -4,6 +4,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use itertools::Itertools;
@@ -103,21 +104,21 @@ impl Miner {
     /// Spawns a new thread that keep mining blocks in the specified interval.
     ///
     /// Also unpauses `Miner` if it was paused.
-    pub async fn start_if_interval(self: &Arc<Self>) -> anyhow::Result<()> {
-        let MinerMode::Interval(block_time) = self.mode() else {
-            // Don't do anything
-            return Ok(());
+    pub async fn start_interval_mining(self: &Arc<Self>, block_time: Duration) {
+        if self.mode().is_interval() {
+            tracing::warn!(block_time = ?block_time.to_string_ext(), "trying to start interval mining, but it's already started, skipping");
+            return;
         };
 
+        tracing::info!(block_time = ?block_time.to_string_ext(), "spawning interval miner");
+        self.set_mode(MinerMode::Interval(block_time));
         self.unpause();
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::channel();
-
         let new_shutdown_signal = STRATUS_SHUTDOWN_SIGNAL.child_token();
         let mut joinset = JoinSet::new();
 
-        tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
         joinset.spawn_blocking({
             let shutdown = new_shutdown_signal.clone();
             let miner_clone = Arc::clone(self);
@@ -128,8 +129,15 @@ impl Miner {
 
         *self.shutdown_signal.lock_or_clear("setting up shutdown signal for interval miner") = new_shutdown_signal;
         *self.interval_joinset.lock().await = Some(joinset);
+    }
 
-        Ok(())
+    /// Shuts down interval miner, set miner mode to External.
+    pub async fn switch_to_external_mode(self: &Arc<Self>) {
+        if self.mode().is_external() {
+            tracing::warn!("trying to change mode to external, but it's already set, skipping");
+            return;
+        }
+        self.shutdown_and_wait().await;
     }
 
     // Unpause interval miner (if in interval mode)
@@ -155,7 +163,7 @@ impl Miner {
         })
     }
 
-    pub fn set_mode(&self, new_mode: MinerMode) {
+    fn set_mode(&self, new_mode: MinerMode) {
         *self.mode.write().unwrap_or_else(|poison_error| {
             tracing::error!("miner mode write lock was poisoned");
             self.mode.clear_poison();
@@ -173,7 +181,7 @@ impl Miner {
     }
 
     /// Shutdown if miner is interval miner.
-    pub async fn shutdown_and_wait(&self) {
+    async fn shutdown_and_wait(&self) {
         // Note: we are intentionally holding this mutex till the end of the function, so that
         // subsequent calls wait for the first to finish, and `is_interval_miner_running` works too
         let mut joinset_lock = self.interval_joinset.lock().await;
@@ -181,6 +189,8 @@ impl Miner {
         let Some(mut joinset) = joinset_lock.take() else {
             return;
         };
+
+        tracing::warn!("Shutting down interval miner to switch to external mode");
 
         self.shutdown_signal.lock_or_clear("sending shutdown signal to interval miner").cancel();
 

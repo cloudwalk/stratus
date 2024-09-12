@@ -504,9 +504,7 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
                 });
             }
 
-            ctx.miner.set_mode(MinerMode::External);
-            tracing::warn!("shutting down Interval miner to change it to External mode");
-            ctx.miner.shutdown_and_wait().await;
+            ctx.miner.switch_to_external_mode().await;
         }
         MinerMode::Interval(duration) => {
             tracing::info!(duration = ?duration, "changing miner mode to Interval");
@@ -523,8 +521,7 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
                 }
             }
 
-            ctx.miner.set_mode(MinerMode::Interval(duration));
-            ctx.miner.start_if_interval().await?;
+            ctx.miner.start_interval_mining(duration).await;
         }
         MinerMode::Automine => {
             tracing::error!("automine mode is not supported");
