@@ -101,13 +101,15 @@ impl Miner {
     }
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
+    ///
+    /// Also unpauses `Miner` if it was paused.
     pub async fn start_if_interval(self: &Arc<Self>) -> anyhow::Result<()> {
         let MinerMode::Interval(block_time) = self.mode() else {
             // Don't do anything
             return Ok(());
         };
 
-        tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
+        self.unpause();
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::channel();
@@ -115,6 +117,7 @@ impl Miner {
         let new_shutdown_signal = STRATUS_SHUTDOWN_SIGNAL.child_token();
         let mut joinset = JoinSet::new();
 
+        tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
         joinset.spawn_blocking({
             let shutdown = new_shutdown_signal.clone();
             let miner_clone = Arc::clone(self);
