@@ -4,8 +4,8 @@
 set -e
 
 # Define the addresses of the leader and follower nodes
-LEADER_ADDRESS="0.0.0.0:3001"
-FOLLOWER_ADDRESS="0.0.0.0:3000"
+LEADER_ADDRESS="0.0.0.0:3000"
+FOLLOWER_ADDRESS="0.0.0.0:3001"
 
 # Define the external RPC timeout and sync interval
 EXTERNAL_RPC_TIMEOUT="2s"
@@ -160,6 +160,17 @@ else
     log "Successfully changed Leader to Follower." "$LEADER_ADDRESS" "$change_to_follower"
 fi
 
+# Validate if the new Follower is indeed the Follower
+leader_state=$(send_request "http://$LEADER_ADDRESS" "stratus_state" "[]")
+log "Validating new Follower state..." "$LEADER_ADDRESS"
+is_leader=$(echo $leader_state | jq -r '.result.is_leader')
+if [ "$is_leader" != "true" ]; then
+    log "New Follower node is correctly identified as the follower." "$LEADER_ADDRESS" "$leader_state"
+else
+    log "Error: New Follower node is not identified as the follower." "$LEADER_ADDRESS" "$leader_state"
+    exit 1
+fi
+
 # Change Follower to Leader
 change_to_leader=$(send_request "http://$FOLLOWER_ADDRESS" "stratus_changeToLeader" "[]")
 log "Changing Follower to Leader..." "$FOLLOWER_ADDRESS"
@@ -169,6 +180,17 @@ if [ "$change_to_leader_result" != "true" ]; then
     exit 1
 else
     log "Successfully changed Follower to Leader." "$FOLLOWER_ADDRESS" "$change_to_leader"
+fi
+
+# Validate if the new Leader is indeed the Leader
+leader_state=$(send_request "http://$FOLLOWER_ADDRESS" "stratus_state" "[]")
+log "Validating new Leader state..." "$FOLLOWER_ADDRESS"
+is_leader=$(echo $leader_state | jq -r '.result.is_leader')
+if [ "$is_leader" = "true" ]; then
+    log "New Leader node is correctly identified as the leader." "$FOLLOWER_ADDRESS" "$leader_state"
+else
+    log "Error: New Leader node is not identified as the leader." "$FOLLOWER_ADDRESS" "$leader_state"
+    exit 1
 fi
 
 # Enable transactions on new Leader
