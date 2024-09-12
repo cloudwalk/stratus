@@ -318,6 +318,20 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
         return Err(StratusError::RpcTransactionEnabled);
     }
 
+    let current_importer_config: ImporterConfig = match ctx.app_config.get("importer") {
+        Some(importer_value) => match serde_json::from_value(importer_value.clone()) {
+            Ok(config) => config,
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to parse current importer configuration");
+                return Err(StratusError::ImporterConfigParseError);
+            }
+        },
+        None => {
+            tracing::error!("current importer configuration not found in app_config");
+            return Err(StratusError::ImporterConfigNotFound);
+        }
+    };
+
     tracing::info!("shutting down importer");
     let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), &ctx, &ext);
     match shutdown_importer_result {
@@ -326,7 +340,8 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
             tracing::warn!("importer is already shutdown, continuing");
         }
         Err(e) => {
-            tracing::error!(reason = ?e, "failed to shutdown importer");
+            tracing::error!(reason = ?e, "failed to shutdown importer. Restarting importer with current configuration");
+            current_importer_config.init_follower_importer(ctx).await?;
             return Err(e);
         }
     }
@@ -338,7 +353,16 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 
     let change_miner_mode_result = change_miner_mode(MinerMode::Interval(LEADER_MINER_INTERVAL), &ctx);
     if let Err(e) = change_miner_mode_result {
-        tracing::error!(reason = ?e, "failed to change miner mode");
+        tracing::error!(reason = ?e, "failed to change miner mode to interval(1s). Reverting miner mode to external");
+        let change_miner_mode_result = change_miner_mode(MinerMode::External, &ctx);
+        if let Err(e) = change_miner_mode_result {
+            tracing::error!(reason = ?e, "failed to revert miner mode to external");
+            return Err(e);
+        }
+        tracing::info!("wait for miner mode to revert to external");
+        traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
+        tracing::info!("reinitializing importer with current configuration");
+        current_importer_config.init_follower_importer(ctx).await?;
         return Err(e);
     }
     tracing::info!("miner mode changed to interval(1s) successfully");
