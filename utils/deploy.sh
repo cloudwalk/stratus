@@ -115,28 +115,6 @@ else
     log "Successfully disabled transactions on Follower." "$FOLLOWER_ADDRESS" "$disable_follower_tx"
 fi
 
-# Validate Leader state for transaction_enabled
-leader_state=$(send_request "http://$LEADER_ADDRESS" "stratus_state" "[]")
-log "Validating Leader state for transaction_enabled..." "$LEADER_ADDRESS"
-transaction_enabled=$(echo $leader_state | jq -r '.result.transactions_enabled')
-if [ "$transaction_enabled" != "false" ]; then
-    log "Error: Leader node transactions are not disabled." "$LEADER_ADDRESS" "$leader_state"
-    exit 1
-else
-    log "Leader node transactions are successfully disabled." "$LEADER_ADDRESS" "$leader_state"
-fi
-
-# Validate Follower state for transaction_enabled
-follower_state=$(send_request "http://$FOLLOWER_ADDRESS" "stratus_state" "[]")
-log "Validating Follower state for transaction_enabled..." "$FOLLOWER_ADDRESS"
-transaction_enabled=$(echo $follower_state | jq -r '.result.transactions_enabled')
-if [ "$transaction_enabled" != "false" ]; then
-    log "Error: Follower node transactions are not disabled." "$FOLLOWER_ADDRESS" "$follower_state"
-    exit 1
-else
-    log "Follower node transactions are successfully disabled." "$FOLLOWER_ADDRESS" "$follower_state"
-fi
-
 # Check for pending transactions on Leader
 pending_tx_count=$(send_request "http://$LEADER_ADDRESS" "stratus_pendingTransactionsCount" "[]")
 log "Checking pending transactions on Leader..." "$LEADER_ADDRESS"
