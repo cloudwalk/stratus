@@ -16,6 +16,11 @@ use stratus::eth::storage::rocks::types::AddressRocksdb;
 use stratus::eth::storage::rocks::types::BlockNumberRocksdb;
 use stratus::eth::storage::rocks::types::SlotIndexRocksdb;
 
+static CHANGED_BLOCKS: [u64; 18] = [
+    72648975, 72648976, 72649598, 72649599, 72656728, 72656729, 72662429, 72662430, 72667568, 72667569, 72671814, 72671815, 72679601, 72679602, 72680731,
+    72680732, 72682152, 72682153,
+];
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -93,6 +98,24 @@ fn main() -> anyhow::Result<()> {
             None => {
                 println!("Entry missing in new DB:");
                 println!("  Old DB: address: {:?}, slot: {:?}, block: {:?}", address, slot_index, block_number);
+                if CHANGED_BLOCKS.binary_search(&block_number.0.as_u64()).is_ok() {
+                    let prev_block_key = (
+                        Address::from(address.0).into(),
+                        SlotIndex::from(slot_index.0).into(),
+                        (block_number.0.as_u64() - 1).into(),
+                    );
+                    if let Ok(Some(prev_value)) = cf1.get(&prev_block_key) {
+                        if prev_value == SlotValue::from(value_old.0).into() {
+                            println!("Values are the same in the previous block.");
+                        } else {
+                            println!(
+                                "Found in previous block. Old value: {:?}, Previous block value: {:?}",
+                                value_old,
+                                U256(prev_value.into_inner().0)
+                            );
+                        }
+                    }
+                }
                 differences.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         }
