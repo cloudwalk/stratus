@@ -67,7 +67,7 @@ fn main() -> anyhow::Result<()> {
     let progress_bar = indicatif::ProgressBar::new(num_keys);
     progress_bar.set_style(
         indicatif::ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({percentage}%) ({eta})")
+            .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos}/{human_len} ({percent}%) ({eta})")
             .unwrap()
             .progress_chars("#>-"),
     );
