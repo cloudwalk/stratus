@@ -54,11 +54,9 @@ if [ "$follower_health_result" != "true" ]; then
     exit 1
 fi
 
-# Validate initial Leader state
+# Validate if the Leader is indeed the Leader
 leader_state=$(send_request "http://$LEADER_ADDRESS" "stratus_state" "[]")
 log "Validating initial Leader state..." "$LEADER_ADDRESS" "$leader_state"
-
-# Check if the leader is indeed the leader
 is_leader=$(echo $leader_state | jq -r '.result.is_leader')
 if [ "$is_leader" = "true" ]; then
     log "Leader node is correctly identified as the leader." "$LEADER_ADDRESS" "$leader_state"
@@ -67,11 +65,9 @@ else
     exit 1
 fi
 
-# Validate initial Follower state
+# Validate if the Follower is indeed the Follower
 follower_state=$(send_request "http://$FOLLOWER_ADDRESS" "stratus_state" "[]")
 log "Validating initial Follower state..." "$FOLLOWER_ADDRESS" "$follower_state"
-
-# Check if the follower is indeed the follower
 is_leader=$(echo $follower_state | jq -r '.result.is_leader')
 if [ "$is_leader" = "false" ]; then
     log "Follower node is correctly identified as the follower." "$FOLLOWER_ADDRESS" "$follower_state"
