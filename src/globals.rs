@@ -97,14 +97,10 @@ pub enum NodeMode {
 // Global state
 // -----------------------------------------------------------------------------
 
-// Stratus is running or being shut-down?
-static STRATUS_SHUTDOWN: Lazy<CancellationToken> = Lazy::new(CancellationToken::new);
+pub static STRATUS_SHUTDOWN_SIGNAL: Lazy<CancellationToken> = Lazy::new(CancellationToken::new);
 
 /// Importer is running or being shut-down?
 static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(true);
-
-/// Interval Miner is running or being shut-down?
-static INTERVAL_MINER_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 /// Transaction should be accepted?
 static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -128,13 +124,13 @@ impl GlobalState {
     /// Returns the formatted reason for shutdown.
     pub fn shutdown_from(caller: &str, reason: &str) -> String {
         tracing::warn!(%caller, %reason, "application is shutting down");
-        STRATUS_SHUTDOWN.cancel();
+        STRATUS_SHUTDOWN_SIGNAL.cancel();
         format!("{} {}", caller, reason)
     }
 
     /// Checks if the application is being shutdown.
     pub fn is_shutdown() -> bool {
-        STRATUS_SHUTDOWN.is_cancelled()
+        STRATUS_SHUTDOWN_SIGNAL.is_cancelled()
     }
 
     /// Checks if the application is being shutdown. Emits an warning with the task name in case it is.
@@ -148,7 +144,7 @@ impl GlobalState {
 
     /// Waits until a shutdown is signalled.
     pub async fn wait_shutdown() {
-        STRATUS_SHUTDOWN.cancelled().await;
+        STRATUS_SHUTDOWN_SIGNAL.cancelled().await;
     }
 
     /// Waits until a shutdown is signalled. Emits an warning with the task name when it is.
@@ -204,38 +200,6 @@ impl GlobalState {
     }
 
     // -------------------------------------------------------------------------
-    // Miner
-    // -------------------------------------------------------------------------
-
-    /// Shutdown the miner.
-    ///
-    /// Returns the formatted reason for miner shutdown.
-    pub fn shutdown_interval_miner_from(caller: &str, reason: &str) -> String {
-        tracing::warn!(%caller, %reason, "miner is shutting down");
-        Self::set_interval_miner_shutdown(true);
-        format!("{} {}", caller, reason)
-    }
-
-    /// Checks if the miner is being shutdown.
-    pub fn is_interval_miner_shutdown() -> bool {
-        INTERVAL_MINER_SHUTDOWN.load(Ordering::Relaxed)
-    }
-
-    /// Checks if the miner is being shutdown. Emits a warning with the task name in case it is.
-    pub fn is_interval_miner_shutdown_warn(task_name: &str) -> bool {
-        let shutdown = Self::is_interval_miner_shutdown();
-        if shutdown {
-            warn_task_cancellation(task_name);
-        }
-        shutdown
-    }
-
-    /// Sets the miner shutdown state.
-    pub fn set_interval_miner_shutdown(shutdown: bool) {
-        INTERVAL_MINER_SHUTDOWN.store(shutdown, Ordering::Relaxed);
-    }
-
-    // -------------------------------------------------------------------------
     // Unknown Client
     // -------------------------------------------------------------------------
 
@@ -257,7 +221,6 @@ impl GlobalState {
     pub fn initialize_node_mode(config: &StratusConfig) {
         let mode = if config.follower {
             Self::set_importer_shutdown(false);
-            Self::set_interval_miner_shutdown(true);
             NodeMode::Follower
         } else {
             NodeMode::Leader
@@ -298,7 +261,7 @@ impl GlobalState {
             "is_leader": Self::is_leader(),
             "is_shutdown": Self::is_shutdown(),
             "is_importer_shutdown": Self::is_importer_shutdown(),
-            "is_interval_miner_shutdown": Self::is_interval_miner_shutdown(),
+            "is_interval_miner_running": ctx.miner.is_interval_miner_running(),
             "transactions_enabled": Self::is_transactions_enabled(),
             "miner_enabled": ctx.miner.is_enabled(),
             "unknown_client_enabled": Self::is_unknown_client_enabled(),

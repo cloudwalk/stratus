@@ -15,7 +15,7 @@ describe("Miner mode change integration test", function () {
         const leaderNode = await sendWithRetry("stratus_state", []);
         expect(leaderNode.is_leader).to.equal(true);
         expect(leaderNode.miner_enabled).to.equal(true);
-        expect(leaderNode.is_interval_miner_shutdown).to.equal(false);
+        expect(leaderNode.is_interval_miner_running).to.equal(true);
         expect(leaderNode.transactions_enabled).to.equal(true);
         const leaderHealth = await sendWithRetry("stratus_health", []);
         expect(leaderHealth).to.equal(true);
@@ -26,7 +26,7 @@ describe("Miner mode change integration test", function () {
         const followerNode = await sendWithRetry("stratus_state", []);
         expect(followerNode.is_leader).to.equal(false);
         expect(followerNode.miner_enabled).to.equal(true);
-        expect(followerNode.is_interval_miner_shutdown).to.equal(true);
+        expect(followerNode.is_interval_miner_running).to.equal(false);
         expect(followerNode.transactions_enabled).to.equal(true);
         const followerHealth = await sendWithRetry("stratus_health", []);
         expect(followerHealth).to.equal(true);
@@ -197,7 +197,7 @@ describe("Miner mode change integration test", function () {
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
         expect(response.data.result).to.equal(true);
         const state = await sendWithRetry("stratus_state", []);
-        expect(state.is_interval_miner_shutdown).to.equal(true);
+        expect(state.is_interval_miner_running).to.equal(false);
     });
 
     it("Shutdown importer on Follower", async function () {
@@ -213,7 +213,7 @@ describe("Miner mode change integration test", function () {
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["1s"]);
         expect(response.data.result).to.equal(true);
         const state = await sendWithRetry("stratus_state", []);
-        expect(state.is_interval_miner_shutdown).to.equal(false);
+        expect(state.is_interval_miner_running).to.equal(true);
         expect(state.is_importer_shutdown).to.equal(true);
     });
 

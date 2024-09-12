@@ -184,7 +184,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_changeToFollower", stratus_change_to_follower)?;
     module.register_async_method("stratus_initImporter", stratus_init_importer)?;
     module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
-    module.register_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
+    module.register_async_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
 
     // stratus state
     module.register_method("stratus_version", stratus_version)?;
@@ -336,7 +336,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 
     ctx.miner.disable();
 
-    let change_miner_mode_result = change_miner_mode(MinerMode::Interval(LEADER_MINER_INTERVAL), &ctx);
+    let change_miner_mode_result = change_miner_mode(MinerMode::Interval(LEADER_MINER_INTERVAL), &ctx).await;
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
         return Err(e);
@@ -374,9 +374,10 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         });
     }
 
+    // Miner is disabled, but will be re-enabled if `change_miner_mode` succeeds
     ctx.miner.disable();
 
-    let change_miner_mode_result = change_miner_mode(MinerMode::External, &ctx);
+    let change_miner_mode_result = change_miner_mode(MinerMode::External, &ctx).await;
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
         return Err(e);
@@ -465,20 +466,20 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     Ok(json!(true))
 }
 
-fn stratus_change_miner_mode(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+async fn stratus_change_miner_mode(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     let (_, mode_str) = next_rpc_param::<String>(params.sequence())?;
     let mode = MinerMode::from_str(&mode_str).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse miner mode");
         StratusError::MinerModeParamInvalid
     })?;
 
-    change_miner_mode(mode, ctx)
+    change_miner_mode(mode, &ctx).await
 }
 
 /// Tries changing miner mode, returns `Ok(true)` if changed, and `Ok(false)` if no changing was necessary.
 ///
 /// This function also enables the miner after changing it.
-fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, StratusError> {
+async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
         tracing::error!("cannot change miner mode while transactions are enabled");
         return Err(StratusError::RpcTransactionEnabled);
@@ -507,8 +508,8 @@ fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue,
             }
 
             ctx.miner.set_mode(MinerMode::External);
-            const TASK_NAME: &str = "rpc-server::miner-shutdown";
-            GlobalState::shutdown_interval_miner_from(TASK_NAME, "received miner shutdown request");
+            tracing::warn!("shutting down Interval miner to change it to External mode");
+            ctx.miner.shutdown_and_wait().await;
         }
         MinerMode::Interval(duration) => {
             tracing::info!(duration = ?duration, "changing miner mode to Interval");
@@ -525,9 +526,8 @@ fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue,
                 }
             }
 
-            GlobalState::set_interval_miner_shutdown(false);
             ctx.miner.set_mode(MinerMode::Interval(duration));
-            ctx.miner.start_if_interval()?;
+            ctx.miner.start_if_interval().await?;
         }
         MinerMode::Automine => {
             tracing::error!("automine mode is not supported");
