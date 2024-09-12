@@ -310,7 +310,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 
     if GlobalState::get_node_mode() == NodeMode::Leader {
         tracing::info!("node is already in leader mode, no changes made");
-        return Ok(json!(true));
+        return Ok(json!(false));
     }
 
     if GlobalState::is_transactions_enabled() {
@@ -355,7 +355,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
 
     if GlobalState::get_node_mode() == NodeMode::Follower {
         tracing::info!("node is already in follower mode, no changes made");
-        return Ok(json!(true));
+        return Ok(json!(false));
     }
 
     if GlobalState::is_transactions_enabled() {
