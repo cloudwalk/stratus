@@ -158,6 +158,10 @@ pub enum StratusError {
     #[strum(props(kind = "client_request"))]
     ImporterConfigParseError,
 
+    #[error("Importer configuration not found in app_config.")]
+    #[strum(props(kind = "client_request"))]
+    ImporterConfigNotFound,
+
     #[error("Failed to initialize importer.")]
     #[strum(props(kind = "internal"))]
     ImporterInitError,
