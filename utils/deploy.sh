@@ -11,12 +11,17 @@ FOLLOWER_ADDRESS="0.0.0.0:3001"
 EXTERNAL_RPC_TIMEOUT="2s"
 SYNC_INTERVAL="100ms"
 
+# Pending Transactions total check attempts, required consecutive checks and sleep interval
+TOTAL_CHECK_ATTEMPTS=10
+REQUIRED_CONSECUTIVE_CHECKS=4
+SLEEP_INTERVAL=0.5
+
 # Define colors
 COLOR_RESET="\033[0m"
-COLOR_TIMESTAMP="\033[1;34m"  # Blue
-COLOR_MESSAGE="\033[1;32m"    # Green
-COLOR_ADDRESS="\033[1;33m"    # Yellow
-COLOR_RESPONSE="\033[1;31m"   # Red
+COLOR_TIMESTAMP="\033[1;30m"  # Gray
+COLOR_MESSAGE="\033[1;37m"    # White
+COLOR_ADDRESS="\033[1;34m"    # Light Blue
+COLOR_RESPONSE="\033[1;32m"   # Light Green
 
 # Function to send a request and get a response
 send_request() {
@@ -115,15 +120,38 @@ else
     log "Successfully disabled transactions on Follower." "$FOLLOWER_ADDRESS" "$disable_follower_tx"
 fi
 
-# Check for pending transactions on Leader
-pending_tx_count=$(send_request "http://$LEADER_ADDRESS" "stratus_pendingTransactionsCount" "[]")
-log "Checking pending transactions on Leader..." "$LEADER_ADDRESS"
-pending_tx_count_result=$(echo $pending_tx_count | jq -r '.result')
-if [ "$pending_tx_count_result" != "0" ]; then
-    log "Error: There are pending transactions on the Leader node." "$LEADER_ADDRESS" "$pending_tx_count"
-    exit 1
+# Initialize counter for successful consecutive checks
+success_count=0
+
+# Loop to check for pending transactions TOTAL_CHECK_ATTEMPTS times
+for i in $(seq 1 $TOTAL_CHECK_ATTEMPTS); do
+    pending_tx_count=$(send_request "http://$LEADER_ADDRESS" "stratus_pendingTransactionsCount" "[]")
+    log "Checking pending transactions on Leader (Attempt $i)..." "$LEADER_ADDRESS"
+    pending_tx_count_result=$(echo $pending_tx_count | jq -r '.result')
+    
+    if [ "$pending_tx_count_result" == "0" ]; then
+        success_count=$((success_count + 1))
+        log "No pending transactions on the Leader node (Attempt $i)." "$LEADER_ADDRESS" "$pending_tx_count"
+    else
+        success_count=0
+        log "Error: There are pending transactions on the Leader node (Attempt $i)." "$LEADER_ADDRESS" "$pending_tx_count"
+    fi
+    
+    # If REQUIRED_CONSECUTIVE_CHECKS consecutive checks pass, break the loop
+    if [ "$success_count" -eq $REQUIRED_CONSECUTIVE_CHECKS ]; then
+        break
+    fi
+    
+    # Wait for a short period before the next check
+    sleep $SLEEP_INTERVAL
+done
+
+# Final check to ensure REQUIRED_CONSECUTIVE_CHECKS consecutive successful checks
+if [ "$success_count" -eq $REQUIRED_CONSECUTIVE_CHECKS ]; then
+    log "No pending transactions on the Leader node after $REQUIRED_CONSECUTIVE_CHECKS consecutive checks." "$LEADER_ADDRESS"
 else
-    log "No pending transactions on the Leader node." "$LEADER_ADDRESS" "$pending_tx_count"
+    log "Error: Failed to confirm no pending transactions on the Leader node after $TOTAL_CHECK_ATTEMPTS attempts." "$LEADER_ADDRESS"
+    exit 1
 fi
 
 # Change Leader to Follower
