@@ -4,8 +4,8 @@
 set -e
 
 # Define the addresses of the leader and follower nodes
-LEADER_ADDRESS="0.0.0.0:3001"
-FOLLOWER_ADDRESS="0.0.0.0:3000"
+LEADER_ADDRESS="0.0.0.0:3000"
+FOLLOWER_ADDRESS="0.0.0.0:3001"
 
 # Define the external RPC timeout and sync interval
 EXTERNAL_RPC_TIMEOUT="2s"
