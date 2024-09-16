@@ -11,9 +11,9 @@ FOLLOWER_ADDRESS="0.0.0.0:3001"
 EXTERNAL_RPC_TIMEOUT="2s"
 SYNC_INTERVAL="100ms"
 
-# Pending Transactions total check attempts, required consecutive checks and sleep interval
+# Pending Transactions and Miner total check attempts, required consecutive checks and sleep interval
 TOTAL_CHECK_ATTEMPTS=10
-REQUIRED_CONSECUTIVE_CHECKS=4
+REQUIRED_CONSECUTIVE_CHECKS=3
 SLEEP_INTERVAL=0.5
 
 # Define colors
@@ -151,6 +151,58 @@ if [ "$success_count" -eq $REQUIRED_CONSECUTIVE_CHECKS ]; then
     log "No pending transactions on the Leader node after $REQUIRED_CONSECUTIVE_CHECKS consecutive checks." "$LEADER_ADDRESS"
 else
     log "Error: Failed to confirm no pending transactions on the Leader node after $TOTAL_CHECK_ATTEMPTS attempts." "$LEADER_ADDRESS"
+    exit 1
+fi
+
+# Pause miner on Leader
+pause_leader_miner=$(send_request "http://$LEADER_ADDRESS" "stratus_disableMiner" "[]")
+log "Disabling miner on Leader..." "$LEADER_ADDRESS"
+pause_leader_miner_result=$(echo $pause_leader_miner | jq -r '.result')
+if [ "$pause_leader_miner_result" != "false" ]; then
+    log "Error: Failed to pause miner on Leader." "$LEADER_ADDRESS" "$pause_leader_miner"
+    exit 1
+else
+    log "Successfully paused miner on Leader." "$LEADER_ADDRESS" "$pause_leader_miner"
+fi
+
+# Initialize counter for successful consecutive checks
+import_success_count=0
+previous_block_number=""
+
+# Loop to check if the follower has imported all blocks from the leader TOTAL_CHECK_ATTEMPTS times
+for i in $(seq 1 $TOTAL_CHECK_ATTEMPTS); do
+    leader_block_number=$(send_request "http://$LEADER_ADDRESS" "eth_blockNumber" "[]")
+    follower_block_number=$(send_request "http://$FOLLOWER_ADDRESS" "eth_blockNumber" "[]")
+    log "Checking block numbers (Attempt $i)..." "$LEADER_ADDRESS" "$FOLLOWER_ADDRESS"
+    leader_block_number_result=$(echo $leader_block_number | jq -r '.result')
+    follower_block_number_result=$(echo $follower_block_number | jq -r '.result')
+    
+    if [ -z "$previous_block_number" ]; then
+        previous_block_number=$leader_block_number_result
+        log "First check, setting previous block number (Attempt $i)." "$LEADER_ADDRESS" "$follower_block_number"
+    elif [ "$leader_block_number_result" == "$follower_block_number_result" ] && [ "$leader_block_number_result" == "$previous_block_number" ]; then
+        import_success_count=$((import_success_count + 1))
+        log "Follower is in sync with the Leader (Attempt $i)." "$FOLLOWER_ADDRESS" "$follower_block_number"
+    else
+        import_success_count=0
+        previous_block_number=$leader_block_number_result
+        log "Error: Follower is not in sync with the Leader (Attempt $i)." "$FOLLOWER_ADDRESS" "$follower_block_number"
+    fi
+    
+    # If REQUIRED_CONSECUTIVE_CHECKS consecutive checks pass, break the loop
+    if [ "$import_success_count" -eq $REQUIRED_CONSECUTIVE_CHECKS ]; then
+        break
+    fi
+    
+    # Wait for a short period before the next check
+    sleep $SLEEP_INTERVAL
+done
+
+# Final check to ensure REQUIRED_CONSECUTIVE_CHECKS consecutive successful checks
+if [ "$import_success_count" -eq $REQUIRED_CONSECUTIVE_CHECKS ]; then
+    log "Follower has imported all blocks from Leader and no new blocks are being generated after $REQUIRED_CONSECUTIVE_CHECKS consecutive checks." "$FOLLOWER_ADDRESS"
+else
+    log "Error: Failed to confirm block import on Follower or new blocks are being generated after $TOTAL_CHECK_ATTEMPTS attempts." "$FOLLOWER_ADDRESS"
     exit 1
 fi
 

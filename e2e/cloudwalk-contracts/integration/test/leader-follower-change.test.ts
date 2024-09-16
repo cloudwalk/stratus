@@ -48,9 +48,23 @@ describe("Leader & Follower change integration test", function () {
         expect(response.data.error.message).to.equal("Transaction processing is enabled.");
     });
 
-    it("Change Leader to Follower should succeed", async function () {
+    it("Change Leader to Follower with miner enabled should fail ", async function () {
         updateProviderUrl("stratus");
         await sendWithRetry("stratus_disableTransactions", []);
+        const response = await sendAndGetFullResponse("stratus_changeToFollower", [
+            "http://0.0.0.0:3001/",
+            "ws://0.0.0.0:3001/",
+            "2s",
+            "100ms",
+        ]);
+        expect(response.data.error.code).to.equal(-32603);
+        expect(response.data.error.message).to.equal("Miner is enabled.");
+    });
+
+    it("Change Leader to Follower should succeed", async function () {
+        updateProviderUrl("stratus");
+        await sendWithRetry("stratus_disableMiner", []);
+        await new Promise((resolve) => setTimeout(resolve, 10000));
         const response = await sendAndGetFullResponse("stratus_changeToFollower", [
             "http://0.0.0.0:3001/",
             "ws://0.0.0.0:3001/",
