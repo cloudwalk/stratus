@@ -13,7 +13,7 @@ SYNC_INTERVAL="100ms"
 
 # Pending Transactions total check attempts, required consecutive checks and sleep interval
 TOTAL_CHECK_ATTEMPTS=10
-REQUIRED_CONSECUTIVE_CHECKS=4
+REQUIRED_CONSECUTIVE_CHECKS=3
 SLEEP_INTERVAL=0.5
 
 # Define colors
