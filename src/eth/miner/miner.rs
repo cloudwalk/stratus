@@ -105,8 +105,8 @@ impl Miner {
     ///
     /// Also unpauses `Miner` if it was paused.
     pub async fn start_interval_mining(self: &Arc<Self>, block_time: Duration) {
-        if self.mode().is_interval() {
-            tracing::warn!(block_time = ?block_time.to_string_ext(), "trying to start interval mining, but it's already started, skipping");
+        if self.is_interval_miner_running() {
+            tracing::warn!(block_time = ?block_time.to_string_ext(), "tried to start interval mining, but it's already running, skipping");
             return;
         };
 
