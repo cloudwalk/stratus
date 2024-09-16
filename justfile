@@ -290,7 +290,9 @@ e2e-leader-follower-up test="brlc":
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
-        ./utils/deploy.sh --leader 0.0.0.0:3000 --follower 0.0.0.0:3001 --auto-approve
+        cd utils/deploy
+        poetry install --no-root
+        poetry run python3 ./deploy.py --leader 0.0.0.0:3000 --follower 0.0.0.0:3001 --auto-approve
         if [ $? -ne 0 ]; then
             just _log "Deploy script failed"
             exit 1
