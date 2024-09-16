@@ -177,7 +177,10 @@ for i in $(seq 1 $TOTAL_CHECK_ATTEMPTS); do
     leader_block_number_result=$(echo $leader_block_number | jq -r '.result')
     follower_block_number_result=$(echo $follower_block_number | jq -r '.result')
     
-    if [ "$leader_block_number_result" == "$follower_block_number_result" ] && [ "$leader_block_number_result" == "$previous_block_number" ]; then
+    if [ -z "$previous_block_number" ]; then
+        previous_block_number=$leader_block_number_result
+        log "First check, setting previous block number (Attempt $i)." "$LEADER_ADDRESS" "$follower_block_number"
+    elif [ "$leader_block_number_result" == "$follower_block_number_result" ] && [ "$leader_block_number_result" == "$previous_block_number" ]; then
         import_success_count=$((import_success_count + 1))
         log "Follower is in sync with the Leader (Attempt $i)." "$FOLLOWER_ADDRESS" "$follower_block_number"
     else
