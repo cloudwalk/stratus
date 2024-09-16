@@ -11,7 +11,7 @@ FOLLOWER_ADDRESS="0.0.0.0:3001"
 EXTERNAL_RPC_TIMEOUT="2s"
 SYNC_INTERVAL="100ms"
 
-# Pending Transactions total check attempts, required consecutive checks and sleep interval
+# Pending Transactions and Miner total check attempts, required consecutive checks and sleep interval
 TOTAL_CHECK_ATTEMPTS=10
 REQUIRED_CONSECUTIVE_CHECKS=3
 SLEEP_INTERVAL=0.5
