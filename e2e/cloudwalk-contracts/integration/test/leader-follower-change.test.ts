@@ -168,7 +168,7 @@ describe("Leader & Follower change integration test", function () {
         expect(response).to.equal(true);
         const leaderNode = await sendWithRetry("stratus_state", []);
         expect(leaderNode.is_importer_shutdown).to.equal(true);
-        //expect(leaderNode.is_interval_miner_running).to.equal(true);
+        expect(leaderNode.is_interval_miner_running).to.equal(true);
         expect(leaderNode.is_leader).to.equal(true);
         expect(leaderNode.miner_paused).to.equal(false);
         expect(leaderNode.transactions_enabled).to.equal(false);
