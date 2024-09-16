@@ -154,6 +154,55 @@ else
     exit 1
 fi
 
+# Pause miner on Leader
+pause_leader_miner=$(send_request "http://$LEADER_ADDRESS" "stratus_disableMiner" "[]")
+log "Disabling miner on Leader..." "$LEADER_ADDRESS"
+pause_leader_miner_result=$(echo $pause_leader_miner | jq -r '.result')
+if [ "$pause_leader_miner_result" != "false" ]; then
+    log "Error: Failed to pause miner on Leader." "$LEADER_ADDRESS" "$pause_leader_miner"
+    exit 1
+else
+    log "Successfully paused miner on Leader." "$LEADER_ADDRESS" "$pause_leader_miner"
+fi
+
+# Initialize counter for successful consecutive checks
+import_success_count=0
+previous_block_number=""
+
+# Loop to check if the follower has imported all blocks from the leader TOTAL_CHECK_ATTEMPTS times
+for i in $(seq 1 $TOTAL_CHECK_ATTEMPTS); do
+    leader_block_number=$(send_request "http://$LEADER_ADDRESS" "eth_blockNumber" "[]")
+    follower_block_number=$(send_request "http://$FOLLOWER_ADDRESS" "eth_blockNumber" "[]")
+    log "Checking block numbers (Attempt $i)..." "$LEADER_ADDRESS" "$FOLLOWER_ADDRESS"
+    leader_block_number_result=$(echo $leader_block_number | jq -r '.result')
+    follower_block_number_result=$(echo $follower_block_number | jq -r '.result')
+    
+    if [ "$leader_block_number_result" == "$follower_block_number_result" ] && [ "$leader_block_number_result" == "$previous_block_number" ]; then
+        import_success_count=$((import_success_count + 1))
+        log "Follower is in sync with the Leader (Attempt $i)." "$FOLLOWER_ADDRESS" "$follower_block_number"
+    else
+        import_success_count=0
+        previous_block_number=$leader_block_number_result
+        log "Error: Follower is not in sync with the Leader (Attempt $i)." "$FOLLOWER_ADDRESS" "$follower_block_number"
+    fi
+    
+    # If REQUIRED_CONSECUTIVE_CHECKS consecutive checks pass, break the loop
+    if [ "$import_success_count" -eq $REQUIRED_CONSECUTIVE_CHECKS ]; then
+        break
+    fi
+    
+    # Wait for a short period before the next check
+    sleep $SLEEP_INTERVAL
+done
+
+# Final check to ensure REQUIRED_CONSECUTIVE_CHECKS consecutive successful checks
+if [ "$import_success_count" -eq $REQUIRED_CONSECUTIVE_CHECKS ]; then
+    log "Follower has imported all blocks from Leader and no new blocks are being generated after $REQUIRED_CONSECUTIVE_CHECKS consecutive checks." "$FOLLOWER_ADDRESS"
+else
+    log "Error: Failed to confirm block import on Follower or new blocks are being generated after $TOTAL_CHECK_ATTEMPTS attempts." "$FOLLOWER_ADDRESS"
+    exit 1
+fi
+
 # Change Leader to Follower
 change_to_follower_params="[\"http://$FOLLOWER_ADDRESS/\",\"ws://$FOLLOWER_ADDRESS/\",\"$EXTERNAL_RPC_TIMEOUT\",\"$SYNC_INTERVAL\"]"
 change_to_follower=$(send_request "http://$LEADER_ADDRESS" "stratus_changeToFollower" "$change_to_follower_params")
