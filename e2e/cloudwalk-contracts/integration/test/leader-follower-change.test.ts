@@ -156,7 +156,6 @@ describe("Leader & Follower change integration test", function () {
     it("Change new Follower to Leader again should succeed", async function () {
         updateProviderUrl("stratus");
         await sendWithRetry("stratus_disableTransactions", []);
-        await sendWithRetry("stratus_disableMiner", []);
         await new Promise((resolve) => setTimeout(resolve, 4000));
         const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
         expect(response.data.result).to.equal(true);
@@ -171,7 +170,7 @@ describe("Leader & Follower change integration test", function () {
         expect(leaderNode.is_importer_shutdown).to.equal(true);
         //expect(leaderNode.is_interval_miner_running).to.equal(true);
         expect(leaderNode.is_leader).to.equal(true);
-        //expect(leaderNode.miner_paused).to.equal(false);
+        expect(leaderNode.miner_paused).to.equal(false);
         expect(leaderNode.transactions_enabled).to.equal(false);
     });
 });
