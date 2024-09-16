@@ -138,6 +138,7 @@ impl Miner {
             return;
         }
         self.shutdown_and_wait().await;
+        self.unpause();
     }
 
     // Unpause interval miner (if in interval mode)
