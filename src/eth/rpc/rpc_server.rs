@@ -373,9 +373,6 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         return Err(StratusError::MinerEnabled);
     }
 
-    // pause miner so that `change_miner_mode` doesn't fail
-    ctx.miner.pause();
-
     let change_miner_mode_result = change_miner_mode(MinerMode::External, &ctx).await;
     if let Err(e) = change_miner_mode_result {
         tracing::error!(reason = ?e, "failed to change miner mode");
