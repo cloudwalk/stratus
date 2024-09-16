@@ -138,6 +138,7 @@ impl Miner {
             return;
         }
         self.shutdown_and_wait().await;
+        self.set_mode(MinerMode::External);
         self.unpause();
     }
 
