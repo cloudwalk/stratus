@@ -3,9 +3,46 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-# Define the addresses of the leader and follower nodes
-LEADER_ADDRESS="0.0.0.0:3000"
-FOLLOWER_ADDRESS="0.0.0.0:3001"
+# Initialize argument provided variables
+LEADER_ADDRESS=""
+FOLLOWER_ADDRESS=""
+AUTO_APPROVE=false
+
+# Parse arguments
+while [[ "$#" -gt 0 ]]; do
+  case $1 in
+    --leader)
+      LEADER_ADDRESS="$2"
+      shift 2
+      ;;
+    --follower)
+      FOLLOWER_ADDRESS="$2"
+      shift 2
+      ;;
+    --auto-approve)
+      AUTO_APPROVE=true
+      shift 1
+      ;;
+    *)
+      echo "Unknown parameter passed: $1"
+      echo "Usage: $0 --leader <leader_address> --follower <follower_address> [--auto-approve]"
+      exit 1
+      ;;
+  esac
+done
+
+# Check if the leader and follower addresses are provided
+if [ -z "$LEADER_ADDRESS" ] || [ -z "$FOLLOWER_ADDRESS" ]; then
+  echo "Error: Both --leader and --follower addresses must be provided."
+  echo "Usage: $0 --leader <leader_address> --follower <follower_address> [--auto-approve]"
+  exit 1
+fi
+
+# Check if the addresses are the same
+if [ "$LEADER_ADDRESS" == "$FOLLOWER_ADDRESS" ]; then
+  echo "Error: Leader and follower addresses must be different."
+  exit 1
+fi
 
 # Define the external RPC timeout and sync interval
 EXTERNAL_RPC_TIMEOUT="2s"
@@ -154,6 +191,15 @@ else
     exit 1
 fi
 
+# Manual approval step if auto-approve is not enabled
+if [ "$AUTO_APPROVE" = false ]; then
+  read -p "Do you want to proceed with pausing the miner? (yes/no): " CONFIRMATION
+  if [ "$CONFIRMATION" != "yes" ]; then
+    echo "Script canceled."
+    exit 1
+  fi
+fi
+
 # Pause miner on Leader
 pause_leader_miner=$(send_request "http://$LEADER_ADDRESS" "stratus_disableMiner" "[]")
 log "Disabling miner on Leader..." "$LEADER_ADDRESS"
@@ -204,6 +250,15 @@ if [ "$import_success_count" -eq $REQUIRED_CONSECUTIVE_CHECKS ]; then
 else
     log "Error: Failed to confirm block import on Follower or new blocks are being generated after $TOTAL_CHECK_ATTEMPTS attempts." "$FOLLOWER_ADDRESS"
     exit 1
+fi
+
+# Manual approval step if auto-approve is not enabled
+if [ "$AUTO_APPROVE" = false ]; then
+  read -p "Do you want to proceed with changing the Leader to Follower? (yes/no): " CONFIRMATION
+  if [ "$CONFIRMATION" != "yes" ]; then
+    echo "Script canceled."
+    exit 1
+  fi
 fi
 
 # Change Leader to Follower

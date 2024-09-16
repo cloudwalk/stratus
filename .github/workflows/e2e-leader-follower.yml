@@ -80,7 +80,12 @@ jobs:
         run: just contracts-flatten --token
 
       - name: Run e2e tests
-        run: just e2e-leader-follower-up ${{ matrix.test }}
+        run: |
+          if [ "${{ matrix.test }}" == "deploy" ]; then
+            just e2e-leader-follower-up ${{ matrix.test }} --leader 0.0.0.0:3000 --follower 0.0.0.0:3001 --auto-approve
+          else
+            just e2e-leader-follower-up ${{ matrix.test }}
+          fi
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error
