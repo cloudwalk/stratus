@@ -14,7 +14,7 @@ COLOR_RESPONSE = "\033[1;32m"  # Light Green
 # Function to send a request and get a response
 def send_request(url: str, method: str, params: list) -> Dict[str, Any]:
     response = requests.post(
-        url, json={"jsonrpc": "2.0", "method": method, "params": params, "id": 1}
+        url, json={"jsonrpc": "2.0", "method": method, "params": params, "id": 1}, timeout=30
     )
     return response.json()
 
