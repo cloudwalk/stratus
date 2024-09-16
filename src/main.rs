@@ -22,7 +22,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let storage = config.storage.init()?;
 
     // Init miner
-    let miner = config.miner.init(Arc::clone(&storage))?;
+    let miner = config.miner.init(Arc::clone(&storage)).await?;
 
     // Init executor
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));

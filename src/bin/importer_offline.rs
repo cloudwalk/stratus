@@ -55,7 +55,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
     let storage = config.storage.init()?;
-    let miner = config.miner.init_with_mode(MinerMode::External, Arc::clone(&storage))?;
+    let miner = config.miner.init_with_mode(MinerMode::External, Arc::clone(&storage)).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // init block range

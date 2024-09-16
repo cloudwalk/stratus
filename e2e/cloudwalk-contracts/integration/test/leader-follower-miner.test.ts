@@ -14,8 +14,8 @@ describe("Miner mode change integration test", function () {
         updateProviderUrl("stratus");
         const leaderNode = await sendWithRetry("stratus_state", []);
         expect(leaderNode.is_leader).to.equal(true);
-        expect(leaderNode.miner_enabled).to.equal(true);
-        expect(leaderNode.is_interval_miner_shutdown).to.equal(false);
+        expect(leaderNode.miner_paused).to.equal(false);
+        expect(leaderNode.is_interval_miner_running).to.equal(true);
         expect(leaderNode.transactions_enabled).to.equal(true);
         const leaderHealth = await sendWithRetry("stratus_health", []);
         expect(leaderHealth).to.equal(true);
@@ -25,8 +25,8 @@ describe("Miner mode change integration test", function () {
         updateProviderUrl("stratus-follower");
         const followerNode = await sendWithRetry("stratus_state", []);
         expect(followerNode.is_leader).to.equal(false);
-        expect(followerNode.miner_enabled).to.equal(true);
-        expect(followerNode.is_interval_miner_shutdown).to.equal(true);
+        expect(followerNode.miner_paused).to.equal(false);
+        expect(followerNode.is_interval_miner_running).to.equal(false);
         expect(followerNode.transactions_enabled).to.equal(true);
         const followerHealth = await sendWithRetry("stratus_health", []);
         expect(followerHealth).to.equal(true);
@@ -69,11 +69,11 @@ describe("Miner mode change integration test", function () {
         expect(response.data.error.message).eq("Miner is enabled.");
     });
 
-    it("Miner change to Interval on Follower should fail because miner is enabled", async function () {
+    it("Miner change to Interval on Follower should fail because importer wasn't stopped", async function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["1s"]);
         expect(response.data.error.code).eq(-32603);
-        expect(response.data.error.message).eq("Miner is enabled.");
+        expect(response.data.error.message).eq("Consensus is set.");
     });
 
     it("Disable miner on Leader", async function () {
@@ -81,7 +81,7 @@ describe("Miner mode change integration test", function () {
         const response = await sendAndGetFullResponse("stratus_disableMiner", []);
         expect(response.data.result).to.equal(false);
         const state = await sendWithRetry("stratus_state", []);
-        expect(state.miner_enabled).to.equal(false);
+        expect(state.miner_paused).to.equal(true);
     });
 
     it("Disable miner on Follower", async function () {
@@ -89,7 +89,7 @@ describe("Miner mode change integration test", function () {
         const response = await sendAndGetFullResponse("stratus_disableMiner", []);
         expect(response.data.result).to.equal(false);
         const state = await sendWithRetry("stratus_state", []);
-        expect(state.miner_enabled).to.equal(false);
+        expect(state.miner_paused).to.equal(true);
     });
 
     it("Miner change on Leader without params should fail", async function () {
@@ -134,7 +134,7 @@ describe("Miner mode change integration test", function () {
         expect(disableMinerResponse.data.result).to.equal(false);
         const leaderState = await sendWithRetry("stratus_state", []);
         expect(leaderState.transactions_enabled).to.equal(true);
-        expect(leaderState.miner_enabled).to.equal(false);
+        expect(leaderState.miner_paused).to.equal(true);
 
         // Enable Transactions on Follower
         updateProviderUrl("stratus-follower");
@@ -175,7 +175,7 @@ describe("Miner mode change integration test", function () {
 
         const leaderStateAfterCleanup = await sendWithRetry("stratus_state", []);
         expect(leaderStateAfterCleanup.transactions_enabled).to.equal(true);
-        expect(leaderStateAfterCleanup.miner_enabled).to.equal(true);
+        expect(leaderStateAfterCleanup.miner_paused).to.equal(false);
 
         await waitForFollowerToSyncWithLeader();
 
@@ -197,7 +197,7 @@ describe("Miner mode change integration test", function () {
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
         expect(response.data.result).to.equal(true);
         const state = await sendWithRetry("stratus_state", []);
-        expect(state.is_interval_miner_shutdown).to.equal(true);
+        expect(state.is_interval_miner_running).to.equal(false);
     });
 
     it("Shutdown importer on Follower", async function () {
@@ -213,7 +213,7 @@ describe("Miner mode change integration test", function () {
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["1s"]);
         expect(response.data.result).to.equal(true);
         const state = await sendWithRetry("stratus_state", []);
-        expect(state.is_interval_miner_shutdown).to.equal(false);
+        expect(state.is_interval_miner_running).to.equal(true);
         expect(state.is_importer_shutdown).to.equal(true);
     });
 

@@ -4,11 +4,15 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use itertools::Itertools;
 use keccak_hasher::KeccakHasher;
 use tokio::sync::broadcast;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
 use tracing::Span;
 
 use crate::eth::miner::MinerMode;
@@ -28,12 +32,12 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
-use crate::ext::spawn_thread;
 use crate::ext::DisplayExt;
+use crate::ext::MutexExt;
 use crate::ext::MutexResultExt;
+use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
-use crate::GlobalState;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "tracing")] {
@@ -48,7 +52,7 @@ pub struct Miner {
     storage: Arc<StratusStorage>,
 
     /// Miner is enabled by default, but can be disabled.
-    is_enabled: AtomicBool,
+    is_paused: AtomicBool,
 
     /// Mode the block miner is running.
     mode: RwLock<MinerMode>,
@@ -61,6 +65,15 @@ pub struct Miner {
 
     /// Broadcasts transaction logs events.
     pub notifier_logs: broadcast::Sender<LogMined>,
+
+    // -------------------------------------------------------------------------
+    // Shutdown
+    // -------------------------------------------------------------------------
+    /// Signal sent to tasks to shutdown.
+    shutdown_signal: Mutex<CancellationToken>,
+
+    /// Spawned tasks for interval miner, can be used to await for complete shutdown.
+    interval_joinset: AsyncMutex<Option<JoinSet<()>>>,
 }
 
 /// Locks used in operations that mutate state.
@@ -78,51 +91,68 @@ impl Miner {
         Self {
             locks: MinerLocks::default(),
             storage,
-            is_enabled: AtomicBool::new(true),
+            is_paused: AtomicBool::new(false),
             mode: mode.into(),
             notifier_pending_txs: broadcast::channel(u16::MAX as usize).0,
             notifier_blocks: broadcast::channel(u16::MAX as usize).0,
             notifier_logs: broadcast::channel(u16::MAX as usize).0,
+            shutdown_signal: Mutex::new(STRATUS_SHUTDOWN_SIGNAL.child_token()),
+            interval_joinset: AsyncMutex::new(None),
         }
     }
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
-    pub fn start_if_interval(self: &Arc<Self>) -> anyhow::Result<()> {
-        let block_time = {
-            let mode_lock = self.mode.read().map_err(|_| {
-                tracing::error!("miner mode read lock was poisoned");
-                self.mode.clear_poison();
-                StratusError::MinerModeLockFailed
-            })?;
-
-            let MinerMode::Interval(block_time) = *mode_lock else {
-                // Don't do anything
-                return Ok(());
-            };
-
-            block_time
+    ///
+    /// Also unpauses `Miner` if it was paused.
+    pub async fn start_interval_mining(self: &Arc<Self>, block_time: Duration) {
+        if self.is_interval_miner_running() {
+            tracing::warn!(block_time = ?block_time.to_string_ext(), "tried to start interval mining, but it's already running, skipping");
+            return;
         };
 
-        tracing::info!(block_time = %block_time.to_string_ext(), "spawning interval miner");
+        tracing::info!(block_time = ?block_time.to_string_ext(), "spawning interval miner");
+        self.set_mode(MinerMode::Interval(block_time));
+        self.unpause();
 
         // spawn miner and ticker
         let (ticks_tx, ticks_rx) = mpsc::channel();
-        let miner_clone = Arc::clone(self);
-        spawn_thread("miner-miner", move || interval_miner::run(miner_clone, ticks_rx));
-        spawn_thread("miner-ticker", move || interval_miner_ticker::run(block_time, ticks_tx));
-        Ok(())
+        let new_shutdown_signal = STRATUS_SHUTDOWN_SIGNAL.child_token();
+        let mut joinset = JoinSet::new();
+
+        joinset.spawn_blocking({
+            let shutdown = new_shutdown_signal.clone();
+            let miner_clone = Arc::clone(self);
+            || interval_miner::run(miner_clone, ticks_rx, shutdown)
+        });
+
+        joinset.spawn(interval_miner_ticker::run(block_time, ticks_tx, new_shutdown_signal.clone()));
+
+        *self.shutdown_signal.lock_or_clear("setting up shutdown signal for interval miner") = new_shutdown_signal;
+        *self.interval_joinset.lock().await = Some(joinset);
     }
 
-    pub fn enable(&self) {
-        self.is_enabled.store(true, Ordering::Relaxed);
+    /// Shuts down interval miner, set miner mode to External.
+    pub async fn switch_to_external_mode(self: &Arc<Self>) {
+        if self.mode().is_external() {
+            tracing::warn!("trying to change mode to external, but it's already set, skipping");
+            return;
+        }
+        self.shutdown_and_wait().await;
     }
 
-    pub fn disable(&self) {
-        self.is_enabled.store(false, Ordering::Relaxed);
+    // Unpause interval miner (if in interval mode)
+    pub fn unpause(&self) {
+        self.is_paused.store(false, Ordering::Relaxed);
     }
 
-    pub fn is_enabled(&self) -> bool {
-        self.is_enabled.load(Ordering::Relaxed)
+    // Pause interval miner (if in interval mode)
+    pub fn pause(&self) {
+        self.is_paused.store(true, Ordering::Relaxed);
+    }
+
+    // Whether or not interval miner is paused (means nothing if not in interval mode)
+    pub fn is_paused(&self) -> bool {
+        self.is_paused.load(Ordering::Relaxed)
     }
 
     pub fn mode(&self) -> MinerMode {
@@ -133,12 +163,43 @@ impl Miner {
         })
     }
 
-    pub fn set_mode(&self, new_mode: MinerMode) {
+    fn set_mode(&self, new_mode: MinerMode) {
         *self.mode.write().unwrap_or_else(|poison_error| {
             tracing::error!("miner mode write lock was poisoned");
             self.mode.clear_poison();
             poison_error.into_inner()
         }) = new_mode;
+    }
+
+    pub fn is_interval_miner_running(&self) -> bool {
+        match self.interval_joinset.try_lock() {
+            // check if the joinset of tasks has futures running
+            Ok(joinset) => joinset.is_some(),
+            // if the joinset is locked, it's either trying to shutdown or turning on, so yes
+            Err(_) => true,
+        }
+    }
+
+    /// Shutdown if miner is interval miner.
+    async fn shutdown_and_wait(&self) {
+        // Note: we are intentionally holding this mutex till the end of the function, so that
+        // subsequent calls wait for the first to finish, and `is_interval_miner_running` works too
+        let mut joinset_lock = self.interval_joinset.lock().await;
+
+        let Some(mut joinset) = joinset_lock.take() else {
+            return;
+        };
+
+        tracing::warn!("Shutting down interval miner to switch to external mode");
+
+        self.shutdown_signal.lock_or_clear("sending shutdown signal to interval miner").cancel();
+
+        // wait for all tasks to end
+        while let Some(result) = joinset.join_next().await {
+            if let Err(e) = result {
+                tracing::error!(reason = ?e, "miner task failed");
+            }
+        }
     }
 
     /// Persists a transaction execution.
@@ -150,14 +211,7 @@ impl Miner {
         let _span = info_span!("miner::save_execution", %tx_hash).entered();
 
         // Check if automine is enabled
-        let is_automine = {
-            let mode_lock = self.mode.read().map_err(|_| {
-                tracing::error!("miner mode read lock was poisoned");
-                self.mode.clear_poison();
-                StratusError::MinerModeLockFailed
-            })?;
-            mode_lock.is_automine()
-        };
+        let is_automine = self.mode().is_automine();
 
         // if automine is enabled, only one transaction can enter the block at a time.
         let _save_execution_lock = if is_automine {
@@ -392,10 +446,6 @@ pub fn block_from_local(number: BlockNumber, txs: Vec<LocalTransactionExecution>
     Ok(block)
 }
 
-fn should_shutdown(task_name: &str) -> bool {
-    GlobalState::is_shutdown_warn(task_name) || GlobalState::is_interval_miner_shutdown_warn(task_name)
-}
-
 // -----------------------------------------------------------------------------
 // Miner
 // -----------------------------------------------------------------------------
@@ -406,18 +456,19 @@ mod interval_miner {
     use std::time::Duration;
 
     use tokio::time::Instant;
+    use tokio_util::sync::CancellationToken;
 
-    use crate::eth::miner::miner::should_shutdown;
     use crate::eth::miner::Miner;
-    use crate::ext::not;
     use crate::ext::MutexExt;
+    use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
 
-    pub fn run(miner: Arc<Miner>, ticks_rx: mpsc::Receiver<Instant>) {
+    pub fn run(miner: Arc<Miner>, ticks_rx: mpsc::Receiver<Instant>, cancellation: CancellationToken) {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         loop {
-            if should_shutdown(TASK_NAME) {
+            if cancellation.is_cancelled() {
+                warn_task_cancellation(TASK_NAME);
                 break;
             }
 
@@ -430,8 +481,8 @@ mod interval_miner {
                 }
             };
 
-            if not(miner.is_enabled()) {
-                tracing::warn!("skipping mining block because block mining is disabled");
+            if miner.is_paused() {
+                tracing::warn!("skipping mining block because block mining is paused");
                 continue;
             }
 
@@ -476,13 +527,13 @@ mod interval_miner_ticker {
 
     use chrono::Timelike;
     use chrono::Utc;
-    use tokio::runtime::Handle;
     use tokio::time::Instant;
+    use tokio_util::sync::CancellationToken;
 
-    use crate::eth::miner::miner::should_shutdown;
+    use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
 
-    pub fn run(block_time: Duration, ticks_tx: mpsc::Sender<Instant>) {
+    pub async fn run(block_time: Duration, ticks_tx: mpsc::Sender<Instant>, cancellation: CancellationToken) {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         // sync to next second
@@ -497,21 +548,17 @@ mod interval_miner_ticker {
         let mut ticker = tokio::time::interval(block_time);
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Burst);
 
-        // keep ticking
-        let runtime = Handle::current();
-        runtime.block_on(async {
-            ticker.tick().await;
-            loop {
-                if should_shutdown(TASK_NAME) {
-                    return;
-                }
-
-                let tick = ticker.tick().await;
-                if ticks_tx.send(tick).is_err() {
-                    warn_task_rx_closed(TASK_NAME);
-                    break;
-                };
+        loop {
+            if cancellation.is_cancelled() {
+                warn_task_cancellation(TASK_NAME);
+                return;
             }
-        });
+
+            let tick = ticker.tick().await;
+            if ticks_tx.send(tick).is_err() {
+                warn_task_rx_closed(TASK_NAME);
+                break;
+            };
+        }
     }
 }

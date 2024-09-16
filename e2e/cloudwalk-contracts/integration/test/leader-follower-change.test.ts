@@ -30,10 +30,10 @@ describe("Leader & Follower change integration test", function () {
         expect(followerHealth).to.equal(true);
     });
 
-    it("Change Leader to Leader should fail", async function () {
+    it("Change Leader to Leader should return false", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
-        expect(response.data.result).to.equal(true);
+        expect(response.data.result).to.equal(false);
     });
 
     it("Change Leader to Follower with transactions enabled should fail", async function () {
@@ -71,7 +71,7 @@ describe("Leader & Follower change integration test", function () {
     it("Change Follower to Follower should fail", async function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeToFollower", []);
-        expect(response.data.result).to.equal(true);
+        expect(response.data.result).to.equal(false);
     });
 
     it("Change Follower to Leader with transactions enabled should fail", async function () {
