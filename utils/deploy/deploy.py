@@ -10,17 +10,23 @@ COLOR_TIMESTAMP = "\033[1;30m"  # Gray
 COLOR_MESSAGE = "\033[1;37m"  # White
 COLOR_ADDRESS = "\033[1;34m"  # Light Blue
 COLOR_RESPONSE = "\033[1;32m"  # Light Green
+COLOR_ERROR = "\033[1;31m"  # Red
 
 # Function to send a request and get a response
 def send_request(url: str, method: str, params: list) -> Dict[str, Any]:
-    response = requests.post(
-        url, json={"jsonrpc": "2.0", "method": method, "params": params, "id": 1}, timeout=30
-    )
-    return response.json()
+    try:
+        response = requests.post(
+            url, json={"jsonrpc": "2.0", "method": method, "params": params, "id": 1}, timeout=30
+        )
+        return response.json()
+    except requests.exceptions.ConnectionError as e:
+        log(message=f"Error: Unable to connect to {url}. Please check the network connection and the node status.", address=url, response={"error": str(e)}, error=True)
+        exit(1)
 
 # Function to log messages with a timestamp
-def log(message: str, address: Optional[str] = None, response: Optional[Dict[str, Any]] = None) -> None:
-    log_message = f"{COLOR_TIMESTAMP}{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{COLOR_RESET} - {COLOR_MESSAGE}{message}{COLOR_RESET}"
+def log(message: str, address: Optional[str] = None, response: Optional[Dict[str, Any]] = None, error: bool = False) -> None:
+    color = COLOR_ERROR if error else COLOR_MESSAGE
+    log_message = f"{COLOR_TIMESTAMP}{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{COLOR_RESET} - {color}{message}{COLOR_RESET}"
     if address:
         log_message += f" - {COLOR_ADDRESS}Address: {address}{COLOR_RESET}"
     if response:
