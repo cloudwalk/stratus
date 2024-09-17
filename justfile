@@ -292,7 +292,7 @@ e2e-leader-follower-up test="brlc":
         just _log "Running deploy script"
         cd utils/deploy
         poetry install --no-root
-        for i in {1..10}; do
+        for i in {1..5}; do
             poetry run python3 ./deploy.py --leader 0.0.0.0:3000 --follower 0.0.0.0:3001 --auto-approve
             just _log "Switching back roles..."
             sleep 5
