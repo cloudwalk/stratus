@@ -30,7 +30,7 @@ def log(message: str, address: Optional[str] = None, response: Optional[Dict[str
 # Function to validate node health
 def validate_health(address: str, role: str) -> None:
     health = send_request(url=f"http://{address}", method="stratus_health", params=[])
-    log(message=f"Validating initial {role} health...", address=address)
+    log(message=f"Validating {role} health...", address=address)
     if health.get("result") != True:
         log(message=f"Error: {role} node health check failed.", address=address, response=health)
         exit(1)
@@ -51,7 +51,7 @@ def validate_state(address: str, expected_state: bool, role: str) -> None:
 def toggle_transactions(address: str, enable: bool, role: str) -> None:
     method = "stratus_enableTransactions" if enable else "stratus_disableTransactions"
     action = "Enabling" if enable else "Disabling"
-    result_check = True if enable else False
+    result_check = enable
 
     response = send_request(url=f"http://{address}", method=method, params=[])
     log(message=f"{action} transactions on {role}...", address=address)
@@ -65,7 +65,7 @@ def toggle_transactions(address: str, enable: bool, role: str) -> None:
 def toggle_miner(address: str, enable: bool) -> None:
     method = "stratus_enableMiner" if enable else "stratus_disableMiner"
     action = "Enabling" if enable else "Disabling"
-    result_check = True if enable else False
+    result_check = enable
 
     response = send_request(url=f"http://{address}", method=method, params=[])
     log(message=f"{action} miner on node...", address=address)
@@ -157,6 +157,12 @@ def main() -> None:
     validate_health(address=FOLLOWER_ADDRESS, role="Follower")
     validate_state(address=LEADER_ADDRESS, expected_state=True, role="Leader")
     validate_state(address=FOLLOWER_ADDRESS, expected_state=False, role="Follower")
+
+    if not AUTO_APPROVE:
+        confirmation = input("Do you want to proceed with pausing transactions? (yes/no): ")
+        if confirmation.lower() != "yes":
+            print("Script canceled.")
+            exit(1)
 
     # Disable transactions
     toggle_transactions(address=LEADER_ADDRESS, enable=False, role="Leader")
