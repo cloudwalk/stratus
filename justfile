@@ -292,10 +292,13 @@ e2e-leader-follower-up test="brlc":
         just _log "Running deploy script"
         cd utils/deploy
         poetry install --no-root
-        python3 ./deploy.py --leader 0.0.0.0:3000 --follower 0.0.0.0:3001 --auto-approve
-        just _log "Switching back roles..."
-        sleep 10
-        python3 ./deploy.py --leader 0.0.0.0:3001 --follower 0.0.0.0:3000 --auto-approve
+        for i in {1..10}; do
+            python3 ./deploy.py --leader 0.0.0.0:3000 --follower 0.0.0.0:3001 --auto-approve
+            just _log "Switching back roles..."
+            sleep 5
+            python3 ./deploy.py --leader 0.0.0.0:3001 --follower 0.0.0.0:3000 --auto-approve
+            sleep 5
+        done
         if [ $? -ne 0 ]; then
             just _log "Deploy script failed"
             exit 1
