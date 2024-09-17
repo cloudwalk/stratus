@@ -176,7 +176,7 @@ impl Miner {
     pub fn is_interval_miner_running(&self) -> bool {
         match self.interval_joinset.try_lock() {
             // check if the joinset of tasks has futures running
-            Ok(joinset) => joinset.is_some(),
+            Ok(joinset) => joinset.as_ref().is_some_and(|joinset| not(joinset.is_empty())),
             // if the joinset is locked, it's either trying to shutdown or turning on, so yes
             Err(_) => true,
         }
