@@ -138,6 +138,8 @@ def has_leader(leader_address: str, follower_address: str, extra_nodes: List[str
         if state.get("result", {}).get("is_leader"):
             log(message=f"Error: Node is currently a leader.", address=node, response=state)
             return True
+        else:
+            log(message=f"Node is not a leader.", address=node, response=state)
     return False
 
 def main() -> None:
