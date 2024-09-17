@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 use tokio::runtime::Runtime;
+use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
 use crate::alias::JsonValue;
@@ -102,6 +103,9 @@ pub static STRATUS_SHUTDOWN_SIGNAL: Lazy<CancellationToken> = Lazy::new(Cancella
 /// Importer is running or being shut-down?
 static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(true);
 
+/// A guard that is taken when importer is running.
+pub static IMPORTER_ONLINE_TASKS_SEMAPHORE: Lazy<Semaphore> = Lazy::new(|| Semaphore::new(3));
+
 /// Transaction should be accepted?
 static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
 
@@ -169,6 +173,16 @@ impl GlobalState {
     /// Checks if the importer is being shutdown.
     pub fn is_importer_shutdown() -> bool {
         IMPORTER_SHUTDOWN.load(Ordering::Relaxed)
+    }
+
+    /// Waits till importer is done.
+    pub async fn wait_for_importer_to_finish() {
+        // 3 permits will be available when all 3 tasks are finished
+        let result = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire_many(3).await;
+
+        if let Err(e) = result {
+            tracing::error!(reason = ?e, "error waiting for importer to finish");
+        }
     }
 
     /// Checks if the importer is being shutdown. Emits a warning with the task name in case it is.

@@ -26,6 +26,7 @@ use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
+use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -156,6 +157,7 @@ impl Importer {
         mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "block-executor";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
 
         loop {
             if Self::should_shutdown(TASK_NAME) {
@@ -221,6 +223,7 @@ impl Importer {
     /// Retrieves the blockchain current block number.
     async fn start_number_fetcher(chain: Arc<BlockchainClient>, sync_interval: Duration) -> anyhow::Result<()> {
         const TASK_NAME: &str = "external-number-fetcher";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
 
         // initial newHeads subscriptions.
         // abort application if cannot subscribe.
@@ -334,6 +337,7 @@ impl Importer {
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "external-block-fetcher";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
 
         loop {
             if Self::should_shutdown(TASK_NAME) {
