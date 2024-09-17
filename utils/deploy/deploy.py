@@ -12,6 +12,12 @@ COLOR_ADDRESS = "\033[1;34m"  # Light Blue
 COLOR_RESPONSE = "\033[1;32m"  # Light Green
 COLOR_ERROR = "\033[1;31m"  # Red
 
+# Custom exception
+class DeploymentError(Exception):
+    def __init__(self, message: str, error_type: Optional[str] = None):
+        super().__init__(message)
+        self.error_type = error_type
+
 # Function to send a request and get a response
 def send_request(url: str, method: str, params: list) -> Dict[str, Any]:
     try:
@@ -21,7 +27,7 @@ def send_request(url: str, method: str, params: list) -> Dict[str, Any]:
         return response.json()
     except requests.exceptions.ConnectionError as e:
         log(message=f"Error: Unable to connect to {url}. Please check the network connection and the node status.", address=url, response={"error": str(e)}, error=True)
-        exit(1)
+        raise DeploymentError(f"Unable to connect to {url}", error_type="ConnectionError")
 
 # Function to log messages with a timestamp
 def log(message: str, address: Optional[str] = None, response: Optional[Dict[str, Any]] = None, error: bool = False) -> None:
@@ -39,7 +45,7 @@ def validate_health(address: str, role: str) -> None:
     log(message=f"Validating {role} health...", address=address)
     if health.get("result") != True:
         log(message=f"Error: {role} node health check failed.", address=address, response=health)
-        exit(1)
+        raise DeploymentError(f"{role} node health check failed", error_type="HealthCheckError")
     else:
         log(message=f"{role} node health check passed.", address=address, response=health)
 
@@ -49,7 +55,7 @@ def validate_state(address: str, expected_state: bool, role: str) -> None:
     log(message=f"Validating {role} state...", address=address)
     if state.get("result", {}).get("is_leader") != expected_state:
         log(message=f"Error: {role} node is not identified as expected.", address=address, response=state)
-        exit(1)
+        raise DeploymentError(f"{role} node is not identified as expected", error_type="StateCheckError")
     else:
         log(message=f"{role} node is correctly identified as expected.", address=address, response=state)
 
@@ -63,7 +69,7 @@ def toggle_transactions(address: str, enable: bool, role: str) -> None:
     log(message=f"{action} transactions on {role}...", address=address)
     if response.get("result") != result_check:
         log(message=f"Error: Failed to {action.lower()} transactions on {role}.", address=address, response=response)
-        exit(1)
+        raise DeploymentError(f"Failed to {action.lower()} transactions on {role}", error_type="TransactionToggleError")
     else:
         log(message=f"Successfully {action.lower()} transactions on {role}.", address=address, response=response)
 
@@ -77,7 +83,7 @@ def toggle_miner(address: str, enable: bool) -> None:
     log(message=f"{action} miner on node...", address=address)
     if response.get("result") != result_check:
         log(message=f"Error: Failed to {action.lower()} miner on node.", address=address, response=response)
-        exit(1)
+        raise DeploymentError(f"Failed to {action.lower()} miner on node", error_type="MinerToggleError")
     else:
         log(message=f"Successfully {action.lower()} miner on node.", address=address, response=response)
 
@@ -131,7 +137,7 @@ def change_role(address: str, method: str, params: list, role: str) -> None:
     log(message=f"Changing to {role}...", address=address)
     if change_role.get("result") != True:
         log(message=f"Error: Failed to change to {role}.", address=address, response=change_role)
-        exit(1)
+        raise DeploymentError(f"Failed to change to {role}", error_type="RoleChangeError")
     else:
         log(message=f"Successfully changed to {role}.", address=address, response=change_role)
 
@@ -143,7 +149,7 @@ def has_leader(leader_address: str, follower_address: str, extra_nodes: List[str
         log(message=f"Checking if node is a leader...", address=node)
         if state.get("result", {}).get("is_leader"):
             log(message=f"Error: Node is currently a leader.", address=node, response=state)
-            return True
+            raise DeploymentError(f"Node {node} is currently a leader", error_type="LeaderCheckError")
         else:
             log(message=f"Node is not a leader.", address=node, response=state)
     return False
@@ -163,11 +169,11 @@ def main() -> None:
 
     if LEADER_ADDRESS == FOLLOWER_ADDRESS:
         log(message="Error: Leader and follower addresses must be different.")
-        exit(1)
+        raise DeploymentError("Leader and follower addresses must be different", error_type="InputValidationError")
 
     if LEADER_ADDRESS in EXTRA_NODES or FOLLOWER_ADDRESS in EXTRA_NODES:
         log(message="Error: Extra nodes list must not contain the leader or follower addresses.")
-        exit(1)
+        raise DeploymentError("Extra nodes list must not contain the leader or follower addresses", error_type="InputValidationError")
 
     EXTERNAL_RPC_TIMEOUT = "2s"
     SYNC_INTERVAL = "100ms"
@@ -177,83 +183,86 @@ def main() -> None:
 
     start_time = time.time()
 
-    # Validate initial health and state
-    validate_health(address=LEADER_ADDRESS, role="Leader")
-    validate_health(address=FOLLOWER_ADDRESS, role="Follower")
-    validate_state(address=LEADER_ADDRESS, expected_state=True, role="Leader")
-    validate_state(address=FOLLOWER_ADDRESS, expected_state=False, role="Follower")
+    try:
+        # Validate initial health and state
+        validate_health(address=LEADER_ADDRESS, role="Leader")
+        validate_health(address=FOLLOWER_ADDRESS, role="Follower")
+        validate_state(address=LEADER_ADDRESS, expected_state=True, role="Leader")
+        validate_state(address=FOLLOWER_ADDRESS, expected_state=False, role="Follower")
 
-    if not AUTO_APPROVE:
-        confirmation = input("Do you want to proceed with pausing transactions? (yes/no): ")
-        if confirmation.lower() != "yes":
-            print("Script canceled.")
-            exit(1)
+        if not AUTO_APPROVE:
+            confirmation = input("Do you want to proceed with pausing transactions? (yes/no): ")
+            if confirmation.lower() != "yes":
+                print("Script canceled.")
+                return
 
-    # Disable transactions
-    toggle_transactions(address=LEADER_ADDRESS, enable=False, role="Leader")
-    toggle_transactions(address=FOLLOWER_ADDRESS, enable=False, role="Follower")
+        # Disable transactions
+        toggle_transactions(address=LEADER_ADDRESS, enable=False, role="Leader")
+        toggle_transactions(address=FOLLOWER_ADDRESS, enable=False, role="Follower")
 
-    # Check pending transactions
-    if not has_pending_transactions(address=LEADER_ADDRESS, total_attempts=TOTAL_CHECK_ATTEMPTS, required_checks=REQUIRED_CONSECUTIVE_CHECKS, sleep_interval=SLEEP_INTERVAL):
-        toggle_transactions(address=LEADER_ADDRESS, enable=True, role="Leader")
-        toggle_transactions(address=FOLLOWER_ADDRESS, enable=True, role="Follower")
-        exit(1)
-    
-    if not AUTO_APPROVE:
-        confirmation = input("Do you want to proceed with pausing the miner? (yes/no): ")
-        if confirmation.lower() != "yes":
-            print("Script canceled.")
-            # Toggle transactions back on
+        # Check pending transactions
+        if not has_pending_transactions(address=LEADER_ADDRESS, total_attempts=TOTAL_CHECK_ATTEMPTS, required_checks=REQUIRED_CONSECUTIVE_CHECKS, sleep_interval=SLEEP_INTERVAL):
             toggle_transactions(address=LEADER_ADDRESS, enable=True, role="Leader")
             toggle_transactions(address=FOLLOWER_ADDRESS, enable=True, role="Follower")
-            exit(1)
+            return
+        
+        if not AUTO_APPROVE:
+            confirmation = input("Do you want to proceed with pausing the miner? (yes/no): ")
+            if confirmation.lower() != "yes":
+                print("Script canceled.")
+                # Toggle transactions back on
+                toggle_transactions(address=LEADER_ADDRESS, enable=True, role="Leader")
+                toggle_transactions(address=FOLLOWER_ADDRESS, enable=True, role="Follower")
+                return
 
-    # Pause miner on Leader
-    toggle_miner(address=LEADER_ADDRESS, enable=False)
+        # Pause miner on Leader
+        toggle_miner(address=LEADER_ADDRESS, enable=False)
 
-    # Check block synchronization
-    if not blocks_synced(leader_address=LEADER_ADDRESS, follower_address=FOLLOWER_ADDRESS, total_attempts=TOTAL_CHECK_ATTEMPTS, required_checks=REQUIRED_CONSECUTIVE_CHECKS, sleep_interval=SLEEP_INTERVAL):
-        toggle_miner(address=LEADER_ADDRESS, enable=True)
-        toggle_transactions(address=LEADER_ADDRESS, enable=True, role="Leader")
-        toggle_transactions(address=FOLLOWER_ADDRESS, enable=True, role="Follower")
-        exit(1)
-
-    if not AUTO_APPROVE:
-        confirmation = input("Do you want to proceed with changing the Leader to Follower? (yes/no): ")
-        if confirmation.lower() != "yes":
-            print("Script canceled.")
-            # Toggle miner back on
+        # Check block synchronization
+        if not blocks_synced(leader_address=LEADER_ADDRESS, follower_address=FOLLOWER_ADDRESS, total_attempts=TOTAL_CHECK_ATTEMPTS, required_checks=REQUIRED_CONSECUTIVE_CHECKS, sleep_interval=SLEEP_INTERVAL):
             toggle_miner(address=LEADER_ADDRESS, enable=True)
-            # Toggle transactions back on
             toggle_transactions(address=LEADER_ADDRESS, enable=True, role="Leader")
             toggle_transactions(address=FOLLOWER_ADDRESS, enable=True, role="Follower")
-            exit(1)
-            
-    # Change Leader to Follower
-    change_to_follower_params = [f"http://{FOLLOWER_ADDRESS}/", f"ws://{FOLLOWER_ADDRESS}/", EXTERNAL_RPC_TIMEOUT, SYNC_INTERVAL]
-    change_role(address=LEADER_ADDRESS, method="stratus_changeToFollower", params=change_to_follower_params, role="Follower")
+            return
 
-    # Validate new Follower state
-    validate_state(address=LEADER_ADDRESS, expected_state=False, role="Follower")
+        if not AUTO_APPROVE:
+            confirmation = input("Do you want to proceed with changing the Leader to Follower? (yes/no): ")
+            if confirmation.lower() != "yes":
+                print("Script canceled.")
+                # Toggle miner back on
+                toggle_miner(address=LEADER_ADDRESS, enable=True)
+                # Toggle transactions back on
+                toggle_transactions(address=LEADER_ADDRESS, enable=True, role="Leader")
+                toggle_transactions(address=FOLLOWER_ADDRESS, enable=True, role="Follower")
+                return
+                
+        # Change Leader to Follower
+        change_to_follower_params = [f"http://{FOLLOWER_ADDRESS}/", f"ws://{FOLLOWER_ADDRESS}/", EXTERNAL_RPC_TIMEOUT, SYNC_INTERVAL]
+        change_role(address=LEADER_ADDRESS, method="stratus_changeToFollower", params=change_to_follower_params, role="Follower")
 
-    # Check if any extra nodes, leader, or follower are leaders
-    if has_leader(LEADER_ADDRESS, FOLLOWER_ADDRESS, EXTRA_NODES):
-        log(message="Error: One of the nodes is currently a leader. Aborting leader switch.")
-        exit(1)
+        # Validate new Follower state
+        validate_state(address=LEADER_ADDRESS, expected_state=False, role="Follower")
 
-    # Change Follower to Leader
-    change_role(address=FOLLOWER_ADDRESS, method="stratus_changeToLeader", params=[], role="Leader")
+        # Check if any extra nodes, leader, or follower are leaders
+        if has_leader(LEADER_ADDRESS, FOLLOWER_ADDRESS, EXTRA_NODES):
+            log(message="Error: One of the nodes is currently a leader. Aborting leader switch.")
+            return
 
-    # Validate new Leader state
-    validate_state(address=FOLLOWER_ADDRESS, expected_state=True, role="Leader")
+        # Change Follower to Leader
+        change_role(address=FOLLOWER_ADDRESS, method="stratus_changeToLeader", params=[], role="Leader")
 
-    # Enable transactions on new Leader and Follower
-    toggle_transactions(address=FOLLOWER_ADDRESS, enable=True, role="Leader")
-    toggle_transactions(address=LEADER_ADDRESS, enable=True, role="Follower")
+        # Validate new Leader state
+        validate_state(address=FOLLOWER_ADDRESS, expected_state=True, role="Leader")
 
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    log(message=f"Process completed in {elapsed_time:.2f} seconds.")
+        # Enable transactions on new Leader and Follower
+        toggle_transactions(address=FOLLOWER_ADDRESS, enable=True, role="Leader")
+        toggle_transactions(address=LEADER_ADDRESS, enable=True, role="Follower")
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        log(message=f"Process completed in {elapsed_time:.2f} seconds.")
+    except DeploymentError as e:
+        log(message=f"Process failed: {str(e)}", error=True)
 
 if __name__ == "__main__":
     main()
