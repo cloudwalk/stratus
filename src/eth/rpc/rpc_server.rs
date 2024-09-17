@@ -63,9 +63,7 @@ use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
-use crate::ext::traced_sleep;
 use crate::ext::SerdeResultExt;
-use crate::ext::SleepReason;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -305,7 +303,6 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 
 async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     const LEADER_MINER_INTERVAL: Duration = Duration::from_secs(1);
-    const WAIT_DELAY: Duration = Duration::from_secs(5);
     tracing::info!("starting process to change node to leader");
 
     if GlobalState::get_node_mode() == NodeMode::Leader {
@@ -332,7 +329,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     }
 
     tracing::info!("wait for importer to shutdown");
-    traced_sleep(WAIT_DELAY, SleepReason::SyncData).await;
+    GlobalState::wait_for_importer_to_finish().await;
 
     let change_miner_mode_result = change_miner_mode(MinerMode::Interval(LEADER_MINER_INTERVAL), &ctx).await;
     if let Err(e) = change_miner_mode_result {
