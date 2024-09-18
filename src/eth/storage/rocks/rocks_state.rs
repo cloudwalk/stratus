@@ -3,6 +3,7 @@ use std::fmt;
 use std::fmt::Debug;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
+use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::bail;
@@ -121,10 +122,11 @@ pub struct RocksStorageState {
     /// the DB metrics, `Options` can be cloned, but two equal `Options` might not retrieve the same metrics
     #[cfg(feature = "metrics")]
     db_options: Options,
+    shutdown_timeout: Duration,
 }
 
 impl RocksStorageState {
-    pub fn new(path: String) -> Result<Self> {
+    pub fn new(path: String, shutdown_timeout: Duration) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
         #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
         let (db, db_options) = create_or_open_db(&path, &CF_OPTIONS_MAP).context("when trying to create (or open) rocksdb")?;
@@ -151,6 +153,7 @@ impl RocksStorageState {
             #[cfg(feature = "metrics")]
             db_options,
             db,
+            shutdown_timeout,
         };
 
         tracing::debug!("opened database successfully");
@@ -698,21 +701,19 @@ impl RocksStorageState {
 
 impl Drop for RocksStorageState {
     fn drop(&mut self) {
-        let minute_in_micros = 60 * 1_000_000;
-
         let mut options = WaitForCompactOptions::default();
         // if background jobs are paused, it makes no sense to keep waiting indefinitely
         options.set_abort_on_pause(true);
         // flush all write buffers before waiting
         options.set_flush(true);
-        // wait for 4 minutes at max, sacrificing a long shutdown for a faster boot
-        options.set_timeout(4 * minute_in_micros);
+        // wait for the duration passed to `--rocks-shutdown-timeout`, or the default value
+        options.set_timeout(self.shutdown_timeout.as_micros().try_into().unwrap_or_default());
 
         tracing::info!("starting rocksdb shutdown");
         let instant = Instant::now();
 
         // here, waiting for is done to force WAL logs to be processed, to skip replaying most of them when booting
-        // up, which was slowing things down
+        // up, which was slowing things down, we are sacrificing a long shutdown for a faster boot
         let result = self.db.wait_for_compact(&options);
         let waited_for = instant.elapsed();
 
@@ -786,7 +787,7 @@ mod tests {
     fn regression_test_read_logs_without_providing_filter_address() {
         let test_dir = tempdir().unwrap();
 
-        let state = RocksStorageState::new(test_dir.path().display().to_string()).unwrap();
+        let state = RocksStorageState::new(test_dir.path().display().to_string(), Duration::ZERO).unwrap();
 
         assert_eq!(state.read_logs(&LogFilter::default()).unwrap(), vec![]);
 
@@ -818,7 +819,7 @@ mod tests {
     #[test]
     fn regression_test_saving_account_changes_for_accounts_that_didnt_change() {
         let test_dir = tempdir().unwrap();
-        let state = RocksStorageState::new(test_dir.path().display().to_string()).unwrap();
+        let state = RocksStorageState::new(test_dir.path().display().to_string(), Duration::ZERO).unwrap();
 
         let change_base = ExecutionAccountChanges {
             new_account: false,

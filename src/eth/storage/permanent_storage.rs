@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use clap::Parser;
@@ -19,6 +20,7 @@ use crate::eth::storage::redis::RedisPermanentStorage;
 use crate::eth::storage::InMemoryPermanentStorage;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StoragePointInTime;
+use crate::ext::parse_duration;
 use crate::log_and_err;
 
 /// Permanent (committed) storage operations.
@@ -89,6 +91,10 @@ pub struct PermanentStorageConfig {
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
     pub rocks_path_prefix: Option<String>,
+
+    /// The maximum time to wait for the RocksDB `wait_for_compaction` shutdown call.
+    #[arg(long = "rocks-shutdown-timeout", env = "ROCKS_SHUTDOWN_TIMEOUT", value_parser=parse_duration, default_value = "4m")]
+    pub rocks_shutdown_timeout: Duration,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -120,7 +126,8 @@ impl PermanentStorageConfig {
 
             PermanentStorageKind::Rocks => {
                 let prefix = self.rocks_path_prefix.clone();
-                Box::new(RocksPermanentStorage::new(prefix)?)
+                let shutdown_timeout = self.rocks_shutdown_timeout;
+                Box::new(RocksPermanentStorage::new(prefix, shutdown_timeout)?)
             }
         };
         Ok(perm)
