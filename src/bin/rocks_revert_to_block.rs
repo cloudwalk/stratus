@@ -6,6 +6,7 @@
 //! was just processed, that is, before the next ones were processed.
 
 use std::cmp::Ordering;
+use std::time::Duration;
 
 use anyhow::bail;
 use stratus::config::RocksRevertToBlockConfig;
@@ -27,7 +28,7 @@ fn main() -> anyhow::Result<()> {
 fn run(config: RocksRevertToBlockConfig) -> anyhow::Result<()> {
     let _timer = DropTimer::start("rocks-revert-to-block");
 
-    let rocks = RocksPermanentStorage::new(config.rocks_path_prefix)?;
+    let rocks = RocksPermanentStorage::new(config.rocks_path_prefix, Duration::from_secs(30))?;
 
     let target_block = config.block_number;
     let current_block = rocks.read_mined_block_number()?.as_u64();

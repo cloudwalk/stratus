@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use anyhow::bail;
 
@@ -26,7 +27,7 @@ pub struct RocksPermanentStorage {
 }
 
 impl RocksPermanentStorage {
-    pub fn new(rocks_path_prefix: Option<String>) -> anyhow::Result<Self> {
+    pub fn new(rocks_path_prefix: Option<String>, shutdown_timeout: Duration) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
         let path = if let Some(prefix) = rocks_path_prefix {
@@ -47,7 +48,7 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = RocksStorageState::new(path)?;
+        let state = RocksStorageState::new(path, shutdown_timeout)?;
         let block_number = state.preload_block_number()?;
 
         Ok(Self { state, block_number })
