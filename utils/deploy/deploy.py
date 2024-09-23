@@ -2,7 +2,7 @@ import argparse
 import requests
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 # Define colors
 COLOR_RESET = "\033[0m"
@@ -141,9 +141,9 @@ def change_role(address: str, method: str, params: list, role: str) -> None:
     else:
         log(message=f"Successfully changed to {role}.", address=address, response=change_role)
 
-# Function to check if any extra nodes, leader, or follower are leaders
-def has_leader(leader_address: str, follower_address: str, extra_nodes: List[str]) -> bool:
-    nodes_to_check = [leader_address, follower_address] + extra_nodes
+# Function to check if leader or follower are leaders
+def has_leader(leader_address: str, follower_address: str) -> bool:
+    nodes_to_check = [leader_address, follower_address]
     for node in nodes_to_check:
         state = send_request(url=f"http://{node}", method="stratus_state", params=[])
         log(message=f"Checking if node is a leader...", address=node)
@@ -158,22 +158,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Deploy script")
     parser.add_argument("--leader", required=True, help="Leader address")
     parser.add_argument("--follower", required=True, help="Follower address")
-    parser.add_argument("--extra-nodes", nargs='*', help="List of extra nodes")
     parser.add_argument("--auto-approve", action="store_true", help="Auto approve actions")
     args = parser.parse_args()
 
     LEADER_ADDRESS = args.leader
     FOLLOWER_ADDRESS = args.follower
-    EXTRA_NODES = args.extra_nodes or []
     AUTO_APPROVE = args.auto_approve
 
     if LEADER_ADDRESS == FOLLOWER_ADDRESS:
         log(message="Error: Leader and follower addresses must be different.")
         raise DeploymentError("Leader and follower addresses must be different", error_type="InputValidationError")
-
-    if LEADER_ADDRESS in EXTRA_NODES or FOLLOWER_ADDRESS in EXTRA_NODES:
-        log(message="Error: Extra nodes list must not contain the leader or follower addresses.")
-        raise DeploymentError("Extra nodes list must not contain the leader or follower addresses", error_type="InputValidationError")
 
     EXTERNAL_RPC_TIMEOUT = "2s"
     SYNC_INTERVAL = "100ms"
@@ -243,8 +237,8 @@ def main() -> None:
         # Validate new Follower state
         validate_state(address=LEADER_ADDRESS, expected_state=False, role="Follower")
 
-        # Check if any extra nodes, leader, or follower are leaders
-        if has_leader(LEADER_ADDRESS, FOLLOWER_ADDRESS, EXTRA_NODES):
+        # Check if any leader or follower are leaders
+        if has_leader(LEADER_ADDRESS, FOLLOWER_ADDRESS):
             log(message="Error: One of the nodes is currently a leader. Aborting leader switch.")
             return
 
