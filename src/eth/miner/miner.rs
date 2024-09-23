@@ -257,7 +257,7 @@ impl Miner {
 
         // mine block
         let block = self.storage.finish_pending_block()?;
-        Span::with(|s| s.rec_str("block_number", &block.number));
+        Span::with(|s| s.rec_str("block_number", &block.header.number));
         let Some(external_block) = block.external_block else {
             return log_and_err!("failed to mine external block because there is no external block being reexecuted");
         };
@@ -271,7 +271,7 @@ impl Miner {
                 return log_and_err!("failed to mine external block because one of the transactions is not an external transaction");
             }
         }
-        let mined_external_txs = mine_external_transactions(block.number, external_txs)?;
+        let mined_external_txs = mine_external_transactions(block.header.number, external_txs)?;
 
         block_from_external(external_block, mined_external_txs)
     }
@@ -297,7 +297,7 @@ impl Miner {
 
         // mine block
         let block = self.storage.finish_pending_block()?;
-        Span::with(|s| s.rec_str("block_number", &block.number));
+        Span::with(|s| s.rec_str("block_number", &block.header.number));
 
         // mine transactions
         let mut local_txs = Vec::with_capacity(block.transactions.len());
@@ -309,7 +309,7 @@ impl Miner {
             }
         }
 
-        block_from_local(block.number, local_txs)
+        block_from_local(block.header.number, local_txs)
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
