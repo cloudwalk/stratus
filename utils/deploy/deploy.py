@@ -60,22 +60,22 @@ def log(message: str, address: Optional[str] = None, response: Optional[Dict[str
 # Function to validate node health
 def validate_health(address: str, role: NodeRole) -> None:
     health = send_request(url=f"http://{address}", method="stratus_health", params=[])
-    log(message=f"Validating {role} health...", address=address)
+    log(message=f"Validating {role.name} health...", address=address)
     if health.get("result") != True:
-        log(message=f"Error: {role} node health check failed.", address=address, response=health)
-        raise DeploymentError(f"{role} node health check failed", error_type="HealthCheckError")
+        log(message=f"Error: {role.name} node health check failed.", address=address, response=health)
+        raise DeploymentError(f"{role.name} node health check failed", error_type="HealthCheckError")
     else:
-        log(message=f"{role} node health check passed.", address=address, response=health)
+        log(message=f"{role.name} node health check passed.", address=address, response=health)
 
 # Function to validate node state
 def validate_state(address: str, expected_state: bool, role: NodeRole) -> None:
     state = send_request(url=f"http://{address}", method="stratus_state", params=[])
-    log(message=f"Validating {role} state...", address=address)
+    log(message=f"Validating {role.name} state...", address=address)
     if state.get("result", {}).get("is_leader") != expected_state:
-        log(message=f"Error: {role} node is not identified as expected.", address=address, response=state)
-        raise DeploymentError(f"{role} node is not identified as expected", error_type="StateCheckError")
+        log(message=f"Error: {role.name} node is not identified as expected.", address=address, response=state)
+        raise DeploymentError(f"{role.name} node is not identified as expected", error_type="StateCheckError")
     else:
-        log(message=f"{role} node is correctly identified as expected.", address=address, response=state)
+        log(message=f"{role.name} node is correctly identified as expected.", address=address, response=state)
 
 # Function to toggle transactions
 def toggle_transactions(address: str, enable: bool, role: NodeRole) -> None:
@@ -84,12 +84,12 @@ def toggle_transactions(address: str, enable: bool, role: NodeRole) -> None:
     result_check = enable
 
     response = send_request(url=f"http://{address}", method=method, params=[])
-    log(message=f"{action} transactions on {role}...", address=address)
+    log(message=f"{action} transactions on {role.name}...", address=address)
     if response.get("result") != result_check:
-        log(message=f"Error: Failed to {action.lower()} transactions on {role}.", address=address, response=response)
-        raise DeploymentError(f"Failed to {action.lower()} transactions on {role}", error_type="TransactionToggleError")
+        log(message=f"Error: Failed to {action.lower()} transactions on {role.name}.", address=address, response=response)
+        raise DeploymentError(f"Failed to {action.lower()} transactions on {role.name}", error_type="TransactionToggleError")
     else:
-        log(message=f"Successfully {action.lower()} transactions on {role}.", address=address, response=response)
+        log(message=f"Successfully {action.lower()} transactions on {role.name}.", address=address, response=response)
 
 # Function to toggle miner
 def toggle_miner(address: str, enable: bool) -> None:
@@ -110,17 +110,17 @@ def has_pending_transactions(address: str, total_attempts: int, required_checks:
     success_count = 0
     for i in range(1, total_attempts + 1):
         pending_tx_count = send_request(url=f"http://{address}", method="stratus_pendingTransactionsCount", params=[])
-        log(message=f"Checking pending transactions on Leader (Attempt {i})...", address=address)
+        log(message=f"Checking pending transactions on LEADER (Attempt {i})...", address=address)
         if pending_tx_count.get("result") == 0:
             success_count += 1
-            log(message=f"No pending transactions on the Leader node (Attempt {i}).", address=address, response=pending_tx_count)
+            log(message=f"No pending transactions on the LEADER node (Attempt {i}).", address=address, response=pending_tx_count)
         else:
             success_count = 0
-            log(message=f"Error: There are pending transactions on the Leader node (Attempt {i}).", address=address, response=pending_tx_count)
+            log(message=f"Error: There are pending transactions on the LEADER node (Attempt {i}).", address=address, response=pending_tx_count)
         if success_count == required_checks:
             return True
         time.sleep(sleep_interval)
-    log(message=f"Error: Failed to confirm no pending transactions on the Leader node after {total_attempts} attempts.", address=address)
+    log(message=f"Error: Failed to confirm no pending transactions on the LEADER node after {total_attempts} attempts.", address=address)
     return False
 
 # Function to check block synchronization
@@ -138,38 +138,38 @@ def blocks_synced(leader_address: str, follower_address: str, total_attempts: in
             log(message=f"First check, setting previous block number (Attempt {i}).", address=leader_address, response=follower_block_number)
         elif leader_block_number_result == follower_block_number_result and leader_block_number_result == previous_block_number:
             import_success_count += 1
-            log(message=f"Follower is in sync with the Leader (Attempt {i}).", address=follower_address, response=follower_block_number)
+            log(message=f"FOLLOWER is in sync with the LEADER (Attempt {i}).", address=follower_address, response=follower_block_number)
         else:
             import_success_count = 0
             previous_block_number = leader_block_number_result
-            log(message=f"Error: Follower is not in sync with the Leader (Attempt {i}).", address=follower_address, response=follower_block_number)
+            log(message=f"Error: FOLLOWER is not in sync with the LEADER (Attempt {i}).", address=follower_address, response=follower_block_number)
         if import_success_count == required_checks:
             return True
         time.sleep(sleep_interval)
-    log(message=f"Error: Failed to confirm block import on Follower or new blocks are being generated after {total_attempts} attempts.", address=follower_address)
+    log(message=f"Error: Failed to confirm block import on FOLLOWER or new blocks are being generated after {total_attempts} attempts.", address=follower_address)
     return False
 
 # Function to change node roles
 def change_role(address: str, method: str, params: list, role: NodeRole) -> None:
     change_role = send_request(url=f"http://{address}", method=method, params=params)
-    log(message=f"Changing to {role}...", address=address)
+    log(message=f"Changing to {role.name}...", address=address)
     if change_role.get("result") != True:
-        log(message=f"Error: Failed to change to {role}.", address=address, response=change_role)
-        raise DeploymentError(f"Failed to change to {role}", error_type="RoleChangeError")
+        log(message=f"Error: Failed to change to {role.name}.", address=address, response=change_role)
+        raise DeploymentError(f"Failed to change to {role.name}", error_type="RoleChangeError")
     else:
-        log(message=f"Successfully changed to {role}.", address=address, response=change_role)
+        log(message=f"Successfully changed to {role.name}.", address=address, response=change_role)
 
 # Function to check if leader or follower are leaders
 def has_leader(leader_address: str, follower_address: str) -> bool:
     nodes_to_check = [leader_address, follower_address]
     for node in nodes_to_check:
         state = send_request(url=f"http://{node}", method="stratus_state", params=[])
-        log(message=f"Checking if node is a leader...", address=node)
+        log(message=f"Checking if node is a LEADER...", address=node)
         if state.get("result", {}).get("is_leader"):
-            log(message=f"Error: Node is currently a leader.", address=node, response=state)
-            raise DeploymentError(f"Node {node} is currently a leader", error_type="LeaderCheckError")
+            log(message=f"Error: Node is currently a LEADER.", address=node, response=state)
+            raise DeploymentError(f"Node {node} is currently a LEADER", error_type="LeaderCheckError")
         else:
-            log(message=f"Node is not a leader.", address=node, response=state)
+            log(message=f"Node is not a LEADER.", address=node, response=state)
     return False
 
 def main() -> None:
