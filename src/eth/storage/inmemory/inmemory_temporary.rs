@@ -115,9 +115,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         let mut states = self.lock_write();
         match states.head.block.as_mut() {
-            Some(block) => block.number = number,
+            Some(block) => block.header.number = number,
             None => {
-                states.head.block = Some(PendingBlock::new(number));
+                states.head.block = Some(PendingBlock::new_at_now(number));
             }
         }
         Ok(())
@@ -126,7 +126,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     fn read_pending_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
         let states = self.lock_read();
         match &states.head.block {
-            Some(block) => Ok(Some(block.number)),
+            Some(block) => Ok(Some(block.header.number)),
             None => Ok(None),
         }
     }
@@ -207,7 +207,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         // create new state
         states.insert(0, InMemoryTemporaryStorageState::default());
-        states.head.block = Some(PendingBlock::new(finished_block.number.next_block_number()));
+        states.head.block = Some(PendingBlock::new_at_now(finished_block.header.number.next_block_number()));
 
         Ok(finished_block)
     }
