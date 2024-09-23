@@ -3,6 +3,7 @@ use display_json::DebugAsJson;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::UnixTime;
 
+/// Header of the pending block being mined.
 #[derive(DebugAsJson, Clone, Default, serde::Serialize)]
 pub struct PendingBlockHeader {
     pub number: BlockNumber,
