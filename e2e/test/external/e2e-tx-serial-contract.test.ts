@@ -10,6 +10,7 @@ import {
     calculateSlotPosition,
     deployTestContractBalances,
     send,
+    sendEvmMine,
     sendExpect,
     sendGetBlockNumber,
     sendGetNonce,
@@ -34,113 +35,114 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
 
-    // it("Contract is deployed", async () => {
-    //     _contract = await deployTestContractBalances();
-    // });
+    it("Contract is deployed", async () => {
+        _contract = await deployTestContractBalances();
+        await sendEvmMine();
+    });
 
-    // it("Eth_getCode is not null for deployed contract", async () => {
-    //     const deployedCode = await send("eth_getCode", [_contract.target, "latest"]);
+    it("Eth_getCode is not null for deployed contract", async () => {
+        const deployedCode = await send("eth_getCode", [_contract.target, "latest"]);
 
-    //     expect(deployedCode).not.eq("0x");
-    // });
+        expect(deployedCode).not.eq("0x");
+    });
 
-    // it("Deployment transaction receipt", async () => {
-    //     const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
-    //     expect(deploymentTransactionHash).not.eq(undefined);
+    it("Deployment transaction receipt", async () => {
+        const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
+        expect(deploymentTransactionHash).not.eq(undefined);
 
-    //     const receipt = await send("eth_getTransactionReceipt", [deploymentTransactionHash]);
+        const receipt = await send("eth_getTransactionReceipt", [deploymentTransactionHash]);
 
-    //     // Fields existence and null checks
-    //     expect(receipt.contractAddress).not.eq(null, "receipt.contractAddress");
-    //     expect(receipt.transactionHash).not.eq(null, "receipt.transactionHash");
-    //     expect(receipt.transactionIndex).not.eq(null, "receipt.transactionIndex");
-    //     expect(receipt.blockHash).not.eq(null, "receipt.blockHash");
-    //     expect(receipt.blockNumber).not.eq(null, "receipt.blockNumber");
-    //     expect(receipt.from).not.eq(null, "receipt.from");
-    //     expect(receipt.to).eq(null, "receipt.to");
-    //     expect(receipt.cumulativeGasUsed).not.eq(null, "receipt.cumulativeGasUsed");
-    //     expect(receipt.gasUsed).not.eq(null, "receipt.gasUsed");
-    //     expect(receipt.logs).not.eq(null, "receipt.logs");
-    //     expect(receipt.logsBloom).not.eq(null, "receipt.logsBloom");
-    //     expect(receipt.status).not.eq(null, "receipt.status");
-    //     expect(receipt.effectiveGasPrice).not.eq(null, "receipt.effectiveGasPrice");
+        // Fields existence and null checks
+        expect(receipt.contractAddress).not.eq(null, "receipt.contractAddress");
+        expect(receipt.transactionHash).not.eq(null, "receipt.transactionHash");
+        expect(receipt.transactionIndex).not.eq(null, "receipt.transactionIndex");
+        expect(receipt.blockHash).not.eq(null, "receipt.blockHash");
+        expect(receipt.blockNumber).not.eq(null, "receipt.blockNumber");
+        expect(receipt.from).not.eq(null, "receipt.from");
+        expect(receipt.to).eq(null, "receipt.to");
+        expect(receipt.cumulativeGasUsed).not.eq(null, "receipt.cumulativeGasUsed");
+        expect(receipt.gasUsed).not.eq(null, "receipt.gasUsed");
+        expect(receipt.logs).not.eq(null, "receipt.logs");
+        expect(receipt.logsBloom).not.eq(null, "receipt.logsBloom");
+        expect(receipt.status).not.eq(null, "receipt.status");
+        expect(receipt.effectiveGasPrice).not.eq(null, "receipt.effectiveGasPrice");
 
-    //     // contract address
-    //     const expectedContractAddress = _contract.target as string;
-    //     const actualContractAddress = receipt.contractAddress as string;
-    //     expect(expectedContractAddress.toLowerCase()).eq(
-    //         actualContractAddress.toLowerCase(),
-    //         "receipt.contractAddress",
-    //     );
+        // contract address
+        const expectedContractAddress = _contract.target as string;
+        const actualContractAddress = receipt.contractAddress as string;
+        expect(expectedContractAddress.toLowerCase()).eq(
+            actualContractAddress.toLowerCase(),
+            "receipt.contractAddress",
+        );
 
-    //     // transaction hash
-    //     const expectedTransactionHash = deploymentTransactionHash as string;
-    //     const actualTransactionHash = receipt.transactionHash as string;
-    //     expect(expectedTransactionHash.toLowerCase()).eq(
-    //         actualTransactionHash.toLowerCase(),
-    //         "receipt.transactionHash",
-    //     );
+        // transaction hash
+        const expectedTransactionHash = deploymentTransactionHash as string;
+        const actualTransactionHash = receipt.transactionHash as string;
+        expect(expectedTransactionHash.toLowerCase()).eq(
+            actualTransactionHash.toLowerCase(),
+            "receipt.transactionHash",
+        );
 
-    //     // transaction index
-    //     const expectedTransactionIndex = "0x0";
-    //     const actualTransactionIndex = receipt.transactionIndex as number;
-    //     expect(expectedTransactionIndex).eq(actualTransactionIndex, "receipt.transactionIndex");
+        // transaction index
+        const expectedTransactionIndex = "0x0";
+        const actualTransactionIndex = receipt.transactionIndex as number;
+        expect(expectedTransactionIndex).eq(actualTransactionIndex, "receipt.transactionIndex");
 
-    //     // from
-    //     expect(receipt.from.toLowerCase()).eq(CHARLIE.address.toLowerCase(), "receipt.from");
+        // from
+        expect(receipt.from.toLowerCase()).eq(CHARLIE.address.toLowerCase(), "receipt.from");
 
-    //     // status
-    //     const STATUS_SUCCESS = "0x1";
-    //     expect(receipt.status).eq(STATUS_SUCCESS, "receipt.status");
-    // });
+        // status
+        const STATUS_SUCCESS = "0x1";
+        expect(receipt.status).eq(STATUS_SUCCESS, "receipt.status");
+    });
 
-    // it("Deployment transaction by hash", async () => {
-    //     const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
-    //     expect(deploymentTransactionHash).not.eq(undefined);
+    it("Deployment transaction by hash", async () => {
+        const deploymentTransactionHash = _contract.deploymentTransaction()?.hash;
+        expect(deploymentTransactionHash).not.eq(undefined);
 
-    //     const transaction: Transaction = await send("eth_getTransactionByHash", [deploymentTransactionHash]);
+        const transaction: Transaction = await send("eth_getTransactionByHash", [deploymentTransactionHash]);
 
-    //     expect(transaction.from).eq(CHARLIE.address, "tx.from");
-    //     expect(transaction.to).eq(null, "tx.to");
-    //     expect(transaction.value).eq("0x0", "tx.value");
-    //     expect(transaction.gas).match(HEX_PATTERN, "tx.gas format");
-    //     expect(transaction.gasPrice).match(HEX_PATTERN, "tx.gasPrice format");
-    //     expect(transaction.input).match(HEX_PATTERN, "tx.input format");
-    //     expect(transaction.nonce).eq("0x0", "tx.nonce");
+        expect(transaction.from).eq(CHARLIE.address, "tx.from");
+        expect(transaction.to).eq(null, "tx.to");
+        expect(transaction.value).eq("0x0", "tx.value");
+        expect(transaction.gas).match(HEX_PATTERN, "tx.gas format");
+        expect(transaction.gasPrice).match(HEX_PATTERN, "tx.gasPrice format");
+        expect(transaction.input).match(HEX_PATTERN, "tx.input format");
+        expect(transaction.nonce).eq("0x0", "tx.nonce");
 
-    //     if (network.name === "stratus") {
-    //         expect(transaction.chainId).eq(CHAIN_ID, "tx.chainId");
-    //     }
+        if (network.name === "stratus") {
+            expect(transaction.chainId).eq(CHAIN_ID, "tx.chainId");
+        }
 
-    //     expect(transaction.v).match(HEX_PATTERN, "tx.v format");
-    //     expect(transaction.r).match(HEX_PATTERN, "tx.r format");
-    //     expect(transaction.s).match(HEX_PATTERN, "tx.s format");
-    // });
+        expect(transaction.v).match(HEX_PATTERN, "tx.v format");
+        expect(transaction.r).match(HEX_PATTERN, "tx.r format");
+        expect(transaction.s).match(HEX_PATTERN, "tx.s format");
+    });
 
-    // it("Eth_call works on read function", async () => {
-    //     // prepare transaction object
-    //     const data = _contract.interface.encodeFunctionData("get", [CHARLIE.address]);
-    //     const to = _contract.target;
-    //     const from = CHARLIE.address;
-    //     const transaction = { from: from, to: to, data: data };
+    it("Eth_call works on read function", async () => {
+        // prepare transaction object
+        const data = _contract.interface.encodeFunctionData("get", [CHARLIE.address]);
+        const to = _contract.target;
+        const from = CHARLIE.address;
+        const transaction = { from: from, to: to, data: data };
 
-    //     const currentCharlieBalance = await send("eth_call", [transaction, "latest"]);
-    //     const expectedCharlieBalance = toPaddedHex(0, 32);
+        const currentCharlieBalance = await send("eth_call", [transaction, "latest"]);
+        const expectedCharlieBalance = toPaddedHex(0, 32);
 
-    //     expect(currentCharlieBalance).eq(expectedCharlieBalance);
-    // });
+        expect(currentCharlieBalance).eq(expectedCharlieBalance);
+    });
 
-    // it("Eth_call works on read function without from field", async () => {
-    //     // prepare transaction object
-    //     const data = _contract.interface.encodeFunctionData("get", [CHARLIE.address]);
-    //     const to = _contract.target;
-    //     const transaction = { to: to, data: data };
+    it("Eth_call works on read function without from field", async () => {
+        // prepare transaction object
+        const data = _contract.interface.encodeFunctionData("get", [CHARLIE.address]);
+        const to = _contract.target;
+        const transaction = { to: to, data: data };
 
-    //     const currentCharlieBalance = await send("eth_call", [transaction, "latest"]);
-    //     const expectedCharlieBalance = toPaddedHex(0, 32);
+        const currentCharlieBalance = await send("eth_call", [transaction, "latest"]);
+        const expectedCharlieBalance = toPaddedHex(0, 32);
 
-    //     expect(currentCharlieBalance).eq(expectedCharlieBalance);
-    // });
+        expect(currentCharlieBalance).eq(expectedCharlieBalance);
+    });
 
     // it("Performs add and sub", async () => {
     //     _block = await sendGetBlockNumber();
