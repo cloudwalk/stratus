@@ -167,29 +167,29 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(await _contract.get(CHARLIE.address)).eq(20);
     });
 
-    // it("Generates logs", async () => {
-    //     let filter = { address: _contract.target, fromBlock: toHex(_block + 0) };
+    it("Generates logs", async () => {
+        let filter = { address: _contract.target, fromBlock: toHex(_block + 0) };
 
-    //     // filter fromBlock
-    //     (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 0) }])).length(3);
-    //     (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 1) }])).length(3);
-    //     (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 2) }])).length(2);
-    //     (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 3) }])).length(1);
-    //     (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 4) }])).length(0);
+        // filter fromBlock
+        (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 0) }])).length(3);
+        (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 1) }])).length(3);
+        (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 2) }])).length(2);
+        (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 3) }])).length(1);
+        (await sendExpect("eth_getLogs", [{ ...filter, fromBlock: toHex(_block + 4) }])).length(0);
 
-    //     // filter topics
-    //     (await sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_ADD] }])).length(2);
-    //     (await sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_SUB] }])).length(1);
-    // });
+        // filter topics
+        (await sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_ADD] }])).length(2);
+        (await sendExpect("eth_getLogs", [{ ...filter, topics: [CONTRACT_TOPIC_SUB] }])).length(1);
+    });
 
-    // it("Balance matches storage", async () => {
-    //     // calculate Charlie's position in balances mapping
-    //     const balancesSlot = 0;
-    //     const charlieStoragePosition = calculateSlotPosition(CHARLIE.address, balancesSlot);
+    it("Balance matches storage", async () => {
+        // calculate Charlie's position in balances mapping
+        const balancesSlot = 0;
+        const charlieStoragePosition = calculateSlotPosition(CHARLIE.address, balancesSlot);
 
-    //     const expectedStorageValue = toPaddedHex(await _contract.get(CHARLIE.address), 32);
-    //     const actualStorageValue = await send("eth_getStorageAt", [_contract.target, charlieStoragePosition, "latest"]);
+        const expectedStorageValue = toPaddedHex(await _contract.get(CHARLIE.address), 32);
+        const actualStorageValue = await send("eth_getStorageAt", [_contract.target, charlieStoragePosition, "latest"]);
 
-    //     expect(actualStorageValue).eq(expectedStorageValue);
-    // });
+        expect(actualStorageValue).eq(expectedStorageValue);
+    });
 });
