@@ -10,6 +10,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
+use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
@@ -26,7 +27,7 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
 
     // Retrieves the block number being mined.
-    fn read_pending_block_number(&self) -> anyhow::Result<Option<BlockNumber>>;
+    fn read_pending_block_header(&self) -> anyhow::Result<Option<PendingBlockHeader>>;
 
     // -------------------------------------------------------------------------
     // Block and executions
@@ -35,17 +36,17 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     /// Sets the pending external block being re-executed.
     fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
 
-    /// Saves a re-executed transaction to the pending mined block.
-    fn save_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError>;
-
-    /// Retrieves the pending transactions of the pending block.
-    fn pending_transactions(&self) -> Vec<TransactionExecution>;
-
     /// Finishes the mining of the pending block and starts a new block.
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock>;
 
-    /// Retrieves a transaction from the storage.
-    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>>;
+    /// Saves a transaction execution to the pending mined block.
+    fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError>;
+
+    /// Retrieves all transaction executions from the pending block.
+    fn read_pending_executions(&self) -> Vec<TransactionExecution>;
+
+    /// Retrieves a single transaction execution from the pending block.
+    fn read_pending_execution(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>>;
 
     // -------------------------------------------------------------------------
     // Accounts and slots

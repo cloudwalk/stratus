@@ -14,6 +14,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::PendingBlock;
+use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
@@ -81,10 +82,10 @@ impl StratusStorage {
         }
 
         // try to resume from pending block number
-        let pending_block_number = self.read_pending_block_number()?;
-        if let Some(number) = pending_block_number {
-            tracing::info!(block_number = %number, reason = %"set in storage", "resume from PENDING");
-            return Ok(number);
+        let pending_header = self.read_pending_block_header()?;
+        if let Some(pending_header) = pending_header {
+            tracing::info!(block_number = %pending_header.number, reason = %"set in storage", "resume from PENDING");
+            return Ok(pending_header.number);
         }
 
         // fallback to last mined block number
@@ -102,12 +103,12 @@ impl StratusStorage {
         }
     }
 
-    pub fn read_pending_block_number(&self) -> Result<Option<BlockNumber>, StratusError> {
+    pub fn read_pending_block_header(&self) -> Result<Option<PendingBlockHeader>, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_pending_block_number").entered();
         tracing::debug!(storage = %label::TEMP, "reading pending block number");
 
-        timed(|| self.temp.read_pending_block_number())
+        timed(|| self.temp.read_pending_block_header())
             .with(|m| {
                 metrics::inc_storage_read_pending_block_number(m.elapsed, label::TEMP, m.result.is_ok());
                 if let Err(ref e) = m.result {
@@ -157,7 +158,7 @@ impl StratusStorage {
     }
 
     pub fn set_pending_block_number_as_next_if_not_set(&self) -> Result<(), StratusError> {
-        let pending_block = self.read_pending_block_number()?;
+        let pending_block = self.read_pending_block_header()?;
         if pending_block.is_none() {
             self.set_pending_block_number_as_next()?;
         }
@@ -307,7 +308,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.hash()).entered();
         tracing::debug!(storage = %label::TEMP, tx_hash = %tx.hash(), "saving execution");
 
-        timed(|| self.temp.save_execution(tx, check_conflicts))
+        timed(|| self.temp.save_pending_execution(tx, check_conflicts))
             .with(|m| {
                 metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
                 if let Err(ref e) = m.result {
@@ -319,7 +320,7 @@ impl StratusStorage {
 
     /// Retrieves pending transactions being mined.
     pub fn pending_transactions(&self) -> Vec<TransactionExecution> {
-        self.temp.pending_transactions()
+        self.temp.read_pending_executions()
     }
 
     pub fn finish_pending_block(&self) -> Result<PendingBlock, StratusError> {
@@ -361,12 +362,12 @@ impl StratusStorage {
         }
 
         // check pending number
-        if let Some(pending_number) = self.read_pending_block_number()? {
-            if block_number >= pending_number {
-                tracing::error!(%block_number, %pending_number, "failed to save block because mismatch with pending block number");
+        if let Some(pending_header) = self.read_pending_block_header()? {
+            if block_number >= pending_header.number {
+                tracing::error!(%block_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
                 return Err(StratusError::StoragePendingNumberConflict {
                     new: block_number,
-                    pending: pending_number,
+                    pending: pending_header.number,
                 });
             }
         }
@@ -411,7 +412,7 @@ impl StratusStorage {
 
         // read from temp
         tracing::debug!(storage = %label::TEMP, %tx_hash, "reading transaction");
-        let temp_tx = timed(|| self.temp.read_transaction(tx_hash)).with(|m| {
+        let temp_tx = timed(|| self.temp.read_pending_execution(tx_hash)).with(|m| {
             metrics::inc_storage_read_transaction(m.elapsed, label::TEMP, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read transaction from temporary storage");
