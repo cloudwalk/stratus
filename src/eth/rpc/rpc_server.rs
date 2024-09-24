@@ -20,9 +20,12 @@ use jsonrpsee::types::Params;
 use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
+use once_cell::sync::Lazy;
 use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::select;
+use tokio::sync::Semaphore;
+use tokio::sync::SemaphorePermit;
 use tower_http::cors::Any;
 use tower_http::cors::CorsLayer;
 use tracing::field;
@@ -301,7 +304,15 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
     Ok(to_json_value(true))
 }
 
+static MODE_CHANGE_SEMAPHORE: Lazy<Semaphore> = Lazy::new(|| Semaphore::new(1));
+
 async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    let permit = MODE_CHANGE_SEMAPHORE.try_acquire();
+    let _permit: SemaphorePermit = match permit {
+        Ok(permit) => permit,
+        Err(_) => return Err(StratusError::ModeChangeInProgress),
+    };
+
     const LEADER_MINER_INTERVAL: Duration = Duration::from_secs(1);
     tracing::info!("starting process to change node to leader");
 
@@ -345,6 +356,12 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 }
 
 async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    let permit = MODE_CHANGE_SEMAPHORE.try_acquire();
+    let _permit: SemaphorePermit = match permit {
+        Ok(permit) => permit,
+        Err(_) => return Err(StratusError::ModeChangeInProgress),
+    };
+
     tracing::info!("starting process to change node to follower");
 
     if GlobalState::get_node_mode() == NodeMode::Follower {
