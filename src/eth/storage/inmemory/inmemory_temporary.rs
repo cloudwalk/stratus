@@ -9,7 +9,6 @@ use nonempty::NonEmpty;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
@@ -113,12 +112,12 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Block number
     // -------------------------------------------------------------------------
 
-    fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    fn set_pending_block_header(&self, pending_header: PendingBlockHeader) -> anyhow::Result<()> {
         let mut states = self.lock_write();
         match states.head.block.as_mut() {
-            Some(block) => block.header.number = number,
+            Some(block) => block.header = pending_header,
             None => {
-                states.head.block = Some(PendingBlock::new_at_now(number));
+                states.head.block = Some(PendingBlock::new_with_header(pending_header));
             }
         }
         Ok(())
@@ -208,7 +207,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         // create new state
         states.insert(0, InMemoryTemporaryStorageState::default());
-        states.head.block = Some(PendingBlock::new_at_now(finished_block.header.number.next_block_number()));
+        states.head.block = Some(PendingBlock::new_with_number(finished_block.header.number.next_block_number()));
 
         Ok(finished_block)
     }

@@ -17,9 +17,18 @@ pub struct PendingBlock {
 
 impl PendingBlock {
     /// Creates a new [`PendingBlock`] with the specified number.
-    pub fn new_at_now(number: BlockNumber) -> Self {
+    pub fn new_with_number(number: BlockNumber) -> Self {
         Self {
-            header: PendingBlockHeader::new_at_now(number),
+            header: PendingBlockHeader::new_with_number(number),
+            transactions: IndexMap::new(),
+            external_block: None,
+        }
+    }
+
+    /// Creates a new [`PendingBlock`] with the specified header.
+    pub fn new_with_header(pending_header: PendingBlockHeader) -> Self {
+        Self {
+            header: pending_header,
             transactions: IndexMap::new(),
             external_block: None,
         }

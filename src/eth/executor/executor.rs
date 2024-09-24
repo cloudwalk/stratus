@@ -26,6 +26,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
+use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
@@ -241,8 +242,9 @@ impl Executor {
         let block_number = block.number();
         let block_timestamp = block.timestamp();
         let block_transactions = mem::take(&mut block.transactions);
-        self.storage.set_pending_external_block(block)?;
-        self.storage.set_pending_block_number(block_number)?;
+        self.storage
+            .set_pending_block_header(PendingBlockHeader::new(block.number(), block.timestamp()))?;
+        self.storage.set_pending_external_block(block.clone())?;
 
         // determine how to execute each transaction
         for tx in block_transactions {

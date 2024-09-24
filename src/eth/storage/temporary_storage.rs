@@ -6,7 +6,6 @@ use display_json::DebugAsJson;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
@@ -20,13 +19,13 @@ use crate::eth::storage::InMemoryTemporaryStorage;
 /// Temporary storage (in-between blocks) operations.
 pub trait TemporaryStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
-    // Block number
+    // Block header
     // -------------------------------------------------------------------------
 
-    /// Sets the block number being mined.
-    fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+    /// Sets the block header being mined.
+    fn set_pending_block_header(&self, header: PendingBlockHeader) -> anyhow::Result<()>;
 
-    // Retrieves the block number being mined.
+    // Retrieves the block header being mined.
     fn read_pending_block_header(&self) -> anyhow::Result<Option<PendingBlockHeader>>;
 
     // -------------------------------------------------------------------------

@@ -62,6 +62,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
     fn call(&self, mut request: jsonrpsee::types::Request<'a>) -> Self::Future {
         // track request
         let span = info_span!(
+            parent: None,
             "rpc::request",
             cid = %new_cid(),
             rpc_client = field::Empty,

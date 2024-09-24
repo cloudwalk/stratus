@@ -11,8 +11,13 @@ pub struct PendingBlockHeader {
 }
 
 impl PendingBlockHeader {
+    /// Creates a new [`PendingBlockHeader`] with the specified number and timestamp.
+    pub fn new(number: BlockNumber, timestamp: UnixTime) -> Self {
+        Self { number, timestamp }
+    }
+
     /// Creates a new [`PendingBlockHeader`] with the specified number and the current timestamp.
-    pub fn new_at_now(number: BlockNumber) -> Self {
+    pub fn new_with_number(number: BlockNumber) -> Self {
         Self {
             number,
             timestamp: UnixTime::now(),

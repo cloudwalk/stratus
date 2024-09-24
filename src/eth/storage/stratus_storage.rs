@@ -133,12 +133,12 @@ impl StratusStorage {
             .map_err(Into::into)
     }
 
-    pub fn set_pending_block_number(&self, block_number: BlockNumber) -> Result<(), StratusError> {
+    pub fn set_pending_block_header(&self, pending_header: PendingBlockHeader) -> Result<(), StratusError> {
         #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::set_pending_block_number", %block_number).entered();
-        tracing::debug!(storage = &label::TEMP, %block_number, "setting pending block number");
+        let _span = tracing::info_span!("storage::set_pending_block_number", block_number = %pending_header.number).entered();
+        tracing::debug!(storage = &label::TEMP, header = ?pending_header, "setting pending block number");
 
-        timed(|| self.temp.set_pending_block_number(block_number))
+        timed(|| self.temp.set_pending_block_header(pending_header))
             .with(|m| {
                 metrics::inc_storage_set_pending_block_number(m.elapsed, label::TEMP, m.result.is_ok());
                 if let Err(ref e) = m.result {
@@ -153,7 +153,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::set_pending_block_number_as_next").entered();
 
         let last_mined_block = self.read_mined_block_number()?;
-        self.set_pending_block_number(last_mined_block.next_block_number())?;
+        self.set_pending_block_header(PendingBlockHeader::new_with_number(last_mined_block.next_block_number()))?;
         Ok(())
     }
 
