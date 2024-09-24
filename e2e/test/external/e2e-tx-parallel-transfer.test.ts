@@ -8,7 +8,6 @@ describe("Transaction: parallel transfer", () => {
         // HACK: sleeps for 50ms to avoid having the previous test interfering
         await new Promise((resolve) => setTimeout(resolve, 50));
         await sendReset();
-        await sendEvmMine();
         const blockNumber = await send("eth_blockNumber", []);
         expect(blockNumber).to.be.oneOf(["0x0", "0x1"]);
     });
