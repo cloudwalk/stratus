@@ -144,22 +144,28 @@ describe("Transaction: serial TestContractBalances", () => {
         expect(currentCharlieBalance).eq(expectedCharlieBalance);
     });
 
-    // it("Performs add and sub", async () => {
-    //     _block = await sendGetBlockNumber();
+    it("Performs add and sub", async () => {
+        _block = await sendGetBlockNumber();
 
-    //     // initial balance
-    //     expect(await _contract.get(CHARLIE.address)).eq(0);
+        // initial balance
+        expect(await _contract.get(CHARLIE.address)).eq(0);
 
-    //     // mutations
-    //     let nonce = await sendGetNonce(CHARLIE.address);
-    //     const contractOps = _contract.connect(CHARLIE.signer());
-    //     await contractOps.add(CHARLIE.address, 10, { nonce: nonce++ });
-    //     await contractOps.add(CHARLIE.address, 15, { nonce: nonce++ });
-    //     await contractOps.sub(CHARLIE.address, 5, { nonce: nonce++ });
+        // mutations
+        let nonce = await sendGetNonce(CHARLIE.address);
+        const contractOps = _contract.connect(CHARLIE.signer());
 
-    //     // final balance
-    //     expect(await _contract.get(CHARLIE.address)).eq(20);
-    // });
+        await contractOps.add(CHARLIE.address, 10, { nonce: nonce++ });
+        await sendEvmMine();
+
+        await contractOps.add(CHARLIE.address, 15, { nonce: nonce++ });
+        await sendEvmMine();
+
+        await contractOps.sub(CHARLIE.address, 5, { nonce: nonce++ });
+        await sendEvmMine();
+
+        // final balance
+        expect(await _contract.get(CHARLIE.address)).eq(20);
+    });
 
     // it("Generates logs", async () => {
     //     let filter = { address: _contract.target, fromBlock: toHex(_block + 0) };
