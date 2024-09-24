@@ -1,15 +1,6 @@
 import { expect } from "chai";
-import { keccak256 } from "ethers";
 
-import { ALICE, BOB } from "./helpers/account";
-import {
-    getTransactionByHashUntilConfirmed,
-    sendAndGetFullResponse,
-    sendWithRetry,
-    updateProviderUrl,
-    waitForFollowerToSyncWithLeader,
-    waitForLeaderToBeAhead,
-} from "./helpers/rpc";
+import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
 
 describe("Leader & Follower change integration test", function () {
     it("Validate initial Leader state and health", async function () {
@@ -172,5 +163,45 @@ describe("Leader & Follower change integration test", function () {
         expect(leaderNode.is_leader).to.equal(true);
         expect(leaderNode.miner_paused).to.equal(false);
         expect(leaderNode.transactions_enabled).to.equal(false);
+    });
+
+    it("Should prevent concurrent requests to change mode endpoints", async function () {
+        updateProviderUrl("stratus");
+        await sendWithRetry("stratus_enableTransactions", []);
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+
+        const numRequests = 1000; // Number of concurrent requests
+        const changeToLeaderPromises = [];
+        const changeToFollowerPromises = [];
+
+        for (let i = 0; i < numRequests; i++) {
+            changeToLeaderPromises.push(sendAndGetFullResponse("stratus_changeToLeader", []));
+            changeToFollowerPromises.push(sendAndGetFullResponse("stratus_changeToFollower", []));
+        }
+
+        const allPromises = [...changeToLeaderPromises, ...changeToFollowerPromises];
+
+        const allResponses = await Promise.allSettled(allPromises);
+
+        let successCount = 0;
+        let semaphoreFailureCount = 0;
+
+        const SEMAPHORE_ERROR_CODE = -32009;
+        const SEMAPHORE_ERROR_MESSAGE = "Stratus node is already in the process of changing mode.";
+
+        allResponses.forEach((response, index) => {
+            if (response.status === "fulfilled" && response.value.data.result === true) {
+                successCount++;
+            } else if (response.status === "fulfilled" && response.value.data.error) {
+                const error = response.value.data.error;
+                if (error.code === SEMAPHORE_ERROR_CODE && error.message === SEMAPHORE_ERROR_MESSAGE) {
+                    semaphoreFailureCount++;
+                    expect(error.code).to.equal(SEMAPHORE_ERROR_CODE);
+                    expect(error.message).to.equal(SEMAPHORE_ERROR_MESSAGE);
+                }
+            }
+        });
+
+        expect(semaphoreFailureCount).to.be.greaterThan(0);
     });
 });
