@@ -206,6 +206,10 @@ pub enum StratusError {
     #[error("Stratus node is not a follower.")]
     #[strum(props(kind = "server_state"))]
     StratusNotFollower,
+
+    #[error("Stratus node is already in the process of changing mode.")]
+    #[strum(props(kind = "server_state"))]
+    ModeChangeInProgress,
 }
 
 impl StratusError {
