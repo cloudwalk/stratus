@@ -8,6 +8,7 @@ import {
     deployTestContractCounter,
     pollReceipts,
     send,
+    sendEvmMine,
     sendGetNonce,
     sendRawTransactions,
     sendReset,
@@ -17,7 +18,6 @@ describe("Transaction: parallel TestContractBalances", async () => {
     let _contract: TestContractBalances;
 
     it("Resets blockchain", async () => {
-        // HACK: sleeps for 50ms to avoid having the previous test interfering
         await new Promise((resolve) => setTimeout(resolve, 50));
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
@@ -26,7 +26,9 @@ describe("Transaction: parallel TestContractBalances", async () => {
 
     it("Deploy TestContractBalances", async () => {
         _contract = await deployTestContractBalances();
+        await sendEvmMine();
     });
+
     it("Ensure initial balance", async () => {
         expect(await _contract.get(ALICE.address)).eq(0, "Alice initial balance mismatch");
         expect(await _contract.get(BOB.address)).eq(0, "Bob initial balance mismatch");
@@ -65,6 +67,7 @@ describe("Transaction: parallel TestContractBalances", async () => {
 
         // send transactions in parallel
         const hashes = await sendRawTransactions(signedTxs);
+        await sendEvmMine();
         const receipts = await pollReceipts(hashes);
 
         // verify
@@ -82,6 +85,7 @@ describe("Transaction: parallel TestContractBalances", async () => {
     it("Fails parallel transactions due to lack of balance", async () => {
         // set initial balance
         await _contract.connect(ALICE.signer()).set(ALICE.address, 1140);
+        await sendEvmMine();
         expect(await _contract.get(ALICE.address)).eq(1140, "Alice initial balance mismatch");
 
         // parallel transactions decreases balance (15 must work, 5 should fail)
@@ -98,6 +102,7 @@ describe("Transaction: parallel TestContractBalances", async () => {
 
         // send transactions in parallel
         const hashes = await sendRawTransactions(signedTxs);
+        await sendEvmMine();
         const receipts = await pollReceipts(hashes);
 
         // check remaining balance
@@ -111,7 +116,6 @@ describe("Transaction: parallel TestContractCounter", async () => {
     let _contract: TestContractCounter;
 
     it("Resets blockchain", async () => {
-        // HACK: sleeps for 50ms to avoid having the previous test interfering
         await new Promise((resolve) => setTimeout(resolve, 50));
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
@@ -120,7 +124,9 @@ describe("Transaction: parallel TestContractCounter", async () => {
 
     it("Deploy TestContractCounter", async () => {
         _contract = await deployTestContractCounter();
+        await sendEvmMine();
     });
+
     it("Ensure initial balance", async () => {
         expect(await _contract.getCounter()).eq(0, "Counter initial value mismatch");
         expect(await _contract.getDoubleCounter()).eq(0, "Double counter initial value mismatch");
@@ -130,7 +136,6 @@ describe("Transaction: parallel TestContractCounter", async () => {
         const incSender = ALICE;
         const doubleSender = BOB;
 
-        // send a pair of inc and double requests
         for (let i = 0; i < 20; i++) {
             // calculate expected double counter
             const doubleCounter = Number(await _contract.getDoubleCounter());
@@ -151,6 +156,7 @@ describe("Transaction: parallel TestContractCounter", async () => {
 
             // send transactions in parallel
             const hashes = await sendRawTransactions([incSignedTx, doubleSignedTx]);
+            await sendEvmMine();
             const receipts = await pollReceipts(hashes);
 
             // verify
@@ -170,7 +176,6 @@ describe("Transaction: send repeated transaction in parallel", async () => {
     let _contract: TestContractCounter;
 
     it("Resets blockchain", async () => {
-        // HACK: sleeps for 50ms to avoid having the previous test interfering
         await new Promise((resolve) => setTimeout(resolve, 50));
         await sendReset();
         const blockNumber = await send("eth_blockNumber", []);
@@ -179,6 +184,7 @@ describe("Transaction: send repeated transaction in parallel", async () => {
 
     it("Deploy TestContractCounter", async () => {
         _contract = await deployTestContractCounter();
+        await sendEvmMine();
     });
 
     it("Sends repeated transaction in parallel", async () => {
@@ -192,6 +198,7 @@ describe("Transaction: send repeated transaction in parallel", async () => {
 
         // send transactions in parallel
         const hashes = await sendRawTransactions(signedTxs);
+        await sendEvmMine();
         const filteredHashes = hashes.filter((hash) => hash !== undefined);
 
         // only one transaction should pass
