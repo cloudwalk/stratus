@@ -157,10 +157,10 @@ fn execute_block_importer(
 
             // re-execute (and import) block
             batch_tx_len += block.transactions.len();
-            executor.execute_external_block(block, &mut receipts)?;
+            executor.execute_external_block(block.clone(), &mut receipts)?;
 
             // mine and save block
-            miner.mine_external_and_commit()?;
+            miner.mine_external_and_commit(block)?;
         }
         let batch_duration = before_block.elapsed();
 
