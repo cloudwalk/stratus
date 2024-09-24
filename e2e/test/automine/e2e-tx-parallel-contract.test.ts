@@ -182,7 +182,7 @@ describe("Transaction: send repeated transaction in parallel", async () => {
     });
 
     it("Sends repeated transaction in parallel", async () => {
-        const tx = await _contract.connect(ALICE).inc.populateTransaction({ nonce: 0, ...TX_PARAMS });
+        const tx = await _contract.connect(ALICE.signer()).inc.populateTransaction({ nonce: 0, ...TX_PARAMS });
         const signedTx = await ALICE.signer().signTransaction(tx);
 
         const signedTxs = [];

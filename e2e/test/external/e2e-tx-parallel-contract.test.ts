@@ -133,17 +133,41 @@ describe("Transaction: parallel TestContractCounter", async () => {
     });
 
     it("Sends parallel transactions", async () => {
-        // ... (código existente)
+        const incSender = ALICE;
+        const doubleSender = BOB;
 
         for (let i = 0; i < 20; i++) {
-            // ... (código existente para preparar e enviar transações)
+            // calculate expected double counter
+            const doubleCounter = Number(await _contract.getDoubleCounter());
+            const expectedDoubleCounter = [BigInt(doubleCounter + i * 2), BigInt(doubleCounter + (i + 1) * 2)];
+
+            // sign transactions
+            const incNonce = await sendGetNonce(incSender.address);
+            const incTx = await _contract
+                .connect(incSender.signer())
+                .inc.populateTransaction({ nonce: incNonce, ...TX_PARAMS });
+            const incSignedTx = await incSender.signer().signTransaction(incTx);
+
+            const doubleNonce = await sendGetNonce(doubleSender.address);
+            const doubleTx = await _contract
+                .connect(doubleSender.signer())
+                .double.populateTransaction({ nonce: doubleNonce, ...TX_PARAMS });
+            const doubleSignedTx = await doubleSender.signer().signTransaction(doubleTx);
 
             // send transactions in parallel
             const hashes = await sendRawTransactions([incSignedTx, doubleSignedTx]);
             await sendEvmMine();
             const receipts = await pollReceipts(hashes);
 
-            // ... (código existente para verificação)
+            // verify
+            expect(receipts.successCount).eq(2, "Success transaction count mismatch");
+            expect(receipts.failedCount).eq(0, "Failed transaction count mismatch");
+
+            expect(await _contract.getCounter()).eq(i + 1, "Counter final value mismatch");
+            expect(await _contract.getDoubleCounter()).oneOf(
+                expectedDoubleCounter,
+                "Double counter final value mismatch",
+            );
         }
     });
 });
