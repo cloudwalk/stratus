@@ -237,17 +237,17 @@ impl Miner {
     }
 
     /// Same as [`Self::mine_external`], but automatically commits the block instead of returning it.
-    pub fn mine_external_and_commit(&self) -> anyhow::Result<()> {
+    pub fn mine_external_and_commit(&self, external_block: ExternalBlock) -> anyhow::Result<()> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock().map_lock_error("mine_external_and_commit")?;
 
-        let block = self.mine_external()?;
+        let block = self.mine_external(external_block)?;
         self.commit(block)
     }
 
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
-    pub fn mine_external(&self) -> anyhow::Result<Block> {
+    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<Block> {
         // track
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
@@ -258,9 +258,6 @@ impl Miner {
         // mine block
         let block = self.storage.finish_pending_block()?;
         Span::with(|s| s.rec_str("block_number", &block.header.number));
-        let Some(external_block) = block.external_block else {
-            return log_and_err!("failed to mine external block because there is no external block being reexecuted");
-        };
 
         // mine transactions
         let mut external_txs = Vec::with_capacity(block.transactions.len());

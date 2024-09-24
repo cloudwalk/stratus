@@ -180,7 +180,7 @@ impl Importer {
             let mut receipts = ExternalReceipts::from(receipts);
             #[cfg(feature = "metrics")]
             let receipts_len = receipts.len();
-            if let Err(e) = executor.execute_external_block(block, &mut receipts) {
+            if let Err(e) = executor.execute_external_block(block.clone(), &mut receipts) {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
                 return log_and_err!(reason = e, message);
             };
@@ -200,7 +200,7 @@ impl Importer {
                 );
             }
 
-            if let Err(e) = miner.mine_external_and_commit() {
+            if let Err(e) = miner.mine_external_and_commit(block) {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
                 return log_and_err!(reason = e, message);
             };
