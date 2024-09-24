@@ -16,6 +16,7 @@ use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
+use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
@@ -115,18 +116,18 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
         let mut states = self.lock_write();
         match states.head.block.as_mut() {
-            Some(block) => block.number = number,
+            Some(block) => block.header.number = number,
             None => {
-                states.head.block = Some(PendingBlock::new(number));
+                states.head.block = Some(PendingBlock::new_at_now(number));
             }
         }
         Ok(())
     }
 
-    fn read_pending_block_number(&self) -> anyhow::Result<Option<BlockNumber>> {
+    fn read_pending_block_header(&self) -> anyhow::Result<Option<PendingBlockHeader>> {
         let states = self.lock_read();
         match &states.head.block {
-            Some(block) => Ok(Some(block.number)),
+            Some(block) => Ok(Some(block.header.clone())),
             None => Ok(None),
         }
     }
@@ -141,7 +142,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    fn save_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
+    fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // check conflicts
         let mut states = self.lock_write();
         if check_conflicts {
@@ -186,7 +187,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    fn pending_transactions(&self) -> Vec<TransactionExecution> {
+    fn read_pending_executions(&self) -> Vec<TransactionExecution> {
         self.lock_read()
             .head
             .block
@@ -207,12 +208,12 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         // create new state
         states.insert(0, InMemoryTemporaryStorageState::default());
-        states.head.block = Some(PendingBlock::new(finished_block.number.next_block_number()));
+        states.head.block = Some(PendingBlock::new_at_now(finished_block.header.number.next_block_number()));
 
         Ok(finished_block)
     }
 
-    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>> {
+    fn read_pending_execution(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>> {
         let states = self.lock_read();
         let Some(ref pending_block) = states.head.block else { return Ok(None) };
         match pending_block.transactions.get(hash) {

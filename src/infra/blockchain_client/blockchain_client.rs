@@ -125,7 +125,7 @@ impl BlockchainClient {
     pub async fn fetch_listening(&self) -> anyhow::Result<()> {
         tracing::debug!("fetching listening status");
 
-        let result = self.http.request::<bool, Vec<()>>("net_listening", vec![]).await;
+        let result = self.http.request::<bool, _>("net_listening", [(); 0]).await;
         match result {
             Ok(_) => Ok(()),
             Err(e) => log_and_err!(reason = e, "failed to fetch listening status"),
@@ -136,7 +136,7 @@ impl BlockchainClient {
     pub async fn fetch_block_number(&self) -> anyhow::Result<BlockNumber> {
         tracing::debug!("fetching block number");
 
-        let result = self.http.request::<BlockNumber, Vec<()>>("eth_blockNumber", vec![]).await;
+        let result = self.http.request::<BlockNumber, _>("eth_blockNumber", [(); 0]).await;
 
         match result {
             Ok(number) => Ok(number),
@@ -149,10 +149,7 @@ impl BlockchainClient {
         tracing::debug!(%block_number, "fetching block");
 
         let number = to_json_value(block_number);
-        let result = self
-            .http
-            .request::<JsonValue, Vec<JsonValue>>("eth_getBlockByNumber", vec![number, JsonValue::Bool(true)])
-            .await;
+        let result = self.http.request::<JsonValue, _>("eth_getBlockByNumber", [number, JsonValue::Bool(true)]).await;
 
         match result {
             Ok(block) => Ok(block),
@@ -166,10 +163,7 @@ impl BlockchainClient {
 
         let hash = to_json_value(tx_hash);
 
-        let result = self
-            .http
-            .request::<Option<EthersTransaction>, Vec<JsonValue>>("eth_getTransactionByHash", vec![hash])
-            .await;
+        let result = self.http.request::<Option<EthersTransaction>, _>("eth_getTransactionByHash", [hash]).await;
 
         match result {
             Ok(tx) => Ok(tx),
@@ -182,10 +176,7 @@ impl BlockchainClient {
         tracing::debug!(%tx_hash, "fetching transaction receipt");
 
         let hash = to_json_value(tx_hash);
-        let result = self
-            .http
-            .request::<Option<ExternalReceipt>, Vec<JsonValue>>("eth_getTransactionReceipt", vec![hash])
-            .await;
+        let result = self.http.request::<Option<ExternalReceipt>, _>("eth_getTransactionReceipt", [hash]).await;
 
         match result {
             Ok(receipt) => Ok(receipt),
@@ -199,7 +190,7 @@ impl BlockchainClient {
 
         let address = to_json_value(address);
         let number = to_json_value(block_number);
-        let result = self.http.request::<Wei, Vec<JsonValue>>("eth_getBalance", vec![address, number]).await;
+        let result = self.http.request::<Wei, _>("eth_getBalance", [address, number]).await;
 
         match result {
             Ok(receipt) => Ok(receipt),
@@ -217,7 +208,7 @@ impl BlockchainClient {
 
         let tx = to_json_value(tx);
         let rpc_client = to_json_value(rpc_client);
-        let result = self.http.request::<Hash, Vec<JsonValue>>("eth_sendRawTransaction", vec![tx, rpc_client]).await;
+        let result = self.http.request::<Hash, _>("eth_sendRawTransaction", [tx, rpc_client]).await;
 
         match result {
             Ok(hash) => Ok(hash),
@@ -245,7 +236,7 @@ impl BlockchainClient {
 
             let ws_read = self.require_ws().await?;
             let result = ws_read
-                .subscribe::<ExternalBlock, Vec<JsonValue>>("eth_subscribe", vec![JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
+                .subscribe::<ExternalBlock, _>("eth_subscribe", [JsonValue::String("newHeads".to_owned())], "eth_unsubscribe")
                 .await;
 
             match result {
