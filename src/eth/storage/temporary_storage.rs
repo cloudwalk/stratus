@@ -7,7 +7,6 @@ use display_json::DebugAsJson;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
@@ -32,9 +31,6 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
     // Block and executions
     // -------------------------------------------------------------------------
-
-    /// Sets the pending external block being re-executed.
-    fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()>;
 
     /// Finishes the mining of the pending block and starts a new block.
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock>;
