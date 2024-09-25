@@ -278,7 +278,7 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
                     tracing::error!("consensus read lock was poisoned");
                     context.consensus.clear_poison();
                     poisoned.into_inner()
-                },
+                }
             };
             match consensus_lock.as_ref() {
                 Some(consensus) => tokio::task::block_in_place(|| Handle::current().block_on(consensus.should_serve())),
@@ -456,7 +456,7 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
                 tracing::error!("consensus read lock was poisoned");
                 ctx.consensus.clear_poison();
                 poisoned.into_inner()
-            },
+            }
         };
         if consensus_lock.is_none() {
             tracing::error!("importer is already shut down");
@@ -471,7 +471,7 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
                 tracing::error!("consensus write lock was poisoned");
                 ctx.consensus.clear_poison();
                 poisoned.into_inner()
-            },
+            }
         };
         *consensus_lock = None;
     }
@@ -537,7 +537,7 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
                         tracing::error!("consensus read lock was poisoned");
                         ctx.consensus.clear_poison();
                         poisoned.into_inner()
-                    },
+                    }
                 };
                 if consensus_lock.is_some() {
                     tracing::error!("cannot change miner mode to Interval with consensus set");
@@ -938,7 +938,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
                     tracing::error!("consensus read lock was poisoned");
                     ctx.consensus.clear_poison();
                     poisoned.into_inner()
-                },
+                }
             };
             match consensus_lock.as_ref() {
                 Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
