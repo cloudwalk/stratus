@@ -13,7 +13,6 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
-use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
@@ -135,12 +134,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
     // Block and executions
     // -------------------------------------------------------------------------
-
-    fn set_pending_external_block(&self, block: ExternalBlock) -> anyhow::Result<()> {
-        let mut states = self.lock_write();
-        states.head.require_pending_block_mut()?.external_block = Some(block);
-        Ok(())
-    }
 
     fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // check conflicts

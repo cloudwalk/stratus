@@ -241,7 +241,6 @@ impl Executor {
         let block_number = block.number();
         let block_timestamp = block.timestamp();
         let block_transactions = mem::take(&mut block.transactions);
-        self.storage.set_pending_external_block(block)?;
         self.storage.set_pending_block_number(block_number)?;
 
         // determine how to execute each transaction

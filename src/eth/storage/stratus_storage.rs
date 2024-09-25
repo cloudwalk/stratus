@@ -9,7 +9,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -183,19 +182,6 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
     // Accounts and slots
     // -------------------------------------------------------------------------
-
-    pub fn set_pending_external_block(&self, block: ExternalBlock) -> Result<(), StratusError> {
-        tracing::debug!(storage = %label::TEMP, block_number = %block.number(), "setting pending external block");
-
-        timed(|| self.temp.set_pending_external_block(block))
-            .with(|m| {
-                metrics::inc_storage_set_pending_external_block(m.elapsed, label::TEMP, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to set pending external block");
-                }
-            })
-            .map_err(Into::into)
-    }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<(), StratusError> {
         #[cfg(feature = "tracing")]
