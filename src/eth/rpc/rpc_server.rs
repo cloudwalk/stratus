@@ -276,6 +276,7 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
                 Ok(lock) => lock,
                 Err(poisoned) => {
                     tracing::error!("consensus read lock was poisoned");
+                    context.consensus.clear_poison();
                     poisoned.into_inner()
                 },
             };
@@ -453,6 +454,7 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
             Ok(lock) => lock,
             Err(poisoned) => {
                 tracing::error!("consensus read lock was poisoned");
+                ctx.consensus.clear_poison();
                 poisoned.into_inner()
             },
         };

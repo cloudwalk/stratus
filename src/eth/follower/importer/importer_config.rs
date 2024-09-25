@@ -94,6 +94,7 @@ impl ImporterConfig {
                 Ok(lock) => lock,
                 Err(poisoned) => {
                     tracing::error!("consensus write lock was poisoned");
+                    ctx.consensus.clear_poison();
                     poisoned.into_inner()
                 }
             };
