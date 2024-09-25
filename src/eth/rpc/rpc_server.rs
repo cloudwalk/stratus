@@ -1103,19 +1103,28 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     match event.deref() {
         "newPendingTransactions" => {
             drop(method_enter);
-            ctx.subs.add_new_pending_txs(client, pending.accept().await?).instrument(method_span).await;
+            ctx.subs
+                .add_new_pending_txs_subscription(client, pending.accept().await?)
+                .instrument(method_span)
+                .await;
         }
 
         "newHeads" => {
             drop(method_enter);
-            ctx.subs.add_new_heads(client, pending.accept().await?).instrument(method_span).await;
+            ctx.subs
+                .add_new_heads_subscription(client, pending.accept().await?)
+                .instrument(method_span)
+                .await;
         }
 
         "logs" => {
             let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
             let filter = filter.parse(&ctx.storage)?;
             drop(method_enter);
-            ctx.subs.add_logs(client, filter, pending.accept().await?).instrument(method_span).await;
+            ctx.subs
+                .add_logs_subscription(client, filter, pending.accept().await?)
+                .instrument(method_span)
+                .await;
         }
 
         // unsupported

@@ -133,7 +133,7 @@ impl RpcSubscriptions {
                 {
                     metrics::set_rpc_subscriptions_active(subs.pending_txs.read().await.len() as u64, label::PENDING_TXS);
                     metrics::set_rpc_subscriptions_active(subs.new_heads.read().await.len() as u64, label::NEW_HEADS);
-                    RpcSubscriptionsConnected::set_log_subs_metric(&(*subs.logs.read().await));
+                    RpcSubscriptionsConnected::update_log_subscription_metrics(&(*subs.logs.read().await));
                 }
 
                 // await next iteration
@@ -362,7 +362,7 @@ impl RpcSubscriptionsConnected {
     }
 
     /// Adds a new subscriber to `newPendingTransactions` event.
-    pub async fn add_new_pending_txs(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
+    pub async fn add_new_pending_txs_subscription(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
         tracing::info!(
             id = sink.subscription_id().to_string_ext(),
             %rpc_client,
@@ -376,7 +376,7 @@ impl RpcSubscriptionsConnected {
     }
 
     /// Adds a new subscriber to `newHeads` event.
-    pub async fn add_new_heads(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
+    pub async fn add_new_heads_subscription(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
         tracing::info!(
             id = sink.subscription_id().to_string_ext(),
             %rpc_client,
@@ -393,7 +393,7 @@ impl RpcSubscriptionsConnected {
     ///
     /// If the same connection is asking to subscribe with the same filter (which is redundant),
     /// the new subscription will overwrite the newest one.
-    pub async fn add_logs(&self, rpc_client: RpcClientApp, filter: LogFilter, sink: SubscriptionSink) {
+    pub async fn add_logs_subscription(&self, rpc_client: RpcClientApp, filter: LogFilter, sink: SubscriptionSink) {
         tracing::info!(
             id = sink.subscription_id().to_string_ext(), ?filter,
             %rpc_client,
@@ -408,11 +408,11 @@ impl RpcSubscriptionsConnected {
         filter_to_subscription_map.insert(filter.clone(), SubscriptionWithFilter::new(inner, filter));
 
         #[cfg(feature = "metrics")]
-        Self::set_log_subs_metric(&subs);
+        Self::update_log_subscription_metrics(&subs);
     }
 
     #[cfg(feature = "metrics")]
-    fn set_log_subs_metric(log_subs: &HashMap<ConnectionId, HashMap<LogFilter, SubscriptionWithFilter>>) {
+    fn update_log_subscription_metrics(log_subs: &HashMap<ConnectionId, HashMap<LogFilter, SubscriptionWithFilter>>) {
         let sub_count: usize = log_subs.values().map(|value| value.len()).sum();
         metrics::set_rpc_subscriptions_active(sub_count as u64, label::LOGS);
     }
