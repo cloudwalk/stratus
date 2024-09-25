@@ -90,11 +90,13 @@ impl ImporterConfig {
         };
 
         {
-            let mut consensus_lock = ctx.consensus.write().map_err(|_| {
-                tracing::error!("consensus write lock was poisoned");
-                ctx.consensus.clear_poison();
-                StratusError::ConsensusLockFailed
-            })?;
+            let mut consensus_lock = match ctx.consensus.write() {
+                Ok(lock) => lock,
+                Err(poisoned) => {
+                    tracing::error!("consensus write lock was poisoned");
+                    poisoned.into_inner()
+                }
+            };
 
             match consensus {
                 Some(consensus) => {

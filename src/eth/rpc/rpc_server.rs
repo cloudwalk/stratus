@@ -272,11 +272,13 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
     let should_serve = match GlobalState::get_node_mode() {
         NodeMode::Leader => true,
         NodeMode::Follower => {
-            let consensus_lock = context.consensus.read().map_err(|_| {
-                tracing::error!("consensus read lock was poisoned");
-                context.consensus.clear_poison();
-                StratusError::ConsensusLockFailed
-            })?;
+            let consensus_lock = match context.consensus.read() {
+                Ok(lock) => lock,
+                Err(poisoned) => {
+                    tracing::error!("consensus read lock was poisoned");
+                    poisoned.into_inner()
+                },
+            };
             match consensus_lock.as_ref() {
                 Some(consensus) => tokio::task::block_in_place(|| Handle::current().block_on(consensus.should_serve())),
                 None => false,
@@ -447,11 +449,13 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     }
 
     if GlobalState::is_importer_shutdown() {
-        let consensus_lock = ctx.consensus.read().map_err(|_| {
-            tracing::error!("consensus read lock was poisoned");
-            ctx.consensus.clear_poison();
-            StratusError::ConsensusLockFailed
-        })?;
+        let consensus_lock = match ctx.consensus.read() {
+            Ok(lock) => lock,
+            Err(poisoned) => {
+                tracing::error!("consensus read lock was poisoned");
+                poisoned.into_inner()
+            },
+        };
         if consensus_lock.is_none() {
             tracing::error!("importer is already shut down");
             return Err(StratusError::ImporterAlreadyShutdown);
@@ -459,11 +463,14 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
     }
 
     {
-        let mut consensus_lock = ctx.consensus.write().map_err(|_| {
-            tracing::error!("consensus write lock was poisoned");
-            ctx.consensus.clear_poison();
-            StratusError::ConsensusLockFailed
-        })?;
+        let mut consensus_lock = match ctx.consensus.write() {
+            Ok(lock) => lock,
+            Err(poisoned) => {
+                tracing::error!("consensus write lock was poisoned");
+                ctx.consensus.clear_poison();
+                poisoned.into_inner()
+            },
+        };
         *consensus_lock = None;
     }
 
@@ -522,11 +529,14 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
             tracing::info!(duration = ?duration, "changing miner mode to Interval");
 
             {
-                let consensus_lock = ctx.consensus.read().map_err(|_| {
-                    tracing::error!("consensus read lock was poisoned");
-                    ctx.consensus.clear_poison();
-                    StratusError::MinerModeLockFailed
-                })?;
+                let consensus_lock = match ctx.consensus.read() {
+                    Ok(lock) => lock,
+                    Err(poisoned) => {
+                        tracing::error!("consensus read lock was poisoned");
+                        ctx.consensus.clear_poison();
+                        poisoned.into_inner()
+                    },
+                };
                 if consensus_lock.is_some() {
                     tracing::error!("cannot change miner mode to Interval with consensus set");
                     return Err(StratusError::ConsensusSet);
@@ -920,11 +930,14 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
             }
         },
         NodeMode::Follower => {
-            let consensus_lock = ctx.consensus.read().map_err(|_| {
-                tracing::error!("consensus read lock was poisoned");
-                ctx.consensus.clear_poison();
-                StratusError::ConsensusLockFailed
-            })?;
+            let consensus_lock = match ctx.consensus.read() {
+                Ok(lock) => lock,
+                Err(poisoned) => {
+                    tracing::error!("consensus read lock was poisoned");
+                    ctx.consensus.clear_poison();
+                    poisoned.into_inner()
+                },
+            };
             match consensus_lock.as_ref() {
                 Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
                     Ok(hash) => Ok(hex_data(hash)),
