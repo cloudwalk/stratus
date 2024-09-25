@@ -426,7 +426,15 @@ impl RpcSubscriptionsConnected {
 
 #[cfg(feature = "metrics")]
 mod sub_metrics {
-    use super::*;
+    use super::label;
+    use super::metrics;
+    use super::ConnectionId;
+    use super::HashMap;
+    use super::Itertools;
+    use super::LogFilter;
+    use super::RpcClientApp;
+    use super::Subscription;
+    use super::SubscriptionWithFilter;
 
     pub fn update_new_pending_txs_subscription_metrics(subs: &HashMap<ConnectionId, Subscription>) {
         update_subscription_count(label::PENDING_TXS, subs.values());
