@@ -131,9 +131,21 @@ impl RpcSubscriptions {
                 // update metrics
                 #[cfg(feature = "metrics")]
                 {
-                    metrics::set_rpc_subscriptions_active(subs.pending_txs.read().await.len() as u64, label::PENDING_TXS);
-                    metrics::set_rpc_subscriptions_active(subs.new_heads.read().await.len() as u64, label::NEW_HEADS);
-                    RpcSubscriptionsConnected::update_log_subscription_metrics(&(*subs.logs.read().await));
+                    // Set cleaned subscriptions gauges to zero, which might be the wrong value
+                    // they'll be set back to the correct values in the lines below
+                    for client in pending_txs_subs_cleaned {
+                        metrics::set_rpc_subscriptions_active(0, client.to_string(), label::PENDING_TXS);
+                    }
+                    for client in new_heads_subs_cleaned {
+                        metrics::set_rpc_subscriptions_active(0, client.to_string(), label::NEW_HEADS);
+                    }
+                    for client in logs_subs_cleaned.into_iter().map(|(client, _)| client) {
+                        metrics::set_rpc_subscriptions_active(0, client.to_string(), label::LOGS);
+                    }
+
+                    sub_metrics::update_new_pending_txs_subscription_metrics(&(*subs.pending_txs.read().await));
+                    sub_metrics::update_new_heads_subscription_metrics(&(*subs.new_heads.read().await));
+                    sub_metrics::update_logs_subscription_metrics(&(*subs.logs.read().await));
                 }
 
                 // await next iteration
@@ -372,7 +384,7 @@ impl RpcSubscriptionsConnected {
         subs.insert(sink.connection_id(), Subscription::new(rpc_client, sink.into()));
 
         #[cfg(feature = "metrics")]
-        metrics::set_rpc_subscriptions_active(subs.len() as u64, label::PENDING_TXS);
+        sub_metrics::update_new_pending_txs_subscription_metrics(&subs);
     }
 
     /// Adds a new subscriber to `newHeads` event.
@@ -386,7 +398,7 @@ impl RpcSubscriptionsConnected {
         subs.insert(sink.connection_id(), Subscription::new(rpc_client, sink.into()));
 
         #[cfg(feature = "metrics")]
-        metrics::set_rpc_subscriptions_active(subs.len() as u64, label::NEW_HEADS);
+        sub_metrics::update_new_heads_subscription_metrics(&subs);
     }
 
     /// Adds a new subscriber to `logs` event.
@@ -408,12 +420,37 @@ impl RpcSubscriptionsConnected {
         filter_to_subscription_map.insert(filter.clone(), SubscriptionWithFilter::new(inner, filter));
 
         #[cfg(feature = "metrics")]
-        Self::update_log_subscription_metrics(&subs);
+        sub_metrics::update_logs_subscription_metrics(&subs);
+    }
+}
+
+#[cfg(feature = "metrics")]
+mod sub_metrics {
+    use super::*;
+
+    pub fn update_new_pending_txs_subscription_metrics(subs: &HashMap<ConnectionId, Subscription>) {
+        update_subscription_count(label::PENDING_TXS, subs.values());
     }
 
-    #[cfg(feature = "metrics")]
-    fn update_log_subscription_metrics(log_subs: &HashMap<ConnectionId, HashMap<LogFilter, SubscriptionWithFilter>>) {
-        let sub_count: usize = log_subs.values().map(|value| value.len()).sum();
-        metrics::set_rpc_subscriptions_active(sub_count as u64, label::LOGS);
+    pub fn update_new_heads_subscription_metrics(subs: &HashMap<ConnectionId, Subscription>) {
+        update_subscription_count(label::NEW_HEADS, subs.values());
+    }
+
+    pub fn update_logs_subscription_metrics(subs: &HashMap<ConnectionId, HashMap<LogFilter, SubscriptionWithFilter>>) {
+        update_subscription_count(
+            label::LOGS,
+            subs.values().flat_map(HashMap::values).map(|sub_with_filter| &sub_with_filter.inner),
+        );
+    }
+
+    fn update_subscription_count<'a, I>(sub_label: &str, sub_client_app_iter: I)
+    where
+        I: Iterator<Item = &'a Subscription>,
+    {
+        let client_counts: HashMap<&RpcClientApp, usize> = sub_client_app_iter.map(|sub| &sub.client).counts();
+
+        for (client, count) in client_counts {
+            metrics::set_rpc_subscriptions_active(count as u64, client.to_string(), sub_label);
+        }
     }
 }
