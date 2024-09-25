@@ -91,7 +91,7 @@ impl ImporterConfig {
 
         {
             let mut consensus_lock = match ctx.consensus.write() {
-                Ok(lock) => lock,
+                Ok(consensus_lock) => consensus_lock,
                 Err(poisoned) => {
                     tracing::error!("consensus write lock was poisoned");
                     ctx.consensus.clear_poison();
