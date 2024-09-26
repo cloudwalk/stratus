@@ -131,10 +131,6 @@ pub enum StratusError {
     #[strum(props(kind = "internal"))]
     MinerModeChangeUnsupported { miner_mode: &'static str },
 
-    #[error("Miner mode param is invalid.")]
-    #[strum(props(kind = "internal"))]
-    MinerModeParamInvalid,
-
     #[error("Miner is enabled.")]
     #[strum(props(kind = "internal"))]
     MinerEnabled,
