@@ -127,10 +127,6 @@ pub enum StratusError {
     #[strum(props(kind = "internal"))]
     MinerModeConflict,
 
-    #[error("Failed to acquire lock on miner mode.")]
-    #[strum(props(kind = "internal"))]
-    MinerModeLockFailed,
-
     #[error("Miner mode change to ({miner_mode}) is unsupported.")]
     #[strum(props(kind = "internal"))]
     MinerModeChangeUnsupported { miner_mode: &'static str },
@@ -173,13 +169,9 @@ pub enum StratusError {
     #[strum(props(kind = "internal"))]
     ConsensusSet,
 
-    #[error("Failed to update consensus.")]
+    #[error("Failed to update consensus: Consensus is not set.")]
     #[strum(props(kind = "internal"))]
-    ConsensusUpdateError,
-
-    #[error("Failed to acquire lock on consensus.")]
-    #[strum(props(kind = "internal"))]
-    ConsensusLockFailed,
+    ConsensusNotSet,
 
     // -------------------------------------------------------------------------
     // Unexpected

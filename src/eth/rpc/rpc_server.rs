@@ -271,17 +271,10 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
 
     let should_serve = match GlobalState::get_node_mode() {
         NodeMode::Leader => true,
-        NodeMode::Follower => {
-            let consensus_lock = context.consensus.read().map_err(|_| {
-                tracing::error!("consensus read lock was poisoned");
-                context.consensus.clear_poison();
-                StratusError::ConsensusLockFailed
-            })?;
-            match consensus_lock.as_ref() {
-                Some(consensus) => tokio::task::block_in_place(|| Handle::current().block_on(consensus.should_serve())),
-                None => false,
-            }
-        }
+        NodeMode::Follower => match context.consensus() {
+            Some(consensus) => consensus.should_serve().await,
+            None => false,
+        },
     };
 
     if not(should_serve) {
@@ -446,26 +439,12 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
         return Err(StratusError::StratusNotFollower);
     }
 
-    if GlobalState::is_importer_shutdown() {
-        let consensus_lock = ctx.consensus.read().map_err(|_| {
-            tracing::error!("consensus read lock was poisoned");
-            ctx.consensus.clear_poison();
-            StratusError::ConsensusLockFailed
-        })?;
-        if consensus_lock.is_none() {
-            tracing::error!("importer is already shut down");
-            return Err(StratusError::ImporterAlreadyShutdown);
-        }
+    if GlobalState::is_importer_shutdown() && ctx.consensus().is_none() {
+        tracing::error!("importer is already shut down");
+        return Err(StratusError::ImporterAlreadyShutdown);
     }
 
-    {
-        let mut consensus_lock = ctx.consensus.write().map_err(|_| {
-            tracing::error!("consensus write lock was poisoned");
-            ctx.consensus.clear_poison();
-            StratusError::ConsensusLockFailed
-        })?;
-        *consensus_lock = None;
-    }
+    ctx.set_consensus(None);
 
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
@@ -521,16 +500,9 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
         MinerMode::Interval(duration) => {
             tracing::info!(duration = ?duration, "changing miner mode to Interval");
 
-            {
-                let consensus_lock = ctx.consensus.read().map_err(|_| {
-                    tracing::error!("consensus read lock was poisoned");
-                    ctx.consensus.clear_poison();
-                    StratusError::MinerModeLockFailed
-                })?;
-                if consensus_lock.is_some() {
-                    tracing::error!("cannot change miner mode to Interval with consensus set");
-                    return Err(StratusError::ConsensusSet);
-                }
+            if ctx.consensus().is_some() {
+                tracing::error!("cannot change miner mode to Interval with consensus set");
+                return Err(StratusError::ConsensusSet);
             }
 
             ctx.miner.start_interval_mining(duration).await;
@@ -919,23 +891,16 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
                 Err(e)
             }
         },
-        NodeMode::Follower => {
-            let consensus_lock = ctx.consensus.read().map_err(|_| {
-                tracing::error!("consensus read lock was poisoned");
-                ctx.consensus.clear_poison();
-                StratusError::ConsensusLockFailed
-            })?;
-            match consensus_lock.as_ref() {
-                Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
-                    Ok(hash) => Ok(hex_data(hash)),
-                    Err(e) => Err(e),
-                },
-                None => {
-                    tracing::error!("unable to forward transaction because consensus is temporarily unavailable for follower node");
-                    Err(StratusError::ConsensusUnavailable)
-                }
+        NodeMode::Follower => match ctx.consensus() {
+            Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+                Ok(hash) => Ok(hex_data(hash)),
+                Err(e) => Err(e),
+            },
+            None => {
+                tracing::error!("unable to forward transaction because consensus is temporarily unavailable for follower node");
+                Err(StratusError::ConsensusUnavailable)
             }
-        }
+        },
     }
 }
 
