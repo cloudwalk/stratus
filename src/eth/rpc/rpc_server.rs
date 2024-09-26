@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
