@@ -37,7 +37,7 @@ impl LogFilter {
         }
 
         let filter_topics = &self.original_input.topics;
-        let log_topics = log.log.topics_array();
+        let log_topics = log.log.topics();
 
         // (https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs)
         // Matching rules for filtering topics in `eth_getLogs`:
