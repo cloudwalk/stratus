@@ -70,6 +70,7 @@ use crate::ext::SerdeResultExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
+use crate::log_and_err;
 use crate::GlobalState;
 use crate::NodeMode;
 // -----------------------------------------------------------------------------
@@ -479,8 +480,7 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
     }
 
     if not(ctx.miner.is_paused()) && previous_mode.is_interval() {
-        tracing::error!("cannot change miner mode from Interval Mode to another mode without pausing it first");
-        return Err(StratusError::MinerEnabled);
+        return log_and_err!("can't change miner mode from Interval without pausing it first").map_err(Into::into);
     }
 
     match new_mode {
