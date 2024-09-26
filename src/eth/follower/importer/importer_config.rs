@@ -94,9 +94,9 @@ impl ImporterConfig {
                 ctx.set_consensus(Some(consensus));
             }
             None => {
-                tracing::error!("failed to update consensus: consensus is None");
+                tracing::error!("failed to update consensus: Consensus is not set.");
                 GlobalState::set_importer_shutdown(true);
-                return Err(StratusError::ConsensusUpdateError);
+                return Err(StratusError::ConsensusNotSet);
             }
         }
 

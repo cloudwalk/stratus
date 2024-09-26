@@ -169,9 +169,9 @@ pub enum StratusError {
     #[strum(props(kind = "internal"))]
     ConsensusSet,
 
-    #[error("Failed to update consensus.")]
+    #[error("Failed to update consensus: Consensus is not set.")]
     #[strum(props(kind = "internal"))]
-    ConsensusUpdateError,
+    ConsensusNotSet,
 
     // -------------------------------------------------------------------------
     // Unexpected
