@@ -272,7 +272,7 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
     let should_serve = match GlobalState::get_node_mode() {
         NodeMode::Leader => true,
         NodeMode::Follower => match context.consensus() {
-            Some(consensus) => tokio::task::block_in_place(|| Handle::current().block_on(consensus.should_serve())),
+            Some(consensus) => consensus.should_serve().await,
             None => false,
         },
     };
