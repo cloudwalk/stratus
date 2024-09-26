@@ -21,7 +21,7 @@ impl LogsBloom {
 
     pub fn accrue_log(&mut self, log: &Log) {
         self.accrue(ethereum_types::BloomInput::Raw(log.address.as_ref()));
-        for topic in log.topics() {
+        for topic in log.topics_non_empty() {
             self.accrue(ethereum_types::BloomInput::Raw(topic.as_ref()));
         }
     }

@@ -40,9 +40,9 @@ impl LogMined {
         &self.log.address
     }
 
-    /// Returns the topics emitted in the log.
-    pub fn topics(&self) -> Vec<LogTopic> {
-        self.log.topics()
+    /// Returns all non-empty topics in the log.
+    pub fn topics_non_empty(&self) -> Vec<LogTopic> {
+        self.log.topics_non_empty()
     }
 
     /// Serializes itself to JSON-RPC log format.
@@ -77,7 +77,7 @@ impl From<LogMined> for EthersLog {
         Self {
             // log
             address: value.log.address.into(),
-            topics: value.topics().into_iter().map_into().collect_vec(),
+            topics: value.topics_non_empty().into_iter().map_into().collect_vec(),
             data: value.log.data.into(),
             log_index: Some(value.log_index.into()),
             removed: Some(false),
