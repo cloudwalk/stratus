@@ -31,6 +31,27 @@ pub struct RpcContext {
     pub subs: Arc<RpcSubscriptionsConnected>,
 }
 
+impl RpcContext {
+    pub fn consensus(&self) -> Option<Arc<dyn Consensus>> {
+        self.consensus
+            .read()
+            .unwrap_or_else(|poison_error| {
+                tracing::error!("consensus read lock was poisoned");
+                self.consensus.clear_poison();
+                poison_error.into_inner()
+            })
+            .clone()
+    }
+
+    pub fn set_consensus(&self, new_consensus: Option<Arc<dyn Consensus>>) {
+        *self.consensus.write().unwrap_or_else(|poison_error| {
+            tracing::error!("consensus write lock was poisoned");
+            self.consensus.clear_poison();
+            poison_error.into_inner()
+        }) = new_consensus;
+    }
+}
+
 impl Debug for RpcContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RpcContext")

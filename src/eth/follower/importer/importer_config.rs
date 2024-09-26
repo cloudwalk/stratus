@@ -89,25 +89,14 @@ impl ImporterConfig {
             }
         };
 
-        {
-            let mut consensus_lock = match ctx.consensus.write() {
-                Ok(consensus_lock) => consensus_lock,
-                Err(poisoned) => {
-                    tracing::error!("consensus write lock was poisoned");
-                    ctx.consensus.clear_poison();
-                    poisoned.into_inner()
-                }
-            };
-
-            match consensus {
-                Some(consensus) => {
-                    *consensus_lock = Some(consensus);
-                }
-                None => {
-                    tracing::error!("failed to update consensus: consensus is None");
-                    GlobalState::set_importer_shutdown(true);
-                    return Err(StratusError::ConsensusUpdateError);
-                }
+        match consensus {
+            Some(consensus) => {
+                ctx.set_consensus(Some(consensus));
+            }
+            None => {
+                tracing::error!("failed to update consensus: consensus is None");
+                GlobalState::set_importer_shutdown(true);
+                return Err(StratusError::ConsensusUpdateError);
             }
         }
 
