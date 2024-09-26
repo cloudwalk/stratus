@@ -66,7 +66,9 @@ describe("Miner mode change integration test", function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
         expect(response.data.error.code).eq(-32603);
-        expect(response.data.error.message).eq("Miner is enabled.");
+        expect(response.data.error.message).eq(
+            "Unexpected error: can't change miner mode from Interval without pausing it first.",
+        );
     });
 
     it("Miner change to Interval on Follower should fail because importer wasn't stopped", async function () {

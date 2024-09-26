@@ -55,7 +55,7 @@ describe("Leader & Follower change integration test", function () {
             "100ms",
         ]);
         expect(response.data.error.code).to.equal(-32603);
-        expect(response.data.error.message).to.equal("Miner is enabled.");
+        expect(response.data.error.message).to.equal("Unexpected error: can't change miner mode from Interval without pausing it first.");
     });
 
     it("Change Leader to Follower should succeed", async function () {
