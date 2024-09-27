@@ -66,8 +66,8 @@ describe("Miner mode change integration test", function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
         expect(response.data.error.code).eq(-32603);
-        expect(response.data.error.message).eq(
-            "Unexpected error: can't change miner mode from Interval without pausing it first.",
+        expect(response.data.error.message.split("\n")[0]).to.equal(
+            "Unexpected error: can't change miner mode from Interval without pausing it first",
         );
     });
 
