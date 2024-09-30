@@ -62,6 +62,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
     fn call(&self, mut request: jsonrpsee::types::Request<'a>) -> Self::Future {
         // track request
         let span = info_span!(
+            parent: None,
             "rpc::request",
             cid = %new_cid(),
             rpc_client = field::Empty,
@@ -159,18 +160,17 @@ impl<'a> Future for RpcResponse<'a> {
     fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
         // poll future
         let resp = self.project();
-        let response = resp.future_response.poll(cx);
+        let mut response = resp.future_response.poll(cx);
 
-        // when ready, track response
-        if let Poll::Ready(response) = &response {
+        // when ready, track response before returning
+        if let Poll::Ready(response) = &mut response {
             let elapsed = resp.start.elapsed();
-            let _middleware_enter = response.extensions().enter_middleware_span();
+            let middleware_enter = response.extensions().enter_middleware_span();
 
-            // trace response
+            // extract response data
             let response_success = response.is_success();
             let response_result: JsonValue = from_json_str(response.as_result());
 
-            #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
             let (level, error_code) = match response_result
                 .get("error")
                 .and_then(|v| v.get("code"))
@@ -183,6 +183,7 @@ impl<'a> Future for RpcResponse<'a> {
                 None => (Level::INFO, 0),
             };
 
+            // track event
             event_with!(
                 level,
                 rpc_client = %resp.client,
@@ -199,7 +200,7 @@ impl<'a> Future for RpcResponse<'a> {
                 "rpc response"
             );
 
-            // metrify response
+            // track metrics
             #[cfg(feature = "metrics")]
             {
                 let rpc_result = match response_result.get("result") {
@@ -219,6 +220,10 @@ impl<'a> Future for RpcResponse<'a> {
                     response.is_success(),
                 );
             }
+
+            // drop span because maybe jsonrpsee is keeping it alive
+            drop(middleware_enter);
+            response.extensions_mut().remove::<Span>();
         }
 
         response
