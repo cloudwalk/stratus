@@ -476,7 +476,7 @@ impl Executor {
 
             // prepare evm input
             let pending_header = self.storage.read_pending_block_header()?.unwrap_or_default();
-            let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_header.number);
+            let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::info!(
@@ -545,7 +545,7 @@ impl Executor {
         };
 
         // execute
-        let evm_input = EvmInput::from_eth_call(call_input.clone(), point_in_time, pending_header.number, mined_block)?;
+        let evm_input = EvmInput::from_eth_call(call_input.clone(), point_in_time, pending_header, mined_block)?;
         let evm_route = match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => EvmRoute::CallPresent,
             StoragePointInTime::MinedPast(_) => EvmRoute::CallPast,

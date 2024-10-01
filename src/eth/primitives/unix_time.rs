@@ -27,16 +27,8 @@ impl UnixTime {
     }
 
     #[cfg(feature = "dev")]
-    pub fn set_offset(timestamp: UnixTime, latest_timestamp: UnixTime) -> anyhow::Result<()> {
-        offset::set(timestamp, latest_timestamp)
-    }
-
-    pub fn to_i64(&self) -> i64 {
-        self.0.try_into().expect("UNIX time is unrealistically high")
-    }
-
-    pub fn as_u64(&self) -> u64 {
-        self.0
+    pub fn set_offset(current_block_timestamp: UnixTime, new_block_timestamp: UnixTime) -> anyhow::Result<()> {
+        offset::set(current_block_timestamp, new_block_timestamp)
     }
 }
 
@@ -115,31 +107,31 @@ mod offset {
     use super::UnixTime;
     use super::Utc;
 
-    pub static TIME_OFFSET: AtomicI64 = AtomicI64::new(0);
-    pub static NEXT_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
+    pub static NEW_TIMESTAMP_DIFF: AtomicI64 = AtomicI64::new(0);
+    pub static NEW_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
 
-    pub fn set(timestamp: UnixTime, latest_timestamp: UnixTime) -> anyhow::Result<()> {
+    pub fn set(current_block_timestamp: UnixTime, new_block_timestamp: UnixTime) -> anyhow::Result<()> {
         use crate::log_and_err;
         let now = Utc::now().timestamp() as u64;
 
-        if *timestamp != 0 && *timestamp < *latest_timestamp {
+        if *new_block_timestamp != 0 && *new_block_timestamp < *current_block_timestamp {
             return log_and_err!("timestamp can't be before the latest block");
         }
 
-        let diff: i64 = if *timestamp == 0 { 0 } else { (*timestamp as i128 - now as i128) as i64 };
-        NEXT_TIMESTAMP.store(*timestamp, SeqCst);
-        TIME_OFFSET.store(diff, SeqCst);
+        let diff: i64 = if *new_block_timestamp == 0 { 0 } else { (*new_block_timestamp as i128 - now as i128) as i64 };
+        NEW_TIMESTAMP.store(*new_block_timestamp, SeqCst);
+        NEW_TIMESTAMP_DIFF.store(diff, SeqCst);
         Ok(())
     }
 
     pub fn now() -> UnixTime {
-        let offset_time = NEXT_TIMESTAMP.load(Acquire);
-        let time_offset = TIME_OFFSET.load(Acquire);
-        match offset_time {
-            0 => UnixTime((Utc::now().timestamp() as i128 + time_offset as i128) as u64),
+        let new_timestamp = NEW_TIMESTAMP.load(Acquire);
+        let new_timestamp_diff = NEW_TIMESTAMP_DIFF.load(Acquire);
+        match new_timestamp {
+            0 => UnixTime((Utc::now().timestamp() as i128 + new_timestamp_diff as i128) as u64),
             _ => {
-                let _ = NEXT_TIMESTAMP.fetch_update(SeqCst, SeqCst, |_| Some(0));
-                UnixTime(offset_time)
+                let _ = NEW_TIMESTAMP.fetch_update(SeqCst, SeqCst, |_| Some(0));
+                UnixTime(new_timestamp)
             }
         }
     }
