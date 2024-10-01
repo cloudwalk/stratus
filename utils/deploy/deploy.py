@@ -181,7 +181,7 @@ def main() -> None:
 
     try:
         config = Config(
-            leader_address=args.leader,
+            leader_address=args.current_leader,
             follower_address=args.current_follower,
             auto_approve=args.auto_approve
         )
