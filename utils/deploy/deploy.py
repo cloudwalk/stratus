@@ -174,8 +174,8 @@ def has_leader(leader_address: str, follower_address: str) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Deploy script")
-    parser.add_argument("--leader", required=True, help="Leader address")
-    parser.add_argument("--follower", required=True, help="Follower address")
+    parser.add_argument("--current-leader", required=True, help="Current Leader address")
+    parser.add_argument("--current-follower", required=True, help="Current Follower address")
     parser.add_argument("--auto-approve", action="store_true", help="Auto approve actions")
     args = parser.parse_args()
 
