@@ -314,7 +314,6 @@ e2e-leader-follower-up test="brlc":
     
         just _log "Deploy script ran successfully"
         exit 0
-    fi
     elif [ -d e2e/cloudwalk-contracts ]; then
     (
         cd e2e/cloudwalk-contracts/integration
