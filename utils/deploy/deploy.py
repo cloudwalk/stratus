@@ -181,8 +181,8 @@ def main() -> None:
 
     try:
         config = Config(
-            leader_address=args.current_leader,
-            follower_address=args.current_follower,
+            leader_address=f"{args.current_leader}/?app=deploy",
+            follower_address=f"{args.current_follower}/?app=deploy",
             auto_approve=args.auto_approve
         )
     except AttributeError as e:
