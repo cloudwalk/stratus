@@ -179,11 +179,15 @@ def main() -> None:
     parser.add_argument("--auto-approve", action="store_true", help="Auto approve actions")
     args = parser.parse_args()
 
-    config = Config(
-        leader_address=args.leader,
-        follower_address=args.follower,
-        auto_approve=args.auto_approve
-    )
+    try:
+        config = Config(
+            leader_address=args.current_leader,
+            follower_address=args.current_follower,
+            auto_approve=args.auto_approve
+        )
+    except AttributeError as e:
+        log(message=f"Error initializing Config: {str(e)}", error=True)
+        raise DeploymentError("Error initializing Config", error_type="InitializationError")
 
     if config.leader_address == config.follower_address:
         log(message="Error: Leader and follower addresses must be different.")
