@@ -4,17 +4,17 @@ on:
   pull_request:
     types: [opened, reopened, ready_for_review]
     paths-ignore:
-      - '.github/workflows/deploy.yml'
-      - '.github/workflows/docs-release.yml'
-      - '.github/workflows/outdated.yml'
-      - '.github/workflows/comment-tag-report.yml'
-      - '.github/workflows/pr-agent.yml'
-      - '.github/CODEOWNERS'
-      - 'config/**'
-      - 'README.md'
-      - 'LICENSE'
-      - 'CONTRIBUTING.md'
-      - 'utils/slack-notifiers/**'
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/docs-release.yml"
+      - ".github/workflows/outdated.yml"
+      - ".github/workflows/comment-tag-report.yml"
+      - ".github/workflows/pr-agent.yml"
+      - ".github/CODEOWNERS"
+      - "config/**"
+      - "README.md"
+      - "LICENSE"
+      - "CONTRIBUTING.md"
+      - "utils/slack-notifiers/**"
   issue_comment:
   workflow_dispatch:
 
@@ -34,7 +34,7 @@ env:
     * When you detect an unwrap, suggest to use expect.
     * When you detect a core component or service is being initialized, ensure its initialization is being logged with all relevant configurations.
     * When too much cloning is happening, suggest to use references if possible.
-    * When you detect an infinite loop, ensure that tracing events inside the loop use `parent: None` to avoid unbounded Vec growth resulting in memory leak. Example: `tracing::info!(parent: None, "some message");` 
+    * When you detect an infinite loop, ensure that tracing events inside the loop use `parent: None` to avoid unbounded Vec growth resulting in memory leak. Example: `tracing::info!(parent: None, "some message");`
 
 jobs:
   pr_agent_job:

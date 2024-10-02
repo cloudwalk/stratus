@@ -4,20 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       features:
-        description: 'List of features to enable'
+        description: "List of features to enable"
         required: false
-        default: ''
+        default: ""
   push:
     branches:
-      - 'main'
+      - "main"
     paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'rust-toolchain.toml'
-      - 'tests/fixtures/**'
-      - 'static/**'
-      - '.sqlx/**'
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "tests/fixtures/**"
+      - "static/**"
+      - ".sqlx/**"
 
 env:
   RETENTION_DAYS: 90
@@ -66,12 +66,12 @@ jobs:
         uses: actions/upload-artifact@v4
         id: upload-str
         with:
-            name: stratus-${{ github.sha }}
-            path: target/release/stratus
-            if-no-files-found: error
-            retention-days: ${{ env.RETENTION_DAYS }}
+          name: stratus-${{ github.sha }}
+          path: target/release/stratus
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
 
       - name: Print outputs
         run: |
-            echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
-            echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
+          echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
+          echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"

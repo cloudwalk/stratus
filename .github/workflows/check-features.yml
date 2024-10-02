@@ -5,19 +5,20 @@ permissions: read-all
 on:
   pull_request:
     branches:
-      - '*'
+      - "*"
     paths:
-      - 'src/**'
-      - '.github/workflows/check-features.yml'
-      - 'justfile'
-      - 'Cargo.toml'
+      - "src/**"
+      - ".github/workflows/check-features.yml"
+      - "justfile"
+      - "Cargo.toml"
 
   push:
     branches:
       - main
     paths:
-      - 'Cargo.lock'
-      - 'Cargo.toml'
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
 
   workflow_dispatch:
 
