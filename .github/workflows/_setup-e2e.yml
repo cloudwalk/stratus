@@ -9,11 +9,11 @@ on:
       justfile_env:
         required: false
         type: string
-        default: ''
+        default: ""
       cache_key:
         required: false
         type: string
-        default: 'stable-release'
+        default: "stable-release"
 
 jobs:
   setup_and_test:

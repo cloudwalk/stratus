@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'src/**'
-      - 'justfile'
+      - "src/**"
+      - "justfile"
 
   workflow_dispatch:
 
@@ -42,7 +42,7 @@ jobs:
           key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           cache-provider: "github"
           cache-directories: "~/.cargo/bin/"
-      
+
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
@@ -58,7 +58,7 @@ jobs:
       - name: Upload docs artifact
         uses: actions/upload-pages-artifact@v1
         with:
-          path: 'target/doc'
+          path: "target/doc"
 
   # Upload the documentation to GitHub Pages
   docs-release:

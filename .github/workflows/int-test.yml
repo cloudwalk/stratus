@@ -23,6 +23,7 @@ on:
   #   paths:
   #     - 'Cargo.lock'
   #     - 'Cargo.toml'
+  #       - 'rust-toolchain.toml'
 
 jobs:
   int_tests:
