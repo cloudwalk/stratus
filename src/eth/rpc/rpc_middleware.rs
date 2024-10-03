@@ -122,7 +122,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
             // active requests
             if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
-                let active = guard.max_connections() - guard.available_connections() + 1; // +1 because we are inside the middleware
+                let active = guard.max_connections() - guard.available_connections() + 1;
                 metrics::set_rpc_requests_active(active as u64);
             }
         }
