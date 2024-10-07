@@ -1137,7 +1137,7 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
 // -----------------------------------------------------------------------------
 
 /// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
-fn reject_unknown_client(client: RpcClientApp) -> Result<(), StratusError> {
+fn reject_unknown_client(client: &RpcClientApp) -> Result<(), StratusError> {
     if client.is_unknown() && not(GlobalState::is_unknown_client_enabled()) {
         return Err(StratusError::RpcClientMissing);
     }

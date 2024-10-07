@@ -12,15 +12,15 @@ use crate::ext::type_basename;
 /// Extensions for jsonrpsee Extensions.
 pub trait RpcExtensionsExt {
     /// Returns the client performing the JSON-RPC request.
-    fn rpc_client(&self) -> RpcClientApp;
+    fn rpc_client(&self) -> &RpcClientApp;
 
     /// Enters RpcMiddleware request span if present.
     fn enter_middleware_span(&self) -> Option<tracing::span::Entered<'_>>;
 }
 
 impl RpcExtensionsExt for Extensions {
-    fn rpc_client(&self) -> RpcClientApp {
-        self.get::<RpcClientApp>().cloned().unwrap_or(RpcClientApp::Unknown)
+    fn rpc_client(&self) -> &RpcClientApp {
+        self.get::<RpcClientApp>().unwrap_or(&RpcClientApp::Unknown)
     }
 
     fn enter_middleware_span(&self) -> Option<tracing::span::Entered<'_>> {
