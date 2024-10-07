@@ -122,7 +122,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
             // active requests
             if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
-                let active = guard.max_connections() - guard.available_connections(); // TODO: wait for this to be fixed https://github.com/paritytech/jsonrpsee/issues/1467
+                let active = guard.max_connections() - guard.available_connections();
                 metrics::set_rpc_requests_active(active as u64);
             }
         }
