@@ -78,7 +78,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         let middleware_enter = span.enter();
 
         // extract request data
-        let mut client = request.extensions.rpc_client();
         let method = request.method_name().to_owned();
         let tx = match method.as_str() {
             "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(request.params()).ok(),
@@ -86,10 +85,15 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
             _ => None,
         };
-        if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.clone()) {
-            request.extensions_mut().insert(tx_client.clone());
-            client = tx_client;
+
+        let client = if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.as_ref()) {
+            let val = tx_client.clone();
+            request.extensions_mut().insert(val);
+            tx_client
+        } else {
+            request.extensions.rpc_client()
         }
+        .to_owned();
 
         // trace event
         Span::with(|s| {
