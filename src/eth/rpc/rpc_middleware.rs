@@ -8,6 +8,7 @@ use futures::future::BoxFuture;
 use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
 use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
+use jsonrpsee::server::ConnectionGuard;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
@@ -60,7 +61,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
     type Future = RpcResponse<'a>;
 
     fn call(&self, mut request: jsonrpsee::types::Request<'a>) -> Self::Future {
-        // track request
         let span = info_span!(
             parent: None,
             "rpc::request",
@@ -91,7 +91,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             client = tx_client;
         }
 
-        // trace request
+        // trace event
         Span::with(|s| {
             s.rec_str("rpc_id", &request.id);
             s.rec_str("rpc_client", &client);
@@ -113,15 +113,22 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             "rpc request"
         );
 
-        // metrify request
+        // track metrics
         #[cfg(feature = "metrics")]
         {
+            // started requests
             let tx_ref = tx.as_ref();
             metrics::inc_rpc_requests_started(&client, &method, tx_ref.map(|tx| tx.contract), tx_ref.map(|tx| tx.function));
+
+            // active requests
+            if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
+                let active = guard.max_connections() - guard.available_connections(); // TODO: wait for this to be fixed https://github.com/paritytech/jsonrpsee/issues/1467
+                metrics::set_rpc_requests_active(active as u64);
+            }
         }
-        drop(middleware_enter);
 
         // make span available to rpc-server
+        drop(middleware_enter);
         request.extensions_mut().insert(span);
 
         RpcResponse {

@@ -3,7 +3,7 @@ name: Merge Gatekeeper
 on:
   pull_request:
     branches:
-      - '*'
+      - "*"
 
 jobs:
   merge-gatekeeper:
