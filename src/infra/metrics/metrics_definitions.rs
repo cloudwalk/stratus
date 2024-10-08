@@ -133,7 +133,7 @@ metrics! {
     histogram_counter executor_local_call_gas{contract, function},
 
     "Count types of errors when executing a transaction."
-    counter executor_transaction_error_types{error_type}
+    counter executor_transaction_error_types{error_type, client}
 }
 
 metrics! {
