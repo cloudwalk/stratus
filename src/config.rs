@@ -40,7 +40,7 @@ pub fn load_dotenv_file() {
         Ok(Environment::Local) => {
             // local environment only
             match std::env::var("LOCAL_ENV_PATH") {
-                Ok(local_path) => format!("config/{}.env.local", local_path),
+                Ok(local_path) => local_path,
                 Err(_) => format!("config/{}.env.local", build_info::binary_name()),
             }
         }

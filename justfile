@@ -101,7 +101,7 @@ stratus-memory-profiling *args="":
 
 # Bin: Stratus main service as follower
 stratus-follower *args="":
-    LOCAL_ENV_PATH=stratus-follower cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower {{args}}
+    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower {{args}}
 
 # Bin: Download external RPC blocks and receipts to temporary storage
 rpc-downloader *args="":
