@@ -124,7 +124,7 @@ done
 log "Cloning or updating repositories"
 
 if [ "$token" == 1 ]; then
-    clone brlc-token 80bdba3
+    clone brlc-token ddb70af
 fi
 
 if [ "$pix" == 1 ]; then
@@ -132,15 +132,15 @@ if [ "$pix" == 1 ]; then
 fi
 
 if [ "$yield" == 1 ]; then
-    clone brlc-yield-streamer 236dbcb
+    clone brlc-yield-streamer da8d9ce
 fi
 
 if [ "$periphery" == 1 ]; then
-    clone brlc-periphery fed9fcb
+    clone brlc-periphery 1e3de39
 fi
 
 if [ "$multisig" == 1 ]; then
-    clone brlc-multisig 918a226
+    clone brlc-multisig f70ec64
 fi
 
 if [ "$compound" == 1 ]; then
@@ -154,9 +154,9 @@ if [ "$pixv3" == 1 ]; then
 fi
 
 if [ "$pixv4" == 1 ]; then
-    clone_alternative brlc-pix-cashier 3ccc6c4 pix-cashier-v4 brlc-pix-cashier-v4
+    clone_alternative brlc-pix-cashier b5e9cbf pix-cashier-v4 brlc-pix-cashier-v4
 fi
 
 if [ "$cppv2" == 1 ]; then
-    clone_alternative brlc-periphery 1e5344f cpp2 brlc-periphery-v2
+    clone_alternative brlc-periphery 7eab765 cpp2 brlc-periphery-v2
 fi
