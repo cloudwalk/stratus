@@ -33,27 +33,27 @@ pub struct AccountTransfersEvent {
     /// Format: String (TBD)
     pub idempotency_key: String,
 
-    /// Address of the account that is part of all account transfers.
+    /// Address of the account that is part of all transfers.
     ///
     /// Format: Prefixed account address - 20 bytes - 0x1234567890123456789012345678901234567890
     pub account_address: Address,
 
-    /// Hash of the Ethereum transaction that originated account transfers.
+    /// Hash of the Ethereum transaction that originated transfers.
     ///
     /// Format: Prefixed transaction hash - 32 bytes - 0x1234567890123456789012345678901234567890123456789012345678901234
     pub transaction_hash: Hash,
 
-    /// Address of the contract that originated account transfers.
+    /// Address of the contract that originated transfers.
     ///
     /// Format: Prefixed account address - 20 bytes - 0x1234567890123456789012345678901234567890
     pub contract_address: Address,
 
-    /// Identifier of the Ethereum function that originated account transfers.
+    /// Identifier of the Ethereum function that originated transfers.
     ///
     /// Format: Prefixed function signature - 4 bytes - 0x12345678
     pub function_id: [u8; 4],
 
-    /// Number of the block that originated account transfers.
+    /// Number of the block that originated transfers.
     ///
     /// Format: Integer
     pub block_number: BlockNumber,
@@ -63,8 +63,8 @@ pub struct AccountTransfersEvent {
     /// Format: ISO 8601
     pub block_datetime: DateTime<Utc>,
 
-    /// List of account transfers that the related account_address is part of.
-    pub account_transfers: Vec<AccountTransfer>,
+    /// List of transfers the related `account_address` is part of.
+    pub transfers: Vec<AccountTransfer>,
 }
 
 /// Represents a token transfer between a debit party and a credit party.
