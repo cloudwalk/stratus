@@ -65,7 +65,7 @@ pub struct AccountTransfersEvent {
     /// Format: Integer (base 10)
     pub block_number: BlockNumber,
 
-    /// List of transfers the related `account_address` is part of.
+    /// List of transfers the `primary_account_address` is part of.
     pub transfers: Vec<AccountTransfer>,
 }
 
