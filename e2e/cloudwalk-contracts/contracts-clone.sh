@@ -75,7 +75,6 @@ multisig=0
 compound=0
 yield=0
 pix=0
-pixv3=0
 pixv4=0
 cppv2=0
 
@@ -89,7 +88,6 @@ print_help() {
     echo "  -c, --compound    for compound-periphery"
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
-    echo "  -3, --pixv3       for brlc-pix-cashier-v3"
     echo "  -4, --pixv4       for brlc-pix-cashier-v4"
     echo "  -2, --cppv2       for brlc-periphery-v2"
     echo "  -h, --help        display this help and exit"
@@ -102,6 +100,8 @@ if [ "$#" == 0 ]; then
     compound=1
     yield=1
     pix=1
+    pixv4=1
+    cppv2=1
 fi
 
 # Process arguments
@@ -114,7 +114,6 @@ while [[ "$#" -gt 0 ]]; do
         -c|--compound) compound=1; shift ;;
         -i|--yield) yield=1; shift ;;
         -x|--pix) pix=1; shift ;;
-        -3|--pixv3) pixv3=1; shift ;;
         -4|--pixv4) pixv4=1; shift ;;
         -2|--cppv2) cppv2=1; shift ;;
         *) echo "Unknown option: $1"; print_help; exit 1 ;;
@@ -124,7 +123,7 @@ done
 log "Cloning or updating repositories"
 
 if [ "$token" == 1 ]; then
-    clone brlc-token 80bdba3
+    clone brlc-token ddb70af
 fi
 
 if [ "$pix" == 1 ]; then
@@ -132,15 +131,15 @@ if [ "$pix" == 1 ]; then
 fi
 
 if [ "$yield" == 1 ]; then
-    clone brlc-yield-streamer 236dbcb
+    clone brlc-yield-streamer da8d9ce
 fi
 
 if [ "$periphery" == 1 ]; then
-    clone brlc-periphery fed9fcb
+    clone brlc-periphery 1e3de39
 fi
 
 if [ "$multisig" == 1 ]; then
-    clone brlc-multisig 918a226
+    clone brlc-multisig f70ec64
 fi
 
 if [ "$compound" == 1 ]; then
@@ -149,14 +148,10 @@ fi
 
 # Alternative versions
 
-if [ "$pixv3" == 1 ]; then
-    clone_alternative brlc-pix-cashier 2b1e7b3 pix-cashier-v3 brlc-pix-cashier-v3
-fi
-
 if [ "$pixv4" == 1 ]; then
-    clone_alternative brlc-pix-cashier 3ccc6c4 pix-cashier-v4 brlc-pix-cashier-v4
+    clone_alternative brlc-pix-cashier b5e9cbf pix-cashier-v4 brlc-pix-cashier-v4
 fi
 
 if [ "$cppv2" == 1 ]; then
-    clone_alternative brlc-periphery 1e5344f cpp2 brlc-periphery-v2
+    clone_alternative brlc-periphery 7eab765 cpp2 brlc-periphery-v2
 fi
