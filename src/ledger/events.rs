@@ -69,12 +69,12 @@ pub struct AccountTransfersEvent {
 
 /// Represents a token transfer between a debit party and a credit party.
 pub struct AccountTransfer {
-    /// Address of the contract that executed the transfer between `debit_party_address` and `credit_party_address`.
+    /// Address of the token contract that executed the transfer between `debit_party_address` and `credit_party_address`.
     ///
-    /// It may differ from the main contract_address because contracts can execute transfers in other contracts.
+    /// It may differ from the main `contract_address` because any contract can execute transfers in token contracts.
     ///
     /// Format: Prefixed account address - 20 bytes - 0x1234567890123456789012345678901234567890
-    pub contract_address: Address,
+    pub token_address: Address,
 
     /// Address of the account from which the token was subtracted.
     ///
