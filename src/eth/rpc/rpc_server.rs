@@ -1054,7 +1054,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     };
 
     // check subscription limits
-    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.rpc_max_subscriptions, &client).await {
+    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.rpc_max_subscriptions, client).await {
         drop(method_enter);
         pending.reject(e).instrument(method_span).await;
         return Ok(());
