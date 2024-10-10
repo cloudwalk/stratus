@@ -147,7 +147,7 @@ if [ "$pixv3" == 1 ]; then
 fi
 
 if [ "$pixv4" == 1 ]; then
-    test brlc-pix-cashier-v4 PixCashier "$@"
+    test brlc-pix-cashier-v4 CashierSharded "$@"
 fi
 
 if [ "$cppv2" == 1 ]; then
