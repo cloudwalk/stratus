@@ -70,8 +70,6 @@ jobs:
             pkg-config
           export PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu
           export PKG_CONFIG_PATH=/usr/aarch64-linux-gnu/lib/pkgconfig
-          sudo ln -s /usr/aarch64-linux-gnu/include/openssl/opensslconf.h /usr/include/openssl/opensslconf.h
-          sudo ln -s /usr/aarch64-linux-gnu/include/openssl/configuration.h /usr/include/openssl/configuration.h
 
       - name: Install target
         run: rustup target add ${{ matrix.target }}
