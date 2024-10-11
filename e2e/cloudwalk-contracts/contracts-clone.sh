@@ -38,9 +38,9 @@ clone() {
 # Clone an alternative version of a project to the projects directory.
 clone_alternative() {
     repo=$1
-    commit=$2
-    branch=$3
-    folder=$4
+    branch=$2
+    folder=$3
+    commit=$4
     target=repos/$folder
 
     mkdir -p repos
@@ -123,35 +123,35 @@ done
 log "Cloning or updating repositories"
 
 if [ "$token" == 1 ]; then
-    clone brlc-token ddb70af
+    clone brlc-token
 fi
 
 if [ "$pix" == 1 ]; then
-    clone brlc-pix-cashier fe9343c
+    clone brlc-pix-cashier
 fi
 
 if [ "$yield" == 1 ]; then
-    clone brlc-yield-streamer da8d9ce
+    clone brlc-yield-streamer
 fi
 
 if [ "$periphery" == 1 ]; then
-    clone brlc-periphery 1e3de39
+    clone brlc-periphery
 fi
 
 if [ "$multisig" == 1 ]; then
-    clone brlc-multisig f70ec64
+    clone brlc-multisig
 fi
 
 if [ "$compound" == 1 ]; then
-    clone compound-periphery c3ca5df
+    clone compound-periphery
 fi
 
 # Alternative versions
 
 if [ "$pixv4" == 1 ]; then
-    clone_alternative brlc-pix-cashier b5e9cbf pix-cashier-v4 brlc-pix-cashier-v4
+    clone_alternative brlc-pix-cashier pix-cashier-v4 brlc-pix-cashier-v4
 fi
 
 if [ "$cppv2" == 1 ]; then
-    clone_alternative brlc-periphery 7eab765 cpp2 brlc-periphery-v2
+    clone_alternative brlc-periphery cpp2 brlc-periphery-v2
 fi
