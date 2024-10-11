@@ -134,13 +134,13 @@ impl RpcSubscriptions {
                     // Set cleaned subscriptions gauges to zero, which might be the wrong value
                     // they'll be set back to the correct values in the lines below
                     for client in pending_txs_subs_cleaned {
-                        metrics::set_rpc_subscriptions_active(0, client.to_string(), label::PENDING_TXS);
+                        metrics::set_rpc_subscriptions_active(0, label::PENDING_TXS, client.to_string());
                     }
                     for client in new_heads_subs_cleaned {
-                        metrics::set_rpc_subscriptions_active(0, client.to_string(), label::NEW_HEADS);
+                        metrics::set_rpc_subscriptions_active(0, label::NEW_HEADS, client.to_string());
                     }
                     for client in logs_subs_cleaned.into_iter().map(|(client, _)| client) {
-                        metrics::set_rpc_subscriptions_active(0, client.to_string(), label::LOGS);
+                        metrics::set_rpc_subscriptions_active(0, label::LOGS, client.to_string());
                     }
 
                     sub_metrics::update_new_pending_txs_subscription_metrics(&(*subs.pending_txs.read().await));
@@ -458,7 +458,7 @@ mod sub_metrics {
         let client_counts: HashMap<&RpcClientApp, usize> = sub_client_app_iter.map(|sub| &sub.client).counts();
 
         for (client, count) in client_counts {
-            metrics::set_rpc_subscriptions_active(count as u64, client.to_string(), sub_label);
+            metrics::set_rpc_subscriptions_active(count as u64, sub_label, client.to_string());
         }
     }
 }
