@@ -21,17 +21,17 @@ flatten() {
     log "Flattenning: $contract ($repo)"
 
     # Enter the repository folder
-    cd repos/"$repo" || log "$repo folder does not exist" && exit 1
+    cd repos/"$repo" || (log "$repo folder does not exist" && exit 1)
     cp ../../../hardhat.config.ts .
 
     # Flatten
-    npx hardhat flatten contracts/"$contract".sol > ../../integration/contracts/"$contract".flattened.sol
+    npx hardhat flatten contracts/"$contract".sol >../../integration/contracts/"$contract".flattened.sol
 
     # Leave the repository folder
     cd ../../
 
     # Install ts-node if not installed
-    command -v ts-node > /dev/null || npm install --save-dev ts-node
+    command -v ts-node >/dev/null || npm install --save-dev ts-node
 
     # Lint the flattened contract
     log "Linting the flattened $contract ($repo)"

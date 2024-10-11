@@ -245,7 +245,7 @@ e2e-lint mode="--write":
 # E2E: Lint and format shell scripts for cloudwalk contracts
 shell-lint mode="--write":
     @command -v shfmt > /dev/null 2>&1 && command -v shellcheck > /dev/null 2>&1 || echo "Please, install shfmt and shellcheck" && exit 0
-    @shfmt {{ mode }} --indent 4 --space-redirects e2e/cloudwalk-contracts/*.sh
+    @shfmt {{ mode }} --indent 4 e2e/cloudwalk-contracts/*.sh
     @shellcheck e2e/cloudwalk-contracts/*.sh --severity=warning --shell=bash
 
 # E2E: profiles RPC sync and generates a flamegraph

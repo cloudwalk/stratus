@@ -14,7 +14,7 @@ test() {
     log "Testing: $file ($repo)"
 
     # configure hardhat env
-    cd repos/"$repo" || log "Error: $repo not found" && exit 1
+    cd repos/"$repo" || (log "Error: $repo not found" && exit 1)
     git restore .
     cp ../../../hardhat.config.ts .
     rm -rf .openzeppelin/
