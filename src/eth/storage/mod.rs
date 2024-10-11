@@ -11,6 +11,7 @@ mod storage_point_in_time;
 mod stratus_storage;
 mod temporary_storage;
 
+pub use external_rpc_storage::ExternalBlockWithReceipts;
 pub use external_rpc_storage::ExternalRpcStorage;
 pub use external_rpc_storage::ExternalRpcStorageConfig;
 pub use external_rpc_storage::ExternalRpcStorageKind;

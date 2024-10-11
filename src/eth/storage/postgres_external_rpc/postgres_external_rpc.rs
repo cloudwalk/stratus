@@ -17,6 +17,7 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
+use crate::eth::storage::external_rpc_storage::ExternalBlockWithReceipts;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
@@ -140,6 +141,43 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                         receipts.push(row.payload.try_into()?);
                     }
                     return Ok(receipts);
+                }
+                Err(e) =>
+                    if attempt <= MAX_RETRIES {
+                        tracing::warn!(reason = ?e, %attempt, "attempt failed. retrying now.");
+                        attempt += 1;
+
+                        let backoff = Duration::from_millis(attempt.pow(2));
+                        traced_sleep(backoff, SleepReason::RetryBackoff).await;
+                    } else {
+                        return log_and_err!(reason = e, "failed to retrieve receipts");
+                    },
+            }
+        }
+    }
+
+    async fn read_block_and_receipts_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalBlockWithReceipts>> {
+        tracing::debug!(%start, %end, "retrieving external receipts in range");
+        let mut attempt: u64 = 1;
+
+        loop {
+            let result = sqlx::query_file!(
+                "src/eth/storage/postgres_external_rpc/sql/select_external_blocks_and_receipts_in_range.sql",
+                start.as_i64(),
+                end.as_i64()
+            )
+            .fetch_all(&self.pool)
+            .await;
+
+            match result {
+                Ok(rows) => {
+                    let mut blocks_with_receipts: Vec<ExternalBlockWithReceipts> = Vec::with_capacity(rows.len());
+                    for row in rows {
+                        let block: ExternalBlock = row.payload.try_into()?;
+                        let receipts: Vec<ExternalReceipt> = row.receipts.into_iter().map(TryInto::try_into).collect::<Result<_, _>>()?;
+                        blocks_with_receipts.push((block, receipts));
+                    }
+                    return Ok(blocks_with_receipts);
                 }
                 Err(e) =>
                     if attempt <= MAX_RETRIES {

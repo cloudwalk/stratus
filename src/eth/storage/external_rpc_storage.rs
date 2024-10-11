@@ -19,6 +19,8 @@ use crate::eth::storage::PostgresExternalRpcStorage;
 use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::ext::parse_duration;
 
+pub type ExternalBlockWithReceipts = (ExternalBlock, Vec<ExternalReceipt>);
+
 #[async_trait]
 pub trait ExternalRpcStorage: Send + Sync {
     /// Read the largest block number saved inside a block range.
@@ -29,6 +31,9 @@ pub trait ExternalRpcStorage: Send + Sync {
 
     /// Read all receipts inside a block range.
     async fn read_receipts_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalReceipt>>;
+
+    /// Read all blocks and its receipts inside a block range.
+    async fn read_block_and_receipts_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalBlockWithReceipts>>;
 
     /// Read all initial accounts saved.
     async fn read_initial_accounts(&self) -> anyhow::Result<Vec<Account>>;
