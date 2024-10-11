@@ -242,6 +242,12 @@ e2e-lint mode="--write":
     fi
     node_modules/.bin/prettier . {{ mode }} --ignore-unknown
 
+# E2E: Lint and format shell scripts for cloudwalk contracts
+shell-lint mode="--write":
+    @command -v shfmt > /dev/null 2>&1 && command -v shellcheck > /dev/null 2>&1 || echo "Please, install shfmt and shellcheck" && exit 0
+    @shfmt {{ mode }} --indent 4 --space-redirects e2e/cloudwalk-contracts/*.sh
+    @shellcheck e2e/cloudwalk-contracts/*.sh --severity=warning --shell=bash
+
 # E2E: profiles RPC sync and generates a flamegraph
 e2e-flamegraph:
     #!/bin/bash
@@ -292,26 +298,26 @@ e2e-leader-follower-up test="brlc":
         just _log "Running deploy script"
         cd utils/deploy
         poetry install --no-root
-    
+
         for i in {1..5}; do
             poetry run python3 ./deploy.py --current-leader 0.0.0.0:3000 --current-follower 0.0.0.0:3001 --auto-approve
             if [ $? -ne 0 ]; then
                 just _log "Deploy script failed"
                 exit 1
             fi
-    
+
             just _log "Switching back roles..."
             sleep 5
-    
+
             poetry run python3 ./deploy.py --current-leader 0.0.0.0:3001 --current-follower 0.0.0.0:3000 --auto-approve
             if [ $? -ne 0 ]; then
                 just _log "Deploy script failed"
                 exit 1
             fi
-    
+
             sleep 5
         done
-    
+
         just _log "Deploy script ran successfully"
         exit 0
     elif [ -d e2e/cloudwalk-contracts ]; then
