@@ -2,7 +2,7 @@
 #
 # Clone Git repositories containing Solidity contracts.
 #
-source $(dirname $0)/_functions.sh
+source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
 # Functions
@@ -16,23 +16,23 @@ clone() {
 
     mkdir -p repos
 
-    if [ -d $target ]; then
+    if [ -d "$target" ]; then
         log "Updating: $repo"
-        git -C $target pull
+        git -C "$target" pull
     else
         log "Cloning: $repo"
-        git clone https://github.com/cloudwalk/$repo.git $target
-        
+        git clone https://github.com/cloudwalk/"$repo".git "$target"
+
         # checkout commit if specified and it's different from HEAD
-        head_commit=$(git -C $target rev-parse --short HEAD)
+        head_commit=$(git -C "$target" rev-parse --short HEAD)
         if [ -n "$commit" ] && [ "$commit" != "$head_commit" ]; then
             log "Checking out commit: $commit"
-            git -C $target checkout $commit --quiet
+            git -C "$target" checkout "$commit" --quiet
         fi
     fi
 
     log "Installing dependencies: $repo"
-    npm --prefix $target --silent install
+    npm --prefix "$target" --silent install
 }
 
 # Clone an alternative version of a project to the projects directory.
@@ -45,23 +45,23 @@ clone_alternative() {
 
     mkdir -p repos
 
-    if [ -d $target ]; then
+    if [ -d "$target" ]; then
         log "Updating: $repo in $folder"
-        git -C $target pull
+        git -C "$target" pull
     else
         log "Cloning: $branch branch of $repo in $folder"
-        git clone --branch $branch https://github.com/cloudwalk/$repo.git $target
-        
+        git clone --branch "$branch" https://github.com/cloudwalk/"$repo".git "$target"
+
         # checkout commit if specified and it's different from HEAD
-        head_commit=$(git -C $target rev-parse --short HEAD)
+        head_commit=$(git -C "$target" rev-parse --short HEAD)
         if [ -n "$commit" ] && [ "$commit" != "$head_commit" ]; then
             log "Checking out commit: $commit"
-            git -C $target checkout $commit --quiet
+            git -C "$target" checkout "$commit" --quiet
         fi
     fi
 
     log "Installing dependencies: $folder"
-    npm --prefix $target --silent install
+    npm --prefix "$target" --silent install
 }
 
 # ------------------------------------------------------------------------------
@@ -107,16 +107,47 @@ fi
 # Process arguments
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
-        -h|--help) print_help; exit 0 ;;
-        -t|--token) token=1; shift ;;
-        -p|--periphery) periphery=1; shift ;;
-        -m|--multisig) multisig=1; shift ;;
-        -c|--compound) compound=1; shift ;;
-        -i|--yield) yield=1; shift ;;
-        -x|--pix) pix=1; shift ;;
-        -4|--pixv4) pixv4=1; shift ;;
-        -2|--cppv2) cppv2=1; shift ;;
-        *) echo "Unknown option: $1"; print_help; exit 1 ;;
+    -h | --help)
+        print_help
+        exit 0
+        ;;
+    -t | --token)
+        token=1
+        shift
+        ;;
+    -p | --periphery)
+        periphery=1
+        shift
+        ;;
+    -m | --multisig)
+        multisig=1
+        shift
+        ;;
+    -c | --compound)
+        compound=1
+        shift
+        ;;
+    -i | --yield)
+        yield=1
+        shift
+        ;;
+    -x | --pix)
+        pix=1
+        shift
+        ;;
+    -4 | --pixv4)
+        pixv4=1
+        shift
+        ;;
+    -2 | --cppv2)
+        cppv2=1
+        shift
+        ;;
+    *)
+        echo "Unknown option: $1"
+        print_help
+        exit 1
+        ;;
     esac
 done
 

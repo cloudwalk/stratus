@@ -2,7 +2,7 @@
 #
 # Runs tests for Solidity contracts.
 #
-source $(dirname $0)/_functions.sh
+source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
 # Functions
@@ -14,25 +14,25 @@ test() {
     log "Testing: $file ($repo)"
 
     # configure hardhat env
-    cd repos/$repo
+    cd repos/"$repo" || log "Error: $repo not found" && exit 1
     git restore .
     cp ../../../hardhat.config.ts .
     rm -rf .openzeppelin/
 
     # apply git patch
     patch_file="../../patches/$repo.patch"
-    if [ -e $patch_file ]; then
+    if [ -e "$patch_file" ]; then
         log "Applying Git patch: $patch_file"
-        git apply $patch_file || true
+        git apply "$patch_file" || true
     fi
 
     # test
     if [ -z "$test" ]; then
         log "Executing all tests"
-        npx hardhat test --bail --network stratus test/$file.test.ts
+        npx hardhat test --bail --network stratus test/"$file".test.ts
     else
         log "Executing filtered tests: $test"
-        npx hardhat test --bail --network stratus test/$file.test.ts --grep $test
+        npx hardhat test --bail --network stratus test/"$file".test.ts --grep "$test"
     fi
     result_code=$?
 
@@ -40,6 +40,8 @@ test() {
     git restore .
 
     # go back to previous directory
+    # shellcheck disable=SC2164
+    # reason: This cd should not fail
     cd -
 
     # exit with same return code as the test if an error ocurred
@@ -94,16 +96,47 @@ fi
 # Process arguments
 if [[ "$#" -gt 0 ]]; then
     case "$1" in
-        -h|--help) print_help; exit 0 ;;
-        -t|--token) token=1; shift ;;
-        -p|--periphery) periphery=1; shift ;;
-        -m|--multisig) multisig=1; shift ;;
-        -c|--compound) compound=1; shift ;;
-        -i|--yield) yield=1; shift ;;
-        -x|--pix) pix=1; shift ;;
-        -4|--pixv4) pixv4=1; shift ;;
-        -2|--cppv2) cppv2=1; shift ;;
-        *) echo "Unknown option: $1"; print_help; exit 1 ;;
+    -h | --help)
+        print_help
+        exit 0
+        ;;
+    -t | --token)
+        token=1
+        shift
+        ;;
+    -p | --periphery)
+        periphery=1
+        shift
+        ;;
+    -m | --multisig)
+        multisig=1
+        shift
+        ;;
+    -c | --compound)
+        compound=1
+        shift
+        ;;
+    -i | --yield)
+        yield=1
+        shift
+        ;;
+    -x | --pix)
+        pix=1
+        shift
+        ;;
+    -4 | --pixv4)
+        pixv4=1
+        shift
+        ;;
+    -2 | --cppv2)
+        cppv2=1
+        shift
+        ;;
+    *)
+        echo "Unknown option: $1"
+        print_help
+        exit 1
+        ;;
     esac
 fi
 
