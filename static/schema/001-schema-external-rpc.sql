@@ -1,6 +1,7 @@
 create table external_blocks(
     number bigint primary key not null check (number >= 0),
-    payload jsonb not null
+    block jsonb not null,
+    receipts jsonb[] not null
 );
 
 create table external_receipts(

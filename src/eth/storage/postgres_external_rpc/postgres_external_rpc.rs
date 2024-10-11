@@ -92,7 +92,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
             let result = sqlx::query_file!(
                 "src/eth/storage/postgres_external_rpc/sql/select_external_blocks_in_range.sql",
                 start.as_i64(),
-                end.as_i64()
+                end.as_i64(),
             )
             .fetch_all(&self.pool)
             .await;
@@ -200,10 +200,17 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
             Err(e) => return log_and_err!(reason = e, "failed to init postgres transaction"),
         };
 
+        let receipts_json = receipts.iter().map(|(_, receipt)| to_json_value(receipt)).collect::<Vec<JsonValue>>();
+
         // insert block
-        let result = sqlx::query_file!("src/eth/storage/postgres_external_rpc/sql/insert_external_block.sql", number.as_i64(), block)
-            .execute(&mut *tx)
-            .await;
+        let result = sqlx::query_file!(
+            "src/eth/storage/postgres_external_rpc/sql/insert_external_block_and_receipts.sql",
+            number.as_i64(),
+            block,
+            &receipts_json,
+        )
+        .execute(&mut *tx)
+        .await;
 
         match result {
             Ok(_) => {}
