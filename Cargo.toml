@@ -38,6 +38,7 @@ static_assertions = "=1.1.0"
 strum = "=0.26.2"
 sugars = "=3.0.1"
 thiserror = "=1.0.61"
+uuid = "=1.10.0"
 
 # async
 tokio = { version = "=1.38.0", features = [
