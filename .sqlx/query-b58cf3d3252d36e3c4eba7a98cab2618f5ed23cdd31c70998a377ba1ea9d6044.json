@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "insert into external_blocks(number, payload, receipts)\nvalues ($1, $2, $3);\n",
+  "query": "insert into external_blocks(number, block, receipts)\nvalues ($1, $2, $3);\n",
   "describe": {
     "columns": [],
     "parameters": {
@@ -12,5 +12,5 @@
     },
     "nullable": []
   },
-  "hash": "d3215c05a2ec871740c31fc1036f4a9e8431e260d3c6c1e2863b4afc8308065e"
+  "hash": "b58cf3d3252d36e3c4eba7a98cab2618f5ed23cdd31c70998a377ba1ea9d6044"
 }

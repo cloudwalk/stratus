@@ -1,5 +1,5 @@
 select
-    payload,
+    block,
     receipts
 from
     external_blocks

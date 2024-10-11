@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select\n    payload,\n    receipts\nfrom\n    external_blocks\nwhere number >= $1 and number <= $2;\n",
+  "query": "select\n    block,\n    receipts\nfrom\n    external_blocks\nwhere number >= $1 and number <= $2;\n",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "payload",
+        "name": "block",
         "type_info": "Jsonb"
       },
       {
@@ -25,5 +25,5 @@
       false
     ]
   },
-  "hash": "f81eca03ff73a54d8410a16143b88e26e5df8fb11e133e459a4bbe7456507ec2"
+  "hash": "a4ed5ee45ffa8d5ace57f318f5f04377687c69507a4d9a73a87a03b470281cb0"
 }

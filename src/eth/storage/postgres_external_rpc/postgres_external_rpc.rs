@@ -102,7 +102,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                 Ok(rows) => {
                     let mut blocks: Vec<ExternalBlock> = Vec::with_capacity(rows.len());
                     for row in rows {
-                        blocks.push(row.payload.try_into()?);
+                        blocks.push(row.block.try_into()?);
                     }
                     let blocks_sorted = blocks.into_iter().sorted_by_key(|x| x.number()).collect();
                     return Ok(blocks_sorted);
@@ -173,7 +173,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                 Ok(rows) => {
                     let mut blocks_with_receipts: Vec<ExternalBlockWithReceipts> = Vec::with_capacity(rows.len());
                     for row in rows {
-                        let block: ExternalBlock = row.payload.try_into()?;
+                        let block: ExternalBlock = row.block.try_into()?;
                         let receipts: Vec<ExternalReceipt> = row.receipts.into_iter().map(TryInto::try_into).collect::<Result<_, _>>()?;
                         blocks_with_receipts.push((block, receipts));
                     }
