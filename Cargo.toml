@@ -39,7 +39,6 @@ strum = "=0.26.2"
 sugars = "=3.0.1"
 thiserror = "=1.0.61"
 uuid = "=1.10.0"
-openssl = { version = "0.10.35", features = ["vendored"] }
 
 # async
 tokio = { version = "=1.38.0", features = [
