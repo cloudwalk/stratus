@@ -2,7 +2,7 @@
 #
 # Generate coverage info for the Solidity contracts.
 #
-source $(dirname $0)/_functions.sh
+source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
 # Functions
@@ -12,7 +12,7 @@ source $(dirname $0)/_functions.sh
 coverage() {
     repo=$1
 
-    if [ -d repos/$repo/coverage/ ]; then
+    if [ -d repos/"$repo"/coverage/ ]; then
         log "Already generated coverage for $repo"
         return
     fi
@@ -20,14 +20,17 @@ coverage() {
     log "Generating coverage: $repo"
 
     # Enter the repository folder
-    if [ ! -d repos/$repo ]; then
+    if [ ! -d repos/"$repo" ]; then
         log "Repository not found: $repo. Is it cloned?"
         return
     fi
-    cd repos/$repo
-    
+
+    # shellcheck disable=SC2164
+    # reason: the existence of the repository is checked above
+    cd repos/"$repo"
+
     npx hardhat coverage
-    
+
     # Leave the repository folder
     cd ../../
 }
@@ -40,8 +43,8 @@ coverage() {
 asdf local solidity 0.8.16 || echo "asdf, solidity plugin or solidity version not found"
 
 # execute
-coverage brlc-token     
-coverage brlc-periphery    
+coverage brlc-token
+coverage brlc-periphery
 coverage brlc-pix-cashier
 coverage brlc-yield-streamer
 coverage brlc-multisig
