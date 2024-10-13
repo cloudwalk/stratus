@@ -360,7 +360,7 @@ macro_rules! gen_test_serde {
             #[test]
             pub fn [<serde_debug_json_ $type:snake>]() {
                 let original = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
-                let encoded_json = serde_json::to_string(&original).unwrap();
+                let encoded_json = serde_json::to_string(&original).expect(concat!("failed to serialize in test for ", stringify!($type)));
                 let encoded_debug = format!("{:?}", original);
                 assert_eq!(encoded_json, encoded_debug);
             }
