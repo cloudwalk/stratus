@@ -166,14 +166,14 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
             Err(e) => return log_and_err!(reason = e, "failed to init postgres transaction"),
         };
 
-        let receipts_json = receipts.iter().map(|(_, receipt)| to_json_value(receipt)).collect::<Vec<JsonValue>>();
+        let receipts = receipts.iter().map(|(_, receipt)| to_json_value(receipt)).collect::<Vec<JsonValue>>();
 
         // insert block
         let result = sqlx::query_file!(
             "src/eth/storage/postgres_external_rpc/sql/insert_external_block_and_receipts.sql",
             number.as_i64(),
             block,
-            &receipts_json,
+            &receipts,
         )
         .execute(&mut *tx)
         .await;
@@ -184,27 +184,6 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                 tracing::warn!(reason = ?e, "block unique violation, skipping");
             }
             Err(e) => return log_and_err!(reason = e, "failed to insert block"),
-        }
-
-        // insert receipts
-        for (hash, receipt) in receipts {
-            let receipt_json = to_json_value(&receipt);
-            let result = sqlx::query_file!(
-                "src/eth/storage/postgres_external_rpc/sql/insert_external_receipt.sql",
-                hash.as_ref(),
-                number.as_i64(),
-                receipt_json
-            )
-            .execute(&mut *tx)
-            .await;
-
-            match result {
-                Ok(_) => {}
-                Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
-                    tracing::warn!(reason = ?e, "receipt unique violation, skipping");
-                }
-                Err(e) => return log_and_err!(reason = e, "failed to insert receipt"),
-            }
         }
 
         match tx.commit().await {
