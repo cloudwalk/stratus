@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use anyhow::Context;
+use futures::stream;
 use futures::StreamExt;
-use futures::TryStreamExt;
 use itertools::Itertools;
 use serde::Deserialize;
 use stratus::config::RpcDownloaderConfig;
@@ -14,9 +14,9 @@ use stratus::eth::primitives::Hash;
 use stratus::eth::storage::ExternalRpcStorage;
 use stratus::ext::not;
 use stratus::infra::BlockchainClient;
-use stratus::log_and_err;
 use stratus::utils::DropTimer;
 use stratus::GlobalServices;
+use stratus::GlobalState;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 use tikv_jemallocator::Jemalloc;
 
@@ -83,7 +83,8 @@ async fn download_balances(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: &Blo
 }
 
 async fn download_blocks(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: Arc<BlockchainClient>, paralellism: usize, end: BlockNumber) -> anyhow::Result<()> {
-    let _timer = DropTimer::start("rpc-downloader::download_blocks");
+    const TASK_NAME: &str = "rpc-downloader::download_blocks";
+    let _timer = DropTimer::start(TASK_NAME);
 
     // prepare download block tasks
     let mut start = BlockNumber::ZERO;
@@ -99,16 +100,20 @@ async fn download_blocks(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: Arc<Bl
 
     // execute download block tasks
     tracing::info!(tasks = %tasks.len(), %paralellism, "executing block downloads");
-    let result = futures::stream::iter(tasks).buffer_unordered(paralellism).try_collect::<Vec<()>>().await;
-    match result {
-        Ok(_) => {
-            tracing::info!("tasks finished");
-            Ok(())
+
+    let mut stream = stream::iter(tasks).buffered(paralellism);
+    while let Some(result) = stream.next().await {
+        if let Err(e) = result {
+            tracing::error!(reason = ?e, "download task failed");
         }
-        Err(e) => {
-            log_and_err!(reason = e, "tasks failed")
+
+        if GlobalState::is_shutdown_warn(TASK_NAME) {
+            break;
         }
     }
+
+    tracing::info!("download finished");
+    Ok(())
 }
 
 async fn download(
