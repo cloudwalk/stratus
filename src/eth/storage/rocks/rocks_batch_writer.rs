@@ -21,12 +21,14 @@ pub fn write_in_batch_for_multiple_cfs_impl(db: &DB, batch: WriteBatch) -> anyho
 /// A writer that automatically flushes the batch when it exhausts capacity, supports multiple CFs.
 ///
 /// Similar to `io::BufWriter`.
+#[allow(dead_code)]
 pub struct BufferedBatchWriter {
     len: usize,
     capacity: usize,
     batch: WriteBatch,
 }
 
+#[allow(dead_code)]
 impl BufferedBatchWriter {
     pub fn new(capacity: usize) -> Self {
         Self {
