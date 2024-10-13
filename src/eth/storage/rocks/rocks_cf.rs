@@ -246,18 +246,11 @@ where
         })
     }
 
+    #[allow(dead_code)]
     pub fn iter_start(&self) -> RocksCfIter<K, V> {
         let cf = self.handle();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::Start);
-        RocksCfIter::new(iter, &self.column_family)
-    }
-
-    #[allow(dead_code)]
-    pub fn iter_end(&self) -> RocksCfIter<K, V> {
-        let cf = self.handle();
-
-        let iter = self.db.iterator_cf(&cf, IteratorMode::End);
         RocksCfIter::new(iter, &self.column_family)
     }
 
@@ -406,6 +399,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     pub fn keys(self) -> RocksCfKeysIter<'a, K> {
         RocksCfKeysIter {
             iter: self.iter,
@@ -455,6 +449,7 @@ where
 /// This iterator doesn't deserialize values, but the underlying RocksDB iterator still reads them.
 ///
 /// Created by calling `.keys()` on a `RocksCfIter`.
+#[allow(dead_code)]
 pub(super) struct RocksCfKeysIter<'a, K> {
     iter: DBIteratorWithThreadMode<'a, DB>,
     column_family: &'a str,
