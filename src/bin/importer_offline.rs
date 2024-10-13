@@ -90,7 +90,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         .join()
         .expect("'block-importer' thread panic'ed instead of properly returning an error");
 
-    // Explicitly block the `main` thread to drop the storage.
+    // Explicitly block the `main` thread while waiting for the storage to drop.
     drop(storage);
 
     Ok(())
