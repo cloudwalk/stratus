@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use itertools::Itertools;
 use log::LevelFilter;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::postgres::PgPoolOptions;
@@ -82,77 +81,6 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
             Ok(Some(max)) => Ok(Some(max.into())),
             Ok(None) => Ok(None),
             Err(e) => log_and_err!(reason = e, "failed to retrieve max block number"),
-        }
-    }
-
-    async fn read_blocks_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalBlock>> {
-        tracing::debug!(%start, %end, "retrieving external blocks in range");
-        let mut attempt: u64 = 1;
-
-        loop {
-            let result = sqlx::query_file!(
-                "src/eth/storage/postgres_external_rpc/sql/select_external_blocks_in_range.sql",
-                start.as_i64(),
-                end.as_i64(),
-            )
-            .fetch_all(&self.pool)
-            .await;
-
-            match result {
-                Ok(rows) => {
-                    let mut blocks: Vec<ExternalBlock> = Vec::with_capacity(rows.len());
-                    for row in rows {
-                        blocks.push(row.block.try_into()?);
-                    }
-                    let blocks_sorted = blocks.into_iter().sorted_by_key(|x| x.number()).collect();
-                    return Ok(blocks_sorted);
-                }
-                Err(e) =>
-                    if attempt <= MAX_RETRIES {
-                        tracing::warn!(reason = ?e, %attempt, "attempt failed. retrying now.");
-                        attempt += 1;
-
-                        let backoff = Duration::from_millis(attempt.pow(2));
-                        traced_sleep(backoff, SleepReason::RetryBackoff).await;
-                    } else {
-                        return log_and_err!(reason = e, "failed to retrieve external blocks");
-                    },
-            }
-        }
-    }
-
-    async fn read_receipts_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalReceipt>> {
-        tracing::debug!(%start, %end, "retrieving external receipts in range");
-        let mut attempt: u64 = 1;
-
-        loop {
-            let result = sqlx::query_file!(
-                "src/eth/storage/postgres_external_rpc/sql/select_external_receipts_in_range.sql",
-                start.as_i64(),
-                end.as_i64()
-            )
-            .fetch_all(&self.pool)
-            .await;
-
-            match result {
-                Ok(rows) => {
-                    let mut receipts: Vec<ExternalReceipt> = Vec::with_capacity(rows.len());
-                    for row in rows {
-                        receipts.push(row.payload.try_into()?);
-                    }
-                    return Ok(receipts);
-                }
-                Err(e) =>
-                    if attempt <= MAX_RETRIES {
-                        tracing::warn!(reason = ?e, %attempt, "attempt failed. retrying now.");
-                        attempt += 1;
-
-                        let backoff = Duration::from_millis(attempt.pow(2));
-                        traced_sleep(backoff, SleepReason::RetryBackoff).await;
-                    } else {
-                        return log_and_err!(reason = e, "failed to retrieve receipts");
-                    },
-            }
         }
     }
 

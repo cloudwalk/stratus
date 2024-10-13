@@ -26,12 +26,6 @@ pub trait ExternalRpcStorage: Send + Sync {
     /// Read the largest block number saved inside a block range.
     async fn read_max_block_number_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>>;
 
-    /// Read all block inside a block range.
-    async fn read_blocks_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalBlock>>;
-
-    /// Read all receipts inside a block range.
-    async fn read_receipts_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalReceipt>>;
-
     /// Read all blocks and its receipts inside a block range.
     async fn read_block_and_receipts_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalBlockWithReceipts>>;
 
