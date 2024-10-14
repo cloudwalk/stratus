@@ -131,6 +131,8 @@ async fn download(
     start: BlockNumber,
     end_inclusive: BlockNumber,
 ) -> anyhow::Result<()> {
+    const TASK_NAME: &str = "rpc-downloader::download";
+
     // calculate current block
     let mut current = match rpc_storage.read_max_block_number_in_range(start, end_inclusive).await? {
         Some(number) => number.next_block_number(),
@@ -141,11 +143,15 @@ async fn download(
     // download blocks
     while current <= end_inclusive {
         loop {
+            if GlobalState::is_shutdown_warn(TASK_NAME) {
+                break;
+            }
+
             // retrieve block
             let block_json = match chain.fetch_block(current).await {
                 Ok(json) => json,
                 Err(e) => {
-                    tracing::warn!(reason = ?e, "retrying block download");
+                    tracing::warn!(reason = ?e, "failed to fetch, retrying block download");
                     continue;
                 }
             };
