@@ -1,5 +1,10 @@
 use std::cmp::min;
+use std::iter;
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
@@ -23,8 +28,11 @@ use tikv_jemallocator::Jemalloc;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
+
 /// Number of blocks each parallel download will process.
 const BLOCKS_BY_TASK: usize = 1_000;
+
+static BLOCKS_DOWNLOADED: AtomicU32 = AtomicU32::new(0);
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<RpcDownloaderConfig>::init();
@@ -101,6 +109,8 @@ async fn download_blocks(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: Arc<Bl
     // execute download block tasks
     tracing::info!(tasks = %tasks.len(), %paralellism, "executing block downloads");
 
+    thread::spawn(blocks_per_minute_reporter);
+
     let mut stream = stream::iter(tasks).buffered(paralellism);
     while let Some(result) = stream.next().await {
         if let Err(e) = result {
@@ -131,8 +141,6 @@ async fn download(
 
     // download blocks
     while current <= end_inclusive {
-        tracing::info!(block_number = %current, "downloading");
-
         loop {
             // retrieve block
             let block_json = match chain.fetch_block(current).await {
@@ -184,11 +192,38 @@ async fn download(
                 continue;
             }
 
+            BLOCKS_DOWNLOADED.fetch_add(1, Ordering::Relaxed);
+
             current = current.next_block_number();
             break;
         }
     }
+
     Ok(())
+}
+
+fn blocks_per_minute_reporter() {
+    let mut intervals_in_minutes = (1..10).into_iter().chain(iter::repeat(10));
+
+    loop {
+        let interval = intervals_in_minutes.next().expect("infinite iterator");
+        let interval = Duration::from_secs(interval * 60);
+
+        let block_before = BLOCKS_DOWNLOADED.load(Ordering::Relaxed);
+        thread::sleep(interval);
+        let block_after = BLOCKS_DOWNLOADED.load(Ordering::Relaxed);
+
+        let block_diff = block_after - block_before;
+
+        let blocks_per_second = block_diff as f64 / interval.as_secs() as f64;
+
+        tracing::info!(
+            blocks_per_second = format_args!("{blocks_per_second:.2}"),
+            blocks_per_day = (blocks_per_second * 60.0 * 60.0 * 24.0) as u32,
+            sample_interval = ?interval,
+            "speed report",
+        );
+    }
 }
 
 // -----------------------------------------------------------------------------
