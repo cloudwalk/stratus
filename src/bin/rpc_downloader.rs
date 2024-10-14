@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::iter;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
