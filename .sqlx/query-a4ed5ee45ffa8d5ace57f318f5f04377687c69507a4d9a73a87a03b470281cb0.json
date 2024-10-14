@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select\n    block,\n    receipts\nfrom\n    external_blocks\nwhere number >= $1 and number <= $2;\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "block",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 1,
+        "name": "receipts",
+        "type_info": "JsonbArray"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "a4ed5ee45ffa8d5ace57f318f5f04377687c69507a4d9a73a87a03b470281cb0"
+}

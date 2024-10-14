@@ -102,8 +102,6 @@ mod tests {
     use crate::utils::test_utils::fake_first;
     use crate::utils::test_utils::fake_list;
 
-    // TODO: consider moving these 3 functions to the file that defined the returned type
-
     fn build_filter(addresses: Vec<Address>, topics_nested: Vec<Vec<Option<LogTopic>>>) -> LogFilter {
         let topics_map = |topics: Vec<Option<LogTopic>>| LogFilterInputTopic(topics.into_iter().collect());
 

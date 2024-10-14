@@ -150,6 +150,8 @@ impl Importer {
     // Executor
     // -----------------------------------------------------------------------------
 
+    pub const TASKS_COUNT: usize = 3;
+
     // Executes external blocks and persist them to storage.
     async fn start_block_executor(
         executor: Arc<Executor>,

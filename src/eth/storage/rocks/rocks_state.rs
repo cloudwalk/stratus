@@ -28,7 +28,6 @@ use super::cf_versions::CfBlocksByNumberValue;
 use super::cf_versions::CfLogsValue;
 use super::cf_versions::CfTransactionsValue;
 use super::rocks_batch_writer::write_in_batch_for_multiple_cfs_impl;
-use super::rocks_batch_writer::BufferedBatchWriter;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
@@ -284,7 +283,6 @@ impl RocksStorageState {
 
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Option<Slot>> {
         if address.is_coinbase() {
-            //XXX temporary, we will reload the database later without it
             return Ok(None);
         }
 
@@ -324,7 +322,6 @@ impl RocksStorageState {
 
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Option<Account>> {
         if address.is_coinbase() || address.is_zero() {
-            //XXX temporary, we will reload the database later without it
             return Ok(None);
         }
 
@@ -465,154 +462,6 @@ impl RocksStorageState {
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
         self.logs.clear().context("when clearing logs")?;
-        Ok(())
-    }
-
-    /// Revert state to target block, removing all effect from blocks after it.
-    pub fn revert_state_to_block(&self, target_block: BlockNumberRocksdb) -> Result<()> {
-        tracing::info!("clearing current account state (it will be reconstructed)");
-        self.accounts.clear()?;
-        tracing::info!("clearing current slots state (it will be reconstructed)");
-        self.account_slots.clear()?;
-
-        // all data from blocks after `target_block` should be deleted
-        let should_delete_block = |block_number| block_number > target_block;
-
-        let mut bufwriter = BufferedBatchWriter::new(1024 * 2);
-
-        struct LastHistoricalAccount {
-            address: AddressRocksdb,
-            account: AccountRocksdb,
-        }
-
-        let mut history_accounts_count = 0_u64;
-        let mut accounts_count = 0_u64;
-        let mut last_account: Option<LastHistoricalAccount> = None;
-
-        tracing::info!("starting iteration through historical accounts to clean values after target_block and reconstruct current accounts state");
-        for next in self.accounts_history.iter_start() {
-            let ((address, account_block_number), account) = next?;
-            let account = account.into_inner();
-
-            // this can only be `Some` if account in last iteration was in valid range
-            if let Some(last) = last_account {
-                // if reached a new account, insert the previous as it is the most up-to-date for that address
-                let is_different_account = last.address != address;
-                // if last was in valid block range, but this one isn't that's the most up-to-date in the valid range
-                let is_last_account_before_target_block = should_delete_block(account_block_number);
-
-                if is_last_account_before_target_block || is_different_account {
-                    bufwriter.insert(&self.accounts, last.address, last.account.into())?;
-                    accounts_count += 1;
-                }
-            }
-
-            if should_delete_block(account_block_number) {
-                bufwriter.delete(&self.accounts_history, (address, account_block_number))?;
-                // skip last_account for next iteration because its block shall be ignored
-                last_account = None;
-            } else {
-                // update last_account for next iteration
-                last_account = Some(LastHistoricalAccount { address, account });
-            }
-
-            history_accounts_count += 1;
-        }
-
-        // always insert last seen account
-        if let Some(last) = last_account {
-            bufwriter.insert(&self.accounts, last.address, last.account.into())?;
-            accounts_count += 1;
-        }
-
-        bufwriter.flush(&self.db)?;
-        tracing::info!(%history_accounts_count, %accounts_count, "finished historical accounts iteration");
-
-        struct LastHistoricalSlot {
-            address: AddressRocksdb,
-            index: SlotIndexRocksdb,
-            value: SlotValueRocksdb,
-        }
-
-        let mut history_slots_count = 0_u64;
-        let mut slots_count = 0_u64;
-        let mut last_slot: Option<LastHistoricalSlot> = None;
-
-        tracing::info!("starting iteration through historical slots to clean values after target_block and reconstruct current slots state");
-        for next in self.account_slots_history.iter_start() {
-            let ((address, index, slot_block_number), value) = next?;
-
-            // this can only be `Some` if slot in last iteration was in valid range
-            if let Some(last) = last_slot {
-                // if reached a new account, insert the previous as it is the most up-to-date for that address
-                let is_different_slot = last.address != address || last.index != index;
-                // if last was in valid block range, but this one isn't that's the most up-to-date in the valid range
-                let is_last_slot_before_target_block = should_delete_block(slot_block_number);
-
-                if is_last_slot_before_target_block || is_different_slot {
-                    bufwriter.insert(&self.account_slots, (last.address, last.index), last.value.into())?;
-                    slots_count += 1;
-                }
-            }
-
-            if should_delete_block(slot_block_number) {
-                bufwriter.delete(&self.account_slots_history, (address, index, slot_block_number))?;
-                // skip last_slot for next iteration because its block shall be ignored
-                last_slot = None;
-            } else {
-                // update last_slot for next iteration
-                last_slot = Some(LastHistoricalSlot {
-                    address,
-                    index,
-                    value: value.into_inner(),
-                });
-            }
-
-            history_slots_count += 1;
-        }
-
-        // always insert last seen slot
-        if let Some(last) = last_slot {
-            bufwriter.insert(&self.account_slots, (last.address, last.index), last.value.into())?;
-            slots_count += 1;
-        }
-
-        bufwriter.flush(&self.db)?;
-        tracing::info!(%history_slots_count, %slots_count, "finished historical slots iteration");
-
-        tracing::info!("cleaning values in transactions column family");
-        for next in self.transactions.iter_start() {
-            let (hash, block) = next?;
-            if should_delete_block(block.into_inner()) {
-                bufwriter.delete(&self.transactions, hash)?;
-            }
-        }
-        bufwriter.flush(&self.db)?;
-
-        tracing::info!("cleaning values in logs column family");
-        for next in self.logs.iter_start() {
-            let (key, block) = next?;
-            if should_delete_block(block.into_inner()) {
-                bufwriter.delete(&self.logs, key)?;
-            }
-        }
-        bufwriter.flush(&self.db)?;
-
-        tracing::info!("cleaning values in blocks_by_hash column family");
-        for next in self.blocks_by_hash.iter_start() {
-            let (hash, block) = next?;
-            if should_delete_block(block.into_inner()) {
-                bufwriter.delete(&self.blocks_by_hash, hash)?;
-            }
-        }
-        bufwriter.flush(&self.db)?;
-
-        tracing::info!("cleaning values in blocks_by_number column family");
-        for block in self.blocks_by_number.iter_from(target_block + 1, Direction::Forward)?.keys() {
-            bufwriter.delete(&self.blocks_by_number, block?)?;
-        }
-        bufwriter.flush(&self.db)?;
-
         Ok(())
     }
 }

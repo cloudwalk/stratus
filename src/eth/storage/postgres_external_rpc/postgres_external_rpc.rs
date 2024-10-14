@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use itertools::Itertools;
 use log::LevelFilter;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::postgres::PgPoolOptions;
@@ -17,6 +16,7 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
+use crate::eth::storage::external_rpc_storage::ExternalBlockWithReceipts;
 use crate::eth::storage::ExternalRpcStorage;
 use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
@@ -84,49 +84,13 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
         }
     }
 
-    async fn read_blocks_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalBlock>> {
-        tracing::debug!(%start, %end, "retrieving external blocks in range");
-        let mut attempt: u64 = 1;
-
-        loop {
-            let result = sqlx::query_file!(
-                "src/eth/storage/postgres_external_rpc/sql/select_external_blocks_in_range.sql",
-                start.as_i64(),
-                end.as_i64()
-            )
-            .fetch_all(&self.pool)
-            .await;
-
-            match result {
-                Ok(rows) => {
-                    let mut blocks: Vec<ExternalBlock> = Vec::with_capacity(rows.len());
-                    for row in rows {
-                        blocks.push(row.payload.try_into()?);
-                    }
-                    let blocks_sorted = blocks.into_iter().sorted_by_key(|x| x.number()).collect();
-                    return Ok(blocks_sorted);
-                }
-                Err(e) =>
-                    if attempt <= MAX_RETRIES {
-                        tracing::warn!(reason = ?e, %attempt, "attempt failed. retrying now.");
-                        attempt += 1;
-
-                        let backoff = Duration::from_millis(attempt.pow(2));
-                        traced_sleep(backoff, SleepReason::RetryBackoff).await;
-                    } else {
-                        return log_and_err!(reason = e, "failed to retrieve external blocks");
-                    },
-            }
-        }
-    }
-
-    async fn read_receipts_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalReceipt>> {
+    async fn read_block_and_receipts_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Vec<ExternalBlockWithReceipts>> {
         tracing::debug!(%start, %end, "retrieving external receipts in range");
         let mut attempt: u64 = 1;
 
         loop {
             let result = sqlx::query_file!(
-                "src/eth/storage/postgres_external_rpc/sql/select_external_receipts_in_range.sql",
+                "src/eth/storage/postgres_external_rpc/sql/select_external_blocks_and_receipts_in_range.sql",
                 start.as_i64(),
                 end.as_i64()
             )
@@ -135,11 +99,13 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
 
             match result {
                 Ok(rows) => {
-                    let mut receipts: Vec<ExternalReceipt> = Vec::with_capacity(rows.len());
+                    let mut blocks_with_receipts: Vec<ExternalBlockWithReceipts> = Vec::with_capacity(rows.len());
                     for row in rows {
-                        receipts.push(row.payload.try_into()?);
+                        let block: ExternalBlock = row.block.try_into()?;
+                        let receipts: Vec<ExternalReceipt> = row.receipts.into_iter().map(TryInto::try_into).collect::<Result<_, _>>()?;
+                        blocks_with_receipts.push((block, receipts));
                     }
-                    return Ok(receipts);
+                    return Ok(blocks_with_receipts);
                 }
                 Err(e) =>
                     if attempt <= MAX_RETRIES {
@@ -200,10 +166,17 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
             Err(e) => return log_and_err!(reason = e, "failed to init postgres transaction"),
         };
 
+        let receipts = receipts.iter().map(|(_, receipt)| to_json_value(receipt)).collect::<Vec<JsonValue>>();
+
         // insert block
-        let result = sqlx::query_file!("src/eth/storage/postgres_external_rpc/sql/insert_external_block.sql", number.as_i64(), block)
-            .execute(&mut *tx)
-            .await;
+        let result = sqlx::query_file!(
+            "src/eth/storage/postgres_external_rpc/sql/insert_external_block_and_receipts.sql",
+            number.as_i64(),
+            block,
+            &receipts,
+        )
+        .execute(&mut *tx)
+        .await;
 
         match result {
             Ok(_) => {}
@@ -211,27 +184,6 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
                 tracing::warn!(reason = ?e, "block unique violation, skipping");
             }
             Err(e) => return log_and_err!(reason = e, "failed to insert block"),
-        }
-
-        // insert receipts
-        for (hash, receipt) in receipts {
-            let receipt_json = to_json_value(&receipt);
-            let result = sqlx::query_file!(
-                "src/eth/storage/postgres_external_rpc/sql/insert_external_receipt.sql",
-                hash.as_ref(),
-                number.as_i64(),
-                receipt_json
-            )
-            .execute(&mut *tx)
-            .await;
-
-            match result {
-                Ok(_) => {}
-                Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
-                    tracing::warn!(reason = ?e, "receipt unique violation, skipping");
-                }
-                Err(e) => return log_and_err!(reason = e, "failed to insert receipt"),
-            }
         }
 
         match tx.commit().await {
