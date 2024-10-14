@@ -1,10 +1,14 @@
 use std::cmp::min;
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use anyhow::Context;
+use futures::stream;
 use futures::StreamExt;
-use futures::TryStreamExt;
 use itertools::Itertools;
 use serde::Deserialize;
 use stratus::config::RpcDownloaderConfig;
@@ -14,17 +18,20 @@ use stratus::eth::primitives::Hash;
 use stratus::eth::storage::ExternalRpcStorage;
 use stratus::ext::not;
 use stratus::infra::BlockchainClient;
-use stratus::log_and_err;
 use stratus::utils::DropTimer;
 use stratus::GlobalServices;
+use stratus::GlobalState;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 use tikv_jemallocator::Jemalloc;
 
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
+
 /// Number of blocks each parallel download will process.
 const BLOCKS_BY_TASK: usize = 1_000;
+
+static BLOCKS_DOWNLOADED: AtomicU32 = AtomicU32::new(0);
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<RpcDownloaderConfig>::init();
@@ -83,7 +90,8 @@ async fn download_balances(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: &Blo
 }
 
 async fn download_blocks(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: Arc<BlockchainClient>, paralellism: usize, end: BlockNumber) -> anyhow::Result<()> {
-    let _timer = DropTimer::start("rpc-downloader::download_blocks");
+    const TASK_NAME: &str = "rpc-downloader::download_blocks";
+    let _timer = DropTimer::start(TASK_NAME);
 
     // prepare download block tasks
     let mut start = BlockNumber::ZERO;
@@ -99,16 +107,22 @@ async fn download_blocks(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: Arc<Bl
 
     // execute download block tasks
     tracing::info!(tasks = %tasks.len(), %paralellism, "executing block downloads");
-    let result = futures::stream::iter(tasks).buffer_unordered(paralellism).try_collect::<Vec<()>>().await;
-    match result {
-        Ok(_) => {
-            tracing::info!("tasks finished");
-            Ok(())
+
+    thread::spawn(blocks_per_minute_reporter);
+
+    let mut stream = stream::iter(tasks).buffered(paralellism);
+    while let Some(result) = stream.next().await {
+        if GlobalState::is_shutdown_warn(TASK_NAME) {
+            break;
         }
-        Err(e) => {
-            log_and_err!(reason = e, "tasks failed")
+
+        if let Err(e) = result {
+            tracing::error!(reason = ?e, "download task failed");
         }
     }
+
+    tracing::info!("download finished");
+    Ok(())
 }
 
 async fn download(
@@ -117,23 +131,27 @@ async fn download(
     start: BlockNumber,
     end_inclusive: BlockNumber,
 ) -> anyhow::Result<()> {
+    const TASK_NAME: &str = "rpc-downloader::download";
+
     // calculate current block
     let mut current = match rpc_storage.read_max_block_number_in_range(start, end_inclusive).await? {
         Some(number) => number.next_block_number(),
         None => start,
     };
-    tracing::info!(%start, current = %current, end = %end_inclusive, "starting download task (might skip)");
+    tracing::info!(%start, %current, end = %end_inclusive, "starting download task (might skip)");
 
     // download blocks
     while current <= end_inclusive {
-        tracing::info!(block_number = %current, "downloading");
-
         loop {
+            if GlobalState::is_shutdown_warn(TASK_NAME) {
+                return Ok(());
+            }
+
             // retrieve block
             let block_json = match chain.fetch_block(current).await {
                 Ok(json) => json,
                 Err(e) => {
-                    tracing::warn!(reason = ?e, "retrying block download");
+                    tracing::warn!(reason = ?e, "failed to fetch, retrying block download");
                     continue;
                 }
             };
@@ -179,11 +197,41 @@ async fn download(
                 continue;
             }
 
+            BLOCKS_DOWNLOADED.fetch_add(1, Ordering::Relaxed);
+
             current = current.next_block_number();
             break;
         }
     }
+
     Ok(())
+}
+
+fn blocks_per_minute_reporter() {
+    // wait till downloading has started to start measuring
+    while BLOCKS_DOWNLOADED.load(Ordering::Relaxed) == 0 {
+        thread::sleep(Duration::from_secs(1));
+    }
+
+    let interval = Duration::from_secs(60);
+
+    tracing::info!("detected first download, starting to measure speed...");
+
+    loop {
+        let block_before = BLOCKS_DOWNLOADED.load(Ordering::Relaxed);
+        thread::sleep(interval);
+        let block_after = BLOCKS_DOWNLOADED.load(Ordering::Relaxed);
+        let block_diff = block_after - block_before;
+
+        let blocks_per_second = block_diff as f64 / interval.as_secs_f64();
+
+        tracing::info!(
+            blocks_per_second = format_args!("{blocks_per_second:.2}"),
+            blocks_per_day = (blocks_per_second * 60.0 * 60.0 * 24.0) as u32,
+            sample_interval = ?interval,
+            "speed report",
+        );
+    }
 }
 
 // -----------------------------------------------------------------------------

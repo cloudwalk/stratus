@@ -65,7 +65,7 @@ jobs:
   e2e_lint:
     name: E2E Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     concurrency:
       group: ${{ github.workflow }}-e2e-${{ github.ref || github.run_id }}
@@ -83,7 +83,18 @@ jobs:
       - name: Set up Just
         uses: extractions/setup-just@v2
 
+      - name: Set up shfmt
+        uses: mfinelli/setup-shfmt@v3.0.1
+        with:
+          version: v3.9.0
+
+      - name: Set up shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
       - name: Just e2e-lint
         run: |
           npm --prefix ./e2e --silent install
           just e2e-lint --check
+
+      - name: Just shell-lint
+        run: just shell-lint --diff

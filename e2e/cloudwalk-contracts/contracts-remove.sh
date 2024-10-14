@@ -2,7 +2,7 @@
 #
 # Clone Git repositories containing Solidity contracts.
 #
-source $(dirname $0)/_functions.sh
+source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
 # Functions
@@ -13,9 +13,9 @@ remove() {
     repo=$1
     target=repos/$repo
 
-    if [ -d $target ]; then
+    if [ -d "$target" ]; then
         log "Removing: $repo"
-        rm -rf $target
+        rm -rf "$target"
     else
         log "Already removed: $repo"
         log "Nothing to do, leaving"
@@ -59,14 +59,39 @@ fi
 # Process arguments
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
-        -h|--help) print_help; exit 0 ;;
-        -t|--token) token=1; shift ;;
-        -p|--periphery) periphery=1; shift ;;
-        -m|--multisig) multisig=1; shift ;;
-        -c|--compound) compound=1; shift ;;
-        -i|--yield) yield=1; shift ;;
-        -x|--pix) pix=1; shift ;;
-        *) echo "Unknown option: $1"; print_help; exit 1 ;;
+    -h | --help)
+        print_help
+        exit 0
+        ;;
+    -t | --token)
+        token=1
+        shift
+        ;;
+    -p | --periphery)
+        periphery=1
+        shift
+        ;;
+    -m | --multisig)
+        multisig=1
+        shift
+        ;;
+    -c | --compound)
+        compound=1
+        shift
+        ;;
+    -i | --yield)
+        yield=1
+        shift
+        ;;
+    -x | --pix)
+        pix=1
+        shift
+        ;;
+    *)
+        echo "Unknown option: $1"
+        print_help
+        exit 1
+        ;;
     esac
 done
 
