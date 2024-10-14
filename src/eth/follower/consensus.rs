@@ -32,7 +32,7 @@ pub trait Consensus: Send + Sync {
     }
 
     /// Forwards a transaction to leader.
-    async fn forward_to_leader(&self, tx_hash: Hash, tx_data: Bytes, rpc_client: RpcClientApp) -> Result<Hash, StratusError> {
+    async fn forward_to_leader(&self, tx_hash: Hash, tx_data: Bytes, rpc_client: &RpcClientApp) -> Result<Hash, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
