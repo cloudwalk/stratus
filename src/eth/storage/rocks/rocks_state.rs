@@ -283,7 +283,6 @@ impl RocksStorageState {
 
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Option<Slot>> {
         if address.is_coinbase() {
-            //XXX temporary, we will reload the database later without it
             return Ok(None);
         }
 
@@ -323,7 +322,6 @@ impl RocksStorageState {
 
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Option<Account>> {
         if address.is_coinbase() || address.is_zero() {
-            //XXX temporary, we will reload the database later without it
             return Ok(None);
         }
 
