@@ -194,7 +194,7 @@ impl RocksStorageState {
 
             if change.is_account_modified() {
                 let address: AddressRocksdb = change.address.into();
-                let mut account_info_entry = self.accounts.get_or_insert_with(address, || AccountRocksdb::default().into())?;
+                let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
 
                 if let Some(nonce) = change.nonce.take_modified() {
                     account_info_entry.nonce = nonce.into();
