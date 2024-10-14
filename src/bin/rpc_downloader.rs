@@ -137,7 +137,7 @@ async fn download(
         Some(number) => number.next_block_number(),
         None => start,
     };
-    tracing::info!(%start, current = %current, end = %end_inclusive, "starting download task (might skip)");
+    tracing::info!(%start, %current, end = %end_inclusive, "starting download task (might skip)");
 
     // download blocks
     while current <= end_inclusive {
@@ -208,16 +208,14 @@ fn blocks_per_minute_reporter() {
         thread::sleep(Duration::from_secs(1));
     }
 
-    let mut intervals_in_minutes = (1..10).chain(iter::repeat(10));
+    let interval = Duration::from_secs(60);
+
+    tracing::info!("detected first download, starting to measure speed...");
 
     loop {
-        let interval = intervals_in_minutes.next().expect("infinite iterator");
-        let interval = Duration::from_secs(interval * 60);
-
         let block_before = BLOCKS_DOWNLOADED.load(Ordering::Relaxed);
         thread::sleep(interval);
         let block_after = BLOCKS_DOWNLOADED.load(Ordering::Relaxed);
-
         let block_diff = block_after - block_before;
 
         let blocks_per_second = block_diff as f64 / interval.as_secs_f64();
