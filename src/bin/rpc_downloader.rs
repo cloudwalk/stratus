@@ -112,12 +112,12 @@ async fn download_blocks(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: Arc<Bl
 
     let mut stream = stream::iter(tasks).buffered(paralellism);
     while let Some(result) = stream.next().await {
-        if let Err(e) = result {
-            tracing::error!(reason = ?e, "download task failed");
-        }
-
         if GlobalState::is_shutdown_warn(TASK_NAME) {
             break;
+        }
+
+        if let Err(e) = result {
+            tracing::error!(reason = ?e, "download task failed");
         }
     }
 
@@ -144,7 +144,7 @@ async fn download(
     while current <= end_inclusive {
         loop {
             if GlobalState::is_shutdown_warn(TASK_NAME) {
-                break;
+                return Ok(());
             }
 
             // retrieve block
