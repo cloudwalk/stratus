@@ -247,8 +247,7 @@ impl RpcSubscriptions {
         let msg = match msg.try_into() {
             Ok(msg) => msg,
             Err(e) => {
-                // TODO: remove format!() after rust analyzer bug is fixed
-                tracing::error!(parent: None, reason = format!("{e:?}"), "failed to convert message into subscription message");
+                tracing::error!(parent: None, reason = ?e, "failed to convert message into subscription message");
                 return;
             }
         };

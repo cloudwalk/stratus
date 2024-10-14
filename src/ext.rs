@@ -162,8 +162,7 @@ pub trait MutexExt<T> {
 impl<T> MutexExt<T> for Mutex<T> {
     fn lock_or_clear<'a>(&'a self, error_message: &str) -> MutexGuard<'a, T> {
         self.lock().unwrap_or_else(|poison_err| {
-            // TODO: remove this format!() after Rust-Analyzer bug is fixed
-            tracing::error!("Fatal: failed to lock mutex, {error_message}");
+            tracing::error!(error_context, "fatal: failed to lock mutex");
             self.clear_poison();
             poison_err.into_inner()
         })
