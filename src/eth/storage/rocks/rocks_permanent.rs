@@ -65,11 +65,6 @@ impl RocksPermanentStorage {
         self.block_number.store(0, Ordering::SeqCst);
         Ok(())
     }
-
-    pub fn revert_state_to_block(&self, block_number: BlockNumber) -> anyhow::Result<()> {
-        // don't log here, this is binary-specific and will be logged in the binary
-        self.state.revert_state_to_block(block_number.into())
-    }
 }
 
 impl PermanentStorage for RocksPermanentStorage {

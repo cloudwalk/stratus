@@ -156,14 +156,13 @@ impl<T> MutexResultExt<T> for Result<T, std::sync::PoisonError<T>> {
 }
 
 pub trait MutexExt<T> {
-    fn lock_or_clear<'a>(&'a self, error_message: &str) -> MutexGuard<'a, T>;
+    fn lock_or_clear<'a>(&'a self, error_context: &str) -> MutexGuard<'a, T>;
 }
 
 impl<T> MutexExt<T> for Mutex<T> {
-    fn lock_or_clear<'a>(&'a self, error_message: &str) -> MutexGuard<'a, T> {
+    fn lock_or_clear<'a>(&'a self, error_context: &str) -> MutexGuard<'a, T> {
         self.lock().unwrap_or_else(|poison_err| {
-            // TODO: remove this format!() after Rust-Analyzer bug is fixed
-            tracing::error!("Fatal: failed to lock mutex, {error_message}");
+            tracing::error!(error_context, "fatal: failed to lock mutex");
             self.clear_poison();
             poison_err.into_inner()
         })
@@ -360,7 +359,7 @@ macro_rules! gen_test_serde {
             #[test]
             pub fn [<serde_debug_json_ $type:snake>]() {
                 let original = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
-                let encoded_json = serde_json::to_string(&original).unwrap();
+                let encoded_json = serde_json::to_string(&original).expect(concat!("failed to serialize in test for ", stringify!($type)));
                 let encoded_debug = format!("{:?}", original);
                 assert_eq!(encoded_json, encoded_debug);
             }
