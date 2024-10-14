@@ -203,6 +203,11 @@ async fn download(
 }
 
 fn blocks_per_minute_reporter() {
+    // wait till downloading has started to start measuring
+    while BLOCKS_DOWNLOADED.load(Ordering::Relaxed) == 0 {
+        thread::sleep(Duration::from_secs(1));
+    }
+
     let mut intervals_in_minutes = (1..10).chain(iter::repeat(10));
 
     loop {
