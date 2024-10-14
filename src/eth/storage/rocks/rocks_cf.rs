@@ -152,37 +152,6 @@ where
             .collect()
     }
 
-    /// Insert pair (key, value) to the Column Family.
-    pub fn insert(&self, key: K, value: V) -> Result<()> {
-        self.insert_impl(key, value)
-            .with_context(|| format!("when trying to insert value in CF: '{}'", self.column_family))
-    }
-
-    #[inline]
-    fn insert_impl(&self, key: K, value: V) -> Result<()> {
-        let cf = self.handle();
-
-        let serialized_key = self.serialize_key_with_context(&key)?;
-        let serialized_value = self.serialize_value_with_context(&value)?;
-
-        self.db.put_cf(&cf, serialized_key, serialized_value).map_err(Into::into)
-    }
-
-    /// Deletes an entry from the database by key
-    #[allow(dead_code)]
-    pub fn delete(&self, key: &K) -> Result<()> {
-        self.delete_impl(key)
-            .with_context(|| format!("when trying to delete value from CF: '{}'", self.column_family))
-    }
-
-    #[inline]
-    fn delete_impl(&self, key: &K) -> Result<()> {
-        let serialized_key = self.serialize_key_with_context(key)?;
-        let cf = self.handle();
-
-        self.db.delete_cf(&cf, serialized_key).map_err(Into::into)
-    }
-
     pub fn apply_batch_with_context(&self, batch: WriteBatch) -> Result<()> {
         self.db
             .write(batch)
@@ -211,39 +180,6 @@ where
             batch.put_cf(&cf, serialized_key, serialized_value);
         }
         Ok(())
-    }
-
-    pub fn prepare_batch_deletion<I>(&self, deletions: I, batch: &mut WriteBatch) -> Result<()>
-    where
-        I: IntoIterator<Item = K>,
-    {
-        let cf = self.handle();
-
-        for key in deletions {
-            let serialized_key = self
-                .serialize_key_with_context(&key)
-                .with_context(|| format!("failed to prepare batch delete for CF: '{}'", self.column_family))?;
-            // add the delete operation to the batch
-            batch.delete_cf(&cf, serialized_key);
-        }
-        Ok(())
-    }
-
-    // Custom method that combines entry and or_insert_with from a HashMap
-    pub fn get_or_insert_with<F>(&self, key: K, default: F) -> Result<V>
-    where
-        F: FnOnce() -> V,
-    {
-        let value = self.get(&key)?;
-
-        Ok(match value {
-            Some(value) => value,
-            None => {
-                let new_value = default();
-                self.insert(key, new_value.clone())?;
-                new_value
-            }
-        })
     }
 
     #[allow(dead_code)]
