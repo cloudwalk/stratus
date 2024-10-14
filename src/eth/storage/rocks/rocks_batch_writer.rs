@@ -51,19 +51,6 @@ impl BufferedBatchWriter {
         Ok(())
     }
 
-    pub fn delete<K, V>(&mut self, cf_ref: &RocksCfRef<K, V>, key: K) -> anyhow::Result<()>
-    where
-        K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
-        V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
-    {
-        self.len += 1;
-        cf_ref.prepare_batch_deletion([key], &mut self.batch)?;
-        if self.len >= self.capacity {
-            self.flush(cf_ref.db())?;
-        }
-        Ok(())
-    }
-
     pub fn flush(&mut self, db: &DB) -> anyhow::Result<()> {
         if self.len == 0 {
             return Ok(());
