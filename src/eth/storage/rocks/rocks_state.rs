@@ -360,24 +360,28 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
+                }
+            }
         };
 
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
-        for account in accounts {
-            let (key, value) = account.into();
-            let value: CfAccountsValue = value.into();
-            self.accounts.insert(key, value.clone())?;
-            self.accounts_history.insert((key, 0u64.into()), value.into_inner().into())?;
-        }
+        let mut write_batch = WriteBatch::default();
+        self.accounts.prepare_batch_insertion(
+            accounts.iter().cloned().map(|acc| {
+                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
+                (tup.0.into(), tup.1.into())
+            }),
+            &mut write_batch,
+        );
+        write_in_batch_for_multiple_cfs_impl(&self.db, write_batch);
         Ok(())
     }
 
