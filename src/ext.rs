@@ -156,11 +156,11 @@ impl<T> MutexResultExt<T> for Result<T, std::sync::PoisonError<T>> {
 }
 
 pub trait MutexExt<T> {
-    fn lock_or_clear<'a>(&'a self, error_message: &str) -> MutexGuard<'a, T>;
+    fn lock_or_clear<'a>(&'a self, error_context: &str) -> MutexGuard<'a, T>;
 }
 
 impl<T> MutexExt<T> for Mutex<T> {
-    fn lock_or_clear<'a>(&'a self, error_message: &str) -> MutexGuard<'a, T> {
+    fn lock_or_clear<'a>(&'a self, error_context: &str) -> MutexGuard<'a, T> {
         self.lock().unwrap_or_else(|poison_err| {
             tracing::error!(error_context, "fatal: failed to lock mutex");
             self.clear_poison();
