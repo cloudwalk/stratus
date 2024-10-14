@@ -203,7 +203,7 @@ async fn download(
 }
 
 fn blocks_per_minute_reporter() {
-    let mut intervals_in_minutes = (1..10).into_iter().chain(iter::repeat(10));
+    let mut intervals_in_minutes = (1..10).chain(iter::repeat(10));
 
     loop {
         let interval = intervals_in_minutes.next().expect("infinite iterator");
