@@ -377,6 +377,13 @@ impl RocksStorageState {
             }),
             &mut write_batch,
         )?;
+        self.accounts_history.prepare_batch_insertion(
+            accounts.iter().cloned().map(|acc| {
+                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
+                ((tup.0, 0u64.into()), tup.1.into())
+            }),
+            &mut write_batch,
+        )?;
         write_in_batch_for_multiple_cfs_impl(&self.db, write_batch)?;
         Ok(())
     }
