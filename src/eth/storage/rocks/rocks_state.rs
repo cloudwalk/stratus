@@ -369,12 +369,22 @@ impl RocksStorageState {
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
-        for account in accounts {
-            let (key, value) = account.into();
-            let value: CfAccountsValue = value.into();
-            self.accounts.insert(key, value.clone())?;
-            self.accounts_history.insert((key, 0u64.into()), value.into_inner().into())?;
-        }
+        let mut write_batch = WriteBatch::default();
+        self.accounts.prepare_batch_insertion(
+            accounts.iter().cloned().map(|acc| {
+                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
+                (tup.0, tup.1.into())
+            }),
+            &mut write_batch,
+        )?;
+        self.accounts_history.prepare_batch_insertion(
+            accounts.iter().cloned().map(|acc| {
+                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
+                ((tup.0, 0u64.into()), tup.1.into())
+            }),
+            &mut write_batch,
+        )?;
+        write_in_batch_for_multiple_cfs_impl(&self.db, write_batch)?;
         Ok(())
     }
 
