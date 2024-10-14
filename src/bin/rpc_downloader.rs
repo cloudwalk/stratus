@@ -220,7 +220,7 @@ fn blocks_per_minute_reporter() {
 
         let block_diff = block_after - block_before;
 
-        let blocks_per_second = block_diff as f64 / interval.as_secs() as f64;
+        let blocks_per_second = block_diff as f64 / interval.as_secs_f64();
 
         tracing::info!(
             blocks_per_second = format_args!("{blocks_per_second:.2}"),
