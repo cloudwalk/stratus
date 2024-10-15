@@ -1,9 +1,13 @@
 use chrono::DateTime;
 use chrono::Utc;
+use display_json::DebugAsJson;
 use ethereum_types::U256;
-use revm::primitives::Address;
+use serde::Serialize;
+use serde_with::serde_as;
+use serde_with::DisplayFromStr;
 use uuid::Uuid;
 
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 
@@ -15,6 +19,7 @@ use crate::eth::primitives::Hash;
 /// in another event it will treated as the primary and credit and debit operations adjusted accordingly.
 ///
 /// A single event can contain multiple token transfers (e.g., a customer is debited for a card payment but receives a credit as cashback)
+#[derive(DebugAsJson, Serialize)]
 pub struct AccountTransfersEvent {
     /// ID of the event publication.
     ///
@@ -70,6 +75,8 @@ pub struct AccountTransfersEvent {
 }
 
 /// Represents a token transfer between a debit party and a credit party that happened inside a transaction.
+#[serde_as]
+#[derive(DebugAsJson, Serialize)]
 pub struct AccountTransfer {
     /// Address of the token contract that executed the transfer between `debit_party_address` and `credit_party_address`.
     ///
@@ -88,22 +95,62 @@ pub struct AccountTransfer {
     /// Format: Prefixed account address - 20 bytes - 0x1234567890123456789012345678901234567890
     pub credit_party_address: Address,
 
-    /// Amount transferred from debit party to credit party.
-    ///
-    /// Format: Integer (base 10)
-    pub amount: U256,
-
     /// Direction of the transfer relative to the primary account (credit or debit).
     ///
     /// Format: [debit, credit]
     pub direction: AccountTransferDirection,
+
+    /// Amount transferred from debit party to credit party.
+    ///
+    /// Format: Integer (base 10)
+    #[serde_as(as = "DisplayFromStr")]
+    pub amount: U256,
 }
 
 /// Direction of a transfer relative to the primary account.
+#[derive(DebugAsJson, Serialize)]
 pub enum AccountTransferDirection {
     /// `primary_account_address` is being credited.
+    #[serde(rename = "credit")]
     Credit,
 
     /// `primary_account_address` is being debited.
+    #[serde(rename = "debit")]
     Debit,
+}
+
+#[cfg(test)]
+mod tests {
+    use ethereum_types::U256;
+    use serde_json::json;
+
+    use crate::eth::primitives::Address;
+    use crate::ext::to_json_value;
+    use crate::ledger::events::AccountTransfer;
+    use crate::ledger::events::AccountTransferDirection;
+
+    #[test]
+    fn serde_event_account_transfer() {
+        let transfer = AccountTransfer {
+            token_address: Address::ZERO,
+            debit_party_address: Address::ZERO,
+            credit_party_address: Address::ZERO,
+            amount: U256::max_value(),
+            direction: AccountTransferDirection::Credit,
+        };
+        let expected = json!( {
+            "token_address": "0x0000000000000000000000000000000000000000",
+            "debit_party_address": "0x0000000000000000000000000000000000000000",
+            "credit_party_address": "0x0000000000000000000000000000000000000000",
+            "direction": "credit",
+            "amount": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        });
+        assert_eq!(to_json_value(&transfer), expected);
+    }
+
+    #[test]
+    fn serde_event_account_transfer_direction() {
+        assert_eq!(to_json_value(&AccountTransferDirection::Credit), json!("credit"));
+        assert_eq!(to_json_value(&AccountTransferDirection::Debit), json!("debit"));
+    }
 }
