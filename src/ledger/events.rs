@@ -19,7 +19,7 @@ use crate::eth::primitives::Hash;
 /// in another event it will treated as the primary and credit and debit operations adjusted accordingly.
 ///
 /// A single event can contain multiple token transfers (e.g., a customer is debited for a card payment but receives a credit as cashback)
-#[derive(DebugAsJson, Serialize)]
+#[derive(DebugAsJson)]
 pub struct AccountTransfersEvent {
     /// ID of the event publication.
     ///
@@ -119,33 +119,83 @@ pub enum AccountTransferDirection {
     Debit,
 }
 
+impl Serialize for AccountTransfersEvent {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer.serialize_struct("AccountTransfersEvent", 10)?;
+        state.serialize_field("publication_id", &self.publication_id.to_string())?;
+        state.serialize_field("publication_datetime", &self.publication_datetime.to_rfc3339())?;
+        state.serialize_field("idempotency_key", &self.idempotency_key)?;
+        state.serialize_field("primary_account_address", &self.primary_account_address.to_string())?;
+        state.serialize_field("transaction_hash", &self.transaction_hash.to_string())?;
+        state.serialize_field("transaction_datetime", &self.transaction_datetime.to_rfc3339())?;
+        state.serialize_field("contract_address", &self.contract_address.to_string())?;
+        state.serialize_field("function_id", &const_hex::encode_prefixed(self.function_id))?;
+        state.serialize_field("block_number", &self.block_number.to_string())?;
+        state.serialize_field("transfers", &self.transfers)?;
+        state.end()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ethereum_types::U256;
     use serde_json::json;
+    use uuid::Uuid;
 
     use crate::eth::primitives::Address;
+    use crate::eth::primitives::BlockNumber;
+    use crate::eth::primitives::Hash;
     use crate::ext::to_json_value;
     use crate::ledger::events::AccountTransfer;
     use crate::ledger::events::AccountTransferDirection;
+    use crate::ledger::events::AccountTransfersEvent;
 
     #[test]
-    fn serde_event_account_transfer() {
-        let transfer = AccountTransfer {
-            token_address: Address::ZERO,
-            debit_party_address: Address::ZERO,
-            credit_party_address: Address::ZERO,
-            amount: U256::max_value(),
-            direction: AccountTransferDirection::Credit,
+    fn serde_event_account_transfers() {
+        let event = AccountTransfersEvent {
+            publication_id: Uuid::nil(),
+            publication_datetime: "2024-10-16T19:47:50Z".parse().unwrap(),
+            idempotency_key: "".to_string(),
+            primary_account_address: Address::ZERO,
+            transaction_hash: Hash::ZERO,
+            transaction_datetime: "2024-10-16T19:47:50Z".parse().unwrap(),
+            contract_address: Address::ZERO,
+            function_id: [0, 0, 0, 0],
+            block_number: BlockNumber::ZERO,
+            transfers: vec![AccountTransfer {
+                token_address: Address::ZERO,
+                debit_party_address: Address::ZERO,
+                credit_party_address: Address::ZERO,
+                amount: U256::max_value(),
+                direction: AccountTransferDirection::Credit,
+            }],
         };
-        let expected = json!( {
-            "token_address": "0x0000000000000000000000000000000000000000",
-            "debit_party_address": "0x0000000000000000000000000000000000000000",
-            "credit_party_address": "0x0000000000000000000000000000000000000000",
-            "direction": "credit",
-            "amount": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
-        });
-        assert_eq!(to_json_value(&transfer), expected);
+        let expected = json!(
+            {
+                "publication_id": "00000000-0000-0000-0000-000000000000",
+                "publication_datetime": "2024-10-16T19:47:50+00:00",
+                "idempotency_key": "",
+                "primary_account_address": "0x0000000000000000000000000000000000000000",
+                "transaction_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "transaction_datetime": "2024-10-16T19:47:50+00:00",
+                "contract_address":"0x0000000000000000000000000000000000000000",
+                "function_id":"0x00000000",
+                "block_number": "0",
+                "transfers": [{
+                    "token_address": "0x0000000000000000000000000000000000000000",
+                    "debit_party_address": "0x0000000000000000000000000000000000000000",
+                    "credit_party_address": "0x0000000000000000000000000000000000000000",
+                    "direction": "credit",
+                    "amount": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                }],
+            }
+        );
+        assert_eq!(to_json_value(&event), expected);
     }
 
     #[test]
