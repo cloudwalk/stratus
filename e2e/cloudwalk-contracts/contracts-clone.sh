@@ -2,6 +2,7 @@
 #
 # Clone Git repositories containing Solidity contracts.
 #
+set -eo pipefail
 source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
@@ -21,7 +22,11 @@ clone() {
         git -C "$target" pull
     else
         log "Cloning: $repo"
-        git clone https://github.com/cloudwalk/"$repo".git "$target"
+        if ! git clone https://github.com/cloudwalk/"$repo".git "$target"; then
+            log "Clone failed. Removing folder and exiting."
+            rm -rf "$target"
+            return 1
+        fi
 
         # checkout commit if specified and it's different from HEAD
         head_commit=$(git -C "$target" rev-parse --short HEAD)
@@ -50,8 +55,11 @@ clone_alternative() {
         git -C "$target" pull
     else
         log "Cloning: $branch branch of $repo in $folder"
-        git clone --branch "$branch" https://github.com/cloudwalk/"$repo".git "$target"
-
+        if ! git clone --branch "$branch" https://github.com/cloudwalk/"$repo".git "$target"; then
+            log "Clone failed. Removing folder and exiting."
+            rm -rf "$target"
+            return 1
+        fi
         # checkout commit if specified and it's different from HEAD
         head_commit=$(git -C "$target" rev-parse --short HEAD)
         if [ -n "$commit" ] && [ "$commit" != "$head_commit" ]; then
@@ -158,7 +166,17 @@ if [ "$token" == 1 ]; then
 fi
 
 if [ "$pix" == 1 ]; then
-    clone brlc-pix-cashier
+    # Cashier Transition: attempts to clone the cashier v4 repository/contract using different methods
+    # It tries multiple repository names and branches to ensure we get the correct version
+
+    # First, try to clone the 'brlc-cashier' repo, using the 'pix-cashier-v4' branch
+    clone_alternative brlc-cashier pix-cashier-v4 brlc-cashier ||
+        # If that fails, try to clone the 'brlc-pix-cashier' repo, again using the 'pix-cashier-v4' branch
+        clone_alternative brlc-pix-cashier pix-cashier-v4 brlc-cashier ||
+        # If both of those fail, try to clone the 'brlc-cashier' repo using the default branch
+        clone brlc-cashier ||
+        # As a last resort, try to clone the 'brlc-pix-cashier' repo using the default branch
+        clone brlc-pix-cashier
 fi
 
 if [ "$yield" == 1 ]; then
@@ -178,10 +196,6 @@ if [ "$compound" == 1 ]; then
 fi
 
 # Alternative versions
-
-if [ "$pixv4" == 1 ]; then
-    clone_alternative brlc-pix-cashier pix-cashier-v4 brlc-pix-cashier-v4
-fi
 
 if [ "$cppv2" == 1 ]; then
     clone_alternative brlc-periphery cpp2 brlc-periphery-v2

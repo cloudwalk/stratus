@@ -2,6 +2,7 @@
 #
 # Runs tests for Solidity contracts.
 #
+set -eo pipefail
 source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
@@ -14,7 +15,10 @@ test() {
     log "Testing: $file ($repo)"
 
     # configure hardhat env
-    cd repos/"$repo" || (log "Error: $repo not found" && exit 1)
+    if ! cd repos/"$repo"; then
+        log "Error: $repo not found"
+        return 1
+    fi
     git restore .
     cp ../../../hardhat.config.ts .
     rm -rf .openzeppelin/
@@ -149,7 +153,8 @@ if [ "$token" == 1 ]; then
 fi
 
 if [ "$pix" == 1 ]; then
-    test brlc-pix-cashier PixCashier "$@"
+    # Cashier Transition: test Cashier v4, regardless if the repository was renamed or not
+    test brlc-cashier CashierSharded "$@" || test brlc-pix-cashier CashierSharded "$@"
 fi
 
 if [ "$yield" == 1 ]; then
@@ -173,10 +178,6 @@ if [ "$compound" == 1 ]; then
 fi
 
 # Alternative versions
-
-if [ "$pixv4" == 1 ]; then
-    test brlc-pix-cashier-v4 CashierSharded "$@"
-fi
 
 if [ "$cppv2" == 1 ]; then
     test brlc-periphery-v2 CardPaymentProcessor "$@"
