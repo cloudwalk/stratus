@@ -2,6 +2,7 @@
 #
 # Generate coverage info for the Solidity contracts.
 #
+set -eo pipefail
 source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
@@ -22,7 +23,7 @@ coverage() {
     # Enter the repository folder
     if [ ! -d repos/"$repo" ]; then
         log "Repository not found: $repo. Is it cloned?"
-        return
+        return 1
     fi
 
     # shellcheck disable=SC2164
@@ -45,7 +46,7 @@ asdf local solidity 0.8.16 || echo "asdf, solidity plugin or solidity version no
 # execute
 coverage brlc-token
 coverage brlc-periphery
-coverage brlc-pix-cashier
+coverage brlc-cashier || coverage brlc-pix-cashier
 coverage brlc-yield-streamer
 coverage brlc-multisig
 coverage compound-periphery

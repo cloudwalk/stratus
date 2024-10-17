@@ -2,6 +2,7 @@
 #
 # Flattens a subset or relevant Solidity contracts.
 #
+set -eo pipefail
 source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
@@ -21,7 +22,10 @@ flatten() {
     log "Flattenning: $contract ($repo)"
 
     # Enter the repository folder
-    cd repos/"$repo" || (log "$repo folder does not exist" && exit 1)
+    if ! cd repos/"$repo"; then
+        log "$repo folder does not exist"
+        return 1
+    fi
     cp ../../../hardhat.config.ts .
 
     # Flatten
@@ -121,7 +125,7 @@ if [ "$token" == 1 ]; then
 fi
 
 if [ "$pix" == 1 ]; then
-    flatten brlc-pix-cashier PixCashier
+    flatten brlc-cashier Cashier || flatten brlc-pix-cashier PixCashier
 fi
 
 if [ "$yield" == 1 ]; then

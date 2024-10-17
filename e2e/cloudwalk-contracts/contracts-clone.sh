@@ -2,6 +2,7 @@
 #
 # Clone Git repositories containing Solidity contracts.
 #
+set -eo pipefail
 source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
@@ -21,7 +22,11 @@ clone() {
         git -C "$target" pull
     else
         log "Cloning: $repo"
-        git clone https://github.com/cloudwalk/"$repo".git "$target"
+        if ! git clone https://github.com/cloudwalk/"$repo".git "$target"; then
+            log "Clone failed. Removing folder and exiting."
+            rm -rf "$target"
+            return 1
+        fi
 
         # checkout commit if specified and it's different from HEAD
         head_commit=$(git -C "$target" rev-parse --short HEAD)
@@ -50,8 +55,11 @@ clone_alternative() {
         git -C "$target" pull
     else
         log "Cloning: $branch branch of $repo in $folder"
-        git clone --branch "$branch" https://github.com/cloudwalk/"$repo".git "$target"
-
+        if ! git clone --branch "$branch" https://github.com/cloudwalk/"$repo".git "$target"; then
+            log "Clone failed. Removing folder and exiting."
+            rm -rf "$target"
+            return 1
+        fi
         # checkout commit if specified and it's different from HEAD
         head_commit=$(git -C "$target" rev-parse --short HEAD)
         if [ -n "$commit" ] && [ "$commit" != "$head_commit" ]; then
@@ -158,7 +166,7 @@ if [ "$token" == 1 ]; then
 fi
 
 if [ "$pix" == 1 ]; then
-    clone brlc-pix-cashier
+    clone brlc-cashier || clone brlc-pix-cashier
 fi
 
 if [ "$yield" == 1 ]; then
@@ -180,7 +188,9 @@ fi
 # Alternative versions
 
 if [ "$pixv4" == 1 ]; then
-    clone_alternative brlc-pix-cashier pix-cashier-v4 brlc-pix-cashier-v4
+    clone_alternative brlc-cashier cashier-v4 brlc-cashier-v4 ||
+        clone_alternative brlc-cashier pix-cashier-v4 brlc-cashier-v4 ||
+        clone_alternative brlc-pix-cashier pix-cashier-v4 brlc-pix-cashier-v4
 fi
 
 if [ "$cppv2" == 1 ]; then
