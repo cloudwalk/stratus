@@ -25,11 +25,11 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::Size;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::primitives::UnixTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::DisplayExt;
@@ -306,7 +306,7 @@ impl Miner {
             }
         }
 
-        block_from_local(block.header.number, local_txs)
+        block_from_local(block.header, local_txs)
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
@@ -375,14 +375,8 @@ fn block_from_external(external_block: ExternalBlock, mined_txs: Vec<Transaction
     })
 }
 
-pub fn block_from_local(number: BlockNumber, txs: Vec<LocalTransactionExecution>) -> anyhow::Result<Block> {
-    // TODO: block timestamp should be set in the PendingBlock instead of being retrieved from the execution
-    let block_timestamp = match txs.first() {
-        Some(tx) => tx.result.execution.block_timestamp,
-        None => UnixTime::now(),
-    };
-
-    let mut block = Block::new(number, block_timestamp);
+pub fn block_from_local(pending_header: PendingBlockHeader, txs: Vec<LocalTransactionExecution>) -> anyhow::Result<Block> {
+    let mut block = Block::new(pending_header.number, *pending_header.timestamp);
     block.transactions.reserve(txs.len());
     block.header.size = Size::from(txs.len() as u64);
 
