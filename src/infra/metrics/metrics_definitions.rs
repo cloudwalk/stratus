@@ -91,16 +91,16 @@ metrics! {
     histogram_duration executor_external_block{},
 
     "Time executing an external transaction."
-    histogram_duration executor_external_transaction{function},
+    histogram_duration executor_external_transaction{contract, function},
 
     "Number of account reads executing an external transaction."
-    histogram_counter executor_external_transaction_account_reads{function},
+    histogram_counter executor_external_transaction_account_reads{contract, function},
 
     "Number of slot reads executing an external transaction."
-    histogram_counter executor_external_transaction_slot_reads{function},
+    histogram_counter executor_external_transaction_slot_reads{contract, function},
 
     "Gas spent executing an external transaction."
-    histogram_counter executor_external_transaction_gas{function},
+    histogram_counter executor_external_transaction_gas{contract, function},
 
     "Number of account reads when importing an external block."
     histogram_counter executor_external_block_account_reads{},
@@ -109,28 +109,28 @@ metrics! {
     histogram_counter executor_external_block_slot_reads{},
 
     "Time executing a local transaction."
-    histogram_duration executor_local_transaction{success, function},
+    histogram_duration executor_local_transaction{success, contract, function},
 
     "Number of account reads when executing a local transaction."
-    histogram_counter executor_local_transaction_account_reads{function},
+    histogram_counter executor_local_transaction_account_reads{contract, function},
 
     "Number of slot reads when executing a local transaction."
-    histogram_counter executor_local_transaction_slot_reads{function},
+    histogram_counter executor_local_transaction_slot_reads{contract, function},
 
     "Gas spent executing a local transaction."
-    histogram_counter executor_local_transaction_gas{success, function},
+    histogram_counter executor_local_transaction_gas{success, contract, function},
 
     "Time executing a transaction received with eth_call or eth_estimateGas."
-    histogram_duration executor_local_call{success, function},
+    histogram_duration executor_local_call{success, contract, function},
 
     "Number of account reads when executing a local call."
-    histogram_counter executor_local_call_account_reads{function},
+    histogram_counter executor_local_call_account_reads{contract, function},
 
     "Number of slot reads when executing a local call."
-    histogram_counter executor_local_call_slot_reads{function},
+    histogram_counter executor_local_call_slot_reads{contract, function},
 
     "Gas spent executing a local call."
-    histogram_counter executor_local_call_gas{function},
+    histogram_counter executor_local_call_gas{contract, function},
 
     "Count types of errors when executing a transaction."
     counter executor_transaction_error_types{error_type}
