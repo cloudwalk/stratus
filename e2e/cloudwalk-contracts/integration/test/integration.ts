@@ -4,15 +4,6 @@ import { ContractFactory, JsonRpcProvider } from "ethers";
 import { config, ethers, network, upgrades } from "hardhat";
 import { HttpNetworkConfig } from "hardhat/types";
 
-import {
-    BRLCToken,
-    BalanceTracker,
-    CardPaymentProcessor,
-    CashbackDistributor,
-    IERC20Hookable,
-    YieldStreamer,
-} from "../typechain-types";
-import { Cashier } from "./helpers/cashier-transition";
 import { readTokenAddressFromSource, recompile, replaceTokenAddress } from "./helpers/recompile";
 import {
     FAKE_16_BYTES,
