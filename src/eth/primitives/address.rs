@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethabi::Token;
 use ethereum_types::H160;
+use ethereum_types::H256;
 use ethers_core::types::NameOrAddress;
 use fake::Dummy;
 use fake::Faker;
@@ -16,6 +17,7 @@ use sqlx::postgres::PgHasArrayType;
 use sqlx::Decode;
 
 use crate::alias::RevmAddress;
+use crate::eth::primitives::LogTopic;
 use crate::gen_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
@@ -86,6 +88,12 @@ gen_newtype_from!(self = Address, other = H160, [u8; 20]);
 impl From<RevmAddress> for Address {
     fn from(value: RevmAddress) -> Self {
         Address(value.0 .0.into())
+    }
+}
+
+impl From<LogTopic> for Address {
+    fn from(value: LogTopic) -> Self {
+        Self(H160::from_slice(&value.0 .0[12..32]))
     }
 }
 
@@ -175,5 +183,11 @@ impl From<Address> for Token {
 impl From<Address> for [u8; 20] {
     fn from(value: Address) -> Self {
         H160::from(value).0
+    }
+}
+
+impl From<Address> for LogTopic {
+    fn from(value: Address) -> Self {
+        Self(H256::from(value.0))
     }
 }

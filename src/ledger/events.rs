@@ -1,7 +1,12 @@
+use std::collections::HashSet;
+
 use chrono::DateTime;
 use chrono::Utc;
 use display_json::DebugAsJson;
+use ethereum_types::H256;
 use ethereum_types::U256;
+use hex_literal::hex;
+use itertools::Itertools;
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
 use serde::ser::SerializeStruct;
@@ -11,6 +16,9 @@ use uuid::Uuid;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::LogTopic;
+use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::UnixTime;
 use crate::ext::InfallibleExt;
 
 /// ERC-20 tokens are configured with 6 decimal places, so it is necessary to divide them by 1.000.000 to get the human readable currency amount.
@@ -179,25 +187,94 @@ impl Serialize for AccountTransferDirection {
 }
 
 // -----------------------------------------------------------------------------
+// Conversions
+// -----------------------------------------------------------------------------
+
+/// ERC-20 transfer event hash.
+const TRANSFER_EVENT: LogTopic = LogTopic(H256(hex!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")));
+
+/// Converts a mined transaction into multiple account transfers events to be published.
+pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) -> Vec<AccountTransfers> {
+    // identify token transfers in transaction
+    let transfers = tx
+        .logs
+        .into_iter()
+        .filter(|log| log.log.topic0.is_some_and(|topic0| topic0 == TRANSFER_EVENT))
+        .filter_map(|log| {
+            let address = log.log.address;
+
+            let from: Address = log.log.topic1?.into();
+            let to: Address = log.log.topic2?.into();
+            let amount = log.log.data;
+            Some((address, from, to, amount))
+        })
+        .collect_vec();
+
+    // identify accounts involved in transfers
+    let mut accounts = HashSet::new();
+    for (_, from, to, _) in transfers {
+        accounts.insert(from);
+        accounts.insert(to);
+    }
+
+    // for each account, generate an event
+    let mut events = Vec::with_capacity(accounts.len());
+    for account in accounts {
+        // generate base event
+        let event = AccountTransfers {
+            publication_id: Uuid::now_v7(),
+            publication_datetime: Utc::now(),
+            account_address: account,
+            transaction_hash: tx.input.hash,
+            transaction_datetime: block_timestamp.into(),
+            contract_address: tx.input.to.unwrap_or_else(|| {
+                tracing::error!("bug: transaction emitting transfers must have the contract address");
+                Address::ZERO
+            }),
+            function_id: tx.input.input[0..4].try_into().unwrap_or_else(|_| {
+                tracing::error!("bug: transaction emitting transfers must have the 4-byte signature");
+                [0; 4]
+            }),
+            block_number: tx.block_number,
+            transfers: vec![],
+        };
+
+        // gerarate event transfers
+        events.push(event);
+    }
+
+    events
+}
+
+// -----------------------------------------------------------------------------
 // Tests
 // -----------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use ethereum_types::U256;
+    use fake::Fake;
+    use fake::Faker;
     use serde_json::json;
     use uuid::Uuid;
 
+    use crate::eth::primitives::test_accounts;
     use crate::eth::primitives::Address;
     use crate::eth::primitives::BlockNumber;
+    use crate::eth::primitives::Bytes;
     use crate::eth::primitives::Hash;
+    use crate::eth::primitives::LogMined;
+    use crate::eth::primitives::TransactionMined;
+    use crate::eth::primitives::UnixTime;
     use crate::ext::to_json_value;
+    use crate::ledger::events::transaction_to_events;
     use crate::ledger::events::AccountTransfer;
     use crate::ledger::events::AccountTransferDirection;
     use crate::ledger::events::AccountTransfers;
+    use crate::ledger::events::TRANSFER_EVENT;
 
     #[test]
-    fn serde_event_account_transfers() {
+    fn ledger_events_serde_account_transfers() {
         let event = AccountTransfers {
             publication_id: Uuid::nil(),
             publication_datetime: "2024-10-16T19:47:50Z".parse().unwrap(),
@@ -239,8 +316,50 @@ mod tests {
     }
 
     #[test]
-    fn serde_event_account_transfer_direction() {
+    fn ledger_events_serde_event_account_transfer_direction() {
         assert_eq!(to_json_value(&AccountTransferDirection::Credit), json!("credit"));
         assert_eq!(to_json_value(&AccountTransferDirection::Debit), json!("debit"));
+    }
+
+    #[test]
+    fn ledger_events_parse_transfer_events() {
+        let accounts = test_accounts();
+        let alice = &accounts[0];
+        let bob = &accounts[1];
+        let charlie = &accounts[2];
+
+        // 1. generate fake block data transaction and block data
+        let block_timestamp: UnixTime = 1729108070.into();
+
+        // 2. generate fake tx data
+        let mut tx: TransactionMined = Fake::fake(&Faker);
+        tx.input.input = Bytes(vec![1, 2, 3, 4]);
+
+        let mut log_transfer1: LogMined = Fake::fake(&Faker);
+        log_transfer1.log.topic0 = Some(TRANSFER_EVENT);
+        log_transfer1.log.topic1 = Some(alice.address.into());
+        log_transfer1.log.topic2 = Some(bob.address.into());
+        log_transfer1.log.data = Bytes(vec![]);
+
+        let mut log_transfer2: LogMined = Fake::fake(&Faker);
+        log_transfer2.log.topic0 = Some(TRANSFER_EVENT);
+        log_transfer2.log.topic1 = Some(bob.address.into());
+        log_transfer2.log.topic2 = Some(charlie.address.into());
+        log_transfer2.log.data = Bytes(vec![]);
+
+        let log_random: LogMined = Fake::fake(&Faker);
+
+        tx.logs.push(log_transfer1);
+        tx.logs.push(log_random);
+        tx.logs.push(log_transfer2);
+
+        // 3. parse events
+        let events = transaction_to_events(block_timestamp, tx.clone());
+
+        // 4. assert events
+        assert_eq!(events.len(), 3); // number of accounts involved in all transactions
+        for event in events {
+            assert_eq!(&event.transaction_hash, &tx.input.hash);
+        }
     }
 }
