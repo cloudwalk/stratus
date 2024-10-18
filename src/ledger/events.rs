@@ -2,6 +2,8 @@ use chrono::DateTime;
 use chrono::Utc;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
+use rust_decimal::prelude::FromPrimitive;
+use rust_decimal::Decimal;
 use serde::ser::SerializeStruct;
 use serde::Serialize;
 use uuid::Uuid;
@@ -9,6 +11,10 @@ use uuid::Uuid;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+use crate::ext::InfallibleExt;
+
+/// ERC-20 tokens are configured with 6 decimal places, so it is necessary to divide them by 1.000.000 to get the human readable currency amount.
+const TOKEN_SCALE: Decimal = Decimal::from_parts(1_000_000, 0, 0, false, 0);
 
 /// Represents token transfers (debits and credits) associated with a specific Ethereum account within a single transaction.
 ///
@@ -59,7 +65,7 @@ pub struct AccountTransfers {
 
     /// Number of the block that originated transfers.
     ///
-    /// Format: Integer (base 10) - Range: 0 to [`u64::MAX`]
+    /// Format: Number in base 10 - Range: 0 to [`u64::MAX`]
     pub block_number: BlockNumber,
 
     /// List of transfers the `account_address` is part of.
@@ -104,7 +110,7 @@ pub struct AccountTransfer {
 
     /// Amount transferred from debit party to credit party.
     ///
-    /// Format: Integer (base 10) - Range: 0 to [`u64::MAX`].
+    /// Format: Number in base 10 and 6 decimal places - Formatted as String to avoid losing precision - Range: 0 to 18446744073709.551615.
     pub amount: U256,
 }
 
@@ -148,13 +154,13 @@ impl Serialize for AccountTransfer {
     where
         S: serde::Serializer,
     {
-        use serde::ser::SerializeStruct;
+        let amount = Decimal::from_u64(self.amount.low_u64()).expect_infallible() / TOKEN_SCALE;
 
         let mut state = serializer.serialize_struct("AccountTransfer", 5)?;
         state.serialize_field("token_address", &self.token_address)?;
         state.serialize_field("debit_party_address", &self.debit_party_address)?;
         state.serialize_field("credit_party_address", &self.credit_party_address)?;
-        state.serialize_field("amount", &self.amount.low_u64())?;
+        state.serialize_field("amount", &amount)?;
         state.serialize_field("direction", &self.direction)?;
         state.end()
     }
@@ -218,14 +224,14 @@ mod tests {
                 "transaction_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
                 "transaction_datetime": "2024-10-16T19:47:50+00:00",
                 "contract_address":"0x0000000000000000000000000000000000000000",
-                "function_id":"0x00000000",
+                "function_id": "0x00000000",
                 "block_number": 0,
                 "transfers": [{
                     "token_address": "0x0000000000000000000000000000000000000000",
                     "debit_party_address": "0x0000000000000000000000000000000000000000",
                     "credit_party_address": "0x0000000000000000000000000000000000000000",
                     "direction": "credit",
-                    "amount": 18446744073709551615_u64
+                    "amount": "18446744073709.551615"
                 }],
             }
         );

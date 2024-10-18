@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use jsonrpsee::types::SubscriptionId;
+use rust_decimal::Decimal;
 use serde::Serialize;
 use serde::Serializer;
 use tokio::select;
@@ -125,20 +126,29 @@ impl<T> OptionExt<T> for Option<T> {
 // Result
 // -----------------------------------------------------------------------------
 
-pub trait SerdeResultExt<T> {
+pub trait InfallibleExt<T, E> {
     /// Unwraps a result informing that this operation is expected to be infallible.
     fn expect_infallible(self) -> T;
 }
 
-impl<T> SerdeResultExt<T> for Result<T, serde_json::Error>
+impl<T> InfallibleExt<T, serde_json::Error> for Result<T, serde_json::Error>
 where
     T: Sized,
 {
     fn expect_infallible(self) -> T {
         if let Err(ref e) = self {
-            tracing::error!(reason = ?e, "serde serialization/deserialization that should be infallible");
+            tracing::error!(reason = ?e, "expected infallible serde serialization/deserialization");
         }
-        self.expect("serde serialization/deserialization that should be infallible")
+        self.expect("serde serialization/deserialization")
+    }
+}
+
+impl InfallibleExt<Decimal, ()> for Option<Decimal> {
+    fn expect_infallible(self) -> Decimal {
+        if self.is_none() {
+            tracing::error!("expected infallible decimal conversion");
+        }
+        self.expect("infallible decimal conversion")
     }
 }
 
