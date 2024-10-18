@@ -547,7 +547,13 @@ impl Executor {
         // retrieve block info
         let pending_header = self.storage.read_pending_block_header()?.unwrap_or_default();
         let mined_block = match point_in_time {
-            StoragePointInTime::MinedPast(number) => self.storage.read_block(&BlockFilter::Number(number))?,
+            StoragePointInTime::MinedPast(number) => {
+                let Some(block) = self.storage.read_block(&BlockFilter::Number(number))? else {
+                    let filter = BlockFilter::Number(number);
+                    return Err(StratusError::RpcBlockFilterInvalid { filter });
+                };
+                Some(block)
+            }
             _ => None,
         };
 

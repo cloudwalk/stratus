@@ -10,8 +10,9 @@ import {
     BalanceTracker,
     CardPaymentProcessor,
     CashbackDistributor,
+    Cashier,
+    CashierShard,
     IERC20Hookable,
-    PixCashier,
     YieldStreamer,
 } from "../../typechain-types";
 import { readTokenAddressFromSource, recompile, replaceTokenAddress } from "./recompile";
@@ -26,7 +27,8 @@ export const CHAIN_ID = toHex(CHAIN_ID_DEC);
 
 /* Contracts instances */
 export let brlcToken: BRLCToken;
-export let pixCashier: PixCashier;
+export let cashier: Cashier;
+export let cashierShard: CashierShard;
 export let cashbackDistributor: CashbackDistributor;
 export let cardPaymentProcessor: CardPaymentProcessor;
 export let balanceTracker: BalanceTracker;
@@ -95,16 +97,28 @@ export async function configureBRLC() {
     );
 }
 
-export async function deployPixCashier() {
-    let pixFactory: ContractFactory = await ethers.getContractFactory("PixCashier");
-    let deployedProxy = await upgrades.deployProxy(pixFactory.connect(deployer), [await brlcToken.getAddress()]);
+export async function deployCashier() {
+    let cashierFactory: ContractFactory = await ethers.getContractFactory("Cashier");
+    let deployedProxy = await upgrades.deployProxy(cashierFactory.connect(deployer), [await brlcToken.getAddress()]);
     await deployedProxy.waitForDeployment();
-    pixCashier = deployedProxy.connect(deployer) as PixCashier;
+    cashier = deployedProxy.connect(deployer) as Cashier;
 }
 
-export async function configurePixCashier() {
-    brlcToken.connect(deployer).configureMinter(await pixCashier.getAddress(), 1000000000);
-    waitReceipt(pixCashier.grantRole(await pixCashier.CASHIER_ROLE(), await deployer.getAddress()));
+export async function configureCashier() {
+    brlcToken.connect(deployer).configureMinter(await cashier.getAddress(), 1000000000);
+    waitReceipt(cashier.grantRole(await cashier.CASHIER_ROLE(), await deployer.getAddress()));
+}
+
+export async function deployCashierShard() {
+    let cashierShardFactory: ContractFactory = await ethers.getContractFactory("CashierShard");
+    let deployedProxy = await upgrades.deployProxy(cashierShardFactory.connect(deployer), [await cashier.getAddress()]);
+    await deployedProxy.waitForDeployment();
+    cashierShard = deployedProxy.connect(deployer) as CashierShard;
+}
+
+export async function configureCashierShard() {
+    // Nothing to do at the moment
+    // Several shards can be configured if the need rises
 }
 
 export async function deployCashbackDistributor() {
@@ -135,7 +149,9 @@ export async function configureCardPaymentProcessor() {
     waitReceipt(
         cardPaymentProcessor.grantRole(await cardPaymentProcessor.EXECUTOR_ROLE(), await deployer.getAddress()),
     );
+    // @ts-ignore
     waitReceipt(cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress()));
+    // @ts-ignore
     waitReceipt(cardPaymentProcessor.setRevocationLimit(255));
     waitReceipt(cardPaymentProcessor.setCashbackRate(1.5 * rateFactor));
     waitReceipt(cardPaymentProcessor.setCashOutAccount(await deployer.getAddress()));
@@ -146,6 +162,7 @@ export async function configureCardPaymentProcessor() {
             await cardPaymentProcessor.getAddress(),
         ),
     );
+    // @ts-ignore
     waitReceipt(cardPaymentProcessor.setCashbackDistributor(await cashbackDistributor.getAddress()));
     waitReceipt(cardPaymentProcessor.enableCashback());
     waitReceipt(cardPaymentProcessor.setCashOutAccount(ZERO_ADDRESS));

@@ -2,6 +2,7 @@
 #
 # Compiles a subset or relevant Solidity contracts.
 #
+set -eo pipefail
 source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
@@ -31,7 +32,9 @@ asdf local solidity 0.8.24 || echo "asdf, solidity plugin or solidity version no
 # execute
 compile_contract brlc-token BRLCToken
 
-compile_contract brlc-pix-cashier PixCashier
+# Cashier Transition: compile both Cashier and CashierShard regardless if the repository was renamed or not
+compile_contract brlc-cashier Cashier || compile_contract brlc-pix-cashier Cashier
+compile_contract brlc-cashier CashierShard || compile_contract brlc-pix-cashier CashierShard
 
 compile_contract brlc-periphery CashbackDistributor
 compile_contract brlc-periphery CardPaymentProcessor
