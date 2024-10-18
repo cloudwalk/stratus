@@ -2,6 +2,7 @@
 #
 # Clone Git repositories containing Solidity contracts.
 #
+set -eo pipefail
 source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
@@ -102,7 +103,8 @@ if [ "$token" == 1 ]; then
 fi
 
 if [ "$pix" == 1 ]; then
-    remove brlc-pix-cashier a528d0c
+    # Cashier Transition: remove regardless of the repository name at the moment
+    remove brlc-cashier && remove brlc-pix-cashier a528d0c
 fi
 
 if [ "$yield" == 1 ]; then

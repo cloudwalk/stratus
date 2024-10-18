@@ -2,6 +2,7 @@
 #
 # Runs tests for Solidity contracts.
 #
+set -eo pipefail
 source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
@@ -14,7 +15,10 @@ test() {
     log "Testing: $file ($repo)"
 
     # configure hardhat env
-    cd repos/"$repo" || (log "Error: $repo not found" && exit 1)
+    if ! cd repos/"$repo"; then
+        log "Error: $repo not found"
+        return 1
+    fi
     git restore .
     cp ../../../hardhat.config.ts .
     rm -rf .openzeppelin/
@@ -64,7 +68,6 @@ multisig=0
 compound=0
 yield=0
 pix=0
-pixv4=0
 cppv2=0
 
 # Help function
@@ -77,7 +80,6 @@ print_help() {
     echo "  -c, --compound    for compound-periphery"
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
-    echo "  -4, --pixv4       for brlc-pix-cashier-v4"
     echo "  -2, --cppv2       for brlc-periphery-v2"
     echo "  -h, --help        display this help and exit"
 }
@@ -89,7 +91,6 @@ if [ "$#" == 0 ]; then
     compound=1
     yield=1
     pix=1
-    pixv4=1
     cppv2=1
 fi
 
@@ -124,10 +125,6 @@ if [[ "$#" -gt 0 ]]; then
         pix=1
         shift
         ;;
-    -4 | --pixv4)
-        pixv4=1
-        shift
-        ;;
     -2 | --cppv2)
         cppv2=1
         shift
@@ -149,7 +146,8 @@ if [ "$token" == 1 ]; then
 fi
 
 if [ "$pix" == 1 ]; then
-    test brlc-pix-cashier PixCashier "$@"
+    # Cashier Transition: test Cashier v4, regardless if the repository was renamed or not
+    test brlc-cashier CashierSharded "$@" || test brlc-pix-cashier CashierSharded "$@"
 fi
 
 if [ "$yield" == 1 ]; then
@@ -173,10 +171,6 @@ if [ "$compound" == 1 ]; then
 fi
 
 # Alternative versions
-
-if [ "$pixv4" == 1 ]; then
-    test brlc-pix-cashier-v4 CashierSharded "$@"
-fi
 
 if [ "$cppv2" == 1 ]; then
     test brlc-periphery-v2 CardPaymentProcessor "$@"
