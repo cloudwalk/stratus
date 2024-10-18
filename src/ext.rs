@@ -7,6 +7,8 @@ use std::sync::MutexGuard;
 use std::time::Duration;
 
 use anyhow::anyhow;
+use chrono::DateTime;
+use chrono::Utc;
 use jsonrpsee::types::SubscriptionId;
 use rust_decimal::Decimal;
 use serde::Serialize;
@@ -149,6 +151,15 @@ impl InfallibleExt<Decimal, ()> for Option<Decimal> {
             tracing::error!("expected infallible decimal conversion");
         }
         self.expect("infallible decimal conversion")
+    }
+}
+
+impl InfallibleExt<DateTime<Utc>, ()> for Option<DateTime<Utc>> {
+    fn expect_infallible(self) -> DateTime<Utc> {
+        if self.is_none() {
+            tracing::error!("expected infallible datetime conversion");
+        }
+        self.expect("infallible datetime conversion")
     }
 }
 

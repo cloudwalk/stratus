@@ -102,7 +102,6 @@ impl From<&Account> for RevmAccountInfo {
 /// Accounts to be used only in development-mode.
 pub fn test_accounts() -> Vec<Account> {
     use hex_literal::hex;
-
     [
         hex!("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), // ALICE
         hex!("70997970c51812dc3a010c7d01b50e0d17dc79c8"), // BOB
