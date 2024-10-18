@@ -98,6 +98,10 @@ impl EvmInput {
     }
 
     /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas`.
+    ///
+    /// # Errors:
+    ///
+    /// If `point_in_time` is `MinedPast` it's required that `mined_block` is `Some`, otherwise, this function returns an error.
     pub fn from_eth_call(
         input: CallInput,
         point_in_time: StoragePointInTime,
@@ -120,7 +124,7 @@ impl EvmInput {
                 StoragePointInTime::Mined | StoragePointInTime::Pending => UnixTime::now(),
                 StoragePointInTime::MinedPast(_) => match mined_block {
                     Some(block) => block.header.timestamp,
-                    None => return log_and_err!("failed to create EvmInput because cannot determine mined block timestamp"),
+                    None => return log_and_err!("failed to create EvmInput: couldn't determine mined block timestamp"),
                 },
             },
             point_in_time,
