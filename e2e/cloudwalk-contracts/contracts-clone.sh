@@ -83,7 +83,6 @@ multisig=0
 compound=0
 yield=0
 pix=0
-pixv4=0
 cppv2=0
 
 # Help function
@@ -96,7 +95,6 @@ print_help() {
     echo "  -c, --compound    for compound-periphery"
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
-    echo "  -4, --pixv4       for brlc-pix-cashier-v4"
     echo "  -2, --cppv2       for brlc-periphery-v2"
     echo "  -h, --help        display this help and exit"
 }
@@ -108,7 +106,6 @@ if [ "$#" == 0 ]; then
     compound=1
     yield=1
     pix=1
-    pixv4=1
     cppv2=1
 fi
 
@@ -141,10 +138,6 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     -x | --pix)
         pix=1
-        shift
-        ;;
-    -4 | --pixv4)
-        pixv4=1
         shift
         ;;
     -2 | --cppv2)
