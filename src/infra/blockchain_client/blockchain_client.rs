@@ -203,7 +203,7 @@ impl BlockchainClient {
     // -------------------------------------------------------------------------
 
     /// Forwards a transaction to leader.
-    pub async fn send_raw_transaction_to_leader(&self, tx: EthersBytes, rpc_client: RpcClientApp) -> Result<Hash, StratusError> {
+    pub async fn send_raw_transaction_to_leader(&self, tx: EthersBytes, rpc_client: &RpcClientApp) -> Result<Hash, StratusError> {
         tracing::debug!("sending raw transaction to leader");
 
         let tx = to_json_value(tx);

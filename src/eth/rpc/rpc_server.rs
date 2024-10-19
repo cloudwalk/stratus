@@ -800,7 +800,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     }
 }
 
-fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
@@ -843,7 +843,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
     }
 }
 
-fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
@@ -1054,7 +1054,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     };
 
     // check subscription limits
-    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.rpc_max_subscriptions, &client).await {
+    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.rpc_max_subscriptions, client).await {
         drop(method_enter);
         pending.reject(e).instrument(method_span).await;
         return Ok(());
@@ -1137,7 +1137,7 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
 // -----------------------------------------------------------------------------
 
 /// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
-fn reject_unknown_client(client: RpcClientApp) -> Result<(), StratusError> {
+fn reject_unknown_client(client: &RpcClientApp) -> Result<(), StratusError> {
     if client.is_unknown() && not(GlobalState::is_unknown_client_enabled()) {
         return Err(StratusError::RpcClientMissing);
     }
