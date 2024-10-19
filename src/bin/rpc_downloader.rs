@@ -223,11 +223,11 @@ fn blocks_per_minute_reporter() {
         let block_after = BLOCKS_DOWNLOADED.load(Ordering::Relaxed);
         let block_diff = block_after - block_before;
 
-        let blocks_per_second = block_diff as f64 / interval.as_secs_f64();
+        let blocks_per_minute = block_diff as f64 / interval.as_secs_f64() / 60.0;
 
         tracing::info!(
-            blocks_per_second = format_args!("{blocks_per_second:.2}"),
-            blocks_per_day = (blocks_per_second * 60.0 * 60.0 * 24.0) as u32,
+            blocks_per_minute = format_args!("{blocks_per_minute:.2}"),
+            blocks_per_day = (blocks_per_minute * 60.0 * 24.0) as u32,
             sample_interval = ?interval,
             "speed report",
         );
