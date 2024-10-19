@@ -223,7 +223,7 @@ fn blocks_per_minute_reporter() {
         let block_after = BLOCKS_DOWNLOADED.load(Ordering::Relaxed);
         let block_diff = block_after - block_before;
 
-        let blocks_per_minute = block_diff as f64 / interval.as_secs_f64() / 60.0;
+        let blocks_per_minute = block_diff as f64 / interval.as_secs_f64() * 60.0;
 
         tracing::info!(
             blocks_per_minute = format_args!("{blocks_per_minute:.2}"),
