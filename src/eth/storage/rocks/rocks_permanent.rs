@@ -27,10 +27,10 @@ pub struct RocksPermanentStorage {
 }
 
 impl RocksPermanentStorage {
-    pub fn new(rocks_path_prefix: Option<String>, shutdown_timeout: Duration) -> anyhow::Result<Self> {
+    pub fn new(db_path_prefix: Option<String>, shutdown_timeout: Duration) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
-        let path = if let Some(prefix) = rocks_path_prefix {
+        let path = if let Some(prefix) = db_path_prefix {
             // run some checks on the given prefix
             if prefix.is_empty() {
                 bail!("given prefix for RocksDB is empty, try not providing the flag");
