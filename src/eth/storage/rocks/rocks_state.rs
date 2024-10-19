@@ -159,6 +159,15 @@ impl RocksStorageState {
         Ok(state)
     }
 
+    #[cfg(test)]
+    #[track_caller]
+    pub fn new_in_testdir() -> anyhow::Result<(Self, tempfile::TempDir)> {
+        let test_dir = tempfile::tempdir()?;
+        let path = test_dir.as_ref().display().to_string();
+        let state = Self::new(path, Duration::ZERO)?;
+        Ok((state, test_dir))
+    }
+
     /// Get the filename of the database path.
     #[cfg(feature = "metrics")]
     fn db_path_filename(&self) -> &str {
@@ -603,22 +612,22 @@ mod tests {
 
     use fake::Fake;
     use fake::Faker;
-    use tempfile::tempdir;
 
     use super::*;
     use crate::eth::primitives::BlockHeader;
     use crate::eth::primitives::ExecutionValueChange;
-    use crate::eth::primitives::SlotValue;
 
     #[test]
     fn test_rocks_multi_get() {
-        let test_dir = tempdir().unwrap();
+        type Key = (AddressRocksdb, SlotIndexRocksdb);
+        type Value = CfAccountSlotsValue;
 
-        let (db, _db_options) = create_or_open_db(test_dir.path(), &CF_OPTIONS_MAP).unwrap();
-        let account_slots: RocksCfRef<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots").unwrap();
+        let (mut state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
+        let account_slots = &mut state.account_slots;
 
-        let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
-        let extra_slots: HashMap<SlotIndex, SlotValue> = iter::repeat_with(|| (Faker.fake(), Faker.fake()))
+        // slots and extra_slots to be inserted
+        let slots: HashMap<Key, Value> = (0..1000).map(|_| Faker.fake()).collect();
+        let extra_slots: HashMap<Key, Value> = iter::repeat_with(|| Faker.fake())
             .filter(|(key, _)| !slots.contains_key(key))
             .take(1000)
             .collect();
@@ -626,27 +635,29 @@ mod tests {
         let mut batch = WriteBatch::default();
         account_slots.prepare_batch_insertion(slots.clone(), &mut batch).unwrap();
         account_slots.prepare_batch_insertion(extra_slots.clone(), &mut batch).unwrap();
-        db.write(batch).unwrap();
+        account_slots.apply_batch_with_context(batch).unwrap();
 
-        let extra_keys: HashSet<SlotIndex> = (0..1000)
+        // keys that don't match any entry
+        let extra_keys: HashSet<Key> = (0..1000)
             .map(|_| Faker.fake())
             .filter(|key| !extra_slots.contains_key(key) && !slots.contains_key(key))
             .collect();
 
-        let keys: Vec<SlotIndex> = slots.keys().copied().chain(extra_keys).collect();
+        // concatenation of keys for inserted elements, and keys that aren't in the DB
+        let keys: Vec<Key> = slots.keys().copied().chain(extra_keys).collect();
         let result = account_slots.multi_get(keys).expect("this should not fail");
 
+        // check that, besides having extra slots inserted, and extra keys when querying,
+        // only the expected slots are returned
         assert_eq!(result.len(), slots.keys().len());
         for (idx, value) in result {
-            assert_eq!(value, *slots.get(&idx).expect("should not be None"));
+            assert_eq!(value, *slots.get(&idx).expect("slot should be found"));
         }
     }
 
     #[test]
     fn regression_test_read_logs_without_providing_filter_address() {
-        let test_dir = tempdir().unwrap();
-
-        let state = RocksStorageState::new(test_dir.path().display().to_string(), Duration::ZERO).unwrap();
+        let (state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
 
         assert_eq!(state.read_logs(&LogFilter::default()).unwrap(), vec![]);
 
@@ -677,8 +688,7 @@ mod tests {
 
     #[test]
     fn regression_test_saving_account_changes_for_accounts_that_didnt_change() {
-        let test_dir = tempdir().unwrap();
-        let state = RocksStorageState::new(test_dir.path().display().to_string(), Duration::ZERO).unwrap();
+        let (state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
 
         let change_base = ExecutionAccountChanges {
             new_account: false,
