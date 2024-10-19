@@ -95,6 +95,10 @@ pub struct PermanentStorageConfig {
     /// The maximum time to wait for the RocksDB `wait_for_compaction` shutdown call.
     #[arg(long = "rocks-shutdown-timeout", env = "ROCKS_SHUTDOWN_TIMEOUT", value_parser=parse_duration, default_value = "4m")]
     pub rocks_shutdown_timeout: Duration,
+
+    /// Augments or decreases the size of Column Family caches based on a multiplier.
+    #[arg(long = "rocks-cache-size-multiplier", env = "ROCKS_CACHE_SIZE_MULTIPLIER")]
+    pub rocks_cache_size_multiplier: Option<f32>,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -124,11 +128,11 @@ impl PermanentStorageConfig {
                 Box::new(RedisPermanentStorage::new(url)?)
             }
 
-            PermanentStorageKind::Rocks => {
-                let prefix = self.rocks_path_prefix.clone();
-                let shutdown_timeout = self.rocks_shutdown_timeout;
-                Box::new(RocksPermanentStorage::new(prefix, shutdown_timeout)?)
-            }
+            PermanentStorageKind::Rocks => Box::new(RocksPermanentStorage::new(
+                self.rocks_path_prefix.clone(),
+                self.rocks_shutdown_timeout,
+                self.rocks_cache_size_multiplier,
+            )?),
         };
         Ok(perm)
     }

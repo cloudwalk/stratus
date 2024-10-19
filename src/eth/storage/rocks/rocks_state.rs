@@ -9,7 +9,6 @@ use std::time::Instant;
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
-use lazy_static::lazy_static;
 use rocksdb::Direction;
 use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
@@ -68,29 +67,37 @@ cfg_if::cfg_if! {
     }
 }
 
-lazy_static! {
-    /// Map setting presets for each Column Family
-    static ref CF_OPTIONS_MAP: HashMap<&'static str, Options> = hmap! {
-        "accounts" => DbConfig::Default.to_options(CacheSetting::Enabled(15 * GIGABYTE)),
+fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'static str, Options> {
+    let cache_multiplier = cache_multiplier.unwrap_or(1.0);
+
+    // multiplies the given size in GBs by the cache multiplier
+    let cached_in_gigs_and_multiplied = |size_in_gbs: u64| -> CacheSetting {
+        let size = (size_in_gbs as f32) * cache_multiplier;
+        let size = GIGABYTE * size as usize;
+        CacheSetting::Enabled(size)
+    };
+
+    hmap! {
+        "accounts" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(15)),
         "accounts_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
-        "account_slots" => DbConfig::Default.to_options(CacheSetting::Enabled(45 * GIGABYTE)),
+        "account_slots" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(45)),
         "account_slots_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
         "transactions" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
         "blocks_by_number" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
         "blocks_by_hash" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
         "logs" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
-    };
+    }
 }
 
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
-fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> Result<RocksCfRef<K, V>>
+fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str, cf_options_map: &HashMap<&str, Options>) -> Result<RocksCfRef<K, V>>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
-    CF_OPTIONS_MAP
+    cf_options_map
         .get(column_family)
         .with_context(|| format!("matching column_family `{column_family}` given to `new_cf_ref` wasn't found in configuration map"))?;
 
@@ -125,10 +132,13 @@ pub struct RocksStorageState {
 }
 
 impl RocksStorageState {
-    pub fn new(path: String, shutdown_timeout: Duration) -> Result<Self> {
+    pub fn new(path: String, shutdown_timeout: Duration, cache_multiplier: Option<f32>) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
+
+        let cf_options_map = generate_cf_options_map(cache_multiplier);
+
         #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
-        let (db, db_options) = create_or_open_db(&path, &CF_OPTIONS_MAP).context("when trying to create (or open) rocksdb")?;
+        let (db, db_options) = create_or_open_db(&path, &cf_options_map).context("when trying to create (or open) rocksdb")?;
 
         if db.path().to_str().is_none() {
             bail!("db path doesn't isn't valid UTF-8: {:?}", db.path());
@@ -139,14 +149,14 @@ impl RocksStorageState {
 
         let state = Self {
             db_path: path,
-            accounts: new_cf_ref(&db, "accounts")?,
-            accounts_history: new_cf_ref(&db, "accounts_history")?,
-            account_slots: new_cf_ref(&db, "account_slots")?,
-            account_slots_history: new_cf_ref(&db, "account_slots_history")?,
-            transactions: new_cf_ref(&db, "transactions")?,
-            blocks_by_number: new_cf_ref(&db, "blocks_by_number")?,
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash")?,
-            logs: new_cf_ref(&db, "logs")?,
+            accounts: new_cf_ref(&db, "accounts", &cf_options_map)?,
+            accounts_history: new_cf_ref(&db, "accounts_history", &cf_options_map)?,
+            account_slots: new_cf_ref(&db, "account_slots", &cf_options_map)?,
+            account_slots_history: new_cf_ref(&db, "account_slots_history", &cf_options_map)?,
+            transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
+            blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
+            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
+            logs: new_cf_ref(&db, "logs", &cf_options_map)?,
             #[cfg(feature = "metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "metrics")]
@@ -164,7 +174,7 @@ impl RocksStorageState {
     pub fn new_in_testdir() -> anyhow::Result<(Self, tempfile::TempDir)> {
         let test_dir = tempfile::tempdir()?;
         let path = test_dir.as_ref().display().to_string();
-        let state = Self::new(path, Duration::ZERO)?;
+        let state = Self::new(path, Duration::ZERO, None)?;
         Ok((state, test_dir))
     }
 
