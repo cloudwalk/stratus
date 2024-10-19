@@ -24,7 +24,7 @@ use crate::eth::primitives::SlotValue;
 
 macro_rules! impl_single_version_cf_value {
     ($name:ident, $inner_type:ty, $non_rocks_equivalent: ty) => {
-        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount, VariantNames, IntoStaticStr)]
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount, VariantNames, IntoStaticStr, fake::Dummy)]
         pub enum $name {
             V1($inner_type),
         }
