@@ -16,6 +16,7 @@ use tracing::Span;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::Miner;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
@@ -39,6 +40,7 @@ use crate::log_and_err;
 use crate::utils::calculate_tps;
 use crate::utils::DropTimer;
 use crate::GlobalState;
+use crate::infra::kafka_connector::KafkaConnector;
 
 // -----------------------------------------------------------------------------
 // Globals
@@ -80,17 +82,21 @@ pub struct Importer {
     chain: Arc<BlockchainClient>,
 
     sync_interval: Duration,
+
+    kafka_connector: Option<Arc<KafkaConnector>>,
 }
 
 impl Importer {
-    pub fn new(executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>, sync_interval: Duration) -> Self {
+    pub fn new(executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>, kafka_connector: Option<Arc<KafkaConnector>>, sync_interval: Duration) -> Self {
         tracing::info!("creating importer");
+
         Self {
             executor,
             miner,
             storage,
             chain,
             sync_interval,
+            kafka_connector,
         }
     }
 
@@ -119,7 +125,12 @@ impl Importer {
         // it executes and mines blocks and expects to receive them via channel in the correct order.
         let task_executor = spawn_named(
             "importer::executor",
-            Importer::start_block_executor(Arc::clone(&self.executor), Arc::clone(&self.miner), backlog_rx),
+            Importer::start_block_executor(
+                Arc::clone(&self.executor),
+                Arc::clone(&self.miner), 
+                backlog_rx,
+                self.kafka_connector.clone(),
+            ),
         );
 
         // spawn block number:
@@ -157,6 +168,7 @@ impl Importer {
         executor: Arc<Executor>,
         miner: Arc<Miner>,
         mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
+        kafka_connector: Option<Arc<KafkaConnector>>,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "block-executor";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
@@ -201,6 +213,9 @@ impl Importer {
                     "reexecuted external block",
                 );
             }
+
+            // TODO: send to kafka
+            let _ = kafka_connector.as_ref().unwrap().send_event(&block).await;
 
             if let Err(e) = miner.mine_external_and_commit(block) {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");

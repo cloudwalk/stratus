@@ -424,6 +424,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
+        kafka_config: None,
     };
 
     importer_config.init_follower_importer(ctx).await

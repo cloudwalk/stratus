@@ -16,8 +16,11 @@ use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::spawn_named;
 use crate::infra::BlockchainClient;
+use crate::log_and_err;
 use crate::GlobalState;
 use crate::NodeMode;
+use crate::infra::kafka_connector::KafkaConnector;
+use crate::infra::kafka_config::KafkaConfig;
 
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
 #[group(requires_all = ["external_rpc"])]
@@ -36,6 +39,10 @@ pub struct ImporterConfig {
 
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
     pub sync_interval: Duration,
+
+    // Kafka config
+    #[clap(flatten)]
+    pub kafka_config: Option<KafkaConfig>,
 }
 
 impl ImporterConfig {
@@ -51,9 +58,21 @@ impl ImporterConfig {
         tracing::info!(config = ?self, "creating importer for follower node");
 
         let chain = Arc::new(BlockchainClient::new_http_ws(&self.external_rpc, self.external_rpc_ws.as_deref(), self.external_rpc_timeout).await?);
+        //TODO: add kafka connector
+        let kafka_connector = if let Some(kafka_config) = &self.kafka_config {
+            match KafkaConnector::new(kafka_config) {
+                Ok(kafka_connector) => Some(Arc::new(kafka_connector)),
+                Err(e) => {
+                    tracing::error!(reason = ?e, "importer-online failed to create kafka connector");
+                    GlobalState::shutdown_from(TASK_NAME, "failed to create kafka connector");
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
-        let importer = Importer::new(executor, Arc::clone(&miner), Arc::clone(&storage), Arc::clone(&chain), self.sync_interval);
-        let importer = Arc::new(importer);
+        let importer = Arc::new(Importer::new(executor, miner, storage, chain, kafka_connector, self.sync_interval));
 
         spawn_named(TASK_NAME, {
             let importer = Arc::clone(&importer);
