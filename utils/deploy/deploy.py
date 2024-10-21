@@ -47,15 +47,27 @@ def send_request(url: str, method: str, params: list) -> Dict[str, Any]:
         log(message=f"Error: Unable to connect to {url}. Please check the network connection and the node status.", address=url, response={"error": str(e)}, error=True)
         raise DeploymentError(f"Unable to connect to {url}", error_type="ConnectionError")
 
-# Function to log messages with a timestamp
+# Function to log messages
 def log(message: str, address: Optional[str] = None, response: Optional[Dict[str, Any]] = None, error: bool = False) -> None:
     color = Color.ERROR if error else Color.MESSAGE
-    log_message = f"{Color.TIMESTAMP}{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{Color.RESET} - {color}{message}{Color.RESET}"
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_message = f"{timestamp} - {message}"
     if address:
-        log_message += f" - {Color.ADDRESS}Address: {address}{Color.RESET}"
+        log_message += f" - Address: {address}"
     if response:
-        log_message += f" - {Color.RESPONSE}Response: {response}{Color.RESET}"
-    print(log_message)
+        log_message += f" - Response: {response}"
+    
+    if log_file:
+        log_file.write(log_message + "\n")
+        log_file.flush()
+    
+    # Print to terminal (with colors)
+    colored_message = f"{Color.TIMESTAMP}{timestamp}{Color.RESET} - {color}{message}{Color.RESET}"
+    if address:
+        colored_message += f" - {Color.ADDRESS}Address: {address}{Color.RESET}"
+    if response:
+        colored_message += f" - {Color.RESPONSE}Response: {response}{Color.RESET}"
+    print(colored_message)
 
 # Function to validate node health
 def validate_health(address: str, role: NodeRole) -> None:
@@ -173,11 +185,19 @@ def has_leader(leader_address: str, follower_address: str) -> bool:
     return False
 
 def main() -> None:
+    global log_file
     parser = argparse.ArgumentParser(description="Deploy script")
     parser.add_argument("--current-leader", required=True, help="Current Leader address")
     parser.add_argument("--current-follower", required=True, help="Current Follower address")
     parser.add_argument("--auto-approve", action="store_true", help="Auto approve actions")
+    parser.add_argument("--log-file", default="deploy.log", help="Log file path")
     args = parser.parse_args()
+
+    try:
+        log_file = open(args.log_file, "a")
+    except IOError as e:
+        log(message=f"Error opening log file: {e}")
+        raise DeploymentError("Error initializing Log", error_type="InitializationError")
 
     try:
         config = Config(
@@ -281,6 +301,9 @@ def main() -> None:
         log(message=f"Process completed in {elapsed_time:.2f} seconds.")
     except DeploymentError as e:
         log(message=f"Process failed: {str(e)}", error=True)
+    finally:
+        if log_file:
+            log_file.close()
 
 if __name__ == "__main__":
     main()

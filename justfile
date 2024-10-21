@@ -300,7 +300,7 @@ e2e-leader-follower-up test="brlc":
         poetry install --no-root
 
         for i in {1..5}; do
-            poetry run python3 ./deploy.py --current-leader 0.0.0.0:3000 --current-follower 0.0.0.0:3001 --auto-approve
+            poetry run python3 ./deploy.py --current-leader 0.0.0.0:3000 --current-follower 0.0.0.0:3001 --auto-approve --log-file deploy_01.log
             if [ $? -ne 0 ]; then
                 just _log "Deploy script failed"
                 exit 1
@@ -309,7 +309,7 @@ e2e-leader-follower-up test="brlc":
             just _log "Switching back roles..."
             sleep 5
 
-            poetry run python3 ./deploy.py --current-leader 0.0.0.0:3001 --current-follower 0.0.0.0:3000 --auto-approve
+            poetry run python3 ./deploy.py --current-leader 0.0.0.0:3001 --current-follower 0.0.0.0:3000 --auto-approve --log-file deploy_02.log
             if [ $? -ne 0 ]; then
                 just _log "Deploy script failed"
                 exit 1
