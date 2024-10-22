@@ -72,7 +72,8 @@ impl ImporterConfig {
             None
         };
 
-        let importer = Arc::new(Importer::new(executor, miner, storage, chain, kafka_connector, self.sync_interval));
+        let importer = Importer::new(executor, Arc::clone(&miner), Arc::clone(&storage), Arc::clone(&chain), kafka_connector, self.sync_interval);
+        let importer = Arc::new(importer);
 
         spawn_named(TASK_NAME, {
             let importer = Arc::clone(&importer);
