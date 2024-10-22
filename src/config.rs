@@ -235,7 +235,7 @@ pub struct RpcDownloaderConfig {
 
     /// Accounts to retrieve initial balance information.
     ///
-    /// For Cloudwalk networks, provide these addresses for BRLC:
+    /// For Cloudwalk networks, provide these addresses:
     /// - Mainnet: 0xF56A88A4afF45cdb5ED7Fe63a8b71aEAaFF24FA6
     /// - Testnet: 0xE45b176cAd7090A5CF70B69a73b6DEF9296ba6A2
     #[arg(long = "initial-accounts", env = "INITIAL_ACCOUNTS", value_delimiter = ',')]
