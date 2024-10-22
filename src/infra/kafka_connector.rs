@@ -34,7 +34,7 @@ impl KafkaConnector {
         println!("payload: {}", payload);
 
         match self
-        .producer
+            .producer
             .send(
                 FutureRecord::to(&self.topic).payload(&payload).key(&block.hash().to_string()),
                 std::time::Duration::from_secs(0),
