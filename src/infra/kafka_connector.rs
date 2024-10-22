@@ -16,14 +16,14 @@ pub struct KafkaConnector {
 impl KafkaConnector {
     pub fn new(config: &KafkaConfig) -> Result<Self> {
         let producer: FutureProducer = ClientConfig::new()
-            .set("bootstrap.servers", &config.bootstrap_servers)
-            .set("client.id", &config.client_id)
-            .set("group.id", &config.group_id)
+            .set("bootstrap.servers", config.bootstrap_servers.as_ref().unwrap())
+            .set("client.id", config.client_id.as_ref().unwrap())
+            .set("group.id", config.group_id.as_ref().unwrap())
             .create()?;
 
         Ok(Self {
             producer,
-            topic: config.topic.clone(),
+            topic: config.topic.clone().unwrap(),
         })
     }
 
