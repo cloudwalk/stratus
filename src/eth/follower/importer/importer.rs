@@ -218,9 +218,14 @@ impl Importer {
             // TODO: send to kafka
             let _ = kafka_connector.as_ref().unwrap().send_event(&block).await;
 
-            if let Err(e) = miner.mine_external_and_commit(block) {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
-                return log_and_err!(reason = e, message);
+            match miner.mine_external_and_commit(block) {
+                Ok(_) => {
+                    tracing::info!("mined external block");
+                }
+                Err(e) => {
+                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+                    return log_and_err!(reason = e, message);
+                }
             };
 
             #[cfg(feature = "metrics")]

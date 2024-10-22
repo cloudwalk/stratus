@@ -23,6 +23,7 @@ use crate::NodeMode;
 
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
 #[group(requires_all = ["external_rpc"])]
+#[clap(group = clap::ArgGroup::new("kafka").multiple(true).requires_all(&["kafka-bootstrap-servers", "kafka-topic", "kafka-client-id", "kafka-group-id"]))]
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", conflicts_with("leader"))]
@@ -39,9 +40,17 @@ pub struct ImporterConfig {
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
     pub sync_interval: Duration,
 
-    // Kafka config
-    #[clap(flatten)]
-    pub kafka_config: Option<KafkaConfig>,
+    #[arg(long = "kafka-bootstrap-servers", env = "KAFKA_BOOTSTRAP_SERVERS", group = "kafka")]
+    pub bootstrap_servers: Option<String>,
+
+    #[arg(long = "kafka-topic", env = "KAFKA_TOPIC", group = "kafka")]
+    pub topic: Option<String>,
+
+    #[arg(long = "kafka-client-id", env = "KAFKA_CLIENT_ID", group = "kafka")]
+    pub client_id: Option<String>,
+
+    #[arg(long = "kafka-group-id", env = "KAFKA_GROUP_ID", group = "kafka")]
+    pub group_id: Option<String>,
 }
 
 impl ImporterConfig {
@@ -52,14 +61,28 @@ impl ImporterConfig {
         }
     }
 
+    pub fn kafka_config(&self) -> KafkaConfig {
+        KafkaConfig {
+            bootstrap_servers: self.bootstrap_servers.clone(),
+            topic: self.topic.clone(),
+            client_id: self.client_id.clone(),
+            group_id: self.group_id.clone(),
+        }
+    }
+
+    pub fn has_kafka_config(&self) -> bool {
+        self.bootstrap_servers.is_some() && self.topic.is_some() && self.client_id.is_some() && self.group_id.is_some()
+    }
+
     async fn init_follower(&self, executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!(config = ?self, "creating importer for follower node");
 
         let chain = Arc::new(BlockchainClient::new_http_ws(&self.external_rpc, self.external_rpc_ws.as_deref(), self.external_rpc_timeout).await?);
         //TODO: add kafka connector
-        let kafka_connector = if let Some(kafka_config) = &self.kafka_config {
-            match KafkaConnector::new(kafka_config) {
+        let kafka_connector = if self.has_kafka_config() {
+            tracing::info!("creating kafka connector");
+            match KafkaConnector::new(&self.kafka_config()) {
                 Ok(kafka_connector) => Some(Arc::new(kafka_connector)),
                 Err(e) => {
                     tracing::error!(reason = ?e, "importer-online failed to create kafka connector");
