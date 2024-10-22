@@ -14,4 +14,3 @@ pub struct KafkaConfig {
     #[arg(long = "group-id", env = "KAFKA_GROUP_ID", conflicts_with("leader"), group = "kafka")]
     pub group_id: Option<String>,
 }
-
