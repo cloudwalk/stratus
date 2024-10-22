@@ -15,12 +15,12 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::spawn_named;
+use crate::infra::kafka_config::KafkaConfig;
+use crate::infra::kafka_connector::KafkaConnector;
 use crate::infra::BlockchainClient;
 use crate::log_and_err;
 use crate::GlobalState;
 use crate::NodeMode;
-use crate::infra::kafka_connector::KafkaConnector;
-use crate::infra::kafka_config::KafkaConfig;
 
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
 #[group(requires_all = ["external_rpc"])]
@@ -72,7 +72,14 @@ impl ImporterConfig {
             None
         };
 
-        let importer = Importer::new(executor, Arc::clone(&miner), Arc::clone(&storage), Arc::clone(&chain), kafka_connector, self.sync_interval);
+        let importer = Importer::new(
+            executor,
+            Arc::clone(&miner),
+            Arc::clone(&storage),
+            Arc::clone(&chain),
+            kafka_connector,
+            self.sync_interval,
+        );
         let importer = Arc::new(importer);
 
         spawn_named(TASK_NAME, {

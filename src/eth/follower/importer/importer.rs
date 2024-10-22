@@ -29,6 +29,7 @@ use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::if_else;
+use crate::infra::kafka_connector::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_rx_closed;
@@ -40,7 +41,6 @@ use crate::log_and_err;
 use crate::utils::calculate_tps;
 use crate::utils::DropTimer;
 use crate::GlobalState;
-use crate::infra::kafka_connector::KafkaConnector;
 
 // -----------------------------------------------------------------------------
 // Globals
@@ -87,7 +87,14 @@ pub struct Importer {
 }
 
 impl Importer {
-    pub fn new(executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>, kafka_connector: Option<Arc<KafkaConnector>>, sync_interval: Duration) -> Self {
+    pub fn new(
+        executor: Arc<Executor>,
+        miner: Arc<Miner>,
+        storage: Arc<StratusStorage>,
+        chain: Arc<BlockchainClient>,
+        kafka_connector: Option<Arc<KafkaConnector>>,
+        sync_interval: Duration,
+    ) -> Self {
         tracing::info!("creating importer");
 
         Self {
@@ -125,12 +132,7 @@ impl Importer {
         // it executes and mines blocks and expects to receive them via channel in the correct order.
         let task_executor = spawn_named(
             "importer::executor",
-            Importer::start_block_executor(
-                Arc::clone(&self.executor),
-                Arc::clone(&self.miner), 
-                backlog_rx,
-                self.kafka_connector.clone(),
-            ),
+            Importer::start_block_executor(Arc::clone(&self.executor), Arc::clone(&self.miner), backlog_rx, self.kafka_connector.clone()),
         );
 
         // spawn block number:

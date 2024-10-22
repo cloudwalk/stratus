@@ -1,10 +1,12 @@
-use ethereum_types::H256;
-use rdkafka::producer::{FutureProducer, FutureRecord};
-use rdkafka::ClientConfig;
 use anyhow::Result;
-use crate::infra::kafka_config::KafkaConfig;
+use ethereum_types::H256;
+use rdkafka::producer::FutureProducer;
+use rdkafka::producer::FutureRecord;
+use rdkafka::ClientConfig;
+
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
+use crate::infra::kafka_config::KafkaConfig;
 
 pub struct KafkaConnector {
     producer: FutureProducer,
@@ -31,14 +33,14 @@ impl KafkaConnector {
 
         println!("payload: {}", payload);
 
-        match self.producer
+        match self
+        .producer
             .send(
-                FutureRecord::to(&self.topic)
-                    .payload(&payload)
-                    .key(&block.hash().to_string()),
+                FutureRecord::to(&self.topic).payload(&payload).key(&block.hash().to_string()),
                 std::time::Duration::from_secs(0),
             )
-            .await {
+            .await
+        {
             Ok(_) => Ok(()),
             Err(e) => Err(anyhow::anyhow!("failed to send event to kafka: {:?}", e)),
         }
