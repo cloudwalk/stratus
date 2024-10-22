@@ -56,11 +56,6 @@ pub struct AccountTransfers {
     /// Format: Prefixed transaction hash - 32 bytes - 0x1234567890123456789012345678901234567890123456789012345678901234
     pub transaction_hash: Hash,
 
-    /// Datetime of the Ethereum transaction that originated transfers.
-    ///
-    /// Format: ISO 8601
-    pub transaction_datetime: DateTime<Utc>,
-
     /// Address of the contract that originated transfers.
     ///
     /// Format: Prefixed account address - 20 bytes - 0x1234567890123456789012345678901234567890
@@ -75,6 +70,11 @@ pub struct AccountTransfers {
     ///
     /// Format: Number in base 10 - Range: 0 to [`u64::MAX`]
     pub block_number: BlockNumber,
+
+    /// Datetime of the Ethereum block that originated transfers.
+    ///
+    /// Format: ISO 8601
+    pub block_datetime: DateTime<Utc>,
 
     /// List of transfers the `account_address` is part of.
     pub transfers: Vec<AccountTransfer>,
@@ -123,7 +123,7 @@ pub struct AccountTransfer {
 }
 
 /// Direction of a transfer relative to the primary account address.
-#[derive(DebugAsJson)]
+#[derive(DebugAsJson, strum::EnumIs)]
 pub enum AccountTransferDirection {
     /// `account_address` is being credited.
     Credit,
@@ -148,7 +148,7 @@ impl Serialize for AccountTransfers {
         state.serialize_field("idempotency_key", &self.idempotency_key())?;
         state.serialize_field("account_address", &self.account_address)?;
         state.serialize_field("transaction_hash", &self.transaction_hash)?;
-        state.serialize_field("transaction_datetime", &self.transaction_datetime.to_rfc3339())?;
+        state.serialize_field("transaction_datetime", &self.block_datetime.to_rfc3339())?;
         state.serialize_field("contract_address", &self.contract_address)?;
         state.serialize_field("function_id", &const_hex::encode_prefixed(self.function_id))?;
         state.serialize_field("block_number", &self.block_number.as_u64())?;
@@ -226,7 +226,6 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) ->
             publication_datetime: Utc::now(),
             account_address: account,
             transaction_hash: tx.input.hash,
-            transaction_datetime: block_timestamp.into(),
             contract_address: tx.input.to.unwrap_or_else(|| {
                 tracing::error!("bug: transaction emitting transfers must have the contract address");
                 Address::ZERO
@@ -235,9 +234,12 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) ->
                 tracing::error!("bug: transaction emitting transfers must have the 4-byte signature");
                 [0; 4]
             }),
+            block_datetime: block_timestamp.into(),
             block_number: tx.block_number,
             transfers: vec![],
         };
+
+        // generate transfers
 
         // gerarate event transfers
         events.push(event);
@@ -252,6 +254,8 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) ->
 
 #[cfg(test)]
 mod tests {
+    use chrono::DateTime;
+    use chrono::Utc;
     use ethereum_types::U256;
     use fake::Fake;
     use fake::Faker;
@@ -266,6 +270,7 @@ mod tests {
     use crate::eth::primitives::LogMined;
     use crate::eth::primitives::TransactionMined;
     use crate::eth::primitives::UnixTime;
+    use crate::ext::not;
     use crate::ext::to_json_value;
     use crate::ledger::events::transaction_to_events;
     use crate::ledger::events::AccountTransfer;
@@ -280,7 +285,7 @@ mod tests {
             publication_datetime: "2024-10-16T19:47:50Z".parse().unwrap(),
             account_address: Address::ZERO,
             transaction_hash: Hash::ZERO,
-            transaction_datetime: "2024-10-16T19:47:50Z".parse().unwrap(),
+            block_datetime: "2024-10-16T19:47:50Z".parse().unwrap(),
             contract_address: Address::ZERO,
             function_id: [0, 0, 0, 0],
             block_number: BlockNumber::ZERO,
@@ -333,7 +338,7 @@ mod tests {
 
         // 2. generate fake tx data
         let mut tx: TransactionMined = Fake::fake(&Faker);
-        tx.input.input = Bytes(vec![1, 2, 3, 4]);
+        tx.input.input = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         let mut log_transfer1: LogMined = Fake::fake(&Faker);
         log_transfer1.log.topic0 = Some(TRANSFER_EVENT);
@@ -360,6 +365,21 @@ mod tests {
         assert_eq!(events.len(), 3); // number of accounts involved in all transactions
         for event in events {
             assert_eq!(&event.transaction_hash, &tx.input.hash);
+            assert_eq!(&event.contract_address, &tx.input.to.unwrap());
+            assert_eq!(&event.function_id[0..], &tx.input.input.0[0..4]);
+            assert_eq!(&event.block_number, &tx.block_number);
+            assert_eq!(&event.block_datetime, &DateTime::<Utc>::from(block_timestamp));
+            assert!(not(event.transfers.is_empty()));
+
+            // assert transfers
+            for transfer in event.transfers {
+                assert!(event.account_address == transfer.credit_party_address || event.account_address == transfer.debit_party_address);
+                if transfer.direction.is_credit() {
+                    assert_eq!(event.account_address, transfer.credit_party_address);
+                } else {
+                    assert_eq!(event.account_address, transfer.debit_party_address);
+                }
+            }
         }
     }
 }
