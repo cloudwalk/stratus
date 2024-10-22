@@ -8,6 +8,7 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::infra::kafka_config::KafkaConfig;
 
+#[derive(Clone)]
 pub struct KafkaConnector {
     producer: FutureProducer,
     topic: String,

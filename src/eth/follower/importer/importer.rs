@@ -216,7 +216,12 @@ impl Importer {
             }
 
             // TODO: send to kafka
-            let _ = kafka_connector.as_ref().unwrap().send_event(&block).await;
+            match kafka_connector {
+                Some(ref kafka_conn) => {
+                    let _ = kafka_conn.send_event(&block).await;
+                }
+                None => (),
+            }
 
             match miner.mine_external_and_commit(block) {
                 Ok(_) => {
