@@ -16,7 +16,6 @@ use tracing::Span;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::Miner;
-use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;

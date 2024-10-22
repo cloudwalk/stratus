@@ -1,7 +1,5 @@
 use clap::Parser;
 use display_json::DebugAsJson;
-use serde::Deserialize;
-use serde::Serialize;
 
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
 pub struct KafkaConfig {

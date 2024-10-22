@@ -18,7 +18,6 @@ use crate::ext::spawn_named;
 use crate::infra::kafka_config::KafkaConfig;
 use crate::infra::kafka_connector::KafkaConnector;
 use crate::infra::BlockchainClient;
-use crate::log_and_err;
 use crate::GlobalState;
 use crate::NodeMode;
 

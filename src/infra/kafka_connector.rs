@@ -47,6 +47,7 @@ impl KafkaConnector {
     }
 
     fn create_event(&self) -> Result<serde_json::Value> {
+        tracing::info!("create_event: {:?}", self.topic);
         // Implemente a lógica para criar o evento a partir do bloco e da execução
         // Este é apenas um exemplo básico
         let event = serde_json::json!({
