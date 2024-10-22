@@ -20,6 +20,7 @@ use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::ext::InfallibleExt;
+use crate::if_else;
 
 /// ERC-20 tokens are configured with 6 decimal places, so it is necessary to divide them by 1.000.000 to get the human readable currency amount.
 const TOKEN_SCALE: Decimal = Decimal::from_parts(1_000_000, 0, 0, false, 0);
@@ -201,18 +202,26 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) ->
         .into_iter()
         .filter(|log| log.log.topic0.is_some_and(|topic0| topic0 == TRANSFER_EVENT))
         .filter_map(|log| {
-            let address = log.log.address;
+            let amount_bytes: [u8; 32] = match log.log.data.0.try_into() {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    tracing::error!("bug: event identified as ERC-20 transfer should have the amount as 32 bytes in the data field");
+                    return None;
+                }
+            };
 
+            let token = log.log.address;
             let from: Address = log.log.topic1?.into();
             let to: Address = log.log.topic2?.into();
-            let amount = log.log.data;
-            Some((address, from, to, amount))
+            let amount = U256::from_big_endian(&amount_bytes); // TODO: review
+
+            Some((token, from, to, amount))
         })
         .collect_vec();
 
     // identify accounts involved in transfers
     let mut accounts = HashSet::new();
-    for (_, from, to, _) in transfers {
+    for (_, from, to, _) in &transfers {
         accounts.insert(from);
         accounts.insert(to);
     }
@@ -221,10 +230,10 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) ->
     let mut events = Vec::with_capacity(accounts.len());
     for account in accounts {
         // generate base event
-        let event = AccountTransfers {
+        let mut event = AccountTransfers {
             publication_id: Uuid::now_v7(),
             publication_datetime: Utc::now(),
-            account_address: account,
+            account_address: *account,
             transaction_hash: tx.input.hash,
             contract_address: tx.input.to.unwrap_or_else(|| {
                 tracing::error!("bug: transaction emitting transfers must have the contract address");
@@ -240,8 +249,20 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) ->
         };
 
         // generate transfers
-
-        // gerarate event transfers
+        for (token, from, to, amount) in &transfers {
+            if account != from && account != to {
+                continue;
+            }
+            let direction = if_else!(account == from, AccountTransferDirection::Debit, AccountTransferDirection::Credit);
+            let transfer = AccountTransfer {
+                token_address: *token,
+                debit_party_address: *from,
+                credit_party_address: *to,
+                direction,
+                amount: *amount,
+            };
+            event.transfers.push(transfer);
+        }
         events.push(event);
     }
 
@@ -327,10 +348,16 @@ mod tests {
 
     #[test]
     fn ledger_events_parse_transfer_events() {
+        // reference values
         let accounts = test_accounts();
         let alice = &accounts[0];
         let bob = &accounts[1];
         let charlie = &accounts[2];
+        let token_address = Address::BRLC;
+        let amount_bytes = [
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255,
+        ];
+        let amount_u256 = U256::from_big_endian(&amount_bytes);
 
         // 1. generate fake block data transaction and block data
         let block_timestamp: UnixTime = 1729108070.into();
@@ -340,16 +367,18 @@ mod tests {
         tx.input.input = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         let mut log_transfer1: LogMined = Fake::fake(&Faker);
+        log_transfer1.log.address = token_address;
         log_transfer1.log.topic0 = Some(TRANSFER_EVENT);
         log_transfer1.log.topic1 = Some(alice.address.into());
         log_transfer1.log.topic2 = Some(bob.address.into());
-        log_transfer1.log.data = Bytes(vec![]);
+        log_transfer1.log.data = Bytes(amount_bytes.to_vec());
 
         let mut log_transfer2: LogMined = Fake::fake(&Faker);
+        log_transfer2.log.address = token_address;
         log_transfer2.log.topic0 = Some(TRANSFER_EVENT);
         log_transfer2.log.topic1 = Some(bob.address.into());
         log_transfer2.log.topic2 = Some(charlie.address.into());
-        log_transfer2.log.data = Bytes(vec![]);
+        log_transfer2.log.data = Bytes(amount_bytes.to_vec());
 
         let log_random: LogMined = Fake::fake(&Faker);
 
@@ -370,14 +399,26 @@ mod tests {
             assert_eq!(&event.block_datetime, &DateTime::<Utc>::from(block_timestamp));
 
             // assert transfers
-            // assert!(event.transfers.is_empty());
+            match event.account_address {
+                a if a == alice.address => assert_eq!(event.transfers.len(), 1),
+                a if a == bob.address => assert_eq!(event.transfers.len(), 2),
+                a if a == charlie.address => assert_eq!(event.transfers.len(), 1),
+                _ => panic!("invalid account"),
+            }
             for transfer in event.transfers {
+                assert_eq!(transfer.token_address, token_address);
+
                 assert!(event.account_address == transfer.credit_party_address || event.account_address == transfer.debit_party_address);
                 if transfer.direction.is_credit() {
                     assert_eq!(event.account_address, transfer.credit_party_address);
                 } else {
                     assert_eq!(event.account_address, transfer.debit_party_address);
                 }
+                assert_eq!(transfer.amount, amount_u256);
+
+                // assert json format
+                let transfer_json = serde_json::to_value(transfer).unwrap();
+                assert_eq!(*transfer_json.get("amount").unwrap(), json!("0.065535"));
             }
         }
     }
