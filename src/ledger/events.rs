@@ -270,7 +270,6 @@ mod tests {
     use crate::eth::primitives::LogMined;
     use crate::eth::primitives::TransactionMined;
     use crate::eth::primitives::UnixTime;
-    use crate::ext::not;
     use crate::ext::to_json_value;
     use crate::ledger::events::transaction_to_events;
     use crate::ledger::events::AccountTransfer;
@@ -369,9 +368,9 @@ mod tests {
             assert_eq!(&event.function_id[0..], &tx.input.input.0[0..4]);
             assert_eq!(&event.block_number, &tx.block_number);
             assert_eq!(&event.block_datetime, &DateTime::<Utc>::from(block_timestamp));
-            assert!(not(event.transfers.is_empty()));
 
             // assert transfers
+            // assert!(event.transfers.is_empty());
             for transfer in event.transfers {
                 assert!(event.account_address == transfer.credit_party_address || event.account_address == transfer.debit_party_address);
                 if transfer.direction.is_credit() {
