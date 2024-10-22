@@ -348,10 +348,12 @@ mod tests {
 
     #[test]
     fn ledger_events_parse_transfer_events() {
+        // reference values
         let accounts = test_accounts();
         let alice = &accounts[0];
         let bob = &accounts[1];
         let charlie = &accounts[2];
+        let token_address = Address::BRLC;
         let amount_bytes = [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255,
         ];
@@ -365,12 +367,14 @@ mod tests {
         tx.input.input = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         let mut log_transfer1: LogMined = Fake::fake(&Faker);
+        log_transfer1.log.address = token_address;
         log_transfer1.log.topic0 = Some(TRANSFER_EVENT);
         log_transfer1.log.topic1 = Some(alice.address.into());
         log_transfer1.log.topic2 = Some(bob.address.into());
         log_transfer1.log.data = Bytes(amount_bytes.to_vec());
 
         let mut log_transfer2: LogMined = Fake::fake(&Faker);
+        log_transfer2.log.address = token_address;
         log_transfer2.log.topic0 = Some(TRANSFER_EVENT);
         log_transfer2.log.topic1 = Some(bob.address.into());
         log_transfer2.log.topic2 = Some(charlie.address.into());
@@ -402,6 +406,8 @@ mod tests {
                 _ => panic!("invalid account"),
             }
             for transfer in event.transfers {
+                assert_eq!(transfer.token_address, token_address);
+
                 assert!(event.account_address == transfer.credit_party_address || event.account_address == transfer.debit_party_address);
                 if transfer.direction.is_credit() {
                     assert_eq!(event.account_address, transfer.credit_party_address);
