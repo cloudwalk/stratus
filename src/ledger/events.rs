@@ -148,10 +148,10 @@ impl Serialize for AccountTransfers {
         state.serialize_field("idempotency_key", &self.idempotency_key())?;
         state.serialize_field("account_address", &self.account_address)?;
         state.serialize_field("transaction_hash", &self.transaction_hash)?;
-        state.serialize_field("transaction_datetime", &self.block_datetime.to_rfc3339())?;
         state.serialize_field("contract_address", &self.contract_address)?;
         state.serialize_field("function_id", &const_hex::encode_prefixed(self.function_id))?;
         state.serialize_field("block_number", &self.block_number.as_u64())?;
+        state.serialize_field("block_datetime", &self.block_datetime.to_rfc3339())?;
         state.serialize_field("transfers", &self.transfers)?;
         state.end()
     }
@@ -234,8 +234,8 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) ->
                 tracing::error!("bug: transaction emitting transfers must have the 4-byte signature");
                 [0; 4]
             }),
-            block_datetime: block_timestamp.into(),
             block_number: tx.block_number,
+            block_datetime: block_timestamp.into(),
             transfers: vec![],
         };
 
@@ -303,10 +303,10 @@ mod tests {
                 "idempotency_key": "0x0000000000000000000000000000000000000000000000000000000000000000::0x0000000000000000000000000000000000000000",
                 "account_address": "0x0000000000000000000000000000000000000000",
                 "transaction_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-                "transaction_datetime": "2024-10-16T19:47:50+00:00",
                 "contract_address":"0x0000000000000000000000000000000000000000",
                 "function_id": "0x00000000",
                 "block_number": 0,
+                "block_datetime": "2024-10-16T19:47:50+00:00",
                 "transfers": [{
                     "token_address": "0x0000000000000000000000000000000000000000",
                     "debit_party_address": "0x0000000000000000000000000000000000000000",
