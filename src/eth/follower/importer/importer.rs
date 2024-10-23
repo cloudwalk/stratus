@@ -28,6 +28,7 @@ use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::if_else;
+use crate::infra::kafka_connector::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_rx_closed;
@@ -80,17 +81,28 @@ pub struct Importer {
     chain: Arc<BlockchainClient>,
 
     sync_interval: Duration,
+
+    kafka_connector: Option<Arc<KafkaConnector>>,
 }
 
 impl Importer {
-    pub fn new(executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>, sync_interval: Duration) -> Self {
+    pub fn new(
+        executor: Arc<Executor>,
+        miner: Arc<Miner>,
+        storage: Arc<StratusStorage>,
+        chain: Arc<BlockchainClient>,
+        kafka_connector: Option<Arc<KafkaConnector>>,
+        sync_interval: Duration,
+    ) -> Self {
         tracing::info!("creating importer");
+
         Self {
             executor,
             miner,
             storage,
             chain,
             sync_interval,
+            kafka_connector,
         }
     }
 
@@ -119,7 +131,7 @@ impl Importer {
         // it executes and mines blocks and expects to receive them via channel in the correct order.
         let task_executor = spawn_named(
             "importer::executor",
-            Importer::start_block_executor(Arc::clone(&self.executor), Arc::clone(&self.miner), backlog_rx),
+            Importer::start_block_executor(Arc::clone(&self.executor), Arc::clone(&self.miner), backlog_rx, self.kafka_connector.clone()),
         );
 
         // spawn block number:
@@ -157,6 +169,7 @@ impl Importer {
         executor: Arc<Executor>,
         miner: Arc<Miner>,
         mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
+        kafka_connector: Option<Arc<KafkaConnector>>,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "block-executor";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
@@ -202,9 +215,20 @@ impl Importer {
                 );
             }
 
-            if let Err(e) = miner.mine_external_and_commit(block) {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
-                return log_and_err!(reason = e, message);
+            if let Some(ref kafka_conn) = kafka_connector {
+                if let Err(e) = kafka_conn.send_event(&block).await {
+                    tracing::error!(reason = ?e, block_number = %block.number(), "failed to send block to kafka");
+                }
+            }
+
+            match miner.mine_external_and_commit(block) {
+                Ok(_) => {
+                    tracing::info!("mined external block");
+                }
+                Err(e) => {
+                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+                    return log_and_err!(reason = e, message);
+                }
             };
 
             #[cfg(feature = "metrics")]

@@ -118,6 +118,7 @@ sqlx = { version = "=0.8.2", features = [
 
 # test
 fake = { version = "=2.9.2", features = ["chrono", "derive"] }
+rdkafka = "0.36.2"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies

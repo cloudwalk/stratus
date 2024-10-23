@@ -29,8 +29,10 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
 
     // Init importer
     let consensus = if let Some(importer_config) = &config.importer {
+        tracing::info!("creating importer");
         importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage)).await?
     } else {
+        tracing::info!("no importer config, skipping importer");
         None
     };
 
