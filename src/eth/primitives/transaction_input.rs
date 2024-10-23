@@ -57,7 +57,7 @@ impl Dummy<Faker> for TransactionInput {
             nonce: faker.fake_with_rng(rng),
             signer: faker.fake_with_rng(rng),
             from: faker.fake_with_rng(rng),
-            to: faker.fake_with_rng(rng),
+            to: Some(faker.fake_with_rng(rng)),
             value: faker.fake_with_rng(rng),
             input: faker.fake_with_rng(rng),
             gas_limit: faker.fake_with_rng(rng),
