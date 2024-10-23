@@ -57,6 +57,13 @@ pub struct AccountTransfers {
     /// Format: Prefixed transaction hash - 32 bytes - 0x1234567890123456789012345678901234567890123456789012345678901234
     pub transaction_hash: Hash,
 
+    /// Index of the transaction in the block where it was generated.
+    ///
+    /// Used for ordering multiple events from the same user that happened in the same block.
+    ///
+    /// Format: Integer in base - Range: 0 to [`u64::MAX`]
+    pub transaction_index: u64,
+
     /// Address of the contract that originated transfers.
     ///
     /// Format: Prefixed account address - 20 bytes - 0x1234567890123456789012345678901234567890
@@ -69,7 +76,7 @@ pub struct AccountTransfers {
 
     /// Number of the block that originated transfers.
     ///
-    /// Format: Number in base 10 - Range: 0 to [`u64::MAX`]
+    /// Format: Integer in base 10 - Range: 0 to [`u64::MAX`]
     pub block_number: BlockNumber,
 
     /// Datetime of the Ethereum block that originated transfers.
@@ -119,7 +126,7 @@ pub struct AccountTransfer {
 
     /// Amount transferred from debit party to credit party.
     ///
-    /// Format: Number in base 10 and 6 decimal places - Formatted as String to avoid losing precision - Range: 0 to 18446744073709.551615.
+    /// Format: Decimal in base 10 and 6 decimal places - Formatted as String to avoid losing precision - Range: 0 to 18446744073709.551615.
     pub amount: U256,
 }
 
@@ -142,7 +149,7 @@ impl Serialize for AccountTransfers {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("AccountTransfersEvent", 10)?;
+        let mut state = serializer.serialize_struct("AccountTransfersEvent", 11)?;
 
         state.serialize_field("publication_id", &self.publication_id.to_string())?;
         state.serialize_field("publication_datetime", &self.publication_datetime.to_rfc3339())?;
@@ -153,6 +160,7 @@ impl Serialize for AccountTransfers {
         state.serialize_field("function_id", &const_hex::encode_prefixed(self.function_id))?;
         state.serialize_field("block_number", &self.block_number.as_u64())?;
         state.serialize_field("block_datetime", &self.block_datetime.to_rfc3339())?;
+        state.serialize_field("transaction_index", &self.transaction_index)?;
         state.serialize_field("transfers", &self.transfers)?;
         state.end()
     }
@@ -235,6 +243,7 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) ->
             publication_datetime: Utc::now(),
             account_address: *account,
             transaction_hash: tx.input.hash,
+            transaction_index: tx.transaction_index.0,
             contract_address: tx.input.to.unwrap_or_else(|| {
                 tracing::error!("bug: transaction emitting transfers must have the contract address");
                 Address::ZERO
@@ -305,6 +314,7 @@ mod tests {
             publication_datetime: "2024-10-16T19:47:50Z".parse().unwrap(),
             account_address: Address::ZERO,
             transaction_hash: Hash::ZERO,
+            transaction_index: 123,
             block_datetime: "2024-10-16T19:47:50Z".parse().unwrap(),
             contract_address: Address::ZERO,
             function_id: [0, 0, 0, 0],
@@ -324,6 +334,7 @@ mod tests {
                 "idempotency_key": "0x0000000000000000000000000000000000000000000000000000000000000000::0x0000000000000000000000000000000000000000",
                 "account_address": "0x0000000000000000000000000000000000000000",
                 "transaction_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "transaction_index": 123,
                 "contract_address":"0x0000000000000000000000000000000000000000",
                 "function_id": "0x00000000",
                 "block_number": 0,
