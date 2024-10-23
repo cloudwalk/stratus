@@ -46,6 +46,7 @@ impl KafkaConnector {
     }
 
     fn create_event(&self) -> Result<serde_json::Value> {
+        tracing::info!(topic = self.topic, "creating kafka event");
         let event = serde_json::json!({
             "block_number": 0,
             "block_hash": Hash(H256::zero()),
