@@ -215,9 +215,10 @@ impl Importer {
                 );
             }
 
-            // TODO: send to kafka
             if let Some(ref kafka_conn) = kafka_connector {
-                let _ = kafka_conn.send_event(&block).await;
+                if let Err(e) = kafka_conn.send_event(&block).await {
+                    tracing::error!(reason = ?e, block_number = %block.number(), "failed to send block to kafka");
+                }
             }
 
             match miner.mine_external_and_commit(block) {

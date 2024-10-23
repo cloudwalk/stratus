@@ -32,8 +32,6 @@ impl KafkaConnector {
         let event = self.create_event()?;
         let payload = serde_json::to_string(&event)?;
 
-        println!("payload: {}", payload);
-
         match self
             .producer
             .send(
@@ -48,9 +46,6 @@ impl KafkaConnector {
     }
 
     fn create_event(&self) -> Result<serde_json::Value> {
-        tracing::info!("create_event: {:?}", self.topic);
-        // Implemente a lógica para criar o evento a partir do bloco e da execução
-        // Este é apenas um exemplo básico
         let event = serde_json::json!({
             "block_number": 0,
             "block_hash": Hash(H256::zero()),
