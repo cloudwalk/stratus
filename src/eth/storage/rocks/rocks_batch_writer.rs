@@ -3,6 +3,7 @@ use std::mem;
 
 use anyhow::Context;
 use rocksdb::WriteBatch;
+use rocksdb::WriteOptions;
 use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
@@ -11,7 +12,9 @@ use super::rocks_cf::RocksCfRef;
 
 pub fn write_in_batch_for_multiple_cfs_impl(db: &DB, batch: WriteBatch) -> anyhow::Result<()> {
     let batch_len = batch.len();
-    db.write(batch)
+    let mut options = WriteOptions::default();
+    options.set_sync(true);
+    db.write_opt(batch, &options)
         .context("failed to write in batch to (possibly) multiple column families")
         .inspect_err(|e| {
             tracing::error!(reason = ?e, batch_len, "failed to write batch to DB");

@@ -84,6 +84,7 @@ where
     }
 
     // Clears the database
+    #[cfg(feature = "dev")]
     pub fn clear(&self) -> Result<()> {
         let cf = self.handle();
 
@@ -152,6 +153,7 @@ where
             .collect()
     }
 
+    #[cfg(test)]
     pub fn apply_batch_with_context(&self, batch: WriteBatch) -> Result<()> {
         self.db
             .write(batch)

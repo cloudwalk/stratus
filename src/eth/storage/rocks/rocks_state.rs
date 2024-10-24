@@ -190,6 +190,7 @@ impl RocksStorageState {
         Ok((u64::from(block_number)).into())
     }
 
+    #[cfg(feature = "dev")]
     pub fn reset(&self) -> Result<()> {
         self.accounts.clear()?;
         self.accounts_history.clear()?;
@@ -477,7 +478,7 @@ impl RocksStorageState {
         self.accounts_history.iter_start().map(|result| Ok(result?.1.into_inner())).collect()
     }
 
-    /// Clears in-memory state.
+    #[cfg(feature = "dev")]
     pub fn clear(&self) -> Result<()> {
         self.accounts.clear().context("when clearing accounts")?;
         self.accounts_history.clear().context("when clearing accounts_history")?;
