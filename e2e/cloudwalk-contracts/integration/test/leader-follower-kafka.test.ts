@@ -41,7 +41,7 @@ describe("Leader & Follower Kafka integration test", function () {
         it("Consume events from Kafka topic", async function () {
             const messages = await consumeMessages();
             expect(messages.length).to.be.greaterThan(0);
-            
+
             console.log("Consumed messages:");
             messages.forEach((message, index) => {
                 console.log(`Message ${index + 1}:`, JSON.stringify(message, null, 2));
