@@ -294,7 +294,7 @@ e2e-leader-follower-up test="brlc":
         just _log "Starting Kafka"
         docker-compose up kafka >> e2e_logs/kafka.log &
         just _log "Waiting Kafka start"
-        sleep 40
+        wait-service --tcp 0.0.0.0:29092 -- echo
         RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-group-id stratus-consumer > e2e_logs/importer.log &
     else
         RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
