@@ -153,7 +153,7 @@ where
             .collect()
     }
 
-    #[cfg(test)]
+    #[cfg(feature = "dev")]
     pub fn apply_batch_with_context(&self, batch: WriteBatch) -> Result<()> {
         self.db
             .write(batch)
