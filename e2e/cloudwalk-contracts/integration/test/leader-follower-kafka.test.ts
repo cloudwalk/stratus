@@ -1,14 +1,9 @@
 import { expect } from "chai";
+import { ethers } from "hardhat";
 
 import { consumeMessages, disconnectKafkaConsumer, initializeKafkaConsumer, subscribeToTopic } from "./helpers/kafka";
 import { configureBRLC, deployBRLC, deployer, sendWithRetry, setDeployer, updateProviderUrl } from "./helpers/rpc";
-
-import {
-    GAS_LIMIT_OVERRIDE,
-    brlcToken,
-} from "./helpers/rpc";
-
-import { ethers } from "hardhat";
+import { GAS_LIMIT_OVERRIDE, brlcToken } from "./helpers/rpc";
 
 describe("Leader & Follower Kafka integration test", function () {
     it("Validate initial Leader state and health", async function () {
@@ -72,8 +67,10 @@ describe("Leader & Follower Kafka integration test", function () {
             expect(messages.length).to.be.greaterThan(0);
 
             messages.forEach((message, index) => {
-                expect(JSON.parse(message).transfers[0].credit_party_address.toLowerCase()).to.be.eql(wallet.address.toLowerCase());
-                expect(JSON.parse(message).transfers[0].amount).to.equal('0.00001');
+                expect(JSON.parse(message).transfers[0].credit_party_address.toLowerCase()).to.be.eql(
+                    wallet.address.toLowerCase(),
+                );
+                expect(JSON.parse(message).transfers[0].amount).to.equal("0.00001");
             });
         });
     });
