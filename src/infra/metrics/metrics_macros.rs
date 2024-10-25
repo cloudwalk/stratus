@@ -49,7 +49,7 @@ macro_rules! metrics_impl_fn_inc {
                 let labels = super::into_labels(
                     vec![
                         ("group", stringify!($group).into()),
-                        ("node_mode", $crate::globals::GlobalState::get_node_mode().to_string().into()),
+                        ("node_mode", stringify!($crate::globals::GlobalState::get_node_mode()).into()),
                         $(
                             (stringify!($label), $label.into()),
                         )*
@@ -67,7 +67,7 @@ macro_rules! metrics_impl_fn_inc {
                 let labels = super::into_labels(
                     vec![
                         ("group", stringify!($group).into()),
-                        ("node_mode", $crate::globals::GlobalState::get_node_mode().to_string().into()),
+                        ("node_mode", stringify!($crate::globals::GlobalState::get_node_mode()).into()),
                         $(
                             (stringify!($label), $label.into()),
                         )*
@@ -86,7 +86,7 @@ macro_rules! metrics_impl_fn_inc {
                 let labels = super::into_labels(
                     vec![
                         ("group", stringify!($group).into()),
-                        ("node_mode", $crate::globals::GlobalState::get_node_mode().to_string().into()),
+                        ("node_mode", stringify!($crate::globals::GlobalState::get_node_mode()).into()),
                         $(
                             (stringify!($label), $label.into()),
                         )*
@@ -105,7 +105,7 @@ macro_rules! metrics_impl_fn_inc {
                 let labels = super::into_labels(
                     vec![
                         ("group", stringify!($group).into()),
-                        ("node_mode", $crate::globals::GlobalState::get_node_mode().to_string().into()),
+                        ("node_mode", stringify!($crate::globals::GlobalState::get_node_mode()).into()),
                         $(
                             (stringify!($label), $label.into()),
                         )*
@@ -124,7 +124,7 @@ macro_rules! metrics_impl_fn_inc {
                 let labels = super::into_labels(
                     vec![
                         ("group", stringify!($group).into()),
-                        ("node_mode", $crate::globals::GlobalState::get_node_mode().to_string().into()),
+                        ("node_mode", stringify!($crate::globals::GlobalState::get_node_mode()).into()),
                         $(
                             (stringify!($label), $label.into()),
                         )*
