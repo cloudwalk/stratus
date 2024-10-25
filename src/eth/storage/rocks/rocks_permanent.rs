@@ -57,7 +57,7 @@ impl RocksPermanentStorage {
     // -------------------------------------------------------------------------
     // State methods
     // -------------------------------------------------------------------------
-
+    #[cfg(feature = "dev")]
     pub fn clear(&self) -> anyhow::Result<()> {
         self.state.clear().inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to clear RocksPermanent DB");
