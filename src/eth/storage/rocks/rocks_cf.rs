@@ -123,7 +123,7 @@ where
         self.deserialize_value_with_context(&value_bytes).map(Some)
     }
 
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[allow(dead_code)]
     pub fn multi_get<I>(&self, keys: I) -> Result<Vec<(K, V)>>
     where
         I: IntoIterator<Item = K> + Clone,

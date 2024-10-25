@@ -618,8 +618,6 @@ impl fmt::Debug for RocksStorageState {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-    use std::iter;
 
     use fake::Fake;
     use fake::Faker;
