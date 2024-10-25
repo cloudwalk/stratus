@@ -67,14 +67,11 @@ describe("Leader & Follower Kafka integration test", function () {
             const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
 
             await brlcToken.mint(wallet.address, 10, { gasLimit: GAS_LIMIT_OVERRIDE });
-            console.log(wallet.address);
 
             const messages = await consumeMessages();
             expect(messages.length).to.be.greaterThan(0);
 
-            console.log("Consumed messages:");
             messages.forEach((message, index) => {
-                console.log(`Message ${index + 1}:`, JSON.stringify(message, null, 2));
                 expect(JSON.parse(message).transfers[0].credit_party_address.toLowerCase()).to.be.eql(wallet.address.toLowerCase());
                 expect(JSON.parse(message).transfers[0].amount).to.equal('0.00001');
             });
