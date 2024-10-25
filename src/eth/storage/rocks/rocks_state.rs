@@ -190,6 +190,7 @@ impl RocksStorageState {
         Ok((u64::from(block_number)).into())
     }
 
+    #[cfg(feature = "dev")]
     pub fn reset(&self) -> Result<()> {
         self.accounts.clear()?;
         self.accounts_history.clear()?;
@@ -456,7 +457,7 @@ impl RocksStorageState {
     }
 
     /// Writes slots to state (does not write to slot history)
-    #[cfg(test)]
+    #[cfg(feature = "dev")]
     pub fn write_slots(&self, slots: Vec<(Address, Slot)>) -> Result<()> {
         let slots = slots
             .into_iter()
@@ -477,7 +478,7 @@ impl RocksStorageState {
         self.accounts_history.iter_start().map(|result| Ok(result?.1.into_inner())).collect()
     }
 
-    /// Clears in-memory state.
+    #[cfg(feature = "dev")]
     pub fn clear(&self) -> Result<()> {
         self.accounts.clear().context("when clearing accounts")?;
         self.accounts_history.clear().context("when clearing accounts_history")?;
@@ -617,8 +618,6 @@ impl fmt::Debug for RocksStorageState {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-    use std::iter;
 
     use fake::Fake;
     use fake::Faker;
@@ -628,6 +627,7 @@ mod tests {
     use crate::eth::primitives::ExecutionValueChange;
 
     #[test]
+    #[cfg(feature = "dev")]
     fn test_rocks_multi_get() {
         type Key = (AddressRocksdb, SlotIndexRocksdb);
         type Value = CfAccountSlotsValue;
