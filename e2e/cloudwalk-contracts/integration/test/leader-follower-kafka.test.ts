@@ -3,6 +3,13 @@ import { expect } from "chai";
 import { consumeMessages, disconnectKafkaConsumer, initializeKafkaConsumer, subscribeToTopic } from "./helpers/kafka";
 import { sendWithRetry, updateProviderUrl } from "./helpers/rpc";
 
+import {
+    GAS_LIMIT_OVERRIDE,
+    brlcToken,
+} from "./helpers/rpc";
+
+import { ethers } from "hardhat";
+
 describe("Leader & Follower Kafka integration test", function () {
     it("Validate initial Leader state and health", async function () {
         updateProviderUrl("stratus");
@@ -38,7 +45,13 @@ describe("Leader & Follower Kafka integration test", function () {
             await disconnectKafkaConsumer();
         });
 
-        it("Consume events from Kafka topic", async function () {
+        it("Makes a transaction and send events to Kafka", async function () {
+            const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
+
+            expect(
+                await brlcToken.mint(wallet.address, 10, { gasLimit: GAS_LIMIT_OVERRIDE }),
+            ).to.have.changeTokenBalance(brlcToken, wallet, 10);
+
             const messages = await consumeMessages();
             expect(messages.length).to.be.greaterThan(0);
 
