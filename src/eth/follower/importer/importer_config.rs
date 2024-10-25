@@ -15,15 +15,15 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::spawn_named;
-use crate::infra::kafka_config::KafkaConfig;
-use crate::infra::kafka_connector::KafkaConnector;
+use crate::infra::kafka::KafkaConfig;
+use crate::infra::kafka::KafkaConnector;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
 use crate::NodeMode;
 
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
 #[group(requires_all = ["external_rpc"])]
-#[clap(group = clap::ArgGroup::new("kafka").multiple(true).requires_all(&["bootstrap_servers", "topic", "client_id", "group_id"]))]
+#[clap(group = clap::ArgGroup::new("kafka").multiple(true).requires_all(&["bootstrap_servers", "topic", "client_id"]))]
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", conflicts_with("leader"))]
@@ -49,7 +49,7 @@ pub struct ImporterConfig {
     #[arg(long = "kafka-client-id", env = "KAFKA_CLIENT_ID", group = "kafka", required = false)]
     pub client_id: Option<String>,
 
-    #[arg(long = "kafka-group-id", env = "KAFKA_GROUP_ID", group = "kafka", required = false)]
+    #[arg(long = "kafka-group-id", env = "KAFKA_GROUP_ID", required = false)]
     pub group_id: Option<String>,
 }
 
@@ -71,7 +71,7 @@ impl ImporterConfig {
     }
 
     pub fn has_kafka_config(&self) -> bool {
-        self.bootstrap_servers.is_some() && self.topic.is_some() && self.client_id.is_some() && self.group_id.is_some()
+        self.bootstrap_servers.is_some() && self.topic.is_some() && self.client_id.is_some()
     }
 
     async fn init_follower(&self, executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<dyn Consensus>>> {

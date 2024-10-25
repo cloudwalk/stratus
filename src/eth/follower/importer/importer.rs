@@ -23,18 +23,20 @@ use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
+use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::if_else;
-use crate::infra::kafka_connector::KafkaConnector;
+use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_rx_closed;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
 use crate::infra::BlockchainClient;
+use crate::ledger::events::transaction_to_events;
 use crate::log_and_err;
 #[cfg(feature = "metrics")]
 use crate::utils::calculate_tps;
@@ -215,21 +217,39 @@ impl Importer {
                 );
             }
 
-            if let Some(ref kafka_conn) = kafka_connector {
-                if let Err(e) = kafka_conn.send_event(&block).await {
-                    tracing::error!(reason = ?e, block_number = %block.number(), "failed to send block to kafka");
-                }
-            }
-
-            match miner.mine_external_and_commit(block) {
-                Ok(_) => {
+            // trocar do mine_external_and_commit para mine_external e depois commit
+            let mined_block = match miner.mine_external(block) {
+                Ok(mined_block) => {
                     tracing::info!("mined external block");
+                    mined_block
                 }
                 Err(e) => {
                     let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
                     return log_and_err!(reason = e, message);
                 }
             };
+
+            if let Some(ref kafka_conn) = kafka_connector {
+                for tx in &mined_block.transactions {
+                    let events = transaction_to_events(mined_block.header.timestamp, tx.clone());
+                    for event in events {
+                        let json = to_json_value(event);
+                        if let Err(e) = kafka_conn.send_event(json).await {
+                            tracing::error!(reason = ?e, block_number = %mined_block.number(), "failed to send block to kafka");
+                        }
+                    }
+                }
+            }
+
+            match miner.commit(mined_block) {
+                Ok(_) => {
+                    tracing::info!("committed external block");
+                }
+                Err(e) => {
+                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to commit external block");
+                    return log_and_err!(reason = e, message);
+                }
+            }
 
             #[cfg(feature = "metrics")]
             {

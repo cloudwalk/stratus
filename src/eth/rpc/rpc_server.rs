@@ -427,7 +427,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         bootstrap_servers: None,
         topic: None,
         client_id: None,
-        group_id: None,
+        group_id: None
     };
 
     importer_config.init_follower_importer(ctx).await
