@@ -15,6 +15,7 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::spawn_named;
+use crate::infra::kafka::KafkaSecurityProtocol;
 use crate::infra::kafka::KafkaConfig;
 use crate::infra::kafka::KafkaConnector;
 use crate::infra::BlockchainClient;
@@ -51,6 +52,27 @@ pub struct ImporterConfig {
 
     #[arg(long = "kafka-group-id", env = "KAFKA_GROUP_ID", required = false)]
     pub group_id: Option<String>,
+
+    #[arg(long = "kafka-security-protocol", env = "KAFKA_SECURITY_PROTOCOL", required = false)]
+    pub security_protocol: Option<KafkaSecurityProtocol>,
+
+    #[arg(long = "kafka-sasl-mechanisms", env = "KAFKA_SASL_MECHANISMS", required = false)]
+    pub sasl_mechanisms: Option<String>,
+
+    #[arg(long = "kafka-sasl-username", env = "KAFKA_SASL_USERNAME", required = false)]
+    pub sasl_username: Option<String>,
+
+    #[arg(long = "kafka-sasl-password", env = "KAFKA_SASL_PASSWORD", required = false)]
+    pub sasl_password: Option<String>,  
+
+    #[arg(long = "kafka-ssl-ca-location", env = "KAFKA_SSL_CA_LOCATION", required = false)]
+    pub ssl_ca_location: Option<String>,
+
+    #[arg(long = "kafka-ssl-certificate-location", env = "KAFKA_SSL_CERTIFICATE_LOCATION", required = false)]
+    pub ssl_certificate_location: Option<String>,
+
+    #[arg(long = "kafka-ssl-key-location", env = "KAFKA_SSL_KEY_LOCATION", required = false)]
+    pub ssl_key_location: Option<String>,
 }
 
 impl ImporterConfig {
@@ -67,20 +89,23 @@ impl ImporterConfig {
             topic: self.topic.clone(),
             client_id: self.client_id.clone(),
             group_id: self.group_id.clone(),
+            security_protocol: self.security_protocol.clone(),
+            sasl_mechanisms: self.sasl_mechanisms.clone(),
+            sasl_username: self.sasl_username.clone(),
+            sasl_password: self.sasl_password.clone(),
+            ssl_ca_location: self.ssl_ca_location.clone(),
+            ssl_certificate_location: self.ssl_certificate_location.clone(),
+            ssl_key_location: self.ssl_key_location.clone(),
         }
-    }
-
-    pub fn has_kafka_config(&self) -> bool {
-        self.bootstrap_servers.is_some() && self.topic.is_some() && self.client_id.is_some()
     }
 
     async fn init_follower(&self, executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
         const TASK_NAME: &str = "importer::init";
-        tracing::info!(config = ?self, "creating importer for follower node");
+        tracing::info!("creating importer for follower node");
 
         let chain = Arc::new(BlockchainClient::new_http_ws(&self.external_rpc, self.external_rpc_ws.as_deref(), self.external_rpc_timeout).await?);
         //TODO: add kafka connector
-        let kafka_connector = if self.has_kafka_config() {
+        let kafka_connector = if self.kafka_config().has_kafka_config() {
             tracing::info!("creating kafka connector");
             match KafkaConnector::new(&self.kafka_config()) {
                 Ok(kafka_connector) => Some(Arc::new(kafka_connector)),
