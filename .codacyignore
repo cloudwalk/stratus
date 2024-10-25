@@ -1,2 +1,5 @@
 package-lock.json
 package.json
+
+e2e/package-lock.json
+e2e/package.json
