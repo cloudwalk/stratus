@@ -63,13 +63,12 @@ impl KafkaConnector {
             )
             .await
         {
-            Ok(_) => { 
+            Ok(_) => {
                 tracing::info!(payload = payload, "event sent to kafka");
                 println!("event sent to kafka {:?}", payload);
                 Ok(())
-            },
+            }
             Err(e) => Err(anyhow::anyhow!("failed to send event to kafka: {:?}", e)),
         }
     }
-
 }
