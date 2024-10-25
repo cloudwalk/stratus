@@ -23,7 +23,7 @@ use crate::NodeMode;
 
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
 #[group(requires_all = ["external_rpc"])]
-#[clap(group = clap::ArgGroup::new("kafka").multiple(true).requires_all(&["kafka-bootstrap-servers", "kafka-topic", "kafka-client-id", "kafka-group-id"]))]
+#[clap(group = clap::ArgGroup::new("kafka").multiple(true).requires_all(&["bootstrap_servers", "topic", "client_id", "group_id"]))]
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", conflicts_with("leader"))]
@@ -40,16 +40,16 @@ pub struct ImporterConfig {
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
     pub sync_interval: Duration,
 
-    #[arg(long = "kafka-bootstrap-servers", env = "KAFKA_BOOTSTRAP_SERVERS", group = "kafka")]
+    #[arg(long = "kafka-bootstrap-servers", env = "KAFKA_BOOTSTRAP_SERVERS", group = "kafka", required = false)]
     pub bootstrap_servers: Option<String>,
 
-    #[arg(long = "kafka-topic", env = "KAFKA_TOPIC", group = "kafka")]
+    #[arg(long = "kafka-topic", env = "KAFKA_TOPIC", group = "kafka", required = false)]
     pub topic: Option<String>,
 
-    #[arg(long = "kafka-client-id", env = "KAFKA_CLIENT_ID", group = "kafka")]
+    #[arg(long = "kafka-client-id", env = "KAFKA_CLIENT_ID", group = "kafka", required = false)]
     pub client_id: Option<String>,
 
-    #[arg(long = "kafka-group-id", env = "KAFKA_GROUP_ID", group = "kafka")]
+    #[arg(long = "kafka-group-id", env = "KAFKA_GROUP_ID", group = "kafka", required = false)]
     pub group_id: Option<String>,
 }
 
