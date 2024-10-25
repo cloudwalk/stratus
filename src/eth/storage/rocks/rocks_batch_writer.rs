@@ -13,6 +13,10 @@ use super::rocks_cf::RocksCfRef;
 pub fn write_in_batch_for_multiple_cfs_impl(db: &DB, batch: WriteBatch) -> anyhow::Result<()> {
     let batch_len = batch.len();
     let mut options = WriteOptions::default();
+    // By default, each write to rocksdb is asynchronous: it returns after pushing
+    // the write from the process into the operating system (buffer cache).
+    // This option enables sync write to ensure data is persisted to disk before
+    // returning, preventing potential data loss in case of system failure.
     options.set_sync(true);
     db.write_opt(batch, &options)
         .context("failed to write in batch to (possibly) multiple column families")
