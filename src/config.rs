@@ -367,6 +367,10 @@ pub enum Environment {
     #[serde(rename = "production")]
     #[strum(to_string = "production")]
     Production,
+
+    #[serde(rename = "canary")]
+    #[strum(to_string = "canary")]
+    Canary,
 }
 
 impl FromStr for Environment {
@@ -378,6 +382,7 @@ impl FromStr for Environment {
             "local" => Ok(Self::Local),
             "staging" | "test" => Ok(Self::Staging),
             "production" | "prod" => Ok(Self::Production),
+            "canary" => Ok(Self::Canary),
             s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
         }
     }
