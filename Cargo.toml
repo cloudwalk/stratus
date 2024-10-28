@@ -118,7 +118,8 @@ sqlx = { version = "=0.8.2", features = [
 
 # test
 fake = { version = "=2.9.2", features = ["chrono", "derive"] }
-rdkafka = "0.36.2"
+rdkafka = {version = "0.36.2", features = ["ssl", "sasl"] }
+openssl = { version = "0.10.32", features = ["vendored"] }
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
