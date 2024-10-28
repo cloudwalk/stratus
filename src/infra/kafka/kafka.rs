@@ -1,12 +1,13 @@
 use anyhow::Result;
 use clap::ValueEnum;
-use ethereum_types::H256;
+use rdkafka::message::Header;
+use rdkafka::message::OwnedHeaders;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
 use rdkafka::ClientConfig;
 
-use crate::eth::primitives::Hash;
 use crate::ledger::events::Event;
+use crate::log_and_err;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct KafkaConfig {
@@ -104,22 +105,24 @@ impl KafkaConnector {
     }
 
     pub async fn send_event<T: Event>(&self, event: T) -> Result<()> {
-        let payload = serde_json::to_string(&event)?;
+        // prepare base payload
+        let headers = event.event_headers()?;
+        let key = event.event_key()?;
+        let payload = event.event_payload()?;
 
-        match self
-            .producer
-            .send(
-                FutureRecord::to(&self.topic).payload(&payload).key(&Hash(H256::random()).to_string()),
-                std::time::Duration::from_secs(0),
-            )
-            .await
-        {
-            Ok(_) => {
-                tracing::info!(payload = payload, "event sent to kafka");
-                println!("event sent to kafka {:?}", payload);
-                Ok(())
-            }
-            Err(e) => Err(anyhow::anyhow!("failed to send event to kafka: {:?}", e)),
+        // prepare kafka payload
+        let mut kafka_headers = OwnedHeaders::new_with_capacity(headers.len());
+        for (key, value) in headers.iter() {
+            let header = Header { key, value: Some(value) };
+            kafka_headers = kafka_headers.insert(header);
         }
+        let kafka_record = FutureRecord::to(&self.topic).payload(&payload).key(&key).headers(kafka_headers);
+
+        // publis and handle response
+        tracing::info!(%key, %payload, ?headers, "publishing kafka event");
+        if let Err((e, _)) = self.producer.send(kafka_record, std::time::Duration::from_secs(0)).await {
+            return log_and_err!(reason = e, "failed to publish kafka event");
+        }
+        Ok(())
     }
 }
