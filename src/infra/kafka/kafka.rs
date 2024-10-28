@@ -58,31 +58,19 @@ pub enum KafkaSecurityProtocol {
     Ssl,
 }
 
-impl KafkaSecurityProtocol {
-    pub fn to_string(&self) -> String {
-        match self {
-            KafkaSecurityProtocol::None => "none".to_string(),
-            KafkaSecurityProtocol::SaslSsl => "sasl_ssl".to_string(),
-            KafkaSecurityProtocol::Ssl => "ssl".to_string(),
-        }
-    }
-}
-
 impl KafkaConnector {
     pub fn new(config: &KafkaConfig) -> Result<Self> {
-        let producer;
-
         let security_protocol = config.security_protocol.clone().unwrap_or(KafkaSecurityProtocol::None);
 
-        match security_protocol {
+        let producer = match security_protocol {
             KafkaSecurityProtocol::None => {
-                producer = ClientConfig::new()
+                ClientConfig::new()
                     .set("bootstrap.servers", config.bootstrap_servers.as_ref().unwrap())
                     .set("client.id", config.client_id.as_ref().unwrap())
-                    .create()?;
+                    .create()?
             }
             KafkaSecurityProtocol::SaslSsl => {
-                producer = ClientConfig::new()
+                ClientConfig::new()
                     .set("bootstrap.servers", config.bootstrap_servers.as_ref().unwrap())
                     .set("client.id", config.client_id.as_ref().unwrap())
                     .set(
@@ -91,10 +79,10 @@ impl KafkaConnector {
                     )
                     .set("sasl.username", config.sasl_username.as_ref().expect("sasl username is required").as_str())
                     .set("sasl.password", config.sasl_password.as_ref().expect("sasl password is required").as_str())
-                    .create()?;
+                    .create()?
             }
             KafkaSecurityProtocol::Ssl => {
-                producer = ClientConfig::new()
+                ClientConfig::new()
                     .set("bootstrap.servers", config.bootstrap_servers.as_ref().unwrap())
                     .set("client.id", config.client_id.as_ref().unwrap())
                     .set(
@@ -109,9 +97,9 @@ impl KafkaConnector {
                         "ssl.key.location",
                         config.ssl_key_location.as_ref().expect("ssl key location is required").as_str(),
                     )
-                    .create()?;
+                    .create()?
             }
-        }
+        };
 
         Ok(Self {
             producer,
