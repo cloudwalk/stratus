@@ -15,9 +15,9 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::spawn_named;
-use crate::infra::kafka::KafkaSecurityProtocol;
 use crate::infra::kafka::KafkaConfig;
 use crate::infra::kafka::KafkaConnector;
+use crate::infra::kafka::KafkaSecurityProtocol;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
 use crate::NodeMode;
@@ -63,7 +63,7 @@ pub struct ImporterConfig {
     pub sasl_username: Option<String>,
 
     #[arg(long = "kafka-sasl-password", env = "KAFKA_SASL_PASSWORD", required = false)]
-    pub sasl_password: Option<String>,  
+    pub sasl_password: Option<String>,
 
     #[arg(long = "kafka-ssl-ca-location", env = "KAFKA_SSL_CA_LOCATION", required = false)]
     pub ssl_ca_location: Option<String>,
