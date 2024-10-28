@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::collections::HashSet;
 
 use chrono::DateTime;
@@ -200,10 +201,31 @@ impl Serialize for AccountTransferDirection {
 // Marker Trait
 // -----------------------------------------------------------------------------
 
-/// Marker trait for events
-pub trait Event: Serialize {}
+/// Struct is an event that can be published to external systems.
+pub trait Event: Serialize + Sized {
+    /// Returns the partition key component of the event.
+    fn event_key(&self) -> anyhow::Result<String>;
 
-impl Event for AccountTransfers {}
+    /// Returns the headers component of the event.
+    ///
+    /// By default, it returns empty headers.
+    fn event_headers(&self) -> anyhow::Result<HashMap<String, String>> {
+        Ok(HashMap::default())
+    }
+
+    /// Returns the payload component of the event.
+    ///
+    /// By default, it serializes the implementing struct as JSON.
+    fn event_payload(&self) -> anyhow::Result<String> {
+        Ok(serde_json::to_string(self)?)
+    }
+}
+
+impl Event for AccountTransfers {
+    fn event_key(&self) -> anyhow::Result<String> {
+        Ok(self.account_address.to_string())
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions
