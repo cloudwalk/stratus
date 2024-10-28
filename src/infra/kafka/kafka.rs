@@ -6,6 +6,7 @@ use rdkafka::producer::FutureRecord;
 use rdkafka::ClientConfig;
 
 use crate::eth::primitives::Hash;
+use crate::ledger::events::Event;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct KafkaConfig {
@@ -101,7 +102,7 @@ impl KafkaConnector {
         })
     }
 
-    pub async fn send_event(&self, event: serde_json::Value) -> Result<()> {
+    pub async fn send_event<T: Event>(&self, event: T) -> Result<()> {
         let payload = serde_json::to_string(&event)?;
 
         match self
