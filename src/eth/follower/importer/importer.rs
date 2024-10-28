@@ -23,7 +23,6 @@ use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
-use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
@@ -233,8 +232,7 @@ impl Importer {
                 for tx in &mined_block.transactions {
                     let events = transaction_to_events(mined_block.header.timestamp, tx.clone());
                     for event in events {
-                        let json = to_json_value(event);
-                        if let Err(e) = kafka_conn.send_event(json).await {
+                        if let Err(e) = kafka_conn.send_event(event).await {
                             tracing::error!(reason = ?e, block_number = %mined_block.number(), "failed to send block to kafka");
                         }
                     }
