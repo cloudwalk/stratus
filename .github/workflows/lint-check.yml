@@ -91,6 +91,9 @@ jobs:
       - name: Set up shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
+      - name: Install libsasl2-dev libssl-dev
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+
       - name: Just e2e-lint
         run: |
           npm --prefix ./e2e --silent install
