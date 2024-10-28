@@ -58,8 +58,11 @@ jobs:
           echo "<meta http-equiv='refresh' content='0; URL=./stratus/'>" >> target/doc/index.html
           chmod -c -R +rX target/doc/
 
+      - name: Configure GH Pages
+        uses: actions/configure-pages@v5
+
       - name: Upload docs artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           path: "target/doc"
 
@@ -73,12 +76,6 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - name: Download GH Pages artifact
-        uses: actions/download-artifact@v4
-
-      - name: Configure GH Pages
-        uses: actions/configure-pages@v5
-
       - name: Deploy to GH Pages
         id: deployment
         uses: actions/deploy-pages@v4
