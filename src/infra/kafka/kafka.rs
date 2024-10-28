@@ -8,7 +8,7 @@ use rdkafka::ClientConfig;
 use crate::eth::primitives::Hash;
 use crate::ledger::events::Event;
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct KafkaConfig {
     pub bootstrap_servers: Option<String>,
     pub topic: Option<String>,

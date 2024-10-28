@@ -15,32 +15,16 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::spawn_named;
-use crate::infra::kafka::KafkaConfig;
+use crate::infra::kafka::KafkaConfig as ConnectorConfig;
 use crate::infra::kafka::KafkaConnector;
 use crate::infra::kafka::KafkaSecurityProtocol;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
 use crate::NodeMode;
 
-#[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
-#[group(requires_all = ["external_rpc"])]
-#[clap(group = clap::ArgGroup::new("kafka").multiple(true).requires_all(&["bootstrap_servers", "topic", "client_id"]))]
-pub struct ImporterConfig {
-    /// External RPC HTTP endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", conflicts_with("leader"))]
-    pub external_rpc: String,
-
-    /// External RPC WS endpoint to sync blocks with Stratus.
-    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS", conflicts_with("leader"))]
-    pub external_rpc_ws: Option<String>,
-
-    /// Timeout for blockchain requests (importer online)
-    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
-    pub external_rpc_timeout: Duration,
-
-    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
-    pub sync_interval: Duration,
-
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
+#[group(requires_all = ["bootstrap_servers", "topic", "client_id"])]
+pub struct KafkaConfig {
     #[arg(long = "kafka-bootstrap-servers", env = "KAFKA_BOOTSTRAP_SERVERS", group = "kafka", required = false)]
     pub bootstrap_servers: Option<String>,
 
@@ -75,6 +59,27 @@ pub struct ImporterConfig {
     pub ssl_key_location: Option<String>,
 }
 
+#[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ImporterConfig {
+    /// External RPC HTTP endpoint to sync blocks with Stratus.
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", conflicts_with("leader"))]
+    pub external_rpc: String,
+
+    /// External RPC WS endpoint to sync blocks with Stratus.
+    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS", conflicts_with("leader"))]
+    pub external_rpc_ws: Option<String>,
+
+    /// Timeout for blockchain requests (importer online)
+    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
+    pub external_rpc_timeout: Duration,
+
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
+    pub sync_interval: Duration,
+
+    #[clap(flatten)]
+    pub kafka_config: Option<KafkaConfig>,
+}
+
 impl ImporterConfig {
     pub async fn init(&self, executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
         match GlobalState::get_node_mode() {
@@ -83,19 +88,22 @@ impl ImporterConfig {
         }
     }
 
-    pub fn kafka_config(&self) -> KafkaConfig {
-        KafkaConfig {
-            bootstrap_servers: self.bootstrap_servers.clone(),
-            topic: self.topic.clone(),
-            client_id: self.client_id.clone(),
-            group_id: self.group_id.clone(),
-            security_protocol: self.security_protocol.clone(),
-            sasl_mechanisms: self.sasl_mechanisms.clone(),
-            sasl_username: self.sasl_username.clone(),
-            sasl_password: self.sasl_password.clone(),
-            ssl_ca_location: self.ssl_ca_location.clone(),
-            ssl_certificate_location: self.ssl_certificate_location.clone(),
-            ssl_key_location: self.ssl_key_location.clone(),
+    pub fn kafka_config(&self) -> ConnectorConfig {
+        match &self.kafka_config {
+            Some(config) => ConnectorConfig {
+                bootstrap_servers: config.bootstrap_servers.clone(),
+                topic: config.topic.clone(),
+                client_id: config.client_id.clone(),
+                group_id: config.group_id.clone(),
+                security_protocol: config.security_protocol.clone(),
+                sasl_mechanisms: config.sasl_mechanisms.clone(),
+                sasl_username: config.sasl_username.clone(),
+                sasl_password: config.sasl_password.clone(),
+                ssl_ca_location: config.ssl_ca_location.clone(),
+                ssl_certificate_location: config.ssl_certificate_location.clone(),
+                ssl_key_location: config.ssl_key_location.clone(),
+            },
+            None => ConnectorConfig::default(),
         }
     }
 
