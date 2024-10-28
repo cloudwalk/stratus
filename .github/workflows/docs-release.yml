@@ -59,7 +59,7 @@ jobs:
           chmod -c -R +rX target/doc/
 
       - name: Upload docs artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           path: "target/doc"
 
