@@ -194,21 +194,32 @@ impl<'a> Future for RpcResponse<'a> {
                 None => (Level::INFO, 0),
             };
 
-            // track event
-            event_with!(
-                level,
-                rpc_client = %resp.client,
-                rpc_id = %resp.id,
-                rpc_method = %resp.method,
-                rpc_tx_hash = %resp.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
-                rpc_tx_contract = %resp.tx.as_ref().map(|tx|tx.contract).or_empty(),
-                rpc_tx_function = %resp.tx.as_ref().map(|tx|tx.function).or_empty(),
-                rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
-                rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
-                rpc_result = %response_result,
-                rpc_success = %response_success,
-                duration_us = %elapsed.as_micros(),
-                "rpc response"
+            let log_tracing_event = || {
+                event_with!(
+                    level,
+                    rpc_client = %resp.client,
+                    rpc_id = %resp.id,
+                    rpc_method = %resp.method,
+                    rpc_tx_hash = %resp.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
+                    rpc_tx_contract = %resp.tx.as_ref().map(|tx|tx.contract).or_empty(),
+                    rpc_tx_function = %resp.tx.as_ref().map(|tx|tx.function).or_empty(),
+                    rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
+                    rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
+                    rpc_result = %response_result,
+                    rpc_success = %response_success,
+                    duration_us = %elapsed.as_micros(),
+                    "rpc response"
+                );
+            };
+
+            sentry::with_scope(
+                |scope| {
+                    scope.set_user(Some(sentry::User {
+                        username: Some(resp.client.to_string()),
+                        ..Default::default()
+                    }));
+                },
+                log_tracing_event,
             );
 
             // track metrics
