@@ -428,6 +428,13 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         topic: None,
         client_id: None,
         group_id: None,
+        security_protocol: None,
+        sasl_mechanisms: None,
+        sasl_username: None,
+        sasl_password: None,
+        ssl_ca_location: None,
+        ssl_certificate_location: None,
+        ssl_key_location: None,
     };
 
     importer_config.init_follower_importer(ctx).await
