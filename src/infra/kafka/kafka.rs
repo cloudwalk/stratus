@@ -69,6 +69,7 @@ impl KafkaConnector {
                 .set("client.id", config.client_id.as_ref().unwrap())
                 .create()?,
             KafkaSecurityProtocol::SaslSsl => ClientConfig::new()
+                .set("security.protocol", "SASL_SSL")
                 .set("bootstrap.servers", config.bootstrap_servers.as_ref().unwrap())
                 .set("client.id", config.client_id.as_ref().unwrap())
                 .set(
