@@ -1,5 +1,7 @@
 use anyhow::Result;
+use clap::Parser;
 use clap::ValueEnum;
+use display_json::DebugAsJson;
 use rdkafka::message::Header;
 use rdkafka::message::OwnedHeaders;
 use rdkafka::producer::FutureProducer;
@@ -9,41 +11,54 @@ use rdkafka::ClientConfig;
 use crate::ledger::events::Event;
 use crate::log_and_err;
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[group(requires_all = ["bootstrap_servers", "topic", "client_id", "ImporterConfig"])]
 pub struct KafkaConfig {
-    pub bootstrap_servers: Option<String>,
-    pub topic: Option<String>,
-    pub client_id: Option<String>,
+    #[arg(long = "kafka-bootstrap-servers", env = "KAFKA_BOOTSTRAP_SERVERS", required = false)]
+    pub bootstrap_servers: String,
+
+    #[arg(long = "kafka-topic", env = "KAFKA_TOPIC", group = "kafka", required = false)]
+    pub topic: String,
+
+    #[arg(long = "kafka-client-id", env = "KAFKA_CLIENT_ID", required = false)]
+    pub client_id: String,
+
+    #[arg(long = "kafka-group-id", env = "KAFKA_GROUP_ID", required = false)]
     pub group_id: Option<String>,
-    pub security_protocol: Option<KafkaSecurityProtocol>,
+
+    #[arg(long = "kafka-security-protocol", env = "KAFKA_SECURITY_PROTOCOL", required = false, default_value_t)]
+    pub security_protocol: KafkaSecurityProtocol,
+
+    #[arg(long = "kafka-sasl-mechanisms", env = "KAFKA_SASL_MECHANISMS", required = false)]
     pub sasl_mechanisms: Option<String>,
+
+    #[arg(long = "kafka-sasl-username", env = "KAFKA_SASL_USERNAME", required = false)]
     pub sasl_username: Option<String>,
+
+    #[arg(long = "kafka-sasl-password", env = "KAFKA_SASL_PASSWORD", required = false)]
     pub sasl_password: Option<String>,
+
+    #[arg(long = "kafka-ssl-ca-location", env = "KAFKA_SSL_CA_LOCATION", required = false)]
     pub ssl_ca_location: Option<String>,
+
+    #[arg(long = "kafka-ssl-certificate-location", env = "KAFKA_SSL_CERTIFICATE_LOCATION", required = false)]
     pub ssl_certificate_location: Option<String>,
+
+    #[arg(long = "kafka-ssl-key-location", env = "KAFKA_SSL_KEY_LOCATION", required = false)]
     pub ssl_key_location: Option<String>,
 }
 
 impl KafkaConfig {
     pub fn has_kafka_config(&self) -> bool {
         match self.security_protocol {
-            Some(KafkaSecurityProtocol::None) => self.bootstrap_servers.is_some() && self.topic.is_some() && self.client_id.is_some(),
-            Some(KafkaSecurityProtocol::SaslSsl) =>
-                self.bootstrap_servers.is_some()
-                    && self.topic.is_some()
-                    && self.client_id.is_some()
-                    && self.sasl_mechanisms.is_some()
-                    && self.sasl_username.is_some()
-                    && self.sasl_password.is_some(),
-            Some(KafkaSecurityProtocol::Ssl) =>
-                self.bootstrap_servers.is_some()
-                    && self.topic.is_some()
-                    && self.client_id.is_some()
-                    && self.ssl_ca_location.is_some()
-                    && self.ssl_certificate_location.is_some()
-                    && self.ssl_key_location.is_some(),
-            None => false,
+            KafkaSecurityProtocol::None => true,
+            KafkaSecurityProtocol::SaslSsl => self.sasl_mechanisms.is_some() && self.sasl_username.is_some() && self.sasl_password.is_some(),
+            KafkaSecurityProtocol::Ssl => self.ssl_ca_location.is_some() && self.ssl_certificate_location.is_some() && self.ssl_key_location.is_some(),
         }
+    }
+
+    pub fn init(&self) -> Result<KafkaConnector> {
+        KafkaConnector::new(self)
     }
 }
 
@@ -53,26 +68,44 @@ pub struct KafkaConnector {
     topic: String,
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, ValueEnum)]
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, ValueEnum, Default)]
 pub enum KafkaSecurityProtocol {
+    #[default]
     None,
     SaslSsl,
     Ssl,
 }
 
+impl std::fmt::Display for KafkaSecurityProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            KafkaSecurityProtocol::None => write!(f, "none"),
+            KafkaSecurityProtocol::SaslSsl => write!(f, "sasl_ssl"),
+            KafkaSecurityProtocol::Ssl => write!(f, "ssl"),
+        }
+    }
+}
+
 impl KafkaConnector {
     pub fn new(config: &KafkaConfig) -> Result<Self> {
-        let security_protocol = config.security_protocol.clone().unwrap_or(KafkaSecurityProtocol::None);
+        tracing::info!(
+            topic = %config.topic,
+            bootstrap_servers = %config.bootstrap_servers,
+            client_id = %config.client_id,
+            "Creating Kafka connector"
+        );
+
+        let security_protocol = config.security_protocol;
 
         let producer = match security_protocol {
             KafkaSecurityProtocol::None => ClientConfig::new()
-                .set("bootstrap.servers", config.bootstrap_servers.as_ref().unwrap())
-                .set("client.id", config.client_id.as_ref().unwrap())
+                .set("bootstrap.servers", &config.bootstrap_servers)
+                .set("client.id", &config.client_id)
                 .create()?,
             KafkaSecurityProtocol::SaslSsl => ClientConfig::new()
                 .set("security.protocol", "SASL_SSL")
-                .set("bootstrap.servers", config.bootstrap_servers.as_ref().unwrap())
-                .set("client.id", config.client_id.as_ref().unwrap())
+                .set("bootstrap.servers", &config.bootstrap_servers)
+                .set("client.id", &config.client_id)
                 .set(
                     "sasl.mechanisms",
                     config.sasl_mechanisms.as_ref().expect("sasl mechanisms is required").as_str(),
@@ -81,8 +114,8 @@ impl KafkaConnector {
                 .set("sasl.password", config.sasl_password.as_ref().expect("sasl password is required").as_str())
                 .create()?,
             KafkaSecurityProtocol::Ssl => ClientConfig::new()
-                .set("bootstrap.servers", config.bootstrap_servers.as_ref().unwrap())
-                .set("client.id", config.client_id.as_ref().unwrap())
+                .set("bootstrap.servers", &config.bootstrap_servers)
+                .set("client.id", &config.client_id)
                 .set(
                     "ssl.ca.location",
                     config.ssl_ca_location.as_ref().expect("ssl ca location is required").as_str(),
@@ -100,7 +133,7 @@ impl KafkaConnector {
 
         Ok(Self {
             producer,
-            topic: config.topic.clone().unwrap(),
+            topic: config.topic.clone(),
         })
     }
 
