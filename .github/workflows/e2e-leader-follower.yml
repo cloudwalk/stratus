@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [brlc, importer, miner, change, deploy]
+        test: [brlc, importer, miner, change, deploy, kafka]
     name: E2E Leader & Follower on ${{ matrix.test }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
