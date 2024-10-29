@@ -3,7 +3,6 @@ use std::time::Duration;
 use anyhow::Context;
 use clap::CommandFactory;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
-use stratus::eth::primitives::TransactionMined;
 use stratus::eth::storage::rocks::rocks_state::RocksStorageState;
 use stratus::eth::storage::rocks::types::TransactionMinedRocksdb;
 use stratus::eth::storage::rocks::types::UnixTimeRocksdb;
@@ -31,7 +30,7 @@ fn parse_config(args: &clap::ArgMatches) -> KafkaConfig {
 }
 
 fn transaction_mined_rocks_db_to_events(block_timestamp: UnixTimeRocksdb, tx: TransactionMinedRocksdb) -> Vec<AccountTransfers> {
-    transaction_to_events(block_timestamp.into(), std::borrow::Cow::Owned(TransactionMined::from(tx)))
+    transaction_to_events(block_timestamp.into(), std::borrow::Cow::Owned(tx.into()))
 }
 
 #[tokio::main]
@@ -45,7 +44,7 @@ async fn main() -> Result<(), anyhow::Error> {
             .get_matches(),
     );
 
-    let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, None).context("failed to create rocksdb state")?;
+    let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, Some(0.1)).context("failed to create rocksdb state")?;
     let connector = config.init()?;
 
     // Count total number of blocks first
