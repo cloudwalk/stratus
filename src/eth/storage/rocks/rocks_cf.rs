@@ -71,7 +71,7 @@ where
     }
 
     /// Get the necessary handle for any operation in the CF
-    fn handle(&self) -> Arc<BoundColumnFamily> {
+    pub fn handle(&self) -> Arc<BoundColumnFamily> {
         match self.handle_checked() {
             Some(handle) => handle,
             None => {
@@ -318,7 +318,7 @@ where
 }
 
 /// An iterator over K-V pairs in a CF.
-pub(super) struct RocksCfIter<'a, K, V> {
+pub struct RocksCfIter<'a, K, V> {
     iter: DBIteratorWithThreadMode<'a, DB>,
     column_family: &'a str,
     _marker: PhantomData<(K, V)>,
@@ -388,7 +388,7 @@ where
 ///
 /// Created by calling `.keys()` on a `RocksCfIter`.
 #[allow(dead_code)]
-pub(super) struct RocksCfKeysIter<'a, K> {
+pub struct RocksCfKeysIter<'a, K> {
     iter: DBIteratorWithThreadMode<'a, DB>,
     column_family: &'a str,
     _marker: PhantomData<K>,
