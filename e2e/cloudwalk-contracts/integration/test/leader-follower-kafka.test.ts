@@ -25,7 +25,6 @@ describe("Leader & Follower Kafka integration test", function () {
         });
 
         it("Validate deployer is main minter", async function () {
-
             await deployBRLC();
             await configureBRLC();
 
