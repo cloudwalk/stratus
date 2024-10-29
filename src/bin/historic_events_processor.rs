@@ -70,12 +70,14 @@ async fn main() -> Result<(), anyhow::Error> {
     let b_pb = mb.add(indicatif::ProgressBar::new(total_blocks));
 
     let style = indicatif::ProgressStyle::default_bar()
-        .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg} ETA: {eta_precise}")
+        .template("{msg}: [{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ETA: {eta_precise}")
         .unwrap()
         .progress_chars("##-");
 
     tx_pb.set_style(style.clone());
+    tx_pb.set_message("Transactions");
     b_pb.set_style(style);
+    b_pb.set_message("Blocks");
 
     // Load last processed block number from file
     let start_block = std::fs::read_to_string("last_processed_block")
