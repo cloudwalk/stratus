@@ -29,8 +29,11 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
 
     // Init importer
     let consensus = if let Some(importer_config) = &config.importer {
-        tracing::info!("creating importer");
-        importer_config.init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage)).await?
+        tracing::info!(?importer_config, "creating importer");
+        let kafka_connector = config.kafka_config.as_ref().map(|inner| inner.init()).transpose()?;
+        importer_config
+            .init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), kafka_connector)
+            .await?
     } else {
         tracing::info!("no importer config, skipping importer");
         None
