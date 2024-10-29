@@ -46,6 +46,9 @@ jobs:
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
+      - name: Install libsasl2-dev libssl-dev
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+
       - name: Set up Just
         uses: extractions/setup-just@v2
 
@@ -56,7 +59,7 @@ jobs:
           chmod -c -R +rX target/doc/
 
       - name: Upload docs artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           path: "target/doc"
 

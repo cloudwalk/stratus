@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::min;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
@@ -230,7 +231,7 @@ impl Importer {
 
             if let Some(ref kafka_conn) = kafka_connector {
                 for tx in &mined_block.transactions {
-                    let events = transaction_to_events(mined_block.header.timestamp, tx.clone());
+                    let events = transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx));
                     for event in events {
                         if let Err(e) = kafka_conn.send_event(event).await {
                             tracing::error!(reason = ?e, block_number = %mined_block.number(), "failed to send block to kafka");

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::collections::HashSet;
 
 use chrono::DateTime;
@@ -199,10 +201,31 @@ impl Serialize for AccountTransferDirection {
 // Marker Trait
 // -----------------------------------------------------------------------------
 
-/// Marker trait for events
-pub trait Event: Serialize {}
+/// Struct is an event that can be published to external systems.
+pub trait Event: Serialize + Sized {
+    /// Returns the partition key component of the event.
+    fn event_key(&self) -> anyhow::Result<String>;
 
-impl Event for AccountTransfers {}
+    /// Returns the headers component of the event.
+    ///
+    /// By default, it returns empty headers.
+    fn event_headers(&self) -> anyhow::Result<HashMap<String, String>> {
+        Ok(HashMap::default())
+    }
+
+    /// Returns the payload component of the event.
+    ///
+    /// By default, it serializes the implementing struct as JSON.
+    fn event_payload(&self) -> anyhow::Result<String> {
+        Ok(serde_json::to_string(self)?)
+    }
+}
+
+impl Event for AccountTransfers {
+    fn event_key(&self) -> anyhow::Result<String> {
+        Ok(self.account_address.to_string())
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions
@@ -212,15 +235,16 @@ impl Event for AccountTransfers {}
 const TRANSFER_EVENT: LogTopic = LogTopic(H256(hex!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")));
 
 /// Converts a mined transaction into multiple account transfers events to be published.
-pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) -> Vec<AccountTransfers> {
+pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined>) -> Vec<AccountTransfers> {
     // identify token transfers in transaction
     let transfers = tx
+        .as_ref()
         .logs
-        .into_iter()
+        .iter()
         .filter(|log| log.log.topic0.is_some_and(|topic0| topic0 == TRANSFER_EVENT))
         .filter_map(|log| {
-            let amount_bytes: [u8; 32] = match log.log.data.0.try_into() {
-                Ok(bytes) => bytes,
+            let amount_bytes: [u8; 32] = match log.log.data.0.clone().try_into() {
+                Ok(amount_bytes) => amount_bytes,
                 Err(_) => {
                     tracing::error!("bug: event identified as ERC-20 transfer should have the amount as 32 bytes in the data field");
                     return None;
@@ -293,6 +317,8 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: TransactionMined) ->
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use chrono::DateTime;
     use chrono::Utc;
     use ethereum_types::U256;
@@ -407,7 +433,7 @@ mod tests {
         tx.logs.push(log_transfer2);
 
         // 3. parse events
-        let events = transaction_to_events(block_timestamp, tx.clone());
+        let events = transaction_to_events(block_timestamp, Cow::Borrowed(&tx));
 
         // 4. assert events
         assert_eq!(events.len(), 3); // number of accounts involved in all transactions
