@@ -16,11 +16,7 @@ cfg_if! {
             F: Fn(Params<'_>, Arc<RpcContext>, &Extensions) -> Result<T, StratusError> + Clone,
         {
             move |params, ctx, extensions| {
-                function(params, ctx, &extensions).inspect_err(|e| {
-                    let error_type = <&'static str>::from(e);
-                    let client = extensions.rpc_client();
-                    inc_executor_transaction_error_types(error_type, client);
-                })
+                function(params, ctx, &extensions).inspect_err(|e| metrify_stratus_error(e, &extensions))
             }
         }
     } else {
@@ -33,4 +29,10 @@ cfg_if! {
             }
         }
     }
+}
+
+fn metrify_stratus_error(err: &StratusError, extensions: &Extensions) {
+    let error_type = <&'static str>::from(err);
+    let client = extensions.rpc_client();
+    inc_executor_transaction_error_types(error_type, client);
 }
