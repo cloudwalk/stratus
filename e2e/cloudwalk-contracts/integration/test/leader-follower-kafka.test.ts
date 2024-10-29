@@ -18,7 +18,7 @@ describe("Leader & Follower Kafka integration test", function () {
         expect(followerHealth).to.equal(true);
     });
 
-    describe("Deploy and configure BRLC contract using transaction forwarding from follower to leader", function () {
+    describe("Deploy and configure BRLC contract", function () {
         updateProviderUrl("stratus");
         before(async function () {
             await setDeployer();
