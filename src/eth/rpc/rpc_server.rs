@@ -18,9 +18,11 @@ use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
 use jsonrpsee::types::Params;
 use jsonrpsee::Extensions;
+use jsonrpsee::IntoResponse;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use once_cell::sync::Lazy;
+use serde::Serialize;
 use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::select;
@@ -206,34 +208,47 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("eth_gasPrice", eth_gas_price)?;
 
     // block
-    module.register_blocking_method("eth_blockNumber", metrics_wrapper(eth_block_number))?;
-    module.register_blocking_method("eth_getBlockByNumber", metrics_wrapper(eth_get_block_by_number))?;
-    module.register_blocking_method("eth_getBlockByHash", metrics_wrapper(eth_get_block_by_hash))?;
+    register_blocking_method(&mut module, "eth_blockNumber", eth_block_number)?;
+    register_blocking_method(&mut module, "eth_getBlockByNumber", eth_get_block_by_number)?;
+    register_blocking_method(&mut module, "eth_getBlockByHash", eth_get_block_by_hash)?;
     module.register_method("eth_getUncleByBlockHashAndIndex", eth_get_uncle_by_block_hash_and_index)?;
 
     // transactions
-    module.register_blocking_method("eth_getTransactionByHash", metrics_wrapper(eth_get_transaction_by_hash))?;
-    module.register_blocking_method("eth_getTransactionReceipt", metrics_wrapper(eth_get_transaction_receipt))?;
-    module.register_blocking_method("eth_estimateGas", metrics_wrapper(eth_estimate_gas))?;
-    module.register_blocking_method("eth_call", metrics_wrapper(eth_call))?;
-    module.register_blocking_method("eth_sendRawTransaction", metrics_wrapper(eth_send_raw_transaction))?;
+    register_blocking_method(&mut module, "eth_getTransactionByHash", eth_get_transaction_by_hash)?;
+    register_blocking_method(&mut module, "eth_getTransactionReceipt", eth_get_transaction_receipt)?;
+    register_blocking_method(&mut module, "eth_estimateGas", eth_estimate_gas)?;
+    register_blocking_method(&mut module, "eth_call", eth_call)?;
+    register_blocking_method(&mut module, "eth_sendRawTransaction", eth_send_raw_transaction)?;
 
     // logs
-    module.register_blocking_method("eth_getLogs", metrics_wrapper(eth_get_logs))?;
+    register_blocking_method(&mut module, "eth_getLogs", eth_get_logs)?;
 
     // account
     module.register_method("eth_accounts", eth_accounts)?;
-    module.register_blocking_method("eth_getTransactionCount", metrics_wrapper(eth_get_transaction_count))?;
-    module.register_blocking_method("eth_getBalance", metrics_wrapper(eth_get_balance))?;
-    module.register_blocking_method("eth_getCode", metrics_wrapper(eth_get_code))?;
+    register_blocking_method(&mut module, "eth_getTransactionCount", eth_get_transaction_count)?;
+    register_blocking_method(&mut module, "eth_getBalance", eth_get_balance)?;
+    register_blocking_method(&mut module, "eth_getCode", eth_get_code)?;
 
     // storage
-    module.register_blocking_method("eth_getStorageAt", metrics_wrapper(eth_get_storage_at))?;
+    register_blocking_method(&mut module, "eth_getStorageAt", eth_get_storage_at)?;
 
     // subscriptions
     module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
 
     Ok(module)
+}
+
+// helper to call `module.register_blocking_method` while wrapping callback on [`metrics_wrapper`].
+fn register_blocking_method<T>(
+    module: &mut RpcModule<RpcContext>,
+    method_name: &'static str,
+    method: fn(Params<'_>, Arc<RpcContext>, &Extensions) -> Result<T, StratusError>,
+) -> anyhow::Result<()>
+where
+    T: IntoResponse + Clone + Serialize + 'static,
+{
+    module.register_blocking_method(method_name, metrics_wrapper(method, method_name))?;
+    Ok(())
 }
 
 // -----------------------------------------------------------------------------
