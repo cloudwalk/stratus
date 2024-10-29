@@ -14,7 +14,10 @@ metrics! {
     histogram_duration rpc_requests_finished{client, method, contract, function, result, result_code, success},
 
     "Number of JSON-RPC subscriptions active right now."
-    gauge rpc_subscriptions_active{subscription, client}
+    gauge rpc_subscriptions_active{subscription, client},
+
+    "Number of times we respons a client with an error."
+    counter rpc_error_response{error_type, client, method}
 }
 
 // Storage reads.
@@ -130,10 +133,7 @@ metrics! {
     histogram_counter executor_local_call_slot_reads{contract, function},
 
     "Gas spent executing a local call."
-    histogram_counter executor_local_call_gas{contract, function},
-
-    "Count types of errors when executing a transaction."
-    counter executor_transaction_error_types{error_type, client}
+    histogram_counter executor_local_call_gas{contract, function}
 }
 
 metrics! {
