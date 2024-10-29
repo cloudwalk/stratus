@@ -8,6 +8,7 @@ use futures::future::BoxFuture;
 use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
 use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
+#[cfg(feature = "metrics")]
 use jsonrpsee::server::ConnectionGuard;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::Params;
@@ -182,6 +183,7 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result: JsonValue = from_json_str(response.as_result());
 
+            #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
             let (level, error_code) = match response_result
                 .get("error")
                 .and_then(|v| v.get("code"))
