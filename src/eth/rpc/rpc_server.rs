@@ -33,7 +33,7 @@ use tracing::info_span;
 use tracing::Instrument;
 use tracing::Span;
 
-use super::rpc_method_wrapper::call_error_metrics_wrapper;
+use super::rpc_method_wrapper::metrics_wrapper;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
@@ -206,29 +206,29 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("eth_gasPrice", eth_gas_price)?;
 
     // block
-    module.register_blocking_method("eth_blockNumber", eth_block_number)?;
-    module.register_blocking_method("eth_getBlockByNumber", eth_get_block_by_number)?;
-    module.register_blocking_method("eth_getBlockByHash", eth_get_block_by_hash)?;
+    module.register_blocking_method("eth_blockNumber", metrics_wrapper(eth_block_number))?;
+    module.register_blocking_method("eth_getBlockByNumber", metrics_wrapper(eth_get_block_by_number))?;
+    module.register_blocking_method("eth_getBlockByHash", metrics_wrapper(eth_get_block_by_hash))?;
     module.register_method("eth_getUncleByBlockHashAndIndex", eth_get_uncle_by_block_hash_and_index)?;
 
     // transactions
-    module.register_blocking_method("eth_getTransactionByHash", eth_get_transaction_by_hash)?;
-    module.register_blocking_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
-    module.register_blocking_method("eth_estimateGas", eth_estimate_gas)?;
-    module.register_blocking_method("eth_call", call_error_metrics_wrapper(eth_call))?;
-    module.register_blocking_method("eth_sendRawTransaction", call_error_metrics_wrapper(eth_send_raw_transaction))?;
+    module.register_blocking_method("eth_getTransactionByHash", metrics_wrapper(eth_get_transaction_by_hash))?;
+    module.register_blocking_method("eth_getTransactionReceipt", metrics_wrapper(eth_get_transaction_receipt))?;
+    module.register_blocking_method("eth_estimateGas", metrics_wrapper(eth_estimate_gas))?;
+    module.register_blocking_method("eth_call", metrics_wrapper(eth_call))?;
+    module.register_blocking_method("eth_sendRawTransaction", metrics_wrapper(eth_send_raw_transaction))?;
 
     // logs
-    module.register_blocking_method("eth_getLogs", eth_get_logs)?;
+    module.register_blocking_method("eth_getLogs", metrics_wrapper(eth_get_logs))?;
 
     // account
     module.register_method("eth_accounts", eth_accounts)?;
-    module.register_blocking_method("eth_getTransactionCount", eth_get_transaction_count)?;
-    module.register_blocking_method("eth_getBalance", eth_get_balance)?;
-    module.register_blocking_method("eth_getCode", eth_get_code)?;
+    module.register_blocking_method("eth_getTransactionCount", metrics_wrapper(eth_get_transaction_count))?;
+    module.register_blocking_method("eth_getBalance", metrics_wrapper(eth_get_balance))?;
+    module.register_blocking_method("eth_getCode", metrics_wrapper(eth_get_code))?;
 
     // storage
-    module.register_blocking_method("eth_getStorageAt", eth_get_storage_at)?;
+    module.register_blocking_method("eth_getStorageAt", metrics_wrapper(eth_get_storage_at))?;
 
     // subscriptions
     module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
@@ -614,7 +614,7 @@ fn eth_gas_price(_: Params<'_>, _: &RpcContext, _: &Extensions) -> String {
 // Block
 // -----------------------------------------------------------------------------
 
-fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_blockNumber", block_number = field::Empty).entered();
@@ -626,16 +626,16 @@ fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     Ok(to_json_value(block_number))
 }
 
-fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
     eth_get_block_by_selector::<'h'>(params, ctx, ext)
 }
 
-fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
     eth_get_block_by_selector::<'n'>(params, ctx, ext)
 }
 
 #[inline(always)]
-fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = if KIND == 'h' {
@@ -697,7 +697,7 @@ fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Exte
 // Transaction
 // -----------------------------------------------------------------------------
 
-fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionByHash", tx_hash = field::Empty, found = field::Empty).entered();
@@ -728,7 +728,7 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     }
 }
 
-fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionReceipt", tx_hash = field::Empty, found = field::Empty).entered();
@@ -759,7 +759,7 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     }
 }
 
-fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_estimateGas", tx_from = field::Empty, tx_to = field::Empty).entered();
@@ -903,7 +903,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
 // Logs
 // -----------------------------------------------------------------------------
 
-fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
     const MAX_BLOCK_RANGE: u64 = 5_000;
 
     // enter span
@@ -963,7 +963,7 @@ fn eth_accounts(_: Params<'_>, _ctx: &RpcContext, _: &Extensions) -> Result<Json
     Ok(json!([]))
 }
 
-fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionCount", address = field::Empty, filter = field::Empty).entered();
@@ -985,7 +985,7 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     Ok(hex_num(account.nonce))
 }
 
-fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getBalance", address = field::Empty, filter = field::Empty).entered();
@@ -1008,7 +1008,7 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) ->
     Ok(hex_num(account.balance))
 }
 
-fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getCode", address = field::Empty, filter = field::Empty).entered();
@@ -1107,7 +1107,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
 // Storage
 // -----------------------------------------------------------------------------
 
-fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getStorageAt", address = field::Empty, index = field::Empty).entered();
