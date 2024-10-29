@@ -1,9 +1,11 @@
 mod tracing_config;
+mod tracing_entered_wrap;
 mod tracing_services;
 
 pub use tracing_config::TracingConfig;
 pub use tracing_config::TracingLogFormat;
 pub use tracing_config::TracingProtocol;
+pub use tracing_entered_wrap::EnteredWrap;
 pub use tracing_services::info_task_spawn;
 pub use tracing_services::new_cid;
 pub use tracing_services::warn_task_cancellation;

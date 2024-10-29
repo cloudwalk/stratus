@@ -1037,9 +1037,12 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> R
 
 async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>, ext: Extensions) -> impl IntoSubscriptionCloseResponse {
     // enter span
-    let _middleware_enter = ext.enter_middleware_span();
+    let middleware_enter = ext.enter_middleware_span();
     let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty);
     let method_enter = method_span.enter();
+
+    // it's necessary to clear the span before an await point
+    let clear_spans = || drop((middleware_enter, method_enter));
 
     // parse params
     reject_unknown_client(ext.rpc_client())?;
@@ -1047,15 +1050,15 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     let (params, event) = match next_rpc_param::<String>(params.sequence()) {
         Ok((params, event)) => (params, event),
         Err(e) => {
-            drop(method_enter);
+            clear_spans();
             pending.reject(e).instrument(method_span).await;
             return Ok(());
         }
     };
 
+    clear_spans();
     // check subscription limits
     if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.rpc_max_subscriptions, client).await {
-        drop(method_enter);
         pending.reject(e).instrument(method_span).await;
         return Ok(());
     }
@@ -1067,7 +1070,6 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     // execute
     match event.deref() {
         "newPendingTransactions" => {
-            drop(method_enter);
             ctx.subs
                 .add_new_pending_txs_subscription(client, pending.accept().await?)
                 .instrument(method_span)
@@ -1075,7 +1077,6 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         }
 
         "newHeads" => {
-            drop(method_enter);
             ctx.subs
                 .add_new_heads_subscription(client, pending.accept().await?)
                 .instrument(method_span)
@@ -1085,7 +1086,6 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         "logs" => {
             let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
             let filter = filter.parse(&ctx.storage)?;
-            drop(method_enter);
             ctx.subs
                 .add_logs_subscription(client, filter, pending.accept().await?)
                 .instrument(method_span)
@@ -1094,7 +1094,6 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
 
         // unsupported
         event => {
-            drop(method_enter);
             pending
                 .reject(StratusError::RpcSubscriptionInvalid { event: event.to_string() })
                 .instrument(method_span)
