@@ -65,9 +65,21 @@ async fn main() -> Result<(), anyhow::Error> {
             .progress_chars("##-"),
     );
 
-    for result in state.blocks_by_number.iter_start() {
-        let (_number, block) = result.context("failed to read block")?;
+    // Load last processed block number from file
+    let start_block = std::fs::read_to_string("last_processed_block")
+        .map(|s| s.trim().parse::<u64>().unwrap())
+        .unwrap_or(0);
+
+    let iter = if start_block > 0 {
+        state.blocks_by_number.iter_from(start_block.into(), rocksdb::Direction::Forward)?
+    } else {
+        state.blocks_by_number.iter_start()
+    };
+
+    for result in iter {
+        let (number, block) = result.context("failed to read block")?;
         let timestamp = block.header.timestamp;
+
         for tx in block.into_inner().transactions {
             let events: Vec<AccountTransfers> = transaction_mined_rocks_db_to_events(timestamp, tx);
 
@@ -76,6 +88,9 @@ async fn main() -> Result<(), anyhow::Error> {
             }
             pb.inc(1);
         }
+
+        // Save current block number to file after processing
+        std::fs::write("last_processed_block.txt", number.to_string())?;
     }
 
     pb.finish_with_message("Done!");
