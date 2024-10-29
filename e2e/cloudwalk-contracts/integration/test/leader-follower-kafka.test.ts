@@ -52,7 +52,7 @@ describe("Leader & Follower Kafka integration test", function () {
             expect(messages.length).to.be.greaterThan(0);
 
             messages.forEach((message, index) => {
-                console.log(message)
+                console.log(message);
                 expect(JSON.parse(message).transfers[0].credit_party_address.toLowerCase()).to.be.eql(
                     wallet.address.toLowerCase(),
                 );
