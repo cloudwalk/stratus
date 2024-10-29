@@ -424,17 +424,6 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
-        bootstrap_servers: None,
-        topic: None,
-        client_id: None,
-        group_id: None,
-        security_protocol: None,
-        sasl_mechanisms: None,
-        sasl_username: None,
-        sasl_password: None,
-        ssl_ca_location: None,
-        ssl_certificate_location: None,
-        ssl_key_location: None,
     };
 
     importer_config.init_follower_importer(ctx).await
@@ -914,7 +903,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
 // Logs
 // -----------------------------------------------------------------------------
 
-fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
     const MAX_BLOCK_RANGE: u64 = 5_000;
 
     // enter span

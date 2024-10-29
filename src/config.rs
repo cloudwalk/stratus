@@ -23,6 +23,7 @@ use crate::eth::storage::ExternalRpcStorageConfig;
 use crate::eth::storage::StratusStorageConfig;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
+use crate::infra::kafka::KafkaConfig;
 use crate::infra::metrics::MetricsConfig;
 use crate::infra::sentry::SentryConfig;
 use crate::infra::tracing::TracingConfig;
@@ -175,10 +176,10 @@ impl CommonConfig {
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 #[clap(group = ArgGroup::new("mode").required(true).args(&["leader", "follower"]))]
 pub struct StratusConfig {
-    #[arg(long = "leader", env = "LEADER", conflicts_with("follower"))]
+    #[arg(long = "leader", env = "LEADER", conflicts_with = "follower", conflicts_with = "ImporterConfig")]
     pub leader: bool,
 
-    #[arg(long = "follower", env = "FOLLOWER", conflicts_with("leader"))]
+    #[arg(long = "follower", env = "FOLLOWER", conflicts_with = "leader", requires = "ImporterConfig")]
     pub follower: bool,
 
     #[clap(flatten)]
@@ -193,12 +194,15 @@ pub struct StratusConfig {
     #[clap(flatten)]
     pub miner: MinerConfig,
 
-    #[clap(flatten)]
-    pub importer: Option<ImporterConfig>,
-
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,
+
+    #[clap(flatten)]
+    pub importer: Option<ImporterConfig>,
+
+    #[clap(flatten)]
+    pub kafka_config: Option<KafkaConfig>,
 }
 
 impl WithCommonConfig for StratusConfig {
@@ -367,6 +371,10 @@ pub enum Environment {
     #[serde(rename = "production")]
     #[strum(to_string = "production")]
     Production,
+
+    #[serde(rename = "canary")]
+    #[strum(to_string = "canary")]
+    Canary,
 }
 
 impl FromStr for Environment {
@@ -378,6 +386,7 @@ impl FromStr for Environment {
             "local" => Ok(Self::Local),
             "staging" | "test" => Ok(Self::Staging),
             "production" | "prod" => Ok(Self::Production),
+            "canary" => Ok(Self::Canary),
             s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
         }
     }
