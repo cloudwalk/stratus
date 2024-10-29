@@ -19,20 +19,18 @@ describe("Leader & Follower Kafka integration test", function () {
     });
 
     describe("Deploy and configure BRLC contract using transaction forwarding from follower to leader", function () {
+        updateProviderUrl("stratus");
         before(async function () {
             await setDeployer();
         });
 
         it("Validate deployer is main minter", async function () {
-            updateProviderUrl("stratus-follower");
 
             await deployBRLC();
             await configureBRLC();
 
             expect(deployer.address).to.equal(await brlcToken.mainMinter());
             expect(await brlcToken.isMinter(deployer.address)).to.be.true;
-
-            updateProviderUrl("stratus");
         });
     });
 
