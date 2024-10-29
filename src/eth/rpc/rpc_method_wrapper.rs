@@ -11,7 +11,7 @@ use crate::infra::metrics::inc_executor_transaction_error_types;
 
 cfg_if! {
     if #[cfg(feature = "metrics")] {
-        pub fn call_error_metrics_wrapper<F, T>(function: F) -> impl Fn(Params<'_>, Arc<RpcContext>, Extensions) -> Result<T, StratusError> + Clone
+        pub fn metrics_wrapper<F, T>(function: F) -> impl Fn(Params<'_>, Arc<RpcContext>, Extensions) -> Result<T, StratusError> + Clone
         where
             F: Fn(Params<'_>, Arc<RpcContext>, &Extensions) -> Result<T, StratusError> + Clone,
         {
@@ -24,7 +24,7 @@ cfg_if! {
             }
         }
     } else {
-        pub fn call_error_metrics_wrapper<F, T>(function: F) -> impl Fn(Params<'_>, Arc<RpcContext>, Extensions) -> Result<T, StratusError> + Clone
+        pub fn metrics_wrapper<F, T>(function: F) -> impl Fn(Params<'_>, Arc<RpcContext>, Extensions) -> Result<T, StratusError> + Clone
         where
             F: Fn(Params<'_>, Arc<RpcContext>, &Extensions) -> Result<T, StratusError> + Clone,
         {
