@@ -48,6 +48,14 @@ async fn main() -> Result<(), anyhow::Error> {
     let connector = config.init()?;
 
     // Count total number of blocks first
+    let total_blocks = state
+        .db
+        .property_value_cf(&state.blocks_by_number.handle(), ESTIMATE_NUM_KEYS)
+        .unwrap()
+        .unwrap()
+        .parse::<u64>()
+        .unwrap();
+
     let total_transactions = state
         .db
         .property_value_cf(&state.transactions.handle(), ESTIMATE_NUM_KEYS)
@@ -56,14 +64,18 @@ async fn main() -> Result<(), anyhow::Error> {
         .parse::<u64>()
         .unwrap();
 
-    let pb = indicatif::ProgressBar::new(total_transactions);
+    tracing::info!(?total_transactions, "Estimated total transactions in db:");
+    let mb = indicatif::MultiProgress::new();
+    let tx_pb = mb.add(indicatif::ProgressBar::new(total_transactions));
+    let b_pb = mb.add(indicatif::ProgressBar::new(total_blocks));
 
-    pb.set_style(
-        indicatif::ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg} ETA: {eta_precise}")
-            .unwrap()
-            .progress_chars("##-"),
-    );
+    let style = indicatif::ProgressStyle::default_bar()
+        .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg} ETA: {eta_precise}")
+        .unwrap()
+        .progress_chars("##-");
+
+    tx_pb.set_style(style.clone());
+    b_pb.set_style(style);
 
     // Load last processed block number from file
     let start_block = std::fs::read_to_string("last_processed_block")
@@ -71,6 +83,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .unwrap_or(0);
 
     let iter = if start_block > 0 {
+        b_pb.inc(start_block);
         state.blocks_by_number.iter_from(start_block.into(), rocksdb::Direction::Forward)?
     } else {
         state.blocks_by_number.iter_start()
@@ -86,14 +99,15 @@ async fn main() -> Result<(), anyhow::Error> {
             for event in events {
                 connector.send_event(event).await.context("failed to send event")?;
             }
-            pb.inc(1);
+            tx_pb.inc(1);
         }
-
+        b_pb.inc(1);
         // Save current block number to file after processing
-        std::fs::write("last_processed_block.txt", number.to_string())?;
+        std::fs::write("last_processed_block", number.to_string())?;
     }
 
-    pb.finish_with_message("Done!");
+    tx_pb.finish_with_message("Done!");
+    b_pb.finish_with_message("Done!");
 
     Ok(())
 }
