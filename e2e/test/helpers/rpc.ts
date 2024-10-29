@@ -330,7 +330,7 @@ export async function subscribeAndGetEventWithContract(
     shouldMine: boolean = false,
 ): Promise<any> {
     const contract = await deployTestContractBalances();
-    if (shouldMine) sendEvmMine();
+    if (shouldMine) await sendEvmMine();
     const contractAddress = await contract.getAddress();
     const socket = openWebSocketConnection();
     addOpenListener(socket, subscription, { address: contractAddress });
