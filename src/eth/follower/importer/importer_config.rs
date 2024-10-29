@@ -70,7 +70,7 @@ impl ImporterConfig {
             Arc::clone(&miner),
             Arc::clone(&storage),
             Arc::clone(&chain),
-            kafka_connector.map(|inner| Arc::new(inner)),
+            kafka_connector.map(Arc::new),
             self.sync_interval,
         );
         let importer = Arc::new(importer);

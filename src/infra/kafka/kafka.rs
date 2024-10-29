@@ -76,12 +76,12 @@ pub enum KafkaSecurityProtocol {
     Ssl,
 }
 
-impl ToString for KafkaSecurityProtocol {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for KafkaSecurityProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            KafkaSecurityProtocol::None => "none".to_string(),
-            KafkaSecurityProtocol::SaslSsl => "sasl_ssl".to_string(),
-            KafkaSecurityProtocol::Ssl => "ssl".to_string(),
+            KafkaSecurityProtocol::None => write!(f, "none"),
+            KafkaSecurityProtocol::SaslSsl => write!(f, "sasl_ssl"),
+            KafkaSecurityProtocol::Ssl => write!(f, "ssl"),
         }
     }
 }
