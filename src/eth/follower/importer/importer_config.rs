@@ -15,124 +15,62 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::spawn_named;
-use crate::infra::kafka::KafkaConfig as ConnectorConfig;
 use crate::infra::kafka::KafkaConnector;
-use crate::infra::kafka::KafkaSecurityProtocol;
 use crate::infra::BlockchainClient;
 use crate::GlobalState;
 use crate::NodeMode;
 
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
-#[group(requires_all = ["bootstrap_servers", "topic", "client_id"])]
-pub struct KafkaConfig {
-    #[arg(long = "kafka-bootstrap-servers", env = "KAFKA_BOOTSTRAP_SERVERS", group = "kafka", required = false)]
-    pub bootstrap_servers: Option<String>,
-
-    #[arg(long = "kafka-topic", env = "KAFKA_TOPIC", group = "kafka", required = false)]
-    pub topic: Option<String>,
-
-    #[arg(long = "kafka-client-id", env = "KAFKA_CLIENT_ID", group = "kafka", required = false)]
-    pub client_id: Option<String>,
-
-    #[arg(long = "kafka-group-id", env = "KAFKA_GROUP_ID", required = false)]
-    pub group_id: Option<String>,
-
-    #[arg(long = "kafka-security-protocol", env = "KAFKA_SECURITY_PROTOCOL", required = false)]
-    pub security_protocol: Option<KafkaSecurityProtocol>,
-
-    #[arg(long = "kafka-sasl-mechanisms", env = "KAFKA_SASL_MECHANISMS", required = false)]
-    pub sasl_mechanisms: Option<String>,
-
-    #[arg(long = "kafka-sasl-username", env = "KAFKA_SASL_USERNAME", required = false)]
-    pub sasl_username: Option<String>,
-
-    #[arg(long = "kafka-sasl-password", env = "KAFKA_SASL_PASSWORD", required = false)]
-    pub sasl_password: Option<String>,
-
-    #[arg(long = "kafka-ssl-ca-location", env = "KAFKA_SSL_CA_LOCATION", required = false)]
-    pub ssl_ca_location: Option<String>,
-
-    #[arg(long = "kafka-ssl-certificate-location", env = "KAFKA_SSL_CERTIFICATE_LOCATION", required = false)]
-    pub ssl_certificate_location: Option<String>,
-
-    #[arg(long = "kafka-ssl-key-location", env = "KAFKA_SSL_KEY_LOCATION", required = false)]
-    pub ssl_key_location: Option<String>,
-}
-
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
+#[group(requires_all = ["external_rpc, follower"])]
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus.
-    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", conflicts_with("leader"))]
+    #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", required = false)]
     pub external_rpc: String,
 
     /// External RPC WS endpoint to sync blocks with Stratus.
-    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS", conflicts_with("leader"))]
+    #[arg(short = 'w', long = "external-rpc-ws", env = "EXTERNAL_RPC_WS", required = false)]
     pub external_rpc_ws: Option<String>,
 
     /// Timeout for blockchain requests (importer online)
-    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
+    #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s", required = false)]
     pub external_rpc_timeout: Duration,
 
-    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms")]
+    #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms", required = false)]
     pub sync_interval: Duration,
-
-    #[clap(flatten)]
-    pub kafka_config: Option<KafkaConfig>,
 }
 
 impl ImporterConfig {
-    pub async fn init(&self, executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
+    pub async fn init(
+        &self,
+        executor: Arc<Executor>,
+        miner: Arc<Miner>,
+        storage: Arc<StratusStorage>,
+        kafka_connector: Option<KafkaConnector>,
+    ) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
         match GlobalState::get_node_mode() {
-            NodeMode::Follower => self.init_follower(executor, miner, storage).await,
+            NodeMode::Follower => self.init_follower(executor, miner, storage, kafka_connector).await,
             NodeMode::Leader => Ok(None),
         }
     }
 
-    pub fn kafka_config(&self) -> ConnectorConfig {
-        match &self.kafka_config {
-            Some(config) => ConnectorConfig {
-                bootstrap_servers: config.bootstrap_servers.clone(),
-                topic: config.topic.clone(),
-                client_id: config.client_id.clone(),
-                group_id: config.group_id.clone(),
-                security_protocol: config.security_protocol.clone(),
-                sasl_mechanisms: config.sasl_mechanisms.clone(),
-                sasl_username: config.sasl_username.clone(),
-                sasl_password: config.sasl_password.clone(),
-                ssl_ca_location: config.ssl_ca_location.clone(),
-                ssl_certificate_location: config.ssl_certificate_location.clone(),
-                ssl_key_location: config.ssl_key_location.clone(),
-            },
-            None => ConnectorConfig::default(),
-        }
-    }
-
-    async fn init_follower(&self, executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
+    async fn init_follower(
+        &self,
+        executor: Arc<Executor>,
+        miner: Arc<Miner>,
+        storage: Arc<StratusStorage>,
+        kafka_connector: Option<KafkaConnector>,
+    ) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
 
         let chain = Arc::new(BlockchainClient::new_http_ws(&self.external_rpc, self.external_rpc_ws.as_deref(), self.external_rpc_timeout).await?);
-        //TODO: add kafka connector
-        let kafka_connector = if self.kafka_config().has_kafka_config() {
-            tracing::info!("creating kafka connector");
-            match KafkaConnector::new(&self.kafka_config()) {
-                Ok(kafka_connector) => Some(Arc::new(kafka_connector)),
-                Err(e) => {
-                    tracing::error!(reason = ?e, "importer-online failed to create kafka connector");
-                    GlobalState::shutdown_from(TASK_NAME, "failed to create kafka connector");
-                    None
-                }
-            }
-        } else {
-            None
-        };
 
         let importer = Importer::new(
             executor,
             Arc::clone(&miner),
             Arc::clone(&storage),
             Arc::clone(&chain),
-            kafka_connector,
+            kafka_connector.map(|inner| Arc::new(inner)),
             self.sync_interval,
         );
         let importer = Arc::new(importer);
@@ -162,7 +100,10 @@ impl ImporterConfig {
 
         GlobalState::set_importer_shutdown(false);
 
-        let consensus = match self.init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage)).await {
+        let consensus = match self
+            .init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage), None)
+            .await
+        {
             Ok(consensus) => consensus,
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to initialize importer");
