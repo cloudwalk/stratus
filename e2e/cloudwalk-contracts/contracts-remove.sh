@@ -112,6 +112,7 @@ if [ "$yield" == 1 ]; then
 fi
 
 if [ "$periphery" == 1 ]; then
+    # Periphery Transition: remove regardless of the repository name at the moment
     remove brlc-card-payment-processor && remove brlc-periphery fed9fcb
 fi
 

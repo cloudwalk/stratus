@@ -156,6 +156,7 @@ if [ "$yield" == 1 ]; then
 fi
 
 if [ "$periphery" == 1 ]; then
+    # Periphery Transition: test CardPaymentProcessor, regardless if the repository was renamed or not
     test brlc-card-payment-processor CardPaymentProcessor "$@" || test brlc-periphery CardPaymentProcessor "$@"
     test brlc-card-payment-processor CashbackDistributor "$@" || test brlc-periphery CashbackDistributor "$@"
 fi
@@ -173,5 +174,6 @@ fi
 # Alternative versions
 
 if [ "$cppv2" == 1 ]; then
+    # Periphery Transition: test CardPaymentProcessor v2, regardless if the repository was renamed or not
     test brlc-card-payment-processor-v2 CardPaymentProcessor "$@" || test brlc-periphery-v2 CardPaymentProcessor "$@"
 fi

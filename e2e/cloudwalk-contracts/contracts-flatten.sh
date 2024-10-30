@@ -136,6 +136,7 @@ if [ "$yield" == 1 ]; then
 fi
 
 if [ "$periphery" == 1 ]; then
+    # Periphery Transition: flatten Periphery regardless if the repo was renamed or not
     flatten brlc-card-payment-processor CardPaymentProcessor || flatten brlc-periphery CardPaymentProcessor
     flatten brlc-card-payment-processor CashbackDistributor || flatten brlc-periphery CashbackDistributor
 fi
