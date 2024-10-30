@@ -21,7 +21,7 @@ use crate::GlobalState;
 use crate::NodeMode;
 
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
-#[group(requires_all = ["external_rpc, follower"])]
+#[group(requires_all = ["external_rpc", "follower"])]
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC", required = false)]
