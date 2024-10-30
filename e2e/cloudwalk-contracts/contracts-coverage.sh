@@ -45,7 +45,9 @@ asdf local solidity 0.8.16 || echo "asdf, solidity plugin or solidity version no
 
 # execute
 coverage brlc-token
-coverage brlc-periphery
+
+# Periphery Transition: calculate coverage regardless of the repository's current name
+coverage brlc-card-payment-processor || coverage brlc-periphery
 
 # Cashier Transition: calculate coverage regardless of the repository's current name
 coverage brlc-cashier || coverage brlc-pix-cashier

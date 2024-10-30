@@ -177,7 +177,8 @@ if [ "$yield" == 1 ]; then
 fi
 
 if [ "$periphery" == 1 ]; then
-    clone brlc-periphery
+    # Periphery Transition: attempts to clone the periphery repository/contract using different methods
+    clone brlc-card-payment-processor || clone brlc-periphery
 fi
 
 if [ "$multisig" == 1 ]; then
@@ -191,5 +192,7 @@ fi
 # Alternative versions
 
 if [ "$cppv2" == 1 ]; then
-    clone_alternative brlc-periphery cpp2 brlc-periphery-v2
+    # Periphery Transition: attempts to clone the periphery v2 repository/contract using different methods
+    clone_alternative brlc-card-payment-processor cpp2 brlc-card-payment-processor-v2 ||
+        clone_alternative brlc-periphery cpp2 brlc-periphery-v2
 fi
