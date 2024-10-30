@@ -136,8 +136,8 @@ if [ "$yield" == 1 ]; then
 fi
 
 if [ "$periphery" == 1 ]; then
-    flatten brlc-periphery CardPaymentProcessor
-    flatten brlc-periphery CashbackDistributor
+    flatten brlc-card-payment-processor CardPaymentProcessor || flatten brlc-periphery CardPaymentProcessor
+    flatten brlc-card-payment-processor CashbackDistributor || flatten brlc-periphery CashbackDistributor
 fi
 
 if [ "$multisig" == 1 ]; then

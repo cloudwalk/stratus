@@ -156,8 +156,8 @@ if [ "$yield" == 1 ]; then
 fi
 
 if [ "$periphery" == 1 ]; then
-    test brlc-periphery CardPaymentProcessor "$@"
-    test brlc-periphery CashbackDistributor "$@"
+    test brlc-card-payment-processor CardPaymentProcessor "$@" || test brlc-periphery CardPaymentProcessor "$@"
+    test brlc-card-payment-processor CashbackDistributor "$@" || test brlc-periphery CashbackDistributor "$@"
 fi
 
 if [ "$multisig" == 1 ]; then
@@ -173,5 +173,5 @@ fi
 # Alternative versions
 
 if [ "$cppv2" == 1 ]; then
-    test brlc-periphery-v2 CardPaymentProcessor "$@"
+    test brlc-card-payment-processor-v2 CardPaymentProcessor "$@" || test brlc-periphery-v2 CardPaymentProcessor "$@"
 fi
