@@ -123,6 +123,9 @@ rdkafka = {version = "0.36.2", features = ["ssl", "sasl"] }
 openssl = { version = "0.10.32", features = ["vendored"] }
 sasl2-sys = { version = "0.1.22", features = ["vendored"] }
 
+# Historic events processor
+indicatif = "=0.17.8"
+
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
 # ------------------------------------------------------------------------------
@@ -182,6 +185,10 @@ path = "src/bin/rpc_downloader.rs"
 [[bin]]
 name = "importer-offline"
 path = "src/bin/importer_offline.rs"
+
+[[bin]]
+name = "historic_events_processor"
+path = "src/bin/historic_events_processor.rs"
 
 # ------------------------------------------------------------------------------
 # Features

@@ -31,6 +31,8 @@ pub use hash::HashRocksdb;
 pub use index::IndexRocksdb;
 pub use slot::SlotIndexRocksdb;
 pub use slot::SlotValueRocksdb;
+pub use transaction_mined::TransactionMinedRocksdb;
+pub use unix_time::UnixTimeRocksdb;
 
 #[cfg(test)]
 mod tests {

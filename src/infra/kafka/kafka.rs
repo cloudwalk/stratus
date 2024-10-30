@@ -53,7 +53,7 @@ pub struct KafkaConfig {
 }
 
 impl KafkaConfig {
-    pub fn has_kafka_config(&self) -> bool {
+    pub fn has_credentials(&self) -> bool {
         match self.security_protocol {
             KafkaSecurityProtocol::None => true,
             KafkaSecurityProtocol::SaslSsl => self.sasl_mechanisms.is_some() && self.sasl_username.is_some() && self.sasl_password.is_some(),

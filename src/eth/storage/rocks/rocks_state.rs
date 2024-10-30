@@ -110,14 +110,14 @@ where
 ///
 /// With data separated by column families, writing and reading should be done via the `RocksCfRef` fields.
 pub struct RocksStorageState {
-    db: Arc<DB>,
+    pub db: Arc<DB>,
     db_path: String,
     accounts: RocksCfRef<AddressRocksdb, CfAccountsValue>,
     accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), CfAccountsHistoryValue>,
     account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), CfAccountSlotsValue>,
     account_slots_history: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), CfAccountSlotsHistoryValue>,
-    transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
-    blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
+    pub transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
+    pub blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<HashRocksdb, CfBlocksByHashValue>,
     logs: RocksCfRef<(HashRocksdb, IndexRocksdb), CfLogsValue>,
     /// Last collected stats for a histogram
