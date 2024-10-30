@@ -2,8 +2,11 @@ use anyhow::Result;
 use clap::Parser;
 use clap::ValueEnum;
 use display_json::DebugAsJson;
+use futures::Stream;
+use futures::StreamExt;
 use rdkafka::message::Header;
 use rdkafka::message::OwnedHeaders;
+use rdkafka::producer::future_producer::OwnedDeliveryResult;
 use rdkafka::producer::DeliveryFuture;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
@@ -162,13 +165,23 @@ impl KafkaConnector {
 
     pub async fn send_event<T: Event>(&self, event: T) -> Result<()> {
         match self.queue_event(event) {
-            Ok(fut) =>
+            Ok(fut) => {
                 if let Err(e) = fut.await {
                     log_and_err!(reason = e, "failed to publish kafka event")
                 } else {
                     Ok(())
-                },
+                }
+            }
             Err(e) => Err(e),
         }
+    }
+
+    pub async fn send_buffered<T: Event>(
+        &self,
+        events: Vec<T>,
+        buffer_size: usize,
+    ) -> Result<impl Stream<Item = Result<OwnedDeliveryResult, futures_channel::oneshot::Canceled>>> {
+        let futures: Vec<DeliveryFuture> = events.into_iter().map(|event| self.queue_event(event)).collect::<Result<Vec<_>, _>>()?;
+        Ok(futures::stream::iter(futures).buffered(buffer_size))
     }
 }
