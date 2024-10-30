@@ -56,7 +56,7 @@ describe("Leader & Follower Kafka integration test", function () {
                 expect(JSON.parse(message).transfers[0].credit_party_address.toLowerCase()).to.be.eql(
                     wallet.address.toLowerCase(),
                 );
-                expect(JSON.parse(message).transfers[0].amount).to.equal("0.00001");
+                expect(JSON.parse(message).transfers[0].amount).to.equal("10");
             });
         });
     });
