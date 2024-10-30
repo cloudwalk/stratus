@@ -96,6 +96,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let timestamp = block.header.timestamp;
 
         for tx in block.into_inner().transactions {
+            tx_pb.set_message(format!("Sending {}\nTransactions", tx.input.hash));
             let events: Vec<AccountTransfers> = transaction_mined_rocks_db_to_events(timestamp, tx);
 
             for event in events {
