@@ -36,8 +36,9 @@ compile_contract brlc-token BRLCToken
 compile_contract brlc-cashier Cashier || compile_contract brlc-pix-cashier Cashier
 compile_contract brlc-cashier CashierShard || compile_contract brlc-pix-cashier CashierShard
 
-compile_contract brlc-periphery CashbackDistributor
-compile_contract brlc-periphery CardPaymentProcessor
+# Periphery Transition: compile both Periphery and PeripheryShard regardless if the repository was renamed or not
+compile_contract brlc-card-payment-processor CashbackDistributor || compile_contract brlc-periphery CashbackDistributor
+compile_contract brlc-card-payment-processor CardPaymentProcessor || compile_contract brlc-periphery CardPaymentProcessor
 
 compile_contract compound-periphery CompoundAgent
 

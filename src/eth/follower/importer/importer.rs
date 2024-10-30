@@ -234,7 +234,7 @@ impl Importer {
                     let events = transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx));
                     for event in events {
                         if let Err(e) = kafka_conn.send_event(event).await {
-                            tracing::error!(reason = ?e, block_number = %mined_block.number(), "failed to send block to kafka");
+                            tracing::error!(reason = ?e, block_number = %mined_block.number(), tx_hash = ?tx.input.hash, "failed to send transfer event to kafka");
                         }
                     }
                 }

@@ -35,6 +35,7 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
 use crate::ext::MutexExt;
+#[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;

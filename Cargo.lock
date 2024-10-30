@@ -5046,6 +5046,7 @@ dependencies = [
  "fake",
  "fancy-duration",
  "futures",
+ "futures-channel",
  "futures-timer",
  "futures-util",
  "glob",

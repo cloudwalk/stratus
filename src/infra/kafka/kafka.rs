@@ -2,8 +2,12 @@ use anyhow::Result;
 use clap::Parser;
 use clap::ValueEnum;
 use display_json::DebugAsJson;
+use futures::Stream;
+use futures::StreamExt;
 use rdkafka::message::Header;
 use rdkafka::message::OwnedHeaders;
+use rdkafka::producer::future_producer::OwnedDeliveryResult;
+use rdkafka::producer::DeliveryFuture;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
 use rdkafka::ClientConfig;
@@ -137,7 +141,7 @@ impl KafkaConnector {
         })
     }
 
-    pub async fn send_event<T: Event>(&self, event: T) -> Result<()> {
+    pub fn queue_event<T: Event>(&self, event: T) -> Result<DeliveryFuture> {
         // prepare base payload
         let headers = event.event_headers()?;
         let key = event.event_key()?;
@@ -153,9 +157,26 @@ impl KafkaConnector {
 
         // publis and handle response
         tracing::info!(%key, %payload, ?headers, "publishing kafka event");
-        if let Err((e, _)) = self.producer.send(kafka_record, std::time::Duration::from_secs(0)).await {
-            return log_and_err!(reason = e, "failed to publish kafka event");
+        match self.producer.send_result(kafka_record) {
+            Err((e, _)) => log_and_err!(reason = e, "failed to queue kafka event"),
+            Ok(fut) => Ok(fut),
         }
-        Ok(())
+    }
+
+    pub async fn send_event<T: Event>(&self, event: T) -> Result<()> {
+        handle_delivery_result(self.queue_event(event)?.await)
+    }
+
+    pub fn send_buffered<T: Event>(&self, events: Vec<T>, buffer_size: usize) -> Result<impl Stream<Item = Result<()>>> {
+        let futures: Vec<DeliveryFuture> = events.into_iter().map(|event| self.queue_event(event)).collect::<Result<Vec<_>, _>>()?; // This could fail because the queue is full
+        Ok(futures::stream::iter(futures).buffered(buffer_size).map(handle_delivery_result))
+    }
+}
+
+fn handle_delivery_result(res: Result<OwnedDeliveryResult, futures_channel::oneshot::Canceled>) -> Result<()> {
+    match res {
+        Err(e) => log_and_err!(reason = e, "failed to publish kafka event"),
+        Ok(Err((e, _))) => log_and_err!(reason = e, "failed to publish kafka event"),
+        Ok(_) => Ok(()),
     }
 }

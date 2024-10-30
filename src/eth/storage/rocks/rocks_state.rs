@@ -51,6 +51,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::StoragePointInTime;
+#[cfg(feature = "metrics")]
 use crate::ext::MutexExt;
 use crate::ext::OptionExt;
 use crate::log_and_err;

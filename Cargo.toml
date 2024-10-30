@@ -68,6 +68,7 @@ crossbeam-channel = "=0.5.13"
 futures = "=0.3.30"
 futures-timer = "=3.0.3"
 futures-util = "=0.3.31"
+futures-channel = "=0.3.31"
 
 # ethereum / rpc
 ethabi = "=18.0.0"
