@@ -9,8 +9,6 @@ use ethereum_types::H256;
 use ethereum_types::U256;
 use hex_literal::hex;
 use itertools::Itertools;
-use rust_decimal::prelude::FromPrimitive;
-use rust_decimal::Decimal;
 use serde::ser::SerializeStruct;
 use serde::Serialize;
 use uuid::Uuid;
@@ -21,11 +19,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
-use crate::ext::InfallibleExt;
 use crate::if_else;
-
-/// ERC-20 tokens are configured with 6 decimal places, so it is necessary to divide them by 1.000.000 to get the human readable currency amount.
-const TOKEN_SCALE: Decimal = Decimal::from_parts(1_000_000, 0, 0, false, 0);
 
 /// Represents token transfers (debits and credits) associated with a specific Ethereum account within a single transaction.
 ///
@@ -128,7 +122,7 @@ pub struct AccountTransfer {
 
     /// Amount transferred from debit party to credit party.
     ///
-    /// Format: Decimal in base 10 and 6 decimal places - Formatted as String to avoid losing precision - Range: 0 to 18446744073709.551615.
+    /// Format: Decimal in base 10 and 6 decimal places - Formatted as String to avoid losing precision - Range: 0 to [`U256::MAX`].
     pub amount: U256,
 }
 
@@ -173,13 +167,11 @@ impl Serialize for AccountTransfer {
     where
         S: serde::Serializer,
     {
-        let amount = Decimal::from_u64(self.amount.low_u64()).expect_infallible() / TOKEN_SCALE;
-
         let mut state = serializer.serialize_struct("AccountTransfer", 5)?;
         state.serialize_field("token_address", &self.token_address)?;
         state.serialize_field("debit_party_address", &self.debit_party_address)?;
         state.serialize_field("credit_party_address", &self.credit_party_address)?;
-        state.serialize_field("amount", &amount)?;
+        state.serialize_field("amount", &self.amount.to_string())?;
         state.serialize_field("direction", &self.direction)?;
         state.end()
     }
@@ -379,7 +371,7 @@ mod tests {
                     "debit_party_address": "0x0000000000000000000000000000000000000000",
                     "credit_party_address": "0x0000000000000000000000000000000000000000",
                     "direction": "credit",
-                    "amount": "18446744073709.551615"
+                    "amount": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
                 }],
             }
         );
@@ -464,7 +456,7 @@ mod tests {
 
                 // assert json format
                 let transfer_json = serde_json::to_value(transfer).unwrap();
-                assert_eq!(*transfer_json.get("amount").unwrap(), json!("0.065535"));
+                assert_eq!(*transfer_json.get("amount").unwrap(), json!("65535"));
             }
         }
     }
