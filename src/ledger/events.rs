@@ -57,7 +57,7 @@ pub struct AccountTransfers {
     ///
     /// Used for ordering multiple events from the same user that happened in the same block.
     ///
-    /// Format: Integer in base - Range: 0 to [`u64::MAX`]
+    /// Format: Integer in base 10 - Range: 0 to [`u64::MAX`]
     pub transaction_index: u64,
 
     /// Address of the contract that originated transfers.
@@ -122,7 +122,7 @@ pub struct AccountTransfer {
 
     /// Amount transferred from debit party to credit party.
     ///
-    /// Format: Decimal in base 10 and 6 decimal places - Formatted as String to avoid losing precision - Range: 0 to [`U256::MAX`].
+    /// Format: Integer in base 10 - Formatted as String to avoid losing precision - Range: 0 to [`U256::MAX`].
     pub amount: U256,
 }
 
