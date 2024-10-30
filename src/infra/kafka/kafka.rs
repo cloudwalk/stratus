@@ -4,6 +4,7 @@ use clap::ValueEnum;
 use display_json::DebugAsJson;
 use rdkafka::message::Header;
 use rdkafka::message::OwnedHeaders;
+use rdkafka::producer::DeliveryFuture;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
 use rdkafka::ClientConfig;
@@ -137,7 +138,7 @@ impl KafkaConnector {
         })
     }
 
-    pub async fn send_event<T: Event>(&self, event: T) -> Result<()> {
+    pub fn queue_event<T: Event>(&self, event: T) -> Result<DeliveryFuture> {
         // prepare base payload
         let headers = event.event_headers()?;
         let key = event.event_key()?;
@@ -153,9 +154,21 @@ impl KafkaConnector {
 
         // publis and handle response
         tracing::info!(%key, %payload, ?headers, "publishing kafka event");
-        if let Err((e, _)) = self.producer.send(kafka_record, std::time::Duration::from_secs(0)).await {
-            return log_and_err!(reason = e, "failed to publish kafka event");
+        match self.producer.send_result(kafka_record) {
+            Err((e, _)) => log_and_err!(reason = e, "failed to queue kafka event"),
+            Ok(fut) => Ok(fut),
         }
-        Ok(())
+    }
+
+    pub async fn send_event<T: Event>(&self, event: T) -> Result<()> {
+        match self.queue_event(event) {
+            Ok(fut) =>
+                if let Err(e) = fut.await {
+                    log_and_err!(reason = e, "failed to publish kafka event")
+                } else {
+                    Ok(())
+                },
+            Err(e) => Err(e),
+        }
     }
 }
