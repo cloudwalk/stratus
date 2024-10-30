@@ -164,10 +164,7 @@ impl KafkaConnector {
     }
 
     pub async fn send_event<T: Event>(&self, event: T) -> Result<()> {
-        match self.queue_event(event) {
-            Ok(fut) => handle_delivery_result(fut.await),
-            Err(e) => Err(e),
-        }
+        handle_delivery_result(self.queue_event(event)?.await)
     }
 
     pub fn send_buffered<T: Event>(&self, events: Vec<T>, buffer_size: usize) -> Result<impl Stream<Item = Result<()>>> {
