@@ -165,18 +165,17 @@ impl KafkaConnector {
 
     pub async fn send_event<T: Event>(&self, event: T) -> Result<()> {
         match self.queue_event(event) {
-            Ok(fut) => {
+            Ok(fut) =>
                 if let Err(e) = fut.await {
                     log_and_err!(reason = e, "failed to publish kafka event")
                 } else {
                     Ok(())
-                }
-            }
+                },
             Err(e) => Err(e),
         }
     }
 
-    pub async fn send_buffered<T: Event>(
+    pub fn send_buffered<T: Event>(
         &self,
         events: Vec<T>,
         buffer_size: usize,
