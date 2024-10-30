@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use clap::CommandFactory;
+use futures::StreamExt;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
 use stratus::eth::storage::rocks::rocks_state::RocksStorageState;
 use stratus::eth::storage::rocks::types::TransactionMinedRocksdb;
@@ -10,6 +11,7 @@ use stratus::infra::kafka::KafkaConfig;
 use stratus::infra::kafka::KafkaSecurityProtocol;
 use stratus::ledger::events::transaction_to_events;
 use stratus::ledger::events::AccountTransfers;
+use stratus::log_and_err;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -94,16 +96,20 @@ async fn main() -> Result<(), anyhow::Error> {
     for result in iter {
         let (number, block) = result.context("failed to read block")?;
         let timestamp = block.header.timestamp;
+        let block_events = block
+            .into_inner()
+            .transactions
+            .into_iter()
+            .flat_map(|tx| transaction_mined_rocks_db_to_events(timestamp, tx));
 
-        for tx in block.into_inner().transactions {
-            tx_pb.set_message(format!("Sending {}\nTransactions", tx.input.hash));
-            let events: Vec<AccountTransfers> = transaction_mined_rocks_db_to_events(timestamp, tx);
-
-            for event in events {
-                connector.send_event(event).await.context("failed to send event")?;
+        let mut buffer = connector.send_buffered(block_events.collect(), 30)?;
+        while let Some(res) = buffer.next().await {
+            match res {
+                Ok(()) => tx_pb.inc(1),
+                Err(e) => return log_and_err!(reason = e, "failed to send events"),
             }
-            tx_pb.inc(1);
         }
+
         b_pb.inc(1);
         // Save current block number to file after processing
         std::fs::write("last_processed_block", number.to_string())?;
