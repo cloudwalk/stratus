@@ -3,6 +3,7 @@ import "justfile_helpers"
 # Environment variables automatically passed to executed commands.
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
 export RUST_BACKTRACE := env("RUST_BACKTRACE", "0")
+export CARGO_COMMAND := env("CARGO_COMMAND", "")
 
 # Global arguments that can be passed to receipts.
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
@@ -90,7 +91,7 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service as leader
 stratus *args="":
-    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
+    cargo {{nightly_flag}} ${CARGO_COMMAND} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
 # To produce a flamegraph of the memory usage use jeprof:
@@ -166,7 +167,6 @@ e2e-stratus block-mode="automine" test="":
     fi
 
     just _log "Starting Stratus"
-    just build "dev" || exit 1
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
 
     just _wait_for_stratus
@@ -176,7 +176,7 @@ e2e-stratus block-mode="automine" test="":
     result_code=$?
 
     just _log "Killing Stratus"
-    killport 3000
+    killport 3000 -s sigterm
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
@@ -187,7 +187,6 @@ e2e-stratus-rocks block-mode="automine" test="":
     fi
 
     just _log "Starting Stratus"
-    just build "dev" || exit 1
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
@@ -197,15 +196,14 @@ e2e-stratus-rocks block-mode="automine" test="":
     result_code=$?
 
     just _log "Killing Stratus"
-    killport 3000
+    killport 3000 -s sigterm
     exit $result_code
 
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus:
     #!/bin/bash
     just _log "Starting Stratus"
-    just build "dev" || exit 1
-    cargo run  --release --bin stratus --features dev -- --leader --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
+    just run --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
 
@@ -214,15 +212,14 @@ e2e-clock-stratus:
     result_code=$?
 
     just _log "Killing Stratus"
-    killport 3000
+    killport 3000 -s sigterm
     exit $result_code
 
 # E2E Clock: Builds and runs Stratus Rocks with block-time flag, then validates average block generation time
 e2e-clock-stratus-rocks:
     #!/bin/bash
     just _log "Starting Stratus"
-    just build "dev" || exit 1
-    cargo run  --release --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
+    just run --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
 
@@ -231,7 +228,7 @@ e2e-clock-stratus-rocks:
     result_code=$?
 
     just _log "Killing Stratus"
-    killport 3000
+    killport 3000 -s sigterm
     exit $result_code
 
 # E2E: Lint and format code
@@ -254,7 +251,7 @@ e2e-flamegraph:
 
     # Start RPC mock server
     just _log "Starting RPC mock server"
-    killport 3003
+    killport 3003 -s sigterm
 
     cd e2e/rpc-mock-server
     if [ ! -d node_modules ]; then
@@ -273,17 +270,13 @@ e2e-flamegraph:
     cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
 # E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc":
+e2e-leader-follower-up test="brlc" release_flag="--release":
     #!/bin/bash
-
-    # Build Stratus binary
-    just _log "Building Stratus binary"
-    cargo build --release --bin stratus --features dev
 
     mkdir e2e_logs
 
     # Start Stratus with leader flag
-    RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
 
     # Wait for Stratus with leader flag to start
     just _wait_for_stratus 3000
@@ -296,9 +289,9 @@ e2e-leader-follower-up test="brlc":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none > e2e_logs/importer.log &
+        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none > e2e_logs/importer.log &
     else
-        RUST_BACKTRACE=1 RUST_LOG=info cargo run --release --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
+        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
     fi
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
@@ -333,7 +326,7 @@ e2e-leader-follower-up test="brlc":
     (
         cd e2e/cloudwalk-contracts/integration
         npm install
-        npx hardhat test test/leader-follower-{{test}}.test.ts --network stratus --bail --show-stack-traces
+        npx hardhat test test/leader-follower-{{test}}.test.ts --bail --network stratus --show-stack-traces
         if [ $? -ne 0 ]; then
             just _log "Tests failed"
             exit 1
@@ -343,14 +336,16 @@ e2e-leader-follower-up test="brlc":
         fi
     )
     fi
+    killport 3000 -s sigterm
+    killport 3001 -s sigterm
 
 # E2E: Leader & Follower Down
 e2e-leader-follower-down:
     #!/bin/bash
 
     # Kill Stratus
-    killport 3001
-    killport 3000
+    killport 3001 -s sigterm
+    killport 3000 -s sigterm
     stratus_pid=$(pgrep -f 'stratus')
     kill $stratus_pid
 
@@ -418,7 +413,6 @@ contracts-remove *args="":
 contracts-test-stratus *args="":
     #!/bin/bash
     just _log "Starting Stratus"
-    just build "dev" || exit 1
     just run -a 0.0.0.0:3000 &
 
     just _wait_for_stratus
@@ -428,14 +422,13 @@ contracts-test-stratus *args="":
     result_code=$?
 
     just _log "Killing Stratus"
-    killport 3000
+    killport 3000 -s sigterm
     exit $result_code
 
 # Contracts: Start Stratus and run contracts tests with RocksDB storage
 contracts-test-stratus-rocks *args="":
     #!/bin/bash
     just _log "Starting Stratus"
-    just build "dev" || exit 1
     just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
     just _wait_for_stratus
@@ -445,7 +438,7 @@ contracts-test-stratus-rocks *args="":
     result_code=$?
 
     just _log "Killing Stratus"
-    killport 3000
+    killport 3000 -s sigterm
 
     exit $result_code
 
@@ -459,3 +452,76 @@ contracts-coverage-erase:
     cd e2e/cloudwalk-contracts/repos || exit 1
     just _log "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
+
+stratus-test-coverage:
+    cargo llvm-cov clean --workspace
+    # inmemory
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus automine
+    sleep 5
+
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus external
+    sleep 5
+
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-clock-stratus
+    sleep 5
+
+    -CARGO_COMMAND="llvm-cov --no-report" just contracts-test-stratus
+    sleep 5
+
+
+    # rocksdb
+    -rm -r data/rocksdb
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus-rocks automine
+    sleep 5
+
+    -rm -r data/rocksdb
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus-rocks external
+    sleep 5
+
+    -rm -r data/rocksdb
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-clock-stratus-rocks
+    sleep 5
+
+    -rm -r data/rocksdb
+    -CARGO_COMMAND="llvm-cov --no-report" just contracts-test-stratus-rocks
+    sleep 5
+
+
+    # other
+    -CARGO_COMMAND="llvm-cov --no-report" cargo llvm-cov --no-report
+    sleep 5
+
+    -just contracts-clone --token
+    -just contracts-flatten --token
+    -rm -r temp_3000-rocksdb
+    -rm -r temp_3001-rocksdb
+    -docker compose down -v
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up kafka " "
+    sleep 5
+
+    -rm -r temp_3000-rocksdb
+    -rm -r temp_3001-rocksdb
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up deploy " "
+    sleep 5
+
+    -rm -r temp_3000-rocksdb
+    -rm -r temp_3001-rocksdb
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up brlc " "
+    sleep 5
+
+    -rm -r temp_3000-rocksdb
+    -rm -r temp_3001-rocksdb
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up change " "
+    sleep 5
+
+    -rm -r temp_3000-rocksdb
+    -rm -r temp_3001-rocksdb
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up miner " "
+    sleep 5
+
+    -rm -r temp_3000-rocksdb
+    -rm -r temp_3001-rocksdb
+    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up importer " "
+    sleep 5
+
+    cargo llvm-cov report
