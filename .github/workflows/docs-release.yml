@@ -59,7 +59,6 @@ jobs:
           node-version-file: .tool-versions
 
       - name: Set up dependencies
-        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         run: |
           cargo install killport || true
           cargo install wait-service || true
