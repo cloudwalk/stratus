@@ -23,6 +23,7 @@ jobs:
   # Build the documentation and upload as an artifact
   docs-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -52,16 +53,38 @@ jobs:
       - name: Set up Just
         uses: extractions/setup-just@v2
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+
+      - name: Set up dependencies
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        run: |
+          cargo install killport || true
+          cargo install wait-service || true
+
+      - name: Install Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
       - name: Generate docs
         run: |
           just doc -2024-07-19
           echo "<meta http-equiv='refresh' content='0; URL=./stratus/'>" >> target/doc/index.html
           chmod -c -R +rX target/doc/
 
+      - name: Generate coverage
+        run: |
+          just stratus-test-coverage --html
+          mv target/llvm-cov/html target/doc/coverage
+          chmod -c -R +rX target/doc/
+
       - name: Upload docs artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "target/doc"
+          path: "target/llvm-cov/html"
 
   # Upload the documentation to GitHub Pages
   docs-release:
