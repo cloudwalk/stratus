@@ -232,9 +232,10 @@ impl Importer {
             if let Some(ref kafka_conn) = kafka_connector {
                 for tx in &mined_block.transactions {
                     let events = transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx));
-                    for event in events {
-                        if let Err(e) = kafka_conn.send_event(event).await {
-                            tracing::error!(reason = ?e, block_number = %mined_block.number(), tx_hash = ?tx.input.hash, "failed to send transfer event to kafka");
+                    let mut buffer = kafka_conn.send_buffered(events, 30)?;
+                    while let Some(res) = buffer.next().await {
+                        if let Err(e) = res {
+                            return log_and_err!(reason = e, "failed to send events");
                         }
                     }
                 }
