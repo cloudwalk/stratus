@@ -26,8 +26,8 @@ describe("Leader & Follower Kafka integration test", function () {
 
         it("Validate deployer is main minter", async function () {
             await deployBRLC();
+            await new Promise(resolve => setTimeout(resolve, 5000));
             await configureBRLC();
-
             expect(deployer.address).to.equal(await brlcToken.mainMinter());
             expect(await brlcToken.isMinter(deployer.address)).to.be.true;
         });
