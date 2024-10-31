@@ -95,21 +95,23 @@ async fn main() -> Result<(), anyhow::Error> {
 
     for result in iter {
         let (number, block) = result.context("failed to read block")?;
+        let block = block.into_inner();
+
         let timestamp = block.header.timestamp;
+        let tx_count = block.transactions.len();
+
         let block_events = block
-            .into_inner()
             .transactions
             .into_iter()
             .flat_map(|tx| transaction_mined_rocks_db_to_events(timestamp, tx));
 
         let mut buffer = connector.send_buffered(block_events.collect(), 30)?;
         while let Some(res) = buffer.next().await {
-            match res {
-                Ok(()) => tx_pb.inc(1),
-                Err(e) => return log_and_err!(reason = e, "failed to send events"),
+            if let Err(e) = res {
+                return log_and_err!(reason = e, "failed to send events");
             }
         }
-
+        tx_pb.inc(tx_count as u64);
         b_pb.inc(1);
         // Save current block number to file after processing
         std::fs::write("last_processed_block", number.to_string())?;
