@@ -4,12 +4,13 @@ use cfg_if::cfg_if;
 use jsonrpsee::types::Params;
 use jsonrpsee::Extensions;
 
-use super::RpcContext;
 use crate::eth::primitives::StratusError;
+use crate::eth::rpc::reject_unknown_client;
+use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
+use crate::eth::rpc::RpcContext;
 
 cfg_if! {
     if #[cfg(feature = "metrics")] {
-        use super::rpc_parser::RpcExtensionsExt;
         use crate::infra::metrics::inc_rpc_error_response;
 
         fn metrify_stratus_error(err: &StratusError, extensions: &Extensions, method_name: &'static str) {
@@ -23,6 +24,7 @@ cfg_if! {
             F: Fn(Params<'_>, Arc<RpcContext>, &Extensions) -> Result<T, StratusError> + Clone,
         {
             move |params, ctx, extensions| {
+                reject_unknown_client(extensions.rpc_client())?;
                 function(params, ctx, &extensions).inspect_err(|e| metrify_stratus_error(e, &extensions, method_name))
             }
         }
@@ -32,6 +34,7 @@ cfg_if! {
             F: Fn(Params<'_>, Arc<RpcContext>, &Extensions) -> Result<T, StratusError> + Clone,
         {
             move |params, ctx, extensions| {
+                reject_unknown_client(extensions.rpc_client())?;
                 function(params, ctx, &extensions)
             }
         }
