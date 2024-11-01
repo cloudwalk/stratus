@@ -18,6 +18,8 @@ describe("Multiple Transactions Per Block", () => {
     });
 
     it("Send multiple transactions and mine block", async () => {
+        // XXX: This should not be needed, but when running stratus with llvm-cov this test fails unless we wait a bit here
+        await new Promise((resolve) => setTimeout(resolve, 5000));
         const counterParty = randomAccounts(1)[0];
         expect(await sendGetBalance(counterParty.address)).eq(0);
 
@@ -43,13 +45,12 @@ describe("Multiple Transactions Per Block", () => {
 
         // get the latest block after mining
         const latestBlockAfterMining = await send("eth_getBlockByNumber", ["latest", true]);
-
         // check if block was mined
         expect(latestBlockAfterMining).to.exist;
 
         // check if mined block is different from the latest block before mining
         expect(latestBlockAfterMining.hash).to.not.equal(latestBlockBeforeMining.hash);
-
+        expect(latestBlockAfterMining.transactions.length).to.equal(txHashes.length);
         // check if all transactions are in the block
         for (let txHash of txHashes) {
             expect(latestBlockAfterMining.transactions.map((tx: any) => tx.hash)).to.include(txHash);
