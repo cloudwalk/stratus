@@ -453,43 +453,44 @@ contracts-coverage-erase:
     just _log "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
 
-stratus-test-coverage:
+stratus-test-coverage output="":
+    just contracts-clone
+
     cargo llvm-cov clean --workspace
     # inmemory
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus automine
-    sleep 5
+    sleep 10
 
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus external
-    sleep 5
+    sleep 10
 
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-clock-stratus
-    sleep 5
+    sleep 10
 
     -CARGO_COMMAND="llvm-cov --no-report" just contracts-test-stratus
-    sleep 5
-
+    sleep 10
 
     # rocksdb
     -rm -r data/rocksdb
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus-rocks automine
-    sleep 5
+    sleep 10
 
     -rm -r data/rocksdb
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus-rocks external
-    sleep 5
+    sleep 10
 
     -rm -r data/rocksdb
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-clock-stratus-rocks
-    sleep 5
+    sleep 10
 
     -rm -r data/rocksdb
     -CARGO_COMMAND="llvm-cov --no-report" just contracts-test-stratus-rocks
-    sleep 5
+    sleep 10
 
 
     # other
     -CARGO_COMMAND="llvm-cov --no-report" cargo llvm-cov --no-report
-    sleep 5
+    sleep 10
 
     -just contracts-clone --token
     -just contracts-flatten --token
@@ -497,31 +498,31 @@ stratus-test-coverage:
     -rm -r temp_3001-rocksdb
     -docker compose down -v
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up kafka " "
-    sleep 5
+    sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up deploy " "
-    sleep 5
+    sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up brlc " "
-    sleep 5
+    sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up change " "
-    sleep 5
+    sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up miner " "
-    sleep 5
+    sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up importer " "
-    sleep 5
+    sleep 10
 
-    cargo llvm-cov report
+    cargo llvm-cov report {{output}}
