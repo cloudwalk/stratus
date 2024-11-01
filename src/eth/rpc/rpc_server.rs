@@ -1045,22 +1045,21 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty);
     let method_enter = method_span.enter();
 
-    // it's necessary to clear the span before an await point
-    let clear_spans = || drop((middleware_enter, method_enter));
-
     reject_unknown_client(ext.rpc_client())?;
+
+    // clear span before await point and use `.instrument()` instead on futures
+    drop((middleware_enter, method_enter));
+
     // parse params
     let client = ext.rpc_client();
     let (params, event) = match next_rpc_param::<String>(params.sequence()) {
         Ok((params, event)) => (params, event),
         Err(e) => {
-            clear_spans();
             pending.reject(e).instrument(method_span).await;
             return Ok(());
         }
     };
 
-    clear_spans();
     // check subscription limits
     if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.rpc_max_subscriptions, client).await {
         pending.reject(e).instrument(method_span).await;
