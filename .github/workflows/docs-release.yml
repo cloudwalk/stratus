@@ -1,4 +1,4 @@
-name: Documentation Deploy
+name: Coverage Deploy
 
 on:
   push:
@@ -78,33 +78,11 @@ jobs:
           echo "<meta http-equiv='refresh' content='0; URL=./stratus/'>" >> target/doc/index.html
           chmod -c -R +rX target/doc/
 
-      - name: Generate coverage
-        run: |
-          just stratus-test-coverage --html
-          mv target/llvm-cov/html target/doc/coverage
-          chmod -c -R +rX target/doc/
-
-      - name: Upload docs artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: "target/llvm-cov/html"
-
-  # Upload the documentation to GitHub Pages
-  docs-release:
-    runs-on: ubuntu-latest
-    needs: docs-build
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
       - name: Download GH Pages artifact
         uses: actions/download-artifact@v4
+        with:
+          name: github-pages
 
-      - name: Configure GH Pages
-        uses: actions/configure-pages@v5
 
-      - name: Deploy to GH Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Display structure of downloaded files
+        run: ls -R
