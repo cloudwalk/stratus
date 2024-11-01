@@ -2,6 +2,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
 
@@ -19,7 +20,7 @@ use crate::NodeMode;
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct MinerConfig {
     /// Target block time.
-    #[arg(long = "block-mode", env = "BLOCK_MODE", default_value = "automine")]
+    #[arg(long = "block-mode", env = "BLOCK_MODE", default_value = "external")]
     pub block_mode: MinerMode,
 }
 
@@ -64,10 +65,6 @@ impl MinerConfig {
 /// Indicates when the miner will mine new blocks.
 #[derive(Debug, Clone, Copy, PartialEq, strum::EnumIs, serde::Serialize, serde::Deserialize)]
 pub enum MinerMode {
-    /// Mines a new block for each transaction execution.
-    #[serde(rename = "automine")]
-    Automine,
-
     /// Mines a new block at specified interval.
     #[serde(rename = "interval")]
     Interval(Duration),
@@ -77,23 +74,12 @@ pub enum MinerMode {
     External,
 }
 
-impl MinerMode {
-    /// Checks if the mode allow to mine new blocks.
-    pub fn can_mine_new_blocks(&self) -> bool {
-        match self {
-            Self::Automine => true,
-            Self::Interval(_) => true,
-            Self::External => false,
-        }
-    }
-}
-
 impl FromStr for MinerMode {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
-            "automine" => Ok(Self::Automine),
+            "automine" => Err(anyhow!("automine is not supported by stratus")),
             "external" => Ok(Self::External),
             s => {
                 let block_time = parse_duration(s)?;

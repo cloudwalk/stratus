@@ -517,9 +517,6 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
 
             ctx.miner.start_interval_mining(duration).await;
         }
-        MinerMode::Automine => {
-            return log_and_err!("Miner mode change to 'automine' is unsupported.").map_err(Into::into);
-        }
     }
 
     Ok(json!(true))

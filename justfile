@@ -139,7 +139,7 @@ test-int name="'*'":
 # ------------------------------------------------------------------------------
 
 # E2E: Execute Hardhat tests in the specified network
-e2e network="stratus" block_modes="automine" test="":
+e2e network="stratus" block_modes="external" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -160,7 +160,7 @@ e2e network="stratus" block_modes="automine" test="":
     done
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus block-mode="automine" test="":
+e2e-stratus block-mode="external" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -180,7 +180,7 @@ e2e-stratus block-mode="automine" test="":
     exit $result_code
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus-rocks block-mode="automine" test="":
+e2e-stratus-rocks block-mode="external" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e

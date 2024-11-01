@@ -79,7 +79,6 @@ pub struct Miner {
 /// Locks used in operations that mutate state.
 #[derive(Default)]
 pub struct MinerLocks {
-    save_execution: Mutex<()>,
     pub mine_and_commit: Mutex<()>,
     mine: Mutex<()>,
     commit: Mutex<()>,
@@ -212,26 +211,11 @@ impl Miner {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::save_execution", %tx_hash).entered();
 
-        // Check if automine is enabled
-        let is_automine = self.mode().is_automine();
-
-        // if automine is enabled, only one transaction can enter the block at a time.
-        let _save_execution_lock = if is_automine {
-            Some(self.locks.save_execution.lock().map_lock_error("save_execution")?)
-        } else {
-            None
-        };
-
         // save execution to temporary storage
         self.storage.save_execution(tx_execution, check_conflicts)?;
 
         // notify
         let _ = self.notifier_pending_txs.send(tx_hash);
-
-        // if automine is enabled, automatically mines a block
-        if is_automine {
-            self.mine_local_and_commit()?;
-        }
 
         Ok(())
     }

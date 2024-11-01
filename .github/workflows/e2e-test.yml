@@ -27,26 +27,6 @@ on:
       - "rust-toolchain.toml"
 
 jobs:
-  e2e-automine-stratus:
-    name: E2E Automine Stratus in-memory
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: "e2e-stratus automine"
-
-    concurrency:
-      group: ${{ github.workflow }}-automine-inmemory-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-
-  e2e-automine-stratus-rocks:
-    name: E2E Automine Stratus Rocks
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: "e2e-stratus-rocks automine"
-
-    concurrency:
-      group: ${{ github.workflow }}-automine-rocks-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
-
   e2e-external-stratus:
     name: E2E External Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
