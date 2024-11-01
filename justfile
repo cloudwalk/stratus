@@ -458,38 +458,38 @@ stratus-test-coverage output="":
 
     cargo llvm-cov clean --workspace
     # inmemory
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus automine
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-stratus automine
     sleep 10
 
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus external
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-stratus external
     sleep 10
 
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-clock-stratus
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-clock-stratus
     sleep 10
 
-    -CARGO_COMMAND="llvm-cov --no-report" just contracts-test-stratus
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just contracts-test-stratus
     sleep 10
 
     # rocksdb
     -rm -r data/rocksdb
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus-rocks automine
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-stratus-rocks automine
     sleep 10
 
     -rm -r data/rocksdb
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus-rocks external
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-stratus-rocks external
     sleep 10
 
     -rm -r data/rocksdb
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-clock-stratus-rocks
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-clock-stratus-rocks
     sleep 10
 
     -rm -r data/rocksdb
-    -CARGO_COMMAND="llvm-cov --no-report" just contracts-test-stratus-rocks
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just contracts-test-stratus-rocks
     sleep 10
 
 
     # other
-    -CARGO_COMMAND="llvm-cov --no-report" cargo llvm-cov --no-report
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" cargo llvm-cov --no-report
     sleep 10
 
     -just contracts-clone --token
@@ -497,32 +497,32 @@ stratus-test-coverage output="":
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     -docker compose down -v
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up kafka " "
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-leader-follower-up kafka " "
     sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up deploy " "
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-leader-follower-up deploy " "
     sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up brlc " "
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-leader-follower-up brlc " "
     sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up change " "
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-leader-follower-up change " "
     sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up miner " "
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-leader-follower-up miner " "
     sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
-    -CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up importer " "
+    -CARGO_COMMAND="llvm-cov --no-report --no-clean" just e2e-leader-follower-up importer " "
     sleep 10
 
     cargo llvm-cov report {{output}}

@@ -23,7 +23,7 @@ jobs:
   # Build the documentation and upload as an artifact
   docs-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
 
     steps:
       - name: Checkout code
