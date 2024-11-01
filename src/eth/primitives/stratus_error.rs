@@ -58,7 +58,7 @@ pub enum StratusError {
     #[strum(props(kind = "server_state"))]
     RpcTransactionDisabled,
 
-    #[error("Transaction processing is enabled.")]
+    #[error("Can't change miner mode while transactions are enabled.")]
     #[strum(props(kind = "server_state"))]
     RpcTransactionEnabled,
 
