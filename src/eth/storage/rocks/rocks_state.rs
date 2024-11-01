@@ -391,6 +391,8 @@ impl RocksStorageState {
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         let mut write_batch = WriteBatch::default();
+
+        tracing::debug!(?accounts, "preparing accounts cf batch");
         self.accounts.prepare_batch_insertion(
             accounts.iter().cloned().map(|acc| {
                 let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
@@ -398,6 +400,8 @@ impl RocksStorageState {
             }),
             &mut write_batch,
         )?;
+
+        tracing::debug!(?accounts, "preparing accounts history batch");
         self.accounts_history.prepare_batch_insertion(
             accounts.iter().cloned().map(|acc| {
                 let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
@@ -405,6 +409,7 @@ impl RocksStorageState {
             }),
             &mut write_batch,
         )?;
+
         write_in_batch_for_multiple_cfs_impl(&self.db, write_batch)?;
         Ok(())
     }

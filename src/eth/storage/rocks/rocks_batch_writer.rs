@@ -11,6 +11,7 @@ use serde::Serialize;
 use super::rocks_cf::RocksCfRef;
 
 pub fn write_in_batch_for_multiple_cfs_impl(db: &DB, batch: WriteBatch) -> anyhow::Result<()> {
+    tracing::debug!("writing batch");
     let batch_len = batch.len();
     let mut options = WriteOptions::default();
     // By default, each write to rocksdb is asynchronous: it returns after pushing
