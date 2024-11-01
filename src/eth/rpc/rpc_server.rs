@@ -1040,70 +1040,60 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> R
 // -----------------------------------------------------------------------------
 
 async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>, ext: Extensions) -> impl IntoSubscriptionCloseResponse {
-    // enter span
+    // `middleware_enter` created to be used as a parent by `method_span`
     let middleware_enter = ext.enter_middleware_span();
     let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty);
-    let method_enter = method_span.enter();
+    drop(middleware_enter);
 
-    reject_unknown_client(ext.rpc_client())?;
+    async move {
+        reject_unknown_client(ext.rpc_client())?;
 
-    // clear span before await point and use `.instrument()` instead on futures
-    drop((middleware_enter, method_enter));
+        // parse params
+        let client = ext.rpc_client();
+        let (params, event) = match next_rpc_param::<String>(params.sequence()) {
+            Ok((params, event)) => (params, event),
+            Err(e) => {
+                pending.reject(e).await;
+                return Ok(());
+            }
+        };
 
-    // parse params
-    let client = ext.rpc_client();
-    let (params, event) = match next_rpc_param::<String>(params.sequence()) {
-        Ok((params, event)) => (params, event),
-        Err(e) => {
-            pending.reject(e).instrument(method_span).await;
+        // check subscription limits
+        if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.rpc_max_subscriptions, client).await {
+            pending.reject(e).await;
             return Ok(());
         }
-    };
 
-    // check subscription limits
-    if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.rpc_max_subscriptions, client).await {
-        pending.reject(e).instrument(method_span).await;
-        return Ok(());
+        // track
+        Span::with(|s| s.rec_str("subscription", &event));
+        tracing::info!(%event, "subscribing to rpc event");
+
+        // execute
+        match event.deref() {
+            "newPendingTransactions" => {
+                ctx.subs.add_new_pending_txs_subscription(client, pending.accept().await?).await;
+            }
+
+            "newHeads" => {
+                ctx.subs.add_new_heads_subscription(client, pending.accept().await?).await;
+            }
+
+            "logs" => {
+                let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
+                let filter = filter.parse(&ctx.storage)?;
+                ctx.subs.add_logs_subscription(client, filter, pending.accept().await?).await;
+            }
+
+            // unsupported
+            event => {
+                pending.reject(StratusError::RpcSubscriptionInvalid { event: event.to_string() }).await;
+            }
+        }
+
+        Ok(())
     }
-
-    // track
-    Span::with(|s| s.rec_str("subscription", &event));
-    tracing::info!(%event, "subscribing to rpc event");
-
-    // execute
-    match event.deref() {
-        "newPendingTransactions" => {
-            ctx.subs
-                .add_new_pending_txs_subscription(client, pending.accept().await?)
-                .instrument(method_span)
-                .await;
-        }
-
-        "newHeads" => {
-            ctx.subs
-                .add_new_heads_subscription(client, pending.accept().await?)
-                .instrument(method_span)
-                .await;
-        }
-
-        "logs" => {
-            let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
-            let filter = filter.parse(&ctx.storage)?;
-            ctx.subs
-                .add_logs_subscription(client, filter, pending.accept().await?)
-                .instrument(method_span)
-                .await;
-        }
-
-        // unsupported
-        event => {
-            pending
-                .reject(StratusError::RpcSubscriptionInvalid { event: event.to_string() })
-                .instrument(method_span)
-                .await;
-        }
-    };
-    Ok(())
+    .instrument(method_span)
+    .await
 }
 
 // -----------------------------------------------------------------------------
