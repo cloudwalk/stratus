@@ -83,7 +83,7 @@ pub enum StratusError {
 
     #[error("Failed to executed transaction in EVM: {0:?}.")]
     #[strum(props(kind = "execution"))]
-    TransactionEvmFailed(String), // split this in multiple errors
+    TransactionEvmFailed(String), // TODO: split this in multiple errors
 
     #[error("Failed to execute transaction in leader: {0:?}.")]
     #[strum(props(kind = "execution"))]
