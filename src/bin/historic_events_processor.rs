@@ -124,7 +124,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 .date_naive();
 
             days_since_0 = timestamp.0 / 86_400;
-            std::fs::write(format!("events/{}", date), event_batch.join("\n"))?;
+            if !event_batch.is_empty() {
+                std::fs::write(format!("events/{}", date), event_batch.join("\n"))?;
+            }
             std::fs::write("last_processed_block", number.to_string())?;
             event_batch.clear();
         }
