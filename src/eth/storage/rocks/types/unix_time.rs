@@ -4,7 +4,7 @@ use crate::eth::primitives::UnixTime;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
-pub struct UnixTimeRocksdb(u64);
+pub struct UnixTimeRocksdb(pub u64);
 
 gen_newtype_from!(self = UnixTimeRocksdb, other = u64);
 
