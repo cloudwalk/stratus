@@ -78,8 +78,7 @@ fn process_block_events(block: BlockRocksdb) -> Vec<String> {
 }
 
 /// Main function that processes blockchain data and generates events
-#[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
     let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, Some(0.1)).context("failed to create rocksdb state")?;
 
