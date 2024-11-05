@@ -238,7 +238,7 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined
             let amount_bytes: [u8; 32] = match log.log.data.0.clone().try_into() {
                 Ok(amount_bytes) => amount_bytes,
                 Err(_) => {
-                    tracing::error!("bug: event identified as ERC-20 transfer should have the amount as 32 bytes in the data field");
+                    tracing::error!(?log.transaction_hash, "bug: event identified as ERC-20 transfer should have the amount as 32 bytes in the data field");
                     return None;
                 }
             };
@@ -270,11 +270,11 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined
             transaction_hash: tx.input.hash,
             transaction_index: tx.transaction_index.0,
             contract_address: tx.input.to.unwrap_or_else(|| {
-                tracing::error!("bug: transaction emitting transfers must have the contract address");
+                tracing::error!(?tx.input.hash, "bug: transaction emitting transfers must have the contract address");
                 Address::ZERO
             }),
             function_id: tx.input.input[0..4].try_into().unwrap_or_else(|_| {
-                tracing::error!("bug: transaction emitting transfers must have the 4-byte signature");
+                tracing::error!(?tx.input.hash, "bug: transaction emitting transfers must have the 4-byte signature");
                 [0; 4]
             }),
             block_number: tx.block_number,
