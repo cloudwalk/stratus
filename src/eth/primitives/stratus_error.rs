@@ -15,7 +15,7 @@ use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Nonce;
 use crate::ext::to_json_value;
 
-/// Valid  error catogories are:
+/// Valid error catogories are:
 /// * client_request: request is invalid.
 /// * client_state:   request is valid, specific client rules rejects it.
 /// * server_state:   request is valid, global server rules rejects it.

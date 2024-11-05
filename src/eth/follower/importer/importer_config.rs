@@ -88,7 +88,7 @@ impl ImporterConfig {
     }
 
     pub async fn init_follower_importer(&self, ctx: Arc<RpcContext>) -> Result<serde_json::Value, StratusError> {
-        if not(GlobalState::is_follower()) {
+        if GlobalState::get_node_mode() != NodeMode::Follower {
             tracing::error!("node is currently not a follower");
             return Err(StratusError::StratusNotFollower);
         }

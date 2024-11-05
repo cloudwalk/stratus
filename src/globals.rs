@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 use sentry::ClientInitGuard;
@@ -18,6 +19,7 @@ use crate::config::WithCommonConfig;
 use crate::eth::follower::importer::Importer;
 use crate::eth::rpc::RpcContext;
 use crate::ext::spawn_signal_handler;
+use crate::ext::MutexExt;
 use crate::infra::tracing::warn_task_cancellation;
 
 // -----------------------------------------------------------------------------
@@ -114,7 +116,7 @@ static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
 static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Current node mode.
-static IS_LEADER: AtomicBool = AtomicBool::new(false);
+static NODE_MODE: Mutex<NodeMode> = Mutex::new(NodeMode::Follower);
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalState;
@@ -245,26 +247,12 @@ impl GlobalState {
 
     /// Sets the current node mode.
     pub fn set_node_mode(mode: NodeMode) {
-        IS_LEADER.store(matches!(mode, NodeMode::Leader), Ordering::Relaxed);
+        *NODE_MODE.lock_or_clear("set_node_mode") = mode;
     }
 
     /// Gets the current node mode.
     pub fn get_node_mode() -> NodeMode {
-        if IS_LEADER.load(Ordering::Relaxed) {
-            NodeMode::Leader
-        } else {
-            NodeMode::Follower
-        }
-    }
-
-    /// Checks if the node is in follower mode.
-    pub fn is_follower() -> bool {
-        !IS_LEADER.load(Ordering::Relaxed)
-    }
-
-    /// Checks if the node is in leader mode.
-    pub fn is_leader() -> bool {
-        IS_LEADER.load(Ordering::Relaxed)
+        *NODE_MODE.lock_or_clear("get_node_mode")
     }
 
     // -------------------------------------------------------------------------
@@ -273,7 +261,7 @@ impl GlobalState {
 
     pub fn get_global_state_as_json(ctx: &RpcContext) -> JsonValue {
         json!({
-            "is_leader": Self::is_leader(),
+            "is_leader": Self::get_node_mode() == NodeMode::Leader,
             "is_shutdown": Self::is_shutdown(),
             "is_importer_shutdown": Self::is_importer_shutdown(),
             "is_interval_miner_running": ctx.miner.is_interval_miner_running(),

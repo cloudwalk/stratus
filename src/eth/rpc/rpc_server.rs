@@ -445,7 +445,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
 }
 
 fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
-    if not(GlobalState::is_follower()) {
+    if GlobalState::get_node_mode() != NodeMode::Follower {
         tracing::error!("node is currently not a follower");
         return Err(StratusError::StratusNotFollower);
     }
