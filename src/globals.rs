@@ -18,6 +18,7 @@ use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
 use crate::eth::follower::importer::Importer;
 use crate::eth::rpc::RpcContext;
+use crate::ext::not;
 use crate::ext::spawn_signal_handler;
 use crate::ext::MutexExt;
 use crate::infra::tracing::warn_task_cancellation;
@@ -95,6 +96,10 @@ pub enum NodeMode {
 
     #[strum(to_string = "follower")]
     Follower,
+
+    /// The fake leader imports blocks like a follower, but executes the blocks's txs locally like a leader.
+    #[strum(to_string = "fake-leader")]
+    FakeLeader,
 }
 
 // -----------------------------------------------------------------------------
@@ -236,13 +241,20 @@ impl GlobalState {
 
     /// Initializes the node mode based on the StratusConfig.
     pub fn initialize_node_mode(config: &StratusConfig) {
-        let mode = if config.follower {
-            Self::set_importer_shutdown(false);
-            NodeMode::Follower
-        } else {
-            NodeMode::Leader
+        let StratusConfig {
+            follower, leader, fake_leader, ..
+        } = config;
+
+        let mode = match (follower, leader, fake_leader) {
+            (true, false, false) => NodeMode::Follower,
+            (false, true, false) => NodeMode::Leader,
+            (false, false, true) => NodeMode::FakeLeader,
+            _ => unreachable!("exactly one must be true, config should be checked by clap"),
         };
         Self::set_node_mode(mode);
+
+        let should_run_importer = mode != NodeMode::Leader;
+        Self::set_importer_shutdown(not(should_run_importer));
     }
 
     /// Sets the current node mode.

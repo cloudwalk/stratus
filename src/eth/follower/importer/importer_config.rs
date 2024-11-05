@@ -48,7 +48,7 @@ impl ImporterConfig {
         kafka_connector: Option<KafkaConnector>,
     ) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
         match GlobalState::get_node_mode() {
-            NodeMode::Follower => self.init_follower(executor, miner, storage, kafka_connector).await,
+            NodeMode::Follower | NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector).await,
             NodeMode::Leader => Ok(None),
         }
     }

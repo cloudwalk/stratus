@@ -35,7 +35,7 @@ impl MinerConfig {
                 }
                 MinerMode::External
             }
-            NodeMode::Leader => self.block_mode,
+            NodeMode::Leader | NodeMode::FakeLeader => self.block_mode,
         };
 
         self.init_with_mode(mode, storage).await

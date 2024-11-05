@@ -286,7 +286,7 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
     }
 
     let should_serve = match GlobalState::get_node_mode() {
-        NodeMode::Leader => true,
+        NodeMode::Leader | NodeMode::FakeLeader => true,
         NodeMode::Follower => match context.consensus() {
             Some(consensus) => consensus.should_serve().await,
             None => false,
@@ -885,7 +885,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
 
     // execute locally or forward to leader
     match GlobalState::get_node_mode() {
-        NodeMode::Leader => match ctx.executor.execute_local_transaction(tx) {
+        NodeMode::Leader | NodeMode::FakeLeader => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
                 if e.is_internal() {
