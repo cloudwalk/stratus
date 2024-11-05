@@ -126,8 +126,8 @@ fn main() -> Result<(), anyhow::Error> {
             hours_since_0 = timestamp.0 / 3600;
             if !event_batch.is_empty() {
                 let folder_path = format!("events/{}/{}/{}", date.year(), date.month(), date.day());
-                if timestamp.0 % 86_400 == 0 {
-                    let _ = create_dir_all(&folder_path);
+                if !std::path::Path::new(&folder_path).exists() {
+                    std::fs::create_dir_all(&folder_path)?;
                 }
                 std::fs::write(format!("{}/{}", folder_path, date.hour()), event_batch.join("\n"))?;
             }
