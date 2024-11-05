@@ -35,7 +35,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
             .init(Arc::clone(&executor), Arc::clone(&miner), Arc::clone(&storage), kafka_connector)
             .await?
     } else {
-        tracing::info!("no importer config, skipping importer");
+        tracing::warn!("no importer config, skipping importer");
         None
     };
 
