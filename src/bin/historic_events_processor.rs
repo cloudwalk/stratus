@@ -46,6 +46,7 @@ fn get_total_blocks_and_transactions(state: &RocksStorageState) -> (u64, u64) {
 
 /// Creates progress bars for tracking block and transaction processing
 fn create_progress_bar(state: &RocksStorageState) -> (ProgressBar, ProgressBar) {
+    tracing::info!("creating progress bar");
     let (total_blocks, total_transactions) = get_total_blocks_and_transactions(state);
 
     tracing::info!(?total_transactions, "Estimated total transactions in db:");
@@ -85,10 +86,13 @@ fn main() -> Result<(), anyhow::Error> {
     let (b_pb, tx_pb) = create_progress_bar(&state);
 
     // Load last processed block number from file
+    tracing::info!("loading last processed block");
     let start_block = std::fs::read_to_string("last_processed_block")
         .map(|s| s.trim().parse::<u64>().unwrap())
         .unwrap_or(0);
+    tracing::info!(?start_block);
 
+    tracing::info!(?creating rocksdb iterator);
     let iter = if start_block > 0 {
         b_pb.inc(start_block);
         state.blocks_by_number.iter_from(start_block.into(), rocksdb::Direction::Forward)?
