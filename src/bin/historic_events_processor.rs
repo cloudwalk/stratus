@@ -92,7 +92,7 @@ fn main() -> Result<(), anyhow::Error> {
         .unwrap_or(0);
     tracing::info!(?start_block);
 
-    tracing::info!(?creating rocksdb iterator);
+    tracing::info!("creating rocksdb iterator");
     let iter = if start_block > 0 {
         b_pb.inc(start_block);
         state.blocks_by_number.iter_from(start_block.into(), rocksdb::Direction::Forward)?
