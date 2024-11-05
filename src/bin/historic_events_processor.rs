@@ -1,7 +1,10 @@
+use std::fs::create_dir_all;
 use std::time::Duration;
 
 use anyhow::Context;
+use chrono::Datelike;
 use chrono::TimeZone;
+use chrono::Timelike;
 use indicatif::ProgressBar;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
 use stratus::eth::storage::rocks::rocks_state::RocksStorageState;
@@ -94,15 +97,15 @@ async fn main() -> Result<(), anyhow::Error> {
         state.blocks_by_number.iter_start()
     };
 
-    let mut days_since_0 = 0;
+    let mut hours_since_0 = 0;
     let mut event_batch = vec![];
     for result in iter {
         let (number, block) = result.context("failed to read block")?;
         let block = block.into_inner();
 
         let timestamp = block.header.timestamp;
-        if days_since_0 == 0 {
-            days_since_0 = timestamp.0 / 86_400;
+        if hours_since_0 == 0 {
+            hours_since_0 = timestamp.0 / 3600;
         }
 
         let tx_count = block.transactions.len();
@@ -114,18 +117,16 @@ async fn main() -> Result<(), anyhow::Error> {
         tx_pb.inc(tx_count as u64);
         b_pb.inc(1);
         // Save current block number to file after processing
-        if days_since_0 != timestamp.0 / 86_400 {
-            let date = chrono::Utc
-                .timestamp_opt(0, 0)
-                .earliest()
-                .unwrap()
-                .checked_add_days(chrono::Days::new(days_since_0))
-                .unwrap()
-                .date_naive();
+        if hours_since_0 != timestamp.0 / 3600 {
+            let date = chrono::Utc.timestamp_opt((hours_since_0 * 3600) as i64, 0).earliest().unwrap();
 
-            days_since_0 = timestamp.0 / 86_400;
+            hours_since_0 = timestamp.0 / 3600;
             if !event_batch.is_empty() {
-                std::fs::write(format!("events/{}", date), event_batch.join("\n"))?;
+                let folder_path = format!("events/{}/{}/{}", date.year(), date.month(), date.day());
+                if timestamp.0 % 86_400 == 0 {
+                    let _ = create_dir_all(&folder_path);
+                }
+                std::fs::write(format!("{}/{}", folder_path, date.hour()), event_batch.join("\n"))?;
             }
             std::fs::write("last_processed_block", number.to_string())?;
             event_batch.clear();
