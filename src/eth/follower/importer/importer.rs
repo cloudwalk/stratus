@@ -192,12 +192,10 @@ impl Importer {
 
             #[cfg(feature = "metrics")]
             let (start, block_number, block_tx_len) = (metrics::now(), block.number(), block.transactions.len());
-
-            // execute and mine
-            let mut receipts = ExternalReceipts::from(receipts);
             #[cfg(feature = "metrics")]
             let receipts_len = receipts.len();
-            if let Err(e) = executor.execute_external_block(block.clone(), &mut receipts) {
+
+            if let Err(e) = executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts)) {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
                 return log_and_err!(reason = e, message);
             };

@@ -96,7 +96,7 @@ pub enum NodeMode {
     #[strum(to_string = "follower")]
     Follower,
 
-    /// The fake leader imports blocks like a follower, but executes the blocks's txs locally like a leader.
+    /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     #[strum(to_string = "fake-leader")]
     FakeLeader,
 }
