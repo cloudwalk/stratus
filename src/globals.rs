@@ -88,7 +88,6 @@ where
 // Node mode
 // -----------------------------------------------------------------------------
 
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display)]
 pub enum NodeMode {
     #[strum(to_string = "leader")]
@@ -178,7 +177,7 @@ impl GlobalState {
         format!("{} {}", caller, reason)
     }
 
-    /// Checks if the importer is being shutdown.
+    /// Checks if the importer is shut down or being shut down.
     pub fn is_importer_shutdown() -> bool {
         IMPORTER_SHUTDOWN.load(Ordering::Relaxed)
     }
@@ -202,7 +201,6 @@ impl GlobalState {
         shutdown
     }
 
-    /// Sets the importer shutdown state.
     pub fn set_importer_shutdown(shutdown: bool) {
         IMPORTER_SHUTDOWN.store(shutdown, Ordering::Relaxed);
     }
@@ -257,12 +255,10 @@ impl GlobalState {
         Self::set_importer_shutdown(not(should_run_importer));
     }
 
-    /// Sets the current node mode.
     pub fn set_node_mode(mode: NodeMode) {
         *NODE_MODE.lock_or_clear("set_node_mode") = mode;
     }
 
-    /// Gets the current node mode.
     pub fn get_node_mode() -> NodeMode {
         *NODE_MODE.lock_or_clear("get_node_mode")
     }

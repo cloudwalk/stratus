@@ -877,7 +877,6 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
         s.rec_str("tx_nonce", &tx.nonce);
     });
 
-    // check feature
     if not(GlobalState::is_transactions_enabled()) {
         tracing::warn!(%tx_hash, "failed to execute eth_sendRawTransaction because transactions are disabled");
         return Err(StratusError::RpcTransactionDisabled);

@@ -217,7 +217,6 @@ impl Importer {
                 );
             }
 
-            // trocar do mine_external_and_commit para mine_external e depois commit
             let mined_block = match miner.mine_external(block) {
                 Ok(mined_block) => {
                     tracing::info!("mined external block");
