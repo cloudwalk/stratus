@@ -125,7 +125,7 @@ fn main() -> Result<(), anyhow::Error> {
             hours_since_0 = timestamp.0 / 3600;
             if !event_batch.is_empty() {
                 let folder_path = format!(
-                    "events/year={}/month={:02}/day={:02}/hour={:02}",
+                    "events/ledger_wallet_events/year={}/month={:02}/day={:02}/hour={:02}",
                     date.year(),
                     date.month(),
                     date.day(),
