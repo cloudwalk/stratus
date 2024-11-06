@@ -5,6 +5,7 @@ use clap::Parser;
 use display_json::DebugAsJson;
 use serde_json::json;
 
+use super::importer::ImporterMode;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::Importer;
@@ -48,8 +49,11 @@ impl ImporterConfig {
         kafka_connector: Option<KafkaConnector>,
     ) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
         match GlobalState::get_node_mode() {
-            NodeMode::Follower | NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector).await,
             NodeMode::Leader => Ok(None),
+            NodeMode::Follower =>
+                self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::NormalFollower)
+                    .await,
+            NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader).await,
         }
     }
 
@@ -59,6 +63,7 @@ impl ImporterConfig {
         miner: Arc<Miner>,
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
+        importer_mode: ImporterMode,
     ) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
@@ -72,6 +77,7 @@ impl ImporterConfig {
             Arc::clone(&chain),
             kafka_connector.map(Arc::new),
             self.sync_interval,
+            importer_mode,
         );
         let importer = Arc::new(importer);
 

@@ -43,6 +43,14 @@ use crate::utils::calculate_tps;
 use crate::utils::DropTimer;
 use crate::GlobalState;
 
+#[derive(Clone, Copy)]
+pub enum ImporterMode {
+    /// A normal follower imports a mined block.
+    NormalFollower,
+    /// Fake leader feches a block, re-executes its txs and then mines it's own block.
+    FakeLeader,
+}
+
 // -----------------------------------------------------------------------------
 // Globals
 // -----------------------------------------------------------------------------
@@ -85,6 +93,8 @@ pub struct Importer {
     sync_interval: Duration,
 
     kafka_connector: Option<Arc<KafkaConnector>>,
+
+    importer_mode: ImporterMode,
 }
 
 impl Importer {
@@ -95,6 +105,7 @@ impl Importer {
         chain: Arc<BlockchainClient>,
         kafka_connector: Option<Arc<KafkaConnector>>,
         sync_interval: Duration,
+        importer_mode: ImporterMode,
     ) -> Self {
         tracing::info!("creating importer");
 
@@ -105,6 +116,7 @@ impl Importer {
             chain,
             sync_interval,
             kafka_connector,
+            importer_mode,
         }
     }
 
@@ -133,7 +145,13 @@ impl Importer {
         // it executes and mines blocks and expects to receive them via channel in the correct order.
         let task_executor = spawn_named(
             "importer::executor",
-            Importer::start_block_executor(Arc::clone(&self.executor), Arc::clone(&self.miner), backlog_rx, self.kafka_connector.clone()),
+            Importer::start_block_executor(
+                Arc::clone(&self.executor),
+                Arc::clone(&self.miner),
+                backlog_rx,
+                self.kafka_connector.clone(),
+                self.importer_mode,
+            ),
         );
 
         // spawn block number:
@@ -172,6 +190,7 @@ impl Importer {
         miner: Arc<Miner>,
         mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
         kafka_connector: Option<Arc<KafkaConnector>>,
+        importer_mode: ImporterMode,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "block-executor";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
@@ -191,9 +210,27 @@ impl Importer {
             };
 
             #[cfg(feature = "metrics")]
-            let (start, block_number, block_tx_len) = (metrics::now(), block.number(), block.transactions.len());
-            #[cfg(feature = "metrics")]
-            let receipts_len = receipts.len();
+            let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
+
+            // if it's fake miner, execute each tx and skip mining and commiting
+            if let ImporterMode::FakeLeader = importer_mode {
+                for tx in &block.transactions {
+                    let Ok(tx_input) = rlp::decode(&tx.0.input) else {
+                        tracing::error!("Failed to decode processed transaction");
+                        continue; // skip this tx
+                    };
+
+                    if let Err(e) = executor.execute_local_transaction(tx_input) {
+                        if e.is_internal() {
+                            tracing::error!(reason = ?e, "internal error while executing imported transaction");
+                        } else {
+                            tracing::error!(reason = ?e, "transaction failed");
+                        }
+                    }
+                }
+
+                return Ok(());
+            }
 
             if let Err(e) = executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts)) {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
