@@ -124,11 +124,19 @@ fn main() -> Result<(), anyhow::Error> {
 
             hours_since_0 = timestamp.0 / 3600;
             if !event_batch.is_empty() {
-                let folder_path = format!("events/{}/{:02}/{:02}", date.year(), date.month(), date.day());
+                let folder_path = format!(
+                    "events/year={}/month={:02}/day={:02}/hour={:02}",
+                    date.year(),
+                    date.month(),
+                    date.day(),
+                    date.hour()
+                );
                 if !std::path::Path::new(&folder_path).exists() {
                     std::fs::create_dir_all(&folder_path)?;
                 }
-                std::fs::write(format!("{}/{:02}", folder_path, date.hour()), event_batch.join("\n"))?;
+                for (i, chunk) in event_batch.chunks(1000).enumerate() {
+                    std::fs::write(format!("{}/ledger_wallet_events/ledger_wallet_events+{}+0000000000.json", folder_path, i), chunk.join("\n"))?;
+                }
             }
             std::fs::write("last_processed_block", number.to_string())?;
             event_batch.clear();
