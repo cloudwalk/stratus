@@ -134,7 +134,7 @@ fn main() -> Result<(), anyhow::Error> {
                 if !std::path::Path::new(&folder_path).exists() {
                     std::fs::create_dir_all(&folder_path)?;
                 }
-                for (i, chunk) in event_batch.chunks(1000).enumerate() {
+                for (i, chunk) in event_batch.chunks(10000).enumerate() {
                     std::fs::write(format!("{}/ledger_wallet_events+{}+0000000000.json", folder_path, i), chunk.join("\n"))?;
                 }
             }
