@@ -135,7 +135,7 @@ fn main() -> Result<(), anyhow::Error> {
                     std::fs::create_dir_all(&folder_path)?;
                 }
                 for (i, chunk) in event_batch.chunks(1000).enumerate() {
-                    std::fs::write(format!("{}/ledger_wallet_events/ledger_wallet_events+{}+0000000000.json", folder_path, i), chunk.join("\n"))?;
+                    std::fs::write(format!("{}/ledger_wallet_events+{}+0000000000.json", folder_path, i), chunk.join("\n"))?;
                 }
             }
             std::fs::write("last_processed_block", number.to_string())?;
