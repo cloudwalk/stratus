@@ -176,11 +176,15 @@ impl CommonConfig {
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 #[clap(group = ArgGroup::new("mode").required(true).args(&["leader", "follower"]))]
 pub struct StratusConfig {
-    #[arg(long = "leader", env = "LEADER", conflicts_with = "follower", conflicts_with = "ImporterConfig")]
+    #[arg(long = "leader", env = "LEADER", conflicts_with_all = ["follower", "fake-leader", "ImporterConfig"])]
     pub leader: bool,
 
-    #[arg(long = "follower", env = "FOLLOWER", conflicts_with = "leader", requires = "ImporterConfig")]
+    #[arg(long = "follower", env = "FOLLOWER", conflicts_with_all = ["leader", "fake-leader"], requires = "ImporterConfig")]
     pub follower: bool,
+
+    /// The fake leader imports blocks like a follower, but executes the blocks's txs locally like a leader.
+    #[arg(long = "fake-leader", env = "FAKE_LEADER", conflicts_with_all = ["leader", "follower"], requires = "ImporterConfig")]
+    pub fake_leader: bool,
 
     #[clap(flatten)]
     pub rpc_server: RpcServerConfig,

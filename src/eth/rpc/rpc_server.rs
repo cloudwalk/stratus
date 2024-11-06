@@ -286,7 +286,7 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
     }
 
     let should_serve = match GlobalState::get_node_mode() {
-        NodeMode::Leader => true,
+        NodeMode::Leader | NodeMode::FakeLeader => true,
         NodeMode::Follower => match context.consensus() {
             Some(consensus) => consensus.should_serve().await,
             None => false,
@@ -445,7 +445,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
 }
 
 fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
-    if not(GlobalState::is_follower()) {
+    if GlobalState::get_node_mode() != NodeMode::Follower {
         tracing::error!("node is currently not a follower");
         return Err(StratusError::StratusNotFollower);
     }
@@ -877,7 +877,6 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
         s.rec_str("tx_nonce", &tx.nonce);
     });
 
-    // check feature
     if not(GlobalState::is_transactions_enabled()) {
         tracing::warn!(%tx_hash, "failed to execute eth_sendRawTransaction because transactions are disabled");
         return Err(StratusError::RpcTransactionDisabled);
@@ -885,7 +884,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
 
     // execute locally or forward to leader
     match GlobalState::get_node_mode() {
-        NodeMode::Leader => match ctx.executor.execute_local_transaction(tx) {
+        NodeMode::Leader | NodeMode::FakeLeader => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
                 if e.is_internal() {

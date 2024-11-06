@@ -145,7 +145,6 @@ fn execute_block_importer(
 
         let before_block = Instant::now();
         for (mut block, receipts) in blocks.into_iter() {
-            let mut receipts = ExternalReceipts::from(receipts);
             if GlobalState::is_shutdown_warn(TASK_NAME) {
                 return Ok(());
             }
@@ -155,7 +154,7 @@ fn execute_block_importer(
 
             // re-execute (and import) block
             batch_tx_len += block.transactions.len();
-            executor.execute_external_block(block.clone(), &mut receipts)?;
+            executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
 
             // mine and save block
             miner.mine_external_and_commit(block)?;
