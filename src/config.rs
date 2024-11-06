@@ -92,11 +92,11 @@ pub struct CommonConfig {
     pub env: Environment,
 
     /// Number of threads to execute global async tasks.
-    #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
+    #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "32")]
     pub num_async_threads: usize,
 
     /// Number of threads to execute global blocking tasks.
-    #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "10")]
+    #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "512")]
     pub num_blocking_threads: usize,
 
     #[clap(flatten)]
