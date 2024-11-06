@@ -101,7 +101,6 @@ fn main() -> Result<(), anyhow::Error> {
 
     let mut hours_since_0 = 0;
     let mut event_batch = vec![];
-    let mut offset = 0;
     for result in iter {
         let (number, block) = result.context("failed to read block")?;
         let block = block.into_inner();
@@ -135,10 +134,7 @@ fn main() -> Result<(), anyhow::Error> {
                 if !std::path::Path::new(&folder_path).exists() {
                     std::fs::create_dir_all(&folder_path)?;
                 }
-                for chunk in event_batch.chunks(10000) {
-                    offset += chunk.len();
-                    std::fs::write(format!("{}/ledger_wallet_events+0+{:010}.json", folder_path, offset), chunk.join("\n"))?;
-                }
+                std::fs::write(format!("{}/ledger_wallet_events+backfill+0000000000.json", folder_path), chunk.join("\n"))?;
             }
             std::fs::write("last_processed_block", number.to_string())?;
             event_batch.clear();
