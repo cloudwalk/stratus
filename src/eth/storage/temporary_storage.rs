@@ -70,7 +70,7 @@ pub trait TemporaryStorage: Send + Sync + 'static {
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct TemporaryStorageConfig {
     /// Temporary storage implementation.
-    #[arg(long = "temp-storage", env = "TEMP_STORAGE")]
+    #[arg(long = "temp-storage", env = "TEMP_STORAGE", default_value = "inmemory")]
     pub temp_storage_kind: TemporaryStorageKind,
 }
 
