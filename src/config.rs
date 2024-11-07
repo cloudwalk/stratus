@@ -299,6 +299,14 @@ pub struct ImporterOfflineConfig {
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcStorageConfig,
 
+    /// Daemon mode - keeps running and checking for new blocks
+    #[arg(short = 'd', long = "daemon", env = "DAEMON", default_value = "false")]
+    pub daemon: bool,
+
+    /// Interval between daemon checks in seconds
+    #[arg(long = "daemon-interval", env = "DAEMON_INTERVAL", default_value = "60")]
+    pub daemon_interval: u64,
+
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,

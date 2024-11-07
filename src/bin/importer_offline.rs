@@ -10,6 +10,7 @@
 
 use std::cmp::min;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::anyhow;
 use futures::StreamExt;
@@ -73,7 +74,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
     storage.save_accounts(initial_accounts.clone())?;
 
-    let storage_loader = execute_external_rpc_storage_loader(rpc_storage, config.blocks_by_fetch, config.paralellism, block_start, block_end, backlog_tx);
+    let storage_loader = execute_external_rpc_storage_loader(rpc_storage, config.blocks_by_fetch, config.paralellism, config.daemon, config.daemon_interval, block_start, block_end, backlog_tx);
     spawn_named("storage-loader", async move {
         if let Err(e) = storage_loader.await {
             tracing::error!(parent: None, reason = ?e, "'storage-loader' task failed");
@@ -185,57 +186,74 @@ async fn execute_external_rpc_storage_loader(
     // data
     blocks_by_fetch: usize,
     paralellism: usize,
+    daemon: bool,
+    daemon_interval: u64,
     mut start: BlockNumber,
-    end: BlockNumber,
+    mut end: BlockNumber,
     backlog: mpsc::Sender<BacklogTask>,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "external-block-loader";
-    tracing::info!(parent: None, %start, %end, "creating task {}", TASK_NAME);
 
-    // prepare loads to be executed in parallel
-    let mut tasks = Vec::new();
-    while start <= end {
-        let end = min(start + (blocks_by_fetch - 1), end);
-
-        let task = load_blocks_and_receipts(Arc::clone(&rpc_storage), start, end);
-        tasks.push(task);
-
-        start += blocks_by_fetch;
-    }
-
-    // execute loads in parallel
-    let mut tasks = futures::stream::iter(tasks).buffered(paralellism);
     loop {
+        // prepare loads to be executed in parallel
+        let mut tasks = Vec::new();
+
         if GlobalState::is_shutdown_warn(TASK_NAME) {
             return Ok(());
         };
 
-        // retrieve next batch of loaded blocks
-        // if finished, do not cancel, it is expected to finish
-        let Some(result) = tasks.next().await else {
-            tracing::info!(parent: None, "{} has no more blocks to process", TASK_NAME);
-            return Ok(());
-        };
+        tracing::info!(parent: None, %start, %end, "creating task {}", TASK_NAME);
+        while start <= end {
+            end = min(start + (blocks_by_fetch - 1), end);
 
-        // check if executed correctly
-        let blocks = match result {
-            Ok(blocks) => blocks,
-            Err(e) => {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to fetch block or receipt");
-                return log_and_err!(reason = e, message);
-            }
-        };
+            let task = load_blocks_and_receipts(Arc::clone(&rpc_storage), start, end);
+            tasks.push(task);
 
-        // check blocks were really loaded
-        if blocks.is_empty() {
-            let message = GlobalState::shutdown_from(TASK_NAME, "no blocks returned when they were expected");
-            return log_and_err!(message);
+            start += blocks_by_fetch;
         }
 
-        // send to backlog
-        if backlog.send(blocks).await.is_err() {
-            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "failed to send task to importer")));
-        };
+        // execute loads in parallel
+        let mut iterator = futures::stream::iter(tasks).buffered(paralellism);
+        loop {
+            if GlobalState::is_shutdown_warn(TASK_NAME) {
+                return Ok(());
+            };
+
+            // retrieve next batch of loaded blocks
+            // if finished, do not cancel, it is expected to finish
+            let Some(result) = iterator.next().await else {
+                tracing::info!(parent: None, "{} has no more blocks to process", TASK_NAME);
+
+                if daemon {
+                    tracing::info!(parent: None, "{} is in daemon mode, waiting for new blocks", TASK_NAME);
+                    tokio::time::sleep(Duration::from_secs(daemon_interval)).await;
+                    break;
+                } else {
+                    tracing::info!(parent: None, "{} is not in daemon mode, exiting", TASK_NAME);
+                    return Ok(());
+                }
+            };
+
+            // check if executed correctly
+            let blocks = match result {
+                Ok(blocks) => blocks,
+                Err(e) => {
+                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to fetch block or receipt");
+                    return log_and_err!(reason = e, message);
+                }
+            };
+
+            // check blocks were really loaded
+            if blocks.is_empty() {
+                let message = GlobalState::shutdown_from(TASK_NAME, "no blocks returned when they were expected");
+                return log_and_err!(message);
+            }
+
+            // send to backlog
+            if backlog.send(blocks).await.is_err() {
+                return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "failed to send task to importer")));
+            };
+        }
     }
 }
 
