@@ -241,6 +241,10 @@ pub struct RpcDownloaderConfig {
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
     pub paralellism: usize,
 
+    /// Daemon mode.
+    #[arg(short = 'd', long = "daemon", env = "DAEMON", default_value = "false")]
+    pub daemon: bool,
+
     /// Accounts to retrieve initial balance information.
     ///
     /// For Cloudwalk networks, provide these addresses:
