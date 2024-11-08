@@ -38,8 +38,8 @@ alias run-follower := stratus-follower
 alias run-importer := stratus-follower
 
 # Stratus: Compile with debug options
-build features="":
-    cargo {{nightly_flag}} build {{release_flag}} --features "{{features}}"
+build binary="stratus" features="dev":
+    cargo {{nightly_flag}} build {{release_flag}} --bin {{binary}} --features {{features}}
 
 # Stratus: Check, or compile without generating code
 check:
@@ -91,7 +91,7 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service as leader
 stratus *args="":
-    cargo {{nightly_flag}} ${CARGO_COMMAND} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
 # To produce a flamegraph of the memory usage use jeprof:
@@ -165,6 +165,7 @@ e2e-stratus block-mode="automine" test="":
     if [ -d e2e ]; then
         cd e2e
     fi
+    just build
 
     just _log "Starting Stratus"
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
@@ -185,6 +186,7 @@ e2e-stratus-rocks block-mode="automine" test="":
     if [ -d e2e ]; then
         cd e2e
     fi
+    just build
 
     just _log "Starting Stratus"
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
@@ -218,6 +220,8 @@ e2e-clock-stratus:
 # E2E Clock: Builds and runs Stratus Rocks with block-time flag, then validates average block generation time
 e2e-clock-stratus-rocks:
     #!/bin/bash
+    just build
+
     just _log "Starting Stratus"
     just run --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
@@ -272,6 +276,7 @@ e2e-flamegraph:
 # E2E: Leader & Follower Up
 e2e-leader-follower-up test="brlc" release_flag="--release":
     #!/bin/bash
+    just build
 
     mkdir e2e_logs
 
@@ -412,6 +417,8 @@ contracts-remove *args="":
 # Contracts: Start Stratus and run contracts tests with InMemory storage
 contracts-test-stratus *args="":
     #!/bin/bash
+    just build
+
     just _log "Starting Stratus"
     just run -a 0.0.0.0:3000 &
 
@@ -454,42 +461,46 @@ contracts-coverage-erase:
     rm -rf ./*/coverage && echo "Coverage info erased."
 
 stratus-test-coverage output="":
+    #!/bin/bash
+    # setup
     just contracts-clone
-
+    source <(cargo llvm-cov show-env --export-prefix)
     cargo llvm-cov clean --workspace
+    just build
+
     # inmemory
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus automine
+    just e2e-stratus automine
     sleep 10
 
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus external
+    just e2e-stratus external
     sleep 10
 
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-clock-stratus
+    just e2e-clock-stratus
     sleep 10
 
-    CARGO_COMMAND="llvm-cov --no-report" just contracts-test-stratus
+    just contracts-test-stratus
     sleep 10
 
     # rocksdb
     -rm -r data/rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus-rocks automine
+    just e2e-stratus-rocks automine
     sleep 10
 
     -rm -r data/rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus-rocks external
+    just e2e-stratus-rocks external
     sleep 10
 
     -rm -r data/rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-clock-stratus-rocks
+    just e2e-clock-stratus-rocks
     sleep 10
 
     -rm -r data/rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just contracts-test-stratus-rocks
+    just contracts-test-stratus-rocks
     sleep 10
 
 
     # other
-    CARGO_COMMAND="llvm-cov --no-report" cargo llvm-cov --no-report
+    cargo llvm-cov --no-report
     sleep 10
 
     -just contracts-clone --token
@@ -497,32 +508,32 @@ stratus-test-coverage output="":
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     -docker compose down -v
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up kafka " "
+    just e2e-leader-follower-up kafka " "
     sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up deploy " "
+    just e2e-leader-follower-up deploy " "
     sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up brlc " "
+    just e2e-leader-follower-up brlc " "
     sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up change " "
+    just e2e-leader-follower-up change " "
     sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up miner " "
+    just e2e-leader-follower-up miner " "
     sleep 10
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up importer " "
+    just e2e-leader-follower-up importer " "
     sleep 10
 
     cargo llvm-cov report {{output}}
