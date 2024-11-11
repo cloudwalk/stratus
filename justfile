@@ -465,39 +465,48 @@ stratus-test-coverage output="":
     # setup
     just contracts-clone
     source <(cargo llvm-cov show-env --export-prefix)
+    export RUST_LOG=error
+
     cargo llvm-cov clean --workspace
     just build
 
     # inmemory
     just e2e-stratus automine
     sleep 10
+    -rm stratus.log
 
     just e2e-stratus external
     sleep 10
+    -rm stratus.log
 
     just e2e-clock-stratus
     sleep 10
+    -rm stratus.log
 
     just contracts-test-stratus
     sleep 10
+    -rm stratus.log
 
     # rocksdb
     -rm -r data/rocksdb
     just e2e-stratus-rocks automine
     sleep 10
+    -rm stratus.log
 
     -rm -r data/rocksdb
     just e2e-stratus-rocks external
     sleep 10
+    -rm stratus.log
 
     -rm -r data/rocksdb
     just e2e-clock-stratus-rocks
     sleep 10
+    -rm stratus.log
 
     -rm -r data/rocksdb
     just contracts-test-stratus-rocks
     sleep 10
-
+    -rm stratus.log
 
     # other
     cargo llvm-cov --no-report
@@ -510,30 +519,48 @@ stratus-test-coverage output="":
     -docker compose down -v
     just e2e-leader-follower-up kafka " "
     sleep 10
+    -rm -r e2e_logs
+    -rm utils/deploy/deploy_01.log
+    -rm utils/deploy/deploy_02.log
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     just e2e-leader-follower-up deploy " "
     sleep 10
+    -rm -r e2e_logs
+    -rm utils/deploy/deploy_01.log
+    -rm utils/deploy/deploy_02.log
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     just e2e-leader-follower-up brlc " "
     sleep 10
+    -rm -r e2e_logs
+    -rm utils/deploy/deploy_01.log
+    -rm utils/deploy/deploy_02.log
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     just e2e-leader-follower-up change " "
     sleep 10
+    -rm -r e2e_logs
+    -rm utils/deploy/deploy_01.log
+    -rm utils/deploy/deploy_02.log
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     just e2e-leader-follower-up miner " "
     sleep 10
+    -rm -r e2e_logs
+    -rm utils/deploy/deploy_01.log
+    -rm utils/deploy/deploy_02.log
 
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     just e2e-leader-follower-up importer " "
     sleep 10
+    -rm -r e2e_logs
+    -rm utils/deploy/deploy_01.log
+    -rm utils/deploy/deploy_02.log
 
     cargo llvm-cov report {{output}}
