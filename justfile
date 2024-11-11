@@ -435,6 +435,8 @@ contracts-test-stratus *args="":
 # Contracts: Start Stratus and run contracts tests with RocksDB storage
 contracts-test-stratus-rocks *args="":
     #!/bin/bash
+    just build
+
     just _log "Starting Stratus"
     just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
