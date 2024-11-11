@@ -126,7 +126,11 @@ mod offset {
             return log_and_err!("timestamp can't be before the latest block");
         }
 
-        let diff: i64 = if *new_block_timestamp == 0 { 0 } else { (*new_block_timestamp as i128 - now as i128) as i64 };
+        let diff: i64 = if *new_block_timestamp == 0 {
+            0
+        } else {
+            (*new_block_timestamp as i128 - now as i128) as i64
+        };
         NEW_TIMESTAMP.store(*new_block_timestamp, SeqCst);
         NEW_TIMESTAMP_DIFF.store(diff, SeqCst);
         Ok(())
