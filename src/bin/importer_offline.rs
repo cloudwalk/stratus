@@ -12,17 +12,15 @@ use std::cmp::min;
 use std::sync::Arc;
 
 use anyhow::anyhow;
-use futures::try_join;
 use futures::StreamExt;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
 use stratus::eth::miner::Miner;
 use stratus::eth::miner::MinerMode;
 use stratus::eth::primitives::BlockNumber;
-use stratus::eth::primitives::ExternalBlock;
-use stratus::eth::primitives::ExternalReceipt;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::ExternalTransaction;
+use stratus::eth::storage::ExternalBlockWithReceipts;
 use stratus::eth::storage::ExternalRpcStorage;
 use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
@@ -42,7 +40,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 /// Number of tasks in the backlog. Each task contains `--blocks-by-fetch` blocks and all receipts for them.
 const BACKLOG_SIZE: usize = 10;
 
-type BacklogTask = (Vec<ExternalBlock>, Vec<ExternalReceipt>);
+type BacklogTask = Vec<ExternalBlockWithReceipts>;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<ImporterOfflineConfig>::init();
@@ -92,7 +90,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         .join()
         .expect("'block-importer' thread panic'ed instead of properly returning an error");
 
-    // Explicitly block the `main` thread to drop the storage.
+    // Explicitly block the `main` thread while waiting for the storage to drop.
     drop(storage);
 
     Ok(())
@@ -118,13 +116,13 @@ fn execute_block_importer(
         };
 
         // receive blocks to execute
-        let Some((blocks, receipts)) = backlog_rx.blocking_recv() else {
+        let Some(blocks) = backlog_rx.blocking_recv() else {
             tracing::info!(parent: None, "{} has no more blocks to reexecute", TASK_NAME);
             return Ok(());
         };
 
         // ensure range is not empty
-        let (Some(block_start), Some(block_end)) = (blocks.first(), blocks.last()) else {
+        let (Some((block_start, _)), Some((block_end, _))) = (blocks.first(), blocks.last()) else {
             let message = GlobalState::shutdown_from(TASK_NAME, "received empty block range to reexecute");
             return log_and_err!(message);
         };
@@ -133,7 +131,8 @@ fn execute_block_importer(
         let block_start = block_start.number();
         let block_end = block_end.number();
         let batch_blocks_len = blocks.len();
-        tracing::info!(parent: None, %block_start, %block_end, receipts = %receipts.len(), "reexecuting blocks");
+        let receipts_len = blocks.iter().map(|(_, receipts)| receipts.len()).sum::<usize>();
+        tracing::info!(parent: None, %block_start, %block_end, %receipts_len, "reexecuting blocks");
 
         // ensure block range have no gaps
         if block_start.count_to(&block_end) != batch_blocks_len as u64 {
@@ -142,12 +141,10 @@ fn execute_block_importer(
         }
 
         // imports block transactions
-        let mut receipts = ExternalReceipts::from(receipts);
-        let receipts_len = receipts.len();
         let mut batch_tx_len = 0;
 
         let before_block = Instant::now();
-        for mut block in blocks.into_iter() {
+        for (mut block, receipts) in blocks.into_iter() {
             if GlobalState::is_shutdown_warn(TASK_NAME) {
                 return Ok(());
             }
@@ -157,7 +154,7 @@ fn execute_block_importer(
 
             // re-execute (and import) block
             batch_tx_len += block.transactions.len();
-            executor.execute_external_block(block.clone(), &mut receipts)?;
+            executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
 
             // mine and save block
             miner.mine_external_and_commit(block)?;
@@ -221,8 +218,8 @@ async fn execute_external_rpc_storage_loader(
         };
 
         // check if executed correctly
-        let (blocks, receipts) = match result {
-            Ok((blocks, receipts)) => (blocks, receipts),
+        let blocks = match result {
+            Ok(blocks) => blocks,
             Err(e) => {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to fetch block or receipt");
                 return log_and_err!(reason = e, message);
@@ -236,7 +233,7 @@ async fn execute_external_rpc_storage_loader(
         }
 
         // send to backlog
-        if backlog.send((blocks, receipts)).await.is_err() {
+        if backlog.send(blocks).await.is_err() {
             return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "failed to send task to importer")));
         };
     }
@@ -244,9 +241,7 @@ async fn execute_external_rpc_storage_loader(
 
 async fn load_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpcStorage>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BacklogTask> {
     tracing::info!(parent: None, %block_start, %block_end, "loading blocks and receipts");
-    let blocks_task = rpc_storage.read_blocks_in_range(block_start, block_end);
-    let receipts_task = rpc_storage.read_receipts_in_range(block_start, block_end);
-    try_join!(blocks_task, receipts_task)
+    rpc_storage.read_block_and_receipts_in_range(block_start, block_end).await
 }
 
 // Finds the block number to stop the import job.

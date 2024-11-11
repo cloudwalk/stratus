@@ -71,7 +71,7 @@ where
     }
 
     /// Get the necessary handle for any operation in the CF
-    fn handle(&self) -> Arc<BoundColumnFamily> {
+    pub fn handle(&self) -> Arc<BoundColumnFamily> {
         match self.handle_checked() {
             Some(handle) => handle,
             None => {
@@ -84,6 +84,7 @@ where
     }
 
     // Clears the database
+    #[cfg(feature = "dev")]
     pub fn clear(&self) -> Result<()> {
         let cf = self.handle();
 
@@ -122,7 +123,7 @@ where
         self.deserialize_value_with_context(&value_bytes).map(Some)
     }
 
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[allow(dead_code)]
     pub fn multi_get<I>(&self, keys: I) -> Result<Vec<(K, V)>>
     where
         I: IntoIterator<Item = K> + Clone,
@@ -152,37 +153,7 @@ where
             .collect()
     }
 
-    /// Insert pair (key, value) to the Column Family.
-    pub fn insert(&self, key: K, value: V) -> Result<()> {
-        self.insert_impl(key, value)
-            .with_context(|| format!("when trying to insert value in CF: '{}'", self.column_family))
-    }
-
-    #[inline]
-    fn insert_impl(&self, key: K, value: V) -> Result<()> {
-        let cf = self.handle();
-
-        let serialized_key = self.serialize_key_with_context(&key)?;
-        let serialized_value = self.serialize_value_with_context(&value)?;
-
-        self.db.put_cf(&cf, serialized_key, serialized_value).map_err(Into::into)
-    }
-
-    /// Deletes an entry from the database by key
-    #[allow(dead_code)]
-    pub fn delete(&self, key: &K) -> Result<()> {
-        self.delete_impl(key)
-            .with_context(|| format!("when trying to delete value from CF: '{}'", self.column_family))
-    }
-
-    #[inline]
-    fn delete_impl(&self, key: &K) -> Result<()> {
-        let serialized_key = self.serialize_key_with_context(key)?;
-        let cf = self.handle();
-
-        self.db.delete_cf(&cf, serialized_key).map_err(Into::into)
-    }
-
+    #[cfg(feature = "dev")]
     pub fn apply_batch_with_context(&self, batch: WriteBatch) -> Result<()> {
         self.db
             .write(batch)
@@ -213,51 +184,11 @@ where
         Ok(())
     }
 
-    pub fn prepare_batch_deletion<I>(&self, deletions: I, batch: &mut WriteBatch) -> Result<()>
-    where
-        I: IntoIterator<Item = K>,
-    {
-        let cf = self.handle();
-
-        for key in deletions {
-            let serialized_key = self
-                .serialize_key_with_context(&key)
-                .with_context(|| format!("failed to prepare batch delete for CF: '{}'", self.column_family))?;
-            // add the delete operation to the batch
-            batch.delete_cf(&cf, serialized_key);
-        }
-        Ok(())
-    }
-
-    // Custom method that combines entry and or_insert_with from a HashMap
-    pub fn get_or_insert_with<F>(&self, key: K, default: F) -> Result<V>
-    where
-        F: FnOnce() -> V,
-    {
-        let value = self.get(&key)?;
-
-        Ok(match value {
-            Some(value) => value,
-            None => {
-                let new_value = default();
-                self.insert(key, new_value.clone())?;
-                new_value
-            }
-        })
-    }
-
+    #[allow(dead_code)]
     pub fn iter_start(&self) -> RocksCfIter<K, V> {
         let cf = self.handle();
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::Start);
-        RocksCfIter::new(iter, &self.column_family)
-    }
-
-    #[allow(dead_code)]
-    pub fn iter_end(&self) -> RocksCfIter<K, V> {
-        let cf = self.handle();
-
-        let iter = self.db.iterator_cf(&cf, IteratorMode::End);
         RocksCfIter::new(iter, &self.column_family)
     }
 
@@ -387,7 +318,7 @@ where
 }
 
 /// An iterator over K-V pairs in a CF.
-pub(super) struct RocksCfIter<'a, K, V> {
+pub struct RocksCfIter<'a, K, V> {
     iter: DBIteratorWithThreadMode<'a, DB>,
     column_family: &'a str,
     _marker: PhantomData<(K, V)>,
@@ -406,6 +337,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     pub fn keys(self) -> RocksCfKeysIter<'a, K> {
         RocksCfKeysIter {
             iter: self.iter,
@@ -455,7 +387,8 @@ where
 /// This iterator doesn't deserialize values, but the underlying RocksDB iterator still reads them.
 ///
 /// Created by calling `.keys()` on a `RocksCfIter`.
-pub(super) struct RocksCfKeysIter<'a, K> {
+#[allow(dead_code)]
+pub struct RocksCfKeysIter<'a, K> {
     iter: DBIteratorWithThreadMode<'a, DB>,
     column_family: &'a str,
     _marker: PhantomData<K>,

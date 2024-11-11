@@ -36,6 +36,8 @@ use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
 use crate::ext::MutexExt;
 #[cfg(feature = "metrics")]
+use crate::ext::OptionExt;
+#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
@@ -228,7 +230,7 @@ impl Executor {
     /// Reexecutes an external block locally and imports it to the temporary storage.
     ///
     /// Returns the remaining receipts that were not consumed by the execution.
-    pub fn execute_external_block(&self, mut block: ExternalBlock, receipts: &mut ExternalReceipts) -> anyhow::Result<()> {
+    pub fn execute_external_block(&self, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), EvmExecutionMetrics::default());
@@ -281,7 +283,11 @@ impl Executor {
     ) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
-        let (start, tx_function) = (metrics::now(), codegen::function_sig_for_o11y(&tx.0.input));
+        let (start, tx_function, tx_contract) = (
+            metrics::now(),
+            codegen::function_sig_for_o11y(&tx.0.input),
+            codegen::contract_name_for_o11y(&tx.0.to.map_into()),
+        );
 
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash).entered();
@@ -289,7 +295,6 @@ impl Executor {
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
-            //
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
@@ -351,10 +356,10 @@ impl Executor {
         {
             *block_metrics += tx_metrics;
 
-            metrics::inc_executor_external_transaction(start.elapsed(), tx_function);
-            metrics::inc_executor_external_transaction_account_reads(tx_metrics.account_reads, tx_function);
-            metrics::inc_executor_external_transaction_slot_reads(tx_metrics.slot_reads, tx_function);
-            metrics::inc_executor_external_transaction_gas(tx_gas.as_u64() as usize, tx_function);
+            metrics::inc_executor_external_transaction(start.elapsed(), tx_contract, tx_function);
+            metrics::inc_executor_external_transaction_account_reads(tx_metrics.account_reads, tx_contract, tx_function);
+            metrics::inc_executor_external_transaction_slot_reads(tx_metrics.slot_reads, tx_contract, tx_function);
+            metrics::inc_executor_external_transaction_gas(tx_gas.as_u64() as usize, tx_contract, tx_function);
         }
 
         Ok(())
@@ -427,15 +432,17 @@ impl Executor {
         #[cfg(feature = "metrics")]
         {
             let function = codegen::function_sig_for_o11y(&tx.input);
+            let contract = codegen::contract_name_for_o11y(&tx.to);
+
             match &tx_execution {
                 Ok(tx_execution) => {
-                    metrics::inc_executor_local_transaction(start.elapsed(), true, function);
-                    metrics::inc_executor_local_transaction_account_reads(tx_execution.metrics().account_reads, function);
-                    metrics::inc_executor_local_transaction_slot_reads(tx_execution.metrics().slot_reads, function);
-                    metrics::inc_executor_local_transaction_gas(tx_execution.execution().gas.as_u64() as usize, true, function);
+                    metrics::inc_executor_local_transaction(start.elapsed(), true, contract, function);
+                    metrics::inc_executor_local_transaction_account_reads(tx_execution.metrics().account_reads, contract, function);
+                    metrics::inc_executor_local_transaction_slot_reads(tx_execution.metrics().slot_reads, contract, function);
+                    metrics::inc_executor_local_transaction_gas(tx_execution.execution().gas.as_u64() as usize, true, contract, function);
                 }
                 Err(_) => {
-                    metrics::inc_executor_local_transaction(start.elapsed(), false, function);
+                    metrics::inc_executor_local_transaction(start.elapsed(), false, contract, function);
                 }
             }
         }
@@ -540,7 +547,13 @@ impl Executor {
         // retrieve block info
         let pending_header = self.storage.read_pending_block_header()?.unwrap_or_default();
         let mined_block = match point_in_time {
-            StoragePointInTime::MinedPast(number) => self.storage.read_block(&BlockFilter::Number(number))?,
+            StoragePointInTime::MinedPast(number) => {
+                let Some(block) = self.storage.read_block(&BlockFilter::Number(number))? else {
+                    let filter = BlockFilter::Number(number);
+                    return Err(StratusError::RpcBlockFilterInvalid { filter });
+                };
+                Some(block)
+            }
             _ => None,
         };
 
@@ -556,15 +569,17 @@ impl Executor {
         #[cfg(feature = "metrics")]
         {
             let function = codegen::function_sig_for_o11y(&call_input.data);
+            let contract = codegen::contract_name_for_o11y(&call_input.to);
+
             match &evm_result {
                 Ok(evm_result) => {
-                    metrics::inc_executor_local_call(start.elapsed(), true, function);
-                    metrics::inc_executor_local_call_account_reads(evm_result.metrics.account_reads, function);
-                    metrics::inc_executor_local_call_slot_reads(evm_result.metrics.slot_reads, function);
-                    metrics::inc_executor_local_call_gas(evm_result.execution.gas.as_u64() as usize, function);
+                    metrics::inc_executor_local_call(start.elapsed(), true, contract, function);
+                    metrics::inc_executor_local_call_account_reads(evm_result.metrics.account_reads, contract, function);
+                    metrics::inc_executor_local_call_slot_reads(evm_result.metrics.slot_reads, contract, function);
+                    metrics::inc_executor_local_call_gas(evm_result.execution.gas.as_u64() as usize, contract, function);
                 }
                 Err(_) => {
-                    metrics::inc_executor_local_call(start.elapsed(), false, function);
+                    metrics::inc_executor_local_call(start.elapsed(), false, contract, function);
                 }
             }
         }

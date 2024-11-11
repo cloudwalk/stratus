@@ -134,13 +134,13 @@ impl RpcSubscriptions {
                     // Set cleaned subscriptions gauges to zero, which might be the wrong value
                     // they'll be set back to the correct values in the lines below
                     for client in pending_txs_subs_cleaned {
-                        metrics::set_rpc_subscriptions_active(0, client.to_string(), label::PENDING_TXS);
+                        metrics::set_rpc_subscriptions_active(0, label::PENDING_TXS, client.to_string());
                     }
                     for client in new_heads_subs_cleaned {
-                        metrics::set_rpc_subscriptions_active(0, client.to_string(), label::NEW_HEADS);
+                        metrics::set_rpc_subscriptions_active(0, label::NEW_HEADS, client.to_string());
                     }
                     for client in logs_subs_cleaned.into_iter().map(|(client, _)| client) {
-                        metrics::set_rpc_subscriptions_active(0, client.to_string(), label::LOGS);
+                        metrics::set_rpc_subscriptions_active(0, label::LOGS, client.to_string());
                     }
 
                     sub_metrics::update_new_pending_txs_subscription_metrics(&(*subs.pending_txs.read().await));
@@ -247,8 +247,7 @@ impl RpcSubscriptions {
         let msg = match msg.try_into() {
             Ok(msg) => msg,
             Err(e) => {
-                // TODO: remove format!() after rust analyzer bug is fixed
-                tracing::error!(parent: None, reason = format!("{e:?}"), "failed to convert message into subscription message");
+                tracing::error!(parent: None, reason = ?e, "failed to convert message into subscription message");
                 return;
             }
         };
@@ -374,28 +373,28 @@ impl RpcSubscriptionsConnected {
     }
 
     /// Adds a new subscriber to `newPendingTransactions` event.
-    pub async fn add_new_pending_txs_subscription(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
+    pub async fn add_new_pending_txs_subscription(&self, rpc_client: &RpcClientApp, sink: SubscriptionSink) {
         tracing::info!(
             id = sink.subscription_id().to_string_ext(),
             %rpc_client,
             "subscribing to newPendingTransactions event"
         );
         let mut subs = self.pending_txs.write().await;
-        subs.insert(sink.connection_id(), Subscription::new(rpc_client, sink.into()));
+        subs.insert(sink.connection_id(), Subscription::new(rpc_client.clone(), sink.into()));
 
         #[cfg(feature = "metrics")]
         sub_metrics::update_new_pending_txs_subscription_metrics(&subs);
     }
 
     /// Adds a new subscriber to `newHeads` event.
-    pub async fn add_new_heads_subscription(&self, rpc_client: RpcClientApp, sink: SubscriptionSink) {
+    pub async fn add_new_heads_subscription(&self, rpc_client: &RpcClientApp, sink: SubscriptionSink) {
         tracing::info!(
             id = sink.subscription_id().to_string_ext(),
             %rpc_client,
             "subscribing to newHeads event"
         );
         let mut subs = self.new_heads.write().await;
-        subs.insert(sink.connection_id(), Subscription::new(rpc_client, sink.into()));
+        subs.insert(sink.connection_id(), Subscription::new(rpc_client.clone(), sink.into()));
 
         #[cfg(feature = "metrics")]
         sub_metrics::update_new_heads_subscription_metrics(&subs);
@@ -405,7 +404,7 @@ impl RpcSubscriptionsConnected {
     ///
     /// If the same connection is asking to subscribe with the same filter (which is redundant),
     /// the new subscription will overwrite the newest one.
-    pub async fn add_logs_subscription(&self, rpc_client: RpcClientApp, filter: LogFilter, sink: SubscriptionSink) {
+    pub async fn add_logs_subscription(&self, rpc_client: &RpcClientApp, filter: LogFilter, sink: SubscriptionSink) {
         tracing::info!(
             id = sink.subscription_id().to_string_ext(), ?filter,
             %rpc_client,
@@ -416,7 +415,7 @@ impl RpcSubscriptionsConnected {
 
         // Insert the new subscription, if it already existed with the provided filter, overwrite
         // the previous sink with the newest
-        let inner = Subscription::new(rpc_client, sink.into());
+        let inner = Subscription::new(rpc_client.clone(), sink.into());
         filter_to_subscription_map.insert(filter.clone(), SubscriptionWithFilter::new(inner, filter));
 
         #[cfg(feature = "metrics")]
@@ -458,7 +457,7 @@ mod sub_metrics {
         let client_counts: HashMap<&RpcClientApp, usize> = sub_client_app_iter.map(|sub| &sub.client).counts();
 
         for (client, count) in client_counts {
-            metrics::set_rpc_subscriptions_active(count as u64, client.to_string(), sub_label);
+            metrics::set_rpc_subscriptions_active(count as u64, sub_label, client.to_string());
         }
     }
 }

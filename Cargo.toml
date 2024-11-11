@@ -34,10 +34,12 @@ paste = "=1.0.15"
 phf = "=0.11.2"
 pin-project = "=1.1.5"
 rand = { version = "=0.8.5", features = ["small_rng"] }
+rust_decimal = "=1.36.0"
 static_assertions = "=1.1.0"
 strum = "=0.26.2"
 sugars = "=3.0.1"
 thiserror = "=1.0.61"
+uuid = { version = "=1.10.0", features = ["v7"]}
 
 # async
 tokio = { version = "=1.38.0", features = [
@@ -65,7 +67,8 @@ serde_with = "=3.8.1"
 crossbeam-channel = "=0.5.13"
 futures = "=0.3.30"
 futures-timer = "=3.0.3"
-futures-util = "=0.3.30"
+futures-util = "=0.3.31"
+futures-channel = "=0.3.31"
 
 # ethereum / rpc
 ethabi = "=18.0.0"
@@ -76,7 +79,7 @@ rlp = "=0.5.2"
 triehash = "=0.8.4"
 
 # network
-jsonrpsee = { version = "=0.23.2", features = ["server", "client"] }
+jsonrpsee = { version = "=0.24.6", features = ["server", "client"] }
 reqwest = { version = "=0.12.4", features = ["json"] }
 tonic = "=0.11.0"
 tower = "=0.4.13"
@@ -116,6 +119,12 @@ sqlx = { version = "=0.8.2", features = [
 
 # test
 fake = { version = "=2.9.2", features = ["chrono", "derive"] }
+rdkafka = {version = "0.36.2", features = ["ssl", "sasl"] }
+openssl = { version = "0.10.32", features = ["vendored"] }
+sasl2-sys = { version = "0.1.22", features = ["vendored"] }
+
+# Historic events processor
+indicatif = "=0.17.8"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
@@ -178,8 +187,8 @@ name = "importer-offline"
 path = "src/bin/importer_offline.rs"
 
 [[bin]]
-name = "rocks-revert-to-block"
-path = "src/bin/rocks_revert_to_block.rs"
+name = "historic_events_processor"
+path = "src/bin/historic_events_processor.rs"
 
 # ------------------------------------------------------------------------------
 # Features

@@ -36,14 +36,14 @@ describe("Miner mode change integration test", function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
         expect(response.data.error.code).eq(-32009);
-        expect(response.data.error.message).eq("Transaction processing is enabled.");
+        expect(response.data.error.message).eq("Can't change miner mode while transactions are enabled.");
     });
 
     it("Miner change to Interval on Follower should fail because transactions are enabled", async function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["1s"]);
         expect(response.data.error.code).eq(-32009);
-        expect(response.data.error.message).eq("Transaction processing is enabled.");
+        expect(response.data.error.message).eq("Can't change miner mode while transactions are enabled.");
     });
 
     it("Disable transactions on Leader", async function () {

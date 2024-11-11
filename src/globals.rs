@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 use sentry::ClientInitGuard;
@@ -15,8 +16,11 @@ use crate::alias::JsonValue;
 use crate::config;
 use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
+use crate::eth::follower::importer::Importer;
 use crate::eth::rpc::RpcContext;
+use crate::ext::not;
 use crate::ext::spawn_signal_handler;
+use crate::ext::MutexExt;
 use crate::infra::tracing::warn_task_cancellation;
 
 // -----------------------------------------------------------------------------
@@ -84,7 +88,6 @@ where
 // Node mode
 // -----------------------------------------------------------------------------
 
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display)]
 pub enum NodeMode {
     #[strum(to_string = "leader")]
@@ -92,6 +95,10 @@ pub enum NodeMode {
 
     #[strum(to_string = "follower")]
     Follower,
+
+    /// Fake leader feches a block, re-executes its txs and then mines it's own block.
+    #[strum(to_string = "fake-leader")]
+    FakeLeader,
 }
 
 // -----------------------------------------------------------------------------
@@ -104,7 +111,7 @@ pub static STRATUS_SHUTDOWN_SIGNAL: Lazy<CancellationToken> = Lazy::new(Cancella
 static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(true);
 
 /// A guard that is taken when importer is running.
-pub static IMPORTER_ONLINE_TASKS_SEMAPHORE: Lazy<Semaphore> = Lazy::new(|| Semaphore::new(3));
+pub static IMPORTER_ONLINE_TASKS_SEMAPHORE: Lazy<Semaphore> = Lazy::new(|| Semaphore::new(Importer::TASKS_COUNT));
 
 /// Transaction should be accepted?
 static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -113,7 +120,7 @@ static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
 static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Current node mode.
-static IS_LEADER: AtomicBool = AtomicBool::new(false);
+static NODE_MODE: Mutex<NodeMode> = Mutex::new(NodeMode::Follower);
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalState;
@@ -170,7 +177,7 @@ impl GlobalState {
         format!("{} {}", caller, reason)
     }
 
-    /// Checks if the importer is being shutdown.
+    /// Checks if the importer is shut down or being shut down.
     pub fn is_importer_shutdown() -> bool {
         IMPORTER_SHUTDOWN.load(Ordering::Relaxed)
     }
@@ -178,7 +185,7 @@ impl GlobalState {
     /// Waits till importer is done.
     pub async fn wait_for_importer_to_finish() {
         // 3 permits will be available when all 3 tasks are finished
-        let result = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire_many(3).await;
+        let result = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire_many(Importer::TASKS_COUNT as u32).await;
 
         if let Err(e) = result {
             tracing::error!(reason = ?e, "error waiting for importer to finish");
@@ -194,7 +201,6 @@ impl GlobalState {
         shutdown
     }
 
-    /// Sets the importer shutdown state.
     pub fn set_importer_shutdown(shutdown: bool) {
         IMPORTER_SHUTDOWN.store(shutdown, Ordering::Relaxed);
     }
@@ -233,37 +239,28 @@ impl GlobalState {
 
     /// Initializes the node mode based on the StratusConfig.
     pub fn initialize_node_mode(config: &StratusConfig) {
-        let mode = if config.follower {
-            Self::set_importer_shutdown(false);
-            NodeMode::Follower
-        } else {
-            NodeMode::Leader
+        let StratusConfig {
+            follower, leader, fake_leader, ..
+        } = config;
+
+        let mode = match (follower, leader, fake_leader) {
+            (true, false, false) => NodeMode::Follower,
+            (false, true, false) => NodeMode::Leader,
+            (false, false, true) => NodeMode::FakeLeader,
+            _ => unreachable!("exactly one must be true, config should be checked by clap"),
         };
         Self::set_node_mode(mode);
+
+        let should_run_importer = mode != NodeMode::Leader;
+        Self::set_importer_shutdown(not(should_run_importer));
     }
 
-    /// Sets the current node mode.
     pub fn set_node_mode(mode: NodeMode) {
-        IS_LEADER.store(matches!(mode, NodeMode::Leader), Ordering::Relaxed);
+        *NODE_MODE.lock_or_clear("set_node_mode") = mode;
     }
 
-    /// Gets the current node mode.
     pub fn get_node_mode() -> NodeMode {
-        if IS_LEADER.load(Ordering::Relaxed) {
-            NodeMode::Leader
-        } else {
-            NodeMode::Follower
-        }
-    }
-
-    /// Checks if the node is in follower mode.
-    pub fn is_follower() -> bool {
-        !IS_LEADER.load(Ordering::Relaxed)
-    }
-
-    /// Checks if the node is in leader mode.
-    pub fn is_leader() -> bool {
-        IS_LEADER.load(Ordering::Relaxed)
+        *NODE_MODE.lock_or_clear("get_node_mode")
     }
 
     // -------------------------------------------------------------------------
@@ -272,7 +269,7 @@ impl GlobalState {
 
     pub fn get_global_state_as_json(ctx: &RpcContext) -> JsonValue {
         json!({
-            "is_leader": Self::is_leader(),
+            "is_leader": Self::get_node_mode() == NodeMode::Leader,
             "is_shutdown": Self::is_shutdown(),
             "is_importer_shutdown": Self::is_importer_shutdown(),
             "is_interval_miner_running": ctx.miner.is_interval_miner_running(),

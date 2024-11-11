@@ -2,6 +2,7 @@ use std::num::TryFromIntError;
 use std::ops::Deref;
 use std::str::FromStr;
 
+use chrono::DateTime;
 use chrono::Utc;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
@@ -9,6 +10,7 @@ use fake::Dummy;
 use fake::Faker;
 
 use crate::alias::RevmU256;
+use crate::ext::InfallibleExt;
 
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnixTime(u64);
@@ -78,6 +80,12 @@ impl From<U256> for UnixTime {
 impl From<UnixTime> for RevmU256 {
     fn from(value: UnixTime) -> Self {
         Self::from_limbs([value.0, 0, 0, 0])
+    }
+}
+
+impl From<UnixTime> for DateTime<Utc> {
+    fn from(value: UnixTime) -> Self {
+        DateTime::from_timestamp(value.0 as i64, 0).expect_infallible()
     }
 }
 

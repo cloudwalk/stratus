@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::min;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
@@ -28,17 +29,27 @@ use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::if_else;
+use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_rx_closed;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
 use crate::infra::BlockchainClient;
+use crate::ledger::events::transaction_to_events;
 use crate::log_and_err;
 #[cfg(feature = "metrics")]
 use crate::utils::calculate_tps;
 use crate::utils::DropTimer;
 use crate::GlobalState;
+
+#[derive(Clone, Copy)]
+pub enum ImporterMode {
+    /// A normal follower imports a mined block.
+    NormalFollower,
+    /// Fake leader feches a block, re-executes its txs and then mines it's own block.
+    FakeLeader,
+}
 
 // -----------------------------------------------------------------------------
 // Globals
@@ -80,17 +91,32 @@ pub struct Importer {
     chain: Arc<BlockchainClient>,
 
     sync_interval: Duration,
+
+    kafka_connector: Option<Arc<KafkaConnector>>,
+
+    importer_mode: ImporterMode,
 }
 
 impl Importer {
-    pub fn new(executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>, sync_interval: Duration) -> Self {
+    pub fn new(
+        executor: Arc<Executor>,
+        miner: Arc<Miner>,
+        storage: Arc<StratusStorage>,
+        chain: Arc<BlockchainClient>,
+        kafka_connector: Option<Arc<KafkaConnector>>,
+        sync_interval: Duration,
+        importer_mode: ImporterMode,
+    ) -> Self {
         tracing::info!("creating importer");
+
         Self {
             executor,
             miner,
             storage,
             chain,
             sync_interval,
+            kafka_connector,
+            importer_mode,
         }
     }
 
@@ -119,7 +145,13 @@ impl Importer {
         // it executes and mines blocks and expects to receive them via channel in the correct order.
         let task_executor = spawn_named(
             "importer::executor",
-            Importer::start_block_executor(Arc::clone(&self.executor), Arc::clone(&self.miner), backlog_rx),
+            Importer::start_block_executor(
+                Arc::clone(&self.executor),
+                Arc::clone(&self.miner),
+                backlog_rx,
+                self.kafka_connector.clone(),
+                self.importer_mode,
+            ),
         );
 
         // spawn block number:
@@ -150,11 +182,15 @@ impl Importer {
     // Executor
     // -----------------------------------------------------------------------------
 
+    pub const TASKS_COUNT: usize = 3;
+
     // Executes external blocks and persist them to storage.
     async fn start_block_executor(
         executor: Arc<Executor>,
         miner: Arc<Miner>,
         mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
+        kafka_connector: Option<Arc<KafkaConnector>>,
+        importer_mode: ImporterMode,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "block-executor";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
@@ -174,13 +210,29 @@ impl Importer {
             };
 
             #[cfg(feature = "metrics")]
-            let (start, block_number, block_tx_len) = (metrics::now(), block.number(), block.transactions.len());
+            let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
 
-            // execute and mine
-            let mut receipts = ExternalReceipts::from(receipts);
-            #[cfg(feature = "metrics")]
-            let receipts_len = receipts.len();
-            if let Err(e) = executor.execute_external_block(block.clone(), &mut receipts) {
+            // if it's fake miner, execute each tx and skip mining and commiting
+            if let ImporterMode::FakeLeader = importer_mode {
+                for tx in &block.transactions {
+                    let Ok(tx_input) = rlp::decode(&tx.0.input) else {
+                        tracing::error!("Failed to decode processed transaction");
+                        continue; // skip this tx
+                    };
+
+                    if let Err(e) = executor.execute_local_transaction(tx_input) {
+                        if e.is_internal() {
+                            tracing::error!(reason = ?e, "internal error while executing imported transaction");
+                        } else {
+                            tracing::error!(reason = ?e, "transaction failed");
+                        }
+                    }
+                }
+
+                return Ok(());
+            }
+
+            if let Err(e) = executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts)) {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
                 return log_and_err!(reason = e, message);
             };
@@ -200,10 +252,38 @@ impl Importer {
                 );
             }
 
-            if let Err(e) = miner.mine_external_and_commit(block) {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
-                return log_and_err!(reason = e, message);
+            let mined_block = match miner.mine_external(block) {
+                Ok(mined_block) => {
+                    tracing::info!("mined external block");
+                    mined_block
+                }
+                Err(e) => {
+                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+                    return log_and_err!(reason = e, message);
+                }
             };
+
+            if let Some(ref kafka_conn) = kafka_connector {
+                for tx in &mined_block.transactions {
+                    let events = transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx));
+                    let mut buffer = kafka_conn.send_buffered(events, 30)?;
+                    while let Some(res) = buffer.next().await {
+                        if let Err(e) = res {
+                            return log_and_err!(reason = e, "failed to send events");
+                        }
+                    }
+                }
+            }
+
+            match miner.commit(mined_block) {
+                Ok(_) => {
+                    tracing::info!("committed external block");
+                }
+                Err(e) => {
+                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to commit external block");
+                    return log_and_err!(reason = e, message);
+                }
+            }
 
             #[cfg(feature = "metrics")]
             {
@@ -255,31 +335,25 @@ impl Importer {
             // in case of failure, re-subscribe because current subscription may have been closed in the server.
             if let Some(sub) = &mut sub_new_heads {
                 tracing::info!("{} awaiting block number from newHeads subscription", TASK_NAME);
-                let resubscribe_ws = match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
+                match timeout(TIMEOUT_NEW_HEADS, sub.next()).await {
                     Ok(Some(Ok(block))) => {
                         tracing::info!(block_number = %block.number(), "{} received newHeads event", TASK_NAME);
                         set_external_rpc_current_block(block.number());
                         continue;
                     }
-                    Ok(None) => {
+                    Ok(None) =>
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
-                        }
-                        true
-                    }
-                    Ok(Some(Err(e))) => {
+                        },
+                    Ok(Some(Err(e))) =>
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
-                        }
-                        true
-                    }
-                    Err(_) => {
+                        },
+                    Err(_) =>
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
-                        }
-                        true
-                    }
-                };
+                        },
+                }
 
                 if Self::should_shutdown(TASK_NAME) {
                     return Ok(());
@@ -287,7 +361,7 @@ impl Importer {
 
                 // resubscribe if necessary.
                 // only update the existing subscription if succedeed, otherwise we will try again in the next iteration.
-                if chain.supports_ws() && resubscribe_ws {
+                if chain.supports_ws() {
                     tracing::info!("{} resubscribing to newHeads event", TASK_NAME);
                     match chain.subscribe_new_heads().await {
                         Ok(sub) => {

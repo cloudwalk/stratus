@@ -2,7 +2,8 @@
 #
 # Clone Git repositories containing Solidity contracts.
 #
-source $(dirname $0)/_functions.sh
+set -eo pipefail
+source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
 # Functions
@@ -13,9 +14,9 @@ remove() {
     repo=$1
     target=repos/$repo
 
-    if [ -d $target ]; then
+    if [ -d "$target" ]; then
         log "Removing: $repo"
-        rm -rf $target
+        rm -rf "$target"
     else
         log "Already removed: $repo"
         log "Nothing to do, leaving"
@@ -59,14 +60,39 @@ fi
 # Process arguments
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
-        -h|--help) print_help; exit 0 ;;
-        -t|--token) token=1; shift ;;
-        -p|--periphery) periphery=1; shift ;;
-        -m|--multisig) multisig=1; shift ;;
-        -c|--compound) compound=1; shift ;;
-        -i|--yield) yield=1; shift ;;
-        -x|--pix) pix=1; shift ;;
-        *) echo "Unknown option: $1"; print_help; exit 1 ;;
+    -h | --help)
+        print_help
+        exit 0
+        ;;
+    -t | --token)
+        token=1
+        shift
+        ;;
+    -p | --periphery)
+        periphery=1
+        shift
+        ;;
+    -m | --multisig)
+        multisig=1
+        shift
+        ;;
+    -c | --compound)
+        compound=1
+        shift
+        ;;
+    -i | --yield)
+        yield=1
+        shift
+        ;;
+    -x | --pix)
+        pix=1
+        shift
+        ;;
+    *)
+        echo "Unknown option: $1"
+        print_help
+        exit 1
+        ;;
     esac
 done
 
@@ -77,7 +103,8 @@ if [ "$token" == 1 ]; then
 fi
 
 if [ "$pix" == 1 ]; then
-    remove brlc-pix-cashier a528d0c
+    # Cashier Transition: remove regardless of the repository name at the moment
+    remove brlc-cashier && remove brlc-pix-cashier a528d0c
 fi
 
 if [ "$yield" == 1 ]; then
@@ -85,7 +112,8 @@ if [ "$yield" == 1 ]; then
 fi
 
 if [ "$periphery" == 1 ]; then
-    remove brlc-periphery fed9fcb
+    # Periphery Transition: remove regardless of the repository name at the moment
+    remove brlc-card-payment-processor && remove brlc-periphery fed9fcb
 fi
 
 if [ "$multisig" == 1 ]; then

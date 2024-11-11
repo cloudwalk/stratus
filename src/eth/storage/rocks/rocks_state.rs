@@ -9,7 +9,6 @@ use std::time::Instant;
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
-use lazy_static::lazy_static;
 use rocksdb::Direction;
 use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
@@ -28,7 +27,6 @@ use super::cf_versions::CfBlocksByNumberValue;
 use super::cf_versions::CfLogsValue;
 use super::cf_versions::CfTransactionsValue;
 use super::rocks_batch_writer::write_in_batch_for_multiple_cfs_impl;
-use super::rocks_batch_writer::BufferedBatchWriter;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
@@ -53,6 +51,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::StoragePointInTime;
+#[cfg(feature = "metrics")]
 use crate::ext::MutexExt;
 use crate::ext::OptionExt;
 use crate::log_and_err;
@@ -69,29 +68,37 @@ cfg_if::cfg_if! {
     }
 }
 
-lazy_static! {
-    /// Map setting presets for each Column Family
-    static ref CF_OPTIONS_MAP: HashMap<&'static str, Options> = hmap! {
-        "accounts" => DbConfig::Default.to_options(CacheSetting::Enabled(15 * GIGABYTE)),
+fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'static str, Options> {
+    let cache_multiplier = cache_multiplier.unwrap_or(1.0);
+
+    // multiplies the given size in GBs by the cache multiplier
+    let cached_in_gigs_and_multiplied = |size_in_gbs: u64| -> CacheSetting {
+        let size = (size_in_gbs as f32) * cache_multiplier;
+        let size = GIGABYTE * size as usize;
+        CacheSetting::Enabled(size)
+    };
+
+    hmap! {
+        "accounts" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(15)),
         "accounts_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
-        "account_slots" => DbConfig::Default.to_options(CacheSetting::Enabled(45 * GIGABYTE)),
+        "account_slots" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(45)),
         "account_slots_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
         "transactions" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
         "blocks_by_number" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
         "blocks_by_hash" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
         "logs" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
-    };
+    }
 }
 
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
-fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str) -> Result<RocksCfRef<K, V>>
+fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str, cf_options_map: &HashMap<&str, Options>) -> Result<RocksCfRef<K, V>>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
-    CF_OPTIONS_MAP
+    cf_options_map
         .get(column_family)
         .with_context(|| format!("matching column_family `{column_family}` given to `new_cf_ref` wasn't found in configuration map"))?;
 
@@ -103,14 +110,14 @@ where
 ///
 /// With data separated by column families, writing and reading should be done via the `RocksCfRef` fields.
 pub struct RocksStorageState {
-    db: Arc<DB>,
+    pub db: Arc<DB>,
     db_path: String,
     accounts: RocksCfRef<AddressRocksdb, CfAccountsValue>,
     accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), CfAccountsHistoryValue>,
     account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), CfAccountSlotsValue>,
     account_slots_history: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), CfAccountSlotsHistoryValue>,
-    transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
-    blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
+    pub transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
+    pub blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<HashRocksdb, CfBlocksByHashValue>,
     logs: RocksCfRef<(HashRocksdb, IndexRocksdb), CfLogsValue>,
     /// Last collected stats for a histogram
@@ -126,10 +133,13 @@ pub struct RocksStorageState {
 }
 
 impl RocksStorageState {
-    pub fn new(path: String, shutdown_timeout: Duration) -> Result<Self> {
+    pub fn new(path: String, shutdown_timeout: Duration, cache_multiplier: Option<f32>) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
+
+        let cf_options_map = generate_cf_options_map(cache_multiplier);
+
         #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
-        let (db, db_options) = create_or_open_db(&path, &CF_OPTIONS_MAP).context("when trying to create (or open) rocksdb")?;
+        let (db, db_options) = create_or_open_db(&path, &cf_options_map).context("when trying to create (or open) rocksdb")?;
 
         if db.path().to_str().is_none() {
             bail!("db path doesn't isn't valid UTF-8: {:?}", db.path());
@@ -140,14 +150,14 @@ impl RocksStorageState {
 
         let state = Self {
             db_path: path,
-            accounts: new_cf_ref(&db, "accounts")?,
-            accounts_history: new_cf_ref(&db, "accounts_history")?,
-            account_slots: new_cf_ref(&db, "account_slots")?,
-            account_slots_history: new_cf_ref(&db, "account_slots_history")?,
-            transactions: new_cf_ref(&db, "transactions")?,
-            blocks_by_number: new_cf_ref(&db, "blocks_by_number")?,
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash")?,
-            logs: new_cf_ref(&db, "logs")?,
+            accounts: new_cf_ref(&db, "accounts", &cf_options_map)?,
+            accounts_history: new_cf_ref(&db, "accounts_history", &cf_options_map)?,
+            account_slots: new_cf_ref(&db, "account_slots", &cf_options_map)?,
+            account_slots_history: new_cf_ref(&db, "account_slots_history", &cf_options_map)?,
+            transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
+            blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
+            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
+            logs: new_cf_ref(&db, "logs", &cf_options_map)?,
             #[cfg(feature = "metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "metrics")]
@@ -158,6 +168,15 @@ impl RocksStorageState {
 
         tracing::debug!("opened database successfully");
         Ok(state)
+    }
+
+    #[cfg(test)]
+    #[track_caller]
+    pub fn new_in_testdir() -> anyhow::Result<(Self, tempfile::TempDir)> {
+        let test_dir = tempfile::tempdir()?;
+        let path = test_dir.as_ref().display().to_string();
+        let state = Self::new(path, Duration::ZERO, None)?;
+        Ok((state, test_dir))
     }
 
     /// Get the filename of the database path.
@@ -172,6 +191,7 @@ impl RocksStorageState {
         Ok((u64::from(block_number)).into())
     }
 
+    #[cfg(feature = "dev")]
     pub fn reset(&self) -> Result<()> {
         self.accounts.clear()?;
         self.accounts_history.clear()?;
@@ -195,7 +215,7 @@ impl RocksStorageState {
 
             if change.is_account_modified() {
                 let address: AddressRocksdb = change.address.into();
-                let mut account_info_entry = self.accounts.get_or_insert_with(address, || AccountRocksdb::default().into())?;
+                let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
 
                 if let Some(nonce) = change.nonce.take_modified() {
                     account_info_entry.nonce = nonce.into();
@@ -284,7 +304,6 @@ impl RocksStorageState {
 
     pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Option<Slot>> {
         if address.is_coinbase() {
-            //XXX temporary, we will reload the database later without it
             return Ok(None);
         }
 
@@ -324,7 +343,6 @@ impl RocksStorageState {
 
     pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Option<Account>> {
         if address.is_coinbase() || address.is_zero() {
-            //XXX temporary, we will reload the database later without it
             return Ok(None);
         }
 
@@ -372,12 +390,27 @@ impl RocksStorageState {
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
-        for account in accounts {
-            let (key, value) = account.into();
-            let value: CfAccountsValue = value.into();
-            self.accounts.insert(key, value.clone())?;
-            self.accounts_history.insert((key, 0u64.into()), value.into_inner().into())?;
-        }
+        let mut write_batch = WriteBatch::default();
+
+        tracing::debug!(?accounts, "preparing accounts cf batch");
+        self.accounts.prepare_batch_insertion(
+            accounts.iter().cloned().map(|acc| {
+                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
+                (tup.0, tup.1.into())
+            }),
+            &mut write_batch,
+        )?;
+
+        tracing::debug!(?accounts, "preparing accounts history batch");
+        self.accounts_history.prepare_batch_insertion(
+            accounts.iter().cloned().map(|acc| {
+                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
+                ((tup.0, 0u64.into()), tup.1.into())
+            }),
+            &mut write_batch,
+        )?;
+
+        write_in_batch_for_multiple_cfs_impl(&self.db, write_batch)?;
         Ok(())
     }
 
@@ -430,7 +463,7 @@ impl RocksStorageState {
     }
 
     /// Writes slots to state (does not write to slot history)
-    #[cfg(test)]
+    #[cfg(feature = "dev")]
     pub fn write_slots(&self, slots: Vec<(Address, Slot)>) -> Result<()> {
         let slots = slots
             .into_iter()
@@ -451,7 +484,7 @@ impl RocksStorageState {
         self.accounts_history.iter_start().map(|result| Ok(result?.1.into_inner())).collect()
     }
 
-    /// Clears in-memory state.
+    #[cfg(feature = "dev")]
     pub fn clear(&self) -> Result<()> {
         self.accounts.clear().context("when clearing accounts")?;
         self.accounts_history.clear().context("when clearing accounts_history")?;
@@ -461,154 +494,6 @@ impl RocksStorageState {
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
         self.logs.clear().context("when clearing logs")?;
-        Ok(())
-    }
-
-    /// Revert state to target block, removing all effect from blocks after it.
-    pub fn revert_state_to_block(&self, target_block: BlockNumberRocksdb) -> Result<()> {
-        tracing::info!("clearing current account state (it will be reconstructed)");
-        self.accounts.clear()?;
-        tracing::info!("clearing current slots state (it will be reconstructed)");
-        self.account_slots.clear()?;
-
-        // all data from blocks after `target_block` should be deleted
-        let should_delete_block = |block_number| block_number > target_block;
-
-        let mut bufwriter = BufferedBatchWriter::new(1024 * 2);
-
-        struct LastHistoricalAccount {
-            address: AddressRocksdb,
-            account: AccountRocksdb,
-        }
-
-        let mut history_accounts_count = 0_u64;
-        let mut accounts_count = 0_u64;
-        let mut last_account: Option<LastHistoricalAccount> = None;
-
-        tracing::info!("starting iteration through historical accounts to clean values after target_block and reconstruct current accounts state");
-        for next in self.accounts_history.iter_start() {
-            let ((address, account_block_number), account) = next?;
-            let account = account.into_inner();
-
-            // this can only be `Some` if account in last iteration was in valid range
-            if let Some(last) = last_account {
-                // if reached a new account, insert the previous as it is the most up-to-date for that address
-                let is_different_account = last.address != address;
-                // if last was in valid block range, but this one isn't that's the most up-to-date in the valid range
-                let is_last_account_before_target_block = should_delete_block(account_block_number);
-
-                if is_last_account_before_target_block || is_different_account {
-                    bufwriter.insert(&self.accounts, last.address, last.account.into())?;
-                    accounts_count += 1;
-                }
-            }
-
-            if should_delete_block(account_block_number) {
-                bufwriter.delete(&self.accounts_history, (address, account_block_number))?;
-                // skip last_account for next iteration because its block shall be ignored
-                last_account = None;
-            } else {
-                // update last_account for next iteration
-                last_account = Some(LastHistoricalAccount { address, account });
-            }
-
-            history_accounts_count += 1;
-        }
-
-        // always insert last seen account
-        if let Some(last) = last_account {
-            bufwriter.insert(&self.accounts, last.address, last.account.into())?;
-            accounts_count += 1;
-        }
-
-        bufwriter.flush(&self.db)?;
-        tracing::info!(%history_accounts_count, %accounts_count, "finished historical accounts iteration");
-
-        struct LastHistoricalSlot {
-            address: AddressRocksdb,
-            index: SlotIndexRocksdb,
-            value: SlotValueRocksdb,
-        }
-
-        let mut history_slots_count = 0_u64;
-        let mut slots_count = 0_u64;
-        let mut last_slot: Option<LastHistoricalSlot> = None;
-
-        tracing::info!("starting iteration through historical slots to clean values after target_block and reconstruct current slots state");
-        for next in self.account_slots_history.iter_start() {
-            let ((address, index, slot_block_number), value) = next?;
-
-            // this can only be `Some` if slot in last iteration was in valid range
-            if let Some(last) = last_slot {
-                // if reached a new account, insert the previous as it is the most up-to-date for that address
-                let is_different_slot = last.address != address || last.index != index;
-                // if last was in valid block range, but this one isn't that's the most up-to-date in the valid range
-                let is_last_slot_before_target_block = should_delete_block(slot_block_number);
-
-                if is_last_slot_before_target_block || is_different_slot {
-                    bufwriter.insert(&self.account_slots, (last.address, last.index), last.value.into())?;
-                    slots_count += 1;
-                }
-            }
-
-            if should_delete_block(slot_block_number) {
-                bufwriter.delete(&self.account_slots_history, (address, index, slot_block_number))?;
-                // skip last_slot for next iteration because its block shall be ignored
-                last_slot = None;
-            } else {
-                // update last_slot for next iteration
-                last_slot = Some(LastHistoricalSlot {
-                    address,
-                    index,
-                    value: value.into_inner(),
-                });
-            }
-
-            history_slots_count += 1;
-        }
-
-        // always insert last seen slot
-        if let Some(last) = last_slot {
-            bufwriter.insert(&self.account_slots, (last.address, last.index), last.value.into())?;
-            slots_count += 1;
-        }
-
-        bufwriter.flush(&self.db)?;
-        tracing::info!(%history_slots_count, %slots_count, "finished historical slots iteration");
-
-        tracing::info!("cleaning values in transactions column family");
-        for next in self.transactions.iter_start() {
-            let (hash, block) = next?;
-            if should_delete_block(block.into_inner()) {
-                bufwriter.delete(&self.transactions, hash)?;
-            }
-        }
-        bufwriter.flush(&self.db)?;
-
-        tracing::info!("cleaning values in logs column family");
-        for next in self.logs.iter_start() {
-            let (key, block) = next?;
-            if should_delete_block(block.into_inner()) {
-                bufwriter.delete(&self.logs, key)?;
-            }
-        }
-        bufwriter.flush(&self.db)?;
-
-        tracing::info!("cleaning values in blocks_by_hash column family");
-        for next in self.blocks_by_hash.iter_start() {
-            let (hash, block) = next?;
-            if should_delete_block(block.into_inner()) {
-                bufwriter.delete(&self.blocks_by_hash, hash)?;
-            }
-        }
-        bufwriter.flush(&self.db)?;
-
-        tracing::info!("cleaning values in blocks_by_number column family");
-        for block in self.blocks_by_number.iter_from(target_block + 1, Direction::Forward)?.keys() {
-            bufwriter.delete(&self.blocks_by_number, block?)?;
-        }
-        bufwriter.flush(&self.db)?;
-
         Ok(())
     }
 }
@@ -739,27 +624,26 @@ impl fmt::Debug for RocksStorageState {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-    use std::iter;
 
     use fake::Fake;
     use fake::Faker;
-    use tempfile::tempdir;
 
     use super::*;
     use crate::eth::primitives::BlockHeader;
     use crate::eth::primitives::ExecutionValueChange;
-    use crate::eth::primitives::SlotValue;
 
     #[test]
+    #[cfg(feature = "dev")]
     fn test_rocks_multi_get() {
-        let test_dir = tempdir().unwrap();
+        type Key = (AddressRocksdb, SlotIndexRocksdb);
+        type Value = CfAccountSlotsValue;
 
-        let (db, _db_options) = create_or_open_db(test_dir.path(), &CF_OPTIONS_MAP).unwrap();
-        let account_slots: RocksCfRef<SlotIndex, SlotValue> = new_cf_ref(&db, "account_slots").unwrap();
+        let (mut state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
+        let account_slots = &mut state.account_slots;
 
-        let slots: HashMap<SlotIndex, SlotValue> = (0..1000).map(|_| (Faker.fake(), Faker.fake())).collect();
-        let extra_slots: HashMap<SlotIndex, SlotValue> = iter::repeat_with(|| (Faker.fake(), Faker.fake()))
+        // slots and extra_slots to be inserted
+        let slots: HashMap<Key, Value> = (0..1000).map(|_| Faker.fake()).collect();
+        let extra_slots: HashMap<Key, Value> = iter::repeat_with(|| Faker.fake())
             .filter(|(key, _)| !slots.contains_key(key))
             .take(1000)
             .collect();
@@ -767,27 +651,29 @@ mod tests {
         let mut batch = WriteBatch::default();
         account_slots.prepare_batch_insertion(slots.clone(), &mut batch).unwrap();
         account_slots.prepare_batch_insertion(extra_slots.clone(), &mut batch).unwrap();
-        db.write(batch).unwrap();
+        account_slots.apply_batch_with_context(batch).unwrap();
 
-        let extra_keys: HashSet<SlotIndex> = (0..1000)
+        // keys that don't match any entry
+        let extra_keys: HashSet<Key> = (0..1000)
             .map(|_| Faker.fake())
             .filter(|key| !extra_slots.contains_key(key) && !slots.contains_key(key))
             .collect();
 
-        let keys: Vec<SlotIndex> = slots.keys().copied().chain(extra_keys).collect();
+        // concatenation of keys for inserted elements, and keys that aren't in the DB
+        let keys: Vec<Key> = slots.keys().copied().chain(extra_keys).collect();
         let result = account_slots.multi_get(keys).expect("this should not fail");
 
+        // check that, besides having extra slots inserted, and extra keys when querying,
+        // only the expected slots are returned
         assert_eq!(result.len(), slots.keys().len());
         for (idx, value) in result {
-            assert_eq!(value, *slots.get(&idx).expect("should not be None"));
+            assert_eq!(value, *slots.get(&idx).expect("slot should be found"));
         }
     }
 
     #[test]
     fn regression_test_read_logs_without_providing_filter_address() {
-        let test_dir = tempdir().unwrap();
-
-        let state = RocksStorageState::new(test_dir.path().display().to_string(), Duration::ZERO).unwrap();
+        let (state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
 
         assert_eq!(state.read_logs(&LogFilter::default()).unwrap(), vec![]);
 
@@ -818,8 +704,7 @@ mod tests {
 
     #[test]
     fn regression_test_saving_account_changes_for_accounts_that_didnt_change() {
-        let test_dir = tempdir().unwrap();
-        let state = RocksStorageState::new(test_dir.path().display().to_string(), Duration::ZERO).unwrap();
+        let (state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
 
         let change_base = ExecutionAccountChanges {
             new_account: false,

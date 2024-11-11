@@ -3,34 +3,37 @@ name: E2E Leader & Follower
 on:
   pull_request:
     branches:
-      - '*'
+      - "*"
     paths-ignore:
-      - '.github/workflows/deploy.yml'
-      - '.github/workflows/docs-release.yml'
-      - '.github/workflows/outdated.yml'
-      - '.github/workflows/comment-tag-report.yml'
-      - '.github/workflows/pr-agent.yml'
-      - '.github/workflows/build-binary.yml'
-      - '.github/CODEOWNERS'
-      - 'config/**'
-      - 'README.md'
-      - 'LICENSE'
-      - 'CONTRIBUTING.md'
-      - 'utils/slack-notifiers/**'
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/docs-release.yml"
+      - ".github/workflows/outdated.yml"
+      - ".github/workflows/comment-tag-report.yml"
+      - ".github/workflows/pr-agent.yml"
+      - ".github/workflows/build-binary.yml"
+      - ".github/CODEOWNERS"
+      - "config/**"
+      - "README.md"
+      - "LICENSE"
+      - "CONTRIBUTING.md"
+      - "utils/slack-notifiers/**"
 
   push: # Rebuild cache policy
     branches:
-      - 'main'
+      - "main"
     paths:
-      - 'Cargo.lock'
-      - 'Cargo.toml'
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+
+  workflow_dispatch:
 
 jobs:
   leader_follower_test:
     strategy:
       fail-fast: false
       matrix:
-        test: [brlc, importer, miner, change, deploy]
+        test: [brlc, importer, miner, change, deploy, kafka]
     name: E2E Leader & Follower on ${{ matrix.test }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -44,7 +47,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Rust
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.79
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.81
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -59,6 +62,9 @@ jobs:
       - name: Install protoc
         run: sudo apt-get install -y protobuf-compiler
 
+      - name: Install libsasl2-dev libssl-dev
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+
       - name: Set up Just
         uses: extractions/setup-just@v2
 
@@ -72,14 +78,20 @@ jobs:
         run: |
           cargo install killport || true
           cargo install wait-service || true
-      
+
       - name: Install Python 3.12
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install Poetry
         run: curl -sSL https://install.python-poetry.org | python3 -
+      
+      - name: Install Docker Compose
+        if: matrix.test == 'kafka'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker-compose
 
       - name: Clone BRLCToken repository
         run: just contracts-clone --token

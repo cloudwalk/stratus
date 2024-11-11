@@ -8,6 +8,8 @@ use futures::future::BoxFuture;
 use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
 use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
+#[cfg(feature = "metrics")]
+use jsonrpsee::server::ConnectionGuard;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
@@ -60,7 +62,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
     type Future = RpcResponse<'a>;
 
     fn call(&self, mut request: jsonrpsee::types::Request<'a>) -> Self::Future {
-        // track request
         let span = info_span!(
             parent: None,
             "rpc::request",
@@ -78,7 +79,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         let middleware_enter = span.enter();
 
         // extract request data
-        let mut client = request.extensions.rpc_client();
         let method = request.method_name().to_owned();
         let tx = match method.as_str() {
             "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(request.params()).ok(),
@@ -86,12 +86,17 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
             _ => None,
         };
-        if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.clone()) {
-            request.extensions_mut().insert(tx_client.clone());
-            client = tx_client;
-        }
 
-        // trace request
+        let client = if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.as_ref()) {
+            let val = tx_client.clone();
+            request.extensions_mut().insert(val);
+            tx_client
+        } else {
+            request.extensions.rpc_client()
+        }
+        .to_owned();
+
+        // trace event
         Span::with(|s| {
             s.rec_str("rpc_id", &request.id);
             s.rec_str("rpc_client", &client);
@@ -113,15 +118,22 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             "rpc request"
         );
 
-        // metrify request
+        // track metrics
         #[cfg(feature = "metrics")]
         {
+            // started requests
             let tx_ref = tx.as_ref();
             metrics::inc_rpc_requests_started(&client, &method, tx_ref.map(|tx| tx.contract), tx_ref.map(|tx| tx.function));
+
+            // active requests
+            if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
+                let active = guard.max_connections() - guard.available_connections();
+                metrics::set_rpc_requests_active(active as u64);
+            }
         }
-        drop(middleware_enter);
 
         // make span available to rpc-server
+        drop(middleware_enter);
         request.extensions_mut().insert(span);
 
         RpcResponse {
@@ -171,6 +183,7 @@ impl<'a> Future for RpcResponse<'a> {
             let response_success = response.is_success();
             let response_result: JsonValue = from_json_str(response.as_result());
 
+            #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
             let (level, error_code) = match response_result
                 .get("error")
                 .and_then(|v| v.get("code"))
@@ -183,21 +196,32 @@ impl<'a> Future for RpcResponse<'a> {
                 None => (Level::INFO, 0),
             };
 
-            // track event
-            event_with!(
-                level,
-                rpc_client = %resp.client,
-                rpc_id = %resp.id,
-                rpc_method = %resp.method,
-                rpc_tx_hash = %resp.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
-                rpc_tx_contract = %resp.tx.as_ref().map(|tx|tx.contract).or_empty(),
-                rpc_tx_function = %resp.tx.as_ref().map(|tx|tx.function).or_empty(),
-                rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
-                rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
-                rpc_result = %response_result,
-                rpc_success = %response_success,
-                duration_us = %elapsed.as_micros(),
-                "rpc response"
+            let log_tracing_event = || {
+                event_with!(
+                    level,
+                    rpc_client = %resp.client,
+                    rpc_id = %resp.id,
+                    rpc_method = %resp.method,
+                    rpc_tx_hash = %resp.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
+                    rpc_tx_contract = %resp.tx.as_ref().map(|tx|tx.contract).or_empty(),
+                    rpc_tx_function = %resp.tx.as_ref().map(|tx|tx.function).or_empty(),
+                    rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
+                    rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
+                    rpc_result = %response_result,
+                    rpc_success = %response_success,
+                    duration_us = %elapsed.as_micros(),
+                    "rpc response"
+                );
+            };
+
+            sentry::with_scope(
+                |scope| {
+                    scope.set_user(Some(sentry::User {
+                        username: Some(resp.client.to_string()),
+                        ..Default::default()
+                    }));
+                },
+                log_tracing_event,
             );
 
             // track metrics

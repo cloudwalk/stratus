@@ -18,7 +18,7 @@ pub struct ExecutorConfig {
     /// Number of EVM instances to run.
     ///
     /// TODO: should be configured for each kind of EvmRoute instead of being a single value.
-    #[arg(long = "executor-evms", alias = "evms", env = "EXECUTOR_EVMS")]
+    #[arg(long = "executor-evms", alias = "evms", env = "EXECUTOR_EVMS", default_value = "30")]
     pub executor_evms: usize,
 
     /// EVM execution strategy.

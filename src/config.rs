@@ -23,6 +23,7 @@ use crate::eth::storage::ExternalRpcStorageConfig;
 use crate::eth::storage::StratusStorageConfig;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
+use crate::infra::kafka::KafkaConfig;
 use crate::infra::metrics::MetricsConfig;
 use crate::infra::sentry::SentryConfig;
 use crate::infra::tracing::TracingConfig;
@@ -40,7 +41,7 @@ pub fn load_dotenv_file() {
         Ok(Environment::Local) => {
             // local environment only
             match std::env::var("LOCAL_ENV_PATH") {
-                Ok(local_path) => format!("config/{}.env.local", local_path),
+                Ok(local_path) => local_path,
                 Err(_) => format!("config/{}.env.local", build_info::binary_name()),
             }
         }
@@ -91,11 +92,11 @@ pub struct CommonConfig {
     pub env: Environment,
 
     /// Number of threads to execute global async tasks.
-    #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "10")]
+    #[arg(long = "async-threads", env = "ASYNC_THREADS", default_value = "32")]
     pub num_async_threads: usize,
 
     /// Number of threads to execute global blocking tasks.
-    #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "10")]
+    #[arg(long = "blocking-threads", env = "BLOCKING_THREADS", default_value = "512")]
     pub num_blocking_threads: usize,
 
     #[clap(flatten)]
@@ -175,11 +176,15 @@ impl CommonConfig {
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
 #[clap(group = ArgGroup::new("mode").required(true).args(&["leader", "follower"]))]
 pub struct StratusConfig {
-    #[arg(long = "leader", env = "LEADER", conflicts_with("follower"))]
+    #[arg(long = "leader", env = "LEADER", conflicts_with_all = ["follower", "fake_leader", "ImporterConfig"])]
     pub leader: bool,
 
-    #[arg(long = "follower", env = "FOLLOWER", conflicts_with("leader"))]
+    #[arg(long = "follower", env = "FOLLOWER", conflicts_with_all = ["leader", "fake_leader"], requires = "ImporterConfig")]
     pub follower: bool,
+
+    /// The fake leader imports blocks like a follower, but executes the blocks's txs locally like a leader.
+    #[arg(long = "fake-leader", env = "FAKE_LEADER", conflicts_with_all = ["leader", "follower"], requires = "ImporterConfig")]
+    pub fake_leader: bool,
 
     #[clap(flatten)]
     pub rpc_server: RpcServerConfig,
@@ -193,12 +198,15 @@ pub struct StratusConfig {
     #[clap(flatten)]
     pub miner: MinerConfig,
 
-    #[clap(flatten)]
-    pub importer: Option<ImporterConfig>,
-
     #[deref]
     #[clap(flatten)]
     pub common: CommonConfig,
+
+    #[clap(flatten)]
+    pub importer: Option<ImporterConfig>,
+
+    #[clap(flatten)]
+    pub kafka_config: Option<KafkaConfig>,
 }
 
 impl WithCommonConfig for StratusConfig {
@@ -234,6 +242,10 @@ pub struct RpcDownloaderConfig {
     pub paralellism: usize,
 
     /// Accounts to retrieve initial balance information.
+    ///
+    /// For Cloudwalk networks, provide these addresses:
+    /// - Mainnet: 0xF56A88A4afF45cdb5ED7Fe63a8b71aEAaFF24FA6
+    /// - Testnet: 0xE45b176cAd7090A5CF70B69a73b6DEF9296ba6A2
     #[arg(long = "initial-accounts", env = "INITIAL_ACCOUNTS", value_delimiter = ',')]
     pub initial_accounts: Vec<Address>,
 
@@ -363,6 +375,10 @@ pub enum Environment {
     #[serde(rename = "production")]
     #[strum(to_string = "production")]
     Production,
+
+    #[serde(rename = "canary")]
+    #[strum(to_string = "canary")]
+    Canary,
 }
 
 impl FromStr for Environment {
@@ -374,6 +390,7 @@ impl FromStr for Environment {
             "local" => Ok(Self::Local),
             "staging" | "test" => Ok(Self::Staging),
             "production" | "prod" => Ok(Self::Production),
+            "canary" => Ok(Self::Canary),
             s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
         }
     }

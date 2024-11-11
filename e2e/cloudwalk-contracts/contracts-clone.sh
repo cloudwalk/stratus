@@ -2,7 +2,8 @@
 #
 # Clone Git repositories containing Solidity contracts.
 #
-source $(dirname $0)/_functions.sh
+set -eo pipefail
+source "$(dirname "$0")/_functions.sh"
 
 # ------------------------------------------------------------------------------
 # Functions
@@ -16,52 +17,59 @@ clone() {
 
     mkdir -p repos
 
-    if [ -d $target ]; then
+    if [ -d "$target" ]; then
         log "Updating: $repo"
-        git -C $target pull
+        git -C "$target" pull
     else
         log "Cloning: $repo"
-        git clone https://github.com/cloudwalk/$repo.git $target
-        
+        if ! git clone https://github.com/cloudwalk/"$repo".git "$target"; then
+            log "Clone failed. Removing folder and exiting."
+            rm -rf "$target"
+            return 1
+        fi
+
         # checkout commit if specified and it's different from HEAD
-        head_commit=$(git -C $target rev-parse --short HEAD)
+        head_commit=$(git -C "$target" rev-parse --short HEAD)
         if [ -n "$commit" ] && [ "$commit" != "$head_commit" ]; then
             log "Checking out commit: $commit"
-            git -C $target checkout $commit --quiet
+            git -C "$target" checkout "$commit" --quiet
         fi
     fi
 
     log "Installing dependencies: $repo"
-    npm --prefix $target --silent install
+    npm --prefix "$target" --silent install
 }
 
 # Clone an alternative version of a project to the projects directory.
 clone_alternative() {
     repo=$1
-    commit=$2
-    branch=$3
-    folder=$4
+    branch=$2
+    folder=$3
+    commit=$4
     target=repos/$folder
 
     mkdir -p repos
 
-    if [ -d $target ]; then
+    if [ -d "$target" ]; then
         log "Updating: $repo in $folder"
-        git -C $target pull
+        git -C "$target" pull
     else
         log "Cloning: $branch branch of $repo in $folder"
-        git clone --branch $branch https://github.com/cloudwalk/$repo.git $target
-        
+        if ! git clone --branch "$branch" https://github.com/cloudwalk/"$repo".git "$target"; then
+            log "Clone failed. Removing folder and exiting."
+            rm -rf "$target"
+            return 1
+        fi
         # checkout commit if specified and it's different from HEAD
-        head_commit=$(git -C $target rev-parse --short HEAD)
+        head_commit=$(git -C "$target" rev-parse --short HEAD)
         if [ -n "$commit" ] && [ "$commit" != "$head_commit" ]; then
             log "Checking out commit: $commit"
-            git -C $target checkout $commit --quiet
+            git -C "$target" checkout "$commit" --quiet
         fi
     fi
 
     log "Installing dependencies: $folder"
-    npm --prefix $target --silent install
+    npm --prefix "$target" --silent install
 }
 
 # ------------------------------------------------------------------------------
@@ -75,8 +83,6 @@ multisig=0
 compound=0
 yield=0
 pix=0
-pixv3=0
-pixv4=0
 cppv2=0
 
 # Help function
@@ -89,8 +95,6 @@ print_help() {
     echo "  -c, --compound    for compound-periphery"
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
-    echo "  -3, --pixv3       for brlc-pix-cashier-v3"
-    echo "  -4, --pixv4       for brlc-pix-cashier-v4"
     echo "  -2, --cppv2       for brlc-periphery-v2"
     echo "  -h, --help        display this help and exit"
 }
@@ -102,61 +106,93 @@ if [ "$#" == 0 ]; then
     compound=1
     yield=1
     pix=1
+    cppv2=1
 fi
 
 # Process arguments
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
-        -h|--help) print_help; exit 0 ;;
-        -t|--token) token=1; shift ;;
-        -p|--periphery) periphery=1; shift ;;
-        -m|--multisig) multisig=1; shift ;;
-        -c|--compound) compound=1; shift ;;
-        -i|--yield) yield=1; shift ;;
-        -x|--pix) pix=1; shift ;;
-        -3|--pixv3) pixv3=1; shift ;;
-        -4|--pixv4) pixv4=1; shift ;;
-        -2|--cppv2) cppv2=1; shift ;;
-        *) echo "Unknown option: $1"; print_help; exit 1 ;;
+    -h | --help)
+        print_help
+        exit 0
+        ;;
+    -t | --token)
+        token=1
+        shift
+        ;;
+    -p | --periphery)
+        periphery=1
+        shift
+        ;;
+    -m | --multisig)
+        multisig=1
+        shift
+        ;;
+    -c | --compound)
+        compound=1
+        shift
+        ;;
+    -i | --yield)
+        yield=1
+        shift
+        ;;
+    -x | --pix)
+        pix=1
+        shift
+        ;;
+    -2 | --cppv2)
+        cppv2=1
+        shift
+        ;;
+    *)
+        echo "Unknown option: $1"
+        print_help
+        exit 1
+        ;;
     esac
 done
 
 log "Cloning or updating repositories"
 
 if [ "$token" == 1 ]; then
-    clone brlc-token 80bdba3
+    clone brlc-token
 fi
 
 if [ "$pix" == 1 ]; then
-    clone brlc-pix-cashier fe9343c
+    # Cashier Transition: attempts to clone the cashier v4 repository/contract using different methods
+    # It tries multiple repository names and branches to ensure we get the correct version
+
+    # First, try to clone the 'brlc-cashier' repo, using the 'pix-cashier-v4' branch
+    clone_alternative brlc-cashier pix-cashier-v4 brlc-cashier ||
+        # If that fails, try to clone the 'brlc-pix-cashier' repo, again using the 'pix-cashier-v4' branch
+        clone_alternative brlc-pix-cashier pix-cashier-v4 brlc-cashier ||
+        # If both of those fail, try to clone the 'brlc-cashier' repo using the default branch
+        clone brlc-cashier ||
+        # As a last resort, try to clone the 'brlc-pix-cashier' repo using the default branch
+        clone brlc-pix-cashier
 fi
 
 if [ "$yield" == 1 ]; then
-    clone brlc-yield-streamer 236dbcb
+    clone brlc-yield-streamer
 fi
 
 if [ "$periphery" == 1 ]; then
-    clone brlc-periphery fed9fcb
+    # Periphery Transition: attempts to clone the periphery repository/contract using different methods
+    clone brlc-card-payment-processor || clone brlc-periphery
 fi
 
 if [ "$multisig" == 1 ]; then
-    clone brlc-multisig 918a226
+    clone brlc-multisig
 fi
 
 if [ "$compound" == 1 ]; then
-    clone compound-periphery c3ca5df
+    clone compound-periphery
 fi
 
 # Alternative versions
 
-if [ "$pixv3" == 1 ]; then
-    clone_alternative brlc-pix-cashier 2b1e7b3 pix-cashier-v3 brlc-pix-cashier-v3
-fi
-
-if [ "$pixv4" == 1 ]; then
-    clone_alternative brlc-pix-cashier 3ccc6c4 pix-cashier-v4 brlc-pix-cashier-v4
-fi
-
 if [ "$cppv2" == 1 ]; then
-    clone_alternative brlc-periphery 1e5344f cpp2 brlc-periphery-v2
+    # Periphery Transition: attempts to clone the periphery v2 repository/contract using different methods
+    clone_alternative brlc-card-payment-processor cpp2 brlc-card-payment-processor-v2 ||
+        clone_alternative brlc-periphery cpp2 brlc-periphery-v2
 fi

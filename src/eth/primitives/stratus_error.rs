@@ -15,7 +15,7 @@ use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Nonce;
 use crate::ext::to_json_value;
 
-/// Valid  error catogories are:
+/// Valid error catogories are:
 /// * client_request: request is invalid.
 /// * client_state:   request is valid, specific client rules rejects it.
 /// * server_state:   request is valid, global server rules rejects it.
@@ -58,7 +58,7 @@ pub enum StratusError {
     #[strum(props(kind = "server_state"))]
     RpcTransactionDisabled,
 
-    #[error("Transaction processing is enabled.")]
+    #[error("Can't change miner mode while transactions are enabled.")]
     #[strum(props(kind = "server_state"))]
     RpcTransactionEnabled,
 
@@ -83,7 +83,7 @@ pub enum StratusError {
 
     #[error("Failed to executed transaction in EVM: {0:?}.")]
     #[strum(props(kind = "execution"))]
-    TransactionEvmFailed(String), // split this in multiple errors
+    TransactionEvmFailed(String), // TODO: split this in multiple errors
 
     #[error("Failed to execute transaction in leader: {0:?}.")]
     #[strum(props(kind = "execution"))]
@@ -123,14 +123,6 @@ pub enum StratusError {
     // -------------------------------------------------------------------------
     // Miner
     // -------------------------------------------------------------------------
-    #[error("Requested miner mode conflicts with current miner mode.")]
-    #[strum(props(kind = "internal"))]
-    MinerModeConflict,
-
-    #[error("Miner mode change to ({miner_mode}) is unsupported.")]
-    #[strum(props(kind = "internal"))]
-    MinerModeChangeUnsupported { miner_mode: &'static str },
-
     #[error("Miner mode param is invalid.")]
     #[strum(props(kind = "internal"))]
     MinerModeParamInvalid,

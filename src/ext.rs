@@ -7,7 +7,10 @@ use std::sync::MutexGuard;
 use std::time::Duration;
 
 use anyhow::anyhow;
+use chrono::DateTime;
+use chrono::Utc;
 use jsonrpsee::types::SubscriptionId;
+use rust_decimal::Decimal;
 use serde::Serialize;
 use serde::Serializer;
 use tokio::select;
@@ -125,20 +128,38 @@ impl<T> OptionExt<T> for Option<T> {
 // Result
 // -----------------------------------------------------------------------------
 
-pub trait SerdeResultExt<T> {
+pub trait InfallibleExt<T, E> {
     /// Unwraps a result informing that this operation is expected to be infallible.
     fn expect_infallible(self) -> T;
 }
 
-impl<T> SerdeResultExt<T> for Result<T, serde_json::Error>
+impl<T> InfallibleExt<T, serde_json::Error> for Result<T, serde_json::Error>
 where
     T: Sized,
 {
     fn expect_infallible(self) -> T {
         if let Err(ref e) = self {
-            tracing::error!(reason = ?e, "serde serialization/deserialization that should be infallible");
+            tracing::error!(reason = ?e, "expected infallible serde serialization/deserialization");
         }
-        self.expect("serde serialization/deserialization that should be infallible")
+        self.expect("serde serialization/deserialization")
+    }
+}
+
+impl InfallibleExt<Decimal, ()> for Option<Decimal> {
+    fn expect_infallible(self) -> Decimal {
+        if self.is_none() {
+            tracing::error!("expected infallible decimal conversion");
+        }
+        self.expect("infallible decimal conversion")
+    }
+}
+
+impl InfallibleExt<DateTime<Utc>, ()> for Option<DateTime<Utc>> {
+    fn expect_infallible(self) -> DateTime<Utc> {
+        if self.is_none() {
+            tracing::error!("expected infallible datetime conversion");
+        }
+        self.expect("infallible datetime conversion")
     }
 }
 
@@ -156,14 +177,13 @@ impl<T> MutexResultExt<T> for Result<T, std::sync::PoisonError<T>> {
 }
 
 pub trait MutexExt<T> {
-    fn lock_or_clear<'a>(&'a self, error_message: &str) -> MutexGuard<'a, T>;
+    fn lock_or_clear<'a>(&'a self, error_context: &str) -> MutexGuard<'a, T>;
 }
 
 impl<T> MutexExt<T> for Mutex<T> {
-    fn lock_or_clear<'a>(&'a self, error_message: &str) -> MutexGuard<'a, T> {
+    fn lock_or_clear<'a>(&'a self, error_context: &str) -> MutexGuard<'a, T> {
         self.lock().unwrap_or_else(|poison_err| {
-            // TODO: remove this format!() after Rust-Analyzer bug is fixed
-            tracing::error!("Fatal: failed to lock mutex, {error_message}");
+            tracing::error!(error_context, "fatal: failed to lock mutex");
             self.clear_poison();
             poison_err.into_inner()
         })
@@ -360,7 +380,7 @@ macro_rules! gen_test_serde {
             #[test]
             pub fn [<serde_debug_json_ $type:snake>]() {
                 let original = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
-                let encoded_json = serde_json::to_string(&original).unwrap();
+                let encoded_json = serde_json::to_string(&original).expect(concat!("failed to serialize in test for ", stringify!($type)));
                 let encoded_debug = format!("{:?}", original);
                 assert_eq!(encoded_json, encoded_debug);
             }

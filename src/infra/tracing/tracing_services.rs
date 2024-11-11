@@ -29,8 +29,6 @@ use crate::alias::JsonValue;
 use crate::ext::not;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 
 // -----------------------------------------------------------------------------
 // Tracing service: Span field recorder
@@ -120,40 +118,18 @@ where
             }
         });
 
-        // TODO: temporary metrics from events
-        let fields = to_json_value(event.field_map());
-        #[cfg(feature = "metrics")]
-        {
-            event_to_metrics(&fields);
-        }
-
         // parse metadata and event
         let log = TracingLog {
             timestamp: Utc::now(),
             level: meta.level().as_serde(),
             target: meta.target(),
             thread: std::thread::current(),
-            fields,
+            fields: to_json_value(event.field_map()),
             context,
         };
 
         writeln!(writer, "{}", to_json_string(&log))
     }
-}
-
-#[cfg(feature = "metrics")]
-fn event_to_metrics(json: &JsonValue) {
-    let Some(message) = json.as_object().and_then(|obj| obj.get("message")).and_then(|msg| msg.as_str()) else {
-        return;
-    };
-
-    // jsonrpsee active connections
-    let Some(message) = message.strip_prefix("Accepting new connection ") else {
-        return;
-    };
-    let Some((current, _)) = message.split_once('/') else { return };
-    let Ok(current) = current.parse::<u64>() else { return };
-    metrics::set_rpc_requests_active(current);
 }
 
 #[derive(derive_new::new)]
@@ -376,7 +352,7 @@ pub fn warn_task_cancellation(task: &str) -> String {
 /// Returns the formatted tracing message.
 #[track_caller]
 pub fn warn_task_tx_closed(task: &str) -> String {
-    let message = format!("exiting {} because the tx channel on the other side was closed", task);
+    let message = format!("exiting {} because the tx channel on the receiver side was closed", task);
     tracing::warn!(%message);
     message
 }
@@ -386,7 +362,7 @@ pub fn warn_task_tx_closed(task: &str) -> String {
 /// Returns the formatted tracing message.
 #[track_caller]
 pub fn warn_task_rx_closed(task: &str) -> String {
-    let message = format!("exiting {} because the rx channel on the other side was closed", task);
+    let message = format!("exiting {} because the rx channel on the sender side was closed", task);
     tracing::warn!(%message);
     message
 }
