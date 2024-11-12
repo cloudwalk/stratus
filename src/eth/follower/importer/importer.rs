@@ -256,7 +256,7 @@ impl Importer {
 
             let mined_block = match miner.mine_external(block) {
                 Ok(mined_block) => {
-                    tracing::info!("mined external block");
+                    tracing::info!(number = %mined_block.number(), "mined external block");
                     mined_block
                 }
                 Err(e) => {
