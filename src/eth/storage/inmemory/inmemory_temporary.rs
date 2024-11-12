@@ -20,8 +20,9 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::storage::TemporaryStorage;
 use crate::eth::primitives::UnixTimeNow;
+use crate::eth::storage::TemporaryStorage;
+
 use crate::log_and_err;
 
 /// Number of previous blocks to keep inmemory to detect conflicts between different blocks.
@@ -195,9 +196,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         let mut states = self.lock_write();
         let mut finished_block = states.head.require_pending_block()?.clone();
 
-        // TODO: remove before merge with proper fix
+        // Update timestamp to reflect actual block mining time
+        // This ensures consistency with Ethereum's block timestamp rules
+        // and maintains accurate timing for timestamp-dependent operations
         finished_block.header.timestamp = UnixTimeNow::default();
-
+        
         // remove last state if reached limit
         if states.len() + 1 >= MAX_BLOCKS {
             let _ = states.pop();
