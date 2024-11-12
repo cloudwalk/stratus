@@ -51,6 +51,9 @@ pub struct KafkaConfig {
 
     #[arg(long = "kafka-ssl-key-location", env = "KAFKA_SSL_KEY_LOCATION", required = false)]
     pub ssl_key_location: Option<String>,
+
+    #[arg(long = "kafka-config-file", env = "KAFKA_CONFIG_FILE", required = false)]
+    pub config_file: Option<String>,
 }
 
 impl KafkaConfig {
@@ -100,41 +103,50 @@ impl KafkaConnector {
             "Creating Kafka connector"
         );
 
-        let security_protocol = config.security_protocol;
+        let mut client_config = ClientConfig::new();
 
-        let producer = match security_protocol {
-            KafkaSecurityProtocol::None => ClientConfig::new()
-                .set("bootstrap.servers", &config.bootstrap_servers)
-                .set("client.id", &config.client_id)
-                .create()?,
-            KafkaSecurityProtocol::SaslSsl => ClientConfig::new()
-                .set("security.protocol", "SASL_SSL")
-                .set("bootstrap.servers", &config.bootstrap_servers)
-                .set("client.id", &config.client_id)
-                .set(
-                    "sasl.mechanisms",
-                    config.sasl_mechanisms.as_ref().expect("sasl mechanisms is required").as_str(),
-                )
-                .set("sasl.username", config.sasl_username.as_ref().expect("sasl username is required").as_str())
-                .set("sasl.password", config.sasl_password.as_ref().expect("sasl password is required").as_str())
-                .create()?,
-            KafkaSecurityProtocol::Ssl => ClientConfig::new()
-                .set("bootstrap.servers", &config.bootstrap_servers)
-                .set("client.id", &config.client_id)
-                .set(
-                    "ssl.ca.location",
-                    config.ssl_ca_location.as_ref().expect("ssl ca location is required").as_str(),
-                )
-                .set(
-                    "ssl.certificate.location",
-                    config.ssl_certificate_location.as_ref().expect("ssl certificate location is required").as_str(),
-                )
-                .set(
-                    "ssl.key.location",
-                    config.ssl_key_location.as_ref().expect("ssl key location is required").as_str(),
-                )
-                .create()?,
+        // Se existir arquivo de configuração, carrega primeiro
+        if let Some(config_path) = &config.config_file {
+            let config_content = std::fs::read_to_string(config_path)?;
+            for line in config_content.lines() {
+                if !line.starts_with('#') && !line.is_empty() {
+                    if let Some((key, value)) = line.split_once('=') {
+                        client_config.set(key.trim(), value.trim());
+                    }
+                }
+            }
+        }
+
+        // Configurações básicas obrigatórias
+        client_config
+            .set("bootstrap.servers", &config.bootstrap_servers)
+            .set("client.id", &config.client_id);
+
+        // Configurações específicas baseadas no protocolo de segurança
+        match config.security_protocol {
+            KafkaSecurityProtocol::SaslSsl => {
+                if !config.has_credentials() {
+                    return Err(anyhow::anyhow!("SASL credentials are required for SASL_SSL"));
+                }
+                client_config
+                    .set("security.protocol", "SASL_SSL")
+                    .set("sasl.mechanisms", config.sasl_mechanisms.as_ref().expect("sasl mechanisms is required"))
+                    .set("sasl.username", config.sasl_username.as_ref().expect("sasl username is required"))
+                    .set("sasl.password", config.sasl_password.as_ref().expect("sasl password is required"));
+            }
+            KafkaSecurityProtocol::Ssl => {
+                if !config.has_credentials() {
+                    return Err(anyhow::anyhow!("SSL credentials are required for SSL"));
+                }
+                client_config
+                    .set("ssl.ca.location", config.ssl_ca_location.as_ref().expect("ssl ca location is required"))
+                    .set("ssl.certificate.location", config.ssl_certificate_location.as_ref().expect("ssl certificate location is required"))
+                    .set("ssl.key.location", config.ssl_key_location.as_ref().expect("ssl key location is required"));
+            }
+            KafkaSecurityProtocol::None => {}
         };
+
+        let producer: FutureProducer = client_config.create()?;
 
         Ok(Self {
             producer,
