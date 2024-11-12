@@ -204,6 +204,7 @@ e2e-stratus-rocks block-mode="automine" test="":
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus:
     #!/bin/bash
+    just build
     just _log "Starting Stratus"
     just run --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
