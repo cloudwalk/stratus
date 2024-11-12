@@ -228,8 +228,5 @@ metrics! {
     histogram_duration kafka_send_buffered{},
 
     "Time to run KafkaConnector::create_buffer"
-    histogram_duration kafka_create_buffer{},
-
-    "Time to create events"
-    histogram_duration kafka_create_events{}
+    histogram_duration kafka_create_buffer{}
 }
