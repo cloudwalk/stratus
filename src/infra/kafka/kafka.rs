@@ -171,7 +171,11 @@ impl KafkaConnector {
         handle_delivery_result(self.queue_event(event)?.await)
     }
 
-    pub fn create_buffer<T: Event>(&self, events: Vec<T>, buffer_size: usize) -> Result<impl Stream<Item = Result<()>>> {
+    pub fn create_buffer<T, I>(&self, events: I, buffer_size: usize) -> Result<impl Stream<Item = Result<()>>>
+    where
+        T: Event,
+        I: IntoIterator<Item = T>,
+    {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -190,7 +194,11 @@ impl KafkaConnector {
         Ok(futures::stream::iter(futures).buffered(buffer_size).map(handle_delivery_result))
     }
 
-    pub async fn send_buffered<T: Event>(&self, events: Vec<T>, buffer_size: usize) -> Result<()> {
+    pub async fn send_buffered<T, I>(&self, events: I, buffer_size: usize) -> Result<()>
+    where
+        T: Event,
+        I: IntoIterator<Item = T>,
+    {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
