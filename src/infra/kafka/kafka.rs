@@ -140,7 +140,10 @@ impl KafkaConnector {
                 }
                 client_config
                     .set("ssl.ca.location", config.ssl_ca_location.as_ref().expect("ssl ca location is required"))
-                    .set("ssl.certificate.location", config.ssl_certificate_location.as_ref().expect("ssl certificate location is required"))
+                    .set(
+                        "ssl.certificate.location",
+                        config.ssl_certificate_location.as_ref().expect("ssl certificate location is required"),
+                    )
                     .set("ssl.key.location", config.ssl_key_location.as_ref().expect("ssl key location is required"));
             }
             KafkaSecurityProtocol::None => {}
