@@ -22,7 +22,6 @@ use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::UnixTimeNow;
 use crate::eth::storage::TemporaryStorage;
-
 use crate::log_and_err;
 
 /// Number of previous blocks to keep inmemory to detect conflicts between different blocks.
@@ -200,7 +199,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         // This ensures consistency with Ethereum's block timestamp rules
         // and maintains accurate timing for timestamp-dependent operations
         finished_block.header.timestamp = UnixTimeNow::default();
-        
         // remove last state if reached limit
         if states.len() + 1 >= MAX_BLOCKS {
             let _ = states.pop();
