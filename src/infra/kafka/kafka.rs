@@ -12,6 +12,7 @@ use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
 use rdkafka::ClientConfig;
 
+use crate::infra::metrics;
 use crate::ledger::events::Event;
 use crate::log_and_err;
 
@@ -142,6 +143,8 @@ impl KafkaConnector {
     }
 
     pub fn queue_event<T: Event>(&self, event: T) -> Result<DeliveryFuture> {
+        tracing::debug!(?event, "queueing event");
+
         // prepare base payload
         let headers = event.event_headers()?;
         let key = event.event_key()?;
@@ -164,12 +167,45 @@ impl KafkaConnector {
     }
 
     pub async fn send_event<T: Event>(&self, event: T) -> Result<()> {
+        tracing::debug!(?event, "sending event");
         handle_delivery_result(self.queue_event(event)?.await)
     }
 
-    pub fn send_buffered<T: Event>(&self, events: Vec<T>, buffer_size: usize) -> Result<impl Stream<Item = Result<()>>> {
-        let futures: Vec<DeliveryFuture> = events.into_iter().map(|event| self.queue_event(event)).collect::<Result<Vec<_>, _>>()?; // This could fail because the queue is full
+    pub fn create_buffer<T: Event>(&self, events: Vec<T>, buffer_size: usize) -> Result<impl Stream<Item = Result<()>>> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
+        let futures: Vec<DeliveryFuture> = events
+            .into_iter()
+            .map(|event| {
+                metrics::timed(|| self.queue_event(event)).with(|m| {
+                    metrics::inc_kafka_queue_event(m.elapsed);
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?; // This could fail because the queue is full (?)
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_kafka_create_buffer(start.elapsed());
+
         Ok(futures::stream::iter(futures).buffered(buffer_size).map(handle_delivery_result))
+    }
+
+    pub async fn send_buffered<T: Event>(&self, events: Vec<T>, buffer_size: usize) -> Result<()> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
+        tracing::info!(?buffer_size, "sending events");
+
+        let mut buffer = self.create_buffer(events, buffer_size)?;
+        while let Some(res) = buffer.next().await {
+            if let Err(e) = res {
+                return log_and_err!(reason = e, "failed to send events");
+            }
+        }
+
+        #[cfg(feature = "metrics")]
+        metrics::inc_kafka_send_buffered(start.elapsed());
+        Ok(())
     }
 }
 
