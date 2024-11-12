@@ -215,6 +215,8 @@ impl Importer {
             // if it's fake miner, execute each tx and skip mining and commiting
             if let ImporterMode::FakeLeader = importer_mode {
                 for tx in &block.transactions {
+                    tracing::info!(?tx, "executing tx as fake miner");
+
                     let Ok(tx_input) = rlp::decode(&tx.0.input) else {
                         tracing::error!("Failed to decode processed transaction");
                         continue; // skip this tx
