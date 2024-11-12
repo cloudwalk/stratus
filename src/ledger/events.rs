@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt::Debug;
 
 use chrono::DateTime;
 use chrono::Utc;
@@ -194,7 +195,7 @@ impl Serialize for AccountTransferDirection {
 // -----------------------------------------------------------------------------
 
 /// Struct is an event that can be published to external systems.
-pub trait Event: Serialize + Sized {
+pub trait Event: Serialize + Sized + Debug {
     /// Returns the partition key component of the event.
     fn event_key(&self) -> anyhow::Result<String>;
 

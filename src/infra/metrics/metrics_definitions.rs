@@ -216,3 +216,17 @@ metrics! {
     "The readiness of Stratus."
     gauge consensus_is_ready{}
 }
+
+// Kafka Metrics
+metrics! {
+    group: kafka,
+
+    "Time to run KafkaConnector::queue_event"
+    histogram_duration kafka_queue_event{},
+
+    "Time to run KafkaConnector::send_buffered"
+    histogram_duration kafka_send_buffered{},
+
+    "Time to run KafkaConnector::create_buffer"
+    histogram_duration kafka_create_buffer{}
+}
