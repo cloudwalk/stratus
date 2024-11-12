@@ -9,6 +9,7 @@ use crate::infra::metrics::metrics_for_evm;
 use crate::infra::metrics::metrics_for_executor;
 use crate::infra::metrics::metrics_for_importer_online;
 use crate::infra::metrics::metrics_for_json_rpc;
+use crate::infra::metrics::metrics_for_kafka;
 use crate::infra::metrics::metrics_for_rocks;
 use crate::infra::metrics::metrics_for_storage_read;
 use crate::infra::metrics::metrics_for_storage_write;
@@ -35,6 +36,7 @@ impl MetricsConfig {
         metrics.extend(metrics_for_storage_write());
         metrics.extend(metrics_for_rocks());
         metrics.extend(metrics_for_consensus());
+        metrics.extend(metrics_for_kafka());
 
         // init metric exporter
         init_metrics_exporter(self.metrics_exporter_address);
