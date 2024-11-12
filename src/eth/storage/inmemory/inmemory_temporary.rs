@@ -21,6 +21,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::TemporaryStorage;
+use crate::eth::primitives::UnixTimeNow;
 use crate::log_and_err;
 
 /// Number of previous blocks to keep inmemory to detect conflicts between different blocks.
@@ -192,7 +193,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     /// TODO: we cannot allow more than one pending block. Where to put this check?
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
         let mut states = self.lock_write();
-        let finished_block = states.head.require_pending_block()?.clone();
+        let mut finished_block = states.head.require_pending_block()?.clone();
+
+        // TODO: remove before merge with proper fix
+        finished_block.header.timestamp = UnixTimeNow::default();
 
         // remove last state if reached limit
         if states.len() + 1 >= MAX_BLOCKS {
