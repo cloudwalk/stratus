@@ -105,7 +105,7 @@ impl KafkaConnector {
 
         let mut client_config = ClientConfig::new();
 
-        // Se existir arquivo de configuração, carrega primeiro
+        // If configuration file exists, load it first
         if let Some(config_path) = &config.config_file {
             let config_content = std::fs::read_to_string(config_path)?;
             for line in config_content.lines() {
@@ -117,12 +117,12 @@ impl KafkaConnector {
             }
         }
 
-        // Configurações básicas obrigatórias
+        // Required basic configurations
         client_config
             .set("bootstrap.servers", &config.bootstrap_servers)
             .set("client.id", &config.client_id);
 
-        // Configurações específicas baseadas no protocolo de segurança
+        // Specific configurations based on security protocol
         match config.security_protocol {
             KafkaSecurityProtocol::SaslSsl => {
                 if !config.has_credentials() {
@@ -170,7 +170,7 @@ impl KafkaConnector {
         }
         let kafka_record = FutureRecord::to(&self.topic).payload(&payload).key(&key).headers(kafka_headers);
 
-        // publis and handle response
+        // publish and handle response
         tracing::info!(%key, %payload, ?headers, "publishing kafka event");
         match self.producer.send_result(kafka_record) {
             Err((e, _)) => log_and_err!(reason = e, "failed to queue kafka event"),
