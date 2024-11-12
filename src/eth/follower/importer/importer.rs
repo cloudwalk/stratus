@@ -266,12 +266,7 @@ impl Importer {
             if let Some(ref kafka_conn) = kafka_connector {
                 for tx in &mined_block.transactions {
                     let events = transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx));
-                    let mut buffer = kafka_conn.send_buffered(events, 30)?;
-                    while let Some(res) = buffer.next().await {
-                        if let Err(e) = res {
-                            return log_and_err!(reason = e, "failed to send events");
-                        }
-                    }
+                    kafka_conn.send_buffered(events, 30).await?;
                 }
             }
 
