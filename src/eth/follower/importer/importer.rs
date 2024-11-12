@@ -266,10 +266,16 @@ impl Importer {
             };
 
             if let Some(ref kafka_conn) = kafka_connector {
+                #[cfg(feature = "metrics")]
+                let start = metrics::now();
+
                 for tx in &mined_block.transactions {
                     let events = transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx));
                     kafka_conn.send_buffered(events, 30).await?;
                 }
+
+                #[cfg(feature = "metrics")]
+                metrics::inc_kafka_create_events(start.elapsed());
             }
 
             match miner.commit(mined_block) {
