@@ -24,7 +24,6 @@ use super::cf_versions::CfAccountsHistoryValue;
 use super::cf_versions::CfAccountsValue;
 use super::cf_versions::CfBlocksByHashValue;
 use super::cf_versions::CfBlocksByNumberValue;
-use super::cf_versions::CfLogsValue;
 use super::cf_versions::CfTransactionsValue;
 use super::rocks_batch_writer::write_in_batch_for_multiple_cfs_impl;
 use super::rocks_cf::RocksCfRef;
@@ -35,7 +34,6 @@ use super::types::AccountRocksdb;
 use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
 use super::types::HashRocksdb;
-use super::types::IndexRocksdb;
 use super::types::SlotIndexRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -119,7 +117,6 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<HashRocksdb, CfBlocksByHashValue>,
-    logs: RocksCfRef<(HashRocksdb, IndexRocksdb), CfLogsValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -157,7 +154,6 @@ impl RocksStorageState {
             transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
-            logs: new_cf_ref(&db, "logs", &cf_options_map)?,
             #[cfg(feature = "metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "metrics")]
@@ -419,17 +415,12 @@ impl RocksStorageState {
         let account_changes = block.compact_account_changes();
 
         let mut txs_batch = vec![];
-        let mut logs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
             txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
-            for log in transaction.logs {
-                logs_batch.push(((transaction.input.hash.into(), log.log_index.into()), transaction.block_number.into()));
-            }
         }
         let mut batch = WriteBatch::default();
 
         self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
-        self.logs.prepare_batch_insertion(logs_batch, &mut batch)?;
 
         let number = block.number();
         let block_hash = block.hash();
@@ -560,7 +551,6 @@ impl RocksStorageState {
         self.accounts_history.export_metrics();
         self.blocks_by_hash.export_metrics();
         self.blocks_by_number.export_metrics();
-        self.logs.export_metrics();
         self.transactions.export_metrics();
         Ok(())
     }
