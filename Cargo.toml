@@ -190,6 +190,10 @@ path = "src/bin/importer_offline.rs"
 name = "historic_events_processor"
 path = "src/bin/historic_events_processor.rs"
 
+[[bin]]
+name = "rocks_migration"
+path = "src/bin/rocks_migration.rs"
+
 # ------------------------------------------------------------------------------
 # Features
 # ------------------------------------------------------------------------------
