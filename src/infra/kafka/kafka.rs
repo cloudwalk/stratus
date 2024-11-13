@@ -104,7 +104,7 @@ impl KafkaConnector {
         let mut client_config = ClientConfig::new()
             .set("bootstrap.servers", &config.bootstrap_servers)
             .set("client.id", &config.client_id)
-            .set("linger.ms", "100")
+            .set("linger.ms", "10")
             .set("batch.size", "1048576") // 1 MB
             .to_owned();
 
