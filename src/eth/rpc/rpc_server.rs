@@ -269,7 +269,7 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
     let latest = ctx.storage.read_block(&BlockFilter::Latest)?;
     match latest {
-        Some(block) => UnixTime::set_offset(block.header.timestamp, timestamp)?,
+        Some(block) => UnixTime::set_offset(timestamp, block.header.timestamp)?,
         None => return log_and_err!("reading latest block returned None")?,
     }
     Ok(to_json_value(timestamp))
