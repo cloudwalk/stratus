@@ -229,16 +229,7 @@ describe("Leader & Follower BRLC integration test", function () {
                     const followerBlock = await sendWithRetry("eth_getBlockByNumber", [blockNumber, true]);
 
                     // Compare block fields
-                    expect(leaderBlock.hash, `Block ${blockNumber} hash mismatch`).to.equal(followerBlock.hash);
-                    expect(leaderBlock.parentHash, `Block ${blockNumber} parentHash mismatch`).to.equal(
-                        followerBlock.parentHash,
-                    );
-                    expect(leaderBlock.timestamp, `Block ${blockNumber} timestamp mismatch`).to.equal(
-                        followerBlock.timestamp,
-                    );
-                    expect(leaderBlock.transactions, `Block ${blockNumber} transactions mismatch`).to.deep.equal(
-                        followerBlock.transactions,
-                    );
+                    expect(leaderBlock, `Block ${blockNumber} mismatch`).to.equal(followerBlock);
 
                     updateProviderUrl("stratus");
                 }
