@@ -68,7 +68,7 @@ cfg_if::cfg_if! {
     }
 }
 
-fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'static str, Options> {
+pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'static str, Options> {
     let cache_multiplier = cache_multiplier.unwrap_or(1.0);
 
     // multiplies the given size in GBs by the cache multiplier
@@ -79,14 +79,14 @@ fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'static st
     };
 
     hmap! {
-        "accounts" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(15)),
-        "accounts_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
-        "account_slots" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(45)),
-        "account_slots_history" => DbConfig::FastWriteSST.to_options(CacheSetting::Disabled),
-        "transactions" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
-        "blocks_by_number" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
-        "blocks_by_hash" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
-        "logs" => DbConfig::LargeSSTFiles.to_options(CacheSetting::Disabled),
+        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15)),
+        "accounts_history" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45)),
+        "account_slots_history" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "transactions" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "blocks_by_number" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "logs" => DbConfig::Default.to_options(CacheSetting::Disabled),
     }
 }
 
@@ -378,12 +378,13 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
+                }
+            }
         };
 
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
