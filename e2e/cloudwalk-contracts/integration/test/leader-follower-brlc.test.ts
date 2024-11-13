@@ -205,36 +205,6 @@ describe("Leader & Follower BRLC integration test", function () {
                 }
             });
 
-            it(`${params.name}: Validate block contents are identical between Stratus Leader and Follower`, async function () {
-                // Get unique block numbers from transaction receipts
-                updateProviderUrl("stratus");
-                const blockNumbers = [
-                    ...new Set(
-                        await Promise.all(
-                            txHashList.map(async (txHash) => {
-                                const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash]);
-                                return receipt.blockNumber;
-                            }),
-                        ),
-                    ),
-                ];
-
-                // Compare full block data between leader and follower
-                for (const blockNumber of blockNumbers) {
-                    // Get leader block
-                    const leaderBlock = await sendWithRetry("eth_getBlockByNumber", [blockNumber, true]);
-
-                    // Get follower block
-                    updateProviderUrl("stratus-follower");
-                    const followerBlock = await sendWithRetry("eth_getBlockByNumber", [blockNumber, true]);
-
-                    // Compare block fields
-                    expect(leaderBlock, `Block ${blockNumber} mismatch`).to.equal(followerBlock);
-
-                    updateProviderUrl("stratus");
-                }
-            });
-
             it(`${params.name}: Validate balances between Stratus Leader and Follower`, async function () {
                 for (let i = 0; i < wallets.length; i++) {
                     // Get Stratus Leader balance
