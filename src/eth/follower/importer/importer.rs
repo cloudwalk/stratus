@@ -215,6 +215,8 @@ impl Importer {
             // if it's fake miner, execute each tx and skip mining and commiting
             if let ImporterMode::FakeLeader = importer_mode {
                 for tx in &block.transactions {
+                    tracing::info!(?tx, "executing tx as fake miner");
+
                     let Ok(tx_input) = rlp::decode(&tx.0.input) else {
                         tracing::error!("Failed to decode processed transaction");
                         continue; // skip this tx
@@ -254,7 +256,7 @@ impl Importer {
 
             let mined_block = match miner.mine_external(block) {
                 Ok(mined_block) => {
-                    tracing::info!("mined external block");
+                    tracing::info!(number = %mined_block.number(), "mined external block");
                     mined_block
                 }
                 Err(e) => {
@@ -264,15 +266,12 @@ impl Importer {
             };
 
             if let Some(ref kafka_conn) = kafka_connector {
-                for tx in &mined_block.transactions {
-                    let events = transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx));
-                    let mut buffer = kafka_conn.send_buffered(events, 30)?;
-                    while let Some(res) = buffer.next().await {
-                        if let Err(e) = res {
-                            return log_and_err!(reason = e, "failed to send events");
-                        }
-                    }
-                }
+                let events = mined_block
+                    .transactions
+                    .iter()
+                    .flat_map(|tx| transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx)));
+
+                kafka_conn.send_buffered(events, 50).await?;
             }
 
             match miner.commit(mined_block) {
