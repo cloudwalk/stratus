@@ -9,7 +9,7 @@ use rocksdb::WriteOptions;
 use rocksdb::DB;
 use stratus::eth::storage::rocks::rocks_db::create_or_open_db;
 
-const COLUMN_FAMILIES: [&str; 8] = [
+const COLUMN_FAMILIES: [&str; 7] = [
     "accounts",
     "accounts_history",
     "account_slots",
@@ -17,7 +17,6 @@ const COLUMN_FAMILIES: [&str; 8] = [
     "transactions",
     "blocks_by_number",
     "blocks_by_hash",
-    "logs",
 ];
 
 pub fn main() -> Result<()> {
