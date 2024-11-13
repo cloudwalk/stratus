@@ -101,16 +101,17 @@ impl KafkaConnector {
         );
 
         let security_protocol = config.security_protocol;
+        let mut client_config = ClientConfig::new()
+            .set("bootstrap.servers", &config.bootstrap_servers)
+            .set("client.id", &config.client_id)
+            .set("linger.ms", "100")
+            .set("batch.size", "1048576") // 1 MB
+            .to_owned();
 
         let producer = match security_protocol {
-            KafkaSecurityProtocol::None => ClientConfig::new()
-                .set("bootstrap.servers", &config.bootstrap_servers)
-                .set("client.id", &config.client_id)
-                .create()?,
-            KafkaSecurityProtocol::SaslSsl => ClientConfig::new()
+            KafkaSecurityProtocol::None => client_config.create()?,
+            KafkaSecurityProtocol::SaslSsl => client_config
                 .set("security.protocol", "SASL_SSL")
-                .set("bootstrap.servers", &config.bootstrap_servers)
-                .set("client.id", &config.client_id)
                 .set(
                     "sasl.mechanisms",
                     config.sasl_mechanisms.as_ref().expect("sasl mechanisms is required").as_str(),
@@ -118,9 +119,7 @@ impl KafkaConnector {
                 .set("sasl.username", config.sasl_username.as_ref().expect("sasl username is required").as_str())
                 .set("sasl.password", config.sasl_password.as_ref().expect("sasl password is required").as_str())
                 .create()?,
-            KafkaSecurityProtocol::Ssl => ClientConfig::new()
-                .set("bootstrap.servers", &config.bootstrap_servers)
-                .set("client.id", &config.client_id)
+            KafkaSecurityProtocol::Ssl => client_config
                 .set(
                     "ssl.ca.location",
                     config.ssl_ca_location.as_ref().expect("ssl ca location is required").as_str(),
