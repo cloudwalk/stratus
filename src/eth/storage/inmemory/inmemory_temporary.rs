@@ -20,7 +20,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::UnixTimeNow;
 use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
 
