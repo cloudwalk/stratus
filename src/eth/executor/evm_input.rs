@@ -10,6 +10,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
@@ -81,7 +82,7 @@ pub struct EvmInput {
 
 impl EvmInput {
     /// Creates from a transaction that was sent directly to Stratus with `eth_sendRawTransaction`.
-    pub fn from_eth_transaction(input: TransactionInput, pending_block_number: BlockNumber) -> Self {
+    pub fn from_eth_transaction(input: TransactionInput, pending_header: PendingBlockHeader) -> Self {
         Self {
             from: input.signer,
             to: input.to,
@@ -90,8 +91,8 @@ impl EvmInput {
             gas_limit: Gas::MAX,
             gas_price: Wei::ZERO,
             nonce: Some(input.nonce),
-            block_number: pending_block_number,
-            block_timestamp: UnixTime::now(), // TODO: this should come from the pending block
+            block_number: pending_header.number,
+            block_timestamp: *pending_header.timestamp,
             point_in_time: StoragePointInTime::Pending,
             chain_id: input.chain_id,
         }
@@ -105,7 +106,7 @@ impl EvmInput {
     pub fn from_eth_call(
         input: CallInput,
         point_in_time: StoragePointInTime,
-        pending_block_number: BlockNumber,
+        pending_header: PendingBlockHeader,
         mined_block: Option<Block>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -117,11 +118,11 @@ impl EvmInput {
             gas_price: Wei::ZERO,
             nonce: None,
             block_number: match point_in_time {
-                StoragePointInTime::Mined | StoragePointInTime::Pending => pending_block_number,
+                StoragePointInTime::Mined | StoragePointInTime::Pending => pending_header.number,
                 StoragePointInTime::MinedPast(number) => number,
             },
             block_timestamp: match point_in_time {
-                StoragePointInTime::Mined | StoragePointInTime::Pending => UnixTime::now(),
+                StoragePointInTime::Mined | StoragePointInTime::Pending => *pending_header.timestamp,
                 StoragePointInTime::MinedPast(_) => match mined_block {
                     Some(block) => block.header.timestamp,
                     None => return log_and_err!("failed to create EvmInput: couldn't determine mined block timestamp"),

@@ -20,6 +20,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::UnixTimeNow;
 use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
 
@@ -192,8 +193,13 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     /// TODO: we cannot allow more than one pending block. Where to put this check?
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
         let mut states = self.lock_write();
-        let finished_block = states.head.require_pending_block()?.clone();
+        let mut finished_block = states.head.require_pending_block()?.clone();
 
+        // Update the finished block timestamp to reflect when it was actually mined,
+        // rather than using the timestamp from when the pending block was first created.
+        // This ensures consistency with Ethereum's block timestamp rules
+        // and maintains accurate timing for timestamp-dependent smart-contracts
+        finished_block.header.timestamp = UnixTimeNow::default();
         // remove last state if reached limit
         if states.len() + 1 >= MAX_BLOCKS {
             let _ = states.pop();
