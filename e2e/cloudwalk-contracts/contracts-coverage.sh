@@ -52,7 +52,7 @@ coverage brlc-card-payment-processor || coverage brlc-periphery
 # Cashier Transition: calculate coverage regardless of the repository's current name
 coverage brlc-cashier || coverage brlc-pix-cashier
 
-coverage brlc-balance-tracker || echo "Balance Tracker is not isolated yet. Skipping..."
+coverage brlc-balance-tracker || log "Balance Tracker is not isolated yet. Skipping..."
 coverage brlc-yield-streamer
 coverage brlc-multisig
 coverage compound-periphery

@@ -177,7 +177,8 @@ if [ "$pix" == 1 ]; then
 fi
 
 if [ "$yield" == 1 ]; then
-    clone brlc-balance-tracker || echo "Balance Tracker not isolated yet. Skipping..."
+    # BalanceTracker Transition: clone balance tracker if it exists and contains the hardhat project.
+    clone brlc-balance-tracker || log "Balance Tracker not isolated yet. Skipping..."
     clone brlc-yield-streamer
 fi
 
