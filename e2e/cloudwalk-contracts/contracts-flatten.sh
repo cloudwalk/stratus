@@ -131,7 +131,8 @@ if [ "$pix" == 1 ]; then
 fi
 
 if [ "$yield" == 1 ]; then
-    flatten brlc-yield-streamer BalanceTracker
+    # BalanceTracker Transition: flatten BalanceTracker regardless if the repo is isolated or not
+    flatten brlc-balance-tracker BalanceTracker || flatten brlc-yield-streamer BalanceTracker
     flatten brlc-yield-streamer YieldStreamer
 fi
 
