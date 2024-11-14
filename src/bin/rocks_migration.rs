@@ -19,7 +19,7 @@ const COLUMN_FAMILIES: [&str; 7] = [
 ];
 
 pub fn main() -> Result<()> {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 3 {
