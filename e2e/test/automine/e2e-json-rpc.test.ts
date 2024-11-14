@@ -312,9 +312,14 @@ describe("JSON-RPC", () => {
         describe("eth_subscribe", () => {
             it("fails on HTTP", async () => {
                 const error = await sendAndGetError("eth_subscribe", ["newHeads"]);
-                expect(error).to.not.be.null;
-                expect(error.code).eq(-32603); // Internal error
+                if (isStratus) {
+                    expect(error).to.not.be.null;
+                    expect(error.code).eq(-32603); // Internal error
+                } else {
+                    expect(error).to.be.undefined;
+                }
             });
+            
             it("subscribes to newHeads receives success subscription event", async () => {
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEvent("newHeads", waitTimeInMilliseconds);
