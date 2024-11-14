@@ -401,9 +401,6 @@ describe("JSON-RPC", () => {
                 
                 await sendEvmMine();
         
-                // Get current time before transaction
-                const beforeTx = Math.floor(Date.now() / 1000);
-        
                 // Record timestamp in contract
                 const tx = await contract.recordTimestamp();
         
