@@ -154,11 +154,11 @@ mod offset {
     /// to maintain proper time progression relative to real time.
     pub fn set(current_block_timestamp: UnixTime, new_block_timestamp: UnixTime) -> anyhow::Result<()> {
         use crate::log_and_err;
-    
+
         if *new_block_timestamp != 0 && *new_block_timestamp < *current_block_timestamp {
             return log_and_err!("timestamp can't be before the latest block");
         }
-    
+
         let diff: i64 = if *new_block_timestamp == 0 {
             0
         } else {
@@ -167,7 +167,7 @@ mod offset {
             let current_time = Utc::now().timestamp() as i64;
             (*new_block_timestamp as i64).saturating_sub(current_time)
         };
-        
+
         NEW_TIMESTAMP.store(*new_block_timestamp, SeqCst);
         NEW_TIMESTAMP_DIFF.store(diff, SeqCst);
         EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.store(true, SeqCst);
@@ -214,7 +214,7 @@ mod offset {
         let new_timestamp = NEW_TIMESTAMP.load(Acquire);
         let new_timestamp_diff = NEW_TIMESTAMP_DIFF.load(Acquire);
         let was_evm_timestamp_set = EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.load(Acquire);
-    
+
         let current_time = Utc::now().timestamp() as i64;
         let result = if !was_evm_timestamp_set {
             // For subsequent blocks:
@@ -224,13 +224,13 @@ mod offset {
             } else {
                 current_time + new_timestamp_diff
             };
-            
+
             // 2. Ensure we advance by at least 1 second from the last block
             let next_timestamp = std::cmp::max(
                 current_time + new_timestamp_diff,
                 last_timestamp + 1
             );
-            
+
             UnixTime(next_timestamp as u64)
         } else if new_timestamp != 0 {
             // First block after setting: use exact timestamp
@@ -241,7 +241,7 @@ mod offset {
             // Reset case: use current time
             UnixTime(current_time as u64)
         };
-        
+
         result
     }
 
