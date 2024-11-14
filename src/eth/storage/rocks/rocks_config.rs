@@ -1,6 +1,6 @@
 use rocksdb::BlockBasedOptions;
+use rocksdb::Cache;
 use rocksdb::Options;
-use rocksdb::PlainTableFactoryOptions;
 
 pub enum CacheSetting {
     /// Enabled cache with the given size in bytes
@@ -21,13 +21,17 @@ impl Default for DbConfig {
 }
 
 impl DbConfig {
-    pub fn to_options(self, _cache_setting: CacheSetting, key_length: Option<u32>) -> Options {
+    pub fn to_options(self, cache_setting: CacheSetting) -> Options {
         let mut opts = Options::default();
+        let mut block_based_options = BlockBasedOptions::default();
 
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
         opts.increase_parallelism(16);
         opts.set_allow_mmap_reads(true);
+        block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
+        block_based_options.set_cache_index_and_filter_blocks(true);
+        block_based_options.set_bloom_filter(15.5, true);
 
         // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
         #[cfg(feature = "metrics")]
@@ -38,32 +42,27 @@ impl DbConfig {
 
         match self {
             DbConfig::OptimizedPointLookUp => {
-                let plain = PlainTableFactoryOptions {
-                    user_key_length: key_length.unwrap(),
-                    bloom_bits_per_key: 15,
-                    hash_table_ratio: 0.0,
-                    index_sparseness: 16,
-                    huge_page_tlb_size: 0,
-                    encoding_type: rocksdb::KeyEncodingType::Plain,
-                    full_scan_mode: false,
-                    store_index_in_file: true
-                };
+                block_based_options.set_data_block_hash_ratio(0.5);
+                block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
 
+                opts.set_memtable_whole_key_filtering(true);
+                // not sure why, but it is in OptimizeForPointLookup(\1)
+                // but maybe we can set the prefix extractor for slots, since the they are prefixed by the account.
+                opts.set_memtable_prefix_bloom_ratio(0.02);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
-                opts.set_plain_table_factory(&plain);
             }
             DbConfig::Default => {
-                let mut block_based_options = BlockBasedOptions::default();
-
-                block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
-                block_based_options.set_cache_index_and_filter_blocks(true);
-                block_based_options.set_ribbon_filter(15.5);
-
                 opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
                 opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
                 opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true); // mostly defaults except max_dict_bytes
                 opts.set_bottommost_zstd_max_train_bytes(1600 * 1024, true);
             }
+        }
+
+        if let CacheSetting::Enabled(cache_size) = cache_setting {
+            let cache = Cache::new_lru_cache(cache_size);
+            block_based_options.set_block_cache(&cache);
+            block_based_options.set_cache_index_and_filter_blocks(true);
         }
 
         opts

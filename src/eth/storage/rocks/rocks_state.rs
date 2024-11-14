@@ -77,14 +77,14 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'stati
     };
 
     hmap! {
-        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15), Some(20)),
-        "accounts_history" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45), Some(52)),
-        "account_slots_history" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "transactions" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "blocks_by_number" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "logs" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
+        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15)),
+        "accounts_history" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45)),
+        "account_slots_history" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "transactions" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "blocks_by_number" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "logs" => DbConfig::Default.to_options(CacheSetting::Disabled),
     }
 }
 
