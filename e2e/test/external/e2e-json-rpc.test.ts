@@ -2,7 +2,6 @@ import { expect } from "chai";
 import { TransactionReceipt, TransactionResponse, keccak256 } from "ethers";
 import { Block, Bytes } from "web3-types";
 
-import { TestContractBalances } from "../../typechain-types";
 import { ALICE, BOB } from "../helpers/account";
 import { BlockMode, currentBlockMode, isStratus } from "../helpers/network";
 import {
@@ -17,6 +16,7 @@ import {
     TEST_BALANCE,
     ZERO,
     deployTestContractBalances,
+    deployTestContractBlockTimestamp,
     prepareSignedTx,
     send,
     sendAndGetError,
@@ -390,6 +390,37 @@ describe("JSON-RPC", () => {
                     .lessThan(Math.floor(Date.now() / 1000));
 
                 await send("evm_setNextBlockTimestamp", [0]);
+            });
+        });
+
+        describe("Block timestamp", () => {
+            it("transaction executes with pending block timestamp", async () => {
+                await sendReset();
+
+                const contract = await deployTestContractBlockTimestamp();
+                await sendEvmMine();
+
+                // Record timestamp in contract
+                const tx = await contract.recordTimestamp();
+
+                // Mine block to include the transaction
+                await sendEvmMine();
+
+                const receipt = await tx.wait();
+
+                // Get the timestamp from contract event
+                const event = receipt.logs[0];
+                const recordedTimestamp = contract.interface.parseLog({
+                    topics: event.topics,
+                    data: event.data,
+                })?.args.timestamp;
+
+                // Get the block timestamp
+                const block = await ETHERJS.getBlock(receipt.blockNumber);
+                const blockTimestamp = block!.timestamp;
+
+                // Validate contract saw same timestamp as block
+                expect(recordedTimestamp).to.equal(blockTimestamp);
             });
         });
     });
