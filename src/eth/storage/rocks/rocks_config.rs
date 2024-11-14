@@ -1,7 +1,6 @@
 use rocksdb::BlockBasedOptions;
-use rocksdb::Cache;
-use rocksdb::CuckooTableOptions;
 use rocksdb::Options;
+use rocksdb::PlainTableFactoryOptions;
 
 pub enum CacheSetting {
     /// Enabled cache with the given size in bytes
@@ -22,7 +21,7 @@ impl Default for DbConfig {
 }
 
 impl DbConfig {
-    pub fn to_options(self, _cache_setting: CacheSetting) -> Options {
+    pub fn to_options(self, _cache_setting: CacheSetting, key_length: Option<u32>) -> Options {
         let mut opts = Options::default();
 
         opts.create_if_missing(true);
@@ -39,9 +38,19 @@ impl DbConfig {
 
         match self {
             DbConfig::OptimizedPointLookUp => {
-                let cuckoo = CuckooTableOptions::default();
+                let plain = PlainTableFactoryOptions {
+                    user_key_length: key_length.unwrap(),
+                    bloom_bits_per_key: 15,
+                    hash_table_ratio: 0.75,
+                    index_sparseness: 16,
+                    huge_page_tlb_size: 0,
+                    encoding_type: rocksdb::KeyEncodingType::Plain,
+                    full_scan_mode: false,
+                    store_index_in_file: true
+                };
+
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
-                opts.set_cuckoo_table_factory(&cuckoo);
+                opts.set_plain_table_factory(&plain);
             }
             DbConfig::Default => {
                 let mut block_based_options = BlockBasedOptions::default();
