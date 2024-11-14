@@ -5,14 +5,13 @@ use anyhow::Context;
 use anyhow::Result;
 use rocksdb::IteratorMode;
 use rocksdb::WriteBatch;
-use rocksdb::WriteOptions;
 use rocksdb::DB;
 use stratus::eth::storage::rocks::rocks_db::create_or_open_db;
 
 const COLUMN_FAMILIES: [&str; 7] = [
     "accounts",
-    "accounts_history",
     "account_slots",
+    "accounts_history",
     "account_slots_history",
     "transactions",
     "blocks_by_number",
@@ -34,6 +33,7 @@ pub fn main() -> Result<()> {
     let (dest_state, _) = create_or_open_db(args[2].clone(), &generate_cf_options_map(Some(0.1)))?;
 
     for cf_handle in COLUMN_FAMILIES.into_iter() {
+        println!("Processing column family {}...", cf_handle);
         tracing::info!("Processing column family {cf_handle}...");
 
         let source_cf = source_state.cf_handle(&cf_handle).unwrap();
@@ -44,6 +44,7 @@ pub fn main() -> Result<()> {
 
         for item in source_state.iterator_cf(&source_cf, IteratorMode::Start) {
             let (key, value) = item?;
+            tracing::debug!("{}", key.len());
             batch.put_cf(&dest_cf, key, value);
             count += 1;
 
@@ -73,8 +74,7 @@ pub fn main() -> Result<()> {
 
 pub fn write_in_batch(db: &DB, batch: WriteBatch) -> anyhow::Result<()> {
     tracing::debug!("writing batch");
-    let options = WriteOptions::default();
-    db.write_opt(batch, &options).context("failed to write batch")
+    db.write(batch).context("failed to write batch")
 }
 
 
