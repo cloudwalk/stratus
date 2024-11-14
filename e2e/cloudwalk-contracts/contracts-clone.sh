@@ -37,7 +37,11 @@ clone() {
     fi
 
     log "Installing dependencies: $repo"
-    npm --prefix "$target" --silent install
+    if ! npm --prefix "$target" --silent install; then
+        log "Dependencies install failed. Removing folder and exiting."
+        rm -rf "$target"
+        return 1
+    fi
 }
 
 # Clone an alternative version of a project to the projects directory.
@@ -173,6 +177,7 @@ if [ "$pix" == 1 ]; then
 fi
 
 if [ "$yield" == 1 ]; then
+    clone brlc-balance-tracker || echo "Balance Tracker not isolated yet. Skipping..."
     clone brlc-yield-streamer
 fi
 

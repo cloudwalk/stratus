@@ -131,7 +131,7 @@ if [ "$pix" == 1 ]; then
 fi
 
 if [ "$yield" == 1 ]; then
-    flatten brlc-yield-streamer BalanceTracker
+    flatten brlc-balance-tracker BalanceTracker || flatten brlc-yield-streamer BalanceTracker
     flatten brlc-yield-streamer YieldStreamer
 fi
 
