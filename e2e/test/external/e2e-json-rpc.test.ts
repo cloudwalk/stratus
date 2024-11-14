@@ -413,6 +413,9 @@ describe("JSON-RPC", () => {
                 // Mine the block to include the contract
                 await sendEvmMine();
 
+                // Wait 2 seconds
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+
                 // Send first transaction
                 const tx1 = await contract.recordTimestamp();
 
