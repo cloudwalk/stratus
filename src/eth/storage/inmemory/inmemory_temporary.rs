@@ -204,7 +204,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         #[cfg(feature = "dev")]
         {
-            // Update block timestamp only if evm_setNextBlockTimestamp was called, 
+            // Update block timestamp only if evm_setNextBlockTimestamp was called,
             // otherwise keep the original timestamp from pending block creation
             if UnixTime::evm_set_next_block_timestamp_was_called() {
                 finished_block.header.timestamp = UnixTimeNow::default();
