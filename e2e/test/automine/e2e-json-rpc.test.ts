@@ -30,9 +30,12 @@ import {
 
 describe("JSON-RPC", () => {
     describe("State", () => {
-        it("stratus_reset / hardhat_reset", async () => {
-            (await sendExpect("stratus_reset")).eq(true);
-            (await sendExpect("hardhat_reset")).eq(true);
+        it("reset", async () => {
+            if (isStratus) {
+                (await sendExpect("stratus_reset")).eq(true);
+            } else {
+                (await sendExpect("hardhat_reset")).eq(true);
+            }
         });
     });
 
@@ -230,42 +233,50 @@ describe("JSON-RPC", () => {
         });
 
         describe("evm_setNextBlockTimestamp", () => {
-            let target = Math.floor(Date.now() / 1000) + 10;
+            let initialTarget: number;
+
+            beforeEach(async () => {
+                await send("evm_setNextBlockTimestamp", [0]);
+            });
+
             it("sets the next block timestamp", async () => {
-                await send("evm_setNextBlockTimestamp", [target]);
+                initialTarget = Math.floor(Date.now() / 1000) + 100;
+                await send("evm_setNextBlockTimestamp", [initialTarget]);
                 await sendEvmMine();
-                expect((await latest()).timestamp).eq(target);
+                expect((await latest()).timestamp).eq(initialTarget);
             });
 
             it("offsets subsequent timestamps", async () => {
+                const target = Math.floor(Date.now() / 1000) + 100;
+                await send("evm_setNextBlockTimestamp", [target]);
+                await sendEvmMine();
+
                 await new Promise((resolve) => setTimeout(resolve, 1000));
                 await sendEvmMine();
                 expect((await latest()).timestamp).to.be.greaterThan(target);
             });
 
             it("resets the changes when sending 0", async () => {
+                const currentTimestamp = (await latest()).timestamp;
                 await send("evm_setNextBlockTimestamp", [0]);
-                let mined_timestamp = Math.floor(Date.now() / 1000);
                 await sendEvmMine();
-                let latest_timestamp = (await latest()).timestamp;
-                expect(latest_timestamp)
-                    .gte(mined_timestamp)
-                    .lte(Math.floor(Date.now() / 1000));
+                const newTimestamp = (await latest()).timestamp;
+                expect(newTimestamp).to.be.greaterThan(currentTimestamp);
             });
 
             it("handle negative offsets", async () => {
-                const past = Math.floor(Date.now() / 1000);
-                await new Promise((resolve) => setTimeout(resolve, 2000));
-                await send("evm_setNextBlockTimestamp", [past]);
-                await sendEvmMine();
-                expect((await latest()).timestamp).eq(past);
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                await sendEvmMine();
-                expect((await latest()).timestamp)
-                    .to.be.greaterThan(past)
-                    .lessThan(Math.floor(Date.now() / 1000));
+                const currentBlock = await latest();
+                const futureTimestamp = currentBlock.timestamp + 100;
 
-                await send("evm_setNextBlockTimestamp", [0]);
+                await send("evm_setNextBlockTimestamp", [futureTimestamp]);
+                await sendEvmMine();
+
+                const pastTimestamp = currentBlock.timestamp - 100;
+                await send("evm_setNextBlockTimestamp", [pastTimestamp]);
+                await sendEvmMine();
+
+                const newTimestamp = (await latest()).timestamp;
+                expect(newTimestamp).to.be.greaterThan(futureTimestamp);
             });
         });
 

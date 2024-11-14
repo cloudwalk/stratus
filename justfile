@@ -159,6 +159,25 @@ e2e network="stratus" block_modes="automine" test="":
         fi
     done
 
+# E2E: Starts and execute Hardhat tests in Hardhat
+e2e-hardhat block-mode="automine" test="":
+    #!/bin/bash
+    if [ -d e2e ]; then
+        cd e2e
+    fi
+
+    echo "-> Starting Hardhat"
+    BLOCK_MODE={{block-mode}} npx hardhat node &
+
+    echo "-> Waiting Hardhat to start"
+    wait-service --tcp localhost:8545 -- echo
+
+    echo "-> Running E2E tests"
+    just e2e hardhat {{block-mode}} {{test}}
+
+    echo "-> Killing Hardhat"
+    killport 8545
+
 # E2E: Starts and execute Hardhat tests in Stratus
 e2e-stratus block-mode="automine" test="":
     #!/bin/bash

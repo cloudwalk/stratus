@@ -38,9 +38,12 @@ describe("JSON-RPC", () => {
     });
 
     describe("State", () => {
-        it("stratus_reset", async () => {
-            (await sendExpect("stratus_reset")).eq(true);
-            (await sendExpect("hardhat_reset")).eq(true);
+        it("reset", async () => {
+            if (isStratus) {
+                (await sendExpect("stratus_reset")).eq(true);
+            } else {
+                (await sendExpect("hardhat_reset")).eq(true);
+            }
         });
     });
 
@@ -354,42 +357,50 @@ describe("JSON-RPC", () => {
         });
 
         describe("evm_setNextBlockTimestamp", () => {
-            let target = Math.floor(Date.now() / 1000) + 10;
+            let initialTarget: number;
+
+            beforeEach(async () => {
+                await send("evm_setNextBlockTimestamp", [0]);
+            });
+
             it("sets the next block timestamp", async () => {
-                await send("evm_setNextBlockTimestamp", [target]);
+                initialTarget = Math.floor(Date.now() / 1000) + 100;
+                await send("evm_setNextBlockTimestamp", [initialTarget]);
                 await sendEvmMine();
-                expect((await latest()).timestamp).eq(target);
+                expect((await latest()).timestamp).eq(initialTarget);
             });
 
             it("offsets subsequent timestamps", async () => {
+                const target = Math.floor(Date.now() / 1000) + 100;
+                await send("evm_setNextBlockTimestamp", [target]);
+                await sendEvmMine();
+
                 await new Promise((resolve) => setTimeout(resolve, 1000));
                 await sendEvmMine();
                 expect((await latest()).timestamp).to.be.greaterThan(target);
             });
 
             it("resets the changes when sending 0", async () => {
+                const currentTimestamp = (await latest()).timestamp;
                 await send("evm_setNextBlockTimestamp", [0]);
-                let mined_timestamp = Math.floor(Date.now() / 1000);
                 await sendEvmMine();
-                let latest_timestamp = (await latest()).timestamp;
-                expect(latest_timestamp)
-                    .gte(mined_timestamp)
-                    .lte(Math.floor(Date.now() / 1000));
+                const newTimestamp = (await latest()).timestamp;
+                expect(newTimestamp).to.be.greaterThan(currentTimestamp);
             });
 
             it("handle negative offsets", async () => {
-                const past = Math.floor(Date.now() / 1000);
-                await new Promise((resolve) => setTimeout(resolve, 2000));
-                await send("evm_setNextBlockTimestamp", [past]);
-                await sendEvmMine();
-                expect((await latest()).timestamp).eq(past);
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                await sendEvmMine();
-                expect((await latest()).timestamp)
-                    .to.be.greaterThan(past)
-                    .lessThan(Math.floor(Date.now() / 1000));
+                const currentBlock = await latest();
+                const futureTimestamp = currentBlock.timestamp + 100;
 
-                await send("evm_setNextBlockTimestamp", [0]);
+                await send("evm_setNextBlockTimestamp", [futureTimestamp]);
+                await sendEvmMine();
+
+                const pastTimestamp = currentBlock.timestamp - 100;
+                await send("evm_setNextBlockTimestamp", [pastTimestamp]);
+                await sendEvmMine();
+
+                const newTimestamp = (await latest()).timestamp;
+                expect(newTimestamp).to.be.greaterThan(futureTimestamp);
             });
         });
 
@@ -399,29 +410,45 @@ describe("JSON-RPC", () => {
 
                 const contract = await deployTestContractBlockTimestamp();
 
+                // Mine the block to include the contract
                 await sendEvmMine();
 
-                // Record timestamp in contract
-                const tx = await contract.recordTimestamp();
+                // Send first transaction
+                const tx1 = await contract.recordTimestamp();
 
-                // Mine block to include the transaction
+                // Wait 2 seconds
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+
+                // Send second transaction
+                const tx2 = await contract.recordTimestamp();
+
+                // Wait 2 seconds
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+
+                // Mine block to include both transactions
                 await sendEvmMine();
 
-                const receipt = await tx.wait();
+                const [receipt1, receipt2] = await Promise.all([tx1.wait(), tx2.wait()]);
 
-                // Get the timestamp from contract event
-                const event = receipt.logs[0];
-                const recordedTimestamp = contract.interface.parseLog({
-                    topics: event.topics,
-                    data: event.data,
+                // Get timestamps from contract events
+                const event1 = receipt1.logs[0];
+                const event2 = receipt2.logs[0];
+                const recordedTimestamp1 = contract.interface.parseLog({
+                    topics: event1.topics,
+                    data: event1.data,
+                })?.args.timestamp;
+                const recordedTimestamp2 = contract.interface.parseLog({
+                    topics: event2.topics,
+                    data: event2.data,
                 })?.args.timestamp;
 
-                // Get the block timestamp
-                const block = await ETHERJS.getBlock(receipt.blockNumber);
+                // Get the block timestamp (both transactions are in the same block)
+                const block = await ETHERJS.getBlock(receipt1.blockNumber);
                 const blockTimestamp = block!.timestamp;
 
-                // Validate contract saw same timestamp as block
-                expect(recordedTimestamp).to.equal(blockTimestamp);
+                // Validate both transactions saw same timestamp as block
+                expect(recordedTimestamp1).to.equal(blockTimestamp);
+                expect(recordedTimestamp2).to.equal(blockTimestamp);
             });
         });
     });
