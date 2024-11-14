@@ -202,7 +202,7 @@ mod offset {
         let was_evm_timestamp_set = EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.load(Acquire);
         let last_block_timestamp = LAST_BLOCK_TIMESTAMP.load(Acquire);
         let current_time = Utc::now().timestamp() as i64;
-        
+
         let result = if !was_evm_timestamp_set {
             let last_timestamp = if new_timestamp != 0 {
                 new_timestamp as i64
@@ -214,7 +214,7 @@ mod offset {
         } else {
             EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.store(false, SeqCst);
             NEW_TIMESTAMP.store(0, SeqCst);
-            
+
             if new_timestamp == 0 {
                 UnixTime((last_block_timestamp + 1) as u64)
             } else {
