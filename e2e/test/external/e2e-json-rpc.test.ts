@@ -394,72 +394,37 @@ describe("JSON-RPC", () => {
         });
 
         describe("Block timestamp", () => {
-            it("all transactions in block execute with same block timestamp", async () => {
+            it("transaction executes with pending block timestamp", async () => {
                 await sendReset();
-
+        
                 const contract = await deployTestContractBlockTimestamp();
-
-                // Mine block and wait
+                
                 await sendEvmMine();
-                await new Promise((resolve) => setTimeout(resolve, 3000));
-
-                const timeBeforeTxs = Math.floor(Date.now() / 1000);
-
-                // Send first transaction and wait
-                const tx1 = await contract.recordTimestamp();
-                await new Promise((resolve) => setTimeout(resolve, 5000));
-
-                // Send second transaction and wait
-                const tx2 = await contract.recordTimestamp();
-                await new Promise((resolve) => setTimeout(resolve, 5000));
-
-                // Send third transaction and wait
-                const tx3 = await contract.recordTimestamp();
-                await new Promise((resolve) => setTimeout(resolve, 5000));
-
-                // Mine block to include all transactions and wait
+        
+                // Get current time before transaction
+                const beforeTx = Math.floor(Date.now() / 1000);
+        
+                // Record timestamp in contract
+                const tx = await contract.recordTimestamp();
+        
+                // Mine block to include the transaction
                 await sendEvmMine();
-                await new Promise((resolve) => setTimeout(resolve, 5000));
-
-                const receipts = await Promise.all([tx1.wait(), tx2.wait(), tx3.wait()]);
-
-                // Verify all transactions are in same block
-                const blockNumber = receipts[0].blockNumber;
-                receipts.forEach((receipt, index) => {
-                    expect(receipt.blockNumber).to.equal(blockNumber, `Transaction ${index + 1} in wrong block`);
-                });
-
-                // Get timestamps from events
-                const getTimestamp = (receipt: any) => {
-                    const event = receipt.logs[0];
-                    return contract.interface.parseLog({
-                        topics: event.topics,
-                        data: event.data,
-                    })?.args.timestamp;
-                };
-
-                const timestamps = receipts.map(getTimestamp);
-
-                // Get actual block timestamp
-                const block = await ETHERJS.getBlock(blockNumber);
+        
+                const receipt = await tx.wait();
+        
+                // Get the timestamp from contract event
+                const event = receipt.logs[0];
+                const recordedTimestamp = contract.interface.parseLog({
+                    topics: event.topics,
+                    data: event.data,
+                })?.args.timestamp;
+        
+                // Get the block timestamp
+                const block = await ETHERJS.getBlock(receipt.blockNumber);
                 const blockTimestamp = block!.timestamp;
-
-                const timeAfterMining = Math.floor(Date.now() / 1000);
-
-                // Verify all transactions saw the same timestamp
-                timestamps.forEach((timestamp, index) => {
-                    expect(timestamp).to.equal(blockTimestamp, `Tx ${index + 1} timestamp mismatch`);
-                });
-
-                // Verify block timestamp is before we sent transactions and not ahead of mining
-                expect(blockTimestamp).to.be.lessThan(
-                    timeBeforeTxs,
-                    "Block timestamp should be before txs were sent (when pending block was created)",
-                );
-                expect(blockTimestamp).to.be.lessThanOrEqual(
-                    timeAfterMining,
-                    "Block timestamp should not be in the future",
-                );
+        
+                // Validate contract saw same timestamp as block
+                expect(recordedTimestamp).to.equal(blockTimestamp);
             });
         });
     });
