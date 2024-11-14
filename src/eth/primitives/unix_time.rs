@@ -132,7 +132,8 @@ mod offset {
     /// Indicates whether evm_setNextBlockTimestamp was called and hasn't been consumed yet
     pub static EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED: AtomicBool = AtomicBool::new(false);
 
-    // Add this at the top with other static variables
+    /// Stores the timestamp of the most recently processed block
+    /// Used to ensure that block timestamps always increase monotonically
     pub static LAST_BLOCK_TIMESTAMP: AtomicI64 = AtomicI64::new(0);
 
     /// Sets the timestamp for the next block and calculates the offset for subsequent blocks
