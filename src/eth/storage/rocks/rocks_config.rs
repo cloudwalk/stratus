@@ -39,8 +39,6 @@ impl DbConfig {
         match self {
             DbConfig::OptimizedPointLookUp => {
                 let mut cuckoo = CuckooTableOptions::default();
-                cuckoo.set_hash_ratio(0.5);
-                cuckoo.set_max_search_depth(200);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
                 opts.set_cuckoo_table_factory(&cuckoo);
             }
