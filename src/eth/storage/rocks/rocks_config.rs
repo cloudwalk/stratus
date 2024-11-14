@@ -38,7 +38,8 @@ impl DbConfig {
 
         match self {
             DbConfig::OptimizedPointLookUp => {
-                let mut cuckoo = CuckooTableOptions::default();
+                let cuckoo = CuckooTableOptions::default();
+                opts.set_allow_mmap_reads(true);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
                 opts.set_cuckoo_table_factory(&cuckoo);
             }
