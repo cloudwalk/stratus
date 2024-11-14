@@ -464,7 +464,7 @@ describe("JSON-RPC", () => {
                     expect(error).to.be.undefined;
                 }
             });
-            
+
             it("subscribes to newHeads receives success subscription event", async () => {
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEvent("newHeads", waitTimeInMilliseconds);

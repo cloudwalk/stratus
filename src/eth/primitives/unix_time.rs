@@ -155,22 +155,22 @@ mod offset {
     ///    - Returns error: "timestamp can't be before the latest block"
     pub fn set(current_block_timestamp: UnixTime, new_block_timestamp: UnixTime) -> anyhow::Result<()> {
         use crate::log_and_err;
-    
+
         if *new_block_timestamp == 0 {
             LAST_BLOCK_TIMESTAMP.store(*current_block_timestamp as i64, SeqCst);
         }
-    
+
         if *new_block_timestamp != 0 && *new_block_timestamp < *current_block_timestamp {
             return log_and_err!("timestamp can't be before the latest block");
         }
-    
+
         let current_time = Utc::now().timestamp() as i64;
         let diff: i64 = if *new_block_timestamp == 0 {
             0
         } else {
             (*new_block_timestamp as i64).saturating_sub(current_time)
         };
-    
+
         NEW_TIMESTAMP.store(*new_block_timestamp, SeqCst);
         NEW_TIMESTAMP_DIFF.store(diff, SeqCst);
         EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.store(true, SeqCst);
@@ -209,7 +209,7 @@ mod offset {
             } else {
                 std::cmp::max(current_time + new_timestamp_diff, last_block_timestamp)
             };
-    
+
             UnixTime((last_timestamp + 1) as u64)
         } else {
             EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.store(false, SeqCst);
@@ -221,7 +221,7 @@ mod offset {
                 UnixTime(new_timestamp)
             }
         };
-    
+
         LAST_BLOCK_TIMESTAMP.store(*result as i64, SeqCst);
         result
     }
