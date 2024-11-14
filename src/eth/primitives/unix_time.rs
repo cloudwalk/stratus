@@ -219,13 +219,14 @@ mod offset {
         let result = if !was_evm_timestamp_set {
             // For subsequent blocks:
             // 1. Get the last block's timestamp
-            let next_timestamp = std::cmp::max(current_time + new_timestamp_diff, last_timestamp + 1);
+            let last_timestamp = if new_timestamp != 0 {
+                new_timestamp as i64
+            } else {
+                current_time + new_timestamp_diff
+            };
 
             // 2. Ensure we advance by at least 1 second from the last block
-            let next_timestamp = std::cmp::max(
-                current_time + new_timestamp_diff,
-                last_timestamp + 1
-            );
+            let next_timestamp = std::cmp::max(current_time + new_timestamp_diff, last_timestamp + 1);
 
             UnixTime(next_timestamp as u64)
         } else if new_timestamp != 0 {
