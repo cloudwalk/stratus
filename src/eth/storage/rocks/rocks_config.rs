@@ -41,7 +41,7 @@ impl DbConfig {
                 let plain = PlainTableFactoryOptions {
                     user_key_length: key_length.unwrap(),
                     bloom_bits_per_key: 15,
-                    hash_table_ratio: 0.75,
+                    hash_table_ratio: 0,
                     index_sparseness: 16,
                     huge_page_tlb_size: 0,
                     encoding_type: rocksdb::KeyEncodingType::Plain,
