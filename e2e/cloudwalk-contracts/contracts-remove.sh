@@ -108,6 +108,7 @@ if [ "$pix" == 1 ]; then
 fi
 
 if [ "$yield" == 1 ]; then
+    remove brlc-balance-tracker
     remove brlc-yield-streamer 7683517
 fi
 

@@ -151,7 +151,9 @@ if [ "$pix" == 1 ]; then
 fi
 
 if [ "$yield" == 1 ]; then
-    test brlc-yield-streamer BalanceTracker "$@"
+    # BalanceTracker Transition: test BalanceTracker, regardless of repository
+    test brlc-balance-tracker BalanceTracker "$@" || test brlc-yield-streamer BalanceTracker "$@"
+
     test brlc-yield-streamer YieldStreamer "$@"
 fi
 
