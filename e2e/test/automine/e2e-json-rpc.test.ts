@@ -173,26 +173,13 @@ describe("JSON-RPC", () => {
                     methodParameters: [ALICE.address, 1],
                 });
                 const expectedTxHash = keccak256(signedTx);
+                const actualTxHash = await sendRawTransaction(signedTx);
 
-                if (isStratus) {
-                    // Stratus returns the hash even for failed transactions
-                    const actualTxHash = await sendRawTransaction(signedTx);
-                    expect(actualTxHash).eq(expectedTxHash);
-                } else {
-                    // Hardhat throws an error for failed transactions
-                    try {
-                        await sendRawTransaction(signedTx);
-                        expect.fail("Transaction should have failed");
-                    } catch (error) {
-                        // Transaction failed as expected
-                        expect(error).to.exist;
-                    }
-                }
-
-                // validate receipt shows failure
+                // validate
                 const txReceiptAfterMining = await ETHERJS.getTransactionReceipt(expectedTxHash);
                 expect(txReceiptAfterMining).exist;
                 expect(txReceiptAfterMining?.status).eq(0);
+                expect(actualTxHash).eq(expectedTxHash);
             });
         });
     });
@@ -325,14 +312,9 @@ describe("JSON-RPC", () => {
         describe("eth_subscribe", () => {
             it("fails on HTTP", async () => {
                 const error = await sendAndGetError("eth_subscribe", ["newHeads"]);
-                if (isStratus) {
-                    expect(error).to.not.be.null;
-                    expect(error.code).eq(-32603); // Internal error
-                } else {
-                    expect(error).to.be.undefined;
-                }
+                expect(error).to.not.be.null;
+                expect(error.code).eq(-32603); // Internal error
             });
-
             it("subscribes to newHeads receives success subscription event", async () => {
                 const waitTimeInMilliseconds = 40;
                 const response = await subscribeAndGetEvent("newHeads", waitTimeInMilliseconds);
