@@ -19,16 +19,4 @@ contract TestContractBlockTimestamp {
         emit TimestampRecorded(timestamp, block.number);
         return timestamp;
     }
-
-    /// @dev Gets the current block timestamp
-    /// @return The current block.timestamp
-    function getCurrentTimestamp() public view returns (uint256) {
-        return block.timestamp;
-    }
-
-    /// @dev Gets all recorded timestamps
-    /// @return Array of TimeRecord structs
-    function getRecords() public view returns (TimeRecord[] memory) {
-        return records;
-    }
 }
