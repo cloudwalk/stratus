@@ -213,7 +213,7 @@ async fn execute_external_rpc_storage_loader(
         // retrieve next batch of loaded blocks
         // if finished, do not cancel, it is expected to finish
         let Some(result) = tasks.next().await else {
-            tracing::info!(parent: None, "{} has no more blocks to process", TASK_NAME);
+            tracing::info!(parent: None, "{} has no more blocks to fetch", TASK_NAME);
             return Ok(());
         };
 
