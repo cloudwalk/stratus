@@ -86,9 +86,7 @@ impl InMemoryTemporaryStorageState {
             None => log_and_err!("no pending block being mined"), // try calling set_pending_block_number_as_next_if_not_set or any other method to create a new block on temp storage
         }
     }
-}
 
-impl InMemoryTemporaryStorageState {
     pub fn reset(&mut self) {
         self.block = None;
         self.accounts.clear();
