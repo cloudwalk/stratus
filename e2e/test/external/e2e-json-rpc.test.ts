@@ -410,9 +410,11 @@ describe("JSON-RPC", () => {
                 const contract = await deployTestContractBlockTimestamp();
                 await sendEvmMine();
 
-                // Get initial timestamp
-                const initialTimestamp = await contract.getCurrentTimestamp();
-                expect(initialTimestamp).to.be.gt(0);
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+
+                // Get pending block timestamp
+                const pendingTimestamp = await contract.getCurrentTimestamp();
+                expect(pendingTimestamp).to.be.gt(0);
 
                 // Wait 2 seconds
                 await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -454,19 +456,24 @@ describe("JSON-RPC", () => {
                 const records = await contract.getRecords();
                 expect(records.length).to.equal(2);
 
-                // Validate records match event data
+                // Verify that the pending block timestamp matches the final block timestamp and transaction timestamps
+                expect(pendingTimestamp).to.equal(blockTimestamp);
+                expect(pendingTimestamp).to.equal(recordedTimestamp1);
+                expect(pendingTimestamp).to.equal(recordedTimestamp2);
+
+                // Verify that the stored records in the contract match the event data
                 expect(records[0].timestamp).to.equal(recordedTimestamp1);
                 expect(records[0].blockNumber).to.equal(receipt1.blockNumber);
                 expect(records[1].timestamp).to.equal(recordedTimestamp2);
                 expect(records[1].blockNumber).to.equal(receipt2.blockNumber);
 
-                // Validate both transactions saw same timestamp as block
+                // Verify that both transactions see the same block timestamp
                 expect(recordedTimestamp1).to.equal(blockTimestamp);
                 expect(recordedTimestamp2).to.equal(blockTimestamp);
 
-                // Final timestamp should be greater than initial
+                // Verify that time is advancing
                 const finalTimestamp = await contract.getCurrentTimestamp();
-                expect(finalTimestamp).to.be.gt(initialTimestamp);
+                expect(finalTimestamp).to.be.gt(pendingTimestamp);
             });
         });
     });
