@@ -283,12 +283,14 @@ describe("JSON-RPC", () => {
         describe("Block timestamp", () => {
             it("transaction executes with pending block timestamp", async () => {
                 await sendReset();
-
                 const contract = await deployTestContractBlockTimestamp();
+
+                // Get initial timestamp
+                const initialTimestamp = await contract.getCurrentTimestamp();
+                expect(initialTimestamp).to.be.gt(0);
 
                 // Record timestamp in contract
                 const tx = await contract.recordTimestamp();
-
                 const receipt = await tx.wait();
 
                 // Get the timestamp from contract event
@@ -302,8 +304,18 @@ describe("JSON-RPC", () => {
                 const block = await ETHERJS.getBlock(receipt.blockNumber);
                 const blockTimestamp = block!.timestamp;
 
-                // Validate contract saw same timestamp as block
+                // Get stored record from contract
+                const records = await contract.getRecords();
+                expect(records.length).to.equal(1);
+
+                // Validate timestamps match across all sources
                 expect(recordedTimestamp).to.equal(blockTimestamp);
+                expect(records[0].timestamp).to.equal(recordedTimestamp);
+                expect(records[0].blockNumber).to.equal(receipt.blockNumber);
+
+                // Verify that time is advancing
+                const finalTimestamp = await contract.getCurrentTimestamp();
+                expect(finalTimestamp).to.be.gt(initialTimestamp);
             });
         });
     });
