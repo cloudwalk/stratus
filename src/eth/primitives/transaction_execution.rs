@@ -73,10 +73,10 @@ impl TransactionExecution {
     }
 
     /// Returns the EVM execution metrics.
-    pub fn metrics(&self) -> &EvmExecutionMetrics {
+    pub fn metrics(&self) -> EvmExecutionMetrics {
         match self {
-            Self::Local(LocalTransactionExecution { result, .. }) => &result.metrics,
-            Self::External(ExternalTransactionExecution { evm_execution: result, .. }) => &result.metrics,
+            Self::Local(LocalTransactionExecution { result, .. }) => result.metrics,
+            Self::External(ExternalTransactionExecution { evm_execution: result, .. }) => result.metrics,
         }
     }
 }

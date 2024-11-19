@@ -18,9 +18,9 @@ pub struct AccountRocksdb {
 }
 
 impl AccountRocksdb {
-    pub fn to_account(&self, address: &Address) -> Account {
+    pub fn to_account(&self, address: Address) -> Account {
         Account {
-            address: *address,
+            address,
             nonce: self.nonce.clone().into(),
             balance: self.balance.clone().into(),
             bytecode: self.bytecode.clone().map_into(),

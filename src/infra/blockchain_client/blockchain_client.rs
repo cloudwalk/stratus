@@ -185,7 +185,7 @@ impl BlockchainClient {
     }
 
     /// Fetches account balance by address and block number.
-    pub async fn fetch_balance(&self, address: &Address, block_number: Option<BlockNumber>) -> anyhow::Result<Wei> {
+    pub async fn fetch_balance(&self, address: Address, block_number: Option<BlockNumber>) -> anyhow::Result<Wei> {
         tracing::debug!(%address, block_number = %block_number.or_empty(), "fetching account balance");
 
         let address = to_json_value(address);

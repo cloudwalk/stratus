@@ -43,10 +43,10 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn save_block(&self, block: Block) -> anyhow::Result<()>;
 
     /// Retrieves a block from the storage.
-    fn read_block(&self, block_filter: &BlockFilter) -> anyhow::Result<Option<Block>>;
+    fn read_block(&self, block_filter: BlockFilter) -> anyhow::Result<Option<Block>>;
 
     /// Retrieves a transaction from the storage.
-    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>>;
+    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>>;
 
     /// Retrieves logs from the storage.
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
@@ -59,10 +59,10 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
+    fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Account>>;
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>>;
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Slot>>;
 
     // -------------------------------------------------------------------------
     // Global state

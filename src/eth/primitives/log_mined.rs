@@ -36,8 +36,8 @@ pub struct LogMined {
 
 impl LogMined {
     /// Returns the address that emitted the log.
-    pub fn address(&self) -> &Address {
-        &self.log.address
+    pub fn address(&self) -> Address {
+        self.log.address
     }
 
     /// Returns all non-empty topics in the log.

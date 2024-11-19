@@ -232,9 +232,9 @@ impl RocksStorageState {
                     .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
             }
 
-            for (slot_index, slot_change) in &change.slots {
+            for (&slot_index, slot_change) in &change.slots {
                 if let Some(slot) = slot_change.take_modified_ref() {
-                    let slot_index = (*slot_index).into();
+                    let slot_index = slot_index.into();
                     let slot_value: SlotValueRocksdb = slot.value.into();
 
                     self.account_slots
@@ -248,8 +248,8 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn read_transaction(&self, tx_hash: &Hash) -> Result<Option<TransactionMined>> {
-        let Some(block_number) = self.transactions.get(&(*tx_hash).into())? else {
+    pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionMined>> {
+        let Some(block_number) = self.transactions.get(&tx_hash.into())? else {
             return Ok(None);
         };
 
@@ -258,7 +258,7 @@ impl RocksStorageState {
                 .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash));
         };
 
-        let transaction = block.into_inner().transactions.into_iter().find(|tx| &Hash::from(tx.input.hash) == tx_hash);
+        let transaction = block.into_inner().transactions.into_iter().find(|tx| Hash::from(tx.input.hash) == tx_hash);
 
         match transaction {
             Some(tx) => {
@@ -302,26 +302,26 @@ impl RocksStorageState {
         Ok(logs_result)
     }
 
-    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Option<Slot>> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> Result<Option<Slot>> {
         if address.is_coinbase() {
             return Ok(None);
         }
 
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => {
-                let query_params = ((*address).into(), (*index).into());
+                let query_params = (address.into(), index.into());
 
                 let Some(account_slot_value) = self.account_slots.get(&query_params)? else {
                     return Ok(None);
                 };
 
                 Ok(Some(Slot {
-                    index: *index,
+                    index,
                     value: account_slot_value.into_inner().into(),
                 }))
             }
             StoragePointInTime::MinedPast(number) => {
-                let iterator_start = ((*address).into(), (*index).into(), (*number).into());
+                let iterator_start = (address.into(), (index).into(), number.into());
 
                 if let Some(((rocks_address, rocks_index, _), value)) = self
                     .account_slots_history
@@ -329,7 +329,7 @@ impl RocksStorageState {
                     .next()
                     .transpose()?
                 {
-                    if rocks_index == (*index).into() && rocks_address == (*address).into() {
+                    if rocks_index == (index).into() && rocks_address == address.into() {
                         return Ok(Some(Slot {
                             index: rocks_index.into(),
                             value: value.into_inner().into(),
@@ -341,14 +341,14 @@ impl RocksStorageState {
         }
     }
 
-    pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Option<Account>> {
+    pub fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> Result<Option<Account>> {
         if address.is_coinbase() || address.is_zero() {
             return Ok(None);
         }
 
         match point_in_time {
             StoragePointInTime::Mined | StoragePointInTime::Pending => {
-                let Some(inner_account) = self.accounts.get(&((*address).into()))? else {
+                let Some(inner_account) = self.accounts.get(&address.into())? else {
                     tracing::trace!(%address, "account not found");
                     return Ok(None);
                 };
@@ -358,11 +358,11 @@ impl RocksStorageState {
                 Ok(Some(account))
             }
             StoragePointInTime::MinedPast(block_number) => {
-                let iterator_start = ((*address).into(), (*block_number).into());
+                let iterator_start = (address.into(), block_number.into());
 
                 if let Some(next) = self.accounts_history.iter_from(iterator_start, rocksdb::Direction::Reverse)?.next() {
                     let ((addr, _), account_info) = next?;
-                    if addr == (*address).into() {
+                    if addr == address.into() {
                         return Ok(Some(account_info.to_account(address)));
                     }
                 }
@@ -371,15 +371,15 @@ impl RocksStorageState {
         }
     }
 
-    pub fn read_block(&self, selection: &BlockFilter) -> Result<Option<Block>> {
+    pub fn read_block(&self, selection: BlockFilter) -> Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
         let block = match selection {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
-            BlockFilter::Number(block_number) => self.blocks_by_number.get(&(*block_number).into()),
+            BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
             BlockFilter::Hash(block_hash) =>
-                if let Some(block_number) = self.blocks_by_hash.get(&(*block_hash).into())? {
+                if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)

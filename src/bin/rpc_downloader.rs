@@ -82,7 +82,7 @@ async fn download_balances(rpc_storage: Arc<dyn ExternalRpcStorage>, chain: &Blo
 
     // download missing balances
     for address in address_to_download {
-        let balance = chain.fetch_balance(&address, Some(BlockNumber::ZERO)).await?;
+        let balance = chain.fetch_balance(address, Some(BlockNumber::ZERO)).await?;
         rpc_storage.save_initial_account(address, balance).await?;
     }
 

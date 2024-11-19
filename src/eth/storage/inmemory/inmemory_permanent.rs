@@ -101,10 +101,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Account>> {
         let state = self.lock_read();
 
-        match state.accounts.get(address) {
+        match state.accounts.get(&address) {
             Some(inmemory_account) => {
                 let account = inmemory_account.to_account(point_in_time);
                 Ok(Some(account))
@@ -113,14 +113,14 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         let state = self.lock_read();
 
-        let Some(account) = state.accounts.get(address) else {
+        let Some(account) = state.accounts.get(&address) else {
             return Ok(None);
         };
 
-        match account.slots.get(index) {
+        match account.slots.get(&index) {
             Some(slot_history) => {
                 let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
                 Ok(Some(slot))
@@ -129,13 +129,13 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>> {
         let state_lock = self.lock_read();
         let block = match selection {
             BlockFilter::Latest | BlockFilter::Pending => state_lock.blocks_by_number.values().last().cloned(),
             BlockFilter::Earliest => state_lock.blocks_by_number.values().next().cloned(),
-            BlockFilter::Number(block_number) => state_lock.blocks_by_number.get(block_number).cloned(),
-            BlockFilter::Hash(block_hash) => state_lock.blocks_by_hash.get(block_hash).cloned(),
+            BlockFilter::Number(block_number) => state_lock.blocks_by_number.get(&block_number).cloned(),
+            BlockFilter::Hash(block_hash) => state_lock.blocks_by_hash.get(&block_hash).cloned(),
         };
         match block {
             Some(block) => Ok(Some((*block).clone())),
@@ -143,10 +143,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>> {
         let state_lock = self.lock_read();
-        let Some(block) = state_lock.transactions.get(hash) else { return Ok(None) };
-        Ok(block.transactions.iter().find(|tx| &tx.input.hash == hash).cloned())
+        let Some(block) = state_lock.transactions.get(&hash) else { return Ok(None) };
+        Ok(block.transactions.iter().find(|tx| tx.input.hash == hash).cloned())
     }
 
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
@@ -278,7 +278,7 @@ impl InMemoryPermanentAccount {
     }
 
     /// Converts itself to an account at a point-in-time.
-    pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
+    pub fn to_account(&self, point_in_time: StoragePointInTime) -> Account {
         Account {
             address: self.address,
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),

@@ -54,7 +54,7 @@ impl StratusStorage {
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            let genesis = this.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
+            let genesis = this.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
             if genesis.is_none() {
                 this.reset_to_genesis()?;
             }
@@ -74,7 +74,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
 
         // if does not have the zero block present, should resume from zero
-        let zero = self.read_block(&BlockFilter::Number(BlockNumber::ZERO))?;
+        let zero = self.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
         if zero.is_none() {
             tracing::info!(block_number = %0, reason = %"block ZERO does not exist", "resume from ZERO");
             return Ok(BlockNumber::ZERO);
@@ -89,7 +89,7 @@ impl StratusStorage {
 
         // fallback to last mined block number
         let mined_number = self.read_mined_block_number()?;
-        let mined_block = self.read_block(&BlockFilter::Number(mined_number))?;
+        let mined_block = self.read_block(BlockFilter::Number(mined_number))?;
         match mined_block {
             Some(_) => {
                 tracing::info!(block_number = %mined_number, reason = %"set in storage and block exist", "resume from MINED + 1");
@@ -190,7 +190,7 @@ impl StratusStorage {
         // keep only accounts that does not exist in permanent storage
         let mut missing_accounts = Vec::new();
         for account in accounts {
-            let perm_account = self.perm.read_account(&account.address, &StoragePointInTime::Mined)?;
+            let perm_account = self.perm.read_account(account.address, StoragePointInTime::Mined)?;
             if perm_account.is_none() {
                 missing_accounts.push(account);
             }
@@ -207,7 +207,7 @@ impl StratusStorage {
             .map_err(Into::into)
     }
 
-    pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, StratusError> {
+    pub fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> Result<Account, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
 
@@ -241,12 +241,12 @@ impl StratusStorage {
             }
             None => {
                 tracing::debug!(storage = %label::PERM, %address, "account not found, assuming default value");
-                Ok(Account::new_empty(*address))
+                Ok(Account::new_empty(address))
             }
         }
     }
 
-    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Slot, StratusError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> Result<Slot, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
@@ -280,7 +280,7 @@ impl StratusStorage {
             }
             None => {
                 tracing::debug!(storage = %label::PERM, %address, %index, "slot not found, assuming default value");
-                Ok(Slot::new_empty(*index))
+                Ok(Slot::new_empty(index))
             }
         }
     }
@@ -359,7 +359,7 @@ impl StratusStorage {
         }
 
         // check mined block
-        let existing_block = self.read_block(&BlockFilter::Number(block_number))?;
+        let existing_block = self.read_block(BlockFilter::Number(block_number))?;
         if existing_block.is_some() {
             tracing::error!(%block_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
             return Err(StratusError::StorageBlockConflict { number: block_number });
@@ -377,7 +377,7 @@ impl StratusStorage {
             .map_err(Into::into)
     }
 
-    pub fn read_block(&self, filter: &BlockFilter) -> Result<Option<Block>, StratusError> {
+    pub fn read_block(&self, filter: BlockFilter) -> Result<Option<Block>, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block", %filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading block");
@@ -392,7 +392,7 @@ impl StratusStorage {
             .map_err(Into::into)
     }
 
-    pub fn read_transaction(&self, tx_hash: &Hash) -> Result<Option<TransactionStage>, StratusError> {
+    pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionStage>, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_transaction", %tx_hash).entered();
 
@@ -489,15 +489,15 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Translates a block filter to a specific storage point-in-time indicator.
-    pub fn translate_to_point_in_time(&self, block_filter: &BlockFilter) -> Result<StoragePointInTime, StratusError> {
+    pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<StoragePointInTime, StratusError> {
         match block_filter {
             BlockFilter::Pending => Ok(StoragePointInTime::Pending),
             BlockFilter::Latest => Ok(StoragePointInTime::Mined),
             BlockFilter::Earliest => Ok(StoragePointInTime::MinedPast(BlockNumber::ZERO)),
-            BlockFilter::Number(number) => Ok(StoragePointInTime::MinedPast(*number)),
+            BlockFilter::Number(number) => Ok(StoragePointInTime::MinedPast(number)),
             BlockFilter::Hash(_) => match self.read_block(block_filter)? {
                 Some(block) => Ok(StoragePointInTime::MinedPast(block.header.number)),
-                None => Err(StratusError::RpcBlockFilterInvalid { filter: *block_filter }),
+                None => Err(StratusError::RpcBlockFilterInvalid { filter: block_filter }),
             },
         }
     }

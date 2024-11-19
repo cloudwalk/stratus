@@ -158,8 +158,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                 .or_insert_with(|| InMemoryTemporaryAccount::new(change.address));
 
             // account basic info
-            if let Some(nonce) = change.nonce.take_ref() {
-                account.info.nonce = *nonce;
+            if let Some(&nonce) = change.nonce.take_ref() {
+                account.info.nonce = nonce;
             }
             if let Some(balance) = change.balance.take_ref() {
                 account.info.balance = *balance;
@@ -172,8 +172,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
             // slots
             for slot in change.slots.values() {
-                if let Some(slot) = slot.take_ref() {
-                    account.slots.insert(slot.index, *slot);
+                if let Some(&slot) = slot.take_ref() {
+                    account.slots.insert(slot.index, slot);
                 }
             }
         }
@@ -223,10 +223,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(finished_block)
     }
 
-    fn read_pending_execution(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>> {
+    fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>> {
         let states = self.lock_read();
         let Some(ref pending_block) = states.head.block else { return Ok(None) };
-        match pending_block.transactions.get(hash) {
+        match pending_block.transactions.get(&hash) {
             Some(tx) => Ok(Some(tx.clone())),
             None => Ok(None),
         }
@@ -236,12 +236,12 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Accounts and Slots
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>> {
         let states = self.lock_read();
         Ok(do_read_account(&states, address))
     }
 
-    fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>> {
         let states = self.lock_read();
         Ok(do_read_slot(&states, address, index))
     }
@@ -260,10 +260,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 // -----------------------------------------------------------------------------
 // Implementations without lock
 // -----------------------------------------------------------------------------
-fn do_read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address) -> Option<Account> {
+fn do_read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: Address) -> Option<Account> {
     // search all
     for state in states.iter() {
-        let Some(account) = state.accounts.get(address) else { continue };
+        let Some(account) = state.accounts.get(&address) else { continue };
 
         let info = account.info.clone();
         let account = Account {
@@ -283,14 +283,14 @@ fn do_read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &A
     None
 }
 
-fn do_read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address, index: &SlotIndex) -> Option<Slot> {
+fn do_read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: Address, index: SlotIndex) -> Option<Slot> {
     // search all
     for state in states.iter() {
-        let Some(account) = state.accounts.get(address) else { continue };
-        let Some(slot) = account.slots.get(index) else { continue };
+        let Some(account) = state.accounts.get(&address) else { continue };
+        let Some(&slot) = account.slots.get(&index) else { continue };
 
         tracing::trace!(%address, %index, %slot, "slot found in temporary");
-        return Some(*slot);
+        return Some(slot);
     }
 
     // not found
@@ -301,31 +301,31 @@ fn do_read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Addr
 fn do_check_conflicts(states: &NonEmpty<InMemoryTemporaryStorageState>, execution: &EvmExecution) -> Option<ExecutionConflicts> {
     let mut conflicts = ExecutionConflictsBuilder::default();
 
-    for (address, change) in &execution.changes {
+    for (&address, change) in &execution.changes {
         // check account info conflicts
         if let Some(account) = do_read_account(states, address) {
-            if let Some(expected) = change.nonce.take_original_ref() {
-                let original = &account.nonce;
+            if let Some(&expected) = change.nonce.take_original_ref() {
+                let original = account.nonce;
                 if expected != original {
-                    conflicts.add_nonce(*address, *original, *expected);
+                    conflicts.add_nonce(address, original, expected);
                 }
             }
-            if let Some(expected) = change.balance.take_original_ref() {
-                let original = &account.balance;
+            if let Some(&expected) = change.balance.take_original_ref() {
+                let original = account.balance;
                 if expected != original {
-                    conflicts.add_balance(*address, *original, *expected);
+                    conflicts.add_balance(address, original, expected);
                 }
             }
         }
 
         // check slots conflicts
-        for (slot_index, slot_change) in &change.slots {
+        for (&slot_index, slot_change) in &change.slots {
             if let Some(expected) = slot_change.take_original_ref() {
                 let Some(original) = do_read_slot(states, address, slot_index) else {
                     continue;
                 };
                 if expected.value != original.value {
-                    conflicts.add_slot(*address, *slot_index, original.value, expected.value);
+                    conflicts.add_slot(address, slot_index, original.value, expected.value);
                 }
             }
         }

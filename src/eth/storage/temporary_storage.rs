@@ -42,17 +42,17 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     fn read_pending_executions(&self) -> Vec<TransactionExecution>;
 
     /// Retrieves a single transaction execution from the pending block.
-    fn read_pending_execution(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>>;
+    fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>>;
 
     // -------------------------------------------------------------------------
     // Accounts and slots
     // -------------------------------------------------------------------------
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>>;
+    fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>>;
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>>;
+    fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>>;
 
     // -------------------------------------------------------------------------
     // Global state

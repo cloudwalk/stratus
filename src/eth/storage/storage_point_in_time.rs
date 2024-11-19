@@ -23,8 +23,8 @@ pub enum StoragePointInTime {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<&StoragePointInTime> for MetricLabelValue {
-    fn from(value: &StoragePointInTime) -> Self {
+impl From<StoragePointInTime> for MetricLabelValue {
+    fn from(value: StoragePointInTime) -> Self {
         Self::Some(value.to_string())
     }
 }

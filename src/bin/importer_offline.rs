@@ -135,7 +135,7 @@ fn execute_block_importer(
         tracing::info!(parent: None, %block_start, %block_end, %receipts_len, "reexecuting blocks");
 
         // ensure block range have no gaps
-        if block_start.count_to(&block_end) != batch_blocks_len as u64 {
+        if block_start.count_to(block_end) != batch_blocks_len as u64 {
             let message = GlobalState::shutdown_from(TASK_NAME, "received block range with gaps to reexecute");
             return log_and_err!(message);
         }
