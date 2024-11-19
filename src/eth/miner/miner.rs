@@ -421,7 +421,7 @@ pub fn block_from_local(pending_header: PendingBlockHeader, txs: Vec<LocalTransa
 
     // calculate transactions hash
     if not(block.transactions.is_empty()) {
-        let transactions_hashes: Vec<&Hash> = block.transactions.iter().map(|x| &x.input.hash).collect();
+        let transactions_hashes: Vec<Hash> = block.transactions.iter().map(|x| x.input.hash).collect();
         block.header.transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
     }
 

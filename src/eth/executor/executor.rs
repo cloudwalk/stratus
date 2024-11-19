@@ -247,7 +247,7 @@ impl Executor {
 
         // determine how to execute each transaction
         for tx in block_transactions {
-            let receipt = receipts.try_remove(&tx.hash())?;
+            let receipt = receipts.try_remove(tx.hash())?;
             self.execute_external_transaction(
                 tx,
                 receipt,
@@ -329,7 +329,7 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Pending)?;
+                let sender = self.storage.read_account(receipt.from.into(), StoragePointInTime::Pending)?;
                 let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
                 let evm_result = EvmExecutionResult {
                     execution,
@@ -548,7 +548,7 @@ impl Executor {
         let pending_header = self.storage.read_pending_block_header()?.unwrap_or_default();
         let mined_block = match point_in_time {
             StoragePointInTime::MinedPast(number) => {
-                let Some(block) = self.storage.read_block(&BlockFilter::Number(number))? else {
+                let Some(block) = self.storage.read_block(BlockFilter::Number(number))? else {
                     let filter = BlockFilter::Number(number);
                     return Err(StratusError::RpcBlockFilterInvalid { filter });
                 };

@@ -48,12 +48,12 @@ impl LogFilterInput {
         // parse point-in-time
         let (from, to) = match self.block_hash {
             Some(hash) => {
-                let from_to = storage.translate_to_point_in_time(&BlockFilter::Hash(hash))?;
+                let from_to = storage.translate_to_point_in_time(BlockFilter::Hash(hash))?;
                 (from_to, from_to)
             }
             None => {
-                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockFilter::Latest))?;
-                let to = storage.translate_to_point_in_time(&self.to_block.unwrap_or(BlockFilter::Latest))?;
+                let from = storage.translate_to_point_in_time(self.from_block.unwrap_or(BlockFilter::Latest))?;
+                let to = storage.translate_to_point_in_time(self.to_block.unwrap_or(BlockFilter::Latest))?;
                 (from, to)
             }
         };

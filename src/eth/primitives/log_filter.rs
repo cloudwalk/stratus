@@ -32,7 +32,7 @@ impl LogFilter {
 
         // filter address
         let has_addresses = not(self.addresses.is_empty());
-        if has_addresses && not(self.addresses.contains(log.address())) {
+        if has_addresses && not(self.addresses.contains(&log.address())) {
             return false;
         }
 

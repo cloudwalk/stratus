@@ -85,19 +85,19 @@ impl PermanentStorage for RocksPermanentStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Account>> {
         self.state.read_account(address, point_in_time).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read account in RocksPermanent");
         })
     }
 
-    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Slot>> {
         self.state.read_slot(address, index, point_in_time).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read slot in RocksPermanent");
         })
     }
 
-    fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>> {
         let block = self.state.read_block(selection).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read block in RocksPermanent");
         });
@@ -107,7 +107,7 @@ impl PermanentStorage for RocksPermanentStorage {
         block
     }
 
-    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>> {
         self.state.read_transaction(hash).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read transaction in RocksPermanent");
         })

@@ -130,8 +130,8 @@ impl Block {
                     .entry(transaction_changes.address)
                     .or_insert(transaction_changes.clone());
 
-                if let Some(nonce) = transaction_changes.nonce.take_modified_ref() {
-                    account_compacted_changes.nonce.set_modified(*nonce);
+                if let Some(&nonce) = transaction_changes.nonce.take_modified_ref() {
+                    account_compacted_changes.nonce.set_modified(nonce);
                 }
 
                 if let Some(balance) = transaction_changes.balance.take_modified_ref() {
@@ -142,10 +142,10 @@ impl Block {
                     account_compacted_changes.bytecode.set_modified(bytecode.clone());
                 }
 
-                for (slot_index, slot) in &transaction_changes.slots {
-                    let slot_compacted_changes = account_compacted_changes.slots.entry(*slot_index).or_insert(slot.clone());
-                    if let Some(slot_value) = slot.take_modified_ref() {
-                        slot_compacted_changes.set_modified(*slot_value);
+                for (&slot_index, slot) in &transaction_changes.slots {
+                    let slot_compacted_changes = account_compacted_changes.slots.entry(slot_index).or_insert(slot.clone());
+                    if let Some(&slot_value) = slot.take_modified_ref() {
+                        slot_compacted_changes.set_modified(slot_value);
                     }
                 }
             }
