@@ -14,6 +14,7 @@ import {
     TEST_BALANCE,
     ZERO,
     deployTestContractBalances,
+    deployTestContractBlockTimestamp,
     prepareSignedTx,
     send,
     sendAndGetError,
@@ -29,9 +30,12 @@ import {
 
 describe("JSON-RPC", () => {
     describe("State", () => {
-        it("stratus_reset / hardhat_reset", async () => {
-            (await sendExpect("stratus_reset")).eq(true);
-            (await sendExpect("hardhat_reset")).eq(true);
+        it("reset", async () => {
+            if (isStratus) {
+                (await sendExpect("stratus_reset")).eq(true);
+            } else {
+                (await sendExpect("hardhat_reset")).eq(true);
+            }
         });
     });
 
@@ -229,42 +233,89 @@ describe("JSON-RPC", () => {
         });
 
         describe("evm_setNextBlockTimestamp", () => {
-            let target = Math.floor(Date.now() / 1000) + 10;
+            let initialTarget: number;
+
+            beforeEach(async () => {
+                await send("evm_setNextBlockTimestamp", [0]);
+            });
+
             it("sets the next block timestamp", async () => {
-                await send("evm_setNextBlockTimestamp", [target]);
+                initialTarget = Math.floor(Date.now() / 1000) + 100;
+                await send("evm_setNextBlockTimestamp", [initialTarget]);
                 await sendEvmMine();
-                expect((await latest()).timestamp).eq(target);
+                expect((await latest()).timestamp).eq(initialTarget);
             });
 
             it("offsets subsequent timestamps", async () => {
+                const target = Math.floor(Date.now() / 1000) + 100;
+                await send("evm_setNextBlockTimestamp", [target]);
+                await sendEvmMine();
+
                 await new Promise((resolve) => setTimeout(resolve, 1000));
                 await sendEvmMine();
                 expect((await latest()).timestamp).to.be.greaterThan(target);
             });
 
             it("resets the changes when sending 0", async () => {
+                const currentTimestamp = (await latest()).timestamp;
                 await send("evm_setNextBlockTimestamp", [0]);
-                let mined_timestamp = Math.floor(Date.now() / 1000);
                 await sendEvmMine();
-                let latest_timestamp = (await latest()).timestamp;
-                expect(latest_timestamp)
-                    .gte(mined_timestamp)
-                    .lte(Math.floor(Date.now() / 1000));
+                const newTimestamp = (await latest()).timestamp;
+                expect(newTimestamp).to.be.greaterThan(currentTimestamp);
             });
 
             it("handle negative offsets", async () => {
-                const past = Math.floor(Date.now() / 1000);
-                await new Promise((resolve) => setTimeout(resolve, 2000));
-                await send("evm_setNextBlockTimestamp", [past]);
-                await sendEvmMine();
-                expect((await latest()).timestamp).eq(past);
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                await sendEvmMine();
-                expect((await latest()).timestamp)
-                    .to.be.greaterThan(past)
-                    .lessThan(Math.floor(Date.now() / 1000));
+                const currentBlock = await latest();
+                const futureTimestamp = currentBlock.timestamp + 100;
 
-                await send("evm_setNextBlockTimestamp", [0]);
+                await send("evm_setNextBlockTimestamp", [futureTimestamp]);
+                await sendEvmMine();
+
+                const pastTimestamp = currentBlock.timestamp - 100;
+                await send("evm_setNextBlockTimestamp", [pastTimestamp]);
+                await sendEvmMine();
+
+                const newTimestamp = (await latest()).timestamp;
+                expect(newTimestamp).to.be.greaterThan(futureTimestamp);
+            });
+        });
+
+        describe("Block timestamp", () => {
+            it("transaction executes with pending block timestamp", async () => {
+                await sendReset();
+                const contract = await deployTestContractBlockTimestamp();
+
+                // Get initial timestamp
+                const initialTimestamp = await contract.getCurrentTimestamp();
+                expect(initialTimestamp).to.be.gt(0);
+
+                // Record timestamp in contract
+                const tx = await contract.recordTimestamp();
+                const receipt = await tx.wait();
+
+                // Get the timestamp from contract event
+                const event = receipt.logs[0];
+                const recordedTimestamp = contract.interface.parseLog({
+                    topics: event.topics,
+                    data: event.data,
+                })?.args.timestamp;
+
+                // Get the block timestamp
+                const block = await ETHERJS.getBlock(receipt.blockNumber);
+                const blockTimestamp = block!.timestamp;
+
+                // Get stored record from contract
+                const records = await contract.getRecords();
+                expect(records.length).to.equal(1);
+
+                // Validate timestamps match across all sources
+                expect(recordedTimestamp).to.equal(blockTimestamp);
+                expect(records[0].timestamp).to.equal(recordedTimestamp);
+                expect(records[0].blockNumber).to.equal(receipt.blockNumber);
+
+                // Verify that time is advancing
+                const finalTimestamp = await contract.getCurrentTimestamp();
+                expect(finalTimestamp).to.be.gt(initialTimestamp);
             });
         });
     });

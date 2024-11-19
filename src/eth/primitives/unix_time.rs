@@ -29,16 +29,13 @@ impl UnixTime {
     }
 
     #[cfg(feature = "dev")]
-    pub fn set_offset(timestamp: UnixTime, latest_timestamp: UnixTime) -> anyhow::Result<()> {
-        offset::set(timestamp, latest_timestamp)
+    pub fn set_offset(current_block_timestamp: UnixTime, new_block_timestamp: UnixTime) -> anyhow::Result<()> {
+        offset::set(current_block_timestamp, new_block_timestamp)
     }
 
-    pub fn to_i64(&self) -> i64 {
-        self.0.try_into().expect("UNIX time is unrealistically high")
-    }
-
-    pub fn as_u64(&self) -> u64 {
-        self.0
+    #[cfg(feature = "dev")]
+    pub fn evm_set_next_block_timestamp_was_called() -> bool {
+        offset::evm_set_next_block_timestamp_was_called()
     }
 }
 
@@ -115,6 +112,7 @@ impl TryFrom<UnixTime> for i32 {
 
 #[cfg(feature = "dev")]
 mod offset {
+    use std::sync::atomic::AtomicBool;
     use std::sync::atomic::AtomicI64;
     use std::sync::atomic::AtomicU64;
     use std::sync::atomic::Ordering::Acquire;
@@ -123,32 +121,114 @@ mod offset {
     use super::UnixTime;
     use super::Utc;
 
-    pub static TIME_OFFSET: AtomicI64 = AtomicI64::new(0);
-    pub static NEXT_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
+    /// Stores the time difference (in seconds) to apply to subsequent blocks
+    /// This maintains relative time offsets after an explicit timestamp is used
+    pub static NEW_TIMESTAMP_DIFF: AtomicI64 = AtomicI64::new(0);
 
-    pub fn set(timestamp: UnixTime, latest_timestamp: UnixTime) -> anyhow::Result<()> {
+    /// Stores the exact timestamp to use for the next block
+    /// Only used once, then reset to 0
+    pub static NEW_TIMESTAMP: AtomicU64 = AtomicU64::new(0);
+
+    /// Indicates whether evm_setNextBlockTimestamp was called and hasn't been consumed yet
+    pub static EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED: AtomicBool = AtomicBool::new(false);
+
+    /// Stores the timestamp of the most recently processed block
+    /// Used to ensure that block timestamps always increase monotonically
+    pub static LAST_BLOCK_TIMESTAMP: AtomicI64 = AtomicI64::new(0);
+
+    /// Sets the timestamp for the next block and calculates the offset for subsequent blocks
+    ///
+    /// # Scenarios:
+    /// 1. Setting a future timestamp:
+    ///    - current_block = 100, new_timestamp = 110
+    ///    - diff = (110 - current_time) = +10
+    ///    - Next block will be exactly 110
+    ///    - Subsequent blocks will maintain the +10 offset from current time
+    ///
+    /// 2. Setting timestamp to 0 (reset):
+    ///    - Stores the current block timestamp for reference
+    ///    - Resets the time offset to 0
+    ///    - Next block will be current_block + 1
+    ///    - Subsequent blocks use current time
+    ///
+    /// 3. Setting a past timestamp (error):
+    ///    - current_block = 100, new_timestamp = 90
+    ///    - Returns error: "timestamp can't be before the latest block"
+    pub fn set(current_block_timestamp: UnixTime, new_block_timestamp: UnixTime) -> anyhow::Result<()> {
         use crate::log_and_err;
-        let now = Utc::now().timestamp() as u64;
 
-        if *timestamp != 0 && *timestamp < *latest_timestamp {
+        if *new_block_timestamp == 0 {
+            LAST_BLOCK_TIMESTAMP.store(*current_block_timestamp as i64, SeqCst);
+        }
+
+        if *new_block_timestamp != 0 && *new_block_timestamp < *current_block_timestamp {
             return log_and_err!("timestamp can't be before the latest block");
         }
 
-        let diff: i64 = if *timestamp == 0 { 0 } else { (*timestamp as i128 - now as i128) as i64 };
-        NEXT_TIMESTAMP.store(*timestamp, SeqCst);
-        TIME_OFFSET.store(diff, SeqCst);
+        let current_time = Utc::now().timestamp() as i64;
+        let diff: i64 = if *new_block_timestamp == 0 {
+            0
+        } else {
+            (*new_block_timestamp as i64).saturating_sub(current_time)
+        };
+
+        NEW_TIMESTAMP.store(*new_block_timestamp, SeqCst);
+        NEW_TIMESTAMP_DIFF.store(diff, SeqCst);
+        EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.store(true, SeqCst);
         Ok(())
     }
 
+    /// Returns the timestamp for the current block based on various conditions.
+    /// Ensures proper time progression by guaranteeing that each block's timestamp
+    /// is at least 1 second greater than the previous block.
+    ///
+    /// # Behavior
+    /// There are two main paths for timestamp generation:
+    ///
+    /// 1. When a specific timestamp was set (was_evm_timestamp_set = true):
+    ///    - If new_timestamp is 0: Returns last_block_timestamp + 1
+    ///    - If new_timestamp > 0: Returns exactly new_timestamp
+    ///    After this call, resets the timestamp flag and stored value
+    ///
+    /// 2. For subsequent blocks (was_evm_timestamp_set = false):
+    ///    - If new_timestamp is set: Uses it as reference point
+    ///    - Otherwise: Uses max(current_time + offset, last_block_timestamp)
+    ///    In both cases, adds 1 second to ensure progression
+    ///
+    /// The function always updates LAST_BLOCK_TIMESTAMP with the returned value
+    /// to maintain the chain of increasing timestamps.
     pub fn now() -> UnixTime {
-        let offset_time = NEXT_TIMESTAMP.load(Acquire);
-        let time_offset = TIME_OFFSET.load(Acquire);
-        match offset_time {
-            0 => UnixTime((Utc::now().timestamp() as i128 + time_offset as i128) as u64),
-            _ => {
-                let _ = NEXT_TIMESTAMP.fetch_update(SeqCst, SeqCst, |_| Some(0));
-                UnixTime(offset_time)
+        let new_timestamp = NEW_TIMESTAMP.load(Acquire);
+        let new_timestamp_diff = NEW_TIMESTAMP_DIFF.load(Acquire);
+        let was_evm_timestamp_set = EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.load(Acquire);
+        let last_block_timestamp = LAST_BLOCK_TIMESTAMP.load(Acquire);
+        let current_time = Utc::now().timestamp() as i64;
+
+        let result = if !was_evm_timestamp_set {
+            let last_timestamp = if new_timestamp != 0 {
+                new_timestamp as i64
+            } else {
+                std::cmp::max(current_time + new_timestamp_diff, last_block_timestamp)
+            };
+
+            UnixTime((last_timestamp + 1) as u64)
+        } else {
+            EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.store(false, SeqCst);
+            NEW_TIMESTAMP.store(0, SeqCst);
+
+            if new_timestamp == 0 {
+                UnixTime((last_block_timestamp + 1) as u64)
+            } else {
+                UnixTime(new_timestamp)
             }
-        }
+        };
+
+        LAST_BLOCK_TIMESTAMP.store(*result as i64, SeqCst);
+        result
+    }
+
+    /// Returns whether evm_setNextBlockTimestamp was called and hasn't been consumed yet
+    pub fn evm_set_next_block_timestamp_was_called() -> bool {
+        EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.load(Acquire)
     }
 }
