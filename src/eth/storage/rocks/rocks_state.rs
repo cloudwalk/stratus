@@ -624,7 +624,6 @@ impl fmt::Debug for RocksStorageState {
 
 #[cfg(test)]
 mod tests {
-
     use fake::Fake;
     use fake::Faker;
 
@@ -635,6 +634,9 @@ mod tests {
     #[test]
     #[cfg(feature = "dev")]
     fn test_rocks_multi_get() {
+        use std::collections::HashSet;
+        use std::iter;
+
         type Key = (AddressRocksdb, SlotIndexRocksdb);
         type Value = CfAccountSlotsValue;
 
