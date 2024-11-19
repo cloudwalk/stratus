@@ -414,7 +414,21 @@ impl RocksStorageState {
         Ok(())
     }
 
+    pub fn save_block_batch(&self, block_batch: Vec<Block>) -> Result<()> {
+        let mut batch = WriteBatch::default();
+        for block in block_batch {
+            self.prepare_block_insertion(block, &mut batch)?;
+        }
+        self.write_in_batch_for_multiple_cfs(batch)
+    }
+
     pub fn save_block(&self, block: Block) -> Result<()> {
+        let mut batch = WriteBatch::default();
+        self.prepare_block_insertion(block, &mut batch)?;
+        self.write_in_batch_for_multiple_cfs(batch)
+    }
+
+    pub fn prepare_block_insertion(&self, block: Block, batch: &mut WriteBatch) -> Result<()> {
         let account_changes = block.compact_account_changes();
 
         let mut txs_batch = vec![];
@@ -425,10 +439,9 @@ impl RocksStorageState {
                 logs_batch.push(((transaction.input.hash.into(), log.log_index.into()), transaction.block_number.into()));
             }
         }
-        let mut batch = WriteBatch::default();
 
-        self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
-        self.logs.prepare_batch_insertion(logs_batch, &mut batch)?;
+        self.transactions.prepare_batch_insertion(txs_batch, batch)?;
+        self.logs.prepare_batch_insertion(logs_batch, batch)?;
 
         let number = block.number();
         let block_hash = block.hash();
@@ -446,14 +459,12 @@ impl RocksStorageState {
         };
 
         let block_by_number = (number.into(), block_without_changes.into());
-        self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
+        self.blocks_by_number.prepare_batch_insertion([block_by_number], batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
-        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
+        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], batch)?;
 
-        self.prepare_batch_with_execution_changes(account_changes, number, &mut batch)?;
-
-        self.write_in_batch_for_multiple_cfs(batch)?;
+        self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
         Ok(())
     }
 

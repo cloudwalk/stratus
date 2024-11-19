@@ -131,6 +131,12 @@ impl PermanentStorage for RocksPermanentStorage {
         })
     }
 
+    fn save_block_batch(&self, block_batch: Vec<Block>) -> anyhow::Result<()> {
+        self.state.save_block_batch(block_batch).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to save block_batch in RocksPermanent");
+        })
+    }
+
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
         self.state.save_accounts(accounts).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to save accounts in RocksPermanent");

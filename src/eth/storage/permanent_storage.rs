@@ -39,8 +39,13 @@ pub trait PermanentStorage: Send + Sync + 'static {
     // Block
     // -------------------------------------------------------------------------
 
-    /// Persists atomically all changes from a block.
+    /// Persists atomically changes from block.
     fn save_block(&self, block: Block) -> anyhow::Result<()>;
+
+    /// Persists atomically changes from blocks.
+    fn save_block_batch(&self, blocks: Vec<Block>) -> anyhow::Result<()> {
+        blocks.into_iter().try_for_each(|block| self.save_block(block))
+    }
 
     /// Retrieves a block from the storage.
     fn read_block(&self, block_filter: BlockFilter) -> anyhow::Result<Option<Block>>;

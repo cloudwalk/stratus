@@ -4,9 +4,8 @@ mod external_rpc_storage;
 mod inmemory;
 mod permanent_storage;
 mod postgres_external_rpc;
-pub mod rocks;
-
 mod redis;
+pub mod rocks;
 mod storage_point_in_time;
 mod stratus_storage;
 mod temporary_storage;
