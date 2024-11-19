@@ -20,10 +20,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::UnixTime;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::UnixTimeNow;
 use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
 
@@ -156,8 +152,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                 .or_insert_with(|| InMemoryTemporaryAccount::new(change.address));
 
             // account basic info
-            if let Some(&nonce) = change.nonce.take_ref() {
-                account.info.nonce = nonce;
+            if let Some(nonce) = change.nonce.take_ref() {
+                account.info.nonce = *nonce;
             }
             if let Some(balance) = change.balance.take_ref() {
                 account.info.balance = *balance;
@@ -170,8 +166,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
             // slots
             for slot in change.slots.values() {
-                if let Some(&slot) = slot.take_ref() {
-                    account.slots.insert(slot.index, slot);
+                if let Some(slot) = slot.take_ref() {
+                    account.slots.insert(slot.index, *slot);
                 }
             }
         }
@@ -194,20 +190,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     /// TODO: we cannot allow more than one pending block. Where to put this check?
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
         let mut states = self.lock_write();
-
-        #[cfg(feature = "dev")]
-        let mut finished_block = states.head.require_pending_block()?.clone();
-        #[cfg(not(feature = "dev"))]
         let finished_block = states.head.require_pending_block()?.clone();
-
-        #[cfg(feature = "dev")]
-        {
-            // Update block timestamp only if evm_setNextBlockTimestamp was called,
-            // otherwise keep the original timestamp from pending block creation
-            if UnixTime::evm_set_next_block_timestamp_was_called() {
-                finished_block.header.timestamp = UnixTimeNow::default();
-            }
-        }
 
         // remove last state if reached limit
         if states.len() + 1 >= MAX_BLOCKS {
@@ -282,18 +265,17 @@ fn do_read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: Ad
 }
 
 fn do_read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: Address, index: SlotIndex) -> Option<Slot> {
-    // search all
-    for state in states.iter() {
-        let Some(account) = state.accounts.get(&address) else { continue };
-        let Some(&slot) = account.slots.get(&index) else { continue };
+    let slot = states
+        .iter()
+        .find_map(|state| state.accounts.get(&address).and_then(|account| account.slots.get(&index)));
 
+    if let Some(&slot) = slot {
         tracing::trace!(%address, %index, %slot, "slot found in temporary");
-        return Some(slot);
+        Some(slot)
+    } else {
+        tracing::trace!(%address, %index, "slot not found in temporary");
+        None
     }
-
-    // not found
-    tracing::trace!(%address, %index, "slot not found in temporary");
-    None
 }
 
 fn do_check_conflicts(states: &NonEmpty<InMemoryTemporaryStorageState>, execution: &EvmExecution) -> Option<ExecutionConflicts> {
@@ -302,16 +284,16 @@ fn do_check_conflicts(states: &NonEmpty<InMemoryTemporaryStorageState>, executio
     for (&address, change) in &execution.changes {
         // check account info conflicts
         if let Some(account) = do_read_account(states, address) {
-            if let Some(&expected) = change.nonce.take_original_ref() {
-                let original = account.nonce;
+            if let Some(expected) = change.nonce.take_original_ref() {
+                let original = &account.nonce;
                 if expected != original {
-                    conflicts.add_nonce(address, original, expected);
+                    conflicts.add_nonce(address, *original, *expected);
                 }
             }
-            if let Some(&expected) = change.balance.take_original_ref() {
-                let original = account.balance;
+            if let Some(expected) = change.balance.take_original_ref() {
+                let original = &account.balance;
                 if expected != original {
-                    conflicts.add_balance(address, original, expected);
+                    conflicts.add_balance(address, *original, *expected);
                 }
             }
         }
