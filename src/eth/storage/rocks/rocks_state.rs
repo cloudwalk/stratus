@@ -13,6 +13,7 @@ use rocksdb::Direction;
 use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
+use rocksdb::WriteOptions;
 use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
@@ -26,7 +27,6 @@ use super::cf_versions::CfBlocksByHashValue;
 use super::cf_versions::CfBlocksByNumberValue;
 use super::cf_versions::CfLogsValue;
 use super::cf_versions::CfTransactionsValue;
-use super::rocks_batch_writer::write_in_batch_for_multiple_cfs_impl;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
@@ -130,10 +130,11 @@ pub struct RocksStorageState {
     #[cfg(feature = "metrics")]
     db_options: Options,
     shutdown_timeout: Duration,
+    enable_sync_write: bool,
 }
 
 impl RocksStorageState {
-    pub fn new(path: String, shutdown_timeout: Duration, cache_multiplier: Option<f32>) -> Result<Self> {
+    pub fn new(path: String, shutdown_timeout: Duration, cache_multiplier: Option<f32>, enable_sync_write: bool) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
 
         let cf_options_map = generate_cf_options_map(cache_multiplier);
@@ -164,6 +165,7 @@ impl RocksStorageState {
             db_options,
             db,
             shutdown_timeout,
+            enable_sync_write,
         };
 
         tracing::debug!("opened database successfully");
@@ -175,7 +177,7 @@ impl RocksStorageState {
     pub fn new_in_testdir() -> anyhow::Result<(Self, tempfile::TempDir)> {
         let test_dir = tempfile::tempdir()?;
         let path = test_dir.as_ref().display().to_string();
-        let state = Self::new(path, Duration::ZERO, None)?;
+        let state = Self::new(path, Duration::ZERO, None, true)?;
         Ok((state, test_dir))
     }
 
@@ -410,8 +412,7 @@ impl RocksStorageState {
             &mut write_batch,
         )?;
 
-        write_in_batch_for_multiple_cfs_impl(&self.db, write_batch)?;
-        Ok(())
+        self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
     pub fn save_block_batch(&self, block_batch: Vec<Block>) -> Result<()> {
@@ -470,7 +471,24 @@ impl RocksStorageState {
 
     /// Write to DB in a batch
     pub fn write_in_batch_for_multiple_cfs(&self, batch: WriteBatch) -> Result<()> {
-        write_in_batch_for_multiple_cfs_impl(&self.db, batch)
+        tracing::debug!("writing batch");
+        let batch_len = batch.len();
+
+        let mut options = WriteOptions::default();
+        // By default, each write to rocksdb is asynchronous: it returns after pushing
+        // the write from the process into the operating system (buffer cache).
+        //
+        // This option offers the trade-off of waiting after each write to
+        // ensure data is persisted to disk before returning, preventing
+        // potential data loss in case of system failure.
+        options.set_sync(self.enable_sync_write);
+
+        self.db
+            .write_opt(batch, &options)
+            .context("failed to write in batch to (possibly) multiple column families")
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, batch_len, "failed to write batch to DB");
+            })
     }
 
     /// Writes slots to state (does not write to slot history)

@@ -104,6 +104,10 @@ pub struct PermanentStorageConfig {
     /// Augments or decreases the size of Column Family caches based on a multiplier.
     #[arg(long = "rocks-cache-size-multiplier", env = "ROCKS_CACHE_SIZE_MULTIPLIER")]
     pub rocks_cache_size_multiplier: Option<f32>,
+
+    /// Augments or decreases the size of Column Family caches based on a multiplier.
+    #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
+    pub rocks_disable_sync_write: bool,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -137,6 +141,7 @@ impl PermanentStorageConfig {
                 self.rocks_path_prefix.clone(),
                 self.rocks_shutdown_timeout,
                 self.rocks_cache_size_multiplier,
+                !self.rocks_disable_sync_write,
             )?),
         };
         Ok(perm)

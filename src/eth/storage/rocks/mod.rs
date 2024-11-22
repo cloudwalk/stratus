@@ -1,8 +1,5 @@
 //! RocksDB layers (top-to-bottom): permanent -> state -> rest.
 
-/// Batch writer with capacity for flushing temporarily.
-mod rocks_batch_writer;
-
 /// Exposed API.
 pub mod rocks_permanent;
 
