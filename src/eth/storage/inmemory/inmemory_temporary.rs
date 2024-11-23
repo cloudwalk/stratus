@@ -20,6 +20,10 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::UnixTime;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::UnixTimeNow;
 use crate::eth::storage::TemporaryStorage;
 use crate::log_and_err;
 
@@ -190,7 +194,20 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     /// TODO: we cannot allow more than one pending block. Where to put this check?
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
         let mut states = self.lock_write();
+
+        #[cfg(feature = "dev")]
+        let mut finished_block = states.head.require_pending_block()?.clone();
+        #[cfg(not(feature = "dev"))]
         let finished_block = states.head.require_pending_block()?.clone();
+
+        #[cfg(feature = "dev")]
+        {
+            // Update block timestamp only if evm_setNextBlockTimestamp was called,
+            // otherwise keep the original timestamp from pending block creation
+            if UnixTime::evm_set_next_block_timestamp_was_called() {
+                finished_block.header.timestamp = UnixTimeNow::default();
+            }
+        }
 
         // remove last state if reached limit
         if states.len() + 1 >= MAX_BLOCKS {

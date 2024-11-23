@@ -165,7 +165,7 @@ mod offset {
             return log_and_err!("timestamp can't be before the latest block");
         }
 
-        let current_time = Utc::now().timestamp() as i64;
+        let current_time = Utc::now().timestamp();
         let diff: i64 = if *new_block_timestamp == 0 {
             0
         } else {
@@ -188,12 +188,12 @@ mod offset {
     /// 1. When a specific timestamp was set (was_evm_timestamp_set = true):
     ///    - If new_timestamp is 0: Returns last_block_timestamp + 1
     ///    - If new_timestamp > 0: Returns exactly new_timestamp
-    ///    After this call, resets the timestamp flag and stored value
+    ///    - After this call, resets the timestamp flag and stored value
     ///
     /// 2. For subsequent blocks (was_evm_timestamp_set = false):
     ///    - If new_timestamp is set: Uses it as reference point
     ///    - Otherwise: Uses max(current_time + offset, last_block_timestamp)
-    ///    In both cases, adds 1 second to ensure progression
+    ///    - In both cases, adds 1 second to ensure progression
     ///
     /// The function always updates LAST_BLOCK_TIMESTAMP with the returned value
     /// to maintain the chain of increasing timestamps.
@@ -202,7 +202,7 @@ mod offset {
         let new_timestamp_diff = NEW_TIMESTAMP_DIFF.load(Acquire);
         let was_evm_timestamp_set = EVM_SET_NEXT_BLOCK_TIMESTAMP_WAS_CALLED.load(Acquire);
         let last_block_timestamp = LAST_BLOCK_TIMESTAMP.load(Acquire);
-        let current_time = Utc::now().timestamp() as i64;
+        let current_time = Utc::now().timestamp();
 
         let result = if !was_evm_timestamp_set {
             let last_timestamp = if new_timestamp != 0 {
