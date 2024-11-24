@@ -24,12 +24,12 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::PointInTime;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 struct InMemoryPermanentStorageState {

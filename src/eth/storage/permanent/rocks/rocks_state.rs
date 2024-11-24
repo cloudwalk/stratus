@@ -47,10 +47,10 @@ use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::PointInTime;
 #[cfg(feature = "metrics")]
 use crate::ext::MutexExt;
 use crate::ext::OptionExt;
