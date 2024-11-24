@@ -29,7 +29,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StoragePointInTime;
+use crate::eth::storage::PointInTime;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 struct InMemoryPermanentStorageState {
@@ -102,7 +102,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>> {
         let state = self.lock_read();
 
         match state.accounts.get(&address) {
@@ -114,7 +114,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>> {
         let state = self.lock_read();
 
         let Some(account) = state.accounts.get(&address) else {
@@ -279,7 +279,7 @@ impl InMemoryPermanentAccount {
     }
 
     /// Converts itself to an account at a point-in-time.
-    pub fn to_account(&self, point_in_time: StoragePointInTime) -> Account {
+    pub fn to_account(&self, point_in_time: PointInTime) -> Account {
         Account {
             address: self.address,
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
@@ -323,10 +323,10 @@ where
     }
 
     /// Returns the value at the given point in time.
-    pub fn get_at_point(&self, point_in_time: StoragePointInTime) -> Option<T> {
+    pub fn get_at_point(&self, point_in_time: PointInTime) -> Option<T> {
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => Some(self.get_current()),
-            StoragePointInTime::MinedPast(block_number) => self.get_at_block(block_number),
+            PointInTime::Mined | PointInTime::Pending => Some(self.get_current()),
+            PointInTime::MinedPast(block_number) => self.get_at_block(block_number),
         }
     }
 

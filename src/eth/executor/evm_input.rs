@@ -14,7 +14,7 @@ use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
-use crate::eth::storage::StoragePointInTime;
+use crate::eth::storage::PointInTime;
 use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::if_else;
@@ -72,7 +72,7 @@ pub struct EvmInput {
     pub block_timestamp: UnixTime,
 
     /// Point-in-time from where accounts and slots will be read.
-    pub point_in_time: StoragePointInTime,
+    pub point_in_time: PointInTime,
 
     /// ID of the blockchain where the transaction will be or was included.
     ///
@@ -93,7 +93,7 @@ impl EvmInput {
             nonce: Some(input.nonce),
             block_number: pending_header.number,
             block_timestamp: *pending_header.timestamp,
-            point_in_time: StoragePointInTime::Pending,
+            point_in_time: PointInTime::Pending,
             chain_id: input.chain_id,
         }
     }
@@ -103,12 +103,7 @@ impl EvmInput {
     /// # Errors:
     ///
     /// If `point_in_time` is `MinedPast` it's required that `mined_block` is `Some`, otherwise, this function returns an error.
-    pub fn from_eth_call(
-        input: CallInput,
-        point_in_time: StoragePointInTime,
-        pending_header: PendingBlockHeader,
-        mined_block: Option<Block>,
-    ) -> anyhow::Result<Self> {
+    pub fn from_eth_call(input: CallInput, point_in_time: PointInTime, pending_header: PendingBlockHeader, mined_block: Option<Block>) -> anyhow::Result<Self> {
         Ok(Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
@@ -118,12 +113,12 @@ impl EvmInput {
             gas_price: Wei::ZERO,
             nonce: None,
             block_number: match point_in_time {
-                StoragePointInTime::Mined | StoragePointInTime::Pending => pending_header.number,
-                StoragePointInTime::MinedPast(number) => number,
+                PointInTime::Mined | PointInTime::Pending => pending_header.number,
+                PointInTime::MinedPast(number) => number,
             },
             block_timestamp: match point_in_time {
-                StoragePointInTime::Mined | StoragePointInTime::Pending => *pending_header.timestamp,
-                StoragePointInTime::MinedPast(_) => match mined_block {
+                PointInTime::Mined | PointInTime::Pending => *pending_header.timestamp,
+                PointInTime::MinedPast(_) => match mined_block {
                     Some(block) => block.header.timestamp,
                     None => return log_and_err!("failed to create EvmInput: couldn't determine mined block timestamp"),
                 },
@@ -145,7 +140,7 @@ impl EvmInput {
             nonce: Some(tx.0.nonce.try_into()?),
             gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.0.gas.try_into()?),
             gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.0.gas_price.map_into().unwrap_or(Wei::ZERO)),
-            point_in_time: StoragePointInTime::Pending,
+            point_in_time: PointInTime::Pending,
             block_number,
             block_timestamp,
             chain_id: match tx.0.chain_id {

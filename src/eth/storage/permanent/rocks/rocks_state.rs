@@ -50,7 +50,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::StoragePointInTime;
+use crate::eth::storage::PointInTime;
 #[cfg(feature = "metrics")]
 use crate::ext::MutexExt;
 use crate::ext::OptionExt;
@@ -304,13 +304,13 @@ impl RocksStorageState {
         Ok(logs_result)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> Result<Option<Slot>> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> Result<Option<Slot>> {
         if address.is_coinbase() {
             return Ok(None);
         }
 
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => {
+            PointInTime::Mined | PointInTime::Pending => {
                 let query_params = (address.into(), index.into());
 
                 let Some(account_slot_value) = self.account_slots.get(&query_params)? else {
@@ -322,7 +322,7 @@ impl RocksStorageState {
                     value: account_slot_value.into_inner().into(),
                 }))
             }
-            StoragePointInTime::MinedPast(number) => {
+            PointInTime::MinedPast(number) => {
                 let iterator_start = (address.into(), (index).into(), number.into());
 
                 if let Some(((rocks_address, rocks_index, _), value)) = self
@@ -343,13 +343,13 @@ impl RocksStorageState {
         }
     }
 
-    pub fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> Result<Option<Account>> {
+    pub fn read_account(&self, address: Address, point_in_time: PointInTime) -> Result<Option<Account>> {
         if address.is_coinbase() || address.is_zero() {
             return Ok(None);
         }
 
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => {
+            PointInTime::Mined | PointInTime::Pending => {
                 let Some(inner_account) = self.accounts.get(&address.into())? else {
                     tracing::trace!(%address, "account not found");
                     return Ok(None);
@@ -359,7 +359,7 @@ impl RocksStorageState {
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
             }
-            StoragePointInTime::MinedPast(block_number) => {
+            PointInTime::MinedPast(block_number) => {
                 let iterator_start = (address.into(), block_number.into());
 
                 if let Some(next) = self.accounts_history.iter_from(iterator_start, rocksdb::Direction::Reverse)?.next() {

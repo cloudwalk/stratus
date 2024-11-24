@@ -25,7 +25,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::StoragePointInTime;
+use crate::eth::storage::PointInTime;
 use crate::ext::parse_duration;
 use crate::log_and_err;
 
@@ -70,10 +70,10 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Account>>;
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>>;
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Slot>>;
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>>;
 
     // -------------------------------------------------------------------------
     // Global state

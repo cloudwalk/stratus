@@ -15,7 +15,7 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
 use crate::eth::executor::ExecutorConfig;
-use crate::eth::external_rpc::ExternalRpcStorageConfig;
+use crate::eth::external_rpc::ExternalRpcConfig;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
 use crate::eth::primitives::Address;
@@ -227,7 +227,7 @@ pub struct RpcDownloaderConfig {
     pub block_end: Option<u64>,
 
     #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
+    pub rpc_storage: ExternalRpcConfig,
 
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
@@ -293,7 +293,7 @@ pub struct ImporterOfflineConfig {
     pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
+    pub rpc_storage: ExternalRpcConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -350,7 +350,7 @@ pub struct IntegrationTestConfig {
     pub storage: StratusStorageConfig,
 
     #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
+    pub rpc_storage: ExternalRpcConfig,
 }
 
 impl WithCommonConfig for IntegrationTestConfig {

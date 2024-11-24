@@ -10,7 +10,7 @@ use sqlx::PgPool;
 
 use crate::alias::JsonValue;
 use crate::eth::external_rpc::ExternalBlockWithReceipts;
-use crate::eth::external_rpc::ExternalRpcStorage;
+use crate::eth::external_rpc::ExternalRpc;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -25,21 +25,21 @@ use crate::log_and_err;
 
 const MAX_RETRIES: u64 = 50;
 
-pub struct PostgresExternalRpcStorage {
+pub struct PostgresExternalRpc {
     pool: PgPool,
 }
 
 #[derive(Debug)]
-pub struct PostgresExternalRpcStorageConfig {
+pub struct PostgresExternalRpcConfig {
     pub url: String,
     pub connections: u32,
     pub acquire_timeout: Duration,
     pub slow_query_warn_threshold: Duration,
 }
 
-impl PostgresExternalRpcStorage {
-    /// Creates a new [`PostgresExternalRpcStorage`].
-    pub async fn new(config: PostgresExternalRpcStorageConfig) -> anyhow::Result<Self> {
+impl PostgresExternalRpc {
+    /// Creates a new [`PostgresExternalRpc`].
+    pub async fn new(config: PostgresExternalRpcConfig) -> anyhow::Result<Self> {
         tracing::info!(?config, "creating postgres external rpc storage");
 
         let options = config
@@ -65,7 +65,7 @@ impl PostgresExternalRpcStorage {
 }
 
 #[async_trait]
-impl ExternalRpcStorage for PostgresExternalRpcStorage {
+impl ExternalRpc for PostgresExternalRpc {
     async fn read_max_block_number_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
         tracing::debug!(%start, %end, "retrieving max external block");
 

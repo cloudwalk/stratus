@@ -30,7 +30,7 @@ use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
-use crate::eth::storage::StoragePointInTime;
+use crate::eth::storage::PointInTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
@@ -329,7 +329,7 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let sender = self.storage.read_account(receipt.from.into(), StoragePointInTime::Pending)?;
+                let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending)?;
                 let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
                 let evm_result = EvmExecutionResult {
                     execution,
@@ -527,7 +527,7 @@ impl Executor {
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: StoragePointInTime) -> Result<EvmExecution, StratusError> {
+    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: PointInTime) -> Result<EvmExecution, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -547,7 +547,7 @@ impl Executor {
         // retrieve block info
         let pending_header = self.storage.read_pending_block_header()?.unwrap_or_default();
         let mined_block = match point_in_time {
-            StoragePointInTime::MinedPast(number) => {
+            PointInTime::MinedPast(number) => {
                 let Some(block) = self.storage.read_block(BlockFilter::Number(number))? else {
                     let filter = BlockFilter::Number(number);
                     return Err(StratusError::RpcBlockFilterInvalid { filter });
@@ -560,8 +560,8 @@ impl Executor {
         // execute
         let evm_input = EvmInput::from_eth_call(call_input.clone(), point_in_time, pending_header, mined_block)?;
         let evm_route = match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => EvmRoute::CallPresent,
-            StoragePointInTime::MinedPast(_) => EvmRoute::CallPast,
+            PointInTime::Mined | PointInTime::Pending => EvmRoute::CallPresent,
+            PointInTime::MinedPast(_) => EvmRoute::CallPast,
         };
         let evm_result = self.evms.execute(evm_input, evm_route);
 
