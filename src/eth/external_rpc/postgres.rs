@@ -9,6 +9,8 @@ use sqlx::ConnectOptions;
 use sqlx::PgPool;
 
 use crate::alias::JsonValue;
+use crate::eth::external_rpc::ExternalBlockWithReceipts;
+use crate::eth::external_rpc::ExternalRpcStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -16,8 +18,6 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
-use crate::eth::storage::external_rpc_storage::ExternalBlockWithReceipts;
-use crate::eth::storage::ExternalRpcStorage;
 use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
 use crate::ext::SleepReason;
@@ -69,13 +69,9 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
     async fn read_max_block_number_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
         tracing::debug!(%start, %end, "retrieving max external block");
 
-        let result = sqlx::query_file_scalar!(
-            "src/eth/storage/postgres_external_rpc/sql/select_max_external_block_in_range.sql",
-            start.as_i64(),
-            end.as_i64()
-        )
-        .fetch_one(&self.pool)
-        .await;
+        let result = sqlx::query_file_scalar!("src/eth/external_rpc/sql/select_max_external_block_in_range.sql", start.as_i64(), end.as_i64())
+            .fetch_one(&self.pool)
+            .await;
 
         match result {
             Ok(Some(max)) => Ok(Some(max.into())),
@@ -90,7 +86,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
 
         loop {
             let result = sqlx::query_file!(
-                "src/eth/storage/postgres_external_rpc/sql/select_external_blocks_and_receipts_in_range.sql",
+                "src/eth/external_rpc/sql/select_external_blocks_and_receipts_in_range.sql",
                 start.as_i64(),
                 end.as_i64()
             )
@@ -124,7 +120,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
     async fn read_initial_accounts(&self) -> anyhow::Result<Vec<Account>> {
         tracing::debug!("retrieving external balances");
 
-        let result = sqlx::query_file!("src/eth/storage/postgres_external_rpc/sql/select_external_balances.sql")
+        let result = sqlx::query_file!("src/eth/external_rpc/sql/select_external_balances.sql")
             .fetch_all(&self.pool)
             .await;
 
@@ -145,7 +141,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
         tracing::debug!(%address, %balance, "saving external balance");
 
         let result = sqlx::query_file!(
-            "src/eth/storage/postgres_external_rpc/sql/insert_external_balance.sql",
+            "src/eth/external_rpc/sql/insert_external_balance.sql",
             address.as_ref(),
             TryInto::<BigDecimal>::try_into(balance)?
         )
@@ -170,7 +166,7 @@ impl ExternalRpcStorage for PostgresExternalRpcStorage {
 
         // insert block
         let result = sqlx::query_file!(
-            "src/eth/storage/postgres_external_rpc/sql/insert_external_block_and_receipts.sql",
+            "src/eth/external_rpc/sql/insert_external_block_and_receipts.sql",
             number.as_i64(),
             block,
             &receipts,

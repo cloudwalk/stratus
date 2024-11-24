@@ -37,6 +37,7 @@ use super::types::BlockNumberRocksdb;
 use super::types::HashRocksdb;
 use super::types::IndexRocksdb;
 use super::types::SlotIndexRocksdb;
+use super::types::SlotValueRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -49,7 +50,6 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::StoragePointInTime;
 #[cfg(feature = "metrics")]
 use crate::ext::MutexExt;

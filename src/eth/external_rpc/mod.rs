@@ -1,3 +1,8 @@
+pub use postgres::PostgresExternalRpcStorage;
+pub use postgres::PostgresExternalRpcStorageConfig;
+
+mod postgres;
+
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,8 +20,6 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
-use crate::eth::storage::PostgresExternalRpcStorage;
-use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::ext::parse_duration;
 
 pub type ExternalBlockWithReceipts = (ExternalBlock, Vec<ExternalReceipt>);

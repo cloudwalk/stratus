@@ -66,6 +66,17 @@ impl StratusStorage {
         Ok(this)
     }
 
+    #[cfg(test)]
+    pub fn new_test() -> Result<Self, StratusError> {
+        use super::InMemoryTemporaryStorage;
+        use crate::eth::storage::InMemoryPermanentStorage;
+
+        let perm = Box::new(InMemoryPermanentStorage::default());
+        let temp = Box::new(InMemoryTemporaryStorage::default());
+
+        Self::new(temp, perm)
+    }
+
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use std::sync::RwLockWriteGuard;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
+use nonempty::NonEmpty;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -26,12 +28,11 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
-use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::StoragePointInTime;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct InMemoryPermanentStorageState {
+struct InMemoryPermanentStorageState {
     pub accounts: HashMap<Address, InMemoryPermanentAccount, hash_hasher::HashBuildHasher>,
     pub transactions: HashMap<Hash, Arc<Block>, hash_hasher::HashBuildHasher>,
     pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
@@ -249,7 +250,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct InMemoryPermanentAccount {
+struct InMemoryPermanentAccount {
     #[allow(dead_code)]
     pub address: Address,
     pub balance: InMemoryHistory<Wei>,
@@ -286,5 +287,62 @@ impl InMemoryPermanentAccount {
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
             code_hash: self.code_hash.get_at_point(point_in_time).unwrap_or_default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct InMemoryHistory<T>(NonEmpty<InMemoryHistoryValue<T>>)
+where
+    T: Clone + Debug + serde::Serialize;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, derive_new::new)]
+struct InMemoryHistoryValue<T> {
+    pub block_number: BlockNumber,
+    pub value: T,
+}
+
+impl<T> InMemoryHistory<T>
+where
+    T: Clone + Debug + serde::Serialize + for<'a> serde::Deserialize<'a>,
+{
+    /// Creates a new list of historical values.
+    pub fn new_at_zero(value: T) -> Self {
+        Self::new(BlockNumber::ZERO, value)
+    }
+
+    /// Creates a new list of historical values.
+    pub fn new(block_number: BlockNumber, value: T) -> Self {
+        let value = InMemoryHistoryValue::new(block_number, value);
+        Self(NonEmpty::new(value))
+    }
+
+    /// Adds a new historical value to the list.
+    pub fn push(&mut self, block_number: BlockNumber, value: T) {
+        let value = InMemoryHistoryValue::new(block_number, value);
+        self.0.push(value);
+    }
+
+    /// Returns the value at the given point in time.
+    pub fn get_at_point(&self, point_in_time: StoragePointInTime) -> Option<T> {
+        match point_in_time {
+            StoragePointInTime::Mined | StoragePointInTime::Pending => Some(self.get_current()),
+            StoragePointInTime::MinedPast(block_number) => self.get_at_block(block_number),
+        }
+    }
+
+    /// Returns the most recent value before or at the given block number.
+    pub fn get_at_block(&self, block_number: BlockNumber) -> Option<T> {
+        self.0.iter().take_while(|x| x.block_number <= block_number).map(|x| &x.value).last().cloned()
+    }
+
+    /// Returns the most recent value.
+    pub fn get_current(&self) -> T {
+        self.0.last().value.clone()
+    }
+}
+
+impl<T: Clone + Debug + serde::Serialize + for<'a> serde::Deserialize<'a>> From<InMemoryHistory<T>> for Vec<InMemoryHistoryValue<T>> {
+    fn from(value: InMemoryHistory<T>) -> Self {
+        value.0.into()
     }
 }

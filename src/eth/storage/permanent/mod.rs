@@ -1,3 +1,12 @@
+pub use self::inmemory::InMemoryPermanentStorage;
+pub use self::redis::RedisPermanentStorage;
+pub use self::rocks::RocksPermanentStorage;
+pub use self::rocks::RocksStorageState;
+
+mod inmemory;
+mod redis;
+pub mod rocks;
+
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -16,9 +25,6 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::redis::RedisPermanentStorage;
-use crate::eth::storage::InMemoryPermanentStorage;
-use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StoragePointInTime;
 use crate::ext::parse_duration;
 use crate::log_and_err;

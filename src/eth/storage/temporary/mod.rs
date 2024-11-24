@@ -1,3 +1,7 @@
+pub use inmemory::InMemoryTemporaryStorage;
+
+mod inmemory;
+
 use std::str::FromStr;
 
 use anyhow::anyhow;
@@ -14,7 +18,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::storage::InMemoryTemporaryStorage;
 
 /// Temporary storage (in-between blocks) operations.
 pub trait TemporaryStorage: Send + Sync + 'static {
