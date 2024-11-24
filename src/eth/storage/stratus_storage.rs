@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
 use tracing::Span;
@@ -375,6 +376,54 @@ impl StratusStorage {
                 }
             })
             .map_err(Into::into)
+    }
+
+    pub fn save_block_batch(&self, blocks: Vec<Block>) -> Result<(), StratusError> {
+        let Some(first) = blocks.first() else {
+            tracing::error!("save_block_batch called with no blocks, ignoring");
+            return Ok(());
+        };
+
+        let first_number = first.number();
+
+        // check mined number
+        let mined_number = self.read_mined_block_number()?;
+        if not(first_number.is_zero()) && first_number != mined_number.next_block_number() {
+            tracing::error!(%first_number, %mined_number, "failed to save block because mismatch with mined block number");
+            return Err(StratusError::StorageMinedNumberConflict {
+                new: first_number,
+                mined: mined_number,
+            });
+        }
+
+        // check pending number
+        if let Some(pending_header) = self.read_pending_block_header()? {
+            if first_number >= pending_header.number {
+                tracing::error!(%first_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
+                return Err(StratusError::StoragePendingNumberConflict {
+                    new: first_number,
+                    pending: pending_header.number,
+                });
+            }
+        }
+
+        // check number of rest of blocks
+        for window in blocks.windows(2) {
+            let (previous, next) = (window[0].number(), window[1].number());
+            if previous.next_block_number() != next {
+                tracing::error!(%previous, %next, "previous block number doesn't match next one");
+                return Err(anyhow!("consecutive blocks in batch aren't adjacent").into());
+            }
+        }
+
+        // check mined block
+        let existing_block = self.read_block(BlockFilter::Number(first_number))?;
+        if existing_block.is_some() {
+            tracing::error!(%first_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
+            return Err(StratusError::StorageBlockConflict { number: first_number });
+        }
+
+        self.perm.save_block_batch(blocks).map_err(Into::into)
     }
 
     pub fn read_block(&self, filter: BlockFilter) -> Result<Option<Block>, StratusError> {

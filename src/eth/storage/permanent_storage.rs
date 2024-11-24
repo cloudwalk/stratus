@@ -39,8 +39,13 @@ pub trait PermanentStorage: Send + Sync + 'static {
     // Block
     // -------------------------------------------------------------------------
 
-    /// Persists atomically all changes from a block.
+    /// Persists atomically changes from block.
     fn save_block(&self, block: Block) -> anyhow::Result<()>;
+
+    /// Persists atomically changes from blocks.
+    fn save_block_batch(&self, blocks: Vec<Block>) -> anyhow::Result<()> {
+        blocks.into_iter().try_for_each(|block| self.save_block(block))
+    }
 
     /// Retrieves a block from the storage.
     fn read_block(&self, block_filter: BlockFilter) -> anyhow::Result<Option<Block>>;
@@ -99,6 +104,10 @@ pub struct PermanentStorageConfig {
     /// Augments or decreases the size of Column Family caches based on a multiplier.
     #[arg(long = "rocks-cache-size-multiplier", env = "ROCKS_CACHE_SIZE_MULTIPLIER")]
     pub rocks_cache_size_multiplier: Option<f32>,
+
+    /// Augments or decreases the size of Column Family caches based on a multiplier.
+    #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
+    pub rocks_disable_sync_write: bool,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -132,6 +141,7 @@ impl PermanentStorageConfig {
                 self.rocks_path_prefix.clone(),
                 self.rocks_shutdown_timeout,
                 self.rocks_cache_size_multiplier,
+                !self.rocks_disable_sync_write,
             )?),
         };
         Ok(perm)

@@ -27,7 +27,12 @@ pub struct RocksPermanentStorage {
 }
 
 impl RocksPermanentStorage {
-    pub fn new(db_path_prefix: Option<String>, shutdown_timeout: Duration, cache_size_multiplier: Option<f32>) -> anyhow::Result<Self> {
+    pub fn new(
+        db_path_prefix: Option<String>,
+        shutdown_timeout: Duration,
+        cache_size_multiplier: Option<f32>,
+        enable_sync_write: bool,
+    ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
         let path = if let Some(prefix) = db_path_prefix {
@@ -48,7 +53,7 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier)?;
+        let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write)?;
         let block_number = state.preload_block_number()?;
 
         Ok(Self { state, block_number })
@@ -128,6 +133,12 @@ impl PermanentStorage for RocksPermanentStorage {
         }
         self.state.save_block(block).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to save block in RocksPermanent");
+        })
+    }
+
+    fn save_block_batch(&self, block_batch: Vec<Block>) -> anyhow::Result<()> {
+        self.state.save_block_batch(block_batch).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to save block_batch in RocksPermanent");
         })
     }
 
