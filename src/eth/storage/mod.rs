@@ -104,7 +104,7 @@ pub trait Storage: Sized {
 
 /// Configuration that can be used by any binary that interacts with Stratus storage.
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct StratusStorageConfig {
+pub struct StorageConfig {
     #[clap(flatten)]
     pub temp_storage: TemporaryStorageConfig,
 
@@ -112,7 +112,7 @@ pub struct StratusStorageConfig {
     pub perm_storage: PermanentStorageConfig,
 }
 
-impl StratusStorageConfig {
+impl StorageConfig {
     /// Initializes Stratus storage.
     pub fn init(&self) -> Result<Arc<StratusStorage>, StratusError> {
         let temp_storage = self.temp_storage.init()?;
