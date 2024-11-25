@@ -12,11 +12,11 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StoragePointInTime;
 use crate::ext::from_json_str;
 use crate::ext::to_json_object;
 use crate::ext::to_json_string;
@@ -260,10 +260,10 @@ impl PermanentStorage for RedisPermanentStorage {
         }
     }
 
-    fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>> {
         let mut conn = self.conn()?;
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => {
+            PointInTime::Mined | PointInTime::Pending => {
                 // prepare key
                 let account_key = key_account(address);
 
@@ -277,7 +277,7 @@ impl PermanentStorage for RedisPermanentStorage {
                     Err(e) => log_and_err!(reason = e, "failed to read account from redis current value"),
                 }
             }
-            StoragePointInTime::MinedPast(number) => {
+            PointInTime::MinedPast(number) => {
                 // prepare key
                 let account_key = key_account_history(address);
 
@@ -305,11 +305,11 @@ impl PermanentStorage for RedisPermanentStorage {
         }
     }
 
-    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>> {
         // execute command and parse
         let mut conn = self.conn()?;
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => {
+            PointInTime::Mined | PointInTime::Pending => {
                 // prepare key
                 let slot_key = key_slot(address, index);
 
@@ -323,7 +323,7 @@ impl PermanentStorage for RedisPermanentStorage {
                     Err(e) => log_and_err!(reason = e, "failed to read slot from redis current value"),
                 }
             }
-            StoragePointInTime::MinedPast(number) => {
+            PointInTime::MinedPast(number) => {
                 // prepare key
                 let slot_key = key_slot_history(address, index);
 

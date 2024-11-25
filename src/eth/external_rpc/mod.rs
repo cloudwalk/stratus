@@ -1,3 +1,8 @@
+pub use postgres::PostgresExternalRpc;
+pub use postgres::PostgresExternalRpcConfig;
+
+mod postgres;
+
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,14 +20,12 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
-use crate::eth::storage::PostgresExternalRpcStorage;
-use crate::eth::storage::PostgresExternalRpcStorageConfig;
 use crate::ext::parse_duration;
 
 pub type ExternalBlockWithReceipts = (ExternalBlock, Vec<ExternalReceipt>);
 
 #[async_trait]
-pub trait ExternalRpcStorage: Send + Sync {
+pub trait ExternalRpc: Send + Sync {
     /// Read the largest block number saved inside a block range.
     async fn read_max_block_number_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>>;
 
@@ -45,10 +48,10 @@ pub trait ExternalRpcStorage: Send + Sync {
 
 /// External RPC storage configuration.
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
-pub struct ExternalRpcStorageConfig {
+pub struct ExternalRpcConfig {
     /// External RPC storage implementation.
     #[arg(long = "external-rpc-storage", env = "EXTERNAL_RPC_STORAGE")]
-    pub external_rpc_storage_kind: ExternalRpcStorageKind,
+    pub external_rpc_storage_kind: ExternalRpcKind,
 
     /// External RPC storage number of parallel open connections.
     #[arg(long = "external-rpc-storage-connections", env = "EXTERNAL_RPC_STORAGE_CONNECTIONS")]
@@ -64,29 +67,29 @@ pub struct ExternalRpcStorageConfig {
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
-pub enum ExternalRpcStorageKind {
+pub enum ExternalRpcKind {
     Postgres { url: String },
 }
 
-impl ExternalRpcStorageConfig {
+impl ExternalRpcConfig {
     /// Initializes external rpc storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpcStorage>> {
+    pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpc>> {
         tracing::info!(config = ?self, "creating external rpc storage");
 
-        let ExternalRpcStorageKind::Postgres { url } = &self.external_rpc_storage_kind;
+        let ExternalRpcKind::Postgres { url } = &self.external_rpc_storage_kind;
 
-        let config = PostgresExternalRpcStorageConfig {
+        let config = PostgresExternalRpcConfig {
             url: url.to_owned(),
             connections: self.external_rpc_storage_connections,
             acquire_timeout: self.external_rpc_storage_timeout,
             slow_query_warn_threshold: self.external_rpc_slow_query_warn_threshold,
         };
 
-        Ok(Arc::new(PostgresExternalRpcStorage::new(config).await?))
+        Ok(Arc::new(PostgresExternalRpc::new(config).await?))
     }
 }
 
-impl FromStr for ExternalRpcStorageKind {
+impl FromStr for ExternalRpcKind {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {

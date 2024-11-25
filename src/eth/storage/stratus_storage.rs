@@ -15,6 +15,7 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
@@ -22,7 +23,6 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::storage::PermanentStorage;
 use crate::eth::storage::PermanentStorageConfig;
-use crate::eth::storage::StoragePointInTime;
 use crate::eth::storage::TemporaryStorage;
 use crate::eth::storage::TemporaryStorageConfig;
 use crate::ext::not;
@@ -64,6 +64,17 @@ impl StratusStorage {
         this.set_pending_block_number_as_next_if_not_set()?;
 
         Ok(this)
+    }
+
+    #[cfg(test)]
+    pub fn new_test() -> Result<Self, StratusError> {
+        use super::InMemoryTemporaryStorage;
+        use crate::eth::storage::InMemoryPermanentStorage;
+
+        let perm = Box::new(InMemoryPermanentStorage::default());
+        let temp = Box::new(InMemoryTemporaryStorage::default());
+
+        Self::new(temp, perm)
     }
 
     // -------------------------------------------------------------------------
@@ -191,7 +202,7 @@ impl StratusStorage {
         // keep only accounts that does not exist in permanent storage
         let mut missing_accounts = Vec::new();
         for account in accounts {
-            let perm_account = self.perm.read_account(account.address, StoragePointInTime::Mined)?;
+            let perm_account = self.perm.read_account(account.address, PointInTime::Mined)?;
             if perm_account.is_none() {
                 missing_accounts.push(account);
             }
@@ -208,7 +219,7 @@ impl StratusStorage {
             .map_err(Into::into)
     }
 
-    pub fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> Result<Account, StratusError> {
+    pub fn read_account(&self, address: Address, point_in_time: PointInTime) -> Result<Account, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
 
@@ -247,7 +258,7 @@ impl StratusStorage {
         }
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> Result<Slot, StratusError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> Result<Slot, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
@@ -538,14 +549,14 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Translates a block filter to a specific storage point-in-time indicator.
-    pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<StoragePointInTime, StratusError> {
+    pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StratusError> {
         match block_filter {
-            BlockFilter::Pending => Ok(StoragePointInTime::Pending),
-            BlockFilter::Latest => Ok(StoragePointInTime::Mined),
-            BlockFilter::Earliest => Ok(StoragePointInTime::MinedPast(BlockNumber::ZERO)),
-            BlockFilter::Number(number) => Ok(StoragePointInTime::MinedPast(number)),
+            BlockFilter::Pending => Ok(PointInTime::Pending),
+            BlockFilter::Latest => Ok(PointInTime::Mined),
+            BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
+            BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),
             BlockFilter::Hash(_) => match self.read_block(block_filter)? {
-                Some(block) => Ok(StoragePointInTime::MinedPast(block.header.number)),
+                Some(block) => Ok(PointInTime::MinedPast(block.header.number)),
                 None => Err(StratusError::RpcBlockFilterInvalid { filter: block_filter }),
             },
         }

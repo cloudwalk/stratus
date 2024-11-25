@@ -1,3 +1,12 @@
+pub use self::inmemory::InMemoryPermanentStorage;
+pub use self::redis::RedisPermanentStorage;
+pub use self::rocks::RocksPermanentStorage;
+pub use self::rocks::RocksStorageState;
+
+mod inmemory;
+mod redis;
+pub mod rocks;
+
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -13,13 +22,10 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::redis::RedisPermanentStorage;
-use crate::eth::storage::InMemoryPermanentStorage;
-use crate::eth::storage::RocksPermanentStorage;
-use crate::eth::storage::StoragePointInTime;
 use crate::ext::parse_duration;
 use crate::log_and_err;
 
@@ -64,10 +70,10 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Account>>;
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>>;
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Slot>>;
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>>;
 
     // -------------------------------------------------------------------------
     // Global state

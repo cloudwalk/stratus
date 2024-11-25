@@ -3,7 +3,7 @@ use crate::infra::metrics::MetricLabelValue;
 
 /// EVM storage point-in-time indicator.
 #[derive(Debug, strum::Display, Clone, Copy, Default, strum::EnumIs, serde::Serialize)]
-pub enum StoragePointInTime {
+pub enum PointInTime {
     /// State of `Account` or `Slot` at the pending block being mined.
     ///
     /// If state did not change, then it is the same as the `Mined` state.
@@ -23,8 +23,8 @@ pub enum StoragePointInTime {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<StoragePointInTime> for MetricLabelValue {
-    fn from(value: StoragePointInTime) -> Self {
+impl From<PointInTime> for MetricLabelValue {
+    fn from(value: PointInTime) -> Self {
         Self::Some(value.to_string())
     }
 }

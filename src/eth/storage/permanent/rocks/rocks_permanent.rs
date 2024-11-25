@@ -14,11 +14,11 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StoragePointInTime;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
@@ -90,13 +90,13 @@ impl PermanentStorage for RocksPermanentStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: Address, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>> {
         self.state.read_account(address, point_in_time).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read account in RocksPermanent");
         })
     }
 
-    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>> {
         self.state.read_slot(address, index, point_in_time).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read slot in RocksPermanent");
         })

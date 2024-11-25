@@ -49,6 +49,7 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilterInput;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionInput;
@@ -62,7 +63,6 @@ use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
-use crate::eth::storage::StoragePointInTime;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
@@ -786,7 +786,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) 
     tracing::info!("executing eth_estimateGas");
 
     // execute
-    match ctx.executor.execute_local_call(call, StoragePointInTime::Mined) {
+    match ctx.executor.execute_local_call(call, PointInTime::Mined) {
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");

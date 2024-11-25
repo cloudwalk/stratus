@@ -17,14 +17,14 @@ use futures::StreamExt;
 use itertools::Itertools;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
+use stratus::eth::external_rpc::ExternalBlockWithReceipts;
+use stratus::eth::external_rpc::ExternalRpc;
 use stratus::eth::miner::Miner;
 use stratus::eth::miner::MinerMode;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::ExternalTransaction;
-use stratus::eth::storage::ExternalBlockWithReceipts;
-use stratus::eth::storage::ExternalRpcStorage;
 use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
 use stratus::log_and_err;
@@ -138,7 +138,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 }
 
 async fn run_rpc_block_fetcher(
-    rpc_storage: Arc<dyn ExternalRpcStorage>,
+    rpc_storage: Arc<dyn ExternalRpc>,
     blocks_by_fetch: usize,
     paralellism: usize,
     mut start: BlockNumber,
@@ -289,16 +289,12 @@ fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToS
     }
 }
 
-async fn fetch_blocks_and_receipts(
-    rpc_storage: Arc<dyn ExternalRpcStorage>,
-    block_start: BlockNumber,
-    block_end: BlockNumber,
-) -> anyhow::Result<BlocksToExecute> {
+async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BlocksToExecute> {
     tracing::info!(parent: None, %block_start, %block_end, "fetching blocks and receipts");
     rpc_storage.read_block_and_receipts_in_range(block_start, block_end).await
 }
 
-async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpcStorage>) -> anyhow::Result<BlockNumber> {
+async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpc>) -> anyhow::Result<BlockNumber> {
     match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
         Ok(Some(number)) => Ok(number),
         Ok(None) => Ok(BlockNumber::ZERO),
