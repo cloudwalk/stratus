@@ -28,7 +28,7 @@ impl DbConfig {
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
         opts.increase_parallelism(16);
-        opts.set_allow_mmap_reads(true);
+
         block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
         block_based_options.set_cache_index_and_filter_blocks(true);
         block_based_options.set_bloom_filter(15.5, true);
@@ -44,7 +44,6 @@ impl DbConfig {
             DbConfig::OptimizedPointLookUp => {
                 block_based_options.set_data_block_hash_ratio(0.5);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
-
                 opts.set_memtable_whole_key_filtering(true);
                 // not sure why, but it is in OptimizeForPointLookup(\1)
                 // but maybe we can set the prefix extractor for slots, since the they are prefixed by the account.
