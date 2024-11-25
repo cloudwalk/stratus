@@ -14,6 +14,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::PointInTime;
+use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
