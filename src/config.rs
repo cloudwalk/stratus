@@ -20,7 +20,7 @@ use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
 use crate::eth::primitives::Address;
 use crate::eth::rpc::RpcServerConfig;
-use crate::eth::storage::StratusStorageConfig;
+use crate::eth::storage::StorageConfig;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
 use crate::infra::kafka::KafkaConfig;
@@ -190,7 +190,7 @@ pub struct StratusConfig {
     pub rpc_server: RpcServerConfig,
 
     #[clap(flatten)]
-    pub storage: StratusStorageConfig,
+    pub storage: StorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -290,7 +290,7 @@ pub struct ImporterOfflineConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub storage: StratusStorageConfig,
+    pub storage: StorageConfig,
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcConfig,
@@ -347,7 +347,7 @@ pub struct IntegrationTestConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub storage: StratusStorageConfig,
+    pub storage: StorageConfig,
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcConfig,
@@ -391,7 +391,7 @@ impl FromStr for Environment {
             "staging" | "test" => Ok(Self::Staging),
             "production" | "prod" => Ok(Self::Production),
             "canary" => Ok(Self::Canary),
-            s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
+            s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Self::VARIANTS)),
         }
     }
 }
