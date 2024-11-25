@@ -1,4 +1,5 @@
 pub use inmemory::InMemoryTemporaryStorage;
+use strum::VariantNames;
 
 mod inmemory;
 
@@ -77,9 +78,10 @@ pub struct TemporaryStorageConfig {
     pub temp_storage_kind: TemporaryStorageKind,
 }
 
-#[derive(DebugAsJson, Clone, serde::Serialize)]
+#[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
 pub enum TemporaryStorageKind {
     #[serde(rename = "inmemory")]
+    #[strum(to_string = "inmemory")]
     InMemory,
 }
 
@@ -100,7 +102,7 @@ impl FromStr for TemporaryStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
-            s => Err(anyhow!("unknown temporary storage: {}", s)),
+            s => Err(anyhow!("unknown temporary storage kind: \"{}\" - valid values are {:?}", s, Self::VARIANTS)),
         }
     }
 }
