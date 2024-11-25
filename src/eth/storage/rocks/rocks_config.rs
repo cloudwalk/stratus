@@ -43,9 +43,9 @@ impl DbConfig {
         match self {
             DbConfig::OptimizedPointLookUp => {
                 let transform = rocksdb::SliceTransform::create_fixed_prefix(20);
-                block_based_options.set_data_block_hash_ratio(0.3);
+                block_based_options.set_data_block_hash_ratio(0.1);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
-                //block_based_options.set_index_type(rocksdb::BlockBasedIndexType::);
+                //block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
                 opts.set_prefix_extractor(transform);
                 opts.set_memtable_whole_key_filtering(true);
                 // This is set because of the above
@@ -68,6 +68,8 @@ impl DbConfig {
             block_based_options.set_block_cache(&block_cache);
             block_based_options.set_cache_index_and_filter_blocks(true);
         }
+
+        opts.set_block_based_table_factory(&block_based_options);
 
         opts
     }
