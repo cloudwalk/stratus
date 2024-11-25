@@ -45,7 +45,7 @@ impl DbConfig {
                 let transform = rocksdb::SliceTransform::create_fixed_prefix(20);
                 block_based_options.set_data_block_hash_ratio(0.1);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
-                //block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
+                block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
                 opts.set_prefix_extractor(transform);
                 opts.set_memtable_whole_key_filtering(true);
                 // This is set because of the above
