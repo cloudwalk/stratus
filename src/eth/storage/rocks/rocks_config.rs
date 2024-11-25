@@ -42,11 +42,11 @@ impl DbConfig {
 
         match self {
             DbConfig::OptimizedPointLookUp => {
-                block_based_options.set_data_block_hash_ratio(0.5);
+                block_based_options.set_data_block_hash_ratio(0.1);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
+                //block_based_options.set_index_type(rocksdb::BlockBasedIndexType::);
                 opts.set_memtable_whole_key_filtering(true);
-                // not sure why, but it is in OptimizeForPointLookup(\1)
-                // but maybe we can set the prefix extractor for slots, since the they are prefixed by the account.
+                // This is set because of the above
                 opts.set_memtable_prefix_bloom_ratio(0.02);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
             }
