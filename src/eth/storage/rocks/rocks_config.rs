@@ -61,8 +61,11 @@ impl DbConfig {
         }
 
         if let CacheSetting::Enabled(cache_size) = cache_setting {
-            let cache = Cache::new_lru_cache(cache_size);
-            block_based_options.set_block_cache(&cache);
+            let block_cache = Cache::new_lru_cache(cache_size/2);
+            let row_cache = Cache::new_lru_cache(cache_size/2);
+
+            opts.set_row_cache(&row_cache);
+            block_based_options.set_block_cache(&block_cache);
             block_based_options.set_cache_index_and_filter_blocks(true);
         }
 
