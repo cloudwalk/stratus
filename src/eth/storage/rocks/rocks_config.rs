@@ -42,12 +42,14 @@ impl DbConfig {
 
         match self {
             DbConfig::OptimizedPointLookUp => {
-                block_based_options.set_data_block_hash_ratio(0.1);
+                let transform = rocksdb::SliceTransform::create_fixed_prefix(20);
+                block_based_options.set_data_block_hash_ratio(0.3);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
                 //block_based_options.set_index_type(rocksdb::BlockBasedIndexType::);
+                opts.set_prefix_extractor(transform);
                 opts.set_memtable_whole_key_filtering(true);
                 // This is set because of the above
-                opts.set_memtable_prefix_bloom_ratio(0.02);
+                opts.set_memtable_prefix_bloom_ratio(0.2);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
             }
             DbConfig::Default => {

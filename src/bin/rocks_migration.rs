@@ -44,7 +44,7 @@ pub fn main() -> Result<()> {
 
         for item in source_state.iterator_cf(&source_cf, IteratorMode::Start) {
             let (key, value) = item?;
-            tracing::debug!("{}", key.len());
+            tracing::debug!("key length: {}", key.len());
             batch.put_cf(&dest_cf, key, value);
             count += 1;
 
