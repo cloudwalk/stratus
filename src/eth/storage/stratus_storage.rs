@@ -57,21 +57,14 @@ impl StratusStorage {
 
     #[cfg(test)]
     pub fn new_test() -> Result<Self, StratusError> {
-        use super::InMemoryTemporaryStorage;
-        use crate::eth::storage::InMemoryPermanentStorage;
-
-        let perm = Box::new(InMemoryPermanentStorage::default());
-        let temp = Box::new(InMemoryTemporaryStorage::new(0.into()));
+        let perm = Box::new(super::InMemoryPermanentStorage::default());
+        let temp = Box::new(super::InMemoryTemporaryStorage::new(0.into()));
 
         Self::new(temp, perm)
     }
 }
 
 impl Storage for StratusStorage {
-    // -------------------------------------------------------------------------
-    // Block number
-    // -------------------------------------------------------------------------
-
     fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();

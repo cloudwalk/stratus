@@ -39,7 +39,7 @@ use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
 
-pub trait Storage: Sized {
+pub trait Storage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------
