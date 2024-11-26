@@ -21,7 +21,7 @@ impl Default for DbConfig {
 }
 
 impl DbConfig {
-    pub fn to_options(self, cache_setting: CacheSetting) -> Options {
+    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>) -> Options {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
 
@@ -42,26 +42,11 @@ impl DbConfig {
             opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
         }
 
-        match self {
-            DbConfig::OptimizedPointLookUp => {
-                let transform = rocksdb::SliceTransform::create_fixed_prefix(20);
-                block_based_options.set_data_block_hash_ratio(1.);
-                block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
-                block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
-
-                opts.set_prefix_extractor(transform);
-                opts.set_use_direct_reads(true);
-                opts.set_memtable_whole_key_filtering(true);
-
-                opts.set_memtable_prefix_bloom_ratio(0.2);
-                opts.set_compression_type(rocksdb::DBCompressionType::None);
-            }
-            DbConfig::Default => {
-                opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
-                opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
-                opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true); // mostly defaults except max_dict_bytes
-                opts.set_bottommost_zstd_max_train_bytes(1600 * 1024, true);
-            }
+        if let Some(prefix_len) = prefix_len {
+            let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
+            block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
+            opts.set_memtable_prefix_bloom_ratio(0.2);
+            opts.set_prefix_extractor(transform);
         }
 
         if let CacheSetting::Enabled(cache_size) = cache_setting {
@@ -71,6 +56,24 @@ impl DbConfig {
             opts.set_row_cache(&row_cache);
             block_based_options.set_block_cache(&block_cache);
             block_based_options.set_cache_index_and_filter_blocks(true);
+        }
+
+        match self {
+            DbConfig::OptimizedPointLookUp => {
+                block_based_options.set_data_block_hash_ratio(0.01);
+                block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
+
+                opts.set_use_direct_reads(true);
+                opts.set_memtable_whole_key_filtering(true);
+
+                opts.set_compression_type(rocksdb::DBCompressionType::None);
+            }
+            DbConfig::Default => {
+                opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+                opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
+                opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true); // mostly defaults except max_dict_bytes
+                opts.set_bottommost_zstd_max_train_bytes(1600 * 1024, true);
+            }
         }
 
         opts.set_block_based_table_factory(&block_based_options);
