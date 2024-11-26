@@ -28,6 +28,8 @@ impl DbConfig {
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
         opts.increase_parallelism(16);
+        // add an assertion so that the ulimit -n is at least double this.
+        // opts.set_max_open_files(40960);
 
         block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
         block_based_options.set_cache_index_and_filter_blocks(true);
@@ -43,11 +45,12 @@ impl DbConfig {
         match self {
             DbConfig::OptimizedPointLookUp => {
                 let transform = rocksdb::SliceTransform::create_fixed_prefix(20);
-                block_based_options.set_data_block_hash_ratio(0.75);
+                block_based_options.set_data_block_hash_ratio(0.5);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
                 block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
 
                 opts.set_prefix_extractor(transform);
+                opts.set_use_direct_reads(true);
                 opts.set_memtable_whole_key_filtering(true);
 
                 opts.set_memtable_prefix_bloom_ratio(0.2);
