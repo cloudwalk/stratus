@@ -45,7 +45,7 @@ impl DbConfig {
         match self {
             DbConfig::OptimizedPointLookUp => {
                 let transform = rocksdb::SliceTransform::create_fixed_prefix(20);
-                block_based_options.set_data_block_hash_ratio(0.5);
+                block_based_options.set_data_block_hash_ratio(1);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
                 block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
 
