@@ -69,7 +69,7 @@ impl DbConfig {
             DbConfig::OptimizedPointLookUp => {
                 block_based_options.set_data_block_hash_ratio(0.5);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
-                block_based_options.set_block_size(512);
+                block_based_options.set_block_size(1024*32);
                 opts.set_use_direct_reads(true);
 
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
