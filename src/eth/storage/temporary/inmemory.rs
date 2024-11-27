@@ -77,16 +77,6 @@ impl InMemoryTemporaryStorageState {
         }
     }
 
-    /// Validates there is a pending block being mined and returns a reference to it.
-    fn require_pending_block(&self) -> &PendingBlock {
-        &self.block
-    }
-
-    /// Validates there is a pending block being mined and returns a mutable reference to it.
-    fn require_pending_block_mut(&mut self) -> &mut PendingBlock {
-        &mut self.block
-    }
-
     pub fn reset(&mut self) {
         self.block = PendingBlock::new_at_now(1.into());
         self.accounts.clear();
@@ -165,7 +155,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // save execution
-        states.head.require_pending_block_mut().push_transaction(tx);
+        states.head.block.push_transaction(tx);
 
         Ok(())
     }
@@ -179,9 +169,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         let mut states = self.lock_write();
 
         #[cfg(feature = "dev")]
-        let mut finished_block = states.head.require_pending_block().clone();
+        let mut finished_block = states.head.block.clone();
         #[cfg(not(feature = "dev"))]
-        let finished_block = states.head.require_pending_block().clone();
+        let finished_block = states.head.block.clone();
 
         #[cfg(feature = "dev")]
         {
