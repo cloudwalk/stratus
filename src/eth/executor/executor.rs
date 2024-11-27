@@ -244,7 +244,6 @@ impl Executor {
         let block_number = block.number();
         let block_timestamp = block.timestamp();
         let block_transactions = mem::take(&mut block.transactions);
-        self.storage.set_pending_block_number(block_number)?;
 
         // determine how to execute each transaction
         for tx in block_transactions {
@@ -483,7 +482,7 @@ impl Executor {
             });
 
             // prepare evm input
-            let pending_header = self.storage.read_pending_block_header()?.unwrap_or_default();
+            let pending_header = self.storage.read_pending_block_header();
             let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
@@ -546,7 +545,7 @@ impl Executor {
         );
 
         // retrieve block info
-        let pending_header = self.storage.read_pending_block_header()?.unwrap_or_default();
+        let pending_header = self.storage.read_pending_block_header();
         let mined_block = match point_in_time {
             PointInTime::MinedPast(number) => {
                 let Some(block) = self.storage.read_block(BlockFilter::Number(number))? else {

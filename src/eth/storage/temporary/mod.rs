@@ -9,9 +9,9 @@ use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
 
+use super::PermanentStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
@@ -23,14 +23,11 @@ use crate::eth::primitives::TransactionExecution;
 /// Temporary storage (in-between blocks) operations.
 pub trait TemporaryStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
-    // Block number
+    // Block header
     // -------------------------------------------------------------------------
 
-    /// Sets the block number being mined.
-    fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
-
     // Retrieves the block number being mined.
-    fn read_pending_block_header(&self) -> anyhow::Result<Option<PendingBlockHeader>>;
+    fn read_pending_block_header(&self) -> PendingBlockHeader;
 
     // -------------------------------------------------------------------------
     // Block and executions
@@ -87,11 +84,11 @@ pub enum TemporaryStorageKind {
 
 impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
-    pub fn init(&self) -> anyhow::Result<Box<dyn TemporaryStorage>> {
+    pub fn init(&self, perm_storage: &dyn PermanentStorage) -> anyhow::Result<Box<dyn TemporaryStorage>> {
         tracing::info!(config = ?self, "creating temporary storage");
-
+        let pending_block_number = perm_storage.read_mined_block_number()? + 1;
         match self.temp_storage_kind {
-            TemporaryStorageKind::InMemory => Ok(Box::<InMemoryTemporaryStorage>::default()),
+            TemporaryStorageKind::InMemory => Ok(Box::new(InMemoryTemporaryStorage::new(pending_block_number))),
         }
     }
 }
