@@ -52,6 +52,7 @@ impl DbConfig {
             block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
             opts.set_memtable_whole_key_filtering(true);
             // try HashSkipList memtables
+            opts.set_memtable_factory(MemtableFactory::HashSkipList { bucket_count: 10000, height: 4, branching_factor: 4 });
             opts.set_memtable_prefix_bloom_ratio(0.2);
             opts.set_prefix_extractor(transform);
         }
@@ -69,9 +70,7 @@ impl DbConfig {
             DbConfig::OptimizedPointLookUp => {
                 block_based_options.set_data_block_hash_ratio(0.5);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
-                block_based_options.set_block_size(1024*32);
                 opts.set_use_direct_reads(true);
-
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
             }
             DbConfig::Default => {
