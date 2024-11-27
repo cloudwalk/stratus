@@ -55,5 +55,5 @@ pub enum ExecutionConflict {
         slot: SlotIndex,
         expected: SlotValue,
         actual: SlotValue,
-    }
+    },
 }

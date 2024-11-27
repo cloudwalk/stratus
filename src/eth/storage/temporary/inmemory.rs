@@ -40,7 +40,7 @@ impl InMemoryTemporaryStorage {
         Self {
             states: RwLock::new(NonEmpty::new(InMemoryTemporaryStorageState {
                 block: PendingBlock::new_at_now(block_number),
-                accounts: Default::default()
+                accounts: Default::default(),
             })),
         }
     }
@@ -73,7 +73,7 @@ impl InMemoryTemporaryStorageState {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
             block: PendingBlock::new_at_now(block_number),
-            accounts: Default::default()
+            accounts: Default::default(),
         }
     }
 
