@@ -464,7 +464,6 @@ impl Storage for StratusStorage {
 
         // block number
         self.set_mined_block_number(BlockNumber::ZERO)?;
-        self.set_pending_block_number_as_next()?;
 
         Ok(())
     }

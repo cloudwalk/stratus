@@ -81,7 +81,7 @@ impl InMemoryTemporaryStorageState {
     }
 
     pub fn reset(&mut self) {
-        self.block = PendingBlock::default();
+        self.block = PendingBlock::new_at_now(1.into());
         self.accounts.clear();
     }
 }
