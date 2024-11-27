@@ -52,8 +52,6 @@ impl StratusStorage {
             }
         }
 
-        this.set_pending_block_number_as_next_if_not_set()?;
-
         Ok(this)
     }
 
@@ -63,7 +61,7 @@ impl StratusStorage {
         use crate::eth::storage::InMemoryPermanentStorage;
 
         let perm = Box::new(InMemoryPermanentStorage::default());
-        let temp = Box::new(InMemoryTemporaryStorage::default());
+        let temp = Box::new(InMemoryTemporaryStorage::new(0.into()));
 
         Self::new(temp, perm)
     }
@@ -77,49 +75,17 @@ impl Storage for StratusStorage {
     fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
-
-        // if does not have the zero block present, should resume from zero
-        let zero = self.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
-        if zero.is_none() {
-            tracing::info!(block_number = %0, reason = %"block ZERO does not exist", "resume from ZERO");
-            return Ok(BlockNumber::ZERO);
-        }
-
-        // try to resume from pending block number
-        let pending_header = self.read_pending_block_header()?;
-        if let Some(pending_header) = pending_header {
-            tracing::info!(block_number = %pending_header.number, reason = %"set in storage", "resume from PENDING");
-            return Ok(pending_header.number);
-        }
-
-        // fallback to last mined block number
-        let mined_number = self.read_mined_block_number()?;
-        let mined_block = self.read_block(BlockFilter::Number(mined_number))?;
-        match mined_block {
-            Some(_) => {
-                tracing::info!(block_number = %mined_number, reason = %"set in storage and block exist", "resume from MINED + 1");
-                Ok(mined_number.next_block_number())
-            }
-            None => {
-                tracing::info!(block_number = %mined_number, reason = %"set in storage but block does not exist", "resume from MINED");
-                Ok(mined_number)
-            }
-        }
+        Ok(self.read_pending_block_header().number)
     }
 
-    fn read_pending_block_header(&self) -> Result<Option<PendingBlockHeader>, StratusError> {
+    fn read_pending_block_header(&self) -> PendingBlockHeader {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_pending_block_number").entered();
         tracing::debug!(storage = %label::TEMP, "reading pending block number");
 
-        timed(|| self.temp.read_pending_block_header())
-            .with(|m| {
-                metrics::inc_storage_read_pending_block_number(m.elapsed, label::TEMP, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to read pending block number");
-                }
-            })
-            .map_err(Into::into)
+        timed(|| self.temp.read_pending_block_header()).with(|m| {
+            metrics::inc_storage_read_pending_block_number(m.elapsed, label::TEMP, true);
+        })
     }
 
     fn read_mined_block_number(&self) -> Result<BlockNumber, StratusError> {
@@ -135,38 +101,6 @@ impl Storage for StratusStorage {
                 }
             })
             .map_err(Into::into)
-    }
-
-    fn set_pending_block_number(&self, block_number: BlockNumber) -> Result<(), StratusError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::set_pending_block_number", %block_number).entered();
-        tracing::debug!(storage = &label::TEMP, %block_number, "setting pending block number");
-
-        timed(|| self.temp.set_pending_block_number(block_number))
-            .with(|m| {
-                metrics::inc_storage_set_pending_block_number(m.elapsed, label::TEMP, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to set pending block number");
-                }
-            })
-            .map_err(Into::into)
-    }
-
-    fn set_pending_block_number_as_next(&self) -> Result<(), StratusError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::set_pending_block_number_as_next").entered();
-
-        let last_mined_block = self.read_mined_block_number()?;
-        self.set_pending_block_number(last_mined_block.next_block_number())?;
-        Ok(())
-    }
-
-    fn set_pending_block_number_as_next_if_not_set(&self) -> Result<(), StratusError> {
-        let pending_block = self.read_pending_block_header()?;
-        if pending_block.is_none() {
-            self.set_pending_block_number_as_next()?;
-        }
-        Ok(())
     }
 
     fn set_mined_block_number(&self, block_number: BlockNumber) -> Result<(), StratusError> {
@@ -353,14 +287,13 @@ impl Storage for StratusStorage {
         }
 
         // check pending number
-        if let Some(pending_header) = self.read_pending_block_header()? {
-            if block_number >= pending_header.number {
-                tracing::error!(%block_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
-                return Err(StratusError::StoragePendingNumberConflict {
-                    new: block_number,
-                    pending: pending_header.number,
-                });
-            }
+        let pending_header = self.read_pending_block_header();
+        if block_number >= pending_header.number {
+            tracing::error!(%block_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
+            return Err(StratusError::StoragePendingNumberConflict {
+                new: block_number,
+                pending: pending_header.number,
+            });
         }
 
         // check mined block
@@ -401,14 +334,13 @@ impl Storage for StratusStorage {
         }
 
         // check pending number
-        if let Some(pending_header) = self.read_pending_block_header()? {
-            if first_number >= pending_header.number {
-                tracing::error!(%first_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
-                return Err(StratusError::StoragePendingNumberConflict {
-                    new: first_number,
-                    pending: pending_header.number,
-                });
-            }
+        let pending_header = self.read_pending_block_header();
+        if first_number >= pending_header.number {
+            tracing::error!(%first_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
+            return Err(StratusError::StoragePendingNumberConflict {
+                new: first_number,
+                pending: pending_header.number,
+            });
         }
 
         // check number of rest of blocks

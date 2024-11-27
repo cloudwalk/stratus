@@ -25,7 +25,6 @@ use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTimeNow;
 use crate::eth::storage::TemporaryStorage;
-use crate::log_and_err;
 
 /// Number of previous blocks to keep inmemory to detect conflicts between different blocks.
 const MAX_BLOCKS: usize = 64;
@@ -36,16 +35,16 @@ pub struct InMemoryTemporaryStorage {
     pub states: RwLock<NonEmpty<InMemoryTemporaryStorageState>>,
 }
 
-impl Default for InMemoryTemporaryStorage {
-    fn default() -> Self {
-        tracing::info!("creating inmemory temporary storage");
+impl InMemoryTemporaryStorage {
+    pub fn new(block_number: BlockNumber) -> Self {
         Self {
-            states: RwLock::new(NonEmpty::new(InMemoryTemporaryStorageState::default())),
+            states: RwLock::new(NonEmpty::new(InMemoryTemporaryStorageState {
+                block: PendingBlock::new_at_now(block_number),
+                ..Default::default()
+            })),
         }
     }
-}
 
-impl InMemoryTemporaryStorage {
     /// Locks inner state for reading.
     pub fn lock_read(&self) -> RwLockReadGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
         self.states.read().unwrap()
@@ -64,7 +63,7 @@ impl InMemoryTemporaryStorage {
 #[derive(Debug, Default)]
 pub struct InMemoryTemporaryStorageState {
     /// Block that is being mined.
-    pub block: Option<PendingBlock>,
+    pub block: PendingBlock,
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
     pub accounts: HashMap<Address, InMemoryTemporaryAccount, hash_hasher::HashBuildHasher>,
@@ -72,23 +71,17 @@ pub struct InMemoryTemporaryStorageState {
 
 impl InMemoryTemporaryStorageState {
     /// Validates there is a pending block being mined and returns a reference to it.
-    fn require_pending_block(&self) -> anyhow::Result<&PendingBlock> {
-        match &self.block {
-            Some(block) => Ok(block),
-            None => log_and_err!("no pending block being mined"), // try calling set_pending_block_number_as_next_if_not_set or any other method to create a new block on temp storage
-        }
+    fn require_pending_block(&self) -> &PendingBlock {
+        &self.block
     }
 
     /// Validates there is a pending block being mined and returns a mutable reference to it.
-    fn require_pending_block_mut(&mut self) -> anyhow::Result<&mut PendingBlock> {
-        match &mut self.block {
-            Some(block) => Ok(block),
-            None => log_and_err!("no pending block being mined"), // try calling set_pending_block_number_as_next_if_not_set or any other method to create a new block on temp storage
-        }
+    fn require_pending_block_mut(&mut self) -> &mut PendingBlock {
+        &mut self.block
     }
 
     pub fn reset(&mut self) {
-        self.block = None;
+        self.block = PendingBlock::default();
         self.accounts.clear();
     }
 }
@@ -114,23 +107,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Block number
     // -------------------------------------------------------------------------
 
-    fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        let mut states = self.lock_write();
-        match states.head.block.as_mut() {
-            Some(block) => block.header.number = number,
-            None => {
-                states.head.block = Some(PendingBlock::new_at_now(number));
-            }
-        }
-        Ok(())
-    }
-
-    fn read_pending_block_header(&self) -> anyhow::Result<Option<PendingBlockHeader>> {
+    // Uneeded clone here, return Cow
+    fn read_pending_block_header(&self) -> PendingBlockHeader {
         let states = self.lock_read();
-        match &states.head.block {
-            Some(block) => Ok(Some(block.header.clone())),
-            None => Ok(None),
-        }
+        states.head.block.header.clone()
     }
 
     // -------------------------------------------------------------------------
@@ -140,6 +120,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // check conflicts
         let mut states = self.lock_write();
+
         if check_conflicts {
             if let Some(conflicts) = do_check_conflicts(&states, tx.execution()) {
                 return Err(StratusError::TransactionConflict(conflicts.into()));
@@ -177,18 +158,13 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // save execution
-        states.head.require_pending_block_mut()?.push_transaction(tx);
+        states.head.require_pending_block_mut().push_transaction(tx);
 
         Ok(())
     }
 
     fn read_pending_executions(&self) -> Vec<TransactionExecution> {
-        self.lock_read()
-            .head
-            .block
-            .as_ref()
-            .map(|pending_block| pending_block.transactions.iter().map(|(_, tx)| tx.clone()).collect())
-            .unwrap_or_default()
+        self.lock_read().head.block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
     /// TODO: we cannot allow more than one pending block. Where to put this check?
@@ -196,9 +172,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         let mut states = self.lock_write();
 
         #[cfg(feature = "dev")]
-        let mut finished_block = states.head.require_pending_block()?.clone();
+        let mut finished_block = states.head.require_pending_block().clone();
         #[cfg(not(feature = "dev"))]
-        let finished_block = states.head.require_pending_block()?.clone();
+        let finished_block = states.head.require_pending_block().clone();
 
         #[cfg(feature = "dev")]
         {
@@ -216,15 +192,14 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         // create new state
         states.insert(0, InMemoryTemporaryStorageState::default());
-        states.head.block = Some(PendingBlock::new_at_now(finished_block.header.number.next_block_number()));
+        states.head.block = PendingBlock::new_at_now(finished_block.header.number.next_block_number());
 
         Ok(finished_block)
     }
 
     fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>> {
         let states = self.lock_read();
-        let Some(ref pending_block) = states.head.block else { return Ok(None) };
-        match pending_block.transactions.get(&hash) {
+        match states.head.block.transactions.get(&hash) {
             Some(tx) => Ok(Some(tx.clone())),
             None => Ok(None),
         }

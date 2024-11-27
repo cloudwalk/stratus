@@ -1,6 +1,7 @@
 use display_json::DebugAsJson;
 use nonempty::NonEmpty;
 
+use super::BlockNumber;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;
@@ -57,9 +58,6 @@ pub enum ExecutionConflict {
         actual: SlotValue,
     },
 
-    /// Number of modified accounts mismatch.
-    AccountModifiedCount { expected: usize, actual: usize },
-
-    /// Number of modified slots mismatch.
-    SlotModifiedCount { expected: usize, actual: usize },
+    /// Transaction was executed in block A but the current pending block is B (A != B)
+    BlockNumber { execution: BlockNumber, pending: BlockNumber },
 }

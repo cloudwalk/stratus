@@ -46,15 +46,9 @@ pub trait Storage: Sized {
 
     fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StratusError>;
 
-    fn read_pending_block_header(&self) -> Result<Option<PendingBlockHeader>, StratusError>;
+    fn read_pending_block_header(&self) -> PendingBlockHeader;
 
     fn read_mined_block_number(&self) -> Result<BlockNumber, StratusError>;
-
-    fn set_pending_block_number(&self, block_number: BlockNumber) -> Result<(), StratusError>;
-
-    fn set_pending_block_number_as_next(&self) -> Result<(), StratusError>;
-
-    fn set_pending_block_number_as_next_if_not_set(&self) -> Result<(), StratusError>;
 
     fn set_mined_block_number(&self, block_number: BlockNumber) -> Result<(), StratusError>;
 
@@ -121,8 +115,9 @@ pub struct StorageConfig {
 impl StorageConfig {
     /// Initializes Stratus storage.
     pub fn init(&self) -> Result<Arc<StratusStorage>, StratusError> {
-        let temp_storage = self.temp_storage.init()?;
         let perm_storage = self.perm_storage.init()?;
+        let temp_storage = self.temp_storage.init(&*perm_storage)?;
+
         let StorageKind::StratusStorage = self.storage_kind;
         let storage = StratusStorage::new(temp_storage, perm_storage)?;
 
