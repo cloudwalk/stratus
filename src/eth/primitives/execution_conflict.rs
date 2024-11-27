@@ -1,7 +1,6 @@
 use display_json::DebugAsJson;
 use nonempty::NonEmpty;
 
-use super::BlockNumber;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;
@@ -56,8 +55,5 @@ pub enum ExecutionConflict {
         slot: SlotIndex,
         expected: SlotValue,
         actual: SlotValue,
-    },
-
-    /// Transaction was executed in block A but the current pending block is B (A != B)
-    BlockNumber { execution: BlockNumber, pending: BlockNumber },
+    }
 }

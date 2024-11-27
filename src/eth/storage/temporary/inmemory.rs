@@ -40,7 +40,7 @@ impl InMemoryTemporaryStorage {
         Self {
             states: RwLock::new(NonEmpty::new(InMemoryTemporaryStorageState {
                 block: PendingBlock::new_at_now(block_number),
-                ..Default::default()
+                accounts: Default::default()
             })),
         }
     }
@@ -60,7 +60,7 @@ impl InMemoryTemporaryStorage {
 // Inner State
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct InMemoryTemporaryStorageState {
     /// Block that is being mined.
     pub block: PendingBlock,
@@ -70,6 +70,13 @@ pub struct InMemoryTemporaryStorageState {
 }
 
 impl InMemoryTemporaryStorageState {
+    pub fn new(block_number: BlockNumber) -> Self {
+        Self {
+            block: PendingBlock::new_at_now(block_number),
+            accounts: Default::default()
+        }
+    }
+
     /// Validates there is a pending block being mined and returns a reference to it.
     fn require_pending_block(&self) -> &PendingBlock {
         &self.block
@@ -191,8 +198,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // create new state
-        states.insert(0, InMemoryTemporaryStorageState::default());
-        states.head.block = PendingBlock::new_at_now(finished_block.header.number.next_block_number());
+        states.insert(0, InMemoryTemporaryStorageState::new(finished_block.header.number.next_block_number()));
 
         Ok(finished_block)
     }
