@@ -31,7 +31,6 @@ impl DbConfig {
         opts.increase_parallelism(16);
         // add an assertion so that the ulimit -n is at least double this.
         // opts.set_max_open_files(40960);
-
         block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
         block_based_options.set_cache_index_and_filter_blocks(true);
         // index_type = IndexType::kTwoLevelIndexSearch
@@ -39,6 +38,8 @@ impl DbConfig {
         // https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters
         // block_based_options.set_pin_top_level_index_and_filter(true);
         block_based_options.set_bloom_filter(15.5, true);
+
+        opts.set_allow_concurrent_memtable_write(false);
 
         // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
         #[cfg(feature = "metrics")]
