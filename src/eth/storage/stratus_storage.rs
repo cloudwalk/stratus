@@ -1,9 +1,7 @@
-use std::sync::Arc;
-
-use clap::Parser;
-use display_json::DebugAsJson;
+use anyhow::anyhow;
 use tracing::Span;
 
+use super::Storage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -14,16 +12,14 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::PermanentStorageConfig;
-use crate::eth::storage::StoragePointInTime;
 use crate::eth::storage::TemporaryStorage;
-use crate::eth::storage::TemporaryStorageConfig;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
@@ -43,10 +39,6 @@ pub struct StratusStorage {
 }
 
 impl StratusStorage {
-    // -------------------------------------------------------------------------
-    // Initialization
-    // -------------------------------------------------------------------------
-
     /// Creates a new storage with the specified temporary and permanent implementations.
     pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>) -> Result<Self, StratusError> {
         let this = Self { temp, perm };
@@ -54,70 +46,49 @@ impl StratusStorage {
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            let genesis = this.read_block(&crate::eth::primitives::BlockFilter::Number(crate::eth::primitives::BlockNumber::ZERO))?;
+            let genesis = this.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
             if genesis.is_none() {
                 this.reset_to_genesis()?;
             }
         }
 
-        this.set_pending_block_number_as_next_if_not_set()?;
-
         Ok(this)
     }
 
+    #[cfg(test)]
+    pub fn new_test() -> Result<Self, StratusError> {
+        use super::InMemoryTemporaryStorage;
+        use crate::eth::storage::InMemoryPermanentStorage;
+
+        let perm = Box::new(InMemoryPermanentStorage::default());
+        let temp = Box::new(InMemoryTemporaryStorage::new(0.into()));
+
+        Self::new(temp, perm)
+    }
+}
+
+impl Storage for StratusStorage {
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------
 
-    pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StratusError> {
+    fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
-
-        // if does not have the zero block present, should resume from zero
-        let zero = self.read_block(&BlockFilter::Number(BlockNumber::ZERO))?;
-        if zero.is_none() {
-            tracing::info!(block_number = %0, reason = %"block ZERO does not exist", "resume from ZERO");
-            return Ok(BlockNumber::ZERO);
-        }
-
-        // try to resume from pending block number
-        let pending_header = self.read_pending_block_header()?;
-        if let Some(pending_header) = pending_header {
-            tracing::info!(block_number = %pending_header.number, reason = %"set in storage", "resume from PENDING");
-            return Ok(pending_header.number);
-        }
-
-        // fallback to last mined block number
-        let mined_number = self.read_mined_block_number()?;
-        let mined_block = self.read_block(&BlockFilter::Number(mined_number))?;
-        match mined_block {
-            Some(_) => {
-                tracing::info!(block_number = %mined_number, reason = %"set in storage and block exist", "resume from MINED + 1");
-                Ok(mined_number.next_block_number())
-            }
-            None => {
-                tracing::info!(block_number = %mined_number, reason = %"set in storage but block does not exist", "resume from MINED");
-                Ok(mined_number)
-            }
-        }
+        Ok(self.read_pending_block_header().number)
     }
 
-    pub fn read_pending_block_header(&self) -> Result<Option<PendingBlockHeader>, StratusError> {
+    fn read_pending_block_header(&self) -> PendingBlockHeader {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_pending_block_number").entered();
         tracing::debug!(storage = %label::TEMP, "reading pending block number");
 
-        timed(|| self.temp.read_pending_block_header())
-            .with(|m| {
-                metrics::inc_storage_read_pending_block_number(m.elapsed, label::TEMP, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to read pending block number");
-                }
-            })
-            .map_err(Into::into)
+        timed(|| self.temp.read_pending_block_header()).with(|m| {
+            metrics::inc_storage_read_pending_block_number(m.elapsed, label::TEMP, true);
+        })
     }
 
-    pub fn read_mined_block_number(&self) -> Result<BlockNumber, StratusError> {
+    fn read_mined_block_number(&self) -> Result<BlockNumber, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_mined_block_number").entered();
         tracing::debug!(storage = %label::PERM, "reading mined block number");
@@ -132,39 +103,7 @@ impl StratusStorage {
             .map_err(Into::into)
     }
 
-    pub fn set_pending_block_number(&self, block_number: BlockNumber) -> Result<(), StratusError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::set_pending_block_number", %block_number).entered();
-        tracing::debug!(storage = &label::TEMP, %block_number, "setting pending block number");
-
-        timed(|| self.temp.set_pending_block_number(block_number))
-            .with(|m| {
-                metrics::inc_storage_set_pending_block_number(m.elapsed, label::TEMP, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to set pending block number");
-                }
-            })
-            .map_err(Into::into)
-    }
-
-    pub fn set_pending_block_number_as_next(&self) -> Result<(), StratusError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::set_pending_block_number_as_next").entered();
-
-        let last_mined_block = self.read_mined_block_number()?;
-        self.set_pending_block_number(last_mined_block.next_block_number())?;
-        Ok(())
-    }
-
-    pub fn set_pending_block_number_as_next_if_not_set(&self) -> Result<(), StratusError> {
-        let pending_block = self.read_pending_block_header()?;
-        if pending_block.is_none() {
-            self.set_pending_block_number_as_next()?;
-        }
-        Ok(())
-    }
-
-    pub fn set_mined_block_number(&self, block_number: BlockNumber) -> Result<(), StratusError> {
+    fn set_mined_block_number(&self, block_number: BlockNumber) -> Result<(), StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::set_mined_block_number", %block_number).entered();
         tracing::debug!(storage = %label::PERM, %block_number, "setting mined block number");
@@ -183,14 +122,14 @@ impl StratusStorage {
     // Accounts and slots
     // -------------------------------------------------------------------------
 
-    pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<(), StratusError> {
+    fn save_accounts(&self, accounts: Vec<Account>) -> Result<(), StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_accounts").entered();
 
         // keep only accounts that does not exist in permanent storage
         let mut missing_accounts = Vec::new();
         for account in accounts {
-            let perm_account = self.perm.read_account(&account.address, &StoragePointInTime::Mined)?;
+            let perm_account = self.perm.read_account(account.address, PointInTime::Mined)?;
             if perm_account.is_none() {
                 missing_accounts.push(account);
             }
@@ -207,7 +146,7 @@ impl StratusStorage {
             .map_err(Into::into)
     }
 
-    pub fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> Result<Account, StratusError> {
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> Result<Account, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
 
@@ -241,12 +180,12 @@ impl StratusStorage {
             }
             None => {
                 tracing::debug!(storage = %label::PERM, %address, "account not found, assuming default value");
-                Ok(Account::new_empty(*address))
+                Ok(Account::new_empty(address))
             }
         }
     }
 
-    pub fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> Result<Slot, StratusError> {
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> Result<Slot, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
@@ -280,7 +219,7 @@ impl StratusStorage {
             }
             None => {
                 tracing::debug!(storage = %label::PERM, %address, %index, "slot not found, assuming default value");
-                Ok(Slot::new_empty(*index))
+                Ok(Slot::new_empty(index))
             }
         }
     }
@@ -289,7 +228,7 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
-    pub fn save_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
+    fn save_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.hash()).entered();
         tracing::debug!(storage = %label::TEMP, tx_hash = %tx.hash(), "saving execution");
@@ -305,11 +244,11 @@ impl StratusStorage {
     }
 
     /// Retrieves pending transactions being mined.
-    pub fn pending_transactions(&self) -> Vec<TransactionExecution> {
+    fn pending_transactions(&self) -> Vec<TransactionExecution> {
         self.temp.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self) -> Result<PendingBlock, StratusError> {
+    fn finish_pending_block(&self) -> Result<PendingBlock, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::finish_pending_block", block_number = tracing::field::Empty).entered();
         tracing::debug!(storage = %label::TEMP, "finishing pending block");
@@ -330,7 +269,7 @@ impl StratusStorage {
         result
     }
 
-    pub fn save_block(&self, block: Block) -> Result<(), StratusError> {
+    fn save_block(&self, block: Block) -> Result<(), StratusError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
@@ -348,18 +287,17 @@ impl StratusStorage {
         }
 
         // check pending number
-        if let Some(pending_header) = self.read_pending_block_header()? {
-            if block_number >= pending_header.number {
-                tracing::error!(%block_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
-                return Err(StratusError::StoragePendingNumberConflict {
-                    new: block_number,
-                    pending: pending_header.number,
-                });
-            }
+        let pending_header = self.read_pending_block_header();
+        if block_number >= pending_header.number {
+            tracing::error!(%block_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
+            return Err(StratusError::StoragePendingNumberConflict {
+                new: block_number,
+                pending: pending_header.number,
+            });
         }
 
         // check mined block
-        let existing_block = self.read_block(&BlockFilter::Number(block_number))?;
+        let existing_block = self.read_block(BlockFilter::Number(block_number))?;
         if existing_block.is_some() {
             tracing::error!(%block_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
             return Err(StratusError::StorageBlockConflict { number: block_number });
@@ -377,7 +315,54 @@ impl StratusStorage {
             .map_err(Into::into)
     }
 
-    pub fn read_block(&self, filter: &BlockFilter) -> Result<Option<Block>, StratusError> {
+    fn save_block_batch(&self, blocks: Vec<Block>) -> Result<(), StratusError> {
+        let Some(first) = blocks.first() else {
+            tracing::error!("save_block_batch called with no blocks, ignoring");
+            return Ok(());
+        };
+
+        let first_number = first.number();
+
+        // check mined number
+        let mined_number = self.read_mined_block_number()?;
+        if not(first_number.is_zero()) && first_number != mined_number.next_block_number() {
+            tracing::error!(%first_number, %mined_number, "failed to save block because mismatch with mined block number");
+            return Err(StratusError::StorageMinedNumberConflict {
+                new: first_number,
+                mined: mined_number,
+            });
+        }
+
+        // check pending number
+        let pending_header = self.read_pending_block_header();
+        if first_number >= pending_header.number {
+            tracing::error!(%first_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
+            return Err(StratusError::StoragePendingNumberConflict {
+                new: first_number,
+                pending: pending_header.number,
+            });
+        }
+
+        // check number of rest of blocks
+        for window in blocks.windows(2) {
+            let (previous, next) = (window[0].number(), window[1].number());
+            if previous.next_block_number() != next {
+                tracing::error!(%previous, %next, "previous block number doesn't match next one");
+                return Err(anyhow!("consecutive blocks in batch aren't adjacent").into());
+            }
+        }
+
+        // check mined block
+        let existing_block = self.read_block(BlockFilter::Number(first_number))?;
+        if existing_block.is_some() {
+            tracing::error!(%first_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
+            return Err(StratusError::StorageBlockConflict { number: first_number });
+        }
+
+        self.perm.save_block_batch(blocks).map_err(Into::into)
+    }
+
+    fn read_block(&self, filter: BlockFilter) -> Result<Option<Block>, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block", %filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading block");
@@ -392,7 +377,7 @@ impl StratusStorage {
             .map_err(Into::into)
     }
 
-    pub fn read_transaction(&self, tx_hash: &Hash) -> Result<Option<TransactionStage>, StratusError> {
+    fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionStage>, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_transaction", %tx_hash).entered();
 
@@ -422,7 +407,7 @@ impl StratusStorage {
         }
     }
 
-    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>, StratusError> {
+    fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>, StratusError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_logs", ?filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading logs");
@@ -445,7 +430,7 @@ impl StratusStorage {
     /// Resets the storage to the genesis state used in dev-mode.
     ///
     /// TODO: For now it uses the dev genesis block and test accounts, but it should be refactored to support genesis.json files.
-    pub fn reset_to_genesis(&self) -> Result<(), StratusError> {
+    fn reset_to_genesis(&self) -> Result<(), StratusError> {
         use crate::eth::primitives::test_accounts;
 
         tracing::info!("reseting storage to genesis state");
@@ -479,7 +464,6 @@ impl StratusStorage {
 
         // block number
         self.set_mined_block_number(BlockNumber::ZERO)?;
-        self.set_pending_block_number_as_next()?;
 
         Ok(())
     }
@@ -489,41 +473,16 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     /// Translates a block filter to a specific storage point-in-time indicator.
-    pub fn translate_to_point_in_time(&self, block_filter: &BlockFilter) -> Result<StoragePointInTime, StratusError> {
+    fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StratusError> {
         match block_filter {
-            BlockFilter::Pending => Ok(StoragePointInTime::Pending),
-            BlockFilter::Latest => Ok(StoragePointInTime::Mined),
-            BlockFilter::Earliest => Ok(StoragePointInTime::MinedPast(BlockNumber::ZERO)),
-            BlockFilter::Number(number) => Ok(StoragePointInTime::MinedPast(*number)),
+            BlockFilter::Pending => Ok(PointInTime::Pending),
+            BlockFilter::Latest => Ok(PointInTime::Mined),
+            BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
+            BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),
             BlockFilter::Hash(_) => match self.read_block(block_filter)? {
-                Some(block) => Ok(StoragePointInTime::MinedPast(block.header.number)),
-                None => Err(StratusError::RpcBlockFilterInvalid { filter: *block_filter }),
+                Some(block) => Ok(PointInTime::MinedPast(block.header.number)),
+                None => Err(StratusError::RpcBlockFilterInvalid { filter: block_filter }),
             },
         }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config
-// -----------------------------------------------------------------------------
-
-/// Configuration that can be used by any binary that interacts with Stratus storage.
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
-pub struct StratusStorageConfig {
-    #[clap(flatten)]
-    pub temp_storage: TemporaryStorageConfig,
-
-    #[clap(flatten)]
-    pub perm_storage: PermanentStorageConfig,
-}
-
-impl StratusStorageConfig {
-    /// Initializes Stratus storage.
-    pub fn init(&self) -> Result<Arc<StratusStorage>, StratusError> {
-        let temp_storage = self.temp_storage.init()?;
-        let perm_storage = self.perm_storage.init()?;
-        let storage = StratusStorage::new(temp_storage, perm_storage)?;
-
-        Ok(Arc::new(storage))
     }
 }

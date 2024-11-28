@@ -15,12 +15,12 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::external_rpc::ExternalRpcConfig;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
 use crate::eth::primitives::Address;
 use crate::eth::rpc::RpcServerConfig;
-use crate::eth::storage::ExternalRpcStorageConfig;
-use crate::eth::storage::StratusStorageConfig;
+use crate::eth::storage::StorageConfig;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
 use crate::infra::kafka::KafkaConfig;
@@ -174,7 +174,7 @@ impl CommonConfig {
 
 /// Configuration for main Stratus service.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-#[clap(group = ArgGroup::new("mode").required(true).args(&["leader", "follower"]))]
+#[clap(group = ArgGroup::new("mode").required(true).args(&["leader", "follower", "fake_leader"]))]
 pub struct StratusConfig {
     #[arg(long = "leader", env = "LEADER", conflicts_with_all = ["follower", "fake_leader", "ImporterConfig"])]
     pub leader: bool,
@@ -190,7 +190,7 @@ pub struct StratusConfig {
     pub rpc_server: RpcServerConfig,
 
     #[clap(flatten)]
-    pub storage: StratusStorageConfig,
+    pub storage: StorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -227,7 +227,7 @@ pub struct RpcDownloaderConfig {
     pub block_end: Option<u64>,
 
     #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
+    pub rpc_storage: ExternalRpcConfig,
 
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
@@ -290,10 +290,10 @@ pub struct ImporterOfflineConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub storage: StratusStorageConfig,
+    pub storage: StorageConfig,
 
     #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
+    pub rpc_storage: ExternalRpcConfig,
 
     #[deref]
     #[clap(flatten)]
@@ -347,10 +347,10 @@ pub struct IntegrationTestConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub storage: StratusStorageConfig,
+    pub storage: StorageConfig,
 
     #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
+    pub rpc_storage: ExternalRpcConfig,
 }
 
 impl WithCommonConfig for IntegrationTestConfig {
@@ -391,7 +391,7 @@ impl FromStr for Environment {
             "staging" | "test" => Ok(Self::Staging),
             "production" | "prod" => Ok(Self::Production),
             "canary" => Ok(Self::Canary),
-            s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
+            s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Self::VARIANTS)),
         }
     }
 }

@@ -13,7 +13,8 @@ use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogTopic;
-use crate::eth::storage::StoragePointInTime;
+use crate::eth::primitives::PointInTime;
+use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
@@ -48,26 +49,26 @@ impl LogFilterInput {
         // parse point-in-time
         let (from, to) = match self.block_hash {
             Some(hash) => {
-                let from_to = storage.translate_to_point_in_time(&BlockFilter::Hash(hash))?;
+                let from_to = storage.translate_to_point_in_time(BlockFilter::Hash(hash))?;
                 (from_to, from_to)
             }
             None => {
-                let from = storage.translate_to_point_in_time(&self.from_block.unwrap_or(BlockFilter::Latest))?;
-                let to = storage.translate_to_point_in_time(&self.to_block.unwrap_or(BlockFilter::Latest))?;
+                let from = storage.translate_to_point_in_time(self.from_block.unwrap_or(BlockFilter::Latest))?;
+                let to = storage.translate_to_point_in_time(self.to_block.unwrap_or(BlockFilter::Latest))?;
                 (from, to)
             }
         };
 
         // translate point-in-time to block according to context
         let from = match from {
-            StoragePointInTime::Pending => storage.read_pending_block_header()?.unwrap_or_default().number,
-            StoragePointInTime::Mined => storage.read_mined_block_number()?,
-            StoragePointInTime::MinedPast(number) => number,
+            PointInTime::Pending => storage.read_pending_block_header().number,
+            PointInTime::Mined => storage.read_mined_block_number()?,
+            PointInTime::MinedPast(number) => number,
         };
         let to = match to {
-            StoragePointInTime::Pending => None,
-            StoragePointInTime::Mined => None,
-            StoragePointInTime::MinedPast(number) => Some(number),
+            PointInTime::Pending => None,
+            PointInTime::Mined => None,
+            PointInTime::MinedPast(number) => Some(number),
         };
 
         Ok(LogFilter {

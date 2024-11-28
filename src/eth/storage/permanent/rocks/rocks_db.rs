@@ -7,8 +7,8 @@ use anyhow::Context;
 use rocksdb::Options;
 use rocksdb::DB;
 
-use crate::eth::storage::rocks::rocks_config::CacheSetting;
-use crate::eth::storage::rocks::rocks_config::DbConfig;
+use super::rocks_config::CacheSetting;
+use super::rocks_config::DbConfig;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 

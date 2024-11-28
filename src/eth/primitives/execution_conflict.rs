@@ -56,10 +56,4 @@ pub enum ExecutionConflict {
         expected: SlotValue,
         actual: SlotValue,
     },
-
-    /// Number of modified accounts mismatch.
-    AccountModifiedCount { expected: usize, actual: usize },
-
-    /// Number of modified slots mismatch.
-    SlotModifiedCount { expected: usize, actual: usize },
 }

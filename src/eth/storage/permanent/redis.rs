@@ -12,11 +12,11 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StoragePointInTime;
 use crate::ext::from_json_str;
 use crate::ext::to_json_object;
 use crate::ext::to_json_string;
@@ -79,7 +79,7 @@ impl PermanentStorage for RedisPermanentStorage {
     fn save_block(&self, block: Block) -> anyhow::Result<()> {
         // generate block keys
         let key_block_number = key_block_by_number(block.number());
-        let key_block_hash = key_block_by_hash(&block.hash());
+        let key_block_hash = key_block_by_hash(block.hash());
 
         // generate values
         let block_json = to_json_string(&block);
@@ -94,7 +94,7 @@ impl PermanentStorage for RedisPermanentStorage {
 
         // transactions
         for tx in &block.transactions {
-            let tx_key = key_tx(&tx.input.hash);
+            let tx_key = key_tx(tx.input.hash);
             let tx_value = to_json_string(&tx);
             mset_values.push((tx_key, tx_value));
         }
@@ -122,8 +122,8 @@ impl PermanentStorage for RedisPermanentStorage {
                 account_value.insert("block".to_owned(), to_json_value(block.number()));
                 let account_value = to_json_string(&account_value);
 
-                mset_values.push((key_account(&account.address), account_value.clone()));
-                zadd_values.push((key_account_history(&account.address), account_value, block.number().as_u64()));
+                mset_values.push((key_account(account.address), account_value.clone()));
+                zadd_values.push((key_account_history(account.address), account_value, block.number().as_u64()));
             }
 
             // slots
@@ -134,8 +134,8 @@ impl PermanentStorage for RedisPermanentStorage {
                     slot_value.as_object_mut().unwrap().insert("block".to_owned(), to_json_value(block.number()));
                     let slot_value = to_json_string(&slot_value);
 
-                    mset_values.push((key_slot(&changes.address, &slot.index), slot_value.clone()));
-                    zadd_values.push((key_slot_history(&changes.address, &slot.index), slot_value, block.number().as_u64()));
+                    mset_values.push((key_slot(changes.address, slot.index), slot_value.clone()));
+                    zadd_values.push((key_slot_history(changes.address, slot.index), slot_value, block.number().as_u64()));
                 }
             }
         }
@@ -161,13 +161,13 @@ impl PermanentStorage for RedisPermanentStorage {
         Ok(())
     }
 
-    fn read_block(&self, block_filter: &BlockFilter) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, block_filter: BlockFilter) -> anyhow::Result<Option<Block>> {
         // prepare keys
         let block_key = match block_filter {
             BlockFilter::Latest | BlockFilter::Pending => "block::latest".to_owned(),
             BlockFilter::Earliest => "block::earliest".to_owned(),
             BlockFilter::Hash(hash) => key_block_by_hash(hash),
-            BlockFilter::Number(number) => key_block_by_number(*number),
+            BlockFilter::Number(number) => key_block_by_number(number),
         };
 
         // execute command
@@ -182,7 +182,7 @@ impl PermanentStorage for RedisPermanentStorage {
         }
     }
 
-    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>> {
         // prepare keys
         let tx_key = key_tx(hash);
 
@@ -243,7 +243,7 @@ impl PermanentStorage for RedisPermanentStorage {
         let redis_accounts = accounts
             .into_iter()
             .map(|acc| {
-                let account_key = key_account(&acc.address);
+                let account_key = key_account(acc.address);
                 let account_value = to_json_string(&acc);
                 (account_key, account_value)
             })
@@ -260,10 +260,10 @@ impl PermanentStorage for RedisPermanentStorage {
         }
     }
 
-    fn read_account(&self, address: &Address, point_in_time: &crate::eth::storage::StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>> {
         let mut conn = self.conn()?;
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => {
+            PointInTime::Mined | PointInTime::Pending => {
                 // prepare key
                 let account_key = key_account(address);
 
@@ -277,7 +277,7 @@ impl PermanentStorage for RedisPermanentStorage {
                     Err(e) => log_and_err!(reason = e, "failed to read account from redis current value"),
                 }
             }
-            StoragePointInTime::MinedPast(number) => {
+            PointInTime::MinedPast(number) => {
                 // prepare key
                 let account_key = key_account_history(address);
 
@@ -305,11 +305,11 @@ impl PermanentStorage for RedisPermanentStorage {
         }
     }
 
-    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>> {
         // execute command and parse
         let mut conn = self.conn()?;
         match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => {
+            PointInTime::Mined | PointInTime::Pending => {
                 // prepare key
                 let slot_key = key_slot(address, index);
 
@@ -323,7 +323,7 @@ impl PermanentStorage for RedisPermanentStorage {
                     Err(e) => log_and_err!(reason = e, "failed to read slot from redis current value"),
                 }
             }
-            StoragePointInTime::MinedPast(number) => {
+            PointInTime::MinedPast(number) => {
                 // prepare key
                 let slot_key = key_slot_history(address, index);
 
@@ -372,31 +372,31 @@ fn key_block_by_number(number: impl Into<u64>) -> String {
 }
 
 /// Generates a key for accessing a block by hash.
-fn key_block_by_hash(hash: &Hash) -> String {
+fn key_block_by_hash(hash: Hash) -> String {
     format!("block::hash::{}", hash)
 }
 
 /// Generates a key for accessing an account.
-fn key_account(address: &Address) -> String {
+fn key_account(address: Address) -> String {
     format!("account::{}", address)
 }
 
 /// Generates a key for accessing an account history.
-fn key_account_history(address: &Address) -> String {
+fn key_account_history(address: Address) -> String {
     format!("account_history::{}", address)
 }
 
 /// Generates a key for accessing a slot.
-fn key_slot(address: &Address, index: &SlotIndex) -> String {
+fn key_slot(address: Address, index: SlotIndex) -> String {
     format!("slot::{}::{}", address, index)
 }
 
 /// Generates a key for accessing a slot history.
-fn key_slot_history(address: &Address, index: &SlotIndex) -> String {
+fn key_slot_history(address: Address, index: SlotIndex) -> String {
     format!("slot_history::{}::{}", address, index)
 }
 
 /// Generates a key for accessing a transaction.
-fn key_tx(hash: &Hash) -> String {
+fn key_tx(hash: Hash) -> String {
     format!("tx::{}", hash)
 }

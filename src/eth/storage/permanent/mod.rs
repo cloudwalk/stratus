@@ -1,3 +1,12 @@
+pub use self::inmemory::InMemoryPermanentStorage;
+pub use self::redis::RedisPermanentStorage;
+pub use self::rocks::RocksPermanentStorage;
+pub use self::rocks::RocksStorageState;
+
+mod inmemory;
+mod redis;
+pub mod rocks;
+
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -13,13 +22,10 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::redis::RedisPermanentStorage;
-use crate::eth::storage::InMemoryPermanentStorage;
-use crate::eth::storage::RocksPermanentStorage;
-use crate::eth::storage::StoragePointInTime;
 use crate::ext::parse_duration;
 use crate::log_and_err;
 
@@ -39,14 +45,19 @@ pub trait PermanentStorage: Send + Sync + 'static {
     // Block
     // -------------------------------------------------------------------------
 
-    /// Persists atomically all changes from a block.
+    /// Persists atomically changes from block.
     fn save_block(&self, block: Block) -> anyhow::Result<()>;
 
+    /// Persists atomically changes from blocks.
+    fn save_block_batch(&self, blocks: Vec<Block>) -> anyhow::Result<()> {
+        blocks.into_iter().try_for_each(|block| self.save_block(block))
+    }
+
     /// Retrieves a block from the storage.
-    fn read_block(&self, block_filter: &BlockFilter) -> anyhow::Result<Option<Block>>;
+    fn read_block(&self, block_filter: BlockFilter) -> anyhow::Result<Option<Block>>;
 
     /// Retrieves a transaction from the storage.
-    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>>;
+    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>>;
 
     /// Retrieves logs from the storage.
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
@@ -59,10 +70,10 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>>;
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>>;
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>>;
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>>;
 
     // -------------------------------------------------------------------------
     // Global state
@@ -99,6 +110,10 @@ pub struct PermanentStorageConfig {
     /// Augments or decreases the size of Column Family caches based on a multiplier.
     #[arg(long = "rocks-cache-size-multiplier", env = "ROCKS_CACHE_SIZE_MULTIPLIER")]
     pub rocks_cache_size_multiplier: Option<f32>,
+
+    /// Augments or decreases the size of Column Family caches based on a multiplier.
+    #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
+    pub rocks_disable_sync_write: bool,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -132,6 +147,7 @@ impl PermanentStorageConfig {
                 self.rocks_path_prefix.clone(),
                 self.rocks_shutdown_timeout,
                 self.rocks_cache_size_multiplier,
+                !self.rocks_disable_sync_write,
             )?),
         };
         Ok(perm)

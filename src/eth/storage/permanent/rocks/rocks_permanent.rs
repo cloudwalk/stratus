@@ -14,11 +14,11 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StoragePointInTime;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
@@ -27,7 +27,12 @@ pub struct RocksPermanentStorage {
 }
 
 impl RocksPermanentStorage {
-    pub fn new(db_path_prefix: Option<String>, shutdown_timeout: Duration, cache_size_multiplier: Option<f32>) -> anyhow::Result<Self> {
+    pub fn new(
+        db_path_prefix: Option<String>,
+        shutdown_timeout: Duration,
+        cache_size_multiplier: Option<f32>,
+        enable_sync_write: bool,
+    ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
         let path = if let Some(prefix) = db_path_prefix {
@@ -48,7 +53,7 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier)?;
+        let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write)?;
         let block_number = state.preload_block_number()?;
 
         Ok(Self { state, block_number })
@@ -85,19 +90,19 @@ impl PermanentStorage for RocksPermanentStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>> {
         self.state.read_account(address, point_in_time).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read account in RocksPermanent");
         })
     }
 
-    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>> {
         self.state.read_slot(address, index, point_in_time).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read slot in RocksPermanent");
         })
     }
 
-    fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>> {
         let block = self.state.read_block(selection).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read block in RocksPermanent");
         });
@@ -107,7 +112,7 @@ impl PermanentStorage for RocksPermanentStorage {
         block
     }
 
-    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>> {
         self.state.read_transaction(hash).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read transaction in RocksPermanent");
         })
@@ -128,6 +133,12 @@ impl PermanentStorage for RocksPermanentStorage {
         }
         self.state.save_block(block).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to save block in RocksPermanent");
+        })
+    }
+
+    fn save_block_batch(&self, block_batch: Vec<Block>) -> anyhow::Result<()> {
+        self.state.save_block_batch(block_batch).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to save block_batch in RocksPermanent");
         })
     }
 

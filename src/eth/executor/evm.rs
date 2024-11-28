@@ -38,6 +38,7 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
+use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
@@ -174,7 +175,7 @@ impl Evm {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            metrics::inc_evm_execution(start.elapsed(), &session_point_in_time, execution.is_ok());
+            metrics::inc_evm_execution(start.elapsed(), session_point_in_time, execution.is_ok());
             metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
         }
 
@@ -235,7 +236,7 @@ impl Database for RevmSession {
 
         // retrieve account
         let address: Address = revm_address.into();
-        let account = self.storage.read_account(&address, &self.input.point_in_time)?;
+        let account = self.storage.read_account(address, self.input.point_in_time)?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.input.to {
@@ -272,7 +273,7 @@ impl Database for RevmSession {
         let index: SlotIndex = revm_index.into();
 
         // load slot from storage
-        let slot = self.storage.read_slot(&address, &index, &self.input.point_in_time)?;
+        let slot = self.storage.read_slot(address, index, self.input.point_in_time)?;
 
         // track original value, except if ignored address
         if not(address.is_ignored()) {

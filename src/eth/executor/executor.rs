@@ -26,11 +26,12 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
-use crate::eth::storage::StoragePointInTime;
+use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
@@ -243,11 +244,10 @@ impl Executor {
         let block_number = block.number();
         let block_timestamp = block.timestamp();
         let block_transactions = mem::take(&mut block.transactions);
-        self.storage.set_pending_block_number(block_number)?;
 
         // determine how to execute each transaction
         for tx in block_transactions {
-            let receipt = receipts.try_remove(&tx.hash())?;
+            let receipt = receipts.try_remove(tx.hash())?;
             self.execute_external_transaction(
                 tx,
                 receipt,
@@ -329,7 +329,7 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let sender = self.storage.read_account(&receipt.from.into(), &StoragePointInTime::Pending)?;
+                let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending)?;
                 let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
                 let evm_result = EvmExecutionResult {
                     execution,
@@ -396,17 +396,6 @@ impl Executor {
             ExecutorStrategy::Serial => {
                 // acquire serial execution lock
                 let _serial_lock = self.locks.serial.lock_or_clear("executor serial lock was poisoned");
-
-                // WORKAROUND: prevents interval miner mining blocks while a transaction is being executed.
-                // this can be removed when we implement conflict detection for block number
-                let _miner_lock = {
-                    if self.miner.mode().is_interval() {
-                        let miner_lock = Some(self.miner.locks.mine_and_commit.lock_or_clear("miner mine_and_commit lock was poisoned"));
-                        miner_lock
-                    } else {
-                        None
-                    }
-                };
 
                 // execute transaction
                 self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
@@ -482,8 +471,8 @@ impl Executor {
             });
 
             // prepare evm input
-            let pending_header = self.storage.read_pending_block_header()?.unwrap_or_default();
-            let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_header.number);
+            let pending_header = self.storage.read_pending_block_header();
+            let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::info!(
@@ -499,35 +488,42 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            let evm_result = match self.evms.execute(evm_input, evm_route) {
+            let evm_result = match self.evms.execute(evm_input.clone(), evm_route) {
                 Ok(evm_result) => evm_result,
                 Err(e) => return Err(e),
             };
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-            match self.miner.save_execution(tx_execution.clone(), true) {
+            let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_input, evm_result.clone());
+            match self.miner.save_execution(tx_execution.clone(), matches!(evm_route, EvmRoute::Parallel)) {
                 Ok(_) => {
                     return Ok(tx_execution);
                 }
-                Err(e) =>
-                    if let StratusError::TransactionConflict(ref conflicts) = e {
+                Err(e) => match e {
+                    StratusError::TransactionConflict(ref conflicts) => {
                         tracing::warn!(%attempt, ?conflicts, "temporary storage conflict detected when saving execution");
                         if attempt >= max_attempts {
                             return Err(e);
                         }
                         continue;
-                    } else {
-                        return Err(e);
-                    },
+                    }
+                    StratusError::TransactionEvmInputMismatch { ref expected, ref actual } => {
+                        tracing::warn!(?expected, ?actual, "evm input and block header mismatch");
+                        if attempt >= max_attempts {
+                            return Err(e);
+                        }
+                        continue;
+                    }
+                    _ => return Err(e),
+                },
             }
         }
     }
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: StoragePointInTime) -> Result<EvmExecution, StratusError> {
+    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: PointInTime) -> Result<EvmExecution, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -545,10 +541,10 @@ impl Executor {
         );
 
         // retrieve block info
-        let pending_header = self.storage.read_pending_block_header()?.unwrap_or_default();
+        let pending_header = self.storage.read_pending_block_header();
         let mined_block = match point_in_time {
-            StoragePointInTime::MinedPast(number) => {
-                let Some(block) = self.storage.read_block(&BlockFilter::Number(number))? else {
+            PointInTime::MinedPast(number) => {
+                let Some(block) = self.storage.read_block(BlockFilter::Number(number))? else {
                     let filter = BlockFilter::Number(number);
                     return Err(StratusError::RpcBlockFilterInvalid { filter });
                 };
@@ -558,10 +554,10 @@ impl Executor {
         };
 
         // execute
-        let evm_input = EvmInput::from_eth_call(call_input.clone(), point_in_time, pending_header.number, mined_block)?;
+        let evm_input = EvmInput::from_eth_call(call_input.clone(), point_in_time, pending_header, mined_block)?;
         let evm_route = match point_in_time {
-            StoragePointInTime::Mined | StoragePointInTime::Pending => EvmRoute::CallPresent,
-            StoragePointInTime::MinedPast(_) => EvmRoute::CallPast,
+            PointInTime::Mined | PointInTime::Pending => EvmRoute::CallPresent,
+            PointInTime::MinedPast(_) => EvmRoute::CallPast,
         };
         let evm_result = self.evms.execute(evm_input, evm_route);
 

@@ -49,6 +49,7 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilterInput;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionInput;
@@ -62,7 +63,7 @@ use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
-use crate::eth::storage::StoragePointInTime;
+use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
@@ -267,9 +268,9 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
     use crate::log_and_err;
 
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
-    let latest = ctx.storage.read_block(&BlockFilter::Latest)?;
+    let latest = ctx.storage.read_block(BlockFilter::Latest)?;
     match latest {
-        Some(block) => UnixTime::set_offset(timestamp, block.header.timestamp)?,
+        Some(block) => UnixTime::set_offset(block.header.timestamp, timestamp)?,
         None => return log_and_err!("reading latest block returned None")?,
     }
     Ok(to_json_value(timestamp))
@@ -679,7 +680,7 @@ fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcC
     tracing::info!(%filter, %full_transactions, "reading block");
 
     // execute
-    let block = ctx.storage.read_block(&filter)?;
+    let block = ctx.storage.read_block(filter)?;
     Span::with(|s| {
         s.record("found", block.is_some());
         if let Some(ref block) = block {
@@ -723,7 +724,7 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: &E
     tracing::info!(%tx_hash, "reading transaction");
 
     // execute
-    let tx = ctx.storage.read_transaction(&tx_hash)?;
+    let tx = ctx.storage.read_transaction(tx_hash)?;
     Span::with(|s| {
         s.record("found", tx.is_some());
     });
@@ -753,7 +754,7 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: &E
     tracing::info!(%tx_hash, "reading transaction receipt");
 
     // execute
-    let tx = ctx.storage.read_transaction(&tx_hash)?;
+    let tx = ctx.storage.read_transaction(tx_hash)?;
     Span::with(|s| {
         s.record("found", tx.is_some());
     });
@@ -786,7 +787,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) 
     tracing::info!("executing eth_estimateGas");
 
     // execute
-    match ctx.executor.execute_local_call(call, StoragePointInTime::Mined) {
+    match ctx.executor.execute_local_call(call, PointInTime::Mined) {
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
@@ -828,7 +829,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Resul
     tracing::info!(%filter, "executing eth_call");
 
     // execute
-    let point_in_time = ctx.storage.translate_to_point_in_time(&filter)?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(filter)?;
     match ctx.executor.execute_local_call(call, point_in_time) {
         // result is success
         Ok(result) if result.is_success() => {
@@ -937,7 +938,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> R
             block
         }
     };
-    let blocks_in_range = filter.from_block.count_to(&to_block);
+    let blocks_in_range = filter.from_block.count_to(to_block);
 
     // track
     Span::with(|s| {
@@ -985,8 +986,8 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Ext
     });
     tracing::info!(%address, %filter, "reading account nonce");
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(&filter)?;
-    let account = ctx.storage.read_account(&address, &point_in_time)?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(filter)?;
+    let account = ctx.storage.read_account(address, point_in_time)?;
     Ok(hex_num(account.nonce))
 }
 
@@ -1007,8 +1008,8 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -
     tracing::info!(%address, %filter, "reading account native balance");
 
     // execute
-    let point_in_time = ctx.storage.translate_to_point_in_time(&filter)?;
-    let account = ctx.storage.read_account(&address, &point_in_time)?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(filter)?;
+    let account = ctx.storage.read_account(address, point_in_time)?;
     Ok(hex_num(account.balance))
 }
 
@@ -1028,8 +1029,8 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> R
     });
 
     // execute
-    let point_in_time = ctx.storage.translate_to_point_in_time(&filter)?;
-    let account = ctx.storage.read_account(&address, &point_in_time)?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(filter)?;
+    let account = ctx.storage.read_account(address, point_in_time)?;
 
     Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_null))
 }
@@ -1115,8 +1116,8 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions
     });
 
     // execute
-    let point_in_time = ctx.storage.translate_to_point_in_time(&block_filter)?;
-    let slot = ctx.storage.read_slot(&address, &index, &point_in_time)?;
+    let point_in_time = ctx.storage.translate_to_point_in_time(block_filter)?;
+    let slot = ctx.storage.read_slot(address, index, point_in_time)?;
 
     // It must be padded, even if it is zero.
     Ok(hex_num_zero_padded(slot.value.as_u256()))

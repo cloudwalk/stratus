@@ -7,6 +7,7 @@ use std::sync::RwLockWriteGuard;
 
 use nonempty::NonEmpty;
 
+use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -20,8 +21,11 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::UnixTime;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::UnixTimeNow;
 use crate::eth::storage::TemporaryStorage;
-use crate::log_and_err;
 
 /// Number of previous blocks to keep inmemory to detect conflicts between different blocks.
 const MAX_BLOCKS: usize = 64;
@@ -32,16 +36,16 @@ pub struct InMemoryTemporaryStorage {
     pub states: RwLock<NonEmpty<InMemoryTemporaryStorageState>>,
 }
 
-impl Default for InMemoryTemporaryStorage {
-    fn default() -> Self {
-        tracing::info!("creating inmemory temporary storage");
+impl InMemoryTemporaryStorage {
+    pub fn new(block_number: BlockNumber) -> Self {
         Self {
-            states: RwLock::new(NonEmpty::new(InMemoryTemporaryStorageState::default())),
+            states: RwLock::new(NonEmpty::new(InMemoryTemporaryStorageState {
+                block: PendingBlock::new_at_now(block_number),
+                accounts: HashMap::default(),
+            })),
         }
     }
-}
 
-impl InMemoryTemporaryStorage {
     /// Locks inner state for reading.
     pub fn lock_read(&self) -> RwLockReadGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
         self.states.read().unwrap()
@@ -57,36 +61,25 @@ impl InMemoryTemporaryStorage {
 // Inner State
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct InMemoryTemporaryStorageState {
     /// Block that is being mined.
-    pub block: Option<PendingBlock>,
+    pub block: PendingBlock,
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
     pub accounts: HashMap<Address, InMemoryTemporaryAccount, hash_hasher::HashBuildHasher>,
 }
 
 impl InMemoryTemporaryStorageState {
-    /// Validates there is a pending block being mined and returns a reference to it.
-    fn require_pending_block(&self) -> anyhow::Result<&PendingBlock> {
-        match &self.block {
-            Some(block) => Ok(block),
-            None => log_and_err!("no pending block being mined"), // try calling set_pending_block_number_as_next_if_not_set or any other method to create a new block on temp storage
+    pub fn new(block_number: BlockNumber) -> Self {
+        Self {
+            block: PendingBlock::new_at_now(block_number),
+            accounts: HashMap::default(),
         }
     }
 
-    /// Validates there is a pending block being mined and returns a mutable reference to it.
-    fn require_pending_block_mut(&mut self) -> anyhow::Result<&mut PendingBlock> {
-        match &mut self.block {
-            Some(block) => Ok(block),
-            None => log_and_err!("no pending block being mined"), // try calling set_pending_block_number_as_next_if_not_set or any other method to create a new block on temp storage
-        }
-    }
-}
-
-impl InMemoryTemporaryStorageState {
     pub fn reset(&mut self) {
-        self.block = None;
+        self.block = PendingBlock::new_at_now(1.into());
         self.accounts.clear();
     }
 }
@@ -112,23 +105,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Block number
     // -------------------------------------------------------------------------
 
-    fn set_pending_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        let mut states = self.lock_write();
-        match states.head.block.as_mut() {
-            Some(block) => block.header.number = number,
-            None => {
-                states.head.block = Some(PendingBlock::new_at_now(number));
-            }
-        }
-        Ok(())
-    }
-
-    fn read_pending_block_header(&self) -> anyhow::Result<Option<PendingBlockHeader>> {
+    // Uneeded clone here, return Cow
+    fn read_pending_block_header(&self) -> PendingBlockHeader {
         let states = self.lock_read();
-        match &states.head.block {
-            Some(block) => Ok(Some(block.header.clone())),
-            None => Ok(None),
-        }
+        states.head.block.header.clone()
     }
 
     // -------------------------------------------------------------------------
@@ -138,6 +118,17 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // check conflicts
         let mut states = self.lock_write();
+        if let TransactionExecution::Local(tx) = &tx {
+            let expected_input = EvmInput::from_eth_transaction(tx.input.clone(), states.head.block.header.clone());
+
+            if expected_input != tx.evm_input {
+                return Err(StratusError::TransactionEvmInputMismatch {
+                    expected: Box::new(expected_input),
+                    actual: Box::new(tx.evm_input.clone()),
+                });
+            }
+        }
+
         if check_conflicts {
             if let Some(conflicts) = do_check_conflicts(&states, tx.execution()) {
                 return Err(StratusError::TransactionConflict(conflicts.into()));
@@ -175,24 +166,32 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // save execution
-        states.head.require_pending_block_mut()?.push_transaction(tx);
+        states.head.block.push_transaction(tx);
 
         Ok(())
     }
 
     fn read_pending_executions(&self) -> Vec<TransactionExecution> {
-        self.lock_read()
-            .head
-            .block
-            .as_ref()
-            .map(|pending_block| pending_block.transactions.iter().map(|(_, tx)| tx.clone()).collect())
-            .unwrap_or_default()
+        self.lock_read().head.block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
     /// TODO: we cannot allow more than one pending block. Where to put this check?
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
         let mut states = self.lock_write();
-        let finished_block = states.head.require_pending_block()?.clone();
+
+        #[cfg(feature = "dev")]
+        let mut finished_block = states.head.block.clone();
+        #[cfg(not(feature = "dev"))]
+        let finished_block = states.head.block.clone();
+
+        #[cfg(feature = "dev")]
+        {
+            // Update block timestamp only if evm_setNextBlockTimestamp was called,
+            // otherwise keep the original timestamp from pending block creation
+            if UnixTime::evm_set_next_block_timestamp_was_called() {
+                finished_block.header.timestamp = UnixTimeNow::default();
+            }
+        }
 
         // remove last state if reached limit
         if states.len() + 1 >= MAX_BLOCKS {
@@ -200,16 +199,14 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         }
 
         // create new state
-        states.insert(0, InMemoryTemporaryStorageState::default());
-        states.head.block = Some(PendingBlock::new_at_now(finished_block.header.number.next_block_number()));
+        states.insert(0, InMemoryTemporaryStorageState::new(finished_block.header.number.next_block_number()));
 
         Ok(finished_block)
     }
 
-    fn read_pending_execution(&self, hash: &Hash) -> anyhow::Result<Option<TransactionExecution>> {
+    fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>> {
         let states = self.lock_read();
-        let Some(ref pending_block) = states.head.block else { return Ok(None) };
-        match pending_block.transactions.get(hash) {
+        match states.head.block.transactions.get(&hash) {
             Some(tx) => Ok(Some(tx.clone())),
             None => Ok(None),
         }
@@ -219,12 +216,12 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Accounts and Slots
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: &Address) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>> {
         let states = self.lock_read();
         Ok(do_read_account(&states, address))
     }
 
-    fn read_slot(&self, address: &Address, index: &SlotIndex) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>> {
         let states = self.lock_read();
         Ok(do_read_slot(&states, address, index))
     }
@@ -243,10 +240,10 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 // -----------------------------------------------------------------------------
 // Implementations without lock
 // -----------------------------------------------------------------------------
-fn do_read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address) -> Option<Account> {
+fn do_read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: Address) -> Option<Account> {
     // search all
     for state in states.iter() {
-        let Some(account) = state.accounts.get(address) else { continue };
+        let Some(account) = state.accounts.get(&address) else { continue };
 
         let info = account.info.clone();
         let account = Account {
@@ -266,49 +263,48 @@ fn do_read_account(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &A
     None
 }
 
-fn do_read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: &Address, index: &SlotIndex) -> Option<Slot> {
-    // search all
-    for state in states.iter() {
-        let Some(account) = state.accounts.get(address) else { continue };
-        let Some(slot) = account.slots.get(index) else { continue };
+fn do_read_slot(states: &NonEmpty<InMemoryTemporaryStorageState>, address: Address, index: SlotIndex) -> Option<Slot> {
+    let slot = states
+        .iter()
+        .find_map(|state| state.accounts.get(&address).and_then(|account| account.slots.get(&index)));
 
+    if let Some(&slot) = slot {
         tracing::trace!(%address, %index, %slot, "slot found in temporary");
-        return Some(*slot);
+        Some(slot)
+    } else {
+        tracing::trace!(%address, %index, "slot not found in temporary");
+        None
     }
-
-    // not found
-    tracing::trace!(%address, %index, "slot not found in temporary");
-    None
 }
 
 fn do_check_conflicts(states: &NonEmpty<InMemoryTemporaryStorageState>, execution: &EvmExecution) -> Option<ExecutionConflicts> {
     let mut conflicts = ExecutionConflictsBuilder::default();
 
-    for (address, change) in &execution.changes {
+    for (&address, change) in &execution.changes {
         // check account info conflicts
         if let Some(account) = do_read_account(states, address) {
             if let Some(expected) = change.nonce.take_original_ref() {
                 let original = &account.nonce;
                 if expected != original {
-                    conflicts.add_nonce(*address, *original, *expected);
+                    conflicts.add_nonce(address, *original, *expected);
                 }
             }
             if let Some(expected) = change.balance.take_original_ref() {
                 let original = &account.balance;
                 if expected != original {
-                    conflicts.add_balance(*address, *original, *expected);
+                    conflicts.add_balance(address, *original, *expected);
                 }
             }
         }
 
         // check slots conflicts
-        for (slot_index, slot_change) in &change.slots {
+        for (&slot_index, slot_change) in &change.slots {
             if let Some(expected) = slot_change.take_original_ref() {
                 let Some(original) = do_read_slot(states, address, slot_index) else {
                     continue;
                 };
                 if expected.value != original.value {
-                    conflicts.add_slot(*address, *slot_index, original.value, expected.value);
+                    conflicts.add_slot(address, slot_index, original.value, expected.value);
                 }
             }
         }

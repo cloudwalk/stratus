@@ -1,6 +1,7 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use std::sync::RwLockWriteGuard;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
+use nonempty::NonEmpty;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -22,16 +24,15 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
-use crate::eth::storage::inmemory::InMemoryHistory;
 use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::StoragePointInTime;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct InMemoryPermanentStorageState {
+struct InMemoryPermanentStorageState {
     pub accounts: HashMap<Address, InMemoryPermanentAccount, hash_hasher::HashBuildHasher>,
     pub transactions: HashMap<Hash, Arc<Block>, hash_hasher::HashBuildHasher>,
     pub blocks_by_number: IndexMap<BlockNumber, Arc<Block>>,
@@ -101,10 +102,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: &Address, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>> {
         let state = self.lock_read();
 
-        match state.accounts.get(address) {
+        match state.accounts.get(&address) {
             Some(inmemory_account) => {
                 let account = inmemory_account.to_account(point_in_time);
                 Ok(Some(account))
@@ -113,14 +114,14 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_slot(&self, address: &Address, index: &SlotIndex, point_in_time: &StoragePointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>> {
         let state = self.lock_read();
 
-        let Some(account) = state.accounts.get(address) else {
+        let Some(account) = state.accounts.get(&address) else {
             return Ok(None);
         };
 
-        match account.slots.get(index) {
+        match account.slots.get(&index) {
             Some(slot_history) => {
                 let slot = slot_history.get_at_point(point_in_time).unwrap_or_default();
                 Ok(Some(slot))
@@ -129,13 +130,13 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_block(&self, selection: &BlockFilter) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>> {
         let state_lock = self.lock_read();
         let block = match selection {
             BlockFilter::Latest | BlockFilter::Pending => state_lock.blocks_by_number.values().last().cloned(),
             BlockFilter::Earliest => state_lock.blocks_by_number.values().next().cloned(),
-            BlockFilter::Number(block_number) => state_lock.blocks_by_number.get(block_number).cloned(),
-            BlockFilter::Hash(block_hash) => state_lock.blocks_by_hash.get(block_hash).cloned(),
+            BlockFilter::Number(block_number) => state_lock.blocks_by_number.get(&block_number).cloned(),
+            BlockFilter::Hash(block_hash) => state_lock.blocks_by_hash.get(&block_hash).cloned(),
         };
         match block {
             Some(block) => Ok(Some((*block).clone())),
@@ -143,10 +144,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_transaction(&self, hash: &Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>> {
         let state_lock = self.lock_read();
-        let Some(block) = state_lock.transactions.get(hash) else { return Ok(None) };
-        Ok(block.transactions.iter().find(|tx| &tx.input.hash == hash).cloned())
+        let Some(block) = state_lock.transactions.get(&hash) else { return Ok(None) };
+        Ok(block.transactions.iter().find(|tx| tx.input.hash == hash).cloned())
     }
 
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
@@ -249,7 +250,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct InMemoryPermanentAccount {
+struct InMemoryPermanentAccount {
     #[allow(dead_code)]
     pub address: Address,
     pub balance: InMemoryHistory<Wei>,
@@ -278,7 +279,7 @@ impl InMemoryPermanentAccount {
     }
 
     /// Converts itself to an account at a point-in-time.
-    pub fn to_account(&self, point_in_time: &StoragePointInTime) -> Account {
+    pub fn to_account(&self, point_in_time: PointInTime) -> Account {
         Account {
             address: self.address,
             balance: self.balance.get_at_point(point_in_time).unwrap_or_default(),
@@ -286,5 +287,62 @@ impl InMemoryPermanentAccount {
             bytecode: self.bytecode.get_at_point(point_in_time).unwrap_or_default(),
             code_hash: self.code_hash.get_at_point(point_in_time).unwrap_or_default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct InMemoryHistory<T>(NonEmpty<InMemoryHistoryValue<T>>)
+where
+    T: Clone + Debug + serde::Serialize;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, derive_new::new)]
+struct InMemoryHistoryValue<T> {
+    pub block_number: BlockNumber,
+    pub value: T,
+}
+
+impl<T> InMemoryHistory<T>
+where
+    T: Clone + Debug + serde::Serialize + for<'a> serde::Deserialize<'a>,
+{
+    /// Creates a new list of historical values.
+    pub fn new_at_zero(value: T) -> Self {
+        Self::new(BlockNumber::ZERO, value)
+    }
+
+    /// Creates a new list of historical values.
+    pub fn new(block_number: BlockNumber, value: T) -> Self {
+        let value = InMemoryHistoryValue::new(block_number, value);
+        Self(NonEmpty::new(value))
+    }
+
+    /// Adds a new historical value to the list.
+    pub fn push(&mut self, block_number: BlockNumber, value: T) {
+        let value = InMemoryHistoryValue::new(block_number, value);
+        self.0.push(value);
+    }
+
+    /// Returns the value at the given point in time.
+    pub fn get_at_point(&self, point_in_time: PointInTime) -> Option<T> {
+        match point_in_time {
+            PointInTime::Mined | PointInTime::Pending => Some(self.get_current()),
+            PointInTime::MinedPast(block_number) => self.get_at_block(block_number),
+        }
+    }
+
+    /// Returns the most recent value before or at the given block number.
+    pub fn get_at_block(&self, block_number: BlockNumber) -> Option<T> {
+        self.0.iter().take_while(|x| x.block_number <= block_number).map(|x| &x.value).last().cloned()
+    }
+
+    /// Returns the most recent value.
+    pub fn get_current(&self) -> T {
+        self.0.last().value.clone()
+    }
+}
+
+impl<T: Clone + Debug + serde::Serialize + for<'a> serde::Deserialize<'a>> From<InMemoryHistory<T>> for Vec<InMemoryHistoryValue<T>> {
+    fn from(value: InMemoryHistory<T>) -> Self {
+        value.0.into()
     }
 }

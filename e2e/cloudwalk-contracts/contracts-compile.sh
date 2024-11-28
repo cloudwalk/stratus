@@ -44,5 +44,7 @@ compile_contract compound-periphery CompoundAgent
 
 compile_contract brlc-multisig MultiSigWallet
 
-compile_contract brlc-yield-streamer BalanceTracker
+# BalanceTracker Transition: compile BalanceTracker regardless of the repository it is in.
+compile_contract brlc-balance-tracker BalanceTracker || compile_contract brlc-yield-streamer BalanceTracker
+
 compile_contract brlc-yield-streamer YieldStreamer

@@ -69,7 +69,7 @@ impl BlockNumber {
     /// Count how many blocks there is between itself and the othe block.
     ///
     /// Assumes that self is the lower-end of the range.
-    pub fn count_to(&self, higher_end: &BlockNumber) -> u64 {
+    pub fn count_to(self, higher_end: BlockNumber) -> u64 {
         if higher_end >= self {
             higher_end.as_u64() - self.as_u64() + 1
         } else {

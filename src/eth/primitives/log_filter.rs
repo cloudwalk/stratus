@@ -32,7 +32,7 @@ impl LogFilter {
 
         // filter address
         let has_addresses = not(self.addresses.is_empty());
-        if has_addresses && not(self.addresses.contains(log.address())) {
+        if has_addresses && not(self.addresses.contains(&log.address())) {
             return false;
         }
 
@@ -96,8 +96,6 @@ mod tests {
     use crate::eth::primitives::Log;
     use crate::eth::primitives::LogFilterInputTopic;
     use crate::eth::primitives::LogTopic;
-    use crate::eth::storage::InMemoryPermanentStorage;
-    use crate::eth::storage::InMemoryTemporaryStorage;
     use crate::eth::storage::StratusStorage;
     use crate::utils::test_utils::fake_first;
     use crate::utils::test_utils::fake_list;
@@ -105,7 +103,7 @@ mod tests {
     fn build_filter(addresses: Vec<Address>, topics_nested: Vec<Vec<Option<LogTopic>>>) -> LogFilter {
         let topics_map = |topics: Vec<Option<LogTopic>>| LogFilterInputTopic(topics.into_iter().collect());
 
-        let storage = StratusStorage::new(Box::<InMemoryTemporaryStorage>::default(), Box::<InMemoryPermanentStorage>::default()).unwrap();
+        let storage = StratusStorage::new_test().unwrap();
 
         LogFilterInput {
             address: addresses,

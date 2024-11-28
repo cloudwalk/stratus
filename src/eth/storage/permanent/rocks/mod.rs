@@ -1,13 +1,13 @@
 //! RocksDB layers (top-to-bottom): permanent -> state -> rest.
 
-/// Batch writer with capacity for flushing temporarily.
-mod rocks_batch_writer;
+pub use rocks_permanent::RocksPermanentStorage;
+pub use rocks_state::RocksStorageState;
 
 /// Exposed API.
-pub mod rocks_permanent;
+mod rocks_permanent;
 
 /// State handler for DB and column families.
-pub mod rocks_state;
+mod rocks_state;
 
 /// CFs versionated by value variant.
 mod cf_versions;
