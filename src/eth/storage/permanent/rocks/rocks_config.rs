@@ -1,6 +1,5 @@
 use rocksdb::BlockBasedOptions;
 use rocksdb::Cache;
-use rocksdb::MemtableFactory;
 use rocksdb::Options;
 
 pub enum CacheSetting {
@@ -31,15 +30,10 @@ impl DbConfig {
         opts.increase_parallelism(16);
         // add an assertion so that the ulimit -n is at least double this.
         // opts.set_max_open_files(40960);
+
         block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
         block_based_options.set_cache_index_and_filter_blocks(true);
-        // index_type = IndexType::kTwoLevelIndexSearch
-        // partition_filters = true
-        // https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters
-        // block_based_options.set_pin_top_level_index_and_filter(true);
         block_based_options.set_bloom_filter(15.5, true);
-
-        opts.set_allow_concurrent_memtable_write(false);
 
         // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
         #[cfg(feature = "metrics")]
@@ -51,9 +45,6 @@ impl DbConfig {
         if let Some(prefix_len) = prefix_len {
             let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
             block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
-            opts.set_memtable_whole_key_filtering(true);
-            // try HashSkipList memtables
-            opts.set_memtable_factory(MemtableFactory::HashSkipList { bucket_count: 10000, height: 4, branching_factor: 4 });
             opts.set_memtable_prefix_bloom_ratio(0.2);
             opts.set_prefix_extractor(transform);
         }
@@ -69,9 +60,12 @@ impl DbConfig {
 
         match self {
             DbConfig::OptimizedPointLookUp => {
-                block_based_options.set_data_block_hash_ratio(0.5);
+                block_based_options.set_data_block_hash_ratio(0.01);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
+
                 opts.set_use_direct_reads(true);
+                opts.set_memtable_whole_key_filtering(true);
+
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
             }
             DbConfig::Default => {
