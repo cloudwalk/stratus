@@ -197,7 +197,6 @@ impl RocksStorageState {
         self.transactions.clear()?;
         self.blocks_by_number.clear()?;
         self.blocks_by_hash.clear()?;
-        self.logs.clear()?;
         Ok(())
     }
 
@@ -513,7 +512,6 @@ impl RocksStorageState {
         self.transactions.clear().context("when clearing transactions")?;
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
-        self.logs.clear().context("when clearing logs")?;
         Ok(())
     }
 }
