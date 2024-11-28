@@ -18,6 +18,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 async fn run(config: StratusConfig) -> anyhow::Result<()> {
+    let () = ();
+
     // Init services
     let storage = config.storage.init()?;
 
