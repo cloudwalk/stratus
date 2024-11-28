@@ -68,7 +68,7 @@ jobs:
       cancel-in-progress: true
 
   e2e-interval-stratus:
-    name: E2E Inverval Stratus
+    name: E2E Interval Stratus
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-stratus 10ms"
