@@ -104,7 +104,7 @@ pub enum StratusError {
 
     #[error("Transaction input does not match block header")]
     #[strum(props(kind = "execution"))]
-    TransactionEvmInputMismatch { expected: EvmInput, actual: EvmInput },
+    TransactionEvmInputMismatch { expected: Box<EvmInput>, actual: Box<EvmInput> },
 
     // -------------------------------------------------------------------------
     // Storage

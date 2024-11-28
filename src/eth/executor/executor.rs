@@ -407,13 +407,12 @@ impl Executor {
                 let parallel_attempt = self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Parallel, 1);
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
-                    Err(e) => {
+                    Err(e) =>
                         if let StratusError::TransactionConflict(_) = e {
                             self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
                         } else {
                             Err(e)
-                        }
-                    }
+                        },
                 }
             }
         };
@@ -509,7 +508,7 @@ impl Executor {
                         }
                         continue;
                     }
-                    StratusError::TransactionEvmInputMismatch {ref expected, ref actual} => {
+                    StratusError::TransactionEvmInputMismatch { ref expected, ref actual } => {
                         tracing::warn!(?expected, ?actual, "evm input and block header mismatch");
                         if attempt >= max_attempts {
                             return Err(e);

@@ -125,8 +125,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
             if expected_input != tx.evm_input {
                 return Err(StratusError::TransactionEvmInputMismatch {
-                    expected: expected_input,
-                    actual: tx.evm_input.clone(),
+                    expected: Box::new(expected_input),
+                    actual: Box::new(tx.evm_input.clone()),
                 });
             }
         }
