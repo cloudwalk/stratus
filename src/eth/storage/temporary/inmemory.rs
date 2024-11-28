@@ -119,8 +119,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         // check conflicts
         let mut states = self.lock_write();
         if let TransactionExecution::Local(tx) = &tx {
-            tracing::info!("hereeeeee");
-
             let expected_input = EvmInput::from_eth_transaction(tx.input.clone(), states.head.block.header.clone());
 
             if expected_input != tx.evm_input {
