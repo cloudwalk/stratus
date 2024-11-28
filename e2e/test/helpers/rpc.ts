@@ -20,6 +20,7 @@ import {
     TestContractBlockTimestamp,
     TestContractCounter,
     TestContractDenseStorage,
+    TestEvmInput,
 } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
 import { currentMiningIntervalInMs, currentNetwork, isStratus } from "./network";
@@ -159,6 +160,12 @@ export async function sendExpect(method: string, params: any[] = []): Promise<Ch
 // Deploys the "TestContractBalances" contract.
 export async function deployTestContractBalances(): Promise<TestContractBalances> {
     const testContractFactory = await ethers.getContractFactory("TestContractBalances");
+    return await testContractFactory.connect(CHARLIE.signer()).deploy();
+}
+
+// Deploys the "TestEvmInput" contract.
+export async function deployTestEvmInput(): Promise<TestEvmInput> {
+    const testContractFactory = await ethers.getContractFactory("TestEvmInput");
     return await testContractFactory.connect(CHARLIE.signer()).deploy();
 }
 

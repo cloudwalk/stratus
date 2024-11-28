@@ -21,7 +21,7 @@ use crate::if_else;
 use crate::log_and_err;
 
 /// EVM input data. Usually derived from a transaction or call.
-#[derive(DebugAsJson, Clone, Default, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, fake::Dummy, PartialEq)]
 pub struct EvmInput {
     /// Operation party address.
     ///

@@ -397,17 +397,6 @@ impl Executor {
                 // acquire serial execution lock
                 let _serial_lock = self.locks.serial.lock_or_clear("executor serial lock was poisoned");
 
-                // WORKAROUND: prevents interval miner mining blocks while a transaction is being executed.
-                // this can be removed when we implement conflict detection for block number
-                let _miner_lock = {
-                    if self.miner.mode().is_interval() {
-                        let miner_lock = Some(self.miner.locks.mine_and_commit.lock_or_clear("miner mine_and_commit lock was poisoned"));
-                        miner_lock
-                    } else {
-                        None
-                    }
-                };
-
                 // execute transaction
                 self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
             }
@@ -499,28 +488,35 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            let evm_result = match self.evms.execute(evm_input, evm_route) {
+            let evm_result = match self.evms.execute(evm_input.clone(), evm_route) {
                 Ok(evm_result) => evm_result,
                 Err(e) => return Err(e),
             };
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_result.clone());
-            match self.miner.save_execution(tx_execution.clone(), true) {
+            let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_input, evm_result.clone());
+            match self.miner.save_execution(tx_execution.clone(), matches!(evm_route, EvmRoute::Parallel)) {
                 Ok(_) => {
                     return Ok(tx_execution);
                 }
-                Err(e) =>
-                    if let StratusError::TransactionConflict(ref conflicts) = e {
+                Err(e) => match e {
+                    StratusError::TransactionConflict(ref conflicts) => {
                         tracing::warn!(%attempt, ?conflicts, "temporary storage conflict detected when saving execution");
                         if attempt >= max_attempts {
                             return Err(e);
                         }
                         continue;
-                    } else {
-                        return Err(e);
-                    },
+                    }
+                    StratusError::TransactionEvmInputMismatch { ref expected, ref actual } => {
+                        tracing::warn!(?expected, ?actual, "evm input and block header mismatch");
+                        if attempt >= max_attempts {
+                            return Err(e);
+                        }
+                        continue;
+                    }
+                    _ => return Err(e),
+                },
             }
         }
     }
