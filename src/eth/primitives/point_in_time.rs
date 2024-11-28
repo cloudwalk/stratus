@@ -2,7 +2,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::infra::metrics::MetricLabelValue;
 
 /// EVM storage point-in-time indicator.
-#[derive(Debug, strum::Display, Clone, Copy, Default, strum::EnumIs, serde::Serialize)]
+#[derive(Debug, strum::Display, Clone, Copy, Default, strum::EnumIs, serde::Serialize, serde::Deserialize, fake::Dummy, PartialEq)]
 pub enum PointInTime {
     /// State of `Account` or `Slot` at the pending block being mined.
     ///

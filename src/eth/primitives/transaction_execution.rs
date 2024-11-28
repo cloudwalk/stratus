@@ -1,6 +1,7 @@
 use display_json::DebugAsJson;
 
 use crate::eth::executor::EvmExecutionResult;
+use crate::eth::executor::EvmInput;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExternalReceipt;
@@ -20,8 +21,8 @@ pub enum TransactionExecution {
 
 impl TransactionExecution {
     /// Creates a new local transaction execution.
-    pub fn new_local(tx: TransactionInput, result: EvmExecutionResult) -> Self {
-        Self::Local(LocalTransactionExecution { input: tx, result })
+    pub fn new_local(tx: TransactionInput, evm_input: EvmInput, result: EvmExecutionResult) -> Self {
+        Self::Local(LocalTransactionExecution { input: tx, evm_input, result })
     }
 
     /// Extracts the inner [`LocalTransactionExecution`] if the execution is a local execution.
@@ -85,6 +86,7 @@ impl TransactionExecution {
 #[cfg_attr(test, derive(serde::Deserialize, fake::Dummy, PartialEq))]
 pub struct LocalTransactionExecution {
     pub input: TransactionInput,
+    pub evm_input: EvmInput,
     pub result: EvmExecutionResult,
 }
 

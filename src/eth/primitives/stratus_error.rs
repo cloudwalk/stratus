@@ -7,6 +7,7 @@ use jsonrpsee::types::ErrorObjectOwned;
 use strum::EnumProperty;
 
 use crate::alias::JsonValue;
+use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
@@ -100,6 +101,10 @@ pub enum StratusError {
     #[error("Transaction from zero address is not allowed.")]
     #[strum(props(kind = "execution"))]
     TransactionFromZeroAddress,
+
+    #[error("Transaction input does not match block header")]
+    #[strum(props(kind = "execution"))]
+    TransactionEvmInputMismatch { expected: EvmInput, actual: EvmInput },
 
     // -------------------------------------------------------------------------
     // Storage

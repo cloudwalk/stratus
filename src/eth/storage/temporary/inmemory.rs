@@ -7,6 +7,7 @@ use std::sync::RwLockWriteGuard;
 
 use nonempty::NonEmpty;
 
+use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -117,6 +118,18 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // check conflicts
         let mut states = self.lock_write();
+        if let TransactionExecution::Local(tx) = &tx {
+            tracing::info!("hereeeeee");
+
+            let expected_input = EvmInput::from_eth_transaction(tx.input.clone(), states.head.block.header.clone());
+
+            if expected_input != tx.evm_input {
+                return Err(StratusError::TransactionEvmInputMismatch {
+                    expected: expected_input,
+                    actual: tx.evm_input.clone(),
+                });
+            }
+        }
 
         if check_conflicts {
             if let Some(conflicts) = do_check_conflicts(&states, tx.execution()) {
