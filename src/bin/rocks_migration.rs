@@ -6,7 +6,7 @@ use anyhow::Result;
 use rocksdb::IteratorMode;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
-use stratus::eth::storage::rocks::rocks_db::create_or_open_db;
+use stratus::eth::storage::permanent::rocks::rocks_db::create_or_open_db;
 
 const COLUMN_FAMILIES: [&str; 7] = [
     "accounts",
@@ -87,7 +87,7 @@ pub fn write_in_batch(db: &DB, batch: WriteBatch) -> anyhow::Result<()> {
 use rocksdb::BlockBasedOptions;
 use rocksdb::Cache;
 use rocksdb::Options;
-use stratus::eth::storage::rocks::rocks_state::generate_cf_options_map;
+use stratus::eth::storage::permanent::rocks::rocks_state::generate_cf_options_map;
 use sugars::hmap;
 
 const GIGABYTE: usize = 1024 * 1024 * 1024;

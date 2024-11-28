@@ -7,7 +7,7 @@ pub use rocks_state::RocksStorageState;
 mod rocks_permanent;
 
 /// State handler for DB and column families.
-mod rocks_state;
+pub mod rocks_state;
 
 /// CFs versionated by value variant.
 mod cf_versions;
