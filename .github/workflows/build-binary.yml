@@ -24,25 +24,12 @@ env:
 
 jobs:
   build_binaries:
-    name: Build ${{ matrix.config.name }} binary
+    name: Build and upload
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
-    strategy:
-      fail-fast: false
-      matrix:
-        config:
-          - name: default
-            artifact_prefix: stratus
-            extra_features: ""
-            rustflags: ""
-          - name: profiling
-            artifact_prefix: stratus-prof
-            extra_features: ",jeprof"
-            rustflags: "-C force-frame-pointers=yes"
-
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.config.name }}-${{ github.run_id }}
+      group: ${{ github.workflow }}-{{ github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -61,31 +48,33 @@ jobs:
           cache-provider: "github"
           save-if: ${{ github.ref_name == 'main' && github.event_name == 'push' }}
 
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      - name: Build binary
+      - name: Build binaries
         run: |
           cargo build --release \
             --bin stratus \
-            --features "${{ env.FEATURES }}${{ matrix.config.extra_features }}"
+            --features "$FEATURES"
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
           TRACING_LOG_FORMAT: json
           NO_COLOR: 1
           FEATURES: "${{ github.event.inputs.features || 'default' }}"
-          RUSTFLAGS: ${{ matrix.config.rustflags }}
 
-      - name: Upload binary
+      - name: Upload stratus
         uses: actions/upload-artifact@v4
-        id: upload-binary
+        id: upload-str
         with:
-          name: ${{ matrix.config.artifact_prefix }}-${{ github.sha }}
+          name: stratus-${{ github.sha }}
           path: target/release/stratus
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
 
       - name: Print outputs
         run: |
-          echo "Artifact ID: ${{ steps.upload-binary.outputs.artifact-id }} (${{ matrix.config.name }})"
-          echo "Artifact URL: ${{ steps.upload-binary.outputs.artifact-url }} (${{ matrix.config.name }})"
+          echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
+          echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
