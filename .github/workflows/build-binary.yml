@@ -45,12 +45,6 @@ jobs:
       group: ${{ github.workflow }}-${{ matrix.config.name }}-${{ github.run_id }}
       cancel-in-progress: true
 
-    env:
-      CARGO_PROFILE_RELEASE_DEBUG: 1
-      TRACING_LOG_FORMAT: json
-      NO_COLOR: 1
-      FEATURES: "${{ github.event.inputs.features || 'default' }}"
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -74,9 +68,12 @@ jobs:
         run: |
           cargo build --release \
             --bin stratus \
-            --features "${{ env.FEATURES }}${{ matrix.config.extra_features }}" \
-            --target-dir target/${{ matrix.config.name }}
+            --features "${{ env.FEATURES }}${{ matrix.config.extra_features }}"
         env:
+          CARGO_PROFILE_RELEASE_DEBUG: 1
+          TRACING_LOG_FORMAT: json
+          NO_COLOR: 1
+          FEATURES: "${{ github.event.inputs.features || 'default' }}"
           RUSTFLAGS: ${{ matrix.config.rustflags }}
 
       - name: Upload binary
@@ -84,7 +81,7 @@ jobs:
         id: upload-binary
         with:
           name: ${{ matrix.config.artifact_prefix }}-${{ github.sha }}
-          path: target/${{ matrix.config.name }}/release/stratus
+          path: target/release/stratus
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
 
