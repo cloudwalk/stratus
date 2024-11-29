@@ -236,12 +236,12 @@ impl Storage for StratusStorage {
         timed(|| self.temp.save_pending_execution(tx, check_conflicts))
             .with(|m| {
                 metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
-                match m.result {
-                    Err(StratusError::TransactionEvmInputMismatch { ref expected, ref actual }) => {
+                match &m.result {
+                    Err(StratusError::TransactionEvmInputMismatch { .. }) => {
                         tracing::warn!("failed to save execution due to mismatch, will retry");
                     }
                     Err(ref e) => tracing::error!(reason = ?e, "failed to save execution"),
-                    ok => (),
+                    _ => (),
                 }
             })
             .map_err(Into::into)
