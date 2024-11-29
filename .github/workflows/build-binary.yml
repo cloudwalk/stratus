@@ -70,8 +70,8 @@ jobs:
       - name: Build binary
         run: |
           FEATURE_LIST="${{ github.event.inputs.features || 'default' }}"
-          if [ ! -z "${{ matrix.config.extra_features }}" ]; then
-            FEATURE_LIST="${FEATURE_LIST},${matrix.config.extra_features}"
+          if [ ! -z "$EXTRA_FEATURES" ]; then
+            FEATURE_LIST="${FEATURE_LIST},${EXTRA_FEATURES}"
           fi
           cargo build --release \
             --bin stratus \
