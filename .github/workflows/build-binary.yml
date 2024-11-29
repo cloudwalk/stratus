@@ -48,33 +48,55 @@ jobs:
           cache-provider: "github"
           save-if: ${{ github.ref_name == 'main' && github.event_name == 'push' }}
 
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
-
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      - name: Build binaries
+      - name: Build default binary
         run: |
           cargo build --release \
             --bin stratus \
-            --features "$FEATURES"
+            --features "$FEATURES" \
+            --target-dir target/default
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
           TRACING_LOG_FORMAT: json
           NO_COLOR: 1
           FEATURES: "${{ github.event.inputs.features || 'default' }}"
 
-      - name: Upload stratus
+      - name: Build profiling binary
+        run: |
+          cargo build --release \
+            --bin stratus \
+            --features "$FEATURES,jeprof" \
+            --target-dir target/profiling
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 1
+          TRACING_LOG_FORMAT: json
+          NO_COLOR: 1
+          FEATURES: "${{ github.event.inputs.features || 'default' }}"
+          RUSTFLAGS: "-C force-frame-pointers=yes"
+
+      - name: Upload default stratus
         uses: actions/upload-artifact@v4
-        id: upload-str
+        id: upload-default-stratus
         with:
           name: stratus-${{ github.sha }}
           path: target/release/stratus
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
 
+      - name: Upload profiling stratus
+        uses: actions/upload-artifact@v4
+        id: upload-profiling-stratus
+        with:
+          name: stratus-prof-${{ github.sha }}
+          path: target/release/stratus
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+
       - name: Print outputs
         run: |
-          echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
-          echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
+          echo "Artifact ID: ${{ steps.upload-default-stratus.outputs.artifact-id }} (stratus)"
+          echo "Artifact URL: ${{ steps.upload-default-stratus.outputs.artifact-url }} (stratus)"
+          echo "Artifact ID: ${{ steps.upload-profiling-stratus.outputs.artifact-id }} (stratus-prof)"
+          echo "Artifact URL: ${{ steps.upload-profiling-stratus.outputs.artifact-url }} (stratus-prof)"
