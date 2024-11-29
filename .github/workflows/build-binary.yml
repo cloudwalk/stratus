@@ -36,10 +36,10 @@ jobs:
             artifact_prefix: stratus
             extra_features: ""
             rustflags: ""
-          #- name: profiling
-          #  artifact_prefix: stratus-prof
-          #  extra_features: ",jeprof"
-          #  rustflags: "-C force-frame-pointers=yes"
+          - name: profiling
+            artifact_prefix: stratus-prof
+            extra_features: ",jeprof"
+            rustflags: "-C force-frame-pointers=yes"
 
     concurrency:
       group: ${{ github.workflow }}-${{ matrix.config.name }}-${{ github.run_id }}
