@@ -15,6 +15,7 @@ pub mod permanent;
 mod stratus_storage;
 mod temporary;
 
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -93,6 +94,22 @@ pub trait Storage: Send + Sync + 'static {
 
     /// Translates a block filter to a specific storage point-in-time indicator.
     fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StratusError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountWithSlots {
+    pub info: Account,
+    pub slots: HashMap<SlotIndex, Slot, hash_hasher::HashBuildHasher>,
+}
+
+impl AccountWithSlots {
+    /// Creates a new temporary account.
+    fn new(address: Address) -> Self {
+        Self {
+            info: Account::new_empty(address),
+            slots: HashMap::default(),
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------

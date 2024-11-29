@@ -25,6 +25,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTimeNow;
+use crate::eth::storage::AccountWithSlots;
 use crate::eth::storage::TemporaryStorage;
 
 /// Number of previous blocks to keep inmemory to detect conflicts between different blocks.
@@ -67,7 +68,7 @@ pub struct InMemoryTemporaryStorageState {
     pub block: PendingBlock,
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
-    pub accounts: HashMap<Address, InMemoryTemporaryAccount, hash_hasher::HashBuildHasher>,
+    pub accounts: HashMap<Address, AccountWithSlots, hash_hasher::HashBuildHasher>,
 }
 
 impl InMemoryTemporaryStorageState {
@@ -81,22 +82,6 @@ impl InMemoryTemporaryStorageState {
     pub fn reset(&mut self) {
         self.block = PendingBlock::new_at_now(1.into());
         self.accounts.clear();
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct InMemoryTemporaryAccount {
-    pub info: Account,
-    pub slots: HashMap<SlotIndex, Slot, hash_hasher::HashBuildHasher>,
-}
-
-impl InMemoryTemporaryAccount {
-    /// Creates a new temporary account.
-    fn new(address: Address) -> Self {
-        Self {
-            info: Account::new_empty(address),
-            slots: HashMap::default(),
-        }
     }
 }
 
@@ -142,7 +127,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                 .head
                 .accounts
                 .entry(change.address)
-                .or_insert_with(|| InMemoryTemporaryAccount::new(change.address));
+                .or_insert_with(|| AccountWithSlots::new(change.address));
 
             // account basic info
             if let Some(nonce) = change.nonce.take_ref() {
