@@ -1,5 +1,6 @@
 //! Ethereum / EVM storage.
 
+pub use cache::StorageCache;
 pub use permanent::InMemoryPermanentStorage;
 pub use permanent::PermanentStorage;
 pub use permanent::PermanentStorageConfig;
@@ -11,6 +12,7 @@ pub use temporary::TemporaryStorage;
 pub use temporary::TemporaryStorageConfig;
 pub use temporary::TemporaryStorageKind;
 
+mod cache;
 pub mod permanent;
 mod stratus_storage;
 mod temporary;

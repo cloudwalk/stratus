@@ -29,7 +29,7 @@ use crate::eth::storage::AccountWithSlots;
 use crate::eth::storage::TemporaryStorage;
 
 /// Number of previous blocks to keep inmemory to detect conflicts between different blocks.
-const MAX_BLOCKS: usize = 64;
+const MAX_BLOCKS: usize = 1;
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {

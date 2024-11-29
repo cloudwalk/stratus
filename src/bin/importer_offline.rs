@@ -49,20 +49,19 @@ const RPC_FETCHER_CHANNEL_CAPACITY: usize = 10;
 ///
 /// We want to persist to the storage in batches, this means we don't save a
 /// block right away, but the information from that block still needs to be
-/// found in the storage.
+/// found in the cache.
 ///
-/// By using a channel with capacity 0 to send STORAGE_SAVER_BATCH_SIZE blocks,
-/// we guarantee that accounts and slots can either be found in the permanent
-/// storage, or in the temporary one.
-///
-/// In other words, at most (STORAGE_SAVER_BATCH_SIZE) * 2 executed blocks
-/// won't be found in the permanent storage, but that's still within the
-/// temporary storage capacity.
-///
-/// We use half because we want parallelism in execution and persisting, both
-/// places need to hold blocks that aren't in the permanent storage yet, it's
-/// half for each.
-const STORAGE_SAVER_BATCH_SIZE: usize = 64 / 2 - 1;
+/// These constants are organized to guarantee that accounts and slots can
+/// still be found in the storage cache.
+const CACHE_SIZE: usize = 10_000;
+const MAX_BLOCKS_NOT_SAVED: usize = CACHE_SIZE - 1;
+
+const BATCH_COUNT: usize = 10;
+const SAVER_BATCH_SIZE: usize = MAX_BLOCKS_NOT_SAVED / BATCH_COUNT;
+// The fetcher and saver tasks hold each, at most, SAVER_BATCH_SIZE blocks,
+// so we need to subtract 2 from the buffer capacity to ensure we only have
+// `CACHE_SIZE` executed blocks at a time.
+const SAVER_CHANNEL_CAPACITY: usize = BATCH_COUNT - 2;
 
 type BlocksToExecute = Vec<ExternalBlockWithReceipts>;
 type BlocksToSave = Vec<Block>;
@@ -95,7 +94,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let (fetch_to_execute_tx, fetch_to_execute_rx) = async_mpsc::channel::<BlocksToExecute>(RPC_FETCHER_CHANNEL_CAPACITY);
 
     // send blocks from executor task to saver task
-    let (execute_to_save_tx, execute_to_save_rx) = mpsc::sync_channel::<BlocksToSave>(0);
+    let (execute_to_save_tx, execute_to_save_rx) = mpsc::sync_channel::<BlocksToSave>(SAVER_CHANNEL_CAPACITY);
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
@@ -232,8 +231,8 @@ fn run_external_block_executor(
 
         let instant_before_execution = Instant::now();
 
-        for blocks in Itertools::chunks(blocks.into_iter(), STORAGE_SAVER_BATCH_SIZE).into_iter() {
-            let mut executed_batch = Vec::with_capacity(STORAGE_SAVER_BATCH_SIZE);
+        for blocks in Itertools::chunks(blocks.into_iter(), SAVER_BATCH_SIZE).into_iter() {
+            let mut executed_batch = Vec::with_capacity(SAVER_BATCH_SIZE);
 
             for (mut block, receipts) in blocks {
                 if GlobalState::is_shutdown_warn(TASK_NAME) {
