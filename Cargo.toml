@@ -47,6 +47,7 @@ tokio = { version = "=1.38.0", features = [
     "macros",
     "signal",
     "tracing",
+    "tokio-console",
 ] }
 tokio-util = "=0.7.11"
 
