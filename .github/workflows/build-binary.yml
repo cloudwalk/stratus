@@ -38,7 +38,7 @@ jobs:
             rustflags: ""
           - name: profiling
             artifact_prefix: stratus-prof
-            extra_features: ",jeprof"
+            extra_features: "jeprof"
             rustflags: "-C force-frame-pointers=yes"
 
     concurrency:
@@ -69,16 +69,19 @@ jobs:
 
       - name: Build binary
         run: |
+          FEATURE_LIST="${{ github.event.inputs.features || 'default' }}"
+          if [ ! -z "${{ matrix.config.extra_features }}" ]; then
+            FEATURE_LIST="${FEATURE_LIST},${matrix.config.extra_features}"
+          fi
           cargo build --release \
             --bin stratus \
-            --features "${FEATURES}${EXTRA_FEATURES}"
-          env:
-            CARGO_PROFILE_RELEASE_DEBUG: 1
-            TRACING_LOG_FORMAT: json
-            NO_COLOR: 1
-            FEATURES: "${{ github.event.inputs.features || 'default' }}"
-            EXTRA_FEATURES: "${{ matrix.config.extra_features != '' && format(',{0}', matrix.config.extra_features) || '' }}"
-            RUSTFLAGS: "${{ matrix.config.rustflags }}"
+            --features "${FEATURE_LIST}"
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 1
+          TRACING_LOG_FORMAT: json
+          NO_COLOR: 1
+          FEATURES: "${{ github.event.inputs.features || 'default' }}"
+          RUSTFLAGS: ${{ matrix.config.rustflags }}
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
