@@ -73,12 +73,12 @@ jobs:
             --bin stratus \
             --features "${FEATURES}${EXTRA_FEATURES}"
           env:
-          CARGO_PROFILE_RELEASE_DEBUG: 1
-          TRACING_LOG_FORMAT: json
-          NO_COLOR: 1
-          FEATURES: "${{ github.event.inputs.features || 'default' }}"
-          EXTRA_FEATURES: "${{ matrix.config.extra_features != '' && format(',{0}', matrix.config.extra_features) || '' }}"
-          RUSTFLAGS: ${{ matrix.config.rustflags }}
+            CARGO_PROFILE_RELEASE_DEBUG: 1
+            TRACING_LOG_FORMAT: json
+            NO_COLOR: 1
+            FEATURES: "${{ github.event.inputs.features || 'default' }}"
+            EXTRA_FEATURES: "${{ matrix.config.extra_features != '' && format(',{0}', matrix.config.extra_features) || '' }}"
+            RUSTFLAGS: "${{ matrix.config.rustflags }}"
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
