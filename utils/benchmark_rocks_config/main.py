@@ -95,11 +95,15 @@ def main():
     config_files = list(Path(CONFIGS_FOLDER).glob("*.rs"))
 
     for config_file in sorted(config_files):
-# Delete files in the previous database
+    # Delete files in the previous database
         db_path = Path("../../data")
         if db_path.exists():
-            shutil.rmtree(db_path)
-            print("Cleared previous database")
+            for item in db_path.iterdir():
+                if item.is_file():
+                    item.unlink()
+                elif item.is_dir():
+                    shutil.rmtree(item)
+            print("Cleared previous database contents")
         db_path.mkdir(parents=True, exist_ok=True)
 
         print(f"\nTesting config: {config_file}")
