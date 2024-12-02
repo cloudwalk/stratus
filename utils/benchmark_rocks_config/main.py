@@ -35,7 +35,18 @@ def run_stratus():
     )
     print("Started stratus")
     # Give it some time to start up
-    time.sleep(10)
+    print("Waiting for stratus to start...")
+    port_open = False
+    while not port_open:
+        try:
+            result = subprocess.run(["lsof", "-i", ":3000"], capture_output=True, text=True)
+            if result.stdout:
+                port_open = True
+            else:
+                time.sleep(1)
+        except subprocess.CalledProcessError:
+            time.sleep(1)
+    print("Port 3000 is now in use, stratus has started")
     return process
 
 def start_benchmark():
