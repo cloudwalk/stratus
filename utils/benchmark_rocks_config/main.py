@@ -95,6 +95,13 @@ def main():
     config_files = list(Path(CONFIGS_FOLDER).glob("*.rs"))
 
     for config_file in sorted(config_files):
+# Delete files in the previous database
+        db_path = Path("../../data")
+        if db_path.exists():
+            shutil.rmtree(db_path)
+            print("Cleared previous database")
+        db_path.mkdir(parents=True, exist_ok=True)
+
         print(f"\nTesting config: {config_file}")
         try:
             # 1. Replace config
