@@ -21,8 +21,7 @@ use crate::eth::primitives::LogTopic;
 use crate::gen_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
-#[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(test, derive(PartialOrd, Ord))]
+#[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Address(pub H160);
 
 impl Address {
