@@ -31,7 +31,8 @@ def run_stratus():
     """Run the stratus program and return the process"""
     process = subprocess.Popen(
         ["cargo", "run", "--release", "--bin", "stratus", "--", "--leader"],
-        preexec_fn=os.setsid  # Creates a new process group
+        preexec_fn=os.setsid,  # Creates a new process group,
+        cwd="../../"
     )
     print("Started stratus")
     # Give it some time to start up
