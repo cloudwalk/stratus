@@ -21,7 +21,7 @@ def replace_config(config_file):
 def run_migration():
     """Run the database migration"""
     process = subprocess.run(
-        ["cargo", "run", "--release", "--bin", "rocks_migration", "--", "old_data/rocksdb", "data/rocksdb"],
+        ["cargo", "run", "--release", "--bin", "rocks_migration", "--", "../../old_data/rocksdb", "../../data/rocksdb"],
         env=dict(os.environ, RUST_LOG="info"),
         check=True
     )
