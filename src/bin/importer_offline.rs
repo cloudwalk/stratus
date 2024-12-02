@@ -51,8 +51,8 @@ const RPC_FETCHER_CHANNEL_CAPACITY: usize = 10;
 /// block right away, but the information from that block still needs to be
 /// found in the cache.
 ///
-/// These constants are organized to guarantee that accounts and slots can
-/// still be found in the storage cache.
+/// NOTE: The size below will only work if the cache is big enough to hold
+/// slots and accounts for this number of blocks.
 const CACHE_SIZE: usize = 10_000;
 const MAX_BLOCKS_NOT_SAVED: usize = CACHE_SIZE - 1;
 
