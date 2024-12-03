@@ -22,7 +22,7 @@ impl Default for DbConfig {
 }
 
 impl DbConfig {
-    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>, key_len: usize) -> Options {
+    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>, _key_len: usize) -> Options {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
 
