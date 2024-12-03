@@ -40,16 +40,22 @@ impl DbConfig {
             opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
         }
 
+        if let Some(prefix_len) = prefix_len {
+            let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
+            opts.set_memtable_prefix_bloom_ratio(0.02);
+            opts.set_prefix_extractor(transform);
+        }
+
+        if let CacheSetting::Enabled(cache_size) = cache_setting {
+            let cache = Cache::new_lru_cache(cache_size);
+            block_based_options.set_block_cache(&cache);
+        }
+
         match self {
             DbConfig::OptimizedPointLookUp => {
-                let transform = rocksdb::SliceTransform::create_fixed_prefix(20);
-                block_based_options.set_data_block_hash_ratio(0.3);
+                block_based_options.set_data_block_hash_ratio(0.5);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
-                //block_based_options.set_index_type(rocksdb::BlockBasedIndexType::);
-                opts.set_prefix_extractor(transform);
                 opts.set_memtable_whole_key_filtering(true);
-                // This is set because of the above
-                opts.set_memtable_prefix_bloom_ratio(0.2);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
             }
             DbConfig::Default => {
@@ -58,15 +64,6 @@ impl DbConfig {
                 opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true); // mostly defaults except max_dict_bytes
                 opts.set_bottommost_zstd_max_train_bytes(1600 * 1024, true);
             }
-        }
-
-        if let CacheSetting::Enabled(cache_size) = cache_setting {
-            let block_cache = Cache::new_lru_cache(cache_size/2);
-            let row_cache = Cache::new_lru_cache(cache_size/2);
-
-            opts.set_row_cache(&row_cache);
-            block_based_options.set_block_cache(&block_cache);
-            block_based_options.set_cache_index_and_filter_blocks(true);
         }
 
         opts.set_block_based_table_factory(&block_based_options);

@@ -91,7 +91,7 @@ def save_results(config_file, results):
     result_dir.mkdir(parents=True, exist_ok=True)
 
     # Copy config file
-    shutil.copy(config_file, result_dir / "config.rs")
+    shutil.copy(config_file, result_dir / config_file)
 
     # Save results
     with open(result_dir / "results.json", "w") as f:
