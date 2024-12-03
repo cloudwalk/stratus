@@ -93,10 +93,11 @@ def save_results(config_file: Path, results):
     result_dir.mkdir(parents=True, exist_ok=True)
 
     # Copy config file
-    shutil.copy(config_file, result_dir / config_file)
+    shutil.copy(config_file, result_dir / config_file.name)  # Use config_file.name instead of full path
 
     # Save results
-    with open(result_dir / "results.json", "w") as f:
+    result_file = result_dir / "results.json"
+    with open(str(result_file), "w") as f:  # Convert Path to string
         json.dump(results, f, indent=2)
 
     print(f"Results saved in {result_dir}")
