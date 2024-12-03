@@ -23,7 +23,8 @@ def run_migration():
     process = subprocess.run(
         ["cargo", "run", "--release", "--bin", "rocks_migration", "--", "../../old_data/rocksdb", "../../data/rocksdb"],
         env=dict(os.environ, RUST_LOG="info"),
-        check=True
+        check=True,
+        stdout=open("migration.log", "w")
     )
     print("Migration completed")
 
@@ -32,7 +33,8 @@ def run_stratus():
     process = subprocess.Popen(
         ["cargo", "run", "--release", "--bin", "stratus", "--", "--leader"],
         preexec_fn=os.setsid,  # Creates a new process group,
-        cwd="../../"
+        cwd="../../",
+        stdout=open("stratus.log", "w"),
     )
     print("Started stratus")
     # Give it some time to start up
@@ -83,7 +85,7 @@ def wait_for_benchmark():
 
         time.sleep(10)  # Poll every 10 seconds
 
-def save_results(config_file, results):
+def save_results(config_file: Path, results):
     """Save the results and config to a new directory"""
     # Create unique directory name based on timestamp
     timestamp = time.strftime("%Y%m%d_%H%M%S")
