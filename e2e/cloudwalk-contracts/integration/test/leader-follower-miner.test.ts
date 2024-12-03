@@ -124,7 +124,9 @@ describe("Miner mode change integration test", function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["automine"]);
         expect(response.data.error.code).eq(-32603);
-        expect(response.data.error.message).eq("Miner mode change to (automine) is unsupported.");
+        expect(response.data.error.message.split("\n")[0]).eq(
+            "Unexpected error: Miner mode change to 'automine' is unsupported.",
+        );
     });
 
     it("Miner change on Leader to External should fail if there are pending transactions", async function () {

@@ -13,7 +13,7 @@ Welcome to Stratus, the cutting-edge EVM executor and JSON-RPC server with custo
 Stratus is engineered for high performance, with a unique node Stratus was capable of handling:
 
 - 10k transactions per second (TPS) for reading
-- 1,8k transactions per second (TPS) for writing (custom contract operations), reaching around 32M of gas per second
+- 1,8k transactions per second (TPS) for writing (custom contract operations), reaching around 250M of gas per second
 
 We aim to reach 5k write transactions per second with a unique node and 1M in a cluster.
 
