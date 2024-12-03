@@ -1,5 +1,6 @@
 //! Ethereum / EVM storage.
 
+pub use cache::StorageCache;
 pub use permanent::InMemoryPermanentStorage;
 pub use permanent::PermanentStorage;
 pub use permanent::PermanentStorageConfig;
@@ -11,10 +12,12 @@ pub use temporary::TemporaryStorage;
 pub use temporary::TemporaryStorageConfig;
 pub use temporary::TemporaryStorageKind;
 
+mod cache;
 pub mod permanent;
 mod stratus_storage;
 mod temporary;
 
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -39,7 +42,7 @@ use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
 
-pub trait Storage: Sized {
+pub trait Storage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------
@@ -93,6 +96,22 @@ pub trait Storage: Sized {
 
     /// Translates a block filter to a specific storage point-in-time indicator.
     fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StratusError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountWithSlots {
+    pub info: Account,
+    pub slots: HashMap<SlotIndex, Slot, hash_hasher::HashBuildHasher>,
+}
+
+impl AccountWithSlots {
+    /// Creates a new temporary account.
+    fn new(address: Address) -> Self {
+        Self {
+            info: Account::new_empty(address),
+            slots: HashMap::default(),
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------

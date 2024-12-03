@@ -36,6 +36,7 @@ use tracing::Instrument;
 use tracing::Span;
 
 use super::rpc_method_wrapper::metrics_wrapper;
+use crate::alias::EthersReceipt;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
@@ -207,6 +208,9 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // gas
     module.register_method("eth_gasPrice", eth_gas_price)?;
+
+    // stratus importing helpers
+    register_blocking_method(&mut module, "stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
 
     // block
     register_blocking_method(&mut module, "eth_blockNumber", eth_block_number)?;
@@ -639,6 +643,31 @@ fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions)
     Span::with(|s| s.rec_str("block_number", &block_number));
 
     Ok(to_json_value(block_number))
+}
+
+fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!("rpc::stratus_getBlockAndReceipts").entered();
+
+    // parse params
+    let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+
+    // track
+    tracing::info!(%filter, "reading block and receipts");
+
+    let Some(block) = ctx.storage.read_block(filter)? else {
+        tracing::info!(%filter, "block not found");
+        return Ok(JsonValue::Null);
+    };
+
+    tracing::info!(%filter, "block with transactions found");
+    let receipts = block.transactions.iter().cloned().map(EthersReceipt::from).collect::<Vec<_>>();
+
+    Ok(json!({
+        "block": block.to_json_rpc_with_full_transactions(),
+        "receipts": receipts,
+    }))
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
