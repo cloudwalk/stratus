@@ -61,7 +61,7 @@ def start_benchmark():
         "http_address": "http://10.52.184.4:3000",
         "amp_step": 100,
         "ramp_interval": 1,
-        "run_duration": 600
+        "run_duration": 3600
     }
 
     response = requests.post(
