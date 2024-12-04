@@ -1,0 +1,21 @@
+{
+  "run_id": "bench-4141258073",
+  "rps_summary": {
+    "max": 2110.0,
+    "min": 229.0,
+    "average": 1287.1597337770384,
+    "std_dev": 143.14684561751704
+  },
+  "tps_summary": {
+    "max": 1655.0,
+    "min": 19.0,
+    "average": 1284.5116666666668,
+    "std_dev": 147.6963772876263
+  },
+  "revert_summary": {
+    "max": 0.0,
+    "min": 0.0,
+    "average": 0.0,
+    "std_dev": 0.0
+  }
+}
