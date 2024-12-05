@@ -2,13 +2,13 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::sync::Arc;
-use std::sync::RwLock;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use itertools::Itertools;
 use keccak_hasher::KeccakHasher;
 use parking_lot::Mutex;
+use parking_lot::RwLock;
 use tokio::sync::broadcast;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::JoinSet;
@@ -157,19 +157,11 @@ impl Miner {
     }
 
     pub fn mode(&self) -> MinerMode {
-        *self.mode.read().unwrap_or_else(|poison_error| {
-            tracing::error!("miner mode read lock was poisoned");
-            self.mode.clear_poison();
-            poison_error.into_inner()
-        })
+        *self.mode.read()
     }
 
     fn set_mode(&self, new_mode: MinerMode) {
-        *self.mode.write().unwrap_or_else(|poison_error| {
-            tracing::error!("miner mode write lock was poisoned");
-            self.mode.clear_poison();
-            poison_error.into_inner()
-        }) = new_mode;
+        *self.mode.write() = new_mode;
     }
 
     pub fn is_interval_miner_running(&self) -> bool {

@@ -5,13 +5,13 @@ use std::fmt::Debug;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::sync::RwLock;
-use std::sync::RwLockReadGuard;
-use std::sync::RwLockWriteGuard;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
 use nonempty::NonEmpty;
+use parking_lot::RwLock;
+use parking_lot::RwLockReadGuard;
+use parking_lot::RwLockWriteGuard;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -52,12 +52,12 @@ impl InMemoryPermanentStorage {
 
     /// Locks inner state for reading.
     fn lock_read(&self) -> RwLockReadGuard<'_, InMemoryPermanentStorageState> {
-        self.state.read().unwrap()
+        self.state.read()
     }
 
     /// Locks inner state for writing.
     fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryPermanentStorageState> {
-        self.state.write().unwrap()
+        self.state.write()
     }
 
     // -------------------------------------------------------------------------

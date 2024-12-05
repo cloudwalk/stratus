@@ -1,11 +1,11 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
-use std::sync::RwLock;
-use std::sync::RwLockReadGuard;
-use std::sync::RwLockWriteGuard;
 
 use nonempty::NonEmpty;
+use parking_lot::RwLock;
+use parking_lot::RwLockReadGuard;
+use parking_lot::RwLockWriteGuard;
 
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
@@ -49,12 +49,12 @@ impl InMemoryTemporaryStorage {
 
     /// Locks inner state for reading.
     pub fn lock_read(&self) -> RwLockReadGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
-        self.states.read().unwrap()
+        self.states.read()
     }
 
     /// Locks inner state for writing.
     pub fn lock_write(&self) -> RwLockWriteGuard<'_, NonEmpty<InMemoryTemporaryStorageState>> {
-        self.states.write().unwrap()
+        self.states.write()
     }
 }
 
