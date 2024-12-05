@@ -20,7 +20,9 @@ const COLUMN_FAMILIES: [&str; 7] = [
 ];
 
 pub fn main() -> Result<()> {
-    tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 3 {
@@ -61,15 +63,14 @@ pub fn main() -> Result<()> {
         }
 
         tracing::info!("Scheduling compaction for {cf_handle}");
-        dest_state.compact_range_cf(&source_cf, None, None);
+        dest_state.compact_range_cf(&source_cf, None::<[u8; 0]>, None::<[u8; 0]>);
 
         tracing::info!("Completed column family {cf_handle} with {count} entries");
     }
 
-
     let mut wait_options = WaitForCompactOptions::default();
     wait_options.set_flush(true);
-    dest_state.wait_for_compact(&wait_options);
+    dest_state.wait_for_compact(&wait_options)?;
     tracing::info!("Successfully copied all column families");
 
     Ok(())
@@ -85,7 +86,6 @@ pub fn write_in_batch(db: &DB, batch: WriteBatch) -> anyhow::Result<()> {
     tracing::debug!("writing batch");
     db.write(batch).context("failed to write batch")
 }
-
 
 // ╔═══════════════════════════════════════════════════════════════════════════╗
 // ║                                                                           ║
