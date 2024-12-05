@@ -4,6 +4,7 @@ use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
 use rocksdb::IteratorMode;
+use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
 use stratus::eth::storage::permanent::rocks::rocks_db::create_or_open_db;
@@ -59,10 +60,18 @@ pub fn main() -> Result<()> {
             write_in_batch(&dest_state, batch)?;
         }
 
+        tracing::info!("Scheduling compaction for {cf_handle}");
+        dest_state.compact_range_cf(&source_cf, None, None);
+
         tracing::info!("Completed column family {cf_handle} with {count} entries");
     }
 
+
+    let mut wait_options = WaitForCompactOptions::default();
+    wait_options.set_flush(true);
+    dest_state.wait_for_compact(&wait_options);
     tracing::info!("Successfully copied all column families");
+
     Ok(())
 }
 
