@@ -104,7 +104,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         // check conflicts
         let mut states = self.lock_write();
         if let TransactionExecution::Local(tx) = &tx {
-            let expected_input = EvmInput::from_eth_transaction(tx.input.clone(), states.head.block.header.clone());
+            let expected_input = EvmInput::from_eth_transaction(&tx.input, &states.head.block.header);
 
             if expected_input != tx.evm_input {
                 return Err(StratusError::TransactionEvmInputMismatch {

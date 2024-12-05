@@ -82,12 +82,12 @@ pub struct EvmInput {
 
 impl EvmInput {
     /// Creates from a transaction that was sent directly to Stratus with `eth_sendRawTransaction`.
-    pub fn from_eth_transaction(input: TransactionInput, pending_header: PendingBlockHeader) -> Self {
+    pub fn from_eth_transaction(input: &TransactionInput, pending_header: &PendingBlockHeader) -> Self {
         Self {
             from: input.signer,
             to: input.to,
             value: input.value,
-            data: input.input,
+            data: input.input.clone(),
             gas_limit: Gas::MAX,
             gas_price: Wei::ZERO,
             nonce: Some(input.nonce),
