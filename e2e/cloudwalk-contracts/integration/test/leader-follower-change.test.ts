@@ -3,7 +3,7 @@ import { expect } from "chai";
 import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
 
 describe("Leader & Follower change integration test", function () {
-    it("Validate initial Leader state and health", async function () {
+    it("Validate initial Leader state, health and version", async function () {
         updateProviderUrl("stratus");
         const leaderNode = await sendWithRetry("stratus_state", []);
         expect(leaderNode.is_importer_shutdown).to.equal(true);
@@ -13,9 +13,13 @@ describe("Leader & Follower change integration test", function () {
         expect(leaderNode.transactions_enabled).to.equal(true);
         const leaderHealth = await sendWithRetry("stratus_health", []);
         expect(leaderHealth).to.equal(true);
+        const version = await sendWithRetry("stratus_version", []);
+        expect(version).to.have.nested.property('git.commit');
+        expect(version.git.commit).to.be.a('string');
+        expect(version.git.commit).to.have.lengthOf(7);
     });
 
-    it("Validate initial Follower state and health", async function () {
+    it("Validate initial Follower state, health and version", async function () {
         updateProviderUrl("stratus-follower");
         const followerNode = await sendWithRetry("stratus_state", []);
         expect(followerNode.is_importer_shutdown).to.equal(false);
@@ -25,6 +29,10 @@ describe("Leader & Follower change integration test", function () {
         expect(followerNode.transactions_enabled).to.equal(true);
         const followerHealth = await sendWithRetry("stratus_health", []);
         expect(followerHealth).to.equal(true);
+        const version = await sendWithRetry("stratus_version", []);
+        expect(version).to.have.nested.property('git.commit');
+        expect(version.git.commit).to.be.a('string');
+        expect(version.git.commit).to.have.lengthOf(7);
     });
 
     it("Change Leader to Leader should return false", async function () {
