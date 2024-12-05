@@ -62,15 +62,13 @@ pub fn main() -> Result<()> {
             write_in_batch(&dest_state, batch)?;
         }
 
-        tracing::info!("Scheduling compaction for {cf_handle}");
-        dest_state.compact_range_cf(&dest_cf, None::<[u8; 0]>, None::<[u8; 0]>);
-        let mut wait_options = WaitForCompactOptions::default();
-        wait_options.set_flush(true);
-        dest_state.wait_for_compact(&wait_options)?;
-
         tracing::info!("Completed column family {cf_handle} with {count} entries");
     }
 
+    tracing::info!("Waiting for compactions");
+    let mut wait_options = WaitForCompactOptions::default();
+    wait_options.set_flush(true);
+    dest_state.wait_for_compact(&wait_options)?;
     tracing::info!("Successfully copied all column families");
 
     Ok(())
