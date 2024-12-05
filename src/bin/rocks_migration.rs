@@ -63,7 +63,7 @@ pub fn main() -> Result<()> {
         }
 
         tracing::info!("Scheduling compaction for {cf_handle}");
-        dest_state.compact_range_cf(&source_cf, None::<[u8; 0]>, None::<[u8; 0]>);
+        dest_state.compact_range_cf(&dest_cf, None::<[u8; 0]>, None::<[u8; 0]>);
 
         tracing::info!("Completed column family {cf_handle} with {count} entries");
     }
