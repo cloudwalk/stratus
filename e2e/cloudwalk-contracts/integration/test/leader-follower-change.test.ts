@@ -14,8 +14,8 @@ describe("Leader & Follower change integration test", function () {
         const leaderHealth = await sendWithRetry("stratus_health", []);
         expect(leaderHealth).to.equal(true);
         const version = await sendWithRetry("stratus_version", []);
-        expect(version).to.have.nested.property('git.commit');
-        expect(version.git.commit).to.be.a('string');
+        expect(version).to.have.nested.property("git.commit");
+        expect(version.git.commit).to.be.a("string");
         expect(version.git.commit).to.have.lengthOf(7);
     });
 
@@ -30,8 +30,8 @@ describe("Leader & Follower change integration test", function () {
         const followerHealth = await sendWithRetry("stratus_health", []);
         expect(followerHealth).to.equal(true);
         const version = await sendWithRetry("stratus_version", []);
-        expect(version).to.have.nested.property('git.commit');
-        expect(version.git.commit).to.be.a('string');
+        expect(version).to.have.nested.property("git.commit");
+        expect(version.git.commit).to.be.a("string");
         expect(version.git.commit).to.have.lengthOf(7);
     });
 
