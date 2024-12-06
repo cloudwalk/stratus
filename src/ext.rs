@@ -2,8 +2,6 @@
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::sync::Mutex;
-use std::sync::MutexGuard;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -173,20 +171,6 @@ impl<T> MutexResultExt<T> for Result<T, std::sync::PoisonError<T>> {
             .inspect_err(|err| {
                 tracing::error!(reason = ?err, "FATAL: Mutex is poisoned");
             })
-    }
-}
-
-pub trait MutexExt<T> {
-    fn lock_or_clear<'a>(&'a self, error_context: &str) -> MutexGuard<'a, T>;
-}
-
-impl<T> MutexExt<T> for Mutex<T> {
-    fn lock_or_clear<'a>(&'a self, error_context: &str) -> MutexGuard<'a, T> {
-        self.lock().unwrap_or_else(|poison_err| {
-            tracing::error!(error_context, "fatal: failed to lock mutex");
-            self.clear_poison();
-            poison_err.into_inner()
-        })
     }
 }
 

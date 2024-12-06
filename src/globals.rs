@@ -1,11 +1,11 @@
 use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::Mutex;
 
 use chrono::DateTime;
 use chrono::Utc;
 use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use sentry::ClientInitGuard;
 use serde::Deserialize;
 use serde::Serialize;
@@ -22,7 +22,6 @@ use crate::eth::follower::importer::Importer;
 use crate::eth::rpc::RpcContext;
 use crate::ext::not;
 use crate::ext::spawn_signal_handler;
-use crate::ext::MutexExt;
 use crate::infra::tracing::warn_task_cancellation;
 
 // -----------------------------------------------------------------------------
@@ -262,11 +261,11 @@ impl GlobalState {
     }
 
     pub fn set_node_mode(mode: NodeMode) {
-        *NODE_MODE.lock_or_clear("set_node_mode") = mode;
+        *NODE_MODE.lock() = mode;
     }
 
     pub fn get_node_mode() -> NodeMode {
-        *NODE_MODE.lock_or_clear("get_node_mode")
+        *NODE_MODE.lock()
     }
 
     // -------------------------------------------------------------------------

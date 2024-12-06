@@ -2,10 +2,10 @@ use std::cmp::max;
 use std::mem;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use anyhow::anyhow;
 use cfg_if::cfg_if;
+use parking_lot::Mutex;
 use tracing::info_span;
 use tracing::Span;
 
@@ -35,7 +35,6 @@ use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
-use crate::ext::MutexExt;
 #[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
@@ -399,7 +398,7 @@ impl Executor {
             // * Conflict detection runs, but it should never trigger because of the Mutex.
             ExecutorStrategy::Serial => {
                 // acquire serial execution lock
-                let _serial_lock = self.locks.serial.lock_or_clear("executor serial lock was poisoned");
+                let _serial_lock = self.locks.serial.lock();
 
                 // execute transaction
                 self.execute_local_transaction_attempts(tx, EvmRoute::Serial, INFINITE_ATTEMPTS)

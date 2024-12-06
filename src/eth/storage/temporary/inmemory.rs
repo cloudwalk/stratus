@@ -1,7 +1,8 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
-use std::sync::RwLock;
+
+use parking_lot::RwLock;
 
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
@@ -111,7 +112,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     // Uneeded clone here, return Cow
     fn read_pending_block_header(&self) -> PendingBlockHeader {
-        self.pending_block.read().unwrap().block.header.clone()
+        self.pending_block.read().block.header.clone()
     }
 
     // -------------------------------------------------------------------------
@@ -120,7 +121,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // check conflicts
-        let mut pending_block = self.pending_block.write().unwrap();
+        let mut pending_block = self.pending_block.write();
         if let TransactionExecution::Local(tx) = &tx {
             let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
 
@@ -174,11 +175,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     fn read_pending_executions(&self) -> Vec<TransactionExecution> {
-        self.pending_block.read().unwrap().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
+        self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
-        let mut pending_block = self.pending_block.write().unwrap();
+        let mut pending_block = self.pending_block.write();
 
         #[cfg(feature = "dev")]
         let mut finished_block = pending_block.block.clone();
@@ -194,7 +195,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
             }
         }
 
-        let mut latest = self.latest_block.write().unwrap();
+        let mut latest = self.latest_block.write();
         *latest = Some(std::mem::replace(
             &mut *pending_block,
             InMemoryTemporaryStorageState::new(finished_block.header.number.next_block_number()),
@@ -204,7 +205,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>> {
-        let pending_block = self.pending_block.read().unwrap();
+        let pending_block = self.pending_block.read();
         match pending_block.block.transactions.get(&hash) {
             Some(tx) => Ok(Some(tx.clone())),
             None => Ok(None),
@@ -216,12 +217,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
 
     fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>> {
-        Ok(match self.pending_block.read().unwrap().accounts.get(&address) {
+        Ok(match self.pending_block.read().accounts.get(&address) {
             Some(pending_account) => Some(pending_account.info.clone()),
             None => self
                 .latest_block
                 .read()
-                .unwrap()
                 .as_ref()
                 .and_then(|latest| latest.accounts.get(&address))
                 .map(|account| account.info.clone()),
@@ -230,19 +230,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>> {
         Ok(
-            match self
-                .pending_block
-                .read()
-                .unwrap()
-                .accounts
-                .get(&address)
-                .and_then(|account| account.slots.get(&index))
-            {
+            match self.pending_block.read().accounts.get(&address).and_then(|account| account.slots.get(&index)) {
                 Some(pending_slot) => Some(*pending_slot),
                 None => self
                     .latest_block
                     .read()
-                    .unwrap()
                     .as_ref()
                     .and_then(|latest| latest.accounts.get(&address).and_then(|account| account.slots.get(&index)))
                     .copied(),
@@ -254,8 +246,8 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Global state
     // -------------------------------------------------------------------------
     fn reset(&self) -> anyhow::Result<()> {
-        self.pending_block.write().unwrap().reset();
-        *self.latest_block.write().unwrap() = None;
+        self.pending_block.write().reset();
+        *self.latest_block.write() = None;
         Ok(())
     }
 }
