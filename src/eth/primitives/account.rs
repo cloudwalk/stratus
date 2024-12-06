@@ -8,7 +8,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
-use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
 ///
@@ -93,7 +92,7 @@ impl From<&Account> for RevmAccountInfo {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
             code_hash: value.code_hash.0 .0.into(),
-            code: value.bytecode.as_ref().cloned().map_into(),
+            code: value.bytecode.as_ref().cloned(),
         }
     }
 }
