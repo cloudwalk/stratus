@@ -22,6 +22,7 @@ mod transaction_input;
 mod transaction_mined;
 mod unix_time;
 mod wei;
+mod bytecode;
 
 pub use account::AccountRocksdb;
 pub use address::AddressRocksdb;

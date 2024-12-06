@@ -1061,7 +1061,7 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> R
     let point_in_time = ctx.storage.translate_to_point_in_time(filter)?;
     let account = ctx.storage.read_account(address, point_in_time)?;
 
-    Ok(account.bytecode.map(hex_data).unwrap_or_else(hex_null))
+    Ok(account.bytecode.map(|bytecode| hex_data(bytecode.original_bytes())).unwrap_or_else(hex_null))
 }
 
 // -----------------------------------------------------------------------------
