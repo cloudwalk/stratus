@@ -71,7 +71,8 @@ impl From<BlockRocksdb> for Block {
         let transactions = item
             .transactions
             .into_iter()
-            .map(|tx| TransactionMined::from_rocks_primitives(tx, header.number.into(), header.hash.into()))
+            .enumerate()
+            .map(|(index, tx)| TransactionMined::from_rocks_primitives(tx, header.number.into(), header.hash.into(), index))
             .collect();
         Block { header, transactions }
     }

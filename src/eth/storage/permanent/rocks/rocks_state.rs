@@ -261,12 +261,17 @@ impl RocksStorageState {
         };
         let block = block.into_inner();
 
-        let transaction = block.transactions.into_iter().find(|tx| Hash::from(tx.input.hash) == tx_hash);
+        let transaction = block.transactions.into_iter().enumerate().find(|(_, tx)| Hash::from(tx.input.hash) == tx_hash);
 
         match transaction {
-            Some(tx) => {
+            Some((index, tx)) => {
                 tracing::trace!(%tx_hash, "transaction found");
-                Ok(Some(TransactionMined::from_rocks_primitives(tx, block_number.into_inner(), block.header.hash)))
+                Ok(Some(TransactionMined::from_rocks_primitives(
+                    tx,
+                    block_number.into_inner(),
+                    block.header.hash,
+                    index,
+                )))
             }
             None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
                 .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),

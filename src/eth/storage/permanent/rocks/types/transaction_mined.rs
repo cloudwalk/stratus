@@ -3,9 +3,9 @@ use std::fmt::Debug;
 use super::block_number::BlockNumberRocksdb;
 use super::execution::ExecutionRocksdb;
 use super::hash::HashRocksdb;
-use super::index::IndexRocksdb;
 use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionMined;
 
@@ -14,7 +14,6 @@ pub struct TransactionMinedRocksdb {
     pub input: TransactionInputRocksdb,
     pub execution: ExecutionRocksdb,
     pub logs: Vec<LogMinedRocksdb>,
-    pub transaction_index: IndexRocksdb,
 }
 
 impl From<TransactionMined> for TransactionMinedRocksdb {
@@ -23,13 +22,12 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
             input: item.input.into(),
             execution: item.execution.into(),
             logs: item.logs.into_iter().map(LogMinedRocksdb::from).collect(),
-            transaction_index: IndexRocksdb::from(item.transaction_index),
         }
     }
 }
 
 impl TransactionMined {
-    pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb) -> Self {
+    pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb, index: usize) -> Self {
         Self {
             block_number: block_number.into(),
             block_hash: block_hash.into(),
@@ -40,7 +38,7 @@ impl TransactionMined {
                 .into_iter()
                 .map(|log| LogMined::from_rocks_primitives(log, block_number, block_hash))
                 .collect(),
-            transaction_index: other.transaction_index.into(),
+            transaction_index: Index::from(index as u64),
         }
     }
 }

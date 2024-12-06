@@ -27,8 +27,9 @@ fn transaction_mined_rocks_db_to_events(
     tx: TransactionMinedRocksdb,
     block_number: BlockNumberRocksdb,
     block_hash: HashRocksdb,
+    index: usize,
 ) -> Vec<AccountTransfers> {
-    let tx = TransactionMined::from_rocks_primitives(tx, block_number, block_hash);
+    let tx = TransactionMined::from_rocks_primitives(tx, block_number, block_hash, index);
     transaction_to_events(block_timestamp.into(), Cow::Owned(tx))
 }
 
@@ -82,7 +83,8 @@ fn process_block_events(block: BlockRocksdb) -> Vec<String> {
     block
         .transactions
         .into_iter()
-        .flat_map(|tx| transaction_mined_rocks_db_to_events(timestamp, tx, block.header.number, block.header.hash))
+        .enumerate()
+        .flat_map(|(index, tx)| transaction_mined_rocks_db_to_events(timestamp, tx, block.header.number, block.header.hash, index))
         .map(|event| event.event_payload().unwrap())
         .collect()
 }
