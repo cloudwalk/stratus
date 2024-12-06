@@ -292,12 +292,12 @@ impl RocksStorageState {
                 break;
             }
 
+            let block = block.into_inner();
             let logs = block
-                .into_inner()
                 .transactions
                 .into_iter()
                 .flat_map(|transaction| transaction.logs)
-                .map(LogMined::from);
+                .map(|log| LogMined::from_rocks_primitives(log, block.header.number, block.header.hash));
 
             let filtered_logs = logs.filter(|log| filter.matches(log));
             logs_result.extend(filtered_logs);
