@@ -27,19 +27,20 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
 }
 
 impl TransactionMined {
-    pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb, index: usize) -> Self {
+    pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb, tx_index: usize) -> Self {
+        let logs = other
+            .logs
+            .into_iter()
+            .enumerate()
+            .map(|(log_index, log)| LogMined::from_rocks_primitives(log, block_number, block_hash, tx_index, other.input.hash, log_index))
+            .collect();
         Self {
             block_number: block_number.into(),
             block_hash: block_hash.into(),
             input: other.input.into(),
             execution: other.execution.into(),
-            logs: other
-                .logs
-                .into_iter()
-                .enumerate()
-                .map(|(log_index, log)| LogMined::from_rocks_primitives(log, block_number, block_hash, log_index))
-                .collect(),
-            transaction_index: Index::from(index as u64),
+            logs,
+            transaction_index: Index::from(tx_index as u64),
         }
     }
 }
