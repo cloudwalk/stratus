@@ -216,31 +216,38 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
 
     fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>> {
-        Ok(self
-            .pending_block
-            .read()
-            .unwrap()
-            .accounts
-            .get(&address)
-            .or(self.latest_block.read().unwrap().as_ref().and_then(|latest| latest.accounts.get(&address)))
-            .map(|account| account.info.clone()))
-    }
-
-    fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>> {
-        Ok(self
-            .pending_block
-            .read()
-            .unwrap()
-            .accounts
-            .get(&address)
-            .and_then(|account| account.slots.get(&index))
-            .or(self
+        Ok(match self.pending_block.read().unwrap().accounts.get(&address) {
+            Some(pending_account) => Some(pending_account.info.clone()),
+            None => self
                 .latest_block
                 .read()
                 .unwrap()
                 .as_ref()
-                .and_then(|latest| latest.accounts.get(&address).and_then(|account| account.slots.get(&index))))
-            .copied())
+                .and_then(|latest| latest.accounts.get(&address))
+                .map(|account| account.info.clone()),
+        })
+    }
+
+    fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>> {
+        Ok(
+            match self
+                .pending_block
+                .read()
+                .unwrap()
+                .accounts
+                .get(&address)
+                .and_then(|account| account.slots.get(&index))
+            {
+                Some(pending_slot) => Some(*pending_slot),
+                None => self
+                    .latest_block
+                    .read()
+                    .unwrap()
+                    .as_ref()
+                    .and_then(|latest| latest.accounts.get(&address).and_then(|account| account.slots.get(&index)))
+                    .copied(),
+            },
+        )
     }
 
     // -------------------------------------------------------------------------
