@@ -5,6 +5,12 @@ use crate::eth::primitives::Index;
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_more::Add, Copy, Hash, fake::Dummy)]
 pub struct IndexRocksdb(pub(self) u32);
 
+impl IndexRocksdb {
+    pub fn as_usize(&self) -> usize {
+        self.0 as usize
+    }
+}
+
 impl From<Index> for IndexRocksdb {
     fn from(item: Index) -> Self {
         IndexRocksdb(item.0 as u32)
