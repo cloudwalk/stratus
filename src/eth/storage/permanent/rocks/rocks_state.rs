@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -187,10 +187,10 @@ impl RocksStorageState {
         self.db_path.rsplit('/').next().unwrap_or(&self.db_path)
     }
 
-    pub fn preload_block_number(&self) -> Result<AtomicU64> {
-        let block_number = self.blocks_by_number.last_key()?.unwrap_or_default();
+    pub fn preload_block_number(&self) -> Result<AtomicU32> {
+        let block_number = self.blocks_by_number.last_key()?.unwrap_or_default().0;
         tracing::info!(%block_number, "preloaded block_number");
-        Ok((u64::from(block_number)).into())
+        Ok(AtomicU32::new(block_number))
     }
 
     #[cfg(feature = "dev")]
@@ -407,7 +407,7 @@ impl RocksStorageState {
         self.accounts_history.prepare_batch_insertion(
             accounts.iter().cloned().map(|acc| {
                 let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
-                ((tup.0, 0u64.into()), tup.1.into())
+                ((tup.0, 0u32.into()), tup.1.into())
             }),
             &mut write_batch,
         )?;
