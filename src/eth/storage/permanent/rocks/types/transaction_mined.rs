@@ -35,7 +35,11 @@ impl TransactionMined {
             block_hash: block_hash.into(),
             input: other.input.into(),
             execution: other.execution.into(),
-            logs: other.logs.into_iter().map(LogMined::from).collect(),
+            logs: other
+                .logs
+                .into_iter()
+                .map(|log| LogMined::from_rocks_primitives(log, block_number, block_hash))
+                .collect(),
             transaction_index: other.transaction_index.into(),
         }
     }

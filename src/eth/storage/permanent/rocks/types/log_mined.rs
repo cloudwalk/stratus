@@ -12,8 +12,6 @@ pub struct LogMinedRocksdb {
     pub transaction_hash: HashRocksdb,
     pub transaction_index: IndexRocksdb,
     pub log_index: IndexRocksdb,
-    pub block_number: BlockNumberRocksdb,
-    pub block_hash: HashRocksdb,
 }
 
 impl From<LogMined> for LogMinedRocksdb {
@@ -23,21 +21,19 @@ impl From<LogMined> for LogMinedRocksdb {
             transaction_hash: item.transaction_hash.into(),
             transaction_index: item.transaction_index.into(),
             log_index: item.log_index.into(),
-            block_number: item.block_number.into(),
-            block_hash: item.block_hash.into(),
         }
     }
 }
 
-impl From<LogMinedRocksdb> for LogMined {
-    fn from(item: LogMinedRocksdb) -> Self {
+impl LogMined {
+    pub fn from_rocks_primitives(other: LogMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb) -> Self {
         Self {
-            log: item.log.into(),
-            transaction_hash: item.transaction_hash.into(),
-            transaction_index: item.transaction_index.into(),
-            log_index: item.log_index.into(),
-            block_number: item.block_number.into(),
-            block_hash: item.block_hash.into(),
+            block_number: block_number.into(),
+            block_hash: block_hash.into(),
+            log: other.log.into(),
+            transaction_hash: other.transaction_hash.into(),
+            transaction_index: other.transaction_index.into(),
+            log_index: other.log_index.into(),
         }
     }
 }
