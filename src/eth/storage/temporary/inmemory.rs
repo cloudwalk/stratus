@@ -1,9 +1,8 @@
 //! In-memory storage implementations.
 
 use std::collections::HashMap;
-use nonempty::NonEmpty;
-use parking_lot::RwLock;
 
+use parking_lot::RwLock;
 
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
@@ -231,13 +230,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>> {
         Ok(
-            match self
-                .pending_block
-                .read()
-                .accounts
-                .get(&address)
-                .and_then(|account| account.slots.get(&index))
-            {
+            match self.pending_block.read().accounts.get(&address).and_then(|account| account.slots.get(&index)) {
                 Some(pending_slot) => Some(*pending_slot),
                 None => self
                     .latest_block
