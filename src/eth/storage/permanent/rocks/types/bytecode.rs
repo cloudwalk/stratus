@@ -1,6 +1,7 @@
 use std::ops::Deref;
 
-use revm::primitives::{eof::TypesSection, Bytecode};
+use revm::primitives::eof::TypesSection;
+use revm::primitives::Bytecode;
 
 use super::bytes::BytesRocksdb;
 

@@ -72,7 +72,7 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
     fn from(value: (RevmAddress, RevmAccountInfo)) -> Self {
         let (address, info) = value;
 
-        let code = if let Some(code) = info.code { Some(to_analysed(code)) } else { None };
+        let code = info.code.map(to_analysed);
         Self {
             address: address.into(),
             nonce: info.nonce.into(),
