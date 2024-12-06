@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -6,7 +7,10 @@ use chrono::TimeZone;
 use chrono::Timelike;
 use indicatif::ProgressBar;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
+use stratus::eth::primitives::TransactionMined;
+use stratus::eth::storage::permanent::rocks::types::BlockNumberRocksdb;
 use stratus::eth::storage::permanent::rocks::types::BlockRocksdb;
+use stratus::eth::storage::permanent::rocks::types::HashRocksdb;
 use stratus::eth::storage::permanent::rocks::types::TransactionMinedRocksdb;
 use stratus::eth::storage::permanent::rocks::types::UnixTimeRocksdb;
 use stratus::eth::storage::permanent::rocks::RocksStorageState;
@@ -18,8 +22,14 @@ use stratus::ledger::events::Event;
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Converts a mined transaction from RocksDB to account transfer events
-fn transaction_mined_rocks_db_to_events(block_timestamp: UnixTimeRocksdb, tx: TransactionMinedRocksdb) -> Vec<AccountTransfers> {
-    transaction_to_events(block_timestamp.into(), std::borrow::Cow::Owned(tx.into()))
+fn transaction_mined_rocks_db_to_events(
+    block_timestamp: UnixTimeRocksdb,
+    tx: TransactionMinedRocksdb,
+    block_number: BlockNumberRocksdb,
+    block_hash: HashRocksdb,
+) -> Vec<AccountTransfers> {
+    let tx = TransactionMined::from_rocks_primitives(tx, block_number, block_hash);
+    transaction_to_events(block_timestamp.into(), Cow::Owned(tx))
 }
 
 /// Returns total count of blocks and transactions from RocksDB state
@@ -72,7 +82,7 @@ fn process_block_events(block: BlockRocksdb) -> Vec<String> {
     block
         .transactions
         .into_iter()
-        .flat_map(|tx| transaction_mined_rocks_db_to_events(timestamp, tx))
+        .flat_map(|tx| transaction_mined_rocks_db_to_events(timestamp, tx, block.header.number, block.header.hash))
         .map(|event| event.event_payload().unwrap())
         .collect()
 }
