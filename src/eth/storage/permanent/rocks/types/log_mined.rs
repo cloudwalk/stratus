@@ -7,7 +7,7 @@ use super::log::LogRocksdb;
 use crate::eth::primitives::LogMined;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
-pub struct LogMinedRockdb {
+pub struct LogMinedRocksdb {
     pub log: LogRocksdb,
     pub transaction_hash: HashRocksdb,
     pub transaction_index: IndexRocksdb,
@@ -16,7 +16,7 @@ pub struct LogMinedRockdb {
     pub block_hash: HashRocksdb,
 }
 
-impl From<LogMined> for LogMinedRockdb {
+impl From<LogMined> for LogMinedRocksdb {
     fn from(item: LogMined) -> Self {
         Self {
             log: item.log.into(),
@@ -29,8 +29,8 @@ impl From<LogMined> for LogMinedRockdb {
     }
 }
 
-impl From<LogMinedRockdb> for LogMined {
-    fn from(item: LogMinedRockdb) -> Self {
+impl From<LogMinedRocksdb> for LogMined {
+    fn from(item: LogMinedRocksdb) -> Self {
         Self {
             log: item.log.into(),
             transaction_hash: item.transaction_hash.into(),
