@@ -15,8 +15,6 @@ pub struct TransactionMinedRocksdb {
     pub execution: ExecutionRocksdb,
     pub logs: Vec<LogMinedRocksdb>,
     pub transaction_index: IndexRocksdb,
-    pub block_number: BlockNumberRocksdb,
-    pub block_hash: HashRocksdb,
 }
 
 impl From<TransactionMined> for TransactionMinedRocksdb {
@@ -26,21 +24,19 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
             execution: item.execution.into(),
             logs: item.logs.into_iter().map(LogMinedRocksdb::from).collect(),
             transaction_index: IndexRocksdb::from(item.transaction_index),
-            block_number: BlockNumberRocksdb::from(item.block_number),
-            block_hash: HashRocksdb::from(item.block_hash),
         }
     }
 }
 
-impl From<TransactionMinedRocksdb> for TransactionMined {
-    fn from(item: TransactionMinedRocksdb) -> Self {
+impl TransactionMined {
+    pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb) -> Self {
         Self {
-            input: item.input.into(),
-            execution: item.execution.into(),
-            logs: item.logs.into_iter().map(LogMined::from).collect(),
-            transaction_index: item.transaction_index.into(),
-            block_number: item.block_number.into(),
-            block_hash: item.block_hash.into(),
+            block_number: block_number.into(),
+            block_hash: block_hash.into(),
+            input: other.input.into(),
+            execution: other.execution.into(),
+            logs: other.logs.into_iter().map(LogMined::from).collect(),
+            transaction_index: other.transaction_index.into(),
         }
     }
 }
