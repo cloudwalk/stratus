@@ -12,13 +12,13 @@ use std::sync::RwLockWriteGuard;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use nonempty::NonEmpty;
+use revm::primitives::Bytecode;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
@@ -255,7 +255,7 @@ struct InMemoryPermanentAccount {
     pub address: Address,
     pub balance: InMemoryHistory<Wei>,
     pub nonce: InMemoryHistory<Nonce>,
-    pub bytecode: InMemoryHistory<Option<Bytes>>,
+    pub bytecode: InMemoryHistory<Option<Bytecode>>,
     pub code_hash: InMemoryHistory<CodeHash>,
     pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>, hash_hasher::HashBuildHasher>,
 }
