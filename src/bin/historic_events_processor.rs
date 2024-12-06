@@ -87,13 +87,13 @@ fn main() -> Result<(), anyhow::Error> {
     // Load last processed block number from file
     tracing::info!("loading last processed block");
     let start_block = std::fs::read_to_string("last_processed_block")
-        .map(|s| s.trim().parse::<u64>().unwrap())
+        .map(|s| s.trim().parse::<u32>().unwrap())
         .unwrap_or(0);
     tracing::info!(?start_block);
 
     tracing::info!("creating rocksdb iterator");
     let iter = if start_block > 0 {
-        b_pb.inc(start_block);
+        b_pb.inc(start_block.into());
         state.blocks_by_number.iter_from(start_block.into(), rocksdb::Direction::Forward)?
     } else {
         state.blocks_by_number.iter_start()

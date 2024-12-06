@@ -30,7 +30,6 @@ use crate::ext::traced_sleep;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
-use crate::if_else;
 use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -62,9 +61,8 @@ static EXTERNAL_RPC_CURRENT_BLOCK: AtomicU64 = AtomicU64::new(0);
 
 /// Only sets the external RPC current block number if it is equals or greater than the current one.
 fn set_external_rpc_current_block(new_number: BlockNumber) {
-    let new_number_u64 = new_number.as_u64();
     let _ = EXTERNAL_RPC_CURRENT_BLOCK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
-        if_else!(new_number_u64 >= current_number, Some(new_number_u64), None)
+        Some(current_number.max(new_number.as_u64()))
     });
 }
 
