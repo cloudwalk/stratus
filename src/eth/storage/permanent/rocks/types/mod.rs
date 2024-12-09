@@ -3,6 +3,7 @@ mod address;
 mod block;
 mod block_header;
 mod block_number;
+mod bytecode;
 mod bytes;
 mod chain_id;
 mod difficulty;
