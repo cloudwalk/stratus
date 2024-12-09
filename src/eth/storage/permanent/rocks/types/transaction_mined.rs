@@ -3,9 +3,9 @@ use std::fmt::Debug;
 use super::block_number::BlockNumberRocksdb;
 use super::execution::ExecutionRocksdb;
 use super::hash::HashRocksdb;
-use super::index::IndexRocksdb;
-use super::log_mined::LogMinedRockdb;
+use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionMined;
 
@@ -13,10 +13,7 @@ use crate::eth::primitives::TransactionMined;
 pub struct TransactionMinedRocksdb {
     pub input: TransactionInputRocksdb,
     pub execution: ExecutionRocksdb,
-    pub logs: Vec<LogMinedRockdb>,
-    pub transaction_index: IndexRocksdb,
-    pub block_number: BlockNumberRocksdb,
-    pub block_hash: HashRocksdb,
+    pub logs: Vec<LogMinedRocksdb>,
 }
 
 impl From<TransactionMined> for TransactionMinedRocksdb {
@@ -24,23 +21,26 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
         Self {
             input: item.input.into(),
             execution: item.execution.into(),
-            logs: item.logs.into_iter().map(LogMinedRockdb::from).collect(),
-            transaction_index: IndexRocksdb::from(item.transaction_index),
-            block_number: BlockNumberRocksdb::from(item.block_number),
-            block_hash: HashRocksdb::from(item.block_hash),
+            logs: item.logs.into_iter().map(LogMinedRocksdb::from).collect(),
         }
     }
 }
 
-impl From<TransactionMinedRocksdb> for TransactionMined {
-    fn from(item: TransactionMinedRocksdb) -> Self {
+impl TransactionMined {
+    pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb, tx_index: usize) -> Self {
+        let logs = other
+            .logs
+            .into_iter()
+            .enumerate()
+            .map(|(log_index, log)| LogMined::from_rocks_primitives(log, block_number, block_hash, tx_index, other.input.hash, log_index))
+            .collect();
         Self {
-            input: item.input.into(),
-            execution: item.execution.into(),
-            logs: item.logs.into_iter().map(LogMined::from).collect(),
-            transaction_index: item.transaction_index.into(),
-            block_number: item.block_number.into(),
-            block_hash: item.block_hash.into(),
+            block_number: block_number.into(),
+            block_hash: block_hash.into(),
+            input: other.input.into(),
+            execution: other.execution.into(),
+            logs,
+            transaction_index: Index::from(tx_index as u64),
         }
     }
 }
