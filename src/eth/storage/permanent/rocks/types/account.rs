@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use revm::primitives::KECCAK_EMPTY;
 
 use super::address::AddressRocksdb;
-use super::bytes::BytesRocksdb;
+use super::bytecode::BytecodeRocksdb;
 use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
 use crate::eth::primitives::Account;
@@ -14,7 +14,7 @@ use crate::ext::OptionExt;
 pub struct AccountRocksdb {
     pub balance: WeiRocksdb,
     pub nonce: NonceRocksdb,
-    pub bytecode: Option<BytesRocksdb>,
+    pub bytecode: Option<BytecodeRocksdb>,
 }
 
 impl AccountRocksdb {
