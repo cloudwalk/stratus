@@ -62,12 +62,6 @@ impl From<EthersBytes> for Bytes {
     }
 }
 
-impl From<RevmBytecode> for Bytes {
-    fn from(value: RevmBytecode) -> Self {
-        Self(value.bytecode().clone().into())
-    }
-}
-
 impl From<RevmBytes> for Bytes {
     fn from(value: RevmBytes) -> Self {
         Self(value.0.into())
