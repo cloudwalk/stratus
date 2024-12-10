@@ -223,13 +223,6 @@ impl Miner {
         Ok(())
     }
 
-    /// Same as [`Self::mine_external`], but automatically commits the block instead of returning it.
-    pub fn mine_external_and_commit(&self, external_block: ExternalBlock) -> anyhow::Result<()> {
-        let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
-
-        let block = self.mine_external(external_block)?;
-        self.commit(block)
-    }
 
     /// Mines external block and external transactions.
     ///
