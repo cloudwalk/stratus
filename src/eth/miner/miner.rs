@@ -223,7 +223,6 @@ impl Miner {
         Ok(())
     }
 
-
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
