@@ -190,17 +190,9 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         drop(pending_block);
 
         #[cfg(feature = "dev")]
-        let mut finished_block = latest
-            .as_ref()
-            .expect("latest should be Some after finishing the pending block")
-            .block
-            .clone();
+        let mut finished_block = latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone();
         #[cfg(not(feature = "dev"))]
-        let finished_block = latest
-            .as_ref()
-            .expect("latest should be Some after finishing the pending block")
-            .block
-            .clone();
+        let finished_block = latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone();
 
         #[cfg(feature = "dev")]
         {
