@@ -21,7 +21,7 @@ impl Default for DbConfig {
 }
 
 impl DbConfig {
-    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>, _key_lenghh: usize) -> Options {
+    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>, _key_len: usize) -> Options {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
 
@@ -45,27 +45,25 @@ impl DbConfig {
         if let Some(prefix_len) = prefix_len {
             let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
             block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
-            opts.set_memtable_prefix_bloom_ratio(0.2);
+            opts.set_memtable_prefix_bloom_ratio(0.02);
             opts.set_prefix_extractor(transform);
         }
 
         if let CacheSetting::Enabled(cache_size) = cache_setting {
-            let block_cache = Cache::new_lru_cache(cache_size/2);
-            let row_cache = Cache::new_lru_cache(cache_size/2);
+            // the documentation states that passing 0 to the estimated entry charge makes it so rocks estimates a good value
+            let block_cache = Cache::new_hyper_clock_cache(cache_size/2, 0);
+            let row_cache = Cache::new_hyper_clock_cache(cache_size/2, 0);
 
             opts.set_row_cache(&row_cache);
             block_based_options.set_block_cache(&block_cache);
-            block_based_options.set_cache_index_and_filter_blocks(true);
         }
 
         match self {
             DbConfig::OptimizedPointLookUp => {
-                block_based_options.set_data_block_hash_ratio(0.01);
+                block_based_options.set_data_block_hash_ratio(0.5);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
-
                 opts.set_use_direct_reads(true);
                 opts.set_memtable_whole_key_filtering(true);
-
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
             }
             DbConfig::Default => {
