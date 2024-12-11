@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use parking_lot::lock_api::RwLockUpgradableReadGuard;
 use parking_lot::RwLock;
 
 use crate::eth::executor::EvmInput;
@@ -179,25 +180,23 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
-        let next_state = {
-            let pending_block = self.pending_block.read();
-            InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number())
-        };
+        let pending_block = self.pending_block.upgradable_read();
 
-        let mut pending_block = self.pending_block.write();
+        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
+
+        let mut pending_block = RwLockUpgradableReadGuard::<'_, parking_lot::RawRwLock, InMemoryTemporaryStorageState>::upgrade(pending_block);
         let mut latest = self.latest_block.write();
-
         *latest = Some(std::mem::replace(&mut *pending_block, next_state));
 
-        drop(latest);
-        let latest = self.latest_block.read();
         drop(pending_block);
+        let latest = parking_lot::lock_api::RwLockWriteGuard::<'_, parking_lot::RawRwLock, std::option::Option<InMemoryTemporaryStorageState>>::downgrade(latest);
 
         #[cfg(feature = "dev")]
         let mut finished_block = latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone();
         #[cfg(not(feature = "dev"))]
         let finished_block = latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone();
 
+        drop(latest);
         #[cfg(feature = "dev")]
         {
             // Update block timestamp only if evm_setNextBlockTimestamp was called,
