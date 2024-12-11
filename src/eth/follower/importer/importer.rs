@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::min;
+use std::mem;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -458,6 +459,28 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
     });
+
+    async fn try_reading_block_and_receipts_with_temporary_endpoint(
+        chain: Arc<BlockchainClient>,
+        block_number: BlockNumber,
+    ) -> Option<(ExternalBlock, Vec<ExternalReceipt>)> {
+        let mut json = chain.fetch_block_and_receipts_with_temporary_endpoint(block_number).await.ok()?;
+
+        let block = mem::take(json.get_mut("block")?);
+        let block: ExternalBlock = serde_json::from_value(block).ok()?;
+
+        let receipts = mem::take(json.get_mut("receipts")?);
+        let receipts: Vec<ExternalReceipt> = serde_json::from_value(receipts).ok()?;
+
+        Some((block, receipts))
+    }
+
+    if let Some(res) = try_reading_block_and_receipts_with_temporary_endpoint(Arc::clone(&chain), block_number).await {
+        tracing::info!("successfully imported block and receipts using endpoint stratus_getBlockAndReceipts");
+        return res;
+    } else {
+        tracing::warn!("failed to import block and receipts with endpoint stratus_getBlockAndReceipts, falling back to get block + get each receipt");
+    }
 
     // fetch block
     let block = fetch_block(Arc::clone(&chain), block_number).await;

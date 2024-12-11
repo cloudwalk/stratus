@@ -1,9 +1,11 @@
 use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::Mutex;
 
+use chrono::DateTime;
+use chrono::Utc;
 use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use sentry::ClientInitGuard;
 use serde::Deserialize;
 use serde::Serialize;
@@ -20,7 +22,6 @@ use crate::eth::follower::importer::Importer;
 use crate::eth::rpc::RpcContext;
 use crate::ext::not;
 use crate::ext::spawn_signal_handler;
-use crate::ext::MutexExt;
 use crate::infra::tracing::warn_task_cancellation;
 
 // -----------------------------------------------------------------------------
@@ -45,6 +46,8 @@ where
     where
         T: clap::Parser + WithCommonConfig + Debug,
     {
+        GlobalState::setup_start_time();
+
         // env-var support
         config::load_dotenv_file();
         config::load_env_aliases();
@@ -121,6 +124,8 @@ static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Current node mode.
 static NODE_MODE: Mutex<NodeMode> = Mutex::new(NodeMode::Follower);
+
+static START_TIME: Lazy<DateTime<Utc>> = Lazy::new(Utc::now);
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalState;
@@ -256,11 +261,11 @@ impl GlobalState {
     }
 
     pub fn set_node_mode(mode: NodeMode) {
-        *NODE_MODE.lock_or_clear("set_node_mode") = mode;
+        *NODE_MODE.lock() = mode;
     }
 
     pub fn get_node_mode() -> NodeMode {
-        *NODE_MODE.lock_or_clear("get_node_mode")
+        *NODE_MODE.lock()
     }
 
     // -------------------------------------------------------------------------
@@ -268,6 +273,16 @@ impl GlobalState {
     // -------------------------------------------------------------------------
 
     pub fn get_global_state_as_json(ctx: &RpcContext) -> JsonValue {
+        let start_time = Self::get_start_time();
+        let elapsed_time = {
+            let delta = start_time.signed_duration_since(Utc::now()).abs();
+            let seconds = delta.num_seconds() % 60;
+            let minutes = delta.num_minutes() % 60;
+            let hours = delta.num_hours() % 24;
+            let days = delta.num_days();
+            format!("{days} days and {hours:02}:{minutes:02}:{seconds:02} elapsed")
+        };
+
         json!({
             "is_leader": Self::get_node_mode() == NodeMode::Leader,
             "is_shutdown": Self::is_shutdown(),
@@ -276,6 +291,16 @@ impl GlobalState {
             "transactions_enabled": Self::is_transactions_enabled(),
             "miner_paused": ctx.miner.is_paused(),
             "unknown_client_enabled": Self::is_unknown_client_enabled(),
+            "start_time": start_time.format("%d/%m/%Y %H:%M UTC").to_string(),
+            "elapsed_time": elapsed_time,
         })
+    }
+
+    fn get_start_time() -> DateTime<Utc> {
+        *START_TIME
+    }
+
+    pub fn setup_start_time() {
+        Lazy::force(&START_TIME);
     }
 }

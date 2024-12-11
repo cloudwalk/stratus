@@ -2,10 +2,10 @@ use std::cmp::max;
 use std::mem;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use anyhow::anyhow;
 use cfg_if::cfg_if;
+use parking_lot::Mutex;
 use tracing::info_span;
 use tracing::Span;
 
@@ -35,7 +35,6 @@ use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
-use crate::ext::MutexExt;
 #[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
@@ -371,7 +370,11 @@ impl Executor {
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
-    pub fn execute_local_transaction(&self, tx: TransactionInput) -> Result<TransactionExecution, StratusError> {
+    pub fn execute_local_transaction(&self, tx: TransactionInput) -> Result<(), StratusError> {
+        #[cfg(feature = "metrics")]
+        let function = codegen::function_sig_for_o11y(&tx.input);
+        #[cfg(feature = "metrics")]
+        let contract = codegen::contract_name_for_o11y(&tx.to);
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -395,10 +398,10 @@ impl Executor {
             // * Conflict detection runs, but it should never trigger because of the Mutex.
             ExecutorStrategy::Serial => {
                 // acquire serial execution lock
-                let _serial_lock = self.locks.serial.lock_or_clear("executor serial lock was poisoned");
+                let _serial_lock = self.locks.serial.lock();
 
                 // execute transaction
-                self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
+                self.execute_local_transaction_attempts(tx, EvmRoute::Serial, INFINITE_ATTEMPTS)
             }
 
             // Executes transactions in parallel mode:
@@ -417,35 +420,14 @@ impl Executor {
             }
         };
 
-        // track metrics
         #[cfg(feature = "metrics")]
-        {
-            let function = codegen::function_sig_for_o11y(&tx.input);
-            let contract = codegen::contract_name_for_o11y(&tx.to);
-
-            match &tx_execution {
-                Ok(tx_execution) => {
-                    metrics::inc_executor_local_transaction(start.elapsed(), true, contract, function);
-                    metrics::inc_executor_local_transaction_account_reads(tx_execution.metrics().account_reads, contract, function);
-                    metrics::inc_executor_local_transaction_slot_reads(tx_execution.metrics().slot_reads, contract, function);
-                    metrics::inc_executor_local_transaction_gas(tx_execution.execution().gas.as_u64() as usize, true, contract, function);
-                }
-                Err(_) => {
-                    metrics::inc_executor_local_transaction(start.elapsed(), false, contract, function);
-                }
-            }
-        }
+        metrics::inc_executor_local_transaction(start.elapsed(), tx_execution.is_ok(), contract, function);
 
         tx_execution
     }
 
     /// Executes a transaction until it reaches the max number of attempts.
-    fn execute_local_transaction_attempts(
-        &self,
-        tx_input: TransactionInput,
-        evm_route: EvmRoute,
-        max_attempts: usize,
-    ) -> Result<TransactionExecution, StratusError> {
+    fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, evm_route: EvmRoute, max_attempts: usize) -> Result<(), StratusError> {
         // validate
         if tx_input.signer.is_zero() {
             return Err(StratusError::TransactionFromZeroAddress);
@@ -472,7 +454,7 @@ impl Executor {
 
             // prepare evm input
             let pending_header = self.storage.read_pending_block_header();
-            let evm_input = EvmInput::from_eth_transaction(tx_input.clone(), pending_header);
+            let evm_input = EvmInput::from_eth_transaction(&tx_input, &pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::info!(
@@ -495,10 +477,25 @@ impl Executor {
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_input, evm_result.clone());
-            match self.miner.save_execution(tx_execution.clone(), matches!(evm_route, EvmRoute::Parallel)) {
+            let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_input, evm_result);
+            #[cfg(feature = "metrics")]
+            let tx_metrics = tx_execution.metrics();
+            #[cfg(feature = "metrics")]
+            let gas_used = tx_execution.execution().gas;
+
+            match self.miner.save_execution(tx_execution, matches!(evm_route, EvmRoute::Parallel)) {
                 Ok(_) => {
-                    return Ok(tx_execution);
+                    // track metrics
+                    #[cfg(feature = "metrics")]
+                    {
+                        let function = codegen::function_sig_for_o11y(&tx_input.input);
+                        let contract = codegen::contract_name_for_o11y(&tx_input.to);
+
+                        metrics::inc_executor_local_transaction_account_reads(tx_metrics.account_reads, contract, function);
+                        metrics::inc_executor_local_transaction_slot_reads(tx_metrics.slot_reads, contract, function);
+                        metrics::inc_executor_local_transaction_gas(gas_used.as_u64() as usize, true, contract, function);
+                    }
+                    return Ok(());
                 }
                 Err(e) => match e {
                     StratusError::TransactionConflict(ref conflicts) => {
