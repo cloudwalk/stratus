@@ -180,11 +180,27 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
         let mut pending_block = self.pending_block.write();
+        let mut latest = self.latest_block.write();
+
+        let next_number = (*pending_block).block.header.number.next_block_number();
+        *latest = Some(std::mem::replace(&mut *pending_block, InMemoryTemporaryStorageState::new(next_number)));
+
+        drop(latest);
+        let latest = self.latest_block.read();
+        drop(pending_block);
 
         #[cfg(feature = "dev")]
-        let mut finished_block = pending_block.block.clone();
+        let mut finished_block = (*latest)
+            .as_ref()
+            .expect("latest should be Some after finishing the pending block")
+            .block
+            .clone();
         #[cfg(not(feature = "dev"))]
-        let finished_block = pending_block.block.clone();
+        let finished_block = (*latest)
+            .as_ref()
+            .expect("latest should be Some after finishing the pending block")
+            .block
+            .clone();
 
         #[cfg(feature = "dev")]
         {
@@ -194,12 +210,6 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                 finished_block.header.timestamp = UnixTimeNow::default();
             }
         }
-
-        let mut latest = self.latest_block.write();
-        *latest = Some(std::mem::replace(
-            &mut *pending_block,
-            InMemoryTemporaryStorageState::new(finished_block.header.number.next_block_number()),
-        ));
 
         Ok(finished_block)
     }
