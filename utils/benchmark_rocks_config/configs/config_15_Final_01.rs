@@ -28,8 +28,6 @@ impl DbConfig {
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
         opts.increase_parallelism(16);
-        // add an assertion so that the ulimit -n is at least double this.
-        // opts.set_max_open_files(40960);
 
         block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
         block_based_options.set_cache_index_and_filter_blocks(true);
@@ -45,13 +43,13 @@ impl DbConfig {
         if let Some(prefix_len) = prefix_len {
             let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
             block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
-            opts.set_memtable_prefix_bloom_ratio(0.25);
+            opts.set_memtable_prefix_bloom_ratio(0.15);
             opts.set_prefix_extractor(transform);
         }
 
         if let CacheSetting::Enabled(cache_size) = cache_setting {
-            let block_cache = Cache::new_lru_cache(cache_size/2);
-            let row_cache = Cache::new_lru_cache(cache_size/2);
+            let block_cache = Cache::new_hyper_clock_cache(cache_size/2, 0);
+            let row_cache = Cache::new_hyper_clock_cache(cache_size/2, 0);
 
             opts.set_row_cache(&row_cache);
             block_based_options.set_block_cache(&block_cache);
@@ -59,8 +57,9 @@ impl DbConfig {
 
         match self {
             DbConfig::OptimizedPointLookUp => {
-                block_based_options.set_data_block_hash_ratio(0.5);
+                block_based_options.set_data_block_hash_ratio(0.3);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
+
                 opts.set_use_direct_reads(true);
                 opts.set_memtable_whole_key_filtering(true);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
