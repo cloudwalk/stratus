@@ -179,11 +179,15 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
+        let next_state = {
+            let pending_block = self.pending_block.read();
+            InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number())
+        };
+
         let mut pending_block = self.pending_block.write();
         let mut latest = self.latest_block.write();
 
-        let next_number = pending_block.block.header.number.next_block_number();
-        *latest = Some(std::mem::replace(&mut *pending_block, InMemoryTemporaryStorageState::new(next_number)));
+        *latest = Some(std::mem::replace(&mut *pending_block, next_state));
 
         drop(latest);
         let latest = self.latest_block.read();
