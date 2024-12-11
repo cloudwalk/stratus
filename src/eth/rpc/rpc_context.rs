@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::sync::RwLock;
+
+use parking_lot::RwLock;
 
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
@@ -33,22 +34,11 @@ pub struct RpcContext {
 
 impl RpcContext {
     pub fn consensus(&self) -> Option<Arc<dyn Consensus>> {
-        self.consensus
-            .read()
-            .unwrap_or_else(|poison_error| {
-                tracing::error!("consensus read lock was poisoned");
-                self.consensus.clear_poison();
-                poison_error.into_inner()
-            })
-            .clone()
+        self.consensus.read().clone()
     }
 
     pub fn set_consensus(&self, new_consensus: Option<Arc<dyn Consensus>>) {
-        *self.consensus.write().unwrap_or_else(|poison_error| {
-            tracing::error!("consensus write lock was poisoned");
-            self.consensus.clear_poison();
-            poison_error.into_inner()
-        }) = new_consensus;
+        *self.consensus.write() = new_consensus;
     }
 }
 
