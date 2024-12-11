@@ -440,7 +440,27 @@ impl Importer {
 
             // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
-            while let Some((block, receipts)) = tasks.next().await {
+            while let Some((mut block, mut receipts)) = tasks.next().await {
+                // Stably sort transactions and receipts by transaction_index
+                block.transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+                receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+
+                // perform additional checks on the transaction index
+                for window in block.transactions.windows(2) {
+                    let tx_index = window[0].transaction_index.map_or(u32::MAX, |index| index.as_u32());
+                    let next_tx_index = window[1].transaction_index.map_or(u32::MAX, |index| index.as_u32());
+                    if tx_index + 1 != next_tx_index {
+                        tracing::error!(tx_index, next_tx_index, "two consecutive transactions must have consecutive indices");
+                    }
+                }
+                for window in receipts.windows(2) {
+                    let tx_index = window[0].transaction_index.as_u32();
+                    let next_tx_index = window[1].transaction_index.as_u32();
+                    if tx_index + 1 != next_tx_index {
+                        tracing::error!(tx_index, next_tx_index, "two consecutive receipts must have consecutive indices");
+                    }
+                }
+
                 if backlog_tx.send((block, receipts)).is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
