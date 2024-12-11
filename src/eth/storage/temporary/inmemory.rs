@@ -184,12 +184,13 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
 
-        let mut latest = self.latest_block.write();
         let mut pending_block = RwLockUpgradableReadGuard::<'_, parking_lot::RawRwLock, InMemoryTemporaryStorageState>::upgrade(pending_block);
+        let mut latest = self.latest_block.write();
+
         *latest = Some(std::mem::replace(&mut *pending_block, next_state));
-        let latest = parking_lot::lock_api::RwLockWriteGuard::<'_, parking_lot::RawRwLock, std::option::Option<InMemoryTemporaryStorageState>>::downgrade(latest);
 
         drop(pending_block);
+        let latest = parking_lot::lock_api::RwLockWriteGuard::<'_, parking_lot::RawRwLock, std::option::Option<InMemoryTemporaryStorageState>>::downgrade(latest);
 
         #[cfg(feature = "dev")]
         let mut finished_block = latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone();
