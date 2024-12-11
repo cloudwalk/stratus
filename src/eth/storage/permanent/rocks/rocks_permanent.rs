@@ -150,7 +150,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
     #[cfg(feature = "dev")]
     fn reset(&self) -> anyhow::Result<()> {
-        self.block_number.store(0u64, Ordering::SeqCst);
+        self.block_number.store(0u32, Ordering::SeqCst);
         self.state.reset().inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to reset in RocksPermanent");
         })
