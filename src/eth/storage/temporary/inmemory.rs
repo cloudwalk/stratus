@@ -196,7 +196,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         #[cfg(feature = "dev")]
         let finished_block = {
-            let mut finished_block = pending_block
+            let mut finished_block = latest
                 .as_ref()
                 .expect("latest should be Some after finishing the pending block")
                 .block
