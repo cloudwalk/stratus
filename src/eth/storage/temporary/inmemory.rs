@@ -123,17 +123,18 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // check conflicts
-        let mut pending_block = self.pending_block.write();
+        let pending_block = self.pending_block.upgradable_read();
         if let TransactionExecution::Local(tx) = &tx {
-            let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
-
-            if expected_input != tx.evm_input {
+            if tx.evm_input != (&tx.input, &pending_block.block.header) {
+                let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
                 return Err(StratusError::TransactionEvmInputMismatch {
                     expected: Box::new(expected_input),
                     actual: Box::new(tx.evm_input.clone()),
                 });
             }
         }
+
+        let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
         if check_conflicts {
             if let Some(conflicts) = self.check_conflicts(tx.execution())? {
