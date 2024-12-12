@@ -299,7 +299,6 @@ e2e-flamegraph:
 # E2E: Leader & Follower Up
 e2e-leader-follower-up test="brlc" release_flag="--release":
     #!/bin/bash
-    
     just build
 
     mkdir e2e_logs
