@@ -152,7 +152,10 @@ impl Storage for StratusStorage {
 
         let account = 'query: {
             if point_in_time.is_pending() {
-                if let Some(account) = self.cache.get_account(address) {
+                if let Some(account) = timed(|| self.cache.get_account(address)).with(|m| {
+                    metrics::inc_storage_read_account(m.elapsed, label::CACHE, point_in_time, true);
+                }) {
+                    tracing::debug!(storage = %label::CACHE, %address, ?account, "account found in cache");
                     return Ok(account);
                 };
 
