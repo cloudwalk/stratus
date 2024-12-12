@@ -11,7 +11,8 @@ use ethereum_types::U256;
 use hex_literal::hex;
 use itertools::Itertools;
 use serde::ser::SerializeStruct;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::eth::primitives::Address;
