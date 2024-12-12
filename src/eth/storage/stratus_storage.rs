@@ -204,6 +204,7 @@ impl Storage for StratusStorage {
                 if let Some(slot) = timed(|| self.cache.get_slot(address, index)).with(|m| {
                     metrics::inc_storage_read_slot(m.elapsed, label::CACHE, point_in_time, true);
                 }) {
+                    tracing::debug!(storage = %label::CACHE, %address, %index, value = %slot.value, "slot found in cache");
                     return Ok(slot);
                 };
 
