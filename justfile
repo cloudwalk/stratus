@@ -299,7 +299,6 @@ e2e-flamegraph:
 # E2E: Leader & Follower Up
 e2e-leader-follower-up test="brlc" release_flag="--release":
     #!/bin/bash
-    set -e
     
     just build
 
@@ -359,6 +358,8 @@ e2e-leader-follower-up test="brlc" release_flag="--release":
         npx hardhat test test/leader-follower-{{test}}.test.ts --bail --network stratus --show-stack-traces
         if [ $? -ne 0 ]; then
             just _log "Tests failed"
+            killport 3000 -s sigterm
+            killport 3001 -s sigterm
             exit 1
         else
             just _log "Tests passed successfully"
@@ -366,8 +367,6 @@ e2e-leader-follower-up test="brlc" release_flag="--release":
         fi
     )
     fi
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
 
 # E2E: Leader & Follower Down
 e2e-leader-follower-down:
