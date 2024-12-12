@@ -2,8 +2,9 @@
 
 use std::collections::HashMap;
 
-use parking_lot::lock_api::RwLockUpgradableReadGuard;
 use parking_lot::RwLock;
+use parking_lot::RwLockUpgradableReadGuard;
+use parking_lot::RwLockWriteGuard;
 
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
@@ -184,27 +185,31 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
 
-        let mut pending_block = RwLockUpgradableReadGuard::<'_, parking_lot::RawRwLock, InMemoryTemporaryStorageState>::upgrade(pending_block);
+        let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
         let mut latest = self.latest_block.write();
 
         *latest = Some(std::mem::replace(&mut *pending_block, next_state));
 
         drop(pending_block);
-        let latest = parking_lot::lock_api::RwLockWriteGuard::<'_, parking_lot::RawRwLock, std::option::Option<InMemoryTemporaryStorageState>>::downgrade(latest);
+        let latest = RwLockWriteGuard::<Option<InMemoryTemporaryStorageState>>::downgrade(latest);
 
         #[cfg(feature = "dev")]
-        let mut finished_block = latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone();
-        #[cfg(not(feature = "dev"))]
-        let finished_block = latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone();
-
-        #[cfg(feature = "dev")]
-        {
+        let finished_block = {
+            let mut finished_block = pending_block
+                .as_ref()
+                .expect("latest should be Some after finishing the pending block")
+                .block
+                .clone();
             // Update block timestamp only if evm_setNextBlockTimestamp was called,
             // otherwise keep the original timestamp from pending block creation
             if UnixTime::evm_set_next_block_timestamp_was_called() {
                 finished_block.header.timestamp = UnixTimeNow::default();
             }
-        }
+            finished_block
+        };
+
+        #[cfg(not(feature = "dev"))]
+        let finished_block = latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone();
 
         Ok(finished_block)
     }
