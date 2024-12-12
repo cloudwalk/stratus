@@ -29,6 +29,7 @@ use crate::infra::tracing::SpanExt;
 mod label {
     pub(super) const TEMP: &str = "temporary";
     pub(super) const PERM: &str = "permanent";
+    pub(super) const CACHE: &str = "cache";
 }
 
 /// Proxy that simplifies interaction with permanent and temporary storages.
@@ -200,7 +201,10 @@ impl Storage for StratusStorage {
 
         let slot = 'query: {
             if point_in_time.is_pending() {
-                if let Some(slot) = self.cache.get_slot(address, index) {
+                if let Some(slot) = timed(|| self.cache.get_slot(address, index)).with(|m| {
+                    metrics::inc_storage_read_slot(m.elapsed, label::CACHE, point_in_time, true);
+                }) {
+                    tracing::debug!(storage = %label::CACHE, %address, %index, value = %slot.value, "slot found in cache");
                     return Ok(slot);
                 };
 
