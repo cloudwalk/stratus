@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use parking_lot::RwLock;
+use parking_lot::RwLockUpgradableReadGuard;
 
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
@@ -18,6 +19,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionInput;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
@@ -121,17 +123,18 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // check conflicts
-        let mut pending_block = self.pending_block.write();
+        let pending_block = self.pending_block.upgradable_read();
         if let TransactionExecution::Local(tx) = &tx {
-            let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
-
-            if expected_input != tx.evm_input {
+            if tx.evm_input != (&tx.input, &pending_block.block.header) {
+                let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
                 return Err(StratusError::TransactionEvmInputMismatch {
                     expected: Box::new(expected_input),
                     actual: Box::new(tx.evm_input.clone()),
                 });
             }
         }
+
+        let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
         if check_conflicts {
             if let Some(conflicts) = self.check_conflicts(tx.execution())? {
