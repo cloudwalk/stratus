@@ -157,3 +157,16 @@ impl EvmInput {
         self.to.is_some() && not(self.data.is_empty())
     }
 }
+
+impl PartialEq<(&TransactionInput, &PendingBlockHeader)> for EvmInput {
+    fn eq(&self, other: &(&TransactionInput, &PendingBlockHeader)) -> bool {
+        self.block_number == other.1.number
+            && self.block_timestamp == *other.1.timestamp
+            && self.chain_id == other.0.chain_id
+            && self.data == other.0.input
+            && self.from == other.0.signer
+            && self.nonce.is_some_and(|inner| inner == other.0.nonce)
+            && self.value == other.0.value
+            && self.to == other.0.to
+    }
+}
