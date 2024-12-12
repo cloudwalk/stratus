@@ -19,7 +19,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionInput;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
