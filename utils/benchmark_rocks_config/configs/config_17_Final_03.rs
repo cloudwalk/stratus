@@ -33,13 +33,6 @@ impl DbConfig {
         block_based_options.set_cache_index_and_filter_blocks(true);
         block_based_options.set_bloom_filter(15.5, false);
 
-        // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
-        #[cfg(feature = "metrics")]
-        {
-            opts.enable_statistics();
-            opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
-        }
-
         if let Some(prefix_len) = prefix_len {
             let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
             block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);

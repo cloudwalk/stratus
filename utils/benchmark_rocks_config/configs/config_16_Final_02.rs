@@ -31,14 +31,7 @@ impl DbConfig {
 
         block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
         block_based_options.set_cache_index_and_filter_blocks(true);
-        block_based_options.set_bloom_filter(15.5, true);
-
-        // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
-        #[cfg(feature = "metrics")]
-        {
-            opts.enable_statistics();
-            opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
-        }
+        block_based_options.set_bloom_filter(15.5, false);
 
         if let Some(prefix_len) = prefix_len {
             let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
