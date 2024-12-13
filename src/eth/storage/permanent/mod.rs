@@ -1,10 +1,8 @@
 pub use self::inmemory::InMemoryPermanentStorage;
-pub use self::redis::RedisPermanentStorage;
 pub use self::rocks::RocksPermanentStorage;
 pub use self::rocks::RocksStorageState;
 
 mod inmemory;
-mod redis;
 pub mod rocks;
 
 use std::str::FromStr;
@@ -27,7 +25,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::parse_duration;
-use crate::log_and_err;
 
 /// Permanent (committed) storage operations.
 pub trait PermanentStorage: Send + Sync + 'static {
@@ -121,9 +118,6 @@ pub enum PermanentStorageKind {
     #[serde(rename = "inmemory")]
     InMemory,
 
-    #[serde(rename = "redis")]
-    Redis,
-
     #[serde(rename = "rocks")]
     Rocks,
 }
@@ -135,13 +129,6 @@ impl PermanentStorageConfig {
 
         let perm: Box<dyn PermanentStorage> = match self.perm_storage_kind {
             PermanentStorageKind::InMemory => Box::<InMemoryPermanentStorage>::default(),
-
-            PermanentStorageKind::Redis => {
-                let Some(url) = self.perm_storage_url.as_deref() else {
-                    return log_and_err!("redis connection url not provided when it was expected to be present");
-                };
-                Box::new(RedisPermanentStorage::new(url)?)
-            }
 
             PermanentStorageKind::Rocks => Box::new(RocksPermanentStorage::new(
                 self.rocks_path_prefix.clone(),
@@ -160,7 +147,6 @@ impl FromStr for PermanentStorageKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             "inmemory" => Ok(Self::InMemory),
-            "redis" => Ok(Self::Redis),
             "rocks" => Ok(Self::Rocks),
             s => Err(anyhow!("unknown permanent storage: {}", s)),
         }
