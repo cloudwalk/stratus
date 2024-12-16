@@ -3,6 +3,9 @@
 use std::collections::HashMap;
 
 use parking_lot::RwLock;
+use parking_lot::RwLockUpgradableReadGuard;
+#[cfg(not(feature = "dev"))]
+use parking_lot::RwLockWriteGuard;
 
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
@@ -121,17 +124,18 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
     fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
         // check conflicts
-        let mut pending_block = self.pending_block.write();
+        let pending_block = self.pending_block.upgradable_read();
         if let TransactionExecution::Local(tx) = &tx {
-            let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
-
-            if expected_input != tx.evm_input {
+            if tx.evm_input != (&tx.input, &pending_block.block.header) {
+                let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
                 return Err(StratusError::TransactionEvmInputMismatch {
                     expected: Box::new(expected_input),
                     actual: Box::new(tx.evm_input.clone()),
                 });
             }
         }
+
+        let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
         if check_conflicts {
             if let Some(conflicts) = self.check_conflicts(tx.execution())? {
@@ -179,27 +183,34 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     }
 
     fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
-        let mut pending_block = self.pending_block.write();
+        let pending_block = self.pending_block.upgradable_read();
 
+        // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
         #[cfg(feature = "dev")]
-        let mut finished_block = pending_block.block.clone();
-        #[cfg(not(feature = "dev"))]
-        let finished_block = pending_block.block.clone();
-
-        #[cfg(feature = "dev")]
-        {
+        let finished_block = {
+            let mut finished_block = pending_block.block.clone();
             // Update block timestamp only if evm_setNextBlockTimestamp was called,
             // otherwise keep the original timestamp from pending block creation
             if UnixTime::evm_set_next_block_timestamp_was_called() {
                 finished_block.header.timestamp = UnixTimeNow::default();
             }
-        }
+            finished_block
+        };
 
+        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
+
+        let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
         let mut latest = self.latest_block.write();
-        *latest = Some(std::mem::replace(
-            &mut *pending_block,
-            InMemoryTemporaryStorageState::new(finished_block.header.number.next_block_number()),
-        ));
+
+        *latest = Some(std::mem::replace(&mut *pending_block, next_state));
+
+        drop(pending_block);
+
+        #[cfg(not(feature = "dev"))]
+        let finished_block = {
+            let latest = RwLockWriteGuard::<Option<InMemoryTemporaryStorageState>>::downgrade(latest);
+            latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone()
+        };
 
         Ok(finished_block)
     }
