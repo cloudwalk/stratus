@@ -1,6 +1,7 @@
 //! RPC server for HTTP and WS.
 
 use std::collections::HashMap;
+use std::env;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -256,6 +257,13 @@ where
     Ok(())
 }
 
+fn validate_password(pass: &str) -> Result<(), StratusError> {
+    if env::var_os("ADMIN_PASSWORD").is_some_and(|real_pass| real_pass != pass) {
+        return Err(StratusError::InvalidPassword);
+    }
+    Ok(())
+}
+
 // -----------------------------------------------------------------------------
 // Debug
 // -----------------------------------------------------------------------------
@@ -320,7 +328,9 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
 
 static MODE_CHANGE_SEMAPHORE: Lazy<Semaphore> = Lazy::new(|| Semaphore::new(1));
 
-async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+async fn stratus_change_to_leader(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    let (_, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
     let permit = MODE_CHANGE_SEMAPHORE.try_acquire();
     let _permit: SemaphorePermit = match permit {
         Ok(permit) => permit,
@@ -370,6 +380,8 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 }
 
 async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    let (_, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
     let permit = MODE_CHANGE_SEMAPHORE.try_acquire();
     let _permit: SemaphorePermit = match permit {
         Ok(permit) => permit,
@@ -424,7 +436,9 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
 }
 
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
+    let (params, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
+    let (params, external_rpc) = next_rpc_param::<String>(params)?;
     let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
     let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
     let (_, raw_sync_interval) = next_rpc_param::<String>(params)?;
@@ -449,7 +463,9 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Exte
     importer_config.init_follower_importer(ctx).await
 }
 
-fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_shutdown_importer(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+    let (_, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
     if GlobalState::get_node_mode() != NodeMode::Follower {
         tracing::error!("node is currently not a follower");
         return Err(StratusError::StratusNotFollower);
@@ -469,7 +485,10 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, _: &Extensions) ->
 }
 
 async fn stratus_change_miner_mode(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    let (_, mode_str) = next_rpc_param::<String>(params.sequence())?;
+    let (params, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
+    let (_, mode_str) = next_rpc_param::<String>(params)?;
+
     let mode = MinerMode::from_str(&mode_str).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse miner mode");
         StratusError::MinerModeParamInvalid
@@ -530,34 +549,46 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
     Ok(json!(true))
 }
 
-fn stratus_enable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+fn stratus_enable_unknown_clients(params: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<bool, StratusError> {
+    let (_, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
     GlobalState::set_unknown_client_enabled(true);
-    GlobalState::is_unknown_client_enabled()
+    Ok(GlobalState::is_unknown_client_enabled())
 }
 
-fn stratus_disable_unknown_clients(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+fn stratus_disable_unknown_clients(params: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<bool, StratusError> {
+    let (_, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
     GlobalState::set_unknown_client_enabled(false);
-    GlobalState::is_unknown_client_enabled()
+    Ok(GlobalState::is_unknown_client_enabled())
 }
 
-fn stratus_enable_transactions(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+fn stratus_enable_transactions(params: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<bool, StratusError> {
+    let (_, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
     GlobalState::set_transactions_enabled(true);
-    GlobalState::is_transactions_enabled()
+    Ok(GlobalState::is_transactions_enabled())
 }
 
-fn stratus_disable_transactions(_: Params<'_>, _: &RpcContext, _: &Extensions) -> bool {
+fn stratus_disable_transactions(params: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<bool, StratusError> {
+    let (_, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
     GlobalState::set_transactions_enabled(false);
-    GlobalState::is_transactions_enabled()
+    Ok(GlobalState::is_transactions_enabled())
 }
 
-fn stratus_enable_miner(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
+fn stratus_enable_miner(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<bool, StratusError> {
+    let (_, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
     ctx.miner.unpause();
-    true
+    Ok(true)
 }
 
-fn stratus_disable_miner(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> bool {
+fn stratus_disable_miner(params: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<bool, StratusError> {
+    let (_, password) = next_rpc_param::<&str>(params.sequence())?;
+    validate_password(password)?;
     ctx.miner.pause();
-    false
+    Ok(false)
 }
 
 /// Returns the count of executed transactions waiting to enter the next block.
