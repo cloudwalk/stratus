@@ -150,7 +150,7 @@ impl CommonConfig {
                 let async_id = ASYNC_ID.fetch_add(1, Ordering::SeqCst);
                 if async_id <= num_async_threads {
                     if cfg!(feature = "flamegraph") {
-                        return "tokio-async".to_string()
+                        return "tokio-async".to_string();
                     } else {
                         return format!("tokio-async-{}", async_id);
                     }
