@@ -150,7 +150,7 @@ impl CommonConfig {
                 let async_id = ASYNC_ID.fetch_add(1, Ordering::SeqCst);
                 if async_id <= num_async_threads {
                     if cfg!(feature = "flamegraph") {
-                        return format!("tokio-async");
+                        return "tokio-async".to_string()
                     } else {
                         return format!("tokio-async-{}", async_id);
                     }
@@ -159,7 +159,7 @@ impl CommonConfig {
                 // identify blocking threads
                 let blocking_id = BLOCKING_ID.fetch_add(1, Ordering::SeqCst);
                 if cfg!(feature = "flamegraph") {
-                    format!("tokio-blocking")
+                    "tokio-blocking".to_string()
                 } else {
                     format!("tokio-blocking-{}", blocking_id)
                 }
