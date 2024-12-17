@@ -201,6 +201,9 @@ dev = []
 # Enable runtime metrics collection.
 metrics = ["dep:metrics-exporter-prometheus"]
 
+# Enable runtime rocksdb metrics collection.
+rocks_metrics = ["metrics"]
+
 # Enable runtime tracing/spans collection.
 tracing = []
 
