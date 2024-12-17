@@ -88,7 +88,7 @@ impl Evm {
         let cfg_env = evm.cfg_mut();
         cfg_env.chain_id = chain_id;
         cfg_env.limit_contract_code_size = Some(usize::MAX);
-        cfg_env.perf_analyse_created_bytecodes = AnalysisKind::Raw;
+        cfg_env.perf_analyse_created_bytecodes = AnalysisKind::Analyse;
 
         // global block config
         let block_env = evm.block_mut();

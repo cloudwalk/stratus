@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
@@ -23,7 +23,7 @@ use crate::eth::storage::PermanentStorage;
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
     pub state: RocksStorageState,
-    block_number: AtomicU64,
+    block_number: AtomicU32,
 }
 
 impl RocksPermanentStorage {
@@ -82,7 +82,7 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
-        self.block_number.store(number.as_u64(), Ordering::SeqCst);
+        self.block_number.store(number.as_u32(), Ordering::SeqCst);
         Ok(())
     }
 
@@ -144,7 +144,7 @@ impl PermanentStorage for RocksPermanentStorage {
 
     #[cfg(feature = "dev")]
     fn reset(&self) -> anyhow::Result<()> {
-        self.block_number.store(0u64, Ordering::SeqCst);
+        self.block_number.store(0u32, Ordering::SeqCst);
         self.state.reset().inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to reset in RocksPermanent");
         })
