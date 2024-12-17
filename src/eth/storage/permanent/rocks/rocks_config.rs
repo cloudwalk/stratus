@@ -39,7 +39,7 @@ impl DbConfig {
         opts.increase_parallelism(16);
 
         // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
-        #[cfg(feature = "metrics")]
+        #[cfg(feature = "rocks_metrics")]
         {
             opts.enable_statistics();
             opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
