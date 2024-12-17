@@ -11,6 +11,7 @@ use ethereum_types::U256;
 use hex_literal::hex;
 use itertools::Itertools;
 use serde::ser::SerializeStruct;
+use serde::Deserialize;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -128,7 +129,8 @@ pub struct AccountTransfer {
 }
 
 /// Direction of a transfer relative to the primary account address.
-#[derive(DebugAsJson, strum::EnumIs)]
+#[derive(DebugAsJson, strum::EnumIs, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AccountTransferDirection {
     /// `account_address` is being credited.
     Credit,
@@ -175,18 +177,6 @@ impl Serialize for AccountTransfer {
         state.serialize_field("amount", &self.amount.to_string())?;
         state.serialize_field("direction", &self.direction)?;
         state.end()
-    }
-}
-
-impl Serialize for AccountTransferDirection {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            Self::Credit => serializer.serialize_str("credit"),
-            Self::Debit => serializer.serialize_str("debit"),
-        }
     }
 }
 
