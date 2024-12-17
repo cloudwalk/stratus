@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -180,10 +180,10 @@ impl RocksStorageState {
         self.db_path.rsplit('/').next().unwrap_or(&self.db_path)
     }
 
-    pub fn preload_block_number(&self) -> Result<AtomicU64> {
-        let block_number = self.blocks_by_number.last_key()?.unwrap_or_default();
+    pub fn preload_block_number(&self) -> Result<AtomicU32> {
+        let block_number = self.blocks_by_number.last_key()?.unwrap_or_default().0;
         tracing::info!(%block_number, "preloaded block_number");
-        Ok((u64::from(block_number)).into())
+        Ok(AtomicU32::new(block_number))
     }
 
     #[cfg(feature = "dev")]
@@ -251,13 +251,14 @@ impl RocksStorageState {
             return log_and_err!("the block that the transaction was supposed to be in was not found")
                 .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash));
         };
+        let block = block.into_inner();
 
-        let transaction = block.into_inner().transactions.into_iter().find(|tx| Hash::from(tx.input.hash) == tx_hash);
+        let transaction = block.transactions.into_iter().find(|tx| Hash::from(tx.input.hash) == tx_hash);
 
         match transaction {
             Some(tx) => {
                 tracing::trace!(%tx_hash, "transaction found");
-                Ok(Some(tx.into()))
+                Ok(Some(TransactionMined::from_rocks_primitives(tx, block_number.into_inner(), block.header.hash)))
             }
             None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
                 .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
@@ -283,12 +284,12 @@ impl RocksStorageState {
                 break;
             }
 
-            let logs = block
-                .into_inner()
-                .transactions
-                .into_iter()
-                .flat_map(|transaction| transaction.logs)
-                .map(LogMined::from);
+            let block = block.into_inner();
+            let logs = block.transactions.into_iter().enumerate().flat_map(|(tx_index, transaction)| {
+                transaction.logs.into_iter().enumerate().map(move |(log_index, log)| {
+                    LogMined::from_rocks_primitives(log, block.header.number, block.header.hash, tx_index, transaction.input.hash, log_index)
+                })
+            });
 
             let filtered_logs = logs.filter(|log| filter.matches(log));
             logs_result.extend(filtered_logs);
@@ -400,7 +401,7 @@ impl RocksStorageState {
         self.accounts_history.prepare_batch_insertion(
             accounts.iter().cloned().map(|acc| {
                 let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
-                ((tup.0, 0u64.into()), tup.1.into())
+                ((tup.0, 0u32.into()), tup.1.into())
             }),
             &mut write_batch,
         )?;
@@ -728,7 +729,7 @@ mod tests {
             address: Faker.fake(),
             nonce: ExecutionValueChange::from_original(Faker.fake()),
             balance: ExecutionValueChange::from_original(Faker.fake()),
-            bytecode: ExecutionValueChange::from_original(Faker.fake()),
+            bytecode: ExecutionValueChange::from_original(Some(revm::primitives::Bytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
             code_hash: Faker.fake(),
             slots: HashMap::new(),
         };
@@ -745,7 +746,7 @@ mod tests {
                 ..change_base.clone()
             },
             ExecutionAccountChanges {
-                bytecode: ExecutionValueChange::from_modified(Faker.fake()),
+                bytecode: ExecutionValueChange::from_modified(Some(revm::primitives::Bytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
                 ..change_base
             },
         ];

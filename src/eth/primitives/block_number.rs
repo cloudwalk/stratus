@@ -77,14 +77,16 @@ impl BlockNumber {
         }
     }
 
-    /// Converts itself to i64.
     pub fn as_i64(&self) -> i64 {
         self.0.as_u64() as i64
     }
 
-    /// Converts itself to u64.
     pub fn as_u64(&self) -> u64 {
         self.0.as_u64()
+    }
+
+    pub fn as_u32(&self) -> u32 {
+        self.0.as_u64() as u32
     }
 }
 

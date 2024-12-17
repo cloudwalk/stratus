@@ -364,8 +364,6 @@ e2e-leader-follower-up test="brlc" release_flag="--release":
         fi
     )
     fi
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
 
 # E2E: Leader & Follower Down
 e2e-leader-follower-down:
@@ -543,6 +541,8 @@ stratus-test-coverage output="":
     -rm -r temp_3001-rocksdb
     -docker compose down -v
     just e2e-leader-follower-up kafka " "
+    killport 3000 -s sigterm
+    killport 3001 -s sigterm
     sleep 10
     -rm -r e2e_logs
     -rm utils/deploy/deploy_01.log
@@ -551,6 +551,8 @@ stratus-test-coverage output="":
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     just e2e-leader-follower-up deploy " "
+    killport 3000 -s sigterm
+    killport 3001 -s sigterm
     sleep 10
     -rm -r e2e_logs
     -rm utils/deploy/deploy_01.log
@@ -559,6 +561,8 @@ stratus-test-coverage output="":
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     just e2e-leader-follower-up brlc " "
+    killport 3000 -s sigterm
+    killport 3001 -s sigterm
     sleep 10
     -rm -r e2e_logs
     -rm utils/deploy/deploy_01.log
@@ -567,6 +571,8 @@ stratus-test-coverage output="":
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     just e2e-leader-follower-up change " "
+    killport 3000 -s sigterm
+    killport 3001 -s sigterm
     sleep 10
     -rm -r e2e_logs
     -rm utils/deploy/deploy_01.log
@@ -575,6 +581,8 @@ stratus-test-coverage output="":
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     just e2e-leader-follower-up miner " "
+    killport 3000 -s sigterm
+    killport 3001 -s sigterm
     sleep 10
     -rm -r e2e_logs
     -rm utils/deploy/deploy_01.log
@@ -583,6 +591,8 @@ stratus-test-coverage output="":
     -rm -r temp_3000-rocksdb
     -rm -r temp_3001-rocksdb
     just e2e-leader-follower-up importer " "
+    killport 3000 -s sigterm
+    killport 3001 -s sigterm
     sleep 10
     -rm -r e2e_logs
     -rm utils/deploy/deploy_01.log
