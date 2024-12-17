@@ -21,7 +21,7 @@ impl Default for DbConfig {
 }
 
 impl DbConfig {
-    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>) -> Options {
+    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>, _key_len: usize) -> Options {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
 
@@ -31,9 +31,9 @@ impl DbConfig {
 
         block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
         block_based_options.set_cache_index_and_filter_blocks(true);
-        block_based_options.set_bloom_filter(15.5, false);
+        block_based_options.set_bloom_filter(15.5, true);
 
-        // due to the nature of our application enabling rocks metrics decreases point lookup performance by 5x.
+        // NOTE: As per the rocks db wiki: "The overhead of statistics is usually small but non-negligible. We usually observe an overhead of 5%-10%."
         #[cfg(feature = "metrics")]
         {
             opts.enable_statistics();
@@ -48,8 +48,8 @@ impl DbConfig {
         }
 
         if let CacheSetting::Enabled(cache_size) = cache_setting {
-            let block_cache = Cache::new_lru_cache(cache_size/2);
-            let row_cache = Cache::new_lru_cache(cache_size/2);
+            let block_cache = Cache::new_hyper_clock_cache(cache_size/2, 0);
+            let row_cache = Cache::new_hyper_clock_cache(cache_size/2, 0);
 
             opts.set_row_cache(&row_cache);
             block_based_options.set_block_cache(&block_cache);

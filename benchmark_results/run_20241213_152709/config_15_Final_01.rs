@@ -21,7 +21,7 @@ impl Default for DbConfig {
 }
 
 impl DbConfig {
-    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>) -> Options {
+    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>, _key_len: usize) -> Options {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
 
@@ -33,13 +33,6 @@ impl DbConfig {
         block_based_options.set_cache_index_and_filter_blocks(true);
         block_based_options.set_bloom_filter(15.5, false);
 
-        // due to the nature of our application enabling rocks metrics decreases point lookup performance by 5x.
-        #[cfg(feature = "metrics")]
-        {
-            opts.enable_statistics();
-            opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
-        }
-
         if let Some(prefix_len) = prefix_len {
             let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
             block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
@@ -48,8 +41,8 @@ impl DbConfig {
         }
 
         if let CacheSetting::Enabled(cache_size) = cache_setting {
-            let block_cache = Cache::new_lru_cache(cache_size/2);
-            let row_cache = Cache::new_lru_cache(cache_size/2);
+            let block_cache = Cache::new_hyper_clock_cache(cache_size/2, 0);
+            let row_cache = Cache::new_hyper_clock_cache(cache_size/2, 0);
 
             opts.set_row_cache(&row_cache);
             block_based_options.set_block_cache(&block_cache);
