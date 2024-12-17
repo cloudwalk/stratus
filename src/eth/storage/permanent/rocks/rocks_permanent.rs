@@ -125,12 +125,6 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     fn save_block(&self, block: Block) -> anyhow::Result<()> {
-        #[cfg(feature = "metrics")]
-        {
-            self.state.export_metrics().inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to export metrics in RocksPermanent");
-            })?;
-        }
         self.state.save_block(block).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to save block in RocksPermanent");
         })
