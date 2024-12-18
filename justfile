@@ -600,4 +600,3 @@ stratus-test-coverage output="":
 
     cargo llvm-cov report {{output}}
     cargo llvm-cov report --codecov --output-path target/llvm-cov/codecov/codecov.json
-
