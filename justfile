@@ -599,3 +599,4 @@ stratus-test-coverage output="":
     -rm utils/deploy/deploy_02.log
 
     cargo llvm-cov report {{output}}
+    cargo llvm-cov report --codecov --output-path target/llvm-cov/codecov/codecov.json
