@@ -34,7 +34,7 @@ impl DbConfig {
         block_based_options.set_bloom_filter(15.5, false);
 
         // due to the nature of our application enabling rocks metrics decreases point lookup performance by 5x.
-        #[cfg(feature = "metrics")]
+        #[cfg(feature = "rocks_metrics")]
         {
             opts.enable_statistics();
             opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);

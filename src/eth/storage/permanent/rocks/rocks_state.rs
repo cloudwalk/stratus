@@ -50,17 +50,19 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::OptionExt;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 use crate::log_and_err;
 use crate::utils::GIGABYTE;
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "metrics")] {
+    if #[cfg(feature = "rocks_metrics")] {
         use parking_lot::Mutex;
 
         use rocksdb::statistics::Histogram;
         use rocksdb::statistics::Ticker;
 
-        use crate::infra::metrics::{self, Count, HistogramInt, Sum};
+        use crate::infra::metrics::{Count, HistogramInt, Sum};
     }
 }
 
@@ -115,13 +117,13 @@ pub struct RocksStorageState {
     pub blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<HashRocksdb, CfBlocksByHashValue>,
     /// Last collected stats for a histogram
-    #[cfg(feature = "metrics")]
+    #[cfg(feature = "rocks_metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
     /// Options passed at DB creation, stored for metrics
     ///
     /// a newly created `rocksdb::Options` object is unique, with an underlying pointer identifier inside of it, and is used to access
     /// the DB metrics, `Options` can be cloned, but two equal `Options` might not retrieve the same metrics
-    #[cfg(feature = "metrics")]
+    #[cfg(feature = "rocks_metrics")]
     db_options: Options,
     shutdown_timeout: Duration,
     enable_sync_write: bool,
@@ -133,7 +135,7 @@ impl RocksStorageState {
 
         let cf_options_map = generate_cf_options_map(cache_multiplier);
 
-        #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
+        #[cfg_attr(not(feature = "rocks_metrics"), allow(unused_variables))]
         let (db, db_options) = create_or_open_db(&path, &cf_options_map).context("when trying to create (or open) rocksdb")?;
 
         if db.path().to_str().is_none() {
@@ -152,9 +154,9 @@ impl RocksStorageState {
             transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
-            #[cfg(feature = "metrics")]
+            #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
-            #[cfg(feature = "metrics")]
+            #[cfg(feature = "rocks_metrics")]
             db_options,
             db,
             shutdown_timeout,
@@ -514,7 +516,7 @@ impl RocksStorageState {
     }
 }
 
-#[cfg(feature = "metrics")]
+#[cfg(feature = "rocks_metrics")]
 impl RocksStorageState {
     pub fn export_metrics(&self) -> Result<()> {
         let db_get = self.db_options.get_histogram_data(Histogram::DbGet);
