@@ -19,7 +19,7 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(config: StratusConfig) -> anyhow::Result<()> {
     // Init services
-    let storage = config.storage.init()?;
+    let storage = Arc::new(config.storage.init()?);
 
     // Init miner
     let miner = config.miner.init(Arc::clone(&storage)).await?;

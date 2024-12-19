@@ -1,24 +1,23 @@
 //! Ethereum / EVM storage.
 
-use cache::CacheConfig;
+pub use cache::CacheConfig;
 pub use cache::StorageCache;
 pub use permanent::InMemoryPermanentStorage;
 pub use permanent::PermanentStorage;
 pub use permanent::PermanentStorageConfig;
 pub use permanent::PermanentStorageKind;
 pub use stratus_storage::StratusStorage;
+pub use temporary::CachedTemporaryStorage;
 pub use temporary::InMemoryTemporaryStorage;
 pub use temporary::TemporaryStorage;
 pub use temporary::TemporaryStorageConfig;
 pub use temporary::TemporaryStorageKind;
-
 mod cache;
 pub mod permanent;
 mod stratus_storage;
 mod temporary;
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use clap::Parser;
 use display_json::DebugAsJson;
@@ -131,13 +130,13 @@ pub struct StorageConfig {
 
 impl StorageConfig {
     /// Initializes Stratus storage.
-    pub fn init(&self) -> Result<Arc<StratusStorage>, StratusError> {
+    pub fn init(&self) -> Result<StratusStorage, StratusError> {
         let perm_storage = self.perm_storage.init()?;
         let temp_storage = self.temp_storage.init(&*perm_storage)?;
         let cache = self.cache.init();
 
         let storage = StratusStorage::new(temp_storage, perm_storage, cache)?;
 
-        Ok(Arc::new(storage))
+        Ok(storage)
     }
 }

@@ -36,7 +36,7 @@ mod label {
 ///
 /// Additionaly it tracks metrics that are independent of the storage implementation.
 pub struct StratusStorage {
-    temp: Box<dyn TemporaryStorage>,
+    pub temp: Box<dyn TemporaryStorage>,
     cache: StorageCache,
     perm: Box<dyn PermanentStorage>,
 }

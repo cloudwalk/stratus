@@ -1,8 +1,10 @@
 pub use inmemory::InMemoryTemporaryStorage;
 use strum::VariantNames;
 
-mod inmemory;
+mod cached_temporary;
+pub use cached_temporary::CachedTemporaryStorage;
 
+mod inmemory;
 use std::str::FromStr;
 
 use anyhow::anyhow;

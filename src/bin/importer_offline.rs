@@ -25,7 +25,10 @@ use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::ExternalTransaction;
+use stratus::eth::storage::CacheConfig;
+use stratus::eth::storage::CachedTemporaryStorage;
 use stratus::eth::storage::Storage;
+use stratus::eth::storage::StorageCache;
 use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
 use stratus::log_and_err;
@@ -76,7 +79,23 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
-    let storage = config.storage.init()?;
+    let mut storage = config.storage.init()?;
+
+    // We override the temporary storage with a very large cache since the writes to the parmanent
+    // storage are in batch. If we don't we risk data leaving the cache before it is written to the
+    // permanent storage and therefore impacting execution.
+    let (temp, cache) = CachedTemporaryStorage::new(
+        storage.temp,
+        &CacheConfig {
+            slot_cache_capacity: usize::MAX,
+            account_cache_capacity: usize::MAX,
+        },
+    );
+
+    storage.temp = Box::new(temp);
+
+    let storage = Arc::new(storage);
+
     let miner = config.miner.init_with_mode(MinerMode::External, Arc::clone(&storage)).await?;
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
@@ -122,7 +141,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     });
 
     let block_saver_handle = spawn_thread("block-saver", || {
-        if let Err(e) = run_block_saver(miner, execute_to_save_rx) {
+        if let Err(e) = run_block_saver(miner, execute_to_save_rx, cache) {
             tracing::error!(reason = ?e, "'block-saver' task failed");
         }
     });
@@ -269,7 +288,7 @@ fn run_external_block_executor(
     }
 }
 
-fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToSave>) -> anyhow::Result<()> {
+fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToSave>, cache: Arc<StorageCache>) -> anyhow::Result<()> {
     const TASK_NAME: &str = "block-saver";
     let _timer = DropTimer::start("importer-offline::run_block_saver");
 
@@ -283,9 +302,11 @@ fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToS
             return Ok(());
         };
 
+        // We can implement a function to do this entire operation in batch.
         for block in blocks_batch {
             miner.commit(block)?;
         }
+        cache.clear();
     }
 }
 
