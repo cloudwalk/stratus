@@ -483,7 +483,7 @@ contracts-coverage-erase:
     just _log "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
 
-stratus-test-coverage output="":
+stratus-test-coverage *args="":
     #!/bin/bash
     # setup
     just contracts-clone
@@ -597,6 +597,6 @@ stratus-test-coverage output="":
     -rm -r e2e_logs
     -rm utils/deploy/deploy_01.log
     -rm utils/deploy/deploy_02.log
+    */
 
-    cargo llvm-cov report {{output}}
-    cargo llvm-cov report --codecov --output-path target/llvm-cov/codecov/codecov.json
+    cargo llvm-cov report {{args}}
