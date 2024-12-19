@@ -1,5 +1,6 @@
 //! Ethereum / EVM storage.
 
+use cache::CacheConfig;
 pub use cache::StorageCache;
 pub use permanent::InMemoryPermanentStorage;
 pub use permanent::PermanentStorage;
@@ -129,6 +130,9 @@ pub struct StorageConfig {
 
     #[clap(flatten)]
     pub perm_storage: PermanentStorageConfig,
+
+    #[clap(flatten)]
+    pub cache: CacheConfig,
 }
 
 impl StorageConfig {
@@ -136,9 +140,9 @@ impl StorageConfig {
     pub fn init(&self) -> Result<Arc<StratusStorage>, StratusError> {
         let perm_storage = self.perm_storage.init()?;
         let temp_storage = self.temp_storage.init(&*perm_storage)?;
-
+        let cache = self.cache.init();
         let StorageKind::StratusStorage = self.storage_kind;
-        let storage = StratusStorage::new(temp_storage, perm_storage)?;
+        let storage = StratusStorage::new(temp_storage, perm_storage, cache)?;
 
         Ok(Arc::new(storage))
     }

@@ -1,3 +1,5 @@
+use clap::Parser;
+use display_json::DebugAsJson;
 use quick_cache::sync::Cache;
 use quick_cache::sync::DefaultLifecycle;
 use quick_cache::UnitWeighter;
@@ -16,16 +18,42 @@ pub struct StorageCache {
     account_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
 }
 
-impl Default for StorageCache {
-    fn default() -> Self {
-        Self {
-            slot_cache: Cache::with(100_000, 100_000, UnitWeighter, FxBuildHasher, DefaultLifecycle::default()),
-            account_cache: Cache::with(20_000, 20_000, UnitWeighter, FxBuildHasher, DefaultLifecycle::default()),
-        }
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+pub struct CacheConfig {
+    /// Capacity of slot cache
+    #[arg(long = "slot-cache-capacity", env = "SLOT_CACHE_CAPACITY", default_value = "100000")]
+    pub slot_cache_capacity: usize,
+
+    /// Capacity of account cache
+    #[arg(long = "account-cache-capacity", env = "ACCOUNT_CACHE_CAPACITY", default_value = "20000")]
+    pub account_cache_capacity: usize,
+}
+
+impl CacheConfig {
+    pub fn init(&self) -> StorageCache {
+        StorageCache::new(self)
     }
 }
 
 impl StorageCache {
+    pub fn new(config: &CacheConfig) -> Self {
+        Self {
+            slot_cache: Cache::with(
+                config.slot_cache_capacity,
+                config.slot_cache_capacity as u64,
+                UnitWeighter,
+                FxBuildHasher,
+                DefaultLifecycle::default(),
+            ),
+            account_cache: Cache::with(
+                config.account_cache_capacity,
+                config.account_cache_capacity as u64,
+                UnitWeighter,
+                FxBuildHasher,
+                DefaultLifecycle::default(),
+            ),
+        }
+    }
     pub fn clear(&self) {
         self.slot_cache.clear();
         self.account_cache.clear();
