@@ -43,12 +43,8 @@ pub struct StratusStorage {
 
 impl StratusStorage {
     /// Creates a new storage with the specified temporary and permanent implementations.
-    pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>) -> Result<Self, StratusError> {
-        let this = Self {
-            temp,
-            cache: StorageCache::default(),
-            perm,
-        };
+    pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>, cache: StorageCache) -> Result<Self, StratusError> {
+        let this = Self { temp, cache, perm };
 
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
@@ -64,10 +60,17 @@ impl StratusStorage {
 
     #[cfg(test)]
     pub fn new_test() -> Result<Self, StratusError> {
+        use super::cache::CacheConfig;
+
         let perm = Box::new(super::InMemoryPermanentStorage::default());
         let temp = Box::new(super::InMemoryTemporaryStorage::new(0.into()));
+        let cache = CacheConfig {
+            slot_cache_capacity: 100000,
+            account_cache_capacity: 20000,
+        }
+        .init();
 
-        Self::new(temp, perm)
+        Self::new(temp, perm, cache)
     }
 }
 
