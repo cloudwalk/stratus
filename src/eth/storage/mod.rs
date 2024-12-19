@@ -7,7 +7,6 @@ pub use permanent::PermanentStorage;
 pub use permanent::PermanentStorageConfig;
 pub use permanent::PermanentStorageKind;
 pub use stratus_storage::StratusStorage;
-use strum::VariantNames;
 pub use temporary::InMemoryTemporaryStorage;
 pub use temporary::TemporaryStorage;
 pub use temporary::TemporaryStorageConfig;
@@ -19,10 +18,8 @@ mod stratus_storage;
 mod temporary;
 
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
 
@@ -122,9 +119,6 @@ impl AccountWithSlots {
 /// Configuration that can be used by any binary that interacts with Stratus storage.
 #[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
 pub struct StorageConfig {
-    #[arg(long = "storage-kind", env = "STORAGE_KIND", default_value = "stratus-storage")]
-    pub storage_kind: StorageKind,
-
     #[clap(flatten)]
     pub temp_storage: TemporaryStorageConfig,
 
@@ -141,28 +135,9 @@ impl StorageConfig {
         let perm_storage = self.perm_storage.init()?;
         let temp_storage = self.temp_storage.init(&*perm_storage)?;
         let cache = self.cache.init();
-        let StorageKind::StratusStorage = self.storage_kind;
+
         let storage = StratusStorage::new(temp_storage, perm_storage, cache)?;
 
         Ok(Arc::new(storage))
-    }
-}
-
-#[derive(DebugAsJson, strum::Display, strum::VariantNames, Parser, Clone, serde::Serialize)]
-pub enum StorageKind {
-    #[serde(rename = "stratus-storage")]
-    #[strum(to_string = "stratus-storage")]
-    StratusStorage,
-}
-
-impl FromStr for StorageKind {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        let s = s.trim().to_lowercase();
-        match s.as_ref() {
-            "stratus-storage" | "stratus_storage" => Ok(Self::StratusStorage),
-            s => Err(anyhow!("unknown storage kind: \"{}\" - valid values are {:?}", s, Self::VARIANTS)),
-        }
     }
 }
