@@ -1,13 +1,13 @@
 use display_json::DebugAsJson;
+use revm::interpreter::analysis::to_analysed;
+use revm::primitives::Bytecode;
 
 use crate::alias::RevmAccountInfo;
 use crate::alias::RevmAddress;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
-use crate::ext::OptionExt;
 
 /// Ethereum account (wallet or contract).
 ///
@@ -24,7 +24,8 @@ pub struct Account {
     pub balance: Wei,
 
     /// Contract bytecode. Present only if the account is a contract.
-    pub bytecode: Option<Bytes>,
+    #[dummy(default)]
+    pub bytecode: Option<Bytecode>,
 
     /// Keccak256 Hash of the bytecode. If bytecode is null, then the hash of empty string.
     pub code_hash: CodeHash,
@@ -57,7 +58,7 @@ impl Account {
     /// Checks the current account is a contract.
     pub fn is_contract(&self) -> bool {
         match self.bytecode {
-            Some(ref bytecode) => !bytecode.is_empty(),
+            Some(ref bytecode) => !bytecode.bytecode().is_empty(),
             None => false,
         }
     }
@@ -70,11 +71,12 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
     fn from(value: (RevmAddress, RevmAccountInfo)) -> Self {
         let (address, info) = value;
 
+        let code = info.code.map(to_analysed);
         Self {
             address: address.into(),
             nonce: info.nonce.into(),
             balance: info.balance.into(),
-            bytecode: info.code.map_into(),
+            bytecode: code,
             code_hash: info.code_hash.into(),
         }
     }
@@ -90,7 +92,7 @@ impl From<&Account> for RevmAccountInfo {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
             code_hash: value.code_hash.0 .0.into(),
-            code: value.bytecode.as_ref().cloned().map_into(),
+            code: value.bytecode.as_ref().cloned(),
         }
     }
 }
