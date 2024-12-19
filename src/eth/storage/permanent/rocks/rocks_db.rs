@@ -25,7 +25,7 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &HashMap<&'static s
     let cf_config_iter = cf_configs.iter().map(|(name, opts)| (*name, opts.clone()));
 
     tracing::debug!("generating options for column families");
-    let db_opts = DbConfig::Default.to_options(CacheSetting::Disabled);
+    let db_opts = DbConfig::Default.to_options(CacheSetting::Disabled, None);
 
     if !path.exists() {
         tracing::warn!(?path, "RocksDB at path doesn't exist, creating a new one there instead");
