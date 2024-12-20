@@ -5,7 +5,6 @@ use jsonrpsee::Extensions;
 use rlp::Decodable;
 use tracing::Span;
 
-use super::rpc_http_middleware::Authentication;
 use crate::eth::primitives::StratusError;
 use crate::eth::rpc::rpc_client_app::RpcClientApp;
 use crate::ext::type_basename;
@@ -16,12 +15,6 @@ pub trait RpcExtensionsExt {
     /// Returns the client performing the JSON-RPC request.
     fn rpc_client(&self) -> &RpcClientApp;
 
-    /// Returns current Authentication.
-    fn authentication(&self) -> &Authentication;
-
-    /// Returns wheather admin authentication suceeded.
-    fn is_admin(&self) -> bool;
-
     /// Enters RpcMiddleware request span if present.
     fn enter_middleware_span(&self) -> Option<EnteredWrap<'_>>;
 }
@@ -29,14 +22,6 @@ pub trait RpcExtensionsExt {
 impl RpcExtensionsExt for Extensions {
     fn rpc_client(&self) -> &RpcClientApp {
         self.get::<RpcClientApp>().unwrap_or(&RpcClientApp::Unknown)
-    }
-
-    fn authentication(&self) -> &Authentication {
-        self.get::<Authentication>().unwrap_or(&Authentication::None)
-    }
-
-    fn is_admin(&self) -> bool {
-        matches!(self.authentication(), Authentication::Admin)
     }
 
     fn enter_middleware_span(&self) -> Option<EnteredWrap<'_>> {

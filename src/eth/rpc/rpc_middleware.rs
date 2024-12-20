@@ -87,8 +87,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             _ => None,
         };
 
-        let is_admin = request.extensions.is_admin();
-
         let client = if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.as_ref()) {
             let val = tx_client.clone();
             request.extensions_mut().insert(val);
@@ -117,7 +115,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
             rpc_tx_function = %tx.as_ref().map(|tx|tx.function).or_empty(),
             rpc_tx_from = %tx.as_ref().and_then(|tx|tx.from).or_empty(),
             rpc_tx_to = %tx.as_ref().and_then(|tx|tx.to).or_empty(),
-            is_admin = %is_admin,
             "rpc request"
         );
 
