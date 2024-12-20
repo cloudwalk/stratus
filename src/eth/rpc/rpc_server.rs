@@ -436,12 +436,12 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
 }
 
 async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    let (params, password) = next_rpc_param_or_default::<&str>(params.sequence())?;
-    validate_password(password)?;
-    let (params, external_rpc) = next_rpc_param::<String>(params)?;
+    let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
     let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
     let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
-    let (_, raw_sync_interval) = next_rpc_param::<String>(params)?;
+    let (params, raw_sync_interval) = next_rpc_param::<String>(params)?;
+    let (_, password) = next_rpc_param_or_default::<&str>(params)?;
+    validate_password(password)?;
 
     let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
