@@ -54,7 +54,7 @@ pub enum Authentication {
 impl Authentication {
     pub fn auth_admin(&self) -> Result<(), StratusError> {
         if matches!(self, Authentication::Admin) {
-            return Ok(())
+            return Ok(());
         }
         Err(StratusError::InvalidPassword)
     }
