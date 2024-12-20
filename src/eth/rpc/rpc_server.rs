@@ -485,9 +485,9 @@ fn stratus_shutdown_importer(params: Params<'_>, ctx: &RpcContext, _: &Extension
 }
 
 async fn stratus_change_miner_mode(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    let (params, password) = next_rpc_param_or_default::<&str>(params.sequence())?;
+    let (params, mode_str) = next_rpc_param::<String>(params.sequence())?;
+    let (_, password) = next_rpc_param_or_default::<&str>(params)?;
     validate_password(password)?;
-    let (_, mode_str) = next_rpc_param::<String>(params)?;
 
     let mode = MinerMode::from_str(&mode_str).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse miner mode");
