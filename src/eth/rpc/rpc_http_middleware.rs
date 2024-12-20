@@ -62,23 +62,16 @@ impl Authentication {
 
 /// Checks if the provided admin password is correct
 fn parse_admin_password(headers: &HeaderMap<HeaderValue>) -> Authentication {
-    let Ok(real_pass) = std::env::var("ADMIN_PASSWORD") else {
-        return Authentication::Admin;
+    let real_pass = match std::env::var("ADMIN_PASSWORD") {
+        Ok(pass) if !pass.is_empty() => pass,
+        _ => return Authentication::Admin,
     };
-    if real_pass.is_empty() {
-        return Authentication::Admin;
-    }
-    let Some(value) = headers.get("Authorization") else {
-        return Authentication::None;
-    };
-    let Ok(value) = value.to_str() else { return Authentication::None };
-    let Some(password) = value.strip_prefix("Password ") else {
-        return Authentication::None;
-    };
-    if real_pass == password {
-        Authentication::Admin
-    } else {
-        Authentication::None
+
+    match headers.get("Authorization")
+        .and_then(|val| val.to_str().ok())
+        .and_then(|val| val.strip_prefix("Password ")) {
+        Some(password) if password == real_pass => Authentication::Admin,
+        _ => Authentication::None,
     }
 }
 
