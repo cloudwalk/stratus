@@ -4,12 +4,7 @@ import { send, sendAndGetError, sendReset } from "../helpers/rpc";
 describe("Admin Password", () => {
     describe("With ADMIN_PASSWORD set", () => {
         before(async () => {
-            process.env.ADMIN_PASSWORD = "test123";
             await sendReset();
-        });
-
-        after(() => {
-            delete process.env.ADMIN_PASSWORD;
         });
 
         it("should reject requests without password", async () => {

@@ -65,6 +65,9 @@ fn parse_admin_password(headers: &HeaderMap<HeaderValue>) -> Authentication {
     let Ok(real_pass) = std::env::var("ADMIN_PASSWORD") else {
         return Authentication::Admin;
     };
+    if real_pass.is_empty() {
+        return Authentication::Admin;
+    }
     let Some(value) = headers.get("Authorization") else {
         return Authentication::None;
     };
