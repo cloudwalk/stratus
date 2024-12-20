@@ -12,6 +12,7 @@ use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use tower::Service;
 
+use crate::eth::primitives::StratusError;
 use crate::eth::rpc::RpcClientApp;
 use crate::ext::not;
 
@@ -36,9 +37,45 @@ where
 
     fn call(&mut self, mut request: HttpRequest<HttpBody>) -> Self::Future {
         let client_app = parse_client_app(request.headers(), request.uri());
+        let authentication = parse_admin_password(request.headers());
         request.extensions_mut().insert(client_app);
+        request.extensions_mut().insert(authentication);
 
         Box::pin(self.service.call(request).map_err(Into::into))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Authentication {
+    Admin,
+    None,
+}
+
+impl Authentication {
+    pub fn auth_admin(&self) -> Result<(), StratusError> {
+        if matches!(self, Authentication::Admin) {
+            return Err(StratusError::InvalidPassword);
+        }
+        Ok(())
+    }
+}
+
+/// Checks if the provided admin password is correct
+fn parse_admin_password(headers: &HeaderMap<HeaderValue>) -> Authentication {
+    let Ok(real_pass) = std::env::var("ADMIN_PASSWORD") else {
+        return Authentication::Admin;
+    };
+    let Some(value) = headers.get("Authorization") else {
+        return Authentication::None;
+    };
+    let Ok(value) = value.to_str() else { return Authentication::None };
+    let Some(password) = value.strip_prefix("Password ") else {
+        return Authentication::None;
+    };
+    if real_pass == password {
+        Authentication::Admin
+    } else {
+        Authentication::None
     }
 }
 
