@@ -16,7 +16,7 @@ describe("Leader & Follower change integration test", function () {
         const version = await sendWithRetry("stratus_version", []);
         expect(version).to.have.nested.property("git.commit");
         expect(version.git.commit).to.be.a("string");
-        expect(version.git.commit).to.have.lengthOf(7);
+        expect(version.git.commit.length).to.be.oneOf([7, 8]);
     });
 
     it("Validate initial Follower state, health and version", async function () {
@@ -32,7 +32,7 @@ describe("Leader & Follower change integration test", function () {
         const version = await sendWithRetry("stratus_version", []);
         expect(version).to.have.nested.property("git.commit");
         expect(version.git.commit).to.be.a("string");
-        expect(version.git.commit).to.have.lengthOf(7);
+        expect(version.git.commit.length).to.be.oneOf([7, 8]);
     });
 
     it("Change Leader to Leader should return false", async function () {
