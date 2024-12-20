@@ -111,7 +111,7 @@ if (process.env.RPC_LOG) {
 // Sends an RPC request to the blockchain, returning full response.
 let requestId = 0;
 
-export async function sendAndGetFullResponse(method: string, params: any[] = []): Promise<any> {
+export async function sendAndGetFullResponse(method: string, params: any[] = [], headers: Record<string, string> = {}): Promise<any> {
     for (let i = 0; i < params.length; ++i) {
         const param = params[i];
         if (param instanceof Account) {
@@ -130,8 +130,14 @@ export async function sendAndGetFullResponse(method: string, params: any[] = [])
         console.log("REQ  ->", JSON.stringify(payload));
     }
 
+    // prepare headers
+    const requestHeaders = {
+        "Content-Type": "application/json",
+        ...headers
+    };
+
     // execute request and log response
-    const response = await axios.post(providerUrl, payload, { headers: { "Content-Type": "application/json" } });
+    const response = await axios.post(providerUrl, payload, { headers: requestHeaders });
     if (process.env.RPC_LOG) {
         console.log("RESP <-", JSON.stringify(response.data));
     }
@@ -140,15 +146,15 @@ export async function sendAndGetFullResponse(method: string, params: any[] = [])
 }
 
 // Sends an RPC request to the blockchain, returning its result field.
-export async function send(method: string, params: any[] = []): Promise<any> {
-    const response = await sendAndGetFullResponse(method, params);
+export async function send(method: string, params: any[] = [], headers: Record<string, string> = {}): Promise<any> {
+    const response = await sendAndGetFullResponse(method, params, headers);
     return response.data.result;
 }
 
 // Sends an RPC request to the blockchain, returning its error field.
 // Use it when you expect the RPC call to fail.
-export async function sendAndGetError(method: string, params: any[] = []): Promise<any> {
-    const response = await sendAndGetFullResponse(method, params);
+export async function sendAndGetError(method: string, params: any[] = [], headers: Record<string, string> = {}): Promise<any> {
+    const response = await sendAndGetFullResponse(method, params, headers);
     return response.data.error;
 }
 
