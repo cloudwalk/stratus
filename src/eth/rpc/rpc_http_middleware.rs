@@ -67,9 +67,11 @@ fn parse_admin_password(headers: &HeaderMap<HeaderValue>) -> Authentication {
         _ => return Authentication::Admin,
     };
 
-    match headers.get("Authorization")
+    match headers
+        .get("Authorization")
         .and_then(|val| val.to_str().ok())
-        .and_then(|val| val.strip_prefix("Password ")) {
+        .and_then(|val| val.strip_prefix("Password "))
+    {
         Some(password) if password == real_pass => Authentication::Admin,
         _ => Authentication::None,
     }
