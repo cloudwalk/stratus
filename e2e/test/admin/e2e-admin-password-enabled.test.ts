@@ -1,4 +1,5 @@
 import { expect } from "chai";
+
 import { send, sendAndGetError, sendReset } from "../helpers/rpc";
 
 describe("Admin Password (with password set)", () => {
