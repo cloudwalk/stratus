@@ -162,20 +162,20 @@ e2e network="stratus" block_modes="automine" test="":
 # E2E: Execute admin password tests
 e2e-admin-password:
     #!/bin/bash
-    just build
+    cd e2e
 
     # Start Stratus with password set
     just _log "Running admin password tests with password set"
-    ADMIN_PASSWORD=test123 just run -a 0.0.0.0:3000 &
+    ADMIN_PASSWORD=test123 just run -a 0.0.0.0:3000 > /dev/null &
     just _wait_for_stratus
-    cd e2e && npx hardhat test test/admin/e2e-admin-password-enabled.test.ts --network stratus
+    npx hardhat test test/admin/e2e-admin-password-enabled.test.ts --network stratus
     killport 3000
 
     # Start Stratus without password set
-    just _log "Running admin password tests without password set" 
-    just run -a 0.0.0.0:3000 &
+    just _log "Running admin password tests without password set"
+    just run -a 0.0.0.0:3000 > /dev/null  &
     just _wait_for_stratus
-    cd e2e && npx hardhat test test/admin/e2e-admin-password-disabled.test.ts --network stratus
+    npx hardhat test test/admin/e2e-admin-password-disabled.test.ts --network stratus
     killport 3000
 
 # E2E: Starts and execute Hardhat tests in Hardhat
