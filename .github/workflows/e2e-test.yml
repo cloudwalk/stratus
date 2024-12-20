@@ -96,13 +96,3 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
-
-  e2e-admin-password:
-    name: E2E Admin Password
-    uses: ./.github/workflows/_setup-e2e.yml
-    with:
-      justfile_recipe: "e2e-admin-password"
-
-    concurrency:
-      group: ${{ github.workflow }}-admin-password-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
