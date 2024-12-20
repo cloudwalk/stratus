@@ -18,7 +18,7 @@ use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 
-#[cfg(feature = "metrics")]
+#[cfg(feature = "rocks_metrics")]
 use crate::infra::metrics;
 
 /// A RocksDB Column Family (CF) reference.
@@ -232,7 +232,7 @@ where
         }
     }
 
-    #[cfg(feature = "metrics")]
+    #[cfg(feature = "rocks_metrics")]
     pub fn export_metrics(&self) {
         let handle = self.handle();
         let cur_size_active_mem_table = self

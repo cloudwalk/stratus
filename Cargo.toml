@@ -201,8 +201,14 @@ dev = []
 # Enable runtime metrics collection.
 metrics = ["dep:metrics-exporter-prometheus"]
 
+# Enable runtime rocksdb metrics collection.
+rocks_metrics = ["metrics"]
+
 # Enable runtime tracing/spans collection.
 tracing = []
+
+# Changes to help us generate our flamegraphs
+flamegraph = []
 
 # Use Jemalloc as the global allocator
 jemalloc = ["dep:tikv-jemallocator"]
