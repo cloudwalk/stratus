@@ -48,28 +48,31 @@ impl From<Block> for BlockRocksdb {
 
 impl From<BlockRocksdb> for Block {
     fn from(item: BlockRocksdb) -> Self {
-        Block {
-            header: BlockHeader {
-                number: BlockNumber::from(item.header.number),
-                hash: Hash::from(item.header.hash),
-                transactions_root: Hash::from(item.header.transactions_root),
-                gas_used: item.header.gas_used.into(),
-                gas_limit: item.header.gas_limit.into(),
-                bloom: item.header.bloom.into(),
-                timestamp: item.header.timestamp.into(),
-                parent_hash: Hash::from(item.header.parent_hash),
-                author: Address::from(item.header.author),
-                extra_data: item.header.extra_data.into(),
-                miner: Address::from(item.header.miner),
-                difficulty: item.header.difficulty.into(),
-                receipts_root: Hash::from(item.header.receipts_root),
-                uncle_hash: Hash::from(item.header.uncle_hash),
-                size: item.header.size.into(),
-                state_root: Hash::from(item.header.state_root),
-                total_difficulty: item.header.total_difficulty.into(),
-                nonce: item.header.nonce.into(),
-            },
-            transactions: item.transactions.into_iter().map(TransactionMined::from).collect(),
-        }
+        let header = BlockHeader {
+            number: BlockNumber::from(item.header.number),
+            hash: Hash::from(item.header.hash),
+            transactions_root: Hash::from(item.header.transactions_root),
+            gas_used: item.header.gas_used.into(),
+            gas_limit: item.header.gas_limit.into(),
+            bloom: item.header.bloom.into(),
+            timestamp: item.header.timestamp.into(),
+            parent_hash: Hash::from(item.header.parent_hash),
+            author: Address::from(item.header.author),
+            extra_data: item.header.extra_data.into(),
+            miner: Address::from(item.header.miner),
+            difficulty: item.header.difficulty.into(),
+            receipts_root: Hash::from(item.header.receipts_root),
+            uncle_hash: Hash::from(item.header.uncle_hash),
+            size: item.header.size.into(),
+            state_root: Hash::from(item.header.state_root),
+            total_difficulty: item.header.total_difficulty.into(),
+            nonce: item.header.nonce.into(),
+        };
+        let transactions = item
+            .transactions
+            .into_iter()
+            .map(|tx| TransactionMined::from_rocks_primitives(tx, header.number.into(), header.hash.into()))
+            .collect();
+        Block { header, transactions }
     }
 }
