@@ -40,3 +40,4 @@ stratus.log
 
 # OS specific
 .DS_Store
+.aider*

@@ -159,6 +159,25 @@ e2e network="stratus" block_modes="automine" test="":
         fi
     done
 
+# E2E: Execute admin password tests
+e2e-admin-password:
+    #!/bin/bash
+    cd e2e
+
+    # Start Stratus with password set
+    just _log "Running admin password tests with password set"
+    ADMIN_PASSWORD=test123 just run -a 0.0.0.0:3000 > /dev/null &
+    just _wait_for_stratus
+    npx hardhat test test/admin/e2e-admin-password-enabled.test.ts --network stratus
+    killport 3000 -s sigterm
+
+    # Start Stratus without password set
+    just _log "Running admin password tests without password set"
+    just run -a 0.0.0.0:3000 > /dev/null  &
+    just _wait_for_stratus
+    npx hardhat test test/admin/e2e-admin-password-disabled.test.ts --network stratus
+    killport 3000 -s sigterm
+
 # E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat block-mode="automine" test="":
     #!/bin/bash
@@ -483,17 +502,23 @@ contracts-coverage-erase:
     just _log "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
 
-stratus-test-coverage output="":
+stratus-test-coverage *args="":
     #!/bin/bash
     # setup
-    just contracts-clone
+    cargo llvm-cov clean --workspace
+    just build
     source <(cargo llvm-cov show-env --export-prefix)
     export RUST_LOG=error
 
-    cargo llvm-cov clean --workspace
-    just build
+    just contracts-clone
+
+    # cargo test
+    cargo llvm-cov --no-report
+    sleep 10
+
 
     # inmemory
+
     just e2e-stratus automine
     sleep 10
     -rm stratus.log
@@ -532,8 +557,6 @@ stratus-test-coverage output="":
     -rm stratus.log
 
     # other
-    cargo llvm-cov --no-report
-    sleep 10
 
     -just contracts-clone --token
     -just contracts-flatten --token
@@ -598,4 +621,6 @@ stratus-test-coverage output="":
     -rm utils/deploy/deploy_01.log
     -rm utils/deploy/deploy_02.log
 
-    cargo llvm-cov report {{output}}
+    just e2e-admin-password
+
+    cargo llvm-cov report {{args}}
