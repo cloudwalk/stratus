@@ -618,4 +618,5 @@ stratus-test-coverage *args="":
     -rm utils/deploy/deploy_02.log
     */
 
+    just e2e-admin-password
     cargo llvm-cov report {{args}}
