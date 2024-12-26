@@ -214,4 +214,24 @@ describe("Leader & Follower change integration test", function () {
 
         expect(semaphoreFailureCount).to.be.greaterThan(0);
     });
+    it("Test follower health is based on leader miner enabled", async function () {
+        updateProviderUrl("stratus");
+        await sendWithRetry("stratus_disableMiner", []);
+
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+
+        updateProviderUrl("stratus-follower");
+        const unhealthyResponse = await sendAndGetFullResponse("stratus_health", []);
+        expect(unhealthyResponse.data.error.code).to.equal(-32009);
+        expect(unhealthyResponse.data.error.message).to.equal("Stratus is not ready to start servicing requests.");
+
+        updateProviderUrl("stratus");
+        await sendWithRetry("stratus_enableMiner", []);
+
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+
+        updateProviderUrl("stratus-follower");
+        const healthyResponse = await sendWithRetry("stratus_health", []);
+        expect(healthyResponse).to.equal(true);
+    });
 });
