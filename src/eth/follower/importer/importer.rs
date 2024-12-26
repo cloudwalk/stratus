@@ -60,7 +60,7 @@ pub enum ImporterMode {
 /// Current block number of the external RPC blockchain.
 static EXTERNAL_RPC_CURRENT_BLOCK: AtomicU64 = AtomicU64::new(0);
 
-/// Current block number of the external RPC blockchain.
+/// Timestamp of when EXTERNAL_RPC_CURRENT_BLOCK was updated last.
 static LATEST_FETCHED_BLOCK_TIME: AtomicU64 = AtomicU64::new(0);
 
 /// Only sets the external RPC current block number if it is equals or greater than the current one.
