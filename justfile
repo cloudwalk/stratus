@@ -315,20 +315,13 @@ e2e-flamegraph:
     just _log "Running cargo flamegraph"
     cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
-# E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc" release_flag="--release":
+e2e-leader:
     #!/bin/bash
-    just build
-
-    mkdir e2e_logs
-
-    # Start Stratus with leader flag
     RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
-
-    # Wait for Stratus with leader flag to start
     just _wait_for_stratus 3000
 
-    # Start Stratus with follower flag
+e2e-follower test="brlc":
+    #!/bin/bash
     if [ "{{test}}" = "kafka" ]; then
     # Start Kafka using Docker Compose
         just _log "Starting Kafka"
@@ -342,6 +335,19 @@ e2e-leader-follower-up test="brlc" release_flag="--release":
     fi
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
+
+# E2E: Leader & Follower Up
+e2e-leader-follower-up test="brlc" release_flag="--release":
+    #!/bin/bash
+    just build
+
+    mkdir e2e_logs
+
+    # Start Stratus with leader flag
+    just e2e-leader
+
+    # Start Stratus with follower flag
+    just e2e-follower {{test}}
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
@@ -502,6 +508,18 @@ contracts-coverage-erase:
     just _log "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
 
+
+e2e-leader-follower-up-coverage test="":
+    -rm -r temp_3000-rocksdb
+    -rm -r temp_3001-rocksdb
+    just e2e-leader-follower-up test " "
+    killport 3000 -s sigterm
+    killport 3001 -s sigterm
+    sleep 10
+    -rm -r e2e_logs
+    -rm utils/deploy/deploy_01.log
+    -rm utils/deploy/deploy_02.log
+
 stratus-test-coverage *args="":
     #!/bin/bash
     # setup
@@ -560,66 +578,14 @@ stratus-test-coverage *args="":
 
     -just contracts-clone --token
     -just contracts-flatten --token
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    -docker compose down -v
-    just e2e-leader-follower-up kafka " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
 
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just e2e-leader-follower-up deploy " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just e2e-leader-follower-up brlc " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just e2e-leader-follower-up change " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just e2e-leader-follower-up miner " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just e2e-leader-follower-up importer " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
+    just e2e-leader-follower-up-coverage kafka
+    just e2e-leader-follower-up-coverage deploy
+    just e2e-leader-follower-up-coverage brlc
+    just e2e-leader-follower-up-coverage change
+    just e2e-leader-follower-up-coverage miner
+    just e2e-leader-follower-up-coverage importer
+    just e2e-leader-follower-up-coverage health
 
     just e2e-admin-password
 
