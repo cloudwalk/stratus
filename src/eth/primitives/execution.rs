@@ -66,7 +66,7 @@ impl EvmExecution {
         let sender_next_nonce = sender_changes
             .nonce
             .take_original_ref()
-            .expect("from_original_values populates original values, so taking original ref here will succeed")
+            .ok_or_else(|| anyhow!("original nonce value not found when it should have been populated by from_original_values"))?
             .next_nonce();
         sender_changes.nonce.set_modified(sender_next_nonce);
 
@@ -197,7 +197,7 @@ impl EvmExecution {
             };
 
             // subtract execution cost from sender balance
-            let sender_balance = *sender_changes.balance.take_ref().expect("balance is never None");
+            let sender_balance = *sender_changes.balance.take_ref().ok_or(anyhow!("sender balance was None"))?;
             let sender_new_balance = if sender_balance > execution_cost {
                 sender_balance - execution_cost
             } else {

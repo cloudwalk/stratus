@@ -41,6 +41,7 @@ impl<T> GlobalServices<T>
 where
     T: clap::Parser + WithCommonConfig + Debug,
 {
+    #[allow(clippy::expect_used)]
     /// Executes global services initialization.
     pub fn init() -> Self
     where

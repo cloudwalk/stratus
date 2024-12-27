@@ -209,7 +209,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         #[cfg(not(feature = "dev"))]
         let finished_block = {
             let latest = RwLockWriteGuard::<Option<InMemoryTemporaryStorageState>>::downgrade(latest);
-            latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone()
+            latest
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("latest should be Some after finishing the pending block"))?
+                .block
+                .clone()
         };
 
         Ok(finished_block)
