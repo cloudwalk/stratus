@@ -522,6 +522,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     (block, receipts)
 }
 
+#[allow(clippy::expect_used)]
 #[tracing::instrument(name = "importer::fetch_block", skip_all, fields(block_number))]
 async fn fetch_block(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ExternalBlock {
     const RETRY_DELAY: Duration = Duration::from_millis(10);

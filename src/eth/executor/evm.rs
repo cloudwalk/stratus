@@ -147,7 +147,7 @@ impl Evm {
         // parse result
         let execution = match evm_result {
             // executed
-            Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
+            Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)?),
 
             // nonce errors
             Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(StratusError::TransactionNonce {
@@ -303,9 +303,9 @@ impl Database for RevmSession {
 // Conversion
 // -----------------------------------------------------------------------------
 
-fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> EvmExecution {
+fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> Result<EvmExecution, StratusError> {
     let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
-    let changes = parse_revm_state(revm_result.state, execution_changes);
+    let changes = parse_revm_state(revm_result.state, execution_changes)?;
 
     tracing::info!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
     let mut deployed_contract_address = None;
@@ -315,7 +315,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
         }
     }
 
-    EvmExecution {
+    Ok(EvmExecution {
         block_timestamp: input.block_timestamp,
         receipt_applied: false,
         result,
@@ -324,7 +324,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
         gas,
         changes,
         deployed_contract_address,
-    }
+    })
 }
 
 fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
@@ -351,7 +351,7 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
     }
 }
 
-fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> ExecutionChanges {
+fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> Result<ExecutionChanges, StratusError> {
     for (revm_address, revm_account) in revm_state {
         let address: Address = revm_address.into();
         if address.is_ignored() {
@@ -387,10 +387,13 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         } else if account_touched {
             let Some(account_changes) = execution_changes.get_mut(&address) else {
                 tracing::error!(keys = ?execution_changes.keys(), %address, "account touched, but not loaded by evm");
-                panic!("Account '{}' was expected to be loaded by EVM, but it was not", address);
+                return Err(StratusError::Unexpected(anyhow!(
+                    "Account '{}' was expected to be loaded by EVM, but it was not",
+                    address
+                )));
             };
             account_changes.apply_modifications(account, account_modified_slots);
         }
     }
-    execution_changes
+    Ok(execution_changes)
 }
