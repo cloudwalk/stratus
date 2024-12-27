@@ -525,7 +525,7 @@ _coverage-run-stratus-recipe *recipe="":
     -rm -r e2e_logs
 
 stratus-test-coverage *args="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     # setup
     cargo llvm-cov clean --workspace
     just build
