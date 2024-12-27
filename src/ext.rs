@@ -135,6 +135,7 @@ impl<T> InfallibleExt<T, serde_json::Error> for Result<T, serde_json::Error>
 where
     T: Sized,
 {
+    #[allow(clippy::expect_used)]
     fn expect_infallible(self) -> T {
         if let Err(ref e) = self {
             tracing::error!(reason = ?e, "expected infallible serde serialization/deserialization");
@@ -144,6 +145,7 @@ where
 }
 
 impl InfallibleExt<Decimal, ()> for Option<Decimal> {
+    #[allow(clippy::expect_used)]
     fn expect_infallible(self) -> Decimal {
         if self.is_none() {
             tracing::error!("expected infallible decimal conversion");
@@ -153,6 +155,7 @@ impl InfallibleExt<Decimal, ()> for Option<Decimal> {
 }
 
 impl InfallibleExt<DateTime<Utc>, ()> for Option<DateTime<Utc>> {
+    #[allow(clippy::expect_used)]
     fn expect_infallible(self) -> DateTime<Utc> {
         if self.is_none() {
             tracing::error!("expected infallible datetime conversion");
@@ -238,6 +241,7 @@ pub async fn traced_sleep(duration: Duration, _: SleepReason) {
 
 /// Spawns an async Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
+#[allow(clippy::expect_used)]
 pub fn spawn_named<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
 where
     T: Send + 'static,
@@ -252,6 +256,7 @@ where
 
 /// Spawns a blocking Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
+#[allow(clippy::expect_used)]
 pub fn spawn_blocking_named<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> tokio::task::JoinHandle<T>
 where
     T: Send + 'static,
@@ -265,6 +270,7 @@ where
 }
 
 /// Spawns a thread with the given name. Thread has access to Tokio current runtime.
+#[allow(clippy::expect_used)]
 #[track_caller]
 pub fn spawn_thread<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> std::thread::JoinHandle<T>
 where

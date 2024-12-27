@@ -508,6 +508,7 @@ mod interval_miner_ticker {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         // sync to next second
+        #[allow(clippy::expect_used)]
         let next_second = (Utc::now() + Duration::from_secs(1))
             .with_nanosecond(0)
             .expect("nanosecond above is set to `0`, which is always less than 2 billion");
