@@ -204,6 +204,7 @@ pub enum StateError {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
 pub enum StratusError {
     #[error(transparent)]
+    #[strum(props(kind = "client_request"))]
     RPC(#[from] RpcError),
 
     #[error(transparent)]
