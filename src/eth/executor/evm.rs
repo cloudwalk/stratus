@@ -38,6 +38,8 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionError;
+use crate::eth::primitives::UnexpectedError;
 use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -150,14 +152,16 @@ impl Evm {
             Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)?),
 
             // nonce errors
-            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(StratusError::TransactionNonce {
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(TransactionError::Nonce {
                 transaction: tx.into(),
                 account: state.into(),
-            }),
-            Err(EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state })) => Err(StratusError::TransactionNonce {
+            }
+            .into()),
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state })) => Err(TransactionError::Nonce {
                 transaction: tx.into(),
                 account: state.into(),
-            }),
+            }
+            .into()),
 
             // storage error
             Err(EVMError::Database(e)) => {
@@ -168,7 +172,7 @@ impl Evm {
             // unexpected errors
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm transaction error");
-                Err(StratusError::TransactionEvmFailed(e.to_string()))
+                Err(TransactionError::EvmFailed(e.to_string()).into())
             }
         };
 
@@ -242,7 +246,7 @@ impl Database for RevmSession {
         if let Some(ref to_address) = self.input.to {
             if account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
                 if self.config.executor_reject_not_contract {
-                    return Err(StratusError::TransactionAccountNotContract { address: *to_address });
+                    return Err(TransactionError::AccountNotContract { address: *to_address }.into());
                 } else {
                     tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
                 }
@@ -283,10 +287,7 @@ impl Database for RevmSession {
                 }
                 None => {
                     tracing::error!(reason = "reading slot without account loaded", %address, %index);
-                    return Err(StratusError::Unexpected(anyhow!(
-                        "Account '{}' was expected to be loaded by EVM, but it was not",
-                        address
-                    )));
+                    return Err(UnexpectedError::Unexpected(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address)).into());
                 }
             };
         }
@@ -387,10 +388,7 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         } else if account_touched {
             let Some(account_changes) = execution_changes.get_mut(&address) else {
                 tracing::error!(keys = ?execution_changes.keys(), %address, "account touched, but not loaded by evm");
-                return Err(StratusError::Unexpected(anyhow!(
-                    "Account '{}' was expected to be loaded by EVM, but it was not",
-                    address
-                )));
+                return Err(UnexpectedError::Unexpected(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address)).into());
             };
             account_changes.apply_modifications(account, account_modified_slots);
         }

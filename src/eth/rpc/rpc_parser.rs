@@ -6,7 +6,7 @@ use rlp::Decodable;
 use tracing::Span;
 
 use super::rpc_http_middleware::Authentication;
-use crate::eth::primitives::StratusError;
+use crate::eth::primitives::RpcError;
 use crate::eth::rpc::rpc_client_app::RpcClientApp;
 use crate::ext::type_basename;
 use crate::infra::tracing::EnteredWrap;
@@ -45,16 +45,16 @@ impl RpcExtensionsExt for Extensions {
 }
 
 /// Extracts the next RPC parameter. Fails if parameter not present.
-pub fn next_rpc_param<'a, T>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence<'a>, T), StratusError>
+pub fn next_rpc_param<'a, T>(mut params: ParamsSequence<'a>) -> Result<(ParamsSequence<'a>, T), RpcError>
 where
     T: serde::Deserialize<'a>,
 {
     match params.optional_next::<T>() {
         Ok(Some(value)) => Ok((params, value)),
-        Ok(None) => Err(StratusError::RpcParameterMissing {
+        Ok(None) => Err(RpcError::ParameterMissing {
             rust_type: type_basename::<T>(),
         }),
-        Err(e) => Err(StratusError::RpcParameterInvalid {
+        Err(e) => Err(RpcError::ParameterInvalid {
             rust_type: type_basename::<T>(),
             decode_error: e.data().map(|x| x.to_string()).unwrap_or_default(),
         }),
@@ -62,13 +62,13 @@ where
 }
 
 /// Extract the next RPC parameter. Assumes default value if not present.
-pub fn next_rpc_param_or_default<'a, T>(params: ParamsSequence<'a>) -> Result<(ParamsSequence<'a>, T), StratusError>
+pub fn next_rpc_param_or_default<'a, T>(params: ParamsSequence<'a>) -> Result<(ParamsSequence<'a>, T), RpcError>
 where
     T: serde::Deserialize<'a> + Default,
 {
     match next_rpc_param(params) {
         Ok((params, value)) => Ok((params, value)),
-        Err(StratusError::RpcParameterMissing { .. }) => Ok((params, T::default())),
+        Err(RpcError::ParameterMissing { .. }) => Ok((params, T::default())),
         Err(e) => Err(e),
     }
 }
@@ -76,9 +76,9 @@ where
 /// Decode an RPC parameter encoded in RLP.
 ///
 /// https://ethereum.org/en/developers/docs/data-structures-and-encoding/rlp
-pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, StratusError> {
+pub fn parse_rpc_rlp<T: Decodable>(value: &[u8]) -> Result<T, RpcError> {
     match rlp::decode::<T>(value) {
         Ok(trx) => Ok(trx),
-        Err(e) => Err(StratusError::RpcTransactionInvalid { decode_error: e.to_string() }),
+        Err(e) => Err(RpcError::TransactionInvalid { decode_error: e.to_string() }),
     }
 }
