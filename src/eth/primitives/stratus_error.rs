@@ -51,7 +51,7 @@ pub enum RpcError {
     TransactionInvalid { decode_error: String },
 
     #[error("Miner mode param is invalid.")]
-    #[strum(props(kind = "internal"))]
+    #[strum(props(kind = "client_request"))]
     MinerModeParamInvalid,
 }
 
