@@ -104,7 +104,7 @@ describe("Miner mode change integration test", function () {
     it("Miner change on Leader with invalid params should fail", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["invalidMode"]);
-        expect(response.data.error.code).eq(-32603);
+        expect(response.data.error.code).eq(-32602);
         expect(response.data.error.message).eq("Miner mode param is invalid.");
     });
 
