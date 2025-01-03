@@ -222,6 +222,7 @@ pub enum StratusError {
     Unexpected(#[from] UnexpectedError),
 
     #[error(transparent)]
+    #[strum(props(kind = "server_state"))]
     State(#[from] StateError),
 }
 
