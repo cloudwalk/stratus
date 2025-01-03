@@ -27,6 +27,7 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::PermanentStorage;
@@ -89,11 +90,11 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // Block number operations
     // -------------------------------------------------------------------------
 
-    fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber> {
+    fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber, StorageError> {
         Ok(self.block_number.load(Ordering::SeqCst).into())
     }
 
-    fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()> {
+    fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<(), StorageError> {
         self.block_number.store(number.as_u64(), Ordering::SeqCst);
         Ok(())
     }
@@ -102,7 +103,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>, StorageError> {
         let state = self.lock_read();
 
         match state.accounts.get(&address) {
@@ -114,7 +115,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError> {
         let state = self.lock_read();
 
         let Some(account) = state.accounts.get(&address) else {
@@ -130,7 +131,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>> {
+    fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>, StorageError> {
         let state_lock = self.lock_read();
         let block = match selection {
             BlockFilter::Latest | BlockFilter::Pending => state_lock.blocks_by_number.values().last().cloned(),
@@ -144,13 +145,13 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
-    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>> {
+    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError> {
         let state_lock = self.lock_read();
         let Some(block) = state_lock.transactions.get(&hash) else { return Ok(None) };
         Ok(block.transactions.iter().find(|tx| tx.input.hash == hash).cloned())
     }
 
-    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>> {
+    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>, StorageError> {
         let state = self.lock_read();
 
         // determine block start and end
@@ -175,7 +176,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(filtered_logs.into_iter().cloned().collect_vec())
     }
 
-    fn save_block(&self, block: Block) -> anyhow::Result<()> {
+    fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write();
 
         // save block
@@ -227,7 +228,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
-    fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()> {
+    fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write();
         for account in accounts {
             state
@@ -238,7 +239,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn reset(&self) -> anyhow::Result<()> {
+    fn reset(&self) -> anyhow::Result<(), StorageError> {
         self.block_number.store(0u64, Ordering::SeqCst);
 
         let mut state = self.lock_write();

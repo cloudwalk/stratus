@@ -12,6 +12,7 @@ use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use tower::Service;
 
+use crate::eth::primitives::StateError;
 use crate::eth::primitives::StratusError;
 use crate::eth::rpc::RpcClientApp;
 use crate::ext::not;
@@ -56,7 +57,7 @@ impl Authentication {
         if matches!(self, Authentication::Admin) {
             return Ok(());
         }
-        Err(StratusError::InvalidPassword)
+        Err(StateError::InvalidPassword.into())
     }
 }
 

@@ -19,7 +19,7 @@ use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StratusError;
+use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTime;
@@ -45,7 +45,7 @@ impl InMemoryTemporaryStorage {
         }
     }
 
-    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>> {
+    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>, StorageError> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
         for (&address, change) in &execution.changes {
@@ -122,13 +122,13 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Block and executions
     // -------------------------------------------------------------------------
 
-    fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
+    fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
         if let TransactionExecution::Local(tx) = &tx {
             if tx.evm_input != (&tx.input, &pending_block.block.header) {
                 let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
-                return Err(StratusError::TransactionEvmInputMismatch {
+                return Err(StorageError::EvmInputMismatch {
                     expected: Box::new(expected_input),
                     actual: Box::new(tx.evm_input.clone()),
                 });
@@ -139,7 +139,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
 
         if check_conflicts {
             if let Some(conflicts) = self.check_conflicts(tx.execution())? {
-                return Err(StratusError::TransactionConflict(conflicts.into()));
+                return Err(StorageError::TransactionConflict(conflicts.into()));
             }
         }
 
@@ -182,7 +182,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
-    fn finish_pending_block(&self) -> anyhow::Result<PendingBlock> {
+    fn finish_pending_block(&self) -> anyhow::Result<PendingBlock, StorageError> {
         let pending_block = self.pending_block.upgradable_read();
 
         // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
@@ -209,17 +209,14 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         #[cfg(not(feature = "dev"))]
         let finished_block = {
             let latest = RwLockWriteGuard::<Option<InMemoryTemporaryStorageState>>::downgrade(latest);
-            latest
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("latest should be Some after finishing the pending block"))?
-                .block
-                .clone()
+            #[allow(clippy::expect_used)]
+            latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone()
         };
 
         Ok(finished_block)
     }
 
-    fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>> {
+    fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
         let pending_block = self.pending_block.read();
         match pending_block.block.transactions.get(&hash) {
             Some(tx) => Ok(Some(tx.clone())),
@@ -231,7 +228,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Accounts and Slots
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>> {
+    fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>, StorageError> {
         Ok(match self.pending_block.read().accounts.get(&address) {
             Some(pending_account) => Some(pending_account.info.clone()),
             None => self
@@ -243,7 +240,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         })
     }
 
-    fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>> {
+    fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError> {
         Ok(
             match self.pending_block.read().accounts.get(&address).and_then(|account| account.slots.get(&index)) {
                 Some(pending_slot) => Some(*pending_slot),
@@ -260,7 +257,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
     // Global state
     // -------------------------------------------------------------------------
-    fn reset(&self) -> anyhow::Result<()> {
+    fn reset(&self) -> anyhow::Result<(), StorageError> {
         self.pending_block.write().reset();
         *self.latest_block.write() = None;
         Ok(())

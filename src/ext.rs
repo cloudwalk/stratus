@@ -15,7 +15,6 @@ use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
 
-use crate::eth::primitives::StratusError;
 use crate::infra::tracing::info_task_spawn;
 use crate::log_and_err;
 use crate::GlobalState;
@@ -161,19 +160,6 @@ impl InfallibleExt<DateTime<Utc>, ()> for Option<DateTime<Utc>> {
             tracing::error!("expected infallible datetime conversion");
         }
         self.expect("infallible datetime conversion")
-    }
-}
-
-pub trait MutexResultExt<T> {
-    fn map_lock_error(self, function_name: &str) -> Result<T, StratusError>;
-}
-
-impl<T> MutexResultExt<T> for Result<T, std::sync::PoisonError<T>> {
-    fn map_lock_error(self, function_name: &str) -> Result<T, StratusError> {
-        self.map_err(|_| StratusError::Unexpected(anyhow::anyhow!("accessed poisoned Mutex at function `{function_name}`")))
-            .inspect_err(|err| {
-                tracing::error!(reason = ?err, "FATAL: Mutex is poisoned");
-            })
     }
 }
 

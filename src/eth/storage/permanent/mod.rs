@@ -23,6 +23,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::parse_duration;
 
@@ -33,44 +34,44 @@ pub trait PermanentStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
 
     /// Sets the last mined block number.
-    fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<()>;
+    fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<(), StorageError>;
 
     // Retrieves the last mined block number.
-    fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber>;
+    fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber, StorageError>;
 
     // -------------------------------------------------------------------------
     // Block
     // -------------------------------------------------------------------------
 
     /// Persists atomically changes from block.
-    fn save_block(&self, block: Block) -> anyhow::Result<()>;
+    fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError>;
 
     /// Persists atomically changes from blocks.
-    fn save_block_batch(&self, blocks: Vec<Block>) -> anyhow::Result<()> {
+    fn save_block_batch(&self, blocks: Vec<Block>) -> anyhow::Result<(), StorageError> {
         blocks.into_iter().try_for_each(|block| self.save_block(block))
     }
 
     /// Retrieves a block from the storage.
-    fn read_block(&self, block_filter: BlockFilter) -> anyhow::Result<Option<Block>>;
+    fn read_block(&self, block_filter: BlockFilter) -> anyhow::Result<Option<Block>, StorageError>;
 
     /// Retrieves a transaction from the storage.
-    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>>;
+    fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError>;
 
     /// Retrieves logs from the storage.
-    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>>;
+    fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>, StorageError>;
 
     // -------------------------------------------------------------------------
     // Account and slots
     // -------------------------------------------------------------------------
 
     /// Persists initial accounts (test accounts or genesis accounts).
-    fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<()>;
+    fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<(), StorageError>;
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>>;
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>, StorageError>;
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>>;
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError>;
 
     // -------------------------------------------------------------------------
     // Global state
@@ -78,7 +79,7 @@ pub trait PermanentStorage: Send + Sync + 'static {
 
     #[cfg(feature = "dev")]
     /// Resets all state to a specific block number.
-    fn reset(&self) -> anyhow::Result<()>;
+    fn reset(&self) -> anyhow::Result<(), StorageError>;
 }
 
 // -----------------------------------------------------------------------------

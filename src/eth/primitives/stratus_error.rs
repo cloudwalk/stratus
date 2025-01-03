@@ -16,170 +16,162 @@ use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Nonce;
 use crate::ext::to_json_value;
 
-/// Valid error catogories are:
-/// * client_request: request is invalid.
-/// * client_state:   request is valid, specific client rules rejects it.
-/// * server_state:   request is valid, global server rules rejects it.
-/// * execution:      request is valid, but failed in executor/evm.
-/// * internal:       request is valid, but a an internal component failed.
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
-pub enum StratusError {
-    // -------------------------------------------------------------------------
-    // RPC
-    // -------------------------------------------------------------------------
+pub enum RpcError {
     #[error("Block filter does not point to a valid block.")]
     #[strum(props(kind = "client_request"))]
-    RpcBlockFilterInvalid { filter: BlockFilter },
+    BlockFilterInvalid { filter: BlockFilter },
 
     #[error("Denied because will fetch data from {actual} blocks, but the max allowed is {max}.")]
     #[strum(props(kind = "client_request"))]
-    RpcBlockRangeInvalid { actual: u64, max: u64 },
+    BlockRangeInvalid { actual: u64, max: u64 },
 
     #[error("Denied because client did not identify itself.")]
     #[strum(props(kind = "client_request"))]
-    RpcClientMissing,
+    ClientMissing,
 
     #[error("Failed to decode {rust_type} parameter.")]
     #[strum(props(kind = "client_request"))]
-    RpcParameterInvalid { rust_type: &'static str, decode_error: String },
+    ParameterInvalid { rust_type: &'static str, decode_error: String },
 
     #[error("Expected {rust_type} parameter, but received nothing.")]
     #[strum(props(kind = "client_request"))]
-    RpcParameterMissing { rust_type: &'static str },
+    ParameterMissing { rust_type: &'static str },
 
     #[error("Invalid subscription event: {event}")]
     #[strum(props(kind = "client_request"))]
-    RpcSubscriptionInvalid { event: String },
+    SubscriptionInvalid { event: String },
 
     #[error("Denied because reached maximum subscription limit of {max}.")]
     #[strum(props(kind = "client_state"))]
-    RpcSubscriptionLimit { max: u32 },
-
-    #[error("Transaction processing is temporarily disabled.")]
-    #[strum(props(kind = "server_state"))]
-    RpcTransactionDisabled,
-
-    #[error("Can't change miner mode while transactions are enabled.")]
-    #[strum(props(kind = "server_state"))]
-    RpcTransactionEnabled,
+    SubscriptionLimit { max: u32 },
 
     #[error("Failed to decode transaction RLP data.")]
     #[strum(props(kind = "client_request"))]
-    RpcTransactionInvalid { decode_error: String },
+    TransactionInvalid { decode_error: String },
 
-    // -------------------------------------------------------------------------
-    // Transaction
-    // -------------------------------------------------------------------------
+    #[error("Miner mode param is invalid.")]
+    #[strum(props(kind = "internal"))]
+    MinerModeParamInvalid,
+}
+
+#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
+pub enum TransactionError {
     #[error("Account at {address} is not a contract.")]
     #[strum(props(kind = "execution"))]
-    TransactionAccountNotContract { address: Address },
+    AccountNotContract { address: Address },
+
+    #[error("Transaction nonce {transaction} does not match account nonce {account}.")]
+    #[strum(props(kind = "execution"))]
+    Nonce { transaction: Nonce, account: Nonce },
+
+    #[error("Failed to executed transaction in EVM: {0:?}.")]
+    #[strum(props(kind = "execution"))]
+    EvmFailed(String), // TODO: split this in multiple errors
+
+    #[error("Failed to execute transaction in leader: {0:?}.")]
+    #[strum(props(kind = "execution"))]
+    LeaderFailed(ErrorObjectOwned),
+
+    #[error("Failed to forward transaction to leader node.")]
+    #[strum(props(kind = "execution"))]
+    ForwardToLeaderFailed,
+
+    #[error("Transaction reverted during execution.")]
+    #[strum(props(kind = "execution"))]
+    Reverted { output: Bytes },
+
+    #[error("Transaction from zero address is not allowed.")]
+    #[strum(props(kind = "execution"))]
+    FromZeroAddress,
+}
+
+#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
+pub enum StorageError {
+    #[error("Block conflict: {number} already exists in the permanent storage.")]
+    #[strum(props(kind = "internal"))]
+    BlockConflict { number: BlockNumber },
+
+    #[error("Mined number conflict between new block number ({new}) and mined block number ({mined}).")]
+    #[strum(props(kind = "internal"))]
+    MinedNumberConflict { new: BlockNumber, mined: BlockNumber },
 
     #[error("Transaction execution conflicts: {0:?}.")]
     #[strum(props(kind = "execution"))]
     TransactionConflict(Box<ExecutionConflicts>),
 
-    #[error("Transaction nonce {transaction} does not match account nonce {account}.")]
-    #[strum(props(kind = "execution"))]
-    TransactionNonce { transaction: Nonce, account: Nonce },
-
-    #[error("Failed to executed transaction in EVM: {0:?}.")]
-    #[strum(props(kind = "execution"))]
-    TransactionEvmFailed(String), // TODO: split this in multiple errors
-
-    #[error("Failed to execute transaction in leader: {0:?}.")]
-    #[strum(props(kind = "execution"))]
-    TransactionLeaderFailed(ErrorObjectOwned),
-
-    #[error("Failed to forward transaction to leader node.")]
-    #[strum(props(kind = "execution"))]
-    TransactionForwardToLeaderFailed,
-
-    #[error("Transaction reverted during execution.")]
-    #[strum(props(kind = "execution"))]
-    TransactionReverted { output: Bytes },
-
-    #[error("Transaction from zero address is not allowed.")]
-    #[strum(props(kind = "execution"))]
-    TransactionFromZeroAddress,
-
     #[error("Transaction input does not match block header")]
     #[strum(props(kind = "execution"))]
-    TransactionEvmInputMismatch { expected: Box<EvmInput>, actual: Box<EvmInput> },
-
-    // -------------------------------------------------------------------------
-    // Storage
-    // -------------------------------------------------------------------------
-    #[error("Block conflict: {number} already exists in the permanent storage.")]
-    #[strum(props(kind = "internal"))]
-    StorageBlockConflict { number: BlockNumber },
-
-    #[error("Mined number conflict between new block number ({new}) and mined block number ({mined}).")]
-    #[strum(props(kind = "internal"))]
-    StorageMinedNumberConflict { new: BlockNumber, mined: BlockNumber },
+    EvmInputMismatch { expected: Box<EvmInput>, actual: Box<EvmInput> },
 
     #[error("Pending number conflict between new block number ({new}) and pending block number ({pending}).")]
     #[strum(props(kind = "internal"))]
-    StoragePendingNumberConflict { new: BlockNumber, pending: BlockNumber },
+    PendingNumberConflict { new: BlockNumber, pending: BlockNumber },
 
     #[error("There are ({pending_txs}) pending transactions.")]
     #[strum(props(kind = "internal"))]
     PendingTransactionsExist { pending_txs: usize },
 
-    // -------------------------------------------------------------------------
-    // Miner
-    // -------------------------------------------------------------------------
-    #[error("Miner mode param is invalid.")]
+    #[error("Rocksdb returned an error: {err}")]
     #[strum(props(kind = "internal"))]
-    MinerModeParamInvalid,
+    RocksError { err: anyhow::Error },
 
-    // -------------------------------------------------------------------------
-    // Importer
-    // -------------------------------------------------------------------------
+    #[error("Block not found using filter: {filter}")]
+    #[strum(props(kind = "internal"))]
+    BlockNotFound { filter: BlockFilter },
+
+    #[error("Unexpected storage error: {msg}")]
+    #[strum(props(kind = "internal"))]
+    Unexpected { msg: String },
+}
+
+#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
+pub enum ImporterError {
     #[error("Importer is already running.")]
     #[strum(props(kind = "internal"))]
-    ImporterAlreadyRunning,
+    AlreadyRunning,
 
     #[error("Importer is already shutdown.")]
     #[strum(props(kind = "internal"))]
-    ImporterAlreadyShutdown,
+    AlreadyShutdown,
 
     #[error("Failed to parse importer configuration.")]
     #[strum(props(kind = "client_request"))]
-    ImporterConfigParseError,
+    ConfigParseError,
 
     #[error("Failed to initialize importer.")]
     #[strum(props(kind = "internal"))]
-    ImporterInitError,
+    InitError,
+}
 
-    // -------------------------------------------------------------------------
-    // Consensus
-    // -------------------------------------------------------------------------
+#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
+pub enum ConsensusError {
     #[error("Consensus is temporarily unavailable for follower node.")]
     #[strum(props(kind = "internal"))]
-    ConsensusUnavailable,
+    Unavailable,
 
     #[error("Consensus is set.")]
     #[strum(props(kind = "internal"))]
-    ConsensusSet,
+    Set,
 
     #[error("Failed to update consensus: Consensus is not set.")]
     #[strum(props(kind = "internal"))]
-    ConsensusNotSet,
+    NotSet,
+}
 
-    // -------------------------------------------------------------------------
-    // Unexpected
-    // -------------------------------------------------------------------------
+#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
+pub enum UnexpectedError {
     #[error("Unexpected channel {channel} closed.")]
     #[strum(props(kind = "internal"))]
-    UnexpectedChannelClosed { channel: &'static str },
+    ChannelClosed { channel: &'static str },
 
     #[error("Unexpected error: {0:?}.")]
     #[strum(props(kind = "internal"))]
     Unexpected(anyhow::Error),
+}
 
-    // -------------------------------------------------------------------------
-    // Stratus state
-    // -------------------------------------------------------------------------
+#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
+pub enum StateError {
     #[error("Stratus is not ready to start servicing requests.")]
     #[strum(props(kind = "server_state"))]
     StratusNotReady,
@@ -199,6 +191,38 @@ pub enum StratusError {
     #[error("Stratus node is already in the process of changing mode.")]
     #[strum(props(kind = "server_state"))]
     ModeChangeInProgress,
+
+    #[error("Transaction processing is temporarily disabled.")]
+    #[strum(props(kind = "server_state"))]
+    TransactionsDisabled,
+
+    #[error("Can't change miner mode while transactions are enabled.")]
+    #[strum(props(kind = "server_state"))]
+    TransactionsEnabled,
+}
+
+#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
+pub enum StratusError {
+    #[error(transparent)]
+    RPC(#[from] RpcError),
+
+    #[error(transparent)]
+    Transaction(#[from] TransactionError),
+
+    #[error(transparent)]
+    Storage(#[from] StorageError),
+
+    #[error(transparent)]
+    Importer(#[from] ImporterError),
+
+    #[error(transparent)]
+    Consensus(#[from] ConsensusError),
+
+    #[error(transparent)]
+    Unexpected(#[from] UnexpectedError),
+
+    #[error(transparent)]
+    State(#[from] StateError),
 }
 
 impl StratusError {
@@ -235,16 +259,16 @@ impl StratusError {
     pub fn rpc_data(&self) -> JsonValue {
         match self {
             // RPC
-            Self::RpcBlockFilterInvalid { filter } => to_json_value(filter),
-            Self::RpcParameterInvalid { decode_error, .. } => to_json_value(decode_error),
+            Self::RPC(RpcError::BlockFilterInvalid { filter }) => to_json_value(filter),
+            Self::RPC(RpcError::ParameterInvalid { decode_error, .. }) => to_json_value(decode_error),
 
             // Transaction
-            Self::RpcTransactionInvalid { decode_error } => to_json_value(decode_error),
-            Self::TransactionEvmFailed(e) => JsonValue::String(e.to_string()),
-            Self::TransactionReverted { output } => to_json_value(output),
+            Self::RPC(RpcError::TransactionInvalid { decode_error }) => to_json_value(decode_error),
+            Self::Transaction(TransactionError::EvmFailed(e)) => JsonValue::String(e.to_string()),
+            Self::Transaction(TransactionError::Reverted { output }) => to_json_value(output),
 
             // Unexpected
-            Self::Unexpected(e) => JsonValue::String(e.to_string()),
+            Self::Unexpected(UnexpectedError::Unexpected(e)) => JsonValue::String(e.to_string()),
 
             _ => JsonValue::Null,
         }
@@ -257,7 +281,7 @@ impl StratusError {
 
 impl From<anyhow::Error> for StratusError {
     fn from(value: anyhow::Error) -> Self {
-        Self::Unexpected(value)
+        Self::Unexpected(UnexpectedError::Unexpected(value))
     }
 }
 
@@ -267,10 +291,9 @@ impl From<anyhow::Error> for StratusError {
 impl From<StratusError> for ErrorObjectOwned {
     fn from(value: StratusError) -> Self {
         // return response from leader
-        if let StratusError::TransactionLeaderFailed(response) = value {
+        if let StratusError::Transaction(TransactionError::LeaderFailed(response)) = value {
             return response;
         }
-
         // generate response
         let data = match value.rpc_data() {
             serde_json::Value::String(data_str) => {
