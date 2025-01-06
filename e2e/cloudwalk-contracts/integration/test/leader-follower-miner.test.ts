@@ -74,7 +74,7 @@ describe("Miner mode change integration test", function () {
     it("Miner change to Interval on Follower should fail because importer wasn't stopped", async function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["1s"]);
-        expect(response.data.error.code).eq(6002);
+        expect(response.data.error.code).eq(5002);
         expect(response.data.error.message).eq("Consensus is set.");
     });
 
@@ -167,7 +167,7 @@ describe("Miner mode change integration test", function () {
 
         // Change Miner mode to External on Leader with Pending Transactions should fail
         const changeMinerModeResponse = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
-        expect(changeMinerModeResponse.data.error.code).eq(6002);
+        expect(changeMinerModeResponse.data.error.code).eq(3006);
         expect(changeMinerModeResponse.data.error.message).eq("There are (1) pending transactions.");
 
         // Clean up
