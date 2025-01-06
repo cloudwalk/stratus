@@ -12,7 +12,7 @@ it("Test follower health is based on getting new blocks", async function () {
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
     const unhealthyResponse = await sendAndGetFullResponse("stratus_health", []);
-    expect(unhealthyResponse.data.error.code).to.equal(-32009);
+    expect(unhealthyResponse.data.error.code).to.equal(7001);
     expect(unhealthyResponse.data.error.message).to.equal("Stratus is not ready to start servicing requests.");
 
     // Start the leader again

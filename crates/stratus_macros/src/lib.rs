@@ -1,6 +1,13 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Data, Fields, Meta, Expr, ExprLit, Lit};
+use syn::parse_macro_input;
+use syn::Data;
+use syn::DeriveInput;
+use syn::Expr;
+use syn::ExprLit;
+use syn::Fields;
+use syn::Lit;
+use syn::Meta;
 
 #[proc_macro_derive(ErrorCode, attributes(error_code))]
 pub fn derive_error_code(input: TokenStream) -> TokenStream {
@@ -87,9 +94,10 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
 
 #[cfg(test)]
 mod tests {
-    use crate::derive_error_code_impl;
     use proc_macro2::TokenStream;
     use quote::quote;
+
+    use crate::derive_error_code_impl;
 
     #[test]
     fn test_derive_error_code() {

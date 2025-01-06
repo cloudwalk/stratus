@@ -49,7 +49,7 @@ describe("Leader & Follower change integration test", function () {
             "2s",
             "100ms",
         ]);
-        expect(response.data.error.code).to.equal(-32009);
+        expect(response.data.error.code).to.equal(7007);
         expect(response.data.error.message).to.equal("Can't change miner mode while transactions are enabled.");
     });
 
@@ -62,7 +62,7 @@ describe("Leader & Follower change integration test", function () {
             "2s",
             "100ms",
         ]);
-        expect(response.data.error.code).to.equal(-32603);
+        expect(response.data.error.code).to.equal(6002);
         expect(response.data.error.message.split("\n")[0]).to.equal(
             "Unexpected error: can't change miner mode from Interval without pausing it first",
         );
@@ -103,7 +103,7 @@ describe("Leader & Follower change integration test", function () {
     it("Change Follower to Leader with transactions enabled should fail", async function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
-        expect(response.data.error.code).to.equal(-32009);
+        expect(response.data.error.code).to.equal(7007);
         expect(response.data.error.message).to.equal("Can't change miner mode while transactions are enabled.");
     });
 
@@ -196,7 +196,7 @@ describe("Leader & Follower change integration test", function () {
         let successCount = 0;
         let semaphoreFailureCount = 0;
 
-        const SEMAPHORE_ERROR_CODE = -32009;
+        const SEMAPHORE_ERROR_CODE = 7005;
         const SEMAPHORE_ERROR_MESSAGE = "Stratus node is already in the process of changing mode.";
 
         allResponses.forEach((response, index) => {

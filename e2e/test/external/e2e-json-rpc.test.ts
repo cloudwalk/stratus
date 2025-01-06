@@ -483,7 +483,7 @@ describe("JSON-RPC", () => {
             it("fails on HTTP", async () => {
                 const error = await sendAndGetError("eth_subscribe", ["newHeads"]);
                 expect(error).to.not.be.null;
-                expect(error.code).eq(-32603); // Internal error
+                expect(error.code).eq(6002); // Internal error
             });
             it("subscribes to newHeads receives success subscription event", async () => {
                 const waitTimeInMilliseconds = 40;
@@ -517,7 +517,7 @@ describe("JSON-RPC", () => {
                 expect(response.error).to.not.be.undefined;
                 expect(response.error.code).to.not.be.undefined;
                 expect(response.error.code).to.be.a("number");
-                expect(response.error.code).eq(-32602);
+                expect(response.error.code).eq(1006);
             });
 
             it("validates newHeads event", async () => {
