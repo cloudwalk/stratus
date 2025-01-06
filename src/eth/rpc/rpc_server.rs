@@ -852,9 +852,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) 
 
         // internal error
         Err(e) => {
-            if e.is_internal() {
-                tracing::error!(reason = ?e, "failed to execute eth_estimateGas");
-            }
+            tracing::warn!(reason = ?e, "failed to execute eth_estimateGas");
             Err(e)
         }
     }
@@ -894,9 +892,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Resul
 
         // internal error
         Err(e) => {
-            if e.is_internal() {
-                tracing::error!(reason = ?e, "failed to execute eth_call");
-            }
+            tracing::warn!(reason = ?e, "failed to execute eth_call");
             Err(e)
         }
     }
@@ -937,9 +933,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
         NodeMode::Leader | NodeMode::FakeLeader => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
-                if e.is_internal() {
-                    tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
-                }
+                tracing::warn!(reason = ?e, "failed to execute eth_sendRawTransaction");
                 Err(e)
             }
         },

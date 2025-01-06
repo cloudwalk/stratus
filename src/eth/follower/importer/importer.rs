@@ -229,11 +229,7 @@ impl Importer {
                     };
 
                     if let Err(e) = executor.execute_local_transaction(tx_input) {
-                        if e.is_internal() {
-                            tracing::error!(reason = ?e, "internal error while executing imported transaction");
-                        } else {
-                            tracing::error!(reason = ?e, "transaction failed");
-                        }
+                        tracing::error!(reason = ?e, "transaction failed");
                     }
                 }
 
@@ -346,18 +342,21 @@ impl Importer {
                         set_external_rpc_current_block(block.number());
                         continue;
                     }
-                    Ok(None) =>
+                    Ok(None) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
-                        },
-                    Ok(Some(Err(e))) =>
+                        }
+                    }
+                    Ok(Some(Err(e))) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
-                        },
-                    Err(_) =>
+                        }
+                    }
+                    Err(_) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
-                        },
+                        }
+                    }
                 }
 
                 if Self::should_shutdown(TASK_NAME) {
@@ -373,10 +372,11 @@ impl Importer {
                             tracing::info!("{} resubscribed to newHeads event", TASK_NAME);
                             sub_new_heads = Some(sub);
                         }
-                        Err(e) =>
+                        Err(e) => {
                             if !Self::should_shutdown(TASK_NAME) {
                                 tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
-                            },
+                            }
+                        }
                     }
                 }
             }
@@ -397,10 +397,11 @@ impl Importer {
                     set_external_rpc_current_block(block_number);
                     traced_sleep(sync_interval, SleepReason::SyncData).await;
                 }
-                Err(e) =>
+                Err(e) => {
                     if !Self::should_shutdown(TASK_NAME) {
                         tracing::error!(reason = ?e, "failed to retrieve block number. retrying now.");
-                    },
+                    }
+                }
             }
         }
     }
