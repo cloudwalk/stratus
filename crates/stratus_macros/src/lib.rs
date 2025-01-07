@@ -23,6 +23,23 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
     };
 
     let mut match_arms = Vec::new();
+    // Get the major error code if specified
+    let major_error_code = input
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("major_error_code"))
+        .and_then(|attr| {
+            if let Meta::NameValue(meta) = &attr.meta {
+                if let Expr::Lit(ExprLit { lit: Lit::Int(lit_int), .. }) = &meta.value {
+                    lit_int.base10_parse::<i32>().ok()
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .unwrap_or(0);
     let mut reverse_match_arms = Vec::new();
 
     // Process each variant
@@ -45,7 +62,8 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
                     None
                 }
             })
-            .expect(&format!("Missing error_code attribute for variant {}", variant_name));
+            .expect(&format!("Missing error_code attribute for variant {}", variant_name))
+            + major_error_code;
 
         // Handle different field types
         match &variant.fields {
@@ -103,6 +121,7 @@ mod tests {
     fn test_derive_error_code() {
         let input = TokenStream::from(quote! {
             #[derive(ErrorCode)]
+            #[major_error_code = 100]
             pub enum TestError {
                 #[error_code = 3]
                 First,
@@ -119,17 +138,17 @@ mod tests {
             impl ErrorCode for TestError {
                 fn error_code(&self) -> i32 {
                     match self {
-                        TestError::First => 3i32,
-                        TestError::Second { .. } => 4i32,
-                        TestError::Third(..) => 0i32
+                        TestError::First => 103i32,
+                        TestError::Second { .. } => 104i32,
+                        TestError::Third(..) => 100i32
                     }
                 }
 
                 fn str_repr_from_err_code(code: i32) -> &'static str {
                     match code {
-                        3i32 => stringify ! (First),
-                        4i32 => stringify ! (Second),
-                        0i32 => stringify ! (Third),
+                        103i32 => stringify ! (First),
+                        104i32 => stringify ! (Second),
+                        100i32 => stringify ! (Third),
                         _ => "Unknown"
                     }
                 }
