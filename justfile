@@ -201,7 +201,7 @@ e2e-stratus block-mode="automine" test="":
     just build
 
     just _log "Starting Stratus"
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
+    RUST_LOG=debug just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
 
     just _wait_for_stratus
 

@@ -1,4 +1,9 @@
+use futures::future::BoxFuture;
+use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
 use jsonrpsee::types::ErrorObjectOwned;
+use jsonrpsee::types::Id;
+use jsonrpsee::MethodResponse;
+use jsonrpsee::ResponsePayload;
 use stratus_macros::ErrorCode;
 
 use crate::alias::JsonValue;
@@ -270,6 +275,12 @@ impl StratusError {
 
             _ => JsonValue::Null,
         }
+    }
+
+    pub fn to_response_future<'a>(self, id: Id<'_>) -> ResponseFuture<BoxFuture<'a, MethodResponse>> {
+        let response = ResponsePayload::<()>::error(StratusError::RPC(RpcError::ClientMissing));
+        let method_response = MethodResponse::response(id, response, u32::MAX as usize);
+        ResponseFuture::ready(method_response)
     }
 }
 

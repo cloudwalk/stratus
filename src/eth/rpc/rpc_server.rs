@@ -64,7 +64,6 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
-use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
@@ -601,9 +600,7 @@ fn stratus_state(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<Json
     Ok(GlobalState::get_global_state_as_json(ctx))
 }
 
-async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    reject_unknown_client(ext.rpc_client())?;
-
+async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     // NOTE: this is a workaround for holding only one lock at a time
     let pending_txs = serde_json::to_value(ctx.subs.new_heads.read().await.values().collect_vec()).expect_infallible();
     let new_heads = serde_json::to_value(ctx.subs.pending_txs.read().await.values().collect_vec()).expect_infallible();
@@ -1090,8 +1087,6 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     drop(middleware_enter);
 
     async move {
-        reject_unknown_client(ext.rpc_client())?;
-
         // parse params
         let client = ext.rpc_client();
         let (params, event) = match next_rpc_param::<String>(params.sequence()) {
@@ -1167,18 +1162,6 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions
 
     // It must be padded, even if it is zero.
     Ok(hex_num_zero_padded(slot.value.as_u256()))
-}
-
-// -----------------------------------------------------------------------------
-// Request helpers
-// -----------------------------------------------------------------------------
-
-/// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
-pub(super) fn reject_unknown_client(client: &RpcClientApp) -> Result<(), StratusError> {
-    if client.is_unknown() && not(GlobalState::is_unknown_client_enabled()) {
-        return Err(RpcError::ClientMissing.into());
-    }
-    Ok(())
 }
 
 // -----------------------------------------------------------------------------
