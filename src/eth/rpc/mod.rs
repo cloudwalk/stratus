@@ -1,5 +1,6 @@
 //! Ethereum JSON-RPC server.
 
+pub mod proxy_get_request;
 mod rpc_client_app;
 mod rpc_config;
 mod rpc_context;
