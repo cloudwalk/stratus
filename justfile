@@ -63,8 +63,8 @@ lint:
     @just _lint
 
 # Stratus: Lint and check code formatting
-lint-check nightly-version="":
-    @just _lint "{{nightly-version}}" --check "-D warnings"
+lint-check nightly-version="" clippy-flags="-D warnings -A clippy::unwrap_used -A clippy::expect_used -A clippy::panic":
+    @just _lint "{{nightly-version}}" --check "{{ clippy-flags }}"
 
 # Stratus: Check for dependencies major updates
 outdated:
@@ -164,19 +164,14 @@ e2e-admin-password:
     #!/bin/bash
     cd e2e
 
-    # Start Stratus with password set
-    just _log "Running admin password tests with password set"
-    ADMIN_PASSWORD=test123 just run -a 0.0.0.0:3000 > /dev/null &
-    just _wait_for_stratus
-    npx hardhat test test/admin/e2e-admin-password-enabled.test.ts --network stratus
-    killport 3000 -s sigterm
-
-    # Start Stratus without password set
-    just _log "Running admin password tests without password set"
-    just run -a 0.0.0.0:3000 > /dev/null  &
-    just _wait_for_stratus
-    npx hardhat test test/admin/e2e-admin-password-disabled.test.ts --network stratus
-    killport 3000 -s sigterm
+    for test in "enabled|test123" "disabled|"; do
+        IFS="|" read -r type pass <<< "$test"
+        just _log "Running admin password tests with password $type"
+        ADMIN_PASSWORD=$pass just run -a 0.0.0.0:3000 > /dev/null &
+        just _wait_for_stratus
+        npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
+        killport 3000 -s sigterm
+    done
 
 # E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat block-mode="automine" test="":
@@ -315,20 +310,13 @@ e2e-flamegraph:
     just _log "Running cargo flamegraph"
     cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
-# E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc" release_flag="--release":
+e2e-leader:
     #!/bin/bash
-    just build
-
-    mkdir e2e_logs
-
-    # Start Stratus with leader flag
     RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
-
-    # Wait for Stratus with leader flag to start
     just _wait_for_stratus 3000
 
-    # Start Stratus with follower flag
+e2e-follower test="brlc":
+    #!/bin/bash
     if [ "{{test}}" = "kafka" ]; then
     # Start Kafka using Docker Compose
         just _log "Starting Kafka"
@@ -342,6 +330,19 @@ e2e-leader-follower-up test="brlc" release_flag="--release":
     fi
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
+
+
+_e2e-leader-follower-up-impl test="brlc" release_flag="--release":
+    #!/bin/bash
+    just build
+
+    mkdir e2e_logs
+
+    # Start Stratus with leader flag
+    just e2e-leader
+
+    # Start Stratus with follower flag
+    just e2e-follower {{test}}
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
@@ -383,6 +384,12 @@ e2e-leader-follower-up test="brlc" release_flag="--release":
         fi
     )
     fi
+
+# E2E: Leader & Follower Up
+e2e-leader-follower-up test="brlc" release_flag="--release":
+    just _e2e-leader-follower-up-impl {{test}} {{release_flag}}
+    killport 3000 -s sigterm
+    killport 3001 -s sigterm
 
 # E2E: Leader & Follower Down
 e2e-leader-follower-down:
@@ -502,6 +509,21 @@ contracts-coverage-erase:
     just _log "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
 
+
+_e2e-leader-follower-up-coverage test="":
+    -rm -r temp_3000-rocksdb
+    -rm -r temp_3001-rocksdb
+    just _coverage-run-stratus-recipe e2e-leader-follower-up {{test}} " "
+    sleep 10
+    -rm -r e2e_logs
+    -rm utils/deploy/deploy_01.log
+    -rm utils/deploy/deploy_02.log
+
+_coverage-run-stratus-recipe *recipe="":
+    just {{recipe}}
+    sleep 10
+    -rm -r e2e_logs
+
 stratus-test-coverage *args="":
     #!/bin/bash
     # setup
@@ -509,117 +531,38 @@ stratus-test-coverage *args="":
     just build
     source <(cargo llvm-cov show-env --export-prefix)
     export RUST_LOG=error
-
     just contracts-clone
+    just contracts-flatten
 
     # cargo test
     cargo llvm-cov --no-report
     sleep 10
 
-
     # inmemory
+    for test in "automine" "external"; do
+        just _coverage-run-stratus-recipe e2e-stratus $test
+    done
 
-    just e2e-stratus automine
-    sleep 10
-    -rm stratus.log
+    just _coverage-run-stratus-recipe e2e-clock-stratus
 
-    just e2e-stratus external
-    sleep 10
-    -rm stratus.log
-
-    just e2e-clock-stratus
-    sleep 10
-    -rm stratus.log
-
-    just contracts-test-stratus
-    sleep 10
-    -rm stratus.log
+    just _coverage-run-stratus-recipe contracts-test-stratus
 
     # rocksdb
-    -rm -r data/rocksdb
-    just e2e-stratus-rocks automine
-    sleep 10
-    -rm stratus.log
+    for test in "automine" "external"; do
+        -rm -r data/rocksdb
+        just _coverage-run-stratus-recipe e2e-stratus-rocks $test
+    done
 
     -rm -r data/rocksdb
-    just e2e-stratus-rocks external
-    sleep 10
-    -rm stratus.log
+    just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
 
     -rm -r data/rocksdb
-    just e2e-clock-stratus-rocks
-    sleep 10
-    -rm stratus.log
-
-    -rm -r data/rocksdb
-    just contracts-test-stratus-rocks
-    sleep 10
-    -rm stratus.log
+    just _coverage-run-stratus-recipe contracts-test-stratus-rocks
 
     # other
-
-    -just contracts-clone --token
-    -just contracts-flatten --token
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    -docker compose down -v
-    just e2e-leader-follower-up kafka " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just e2e-leader-follower-up deploy " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just e2e-leader-follower-up brlc " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just e2e-leader-follower-up change " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just e2e-leader-follower-up miner " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just e2e-leader-follower-up importer " "
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
+    for test in kafka deploy brlc change miner importer health; do
+        just _e2e-leader-follower-up-coverage $test
+    done
 
     just e2e-admin-password
 

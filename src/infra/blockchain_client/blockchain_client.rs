@@ -21,6 +21,7 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::RpcClientApp;
 use crate::ext::to_json_value;
@@ -223,10 +224,10 @@ impl BlockchainClient {
 
         match result {
             Ok(hash) => Ok(hash),
-            Err(ClientError::Call(response)) => Err(StratusError::TransactionLeaderFailed(response.into_owned())),
+            Err(ClientError::Call(response)) => Err(TransactionError::LeaderFailed(response.into_owned()).into()),
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to send raw transaction to leader");
-                Err(StratusError::TransactionForwardToLeaderFailed)
+                Err(TransactionError::ForwardToLeaderFailed.into())
             }
         }
     }

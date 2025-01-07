@@ -44,6 +44,7 @@ quick_cache = "=0.6.9"
 sugars = "=3.0.1"
 thiserror = "=1.0.61"
 uuid = { version = "=1.10.0", features = ["v7"]}
+stratus_macros = { path = "./crates/stratus_macros" }
 
 # async
 tokio = { version = "=1.38.0", features = [
@@ -232,3 +233,5 @@ unused_self = "warn"
 used_underscore_binding = "warn"
 wildcard_imports = "warn"
 unwrap_used = "allow"
+expect_used = "warn"
+panic = "warn"

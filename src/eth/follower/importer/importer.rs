@@ -59,8 +59,12 @@ pub enum ImporterMode {
 /// Current block number of the external RPC blockchain.
 static EXTERNAL_RPC_CURRENT_BLOCK: AtomicU64 = AtomicU64::new(0);
 
+/// Timestamp of when EXTERNAL_RPC_CURRENT_BLOCK was updated last.
+static LATEST_FETCHED_BLOCK_TIME: AtomicU64 = AtomicU64::new(0);
+
 /// Only sets the external RPC current block number if it is equals or greater than the current one.
 fn set_external_rpc_current_block(new_number: BlockNumber) {
+    LATEST_FETCHED_BLOCK_TIME.store(chrono::Utc::now().timestamp() as u64, Ordering::Relaxed);
     let _ = EXTERNAL_RPC_CURRENT_BLOCK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
         Some(current_number.max(new_number.as_u64()))
     });
@@ -223,11 +227,7 @@ impl Importer {
                     };
 
                     if let Err(e) = executor.execute_local_transaction(tx_input) {
-                        if e.is_internal() {
-                            tracing::error!(reason = ?e, "internal error while executing imported transaction");
-                        } else {
-                            tracing::error!(reason = ?e, "transaction failed");
-                        }
+                        tracing::error!(reason = ?e, "transaction failed");
                     }
                 }
 
@@ -516,6 +516,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     (block, receipts)
 }
 
+#[allow(clippy::expect_used)]
 #[tracing::instrument(name = "importer::fetch_block", skip_all, fields(block_number))]
 async fn fetch_block(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ExternalBlock {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
@@ -570,7 +571,15 @@ async fn fetch_receipt(chain: Arc<BlockchainClient>, block_number: BlockNumber, 
 #[async_trait]
 impl Consensus for Importer {
     async fn lag(&self) -> anyhow::Result<u64> {
-        Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number()?.as_u64())
+        let elapsed = chrono::Utc::now().timestamp() as u64 - LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
+        if elapsed > 4 {
+            Err(anyhow::anyhow!(
+                "too much time elapsed without communicating with the leader. elapsed: {}s",
+                elapsed
+            ))
+        } else {
+            Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number()?.as_u64())
+        }
     }
 
     fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>> {

@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [brlc, importer, miner, change, deploy, kafka]
+        test: [brlc, importer, miner, change, deploy, kafka, health]
     name: E2E Leader & Follower on ${{ matrix.test }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -86,7 +86,7 @@ jobs:
 
       - name: Install Poetry
         run: curl -sSL https://install.python-poetry.org | python3 -
-      
+
       - name: Install Docker Compose
         if: matrix.test == 'kafka'
         run: |

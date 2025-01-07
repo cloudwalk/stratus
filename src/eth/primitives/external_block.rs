@@ -18,11 +18,13 @@ pub struct ExternalBlock(#[deref] pub EthersBlockExternalTransaction);
 
 impl ExternalBlock {
     /// Returns the block hash.
+    #[allow(clippy::expect_used)]
     pub fn hash(&self) -> Hash {
         self.0.hash.expect("external block must have hash").into()
     }
 
     /// Returns the block number.
+    #[allow(clippy::expect_used)]
     pub fn number(&self) -> BlockNumber {
         self.0.number.expect("external block must have number").into()
     }

@@ -34,6 +34,7 @@ e2e_logs/
 temp_*-rocksdb/
 
 # Build
+crates/*/target
 /target
 vendor
 stratus.log

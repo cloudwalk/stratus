@@ -17,7 +17,7 @@ use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StratusError;
+use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 
 /// Temporary storage (in-between blocks) operations.
@@ -34,33 +34,33 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     // -------------------------------------------------------------------------
 
     /// Finishes the mining of the pending block and starts a new block.
-    fn finish_pending_block(&self) -> anyhow::Result<PendingBlock>;
+    fn finish_pending_block(&self) -> anyhow::Result<PendingBlock, StorageError>;
 
     /// Saves a transaction execution to the pending mined block.
-    fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError>;
+    fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StorageError>;
 
     /// Retrieves all transaction executions from the pending block.
     fn read_pending_executions(&self) -> Vec<TransactionExecution>;
 
     /// Retrieves a single transaction execution from the pending block.
-    fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>>;
+    fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError>;
 
     // -------------------------------------------------------------------------
     // Accounts and slots
     // -------------------------------------------------------------------------
 
     /// Retrieves an account from the storage. Returns Option when not found.
-    fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>>;
+    fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>, StorageError>;
 
     /// Retrieves an slot from the storage. Returns Option when not found.
-    fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>>;
+    fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError>;
 
     // -------------------------------------------------------------------------
     // Global state
     // -------------------------------------------------------------------------
 
     /// Resets to default empty state.
-    fn reset(&self) -> anyhow::Result<()>;
+    fn reset(&self) -> anyhow::Result<(), StorageError>;
 }
 
 // -----------------------------------------------------------------------------

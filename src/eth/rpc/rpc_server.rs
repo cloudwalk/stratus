@@ -48,11 +48,17 @@ use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
+use crate::eth::primitives::ConsensusError;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::ImporterError;
 use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::RpcError;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::StateError;
+use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
@@ -287,7 +293,7 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_shutdown() {
         tracing::warn!("liveness check failed because of shutdown");
-        return Err(StratusError::StratusShutdown);
+        return Err(StateError::StratusShutdown.into());
     }
 
     let should_serve = match GlobalState::get_node_mode() {
@@ -301,7 +307,7 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
     if not(should_serve) {
         tracing::warn!("readiness check failed because consensus is not ready");
         metrics::set_consensus_is_ready(0_u64);
-        return Err(StratusError::StratusNotReady);
+        return Err(StateError::StratusNotReady.into());
     }
 
     metrics::set_consensus_is_ready(1_u64);
@@ -325,7 +331,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     let permit = MODE_CHANGE_SEMAPHORE.try_acquire();
     let _permit: SemaphorePermit = match permit {
         Ok(permit) => permit,
-        Err(_) => return Err(StratusError::ModeChangeInProgress),
+        Err(_) => return Err(StateError::ModeChangeInProgress.into()),
     };
 
     const LEADER_MINER_INTERVAL: Duration = Duration::from_secs(1);
@@ -338,14 +344,14 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
 
     if GlobalState::is_transactions_enabled() {
         tracing::error!("transactions are currently enabled, cannot change node mode");
-        return Err(StratusError::RpcTransactionEnabled);
+        return Err(StateError::TransactionsEnabled.into());
     }
 
     tracing::info!("shutting down importer");
     let shutdown_importer_result = stratus_shutdown_importer(Params::new(None), &ctx, &ext);
     match shutdown_importer_result {
         Ok(_) => tracing::info!("importer shutdown successfully"),
-        Err(StratusError::ImporterAlreadyShutdown) => {
+        Err(StratusError::Importer(ImporterError::AlreadyShutdown)) => {
             tracing::warn!("importer is already shutdown, continuing");
         }
         Err(e) => {
@@ -375,7 +381,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     let permit = MODE_CHANGE_SEMAPHORE.try_acquire();
     let _permit: SemaphorePermit = match permit {
         Ok(permit) => permit,
-        Err(_) => return Err(StratusError::ModeChangeInProgress),
+        Err(_) => return Err(StateError::ModeChangeInProgress.into()),
     };
 
     tracing::info!("starting process to change node to follower");
@@ -387,15 +393,16 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
 
     if GlobalState::is_transactions_enabled() {
         tracing::error!("transactions are currently enabled, cannot change node mode");
-        return Err(StratusError::RpcTransactionEnabled);
+        return Err(StateError::TransactionsEnabled.into());
     }
 
     let pending_txs = ctx.storage.pending_transactions();
     if not(pending_txs.is_empty()) {
         tracing::error!(pending_txs = ?pending_txs.len(), "cannot change to follower mode with pending transactions");
-        return Err(StratusError::PendingTransactionsExist {
+        return Err(StorageError::PendingTransactionsExist {
             pending_txs: pending_txs.len(),
-        });
+        }
+        .into());
     }
 
     let change_miner_mode_result = change_miner_mode(MinerMode::External, &ctx).await;
@@ -411,7 +418,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     let init_importer_result = stratus_init_importer(params, Arc::clone(&ctx), ext).await;
     match init_importer_result {
         Ok(_) => tracing::info!("importer initialized successfully"),
-        Err(StratusError::ImporterAlreadyRunning) => {
+        Err(StratusError::Importer(ImporterError::AlreadyRunning)) => {
             tracing::warn!("importer is already running, continuing");
         }
         Err(e) => {
@@ -434,12 +441,12 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
 
     let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
-        StratusError::ImporterConfigParseError
+        ImporterError::ConfigParseError
     })?;
 
     let sync_interval = parse_duration(&raw_sync_interval).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse sync_interval");
-        StratusError::ImporterConfigParseError
+        ImporterError::ConfigParseError
     })?;
 
     let importer_config = ImporterConfig {
@@ -456,12 +463,12 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) 
     ext.authentication().auth_admin()?;
     if GlobalState::get_node_mode() != NodeMode::Follower {
         tracing::error!("node is currently not a follower");
-        return Err(StratusError::StratusNotFollower);
+        return Err(StateError::StratusNotFollower.into());
     }
 
     if GlobalState::is_importer_shutdown() && ctx.consensus().is_none() {
         tracing::error!("importer is already shut down");
-        return Err(StratusError::ImporterAlreadyShutdown);
+        return Err(ImporterError::AlreadyShutdown.into());
     }
 
     ctx.set_consensus(None);
@@ -478,7 +485,7 @@ async fn stratus_change_miner_mode(params: Params<'_>, ctx: Arc<RpcContext>, ext
 
     let mode = MinerMode::from_str(&mode_str).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse miner mode");
-        StratusError::MinerModeParamInvalid
+        RpcError::MinerModeParamInvalid
     })?;
 
     change_miner_mode(mode, &ctx).await
@@ -490,7 +497,7 @@ async fn stratus_change_miner_mode(params: Params<'_>, ctx: Arc<RpcContext>, ext
 async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<JsonValue, StratusError> {
     if GlobalState::is_transactions_enabled() {
         tracing::error!("cannot change miner mode while transactions are enabled");
-        return Err(StratusError::RpcTransactionEnabled);
+        return Err(StateError::TransactionsEnabled.into());
     }
 
     let previous_mode = ctx.miner.mode();
@@ -511,9 +518,10 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
             let pending_txs = ctx.storage.pending_transactions();
             if not(pending_txs.is_empty()) {
                 tracing::error!(pending_txs = ?pending_txs.len(), "cannot change miner mode to External with pending transactions");
-                return Err(StratusError::PendingTransactionsExist {
+                return Err(StorageError::PendingTransactionsExist {
                     pending_txs: pending_txs.len(),
-                });
+                }
+                .into());
             }
 
             ctx.miner.switch_to_external_mode().await;
@@ -523,7 +531,7 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
 
             if ctx.consensus().is_some() {
                 tracing::error!("cannot change miner mode to Interval with consensus set");
-                return Err(StratusError::ConsensusSet);
+                return Err(ConsensusError::Set.into());
             }
 
             ctx.miner.start_interval_mining(duration).await;
@@ -839,14 +847,12 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) 
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_estimateGas with failure");
-            Err(StratusError::TransactionReverted { output: result.output })
+            Err(TransactionError::Reverted { output: result.output }.into())
         }
 
         // internal error
         Err(e) => {
-            if e.is_internal() {
-                tracing::error!(reason = ?e, "failed to execute eth_estimateGas");
-            }
+            tracing::warn!(reason = ?e, "failed to execute eth_estimateGas");
             Err(e)
         }
     }
@@ -881,14 +887,12 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Resul
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_call with failure");
-            Err(StratusError::TransactionReverted { output: result.output })
+            Err(TransactionError::Reverted { output: result.output }.into())
         }
 
         // internal error
         Err(e) => {
-            if e.is_internal() {
-                tracing::error!(reason = ?e, "failed to execute eth_call");
-            }
+            tracing::warn!(reason = ?e, "failed to execute eth_call");
             Err(e)
         }
     }
@@ -921,7 +925,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
 
     if not(GlobalState::is_transactions_enabled()) {
         tracing::warn!(%tx_hash, "failed to execute eth_sendRawTransaction because transactions are disabled");
-        return Err(StratusError::RpcTransactionDisabled);
+        return Err(StateError::TransactionsDisabled.into());
     }
 
     // execute locally or forward to leader
@@ -929,9 +933,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
         NodeMode::Leader | NodeMode::FakeLeader => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
-                if e.is_internal() {
-                    tracing::error!(reason = ?e, "failed to execute eth_sendRawTransaction");
-                }
+                tracing::warn!(reason = ?e, "failed to execute eth_sendRawTransaction");
                 Err(e)
             }
         },
@@ -942,7 +944,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
             },
             None => {
                 tracing::error!("unable to forward transaction because consensus is temporarily unavailable for follower node");
-                Err(StratusError::ConsensusUnavailable)
+                Err(ConsensusError::Unavailable.into())
             }
         },
     }
@@ -992,10 +994,11 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> R
 
     // check range
     if blocks_in_range > MAX_BLOCK_RANGE {
-        return Err(StratusError::RpcBlockRangeInvalid {
+        return Err(RpcError::BlockRangeInvalid {
             actual: blocks_in_range,
             max: MAX_BLOCK_RANGE,
-        });
+        }
+        .into());
     }
 
     // execute
@@ -1094,7 +1097,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         let (params, event) = match next_rpc_param::<String>(params.sequence()) {
             Ok((params, event)) => (params, event),
             Err(e) => {
-                pending.reject(e).await;
+                pending.reject(StratusError::from(e)).await;
                 return Ok(());
             }
         };
@@ -1127,7 +1130,9 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
 
             // unsupported
             event => {
-                pending.reject(StratusError::RpcSubscriptionInvalid { event: event.to_string() }).await;
+                pending
+                    .reject(StratusError::from(RpcError::SubscriptionInvalid { event: event.to_string() }))
+                    .await;
             }
         }
 
@@ -1171,7 +1176,7 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions
 /// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
 pub(super) fn reject_unknown_client(client: &RpcClientApp) -> Result<(), StratusError> {
     if client.is_unknown() && not(GlobalState::is_unknown_client_enabled()) {
-        return Err(StratusError::RpcClientMissing);
+        return Err(RpcError::ClientMissing.into());
     }
     Ok(())
 }

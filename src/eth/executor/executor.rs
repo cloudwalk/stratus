@@ -27,9 +27,13 @@ use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::RpcError;
+use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::UnexpectedError;
 use crate::eth::primitives::UnixTime;
 use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
@@ -160,7 +164,7 @@ impl Evms {
 
         match execution_rx.recv() {
             Ok(result) => result,
-            Err(_) => Err(StratusError::UnexpectedChannelClosed { channel: "evm" }),
+            Err(_) => Err(UnexpectedError::ChannelClosed { channel: "evm" }.into()),
         }
     }
 }
@@ -411,7 +415,7 @@ impl Executor {
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
                     Err(e) =>
-                        if let StratusError::TransactionConflict(_) = e {
+                        if let StratusError::Storage(StorageError::TransactionConflict(_)) = e {
                             self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
                         } else {
                             Err(e)
@@ -430,7 +434,7 @@ impl Executor {
     fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, evm_route: EvmRoute, max_attempts: usize) -> Result<(), StratusError> {
         // validate
         if tx_input.signer.is_zero() {
-            return Err(StratusError::TransactionFromZeroAddress);
+            return Err(TransactionError::FromZeroAddress.into());
         }
 
         // executes transaction until no more conflicts
@@ -498,14 +502,14 @@ impl Executor {
                     return Ok(());
                 }
                 Err(e) => match e {
-                    StratusError::TransactionConflict(ref conflicts) => {
+                    StratusError::Storage(StorageError::TransactionConflict(ref conflicts)) => {
                         tracing::warn!(%attempt, ?conflicts, "temporary storage conflict detected when saving execution");
                         if attempt >= max_attempts {
                             return Err(e);
                         }
                         continue;
                     }
-                    StratusError::TransactionEvmInputMismatch { ref expected, ref actual } => {
+                    StratusError::Storage(StorageError::EvmInputMismatch { ref expected, ref actual }) => {
                         tracing::warn!(?expected, ?actual, "evm input and block header mismatch");
                         if attempt >= max_attempts {
                             return Err(e);
@@ -543,7 +547,7 @@ impl Executor {
             PointInTime::MinedPast(number) => {
                 let Some(block) = self.storage.read_block(BlockFilter::Number(number))? else {
                     let filter = BlockFilter::Number(number);
-                    return Err(StratusError::RpcBlockFilterInvalid { filter });
+                    return Err(RpcError::BlockFilterInvalid { filter }.into());
                 };
                 Some(block)
             }

@@ -21,6 +21,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::RpcError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::UnixTimeNow;
 use crate::eth::rpc::RpcClientApp;
@@ -366,7 +367,7 @@ impl RpcSubscriptionsConnected {
         tracing::info!(%pending_txs, %new_heads, %logs, "current client subscriptions");
 
         if pending_txs + new_heads + logs >= max_subscriptions as usize {
-            return Err(StratusError::RpcSubscriptionLimit { max: max_subscriptions });
+            return Err(RpcError::SubscriptionLimit { max: max_subscriptions }.into());
         }
 
         Ok(())

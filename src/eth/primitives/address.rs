@@ -99,7 +99,7 @@ impl From<LogTopic> for Address {
 impl From<NameOrAddress> for Address {
     fn from(value: NameOrAddress) -> Self {
         match value {
-            NameOrAddress::Name(_) => panic!("TODO"),
+            NameOrAddress::Name(_) => todo!(),
             NameOrAddress::Address(value) => Self(value),
         }
     }

@@ -27,6 +27,7 @@ use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::Size;
+use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
@@ -254,7 +255,7 @@ impl Miner {
 
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
     /// mainly used when is_automine is enabled.
-    pub fn mine_local_and_commit(&self) -> anyhow::Result<()> {
+    pub fn mine_local_and_commit(&self) -> anyhow::Result<(), StorageError> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
 
         let block = self.mine_local()?;
@@ -264,7 +265,7 @@ impl Miner {
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
-    pub fn mine_local(&self) -> anyhow::Result<Block> {
+    pub fn mine_local(&self) -> anyhow::Result<Block, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
 
@@ -281,15 +282,17 @@ impl Miner {
             if let TransactionExecution::Local(tx) = tx {
                 local_txs.push(tx);
             } else {
-                return log_and_err!("failed to mine local block because one of the transactions is not a local transaction");
+                return Err(StorageError::Unexpected {
+                    msg: "failed to mine local block because one of the transactions is not a local transaction".to_owned(),
+                });
             }
         }
 
-        block_from_local(block.header, local_txs)
+        Ok(block_from_local(block.header, local_txs))
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit(&self, block: Block) -> anyhow::Result<()> {
+    pub fn commit(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -354,7 +357,7 @@ fn block_from_external(external_block: ExternalBlock, mined_txs: Vec<Transaction
     })
 }
 
-pub fn block_from_local(pending_header: PendingBlockHeader, txs: Vec<LocalTransactionExecution>) -> anyhow::Result<Block> {
+pub fn block_from_local(pending_header: PendingBlockHeader, txs: Vec<LocalTransactionExecution>) -> Block {
     let mut block = Block::new(pending_header.number, *pending_header.timestamp);
     block.transactions.reserve(txs.len());
     block.header.size = Size::from(txs.len() as u64);
@@ -415,7 +418,7 @@ pub fn block_from_local(pending_header: PendingBlockHeader, txs: Vec<LocalTransa
     }
 
     // TODO: calculate state_root, receipts_root and parent_hash
-    Ok(block)
+    block
 }
 
 // -----------------------------------------------------------------------------
@@ -508,6 +511,7 @@ mod interval_miner_ticker {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         // sync to next second
+        #[allow(clippy::expect_used)]
         let next_second = (Utc::now() + Duration::from_secs(1))
             .with_nanosecond(0)
             .expect("nanosecond above is set to `0`, which is always less than 2 billion");

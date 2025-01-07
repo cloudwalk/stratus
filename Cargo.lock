@@ -4973,6 +4973,7 @@ dependencies = [
  "smallvec",
  "sqlx",
  "static_assertions",
+ "stratus_macros",
  "strum",
  "sugars",
  "tempfile",
@@ -4990,6 +4991,15 @@ dependencies = [
  "triehash",
  "uuid",
  "vergen",
+]
+
+[[package]]
+name = "stratus_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.76",
 ]
 
 [[package]]
