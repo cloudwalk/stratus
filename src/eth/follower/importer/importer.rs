@@ -229,11 +229,7 @@ impl Importer {
                     };
 
                     if let Err(e) = executor.execute_local_transaction(tx_input) {
-                        if e.is_internal() {
-                            tracing::error!(reason = ?e, "internal error while executing imported transaction");
-                        } else {
-                            tracing::error!(reason = ?e, "transaction failed");
-                        }
+                        tracing::error!(reason = ?e, "transaction failed");
                     }
                 }
 
