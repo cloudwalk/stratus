@@ -23,23 +23,23 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
     };
 
     let mut match_arms = Vec::new();
-        // Get the major error code if specified
-        let major_error_code = input
-            .attrs
-            .iter()
-            .find(|attr| attr.path().is_ident("major_error_code"))
-            .and_then(|attr| {
-                if let Meta::NameValue(meta) = &attr.meta {
-                    if let Expr::Lit(ExprLit { lit: Lit::Int(lit_int), .. }) = &meta.value {
-                        lit_int.base10_parse::<i32>().ok()
-                    } else {
-                        None
-                    }
+    // Get the major error code if specified
+    let major_error_code = input
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("major_error_code"))
+        .and_then(|attr| {
+            if let Meta::NameValue(meta) = &attr.meta {
+                if let Expr::Lit(ExprLit { lit: Lit::Int(lit_int), .. }) = &meta.value {
+                    lit_int.base10_parse::<i32>().ok()
                 } else {
                     None
                 }
-            })
-            .unwrap_or(0);
+            } else {
+                None
+            }
+        })
+        .unwrap_or(0);
     let mut reverse_match_arms = Vec::new();
 
     // Process each variant
@@ -62,7 +62,8 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
                     None
                 }
             })
-            .expect(&format!("Missing error_code attribute for variant {}", variant_name)) + major_error_code;
+            .expect(&format!("Missing error_code attribute for variant {}", variant_name))
+            + major_error_code;
 
         // Handle different field types
         match &variant.fields {
