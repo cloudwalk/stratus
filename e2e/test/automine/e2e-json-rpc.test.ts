@@ -60,6 +60,10 @@ describe("JSON-RPC", () => {
             const error = await sendAndGetError("eth_blockNumber");
             expect(error.code).eq(1003);
 
+            // GET request to health endpoint should fail when unknown clients are disallowed
+            const healthResponseErr = await fetch("http://localhost:3000/health");
+            expect(healthResponseErr.status).eq(500);
+
             // Requests with client identification should succeed
             const validHeaders = {
                 "x-app": "test-client",
@@ -76,6 +80,8 @@ describe("JSON-RPC", () => {
 
             // URL parameters should also work
             const validUrlParams = ["app=test-client", "client=test-client"];
+            const healthResponse = await fetch(`http://localhost:3000/health?app=test-client`);
+            expect(healthResponse.status).eq(200);
             for (const param of validUrlParams) {
                 const providerWithParam = new JsonRpcProvider(`http://localhost:3000?${param}`);
                 const blockNumber = await providerWithParam.getBlockNumber();

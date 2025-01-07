@@ -11,7 +11,6 @@ use ethereum_types::U256;
 use futures::join;
 use http::Method;
 use itertools::Itertools;
-use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RandomStringIdProvider;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::RpcServiceBuilder;
@@ -63,6 +62,7 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
+use crate::eth::rpc::proxy_get_request::ProxyGetRequestTempLayer;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcHttpMiddleware;
@@ -138,10 +138,10 @@ pub async fn serve_rpc(
     let http_middleware = tower::ServiceBuilder::new()
         .layer(cors)
         .layer_fn(RpcHttpMiddleware::new)
-        .layer(ProxyGetRequestLayer::new("/health", "stratus_health").unwrap())
-        .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap())
-        .layer(ProxyGetRequestLayer::new("/config", "stratus_config").unwrap())
-        .layer(ProxyGetRequestLayer::new("/state", "stratus_state").unwrap());
+        .layer(ProxyGetRequestTempLayer::new("/health", "stratus_health").unwrap())
+        .layer(ProxyGetRequestTempLayer::new("/version", "stratus_version").unwrap())
+        .layer(ProxyGetRequestTempLayer::new("/config", "stratus_config").unwrap())
+        .layer(ProxyGetRequestTempLayer::new("/state", "stratus_state").unwrap());
 
     // serve module
     let server = Server::builder()
