@@ -9,7 +9,7 @@ use syn::Fields;
 use syn::Lit;
 use syn::Meta;
 
-#[proc_macro_derive(ErrorCode, attributes(error_code))]
+#[proc_macro_derive(ErrorCode, attributes(error_code, major_error_code))]
 pub fn derive_error_code(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     derive_error_code_impl(input).into()
@@ -86,7 +86,7 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
 
         // Add reverse mapping
         reverse_match_arms.push(quote! {
-            #error_code => stringify!(#variant_name)
+            #error_code => Some(stringify!(#variant_name))
         });
     }
 
@@ -98,10 +98,10 @@ fn derive_error_code_impl(input: DeriveInput) -> proc_macro2::TokenStream {
                 }
             }
 
-            fn str_repr_from_err_code(code: i32) -> &'static str {
+            fn str_repr_from_err_code(code: i32) -> Option<&'static str> {
                 match code {
                     #(#reverse_match_arms),*,
-                    _ => "Unknown"
+                    _ => None
                 }
             }
         }
@@ -144,12 +144,12 @@ mod tests {
                     }
                 }
 
-                fn str_repr_from_err_code(code: i32) -> &'static str {
+                fn str_repr_from_err_code(code: i32) -> Option<&'static str> {
                     match code {
-                        103i32 => stringify ! (First),
-                        104i32 => stringify ! (Second),
-                        100i32 => stringify ! (Third),
-                        _ => "Unknown"
+                        103i32 => Some(stringify ! (First)),
+                        104i32 => Some(stringify ! (Second)),
+                        100i32 => Some(stringify ! (Third)),
+                        _ => None
                     }
                 }
             }

@@ -5,7 +5,6 @@ mod rpc_client_app;
 mod rpc_config;
 mod rpc_context;
 mod rpc_http_middleware;
-mod rpc_method_wrapper;
 mod rpc_middleware;
 mod rpc_parser;
 mod rpc_server;

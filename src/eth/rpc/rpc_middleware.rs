@@ -27,6 +27,7 @@ use crate::eth::codegen::SoliditySignature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
+use crate::eth::primitives::ErrorCode;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::RpcError;
@@ -246,7 +247,7 @@ impl<'a> Future for RpcResponse<'a> {
             {
                 let rpc_result = match response_result.get("result") {
                     Some(result) => if_else!(result.is_null(), metrics::LABEL_MISSING, metrics::LABEL_PRESENT),
-                    None => metrics::LABEL_ERROR,
+                    None => StratusError::str_repr_from_err_code(error_code).unwrap_or("Unknown"),
                 };
 
                 let tx_ref = resp.tx.as_ref();
