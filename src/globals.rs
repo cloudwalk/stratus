@@ -285,7 +285,7 @@ impl GlobalState {
         };
 
         json!({
-            "is_leader": Self::get_node_mode() == NodeMode::Leader,
+            "is_leader": Self::get_node_mode() == NodeMode::Leader || Self::get_node_mode() == NodeMode::FakeLeader,
             "is_shutdown": Self::is_shutdown(),
             "is_importer_shutdown": Self::is_importer_shutdown(),
             "is_interval_miner_running": ctx.miner.is_interval_miner_running(),

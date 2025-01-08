@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::try_join;
 use futures::StreamExt;
@@ -17,6 +18,7 @@ use tracing::Span;
 
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
+use crate::eth::miner::miner::interval_miner::mine_and_commit;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
@@ -218,22 +220,17 @@ impl Importer {
             #[cfg(feature = "metrics")]
             let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
 
-            // if it's fake miner, execute each tx and skip mining and commiting
             if let ImporterMode::FakeLeader = importer_mode {
-                for tx in &block.transactions {
+                for tx in block.0.transactions {
                     tracing::info!(?tx, "executing tx as fake miner");
-
-                    let Ok(tx_input) = rlp::decode(&tx.0.input) else {
-                        tracing::error!("Failed to decode processed transaction");
-                        continue; // skip this tx
-                    };
-
-                    if let Err(e) = executor.execute_local_transaction(tx_input) {
+                    if let Err(e) = executor.execute_local_transaction(tx.try_into()?) {
                         tracing::error!(reason = ?e, "transaction failed");
+                        GlobalState::shutdown_from("Importer (FakeMiner)", "Transaction Failed");
+                        return Err(anyhow!(e));
                     }
                 }
-
-                return Ok(());
+                mine_and_commit(&miner);
+                continue;
             }
 
             if let Err(e) = executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts)) {

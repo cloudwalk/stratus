@@ -424,7 +424,7 @@ pub fn block_from_local(pending_header: PendingBlockHeader, txs: Vec<LocalTransa
 // -----------------------------------------------------------------------------
 // Miner
 // -----------------------------------------------------------------------------
-mod interval_miner {
+pub mod interval_miner {
     use std::sync::mpsc;
     use std::sync::mpsc::RecvTimeoutError;
     use std::sync::Arc;
@@ -468,7 +468,7 @@ mod interval_miner {
     }
 
     #[inline(always)]
-    fn mine_and_commit(miner: &Miner) {
+    pub fn mine_and_commit(miner: &Miner) {
         let _mine_and_commit_lock = miner.locks.mine_and_commit.lock();
 
         // mine
