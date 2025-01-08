@@ -1,5 +1,5 @@
 #[allow(clippy::module_inception)]
-mod miner;
+pub mod miner;
 mod miner_config;
 
 pub use miner::Miner;
