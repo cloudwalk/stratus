@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import { keccak256 } from "ethers";
-import { Block, Bytes, TransactionReceipt } from "web3-types";
+import { JsonRpcProvider } from "ethers";
+import { Block, Bytes } from "web3-types";
 
 import { ALICE, BOB } from "../helpers/account";
 import { isStratus } from "../helpers/network";
@@ -36,6 +37,70 @@ describe("JSON-RPC", () => {
             } else {
                 (await sendExpect("hardhat_reset")).eq(true);
             }
+        });
+    });
+
+    describe("Unknown Clients", () => {
+        before(async () => {
+            if (isStratus) {
+                // Ensure clean state
+                await send("stratus_enableUnknownClients");
+            }
+        });
+
+        it("disabling unknown clients blocks requests without client identification", async function () {
+            if (!isStratus) {
+                this.skip();
+                return;
+            }
+
+            await send("stratus_disableUnknownClients");
+
+            // Request without client identification should fail
+            const error = await sendAndGetError("eth_blockNumber");
+            expect(error.code).eq(1003);
+
+            // GET request to health endpoint should fail when unknown clients are disallowed
+            const healthResponseErr = await fetch("http://localhost:3000/health");
+            expect(healthResponseErr.status).eq(500);
+
+            // Requests with client identification should succeed
+            const validHeaders = {
+                "x-app": "test-client",
+                "x-stratus-app": "test-client",
+                "x-client": "test-client",
+                "x-stratus-client": "test-client",
+            };
+
+            for (const [header, value] of Object.entries(validHeaders)) {
+                const headers = { [header]: value };
+                const result = await send("eth_blockNumber", [], headers);
+                expect(result).to.match(/^0x[0-9a-f]+$/);
+            }
+
+            // URL parameters should also work
+            const validUrlParams = ["app=test-client", "client=test-client"];
+            const healthResponse = await fetch(`http://localhost:3000/health?app=test-client`);
+            expect(healthResponse.status).eq(200);
+            for (const param of validUrlParams) {
+                const providerWithParam = new JsonRpcProvider(`http://localhost:3000?${param}`);
+                const blockNumber = await providerWithParam.getBlockNumber();
+                expect(blockNumber).to.be.a("number");
+            }
+        });
+
+        it("enabling unknown clients allows all requests", async function () {
+            if (!isStratus) {
+                this.skip();
+                return;
+            }
+
+            await send("stratus_disableUnknownClients");
+            await send("stratus_enableUnknownClients");
+
+            // Request without client identification should now succeed
+            const blockNumber = await send("eth_blockNumber");
+            expect(blockNumber).to.match(/^0x[0-9a-f]+$/);
         });
     });
 
@@ -291,7 +356,7 @@ describe("JSON-RPC", () => {
 
                 // Record timestamp in contract
                 const tx = await contract.recordTimestamp();
-                const receipt = await tx.wait();
+                const receipt: TransactionReceipt = await tx.wait();
 
                 // Get the timestamp from contract event
                 const event = receipt.logs[0];

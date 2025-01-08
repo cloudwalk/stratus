@@ -83,12 +83,15 @@ rlp = "=0.5.2"
 triehash = "=0.8.4"
 
 # network
-jsonrpsee = { version = "=0.24.6", features = ["server", "client"] }
+jsonrpsee = { version = "=0.24.7", features = ["server", "client"] }
 reqwest = { version = "=0.12.4", features = ["json"] }
 tonic = "=0.11.0"
 tower = "=0.4.13"
 tower-http = { version = "=0.5.2", features = ["cors"] }
 http = "=1.1.0"
+http-body = "=1.0.1"
+http-body-util = "=0.1.2"
+bytes = "=1.9.0"
 
 # observability
 console-subscriber = "=0.2.0"

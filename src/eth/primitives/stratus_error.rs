@@ -1,4 +1,9 @@
+use futures::future::BoxFuture;
+use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
 use jsonrpsee::types::ErrorObjectOwned;
+use jsonrpsee::types::Id;
+use jsonrpsee::MethodResponse;
+use jsonrpsee::ResponsePayload;
 use stratus_macros::ErrorCode;
 
 use crate::alias::JsonValue;
@@ -13,11 +18,11 @@ use crate::ext::to_json_value;
 
 pub trait ErrorCode {
     fn error_code(&self) -> i32;
-    #[allow(unused)]
-    fn str_repr_from_err_code(code: i32) -> &'static str;
+    fn str_repr_from_err_code(code: i32) -> Option<&'static str>;
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
+#[major_error_code = 1000]
 pub enum RpcError {
     #[error("Block filter does not point to a valid block.")]
     #[error_code = 1]
@@ -55,7 +60,9 @@ pub enum RpcError {
     #[error_code = 9]
     MinerModeParamInvalid,
 }
+
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
+#[major_error_code = 2000]
 pub enum TransactionError {
     #[error("Account at {address} is not a contract.")]
     #[error_code = 1]
@@ -87,6 +94,7 @@ pub enum TransactionError {
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
+#[major_error_code = 3000]
 pub enum StorageError {
     #[error("Block conflict: {number} already exists in the permanent storage.")]
     #[error_code = 1]
@@ -126,6 +134,7 @@ pub enum StorageError {
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
+#[major_error_code = 4000]
 pub enum ImporterError {
     #[error("Importer is already running.")]
     #[error_code = 1]
@@ -145,6 +154,7 @@ pub enum ImporterError {
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
+#[major_error_code = 5000]
 pub enum ConsensusError {
     #[error("Consensus is temporarily unavailable for follower node.")]
     #[error_code = 1]
@@ -160,6 +170,7 @@ pub enum ConsensusError {
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
+#[major_error_code = 6000]
 pub enum UnexpectedError {
     #[error("Unexpected channel {channel} closed.")]
     #[error_code = 1]
@@ -171,6 +182,7 @@ pub enum UnexpectedError {
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
+#[major_error_code = 7000]
 pub enum StateError {
     #[error("Stratus is not ready to start servicing requests.")]
     #[error_code = 1]
@@ -201,41 +213,33 @@ pub enum StateError {
     TransactionsEnabled,
 }
 
-#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
+#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
 pub enum StratusError {
     #[error(transparent)]
-    #[error_code = 1000]
     RPC(#[from] RpcError),
 
     #[error(transparent)]
-    #[error_code = 2000]
     Transaction(#[from] TransactionError),
 
     #[error(transparent)]
-    #[error_code = 3000]
     Storage(#[from] StorageError),
 
     #[error(transparent)]
-    #[error_code = 4000]
     Importer(#[from] ImporterError),
 
     #[error(transparent)]
-    #[error_code = 5000]
     Consensus(#[from] ConsensusError),
 
     #[error(transparent)]
-    #[error_code = 6000]
     Unexpected(#[from] UnexpectedError),
 
     #[error(transparent)]
-    #[error_code = 7000]
     State(#[from] StateError),
 }
 
-impl StratusError {
-    /// Error code to be used in JSON-RPC response.
-    pub fn rpc_code(&self) -> i32 {
-        let inner_error = match self {
+impl ErrorCode for StratusError {
+    fn error_code(&self) -> i32 {
+        match self {
             Self::RPC(err) => err.error_code(),
             Self::Transaction(err) => err.error_code(),
             Self::Storage(err) => err.error_code(),
@@ -243,11 +247,25 @@ impl StratusError {
             Self::Consensus(err) => err.error_code(),
             Self::Unexpected(err) => err.error_code(),
             Self::State(err) => err.error_code(),
-        };
-
-        self.error_code() + inner_error
+        }
     }
 
+    fn str_repr_from_err_code(code: i32) -> Option<&'static str> {
+        let major = code % 1000;
+        match major {
+            1 => RpcError::str_repr_from_err_code(code),
+            2 => TransactionError::str_repr_from_err_code(code),
+            3 => StorageError::str_repr_from_err_code(code),
+            4 => ImporterError::str_repr_from_err_code(code),
+            5 => ConsensusError::str_repr_from_err_code(code),
+            6 => UnexpectedError::str_repr_from_err_code(code),
+            7 => StateError::str_repr_from_err_code(code),
+            _ => None,
+        }
+    }
+}
+
+impl StratusError {
     /// Error message to be used in JSON-RPC response.
     pub fn rpc_message(&self) -> String {
         self.to_string()
@@ -270,6 +288,12 @@ impl StratusError {
 
             _ => JsonValue::Null,
         }
+    }
+
+    pub fn to_response_future<'a>(self, id: Id<'_>) -> ResponseFuture<BoxFuture<'a, MethodResponse>> {
+        let response = ResponsePayload::<()>::error(StratusError::RPC(RpcError::ClientMissing));
+        let method_response = MethodResponse::response(id, response, u32::MAX as usize);
+        ResponseFuture::ready(method_response)
     }
 }
 
@@ -301,6 +325,6 @@ impl From<StratusError> for ErrorObjectOwned {
             data => data,
         };
 
-        Self::owned(value.rpc_code(), value.rpc_message(), Some(data))
+        Self::owned(value.error_code(), value.rpc_message(), Some(data))
     }
 }

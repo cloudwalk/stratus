@@ -11,6 +11,7 @@ use jsonrpsee::server::middleware::rpc::RpcServiceT;
 #[cfg(feature = "metrics")]
 use jsonrpsee::server::ConnectionGuard;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
+use jsonrpsee::types::Id;
 use jsonrpsee::types::Params;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
@@ -26,8 +27,11 @@ use crate::eth::codegen::SoliditySignature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
+use crate::eth::primitives::ErrorCode;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::RpcError;
+use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -42,6 +46,7 @@ use crate::infra::metrics;
 use crate::infra::tracing::new_cid;
 use crate::infra::tracing::SpanExt;
 use crate::infra::tracing::TracingExt;
+use crate::GlobalState;
 
 // -----------------------------------------------------------------------------
 // Request handling
@@ -139,15 +144,25 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         drop(middleware_enter);
         request.extensions_mut().insert(span);
 
+        let id = request.id.to_string();
+        let future_response = reject_unknown_client(&client, request.id.clone()).unwrap_or(self.service.call(request));
         RpcResponse {
             client,
-            id: request.id.to_string(),
+            id,
             method: method.to_string(),
             tx,
             start: Instant::now(),
-            future_response: self.service.call(request),
+            future_response,
         }
     }
+}
+
+/// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
+fn reject_unknown_client<'a>(client: &RpcClientApp, id: Id<'_>) -> Option<ResponseFuture<BoxFuture<'a, MethodResponse>>> {
+    if client.is_unknown() && !GlobalState::is_unknown_client_enabled() {
+        return Some(StratusError::RPC(RpcError::ClientMissing).to_response_future(id));
+    }
+    None
 }
 
 // -----------------------------------------------------------------------------
@@ -232,7 +247,7 @@ impl<'a> Future for RpcResponse<'a> {
             {
                 let rpc_result = match response_result.get("result") {
                     Some(result) => if_else!(result.is_null(), metrics::LABEL_MISSING, metrics::LABEL_PRESENT),
-                    None => metrics::LABEL_ERROR,
+                    None => StratusError::str_repr_from_err_code(error_code).unwrap_or("Unknown"),
                 };
 
                 let tx_ref = resp.tx.as_ref();

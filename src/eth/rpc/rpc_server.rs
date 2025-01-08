@@ -11,18 +11,15 @@ use ethereum_types::U256;
 use futures::join;
 use http::Method;
 use itertools::Itertools;
-use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::RandomStringIdProvider;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
 use jsonrpsee::types::Params;
 use jsonrpsee::Extensions;
-use jsonrpsee::IntoResponse;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
 use once_cell::sync::Lazy;
-use serde::Serialize;
 use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::select;
@@ -35,7 +32,6 @@ use tracing::info_span;
 use tracing::Instrument;
 use tracing::Span;
 
-use super::rpc_method_wrapper::metrics_wrapper;
 use crate::alias::EthersReceipt;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
@@ -63,8 +59,8 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
+use crate::eth::rpc::proxy_get_request::ProxyGetRequestTempLayer;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
-use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
@@ -139,10 +135,10 @@ pub async fn serve_rpc(
     let http_middleware = tower::ServiceBuilder::new()
         .layer(cors)
         .layer_fn(RpcHttpMiddleware::new)
-        .layer(ProxyGetRequestLayer::new("/health", "stratus_health").unwrap())
-        .layer(ProxyGetRequestLayer::new("/version", "stratus_version").unwrap())
-        .layer(ProxyGetRequestLayer::new("/config", "stratus_config").unwrap())
-        .layer(ProxyGetRequestLayer::new("/state", "stratus_state").unwrap());
+        .layer(ProxyGetRequestTempLayer::new("/health", "stratus_health").unwrap())
+        .layer(ProxyGetRequestTempLayer::new("/version", "stratus_version").unwrap())
+        .layer(ProxyGetRequestTempLayer::new("/config", "stratus_config").unwrap())
+        .layer(ProxyGetRequestTempLayer::new("/state", "stratus_state").unwrap());
 
     // serve module
     let server = Server::builder()
@@ -216,50 +212,37 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("eth_gasPrice", eth_gas_price)?;
 
     // stratus importing helpers
-    register_blocking_method(&mut module, "stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
+    module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
 
     // block
-    register_blocking_method(&mut module, "eth_blockNumber", eth_block_number)?;
-    register_blocking_method(&mut module, "eth_getBlockByNumber", eth_get_block_by_number)?;
-    register_blocking_method(&mut module, "eth_getBlockByHash", eth_get_block_by_hash)?;
+    module.register_blocking_method("eth_blockNumber", eth_block_number)?;
+    module.register_blocking_method("eth_getBlockByNumber", eth_get_block_by_number)?;
+    module.register_blocking_method("eth_getBlockByHash", eth_get_block_by_hash)?;
     module.register_method("eth_getUncleByBlockHashAndIndex", eth_get_uncle_by_block_hash_and_index)?;
 
     // transactions
-    register_blocking_method(&mut module, "eth_getTransactionByHash", eth_get_transaction_by_hash)?;
-    register_blocking_method(&mut module, "eth_getTransactionReceipt", eth_get_transaction_receipt)?;
-    register_blocking_method(&mut module, "eth_estimateGas", eth_estimate_gas)?;
-    register_blocking_method(&mut module, "eth_call", eth_call)?;
-    register_blocking_method(&mut module, "eth_sendRawTransaction", eth_send_raw_transaction)?;
+    module.register_blocking_method("eth_getTransactionByHash", eth_get_transaction_by_hash)?;
+    module.register_blocking_method("eth_getTransactionReceipt", eth_get_transaction_receipt)?;
+    module.register_blocking_method("eth_estimateGas", eth_estimate_gas)?;
+    module.register_blocking_method("eth_call", eth_call)?;
+    module.register_blocking_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
 
     // logs
-    register_blocking_method(&mut module, "eth_getLogs", eth_get_logs)?;
+    module.register_blocking_method("eth_getLogs", eth_get_logs)?;
 
     // account
     module.register_method("eth_accounts", eth_accounts)?;
-    register_blocking_method(&mut module, "eth_getTransactionCount", eth_get_transaction_count)?;
-    register_blocking_method(&mut module, "eth_getBalance", eth_get_balance)?;
-    register_blocking_method(&mut module, "eth_getCode", eth_get_code)?;
+    module.register_blocking_method("eth_getTransactionCount", eth_get_transaction_count)?;
+    module.register_blocking_method("eth_getBalance", eth_get_balance)?;
+    module.register_blocking_method("eth_getCode", eth_get_code)?;
 
     // storage
-    register_blocking_method(&mut module, "eth_getStorageAt", eth_get_storage_at)?;
+    module.register_blocking_method("eth_getStorageAt", eth_get_storage_at)?;
 
     // subscriptions
     module.register_subscription("eth_subscribe", "eth_subscription", "eth_unsubscribe", eth_subscribe)?;
 
     Ok(module)
-}
-
-// helper to call `module.register_blocking_method` while wrapping callback on [`metrics_wrapper`].
-fn register_blocking_method<T>(
-    module: &mut RpcModule<RpcContext>,
-    method_name: &'static str,
-    method: fn(Params<'_>, Arc<RpcContext>, &Extensions) -> Result<T, StratusError>,
-) -> anyhow::Result<()>
-where
-    T: IntoResponse + Clone + Serialize + 'static,
-{
-    module.register_blocking_method(method_name, metrics_wrapper(method, method_name))?;
-    Ok(())
 }
 
 // -----------------------------------------------------------------------------
@@ -601,9 +584,7 @@ fn stratus_state(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<Json
     Ok(GlobalState::get_global_state_as_json(ctx))
 }
 
-async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    reject_unknown_client(ext.rpc_client())?;
-
+async fn stratus_get_subscriptions(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     // NOTE: this is a workaround for holding only one lock at a time
     let pending_txs = serde_json::to_value(ctx.subs.new_heads.read().await.values().collect_vec()).expect_infallible();
     let new_heads = serde_json::to_value(ctx.subs.pending_txs.read().await.values().collect_vec()).expect_infallible();
@@ -653,7 +634,7 @@ fn eth_gas_price(_: Params<'_>, _: &RpcContext, _: &Extensions) -> String {
 // Block
 // -----------------------------------------------------------------------------
 
-fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
+fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_blockNumber", block_number = field::Empty).entered();
@@ -665,7 +646,7 @@ fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions)
     Ok(to_json_value(block_number))
 }
 
-fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::stratus_getBlockAndReceipts").entered();
@@ -690,16 +671,16 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     }))
 }
 
-fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     eth_get_block_by_selector::<'h'>(params, ctx, ext)
 }
 
-fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     eth_get_block_by_selector::<'n'>(params, ctx, ext)
 }
 
 #[inline(always)]
-fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = if KIND == 'h' {
@@ -760,7 +741,7 @@ fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Exte
 // Transaction
 // -----------------------------------------------------------------------------
 
-fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionByHash", tx_hash = field::Empty, found = field::Empty).entered();
@@ -790,7 +771,7 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: &E
     }
 }
 
-fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionReceipt", tx_hash = field::Empty, found = field::Empty).entered();
@@ -820,7 +801,7 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: &E
     }
 }
 
-fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
+fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_estimateGas", tx_from = field::Empty, tx_to = field::Empty).entered();
@@ -858,7 +839,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) 
     }
 }
 
-fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
+fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
@@ -898,7 +879,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Resul
     }
 }
 
-fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
+fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
@@ -954,7 +935,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Exte
 // Logs
 // -----------------------------------------------------------------------------
 
-fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<JsonValue, StratusError> {
+fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     const MAX_BLOCK_RANGE: u64 = 5_000;
 
     // enter span
@@ -1014,7 +995,7 @@ fn eth_accounts(_: Params<'_>, _ctx: &RpcContext, _: &Extensions) -> Result<Json
     Ok(json!([]))
 }
 
-fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
+fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getTransactionCount", address = field::Empty, filter = field::Empty).entered();
@@ -1035,7 +1016,7 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Ext
     Ok(hex_num(account.nonce))
 }
 
-fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
+fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getBalance", address = field::Empty, filter = field::Empty).entered();
@@ -1057,7 +1038,7 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -
     Ok(hex_num(account.balance))
 }
 
-fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
+fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getCode", address = field::Empty, filter = field::Empty).entered();
@@ -1090,8 +1071,6 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
     drop(middleware_enter);
 
     async move {
-        reject_unknown_client(ext.rpc_client())?;
-
         // parse params
         let client = ext.rpc_client();
         let (params, event) = match next_rpc_param::<String>(params.sequence()) {
@@ -1146,7 +1125,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
 // Storage
 // -----------------------------------------------------------------------------
 
-fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions) -> Result<String, StratusError> {
+fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::eth_getStorageAt", address = field::Empty, index = field::Empty).entered();
@@ -1167,18 +1146,6 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: &Extensions
 
     // It must be padded, even if it is zero.
     Ok(hex_num_zero_padded(slot.value.as_u256()))
-}
-
-// -----------------------------------------------------------------------------
-// Request helpers
-// -----------------------------------------------------------------------------
-
-/// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
-pub(super) fn reject_unknown_client(client: &RpcClientApp) -> Result<(), StratusError> {
-    if client.is_unknown() && not(GlobalState::is_unknown_client_enabled()) {
-        return Err(RpcError::ClientMissing.into());
-    }
-    Ok(())
 }
 
 // -----------------------------------------------------------------------------

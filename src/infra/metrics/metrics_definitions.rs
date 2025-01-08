@@ -14,10 +14,7 @@ metrics! {
     histogram_duration rpc_requests_finished{client, method, contract, function, result, result_code, success},
 
     "Number of JSON-RPC subscriptions active right now."
-    gauge rpc_subscriptions_active{subscription, client},
-
-    "Number of times we respons a client with an error."
-    counter rpc_error_response{error_type, client, method}
+    gauge rpc_subscriptions_active{subscription, client}
 }
 
 // Storage reads.
