@@ -220,7 +220,6 @@ impl Importer {
             #[cfg(feature = "metrics")]
             let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
 
-            // if it's fake miner, execute each tx and skip mining and commiting
             if let ImporterMode::FakeLeader = importer_mode {
                 for tx in block.0.transactions {
                     tracing::info!(?tx, "executing tx as fake miner");
