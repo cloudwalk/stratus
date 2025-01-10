@@ -29,13 +29,13 @@ impl MinerConfig {
         tracing::info!(config = ?self, "creating block miner");
 
         let mode = match GlobalState::get_node_mode() {
-            NodeMode::Follower => {
+            NodeMode::Follower | NodeMode::FakeLeader => {
                 if not(self.block_mode.is_external()) {
                     tracing::error!(block_mode = ?self.block_mode, "invalid block-mode, a follower's miner can only start as external!");
                 }
                 MinerMode::External
             }
-            NodeMode::Leader | NodeMode::FakeLeader => self.block_mode,
+            NodeMode::Leader => self.block_mode,
         };
 
         self.init_with_mode(mode, storage).await
