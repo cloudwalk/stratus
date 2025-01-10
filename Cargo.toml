@@ -136,10 +136,10 @@ indicatif = "=0.17.8"
 # ------------------------------------------------------------------------------
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
-revm = { version = "=9.0.0", features = ["asm-keccak"] }
+revm = { version = "=9.0.0", features = ["asm-keccak", "serde"] }
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
-revm = { version = "=9.0.0" }
+revm = { version = "=9.0.0", features = ["serde"]}
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { version = "=0.6", optional = true }
