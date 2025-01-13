@@ -921,10 +921,10 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
                         let sig: Cow<str> = function_sig_for_o11y_opt(output)
                             .map(Cow::Borrowed)
                             .unwrap_or_else(|| Cow::Owned(output.to_string()));
-                        tracing::warn!(error = ?sig, "transaction reverted with");
+                        tracing::warn!(error = ?sig, ?tx_hash, "transaction reverted");
                     }
                     e => {
-                        tracing::warn!(reason = ?e, "failed to execute eth_sendRawTransaction");
+                        tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
                     }
                 }
                 Err(e)
