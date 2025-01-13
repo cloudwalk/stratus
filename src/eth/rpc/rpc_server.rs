@@ -1,5 +1,6 @@
 //! RPC server for HTTP and WS.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::str::FromStr;
@@ -34,6 +35,7 @@ use tracing::Span;
 
 use crate::alias::EthersReceipt;
 use crate::alias::JsonValue;
+use crate::eth::codegen::function_sig_for_o11y_opt;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::ImporterConfig;
@@ -914,7 +916,17 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
         NodeMode::Leader | NodeMode::FakeLeader => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
-                tracing::warn!(reason = ?e, "failed to execute eth_sendRawTransaction");
+                match &e {
+                    StratusError::Transaction(TransactionError::Reverted { output }) => {
+                        let sig: Cow<str> = function_sig_for_o11y_opt(output)
+                            .map(Cow::Borrowed)
+                            .unwrap_or_else(|| Cow::Owned(output.to_string()));
+                        tracing::warn!(error = ?sig, "transaction reverted with");
+                    }
+                    e => {
+                        tracing::warn!(reason = ?e, "failed to execute eth_sendRawTransaction");
+                    }
+                }
                 Err(e)
             }
         },
