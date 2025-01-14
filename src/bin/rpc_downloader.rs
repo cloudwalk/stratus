@@ -48,14 +48,29 @@ async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     let rpc_storage = config.rpc_storage.init().await?;
     let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc, config.external_rpc_timeout).await?);
 
-    let block_end = match config.block_end {
-        Some(end) => BlockNumber::from(end),
-        None => chain.fetch_block_number().await?,
-    };
+    loop {
+        let block_end = match config.block_end {
+            Some(end) => BlockNumber::from(end),
+            None => chain.fetch_block_number().await?,
+        };
 
-    // download balances and blocks
-    download_balances(Arc::clone(&rpc_storage), &chain, config.initial_accounts).await?;
-    download_blocks(rpc_storage, chain, config.paralellism, block_end).await?;
+        // download balances and blocks
+        download_balances(Arc::clone(&rpc_storage), &chain, config.initial_accounts.clone()).await?;
+        download_blocks(rpc_storage.clone(), chain.clone(), config.paralellism, block_end).await?;
+
+        if !config.daemon {
+            break;
+        }
+
+        if GlobalState::is_shutdown_warn("rpc-downloader::main") {
+            break;
+        }
+
+        // wait for 1 minute before restarting the download
+        let wait_duration = Duration::from_secs(60);
+        tracing::info!("Daemon mode enabled, waiting {} seconds before restarting...", wait_duration.as_secs());
+        tokio::time::sleep(wait_duration).await;
+    }
 
     Ok(())
 }
