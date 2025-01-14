@@ -21,11 +21,13 @@ impl ExternalReceipt {
     }
 
     /// Returns the block number.
+    #[allow(clippy::expect_used)]
     pub fn block_number(&self) -> BlockNumber {
         self.0.block_number.expect("external receipt must have block number").into()
     }
 
     /// Returns the block hash.
+    #[allow(clippy::expect_used)]
     pub fn block_hash(&self) -> Hash {
         self.0.block_hash.expect("external receipt must have block hash").into()
     }

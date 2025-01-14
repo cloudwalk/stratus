@@ -35,14 +35,14 @@ describe("Miner mode change integration test", function () {
     it("Miner change to External on Leader should fail because transactions are enabled", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
-        expect(response.data.error.code).eq(-32009);
+        expect(response.data.error.code).eq(7007);
         expect(response.data.error.message).eq("Can't change miner mode while transactions are enabled.");
     });
 
     it("Miner change to Interval on Follower should fail because transactions are enabled", async function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["1s"]);
-        expect(response.data.error.code).eq(-32009);
+        expect(response.data.error.code).eq(7007);
         expect(response.data.error.message).eq("Can't change miner mode while transactions are enabled.");
     });
 
@@ -65,7 +65,7 @@ describe("Miner mode change integration test", function () {
     it("Miner change to External on Leader should fail because miner is enabled", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
-        expect(response.data.error.code).eq(-32603);
+        expect(response.data.error.code).eq(6002);
         expect(response.data.error.message.split("\n")[0]).to.equal(
             "Unexpected error: can't change miner mode from Interval without pausing it first",
         );
@@ -74,7 +74,7 @@ describe("Miner mode change integration test", function () {
     it("Miner change to Interval on Follower should fail because importer wasn't stopped", async function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["1s"]);
-        expect(response.data.error.code).eq(-32603);
+        expect(response.data.error.code).eq(5002);
         expect(response.data.error.message).eq("Consensus is set.");
     });
 
@@ -97,14 +97,14 @@ describe("Miner mode change integration test", function () {
     it("Miner change on Leader without params should fail", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", []);
-        expect(response.data.error.code).eq(-32602);
+        expect(response.data.error.code).eq(1005);
         expect(response.data.error.message).eq("Expected String parameter, but received nothing.");
     });
 
     it("Miner change on Leader with invalid params should fail", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["invalidMode"]);
-        expect(response.data.error.code).eq(-32603);
+        expect(response.data.error.code).eq(1009);
         expect(response.data.error.message).eq("Miner mode param is invalid.");
     });
 
@@ -123,8 +123,10 @@ describe("Miner mode change integration test", function () {
     it("Miner change on Leader to Automine should fail because it is not supported", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["automine"]);
-        expect(response.data.error.code).eq(-32603);
-        expect(response.data.error.message).eq("Miner mode change to (automine) is unsupported.");
+        expect(response.data.error.code).eq(6002);
+        expect(response.data.error.message.split("\n")[0]).eq(
+            "Unexpected error: Miner mode change to 'automine' is unsupported.",
+        );
     });
 
     it("Miner change on Leader to External should fail if there are pending transactions", async function () {
@@ -165,7 +167,7 @@ describe("Miner mode change integration test", function () {
 
         // Change Miner mode to External on Leader with Pending Transactions should fail
         const changeMinerModeResponse = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
-        expect(changeMinerModeResponse.data.error.code).eq(-32603);
+        expect(changeMinerModeResponse.data.error.code).eq(3006);
         expect(changeMinerModeResponse.data.error.message).eq("There are (1) pending transactions.");
 
         // Clean up

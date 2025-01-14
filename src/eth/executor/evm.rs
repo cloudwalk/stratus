@@ -38,6 +38,9 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionError;
+use crate::eth::primitives::UnexpectedError;
+use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
@@ -87,7 +90,7 @@ impl Evm {
         let cfg_env = evm.cfg_mut();
         cfg_env.chain_id = chain_id;
         cfg_env.limit_contract_code_size = Some(usize::MAX);
-        cfg_env.perf_analyse_created_bytecodes = AnalysisKind::Raw;
+        cfg_env.perf_analyse_created_bytecodes = AnalysisKind::Analyse;
 
         // global block config
         let block_env = evm.block_mut();
@@ -146,17 +149,19 @@ impl Evm {
         // parse result
         let execution = match evm_result {
             // executed
-            Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)),
+            Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)?),
 
             // nonce errors
-            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(StratusError::TransactionNonce {
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(TransactionError::Nonce {
                 transaction: tx.into(),
                 account: state.into(),
-            }),
-            Err(EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state })) => Err(StratusError::TransactionNonce {
+            }
+            .into()),
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state })) => Err(TransactionError::Nonce {
                 transaction: tx.into(),
                 account: state.into(),
-            }),
+            }
+            .into()),
 
             // storage error
             Err(EVMError::Database(e)) => {
@@ -167,14 +172,14 @@ impl Evm {
             // unexpected errors
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm transaction error");
-                Err(StratusError::TransactionEvmFailed(e.to_string()))
+                Err(TransactionError::EvmFailed(e.to_string()).into())
             }
         };
 
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            metrics::inc_evm_execution(start.elapsed(), &session_point_in_time, execution.is_ok());
+            metrics::inc_evm_execution(start.elapsed(), session_point_in_time, execution.is_ok());
             metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
         }
 
@@ -235,13 +240,13 @@ impl Database for RevmSession {
 
         // retrieve account
         let address: Address = revm_address.into();
-        let account = self.storage.read_account(&address, &self.input.point_in_time)?;
+        let account = self.storage.read_account(address, self.input.point_in_time)?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
         if let Some(ref to_address) = self.input.to {
             if account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
                 if self.config.executor_reject_not_contract {
-                    return Err(StratusError::TransactionAccountNotContract { address: *to_address });
+                    return Err(TransactionError::AccountNotContract { address: *to_address }.into());
                 } else {
                     tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
                 }
@@ -272,7 +277,7 @@ impl Database for RevmSession {
         let index: SlotIndex = revm_index.into();
 
         // load slot from storage
-        let slot = self.storage.read_slot(&address, &index, &self.input.point_in_time)?;
+        let slot = self.storage.read_slot(address, index, self.input.point_in_time)?;
 
         // track original value, except if ignored address
         if not(address.is_ignored()) {
@@ -282,10 +287,7 @@ impl Database for RevmSession {
                 }
                 None => {
                     tracing::error!(reason = "reading slot without account loaded", %address, %index);
-                    return Err(StratusError::Unexpected(anyhow!(
-                        "Account '{}' was expected to be loaded by EVM, but it was not",
-                        address
-                    )));
+                    return Err(UnexpectedError::Unexpected(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address)).into());
                 }
             };
         }
@@ -302,9 +304,9 @@ impl Database for RevmSession {
 // Conversion
 // -----------------------------------------------------------------------------
 
-fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> EvmExecution {
+fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> Result<EvmExecution, StratusError> {
     let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
-    let changes = parse_revm_state(revm_result.state, execution_changes);
+    let changes = parse_revm_state(revm_result.state, execution_changes)?;
 
     tracing::info!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
     let mut deployed_contract_address = None;
@@ -314,7 +316,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
         }
     }
 
-    EvmExecution {
+    Ok(EvmExecution {
         block_timestamp: input.block_timestamp,
         receipt_applied: false,
         result,
@@ -323,7 +325,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
         gas,
         changes,
         deployed_contract_address,
-    }
+    })
 }
 
 fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
@@ -350,7 +352,7 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
     }
 }
 
-fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> ExecutionChanges {
+fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> Result<ExecutionChanges, StratusError> {
     for (revm_address, revm_account) in revm_state {
         let address: Address = revm_address.into();
         if address.is_ignored() {
@@ -386,10 +388,10 @@ fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChang
         } else if account_touched {
             let Some(account_changes) = execution_changes.get_mut(&address) else {
                 tracing::error!(keys = ?execution_changes.keys(), %address, "account touched, but not loaded by evm");
-                panic!("Account '{}' was expected to be loaded by EVM, but it was not", address);
+                return Err(UnexpectedError::Unexpected(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address)).into());
             };
             account_changes.apply_modifications(account, account_modified_slots);
         }
     }
-    execution_changes
+    Ok(execution_changes)
 }

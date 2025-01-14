@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fmt::Debug;
 
 use chrono::DateTime;
 use chrono::Utc;
@@ -10,6 +11,7 @@ use ethereum_types::U256;
 use hex_literal::hex;
 use itertools::Itertools;
 use serde::ser::SerializeStruct;
+use serde::Deserialize;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -127,7 +129,8 @@ pub struct AccountTransfer {
 }
 
 /// Direction of a transfer relative to the primary account address.
-#[derive(DebugAsJson, strum::EnumIs)]
+#[derive(DebugAsJson, strum::EnumIs, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AccountTransferDirection {
     /// `account_address` is being credited.
     Credit,
@@ -177,24 +180,12 @@ impl Serialize for AccountTransfer {
     }
 }
 
-impl Serialize for AccountTransferDirection {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            Self::Credit => serializer.serialize_str("credit"),
-            Self::Debit => serializer.serialize_str("debit"),
-        }
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Marker Trait
 // -----------------------------------------------------------------------------
 
 /// Struct is an event that can be published to external systems.
-pub trait Event: Serialize + Sized {
+pub trait Event: Serialize + Sized + Debug {
     /// Returns the partition key component of the event.
     fn event_key(&self) -> anyhow::Result<String>;
 

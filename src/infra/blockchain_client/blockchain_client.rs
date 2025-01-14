@@ -21,6 +21,7 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::RpcClientApp;
 use crate::ext::to_json_value;
@@ -145,6 +146,17 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number.
+    pub async fn fetch_block_and_receipts_with_temporary_endpoint(&self, block_number: BlockNumber) -> anyhow::Result<JsonValue> {
+        tracing::debug!(%block_number, "fetching block");
+
+        let number = to_json_value(block_number);
+        match self.http.request::<JsonValue, _>("stratus_getBlockAndReceipts", [number]).await {
+            Ok(json) => Ok(json),
+            Err(e) => log_and_err!(reason = e, "failed to fetch block by number"),
+        }
+    }
+
+    /// Fetches a block by number.
     pub async fn fetch_block(&self, block_number: BlockNumber) -> anyhow::Result<JsonValue> {
         tracing::debug!(%block_number, "fetching block");
 
@@ -185,7 +197,7 @@ impl BlockchainClient {
     }
 
     /// Fetches account balance by address and block number.
-    pub async fn fetch_balance(&self, address: &Address, block_number: Option<BlockNumber>) -> anyhow::Result<Wei> {
+    pub async fn fetch_balance(&self, address: Address, block_number: Option<BlockNumber>) -> anyhow::Result<Wei> {
         tracing::debug!(%address, block_number = %block_number.or_empty(), "fetching account balance");
 
         let address = to_json_value(address);
@@ -212,10 +224,10 @@ impl BlockchainClient {
 
         match result {
             Ok(hash) => Ok(hash),
-            Err(ClientError::Call(response)) => Err(StratusError::TransactionLeaderFailed(response.into_owned())),
+            Err(ClientError::Call(response)) => Err(TransactionError::LeaderFailed(response.into_owned()).into()),
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to send raw transaction to leader");
-                Err(StratusError::TransactionForwardToLeaderFailed)
+                Err(TransactionError::ForwardToLeaderFailed.into())
             }
         }
     }

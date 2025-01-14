@@ -2,13 +2,13 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::RwLock;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use itertools::Itertools;
 use keccak_hasher::KeccakHasher;
+use parking_lot::Mutex;
+use parking_lot::RwLock;
 use tokio::sync::broadcast;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::JoinSet;
@@ -25,16 +25,16 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::Size;
+use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::primitives::UnixTime;
+use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::DisplayExt;
-use crate::ext::MutexExt;
-use crate::ext::MutexResultExt;
 use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
@@ -127,7 +127,7 @@ impl Miner {
 
         joinset.spawn(interval_miner_ticker::run(block_time, ticks_tx, new_shutdown_signal.clone()));
 
-        *self.shutdown_signal.lock_or_clear("setting up shutdown signal for interval miner") = new_shutdown_signal;
+        *self.shutdown_signal.lock() = new_shutdown_signal;
         *self.interval_joinset.lock().await = Some(joinset);
     }
 
@@ -158,19 +158,11 @@ impl Miner {
     }
 
     pub fn mode(&self) -> MinerMode {
-        *self.mode.read().unwrap_or_else(|poison_error| {
-            tracing::error!("miner mode read lock was poisoned");
-            self.mode.clear_poison();
-            poison_error.into_inner()
-        })
+        *self.mode.read()
     }
 
     fn set_mode(&self, new_mode: MinerMode) {
-        *self.mode.write().unwrap_or_else(|poison_error| {
-            tracing::error!("miner mode write lock was poisoned");
-            self.mode.clear_poison();
-            poison_error.into_inner()
-        }) = new_mode;
+        *self.mode.write() = new_mode;
     }
 
     pub fn is_interval_miner_running(&self) -> bool {
@@ -194,7 +186,7 @@ impl Miner {
 
         tracing::warn!("Shutting down interval miner to switch to external mode");
 
-        self.shutdown_signal.lock_or_clear("sending shutdown signal to interval miner").cancel();
+        self.shutdown_signal.lock().cancel();
 
         // wait for all tasks to end
         while let Some(result) = joinset.join_next().await {
@@ -216,11 +208,7 @@ impl Miner {
         let is_automine = self.mode().is_automine();
 
         // if automine is enabled, only one transaction can enter the block at a time.
-        let _save_execution_lock = if is_automine {
-            Some(self.locks.save_execution.lock().map_lock_error("save_execution")?)
-        } else {
-            None
-        };
+        let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         // save execution to temporary storage
         self.storage.save_execution(tx_execution, check_conflicts)?;
@@ -236,14 +224,6 @@ impl Miner {
         Ok(())
     }
 
-    /// Same as [`Self::mine_external`], but automatically commits the block instead of returning it.
-    pub fn mine_external_and_commit(&self, external_block: ExternalBlock) -> anyhow::Result<()> {
-        let _mine_and_commit_lock = self.locks.mine_and_commit.lock().map_lock_error("mine_external_and_commit")?;
-
-        let block = self.mine_external(external_block)?;
-        self.commit(block)
-    }
-
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
@@ -253,7 +233,7 @@ impl Miner {
         let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
 
         // lock
-        let _mine_lock = self.locks.mine.lock().map_lock_error("mine_external")?;
+        let _mine_lock = self.locks.mine.lock();
 
         // mine block
         let block = self.storage.finish_pending_block()?;
@@ -275,8 +255,8 @@ impl Miner {
 
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
     /// mainly used when is_automine is enabled.
-    pub fn mine_local_and_commit(&self) -> anyhow::Result<()> {
-        let _mine_and_commit_lock = self.locks.mine_and_commit.lock().map_lock_error("mine_local_and_commit")?;
+    pub fn mine_local_and_commit(&self) -> anyhow::Result<(), StorageError> {
+        let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
 
         let block = self.mine_local()?;
         self.commit(block)
@@ -285,12 +265,12 @@ impl Miner {
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
-    pub fn mine_local(&self) -> anyhow::Result<Block> {
+    pub fn mine_local(&self) -> anyhow::Result<Block, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
 
         // lock
-        let _mine_lock = self.locks.mine.lock().map_lock_error("mine_local")?;
+        let _mine_lock = self.locks.mine.lock();
 
         // mine block
         let block = self.storage.finish_pending_block()?;
@@ -302,15 +282,17 @@ impl Miner {
             if let TransactionExecution::Local(tx) = tx {
                 local_txs.push(tx);
             } else {
-                return log_and_err!("failed to mine local block because one of the transactions is not a local transaction");
+                return Err(StorageError::Unexpected {
+                    msg: "failed to mine local block because one of the transactions is not a local transaction".to_owned(),
+                });
             }
         }
 
-        block_from_local(block.header.number, local_txs)
+        Ok(block_from_local(block.header, local_txs))
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit(&self, block: Block) -> anyhow::Result<()> {
+    pub fn commit(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -319,7 +301,7 @@ impl Miner {
         tracing::info!(%block_number, transactions_len = %block.transactions.len(), "commiting block");
 
         // lock
-        let _commit_lock = self.locks.commit.lock().map_lock_error("commit")?;
+        let _commit_lock = self.locks.commit.lock();
 
         tracing::info!(%block_number, "miner acquired commit lock");
 
@@ -375,14 +357,8 @@ fn block_from_external(external_block: ExternalBlock, mined_txs: Vec<Transaction
     })
 }
 
-pub fn block_from_local(number: BlockNumber, txs: Vec<LocalTransactionExecution>) -> anyhow::Result<Block> {
-    // TODO: block timestamp should be set in the PendingBlock instead of being retrieved from the execution
-    let block_timestamp = match txs.first() {
-        Some(tx) => tx.result.execution.block_timestamp,
-        None => UnixTime::now(),
-    };
-
-    let mut block = Block::new(number, block_timestamp);
+pub fn block_from_local(pending_header: PendingBlockHeader, txs: Vec<LocalTransactionExecution>) -> Block {
+    let mut block = Block::new(pending_header.number, *pending_header.timestamp);
     block.transactions.reserve(txs.len());
     block.header.size = Size::from(txs.len() as u64);
 
@@ -427,7 +403,7 @@ pub fn block_from_local(number: BlockNumber, txs: Vec<LocalTransactionExecution>
 
     // calculate transactions hash
     if not(block.transactions.is_empty()) {
-        let transactions_hashes: Vec<&Hash> = block.transactions.iter().map(|x| &x.input.hash).collect();
+        let transactions_hashes: Vec<Hash> = block.transactions.iter().map(|x| x.input.hash).collect();
         block.header.transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
     }
 
@@ -442,13 +418,13 @@ pub fn block_from_local(number: BlockNumber, txs: Vec<LocalTransactionExecution>
     }
 
     // TODO: calculate state_root, receipts_root and parent_hash
-    Ok(block)
+    block
 }
 
 // -----------------------------------------------------------------------------
 // Miner
 // -----------------------------------------------------------------------------
-mod interval_miner {
+pub mod interval_miner {
     use std::sync::mpsc;
     use std::sync::mpsc::RecvTimeoutError;
     use std::sync::Arc;
@@ -458,7 +434,6 @@ mod interval_miner {
     use tokio_util::sync::CancellationToken;
 
     use crate::eth::miner::Miner;
-    use crate::ext::MutexExt;
     use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
 
@@ -493,8 +468,8 @@ mod interval_miner {
     }
 
     #[inline(always)]
-    fn mine_and_commit(miner: &Miner) {
-        let _mine_and_commit_lock = miner.locks.mine_and_commit.lock_or_clear("mutex in mine_and_commit is poisoned");
+    pub fn mine_and_commit(miner: &Miner) {
+        let _mine_and_commit_lock = miner.locks.mine_and_commit.lock();
 
         // mine
         let block = loop {
@@ -536,6 +511,7 @@ mod interval_miner_ticker {
         const TASK_NAME: &str = "interval-miner-ticker";
 
         // sync to next second
+        #[allow(clippy::expect_used)]
         let next_second = (Utc::now() + Duration::from_secs(1))
             .with_nanosecond(0)
             .expect("nanosecond above is set to `0`, which is always less than 2 billion");

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -6,10 +7,13 @@ use chrono::TimeZone;
 use chrono::Timelike;
 use indicatif::ProgressBar;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
-use stratus::eth::storage::rocks::rocks_state::RocksStorageState;
-use stratus::eth::storage::rocks::types::BlockRocksdb;
-use stratus::eth::storage::rocks::types::TransactionMinedRocksdb;
-use stratus::eth::storage::rocks::types::UnixTimeRocksdb;
+use stratus::eth::primitives::TransactionMined;
+use stratus::eth::storage::permanent::rocks::types::BlockNumberRocksdb;
+use stratus::eth::storage::permanent::rocks::types::BlockRocksdb;
+use stratus::eth::storage::permanent::rocks::types::HashRocksdb;
+use stratus::eth::storage::permanent::rocks::types::TransactionMinedRocksdb;
+use stratus::eth::storage::permanent::rocks::types::UnixTimeRocksdb;
+use stratus::eth::storage::permanent::rocks::RocksStorageState;
 use stratus::ledger::events::transaction_to_events;
 use stratus::ledger::events::AccountTransfers;
 use stratus::ledger::events::Event;
@@ -18,8 +22,14 @@ use stratus::ledger::events::Event;
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Converts a mined transaction from RocksDB to account transfer events
-fn transaction_mined_rocks_db_to_events(block_timestamp: UnixTimeRocksdb, tx: TransactionMinedRocksdb) -> Vec<AccountTransfers> {
-    transaction_to_events(block_timestamp.into(), std::borrow::Cow::Owned(tx.into()))
+fn transaction_mined_rocks_db_to_events(
+    block_timestamp: UnixTimeRocksdb,
+    tx: TransactionMinedRocksdb,
+    block_number: BlockNumberRocksdb,
+    block_hash: HashRocksdb,
+) -> Vec<AccountTransfers> {
+    let tx = TransactionMined::from_rocks_primitives(tx, block_number, block_hash);
+    transaction_to_events(block_timestamp.into(), Cow::Owned(tx))
 }
 
 /// Returns total count of blocks and transactions from RocksDB state
@@ -72,7 +82,7 @@ fn process_block_events(block: BlockRocksdb) -> Vec<String> {
     block
         .transactions
         .into_iter()
-        .flat_map(|tx| transaction_mined_rocks_db_to_events(timestamp, tx))
+        .flat_map(|tx| transaction_mined_rocks_db_to_events(timestamp, tx, block.header.number, block.header.hash))
         .map(|event| event.event_payload().unwrap())
         .collect()
 }
@@ -80,20 +90,20 @@ fn process_block_events(block: BlockRocksdb) -> Vec<String> {
 /// Main function that processes blockchain data and generates events
 fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
-    let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, Some(0.1)).context("failed to create rocksdb state")?;
+    let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, Some(0.1), false).context("failed to create rocksdb state")?;
 
     let (b_pb, tx_pb) = create_progress_bar(&state);
 
     // Load last processed block number from file
     tracing::info!("loading last processed block");
     let start_block = std::fs::read_to_string("last_processed_block")
-        .map(|s| s.trim().parse::<u64>().unwrap())
+        .map(|s| s.trim().parse::<u32>().unwrap())
         .unwrap_or(0);
     tracing::info!(?start_block);
 
     tracing::info!("creating rocksdb iterator");
     let iter = if start_block > 0 {
-        b_pb.inc(start_block);
+        b_pb.inc(start_block.into());
         state.blocks_by_number.iter_from(start_block.into(), rocksdb::Direction::Forward)?
     } else {
         state.blocks_by_number.iter_start()
@@ -101,6 +111,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     let mut hours_since_0 = 0;
     let mut event_batch = vec![];
+    let mut offset = std::fs::read_to_string("last_offset").map(|s| s.trim().parse::<usize>().unwrap()).unwrap_or(0);
     for result in iter {
         let (number, block) = result.context("failed to read block")?;
         let block = block.into_inner();
@@ -124,13 +135,24 @@ fn main() -> Result<(), anyhow::Error> {
 
             hours_since_0 = timestamp.0 / 3600;
             if !event_batch.is_empty() {
-                let folder_path = format!("events/{}/{:02}/{:02}", date.year(), date.month(), date.day());
+                let folder_path = format!(
+                    "events/ledger_wallet_events/year={}/month={:02}/day={:02}/hour={:02}",
+                    date.year(),
+                    date.month(),
+                    date.day(),
+                    date.hour()
+                );
                 if !std::path::Path::new(&folder_path).exists() {
                     std::fs::create_dir_all(&folder_path)?;
                 }
-                std::fs::write(format!("{}/{:02}", folder_path, date.hour()), event_batch.join("\n"))?;
+                std::fs::write(
+                    format!("{}/ledger_wallet_events+backfill+{:010}.json", folder_path, offset),
+                    event_batch.join("\n"),
+                )?;
+                offset += event_batch.len();
             }
             std::fs::write("last_processed_block", number.to_string())?;
+            std::fs::write("last_offset", offset.to_string())?;
             event_batch.clear();
         }
     }

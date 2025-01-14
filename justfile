@@ -38,8 +38,8 @@ alias run-follower := stratus-follower
 alias run-importer := stratus-follower
 
 # Stratus: Compile with debug options
-build features="":
-    cargo {{nightly_flag}} build {{release_flag}} --features "{{features}}"
+build binary="stratus" features="dev":
+    cargo {{nightly_flag}} build {{release_flag}} --bin {{binary}} --features {{features}}
 
 # Stratus: Check, or compile without generating code
 check:
@@ -63,8 +63,8 @@ lint:
     @just _lint
 
 # Stratus: Lint and check code formatting
-lint-check nightly-version="":
-    @just _lint "{{nightly-version}}" --check "-D warnings"
+lint-check nightly-version="" clippy-flags="-D warnings -A clippy::unwrap_used -A clippy::expect_used -A clippy::panic":
+    @just _lint "{{nightly-version}}" --check "{{ clippy-flags }}"
 
 # Stratus: Check for dependencies major updates
 outdated:
@@ -91,7 +91,7 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service as leader
 stratus *args="":
-    cargo {{nightly_flag}} ${CARGO_COMMAND} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
 # To produce a flamegraph of the memory usage use jeprof:
@@ -159,20 +159,58 @@ e2e network="stratus" block_modes="automine" test="":
         fi
     done
 
+# E2E: Execute admin password tests
+e2e-admin-password:
+    #!/bin/bash
+    cd e2e
+
+    for test in "enabled|test123" "disabled|"; do
+        IFS="|" read -r type pass <<< "$test"
+        just _log "Running admin password tests with password $type"
+        ADMIN_PASSWORD=$pass just run -a 0.0.0.0:3000 > /dev/null &
+        just _wait_for_stratus
+        npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
+        killport 3000 -s sigterm
+    done
+
+# E2E: Starts and execute Hardhat tests in Hardhat
+e2e-hardhat block-mode="automine" test="":
+    #!/bin/bash
+    if [ -d e2e ]; then
+        cd e2e
+    fi
+
+    echo "-> Starting Hardhat"
+    BLOCK_MODE={{block-mode}} npx hardhat node &
+
+    echo "-> Waiting Hardhat to start"
+    wait-service --tcp localhost:8545 -- echo
+
+    echo "-> Running E2E tests"
+    just e2e hardhat {{block-mode}} {{test}}
+
+    echo "-> Killing Hardhat"
+    killport 8545
+
 # E2E: Starts and execute Hardhat tests in Stratus
 e2e-stratus block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
+    just build
 
     just _log "Starting Stratus"
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
+    RUST_LOG=debug just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
 
     just _wait_for_stratus
 
     just _log "Running E2E tests"
-    just e2e stratus {{block-mode}} "{{test}}"
+    if [[ {{block-mode}} =~ ^[0-9]+(ms|s)$ ]]; then
+        just e2e stratus interval "{{test}}"
+    else
+        just e2e stratus {{block-mode}} "{{test}}"
+    fi
     result_code=$?
 
     just _log "Killing Stratus"
@@ -185,6 +223,7 @@ e2e-stratus-rocks block-mode="automine" test="":
     if [ -d e2e ]; then
         cd e2e
     fi
+    just build
 
     just _log "Starting Stratus"
     just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
@@ -192,7 +231,6 @@ e2e-stratus-rocks block-mode="automine" test="":
     just _wait_for_stratus
 
     just _log "Running E2E tests"
-    just e2e stratus {{block-mode}} "{{test}}"
     result_code=$?
 
     just _log "Killing Stratus"
@@ -202,6 +240,7 @@ e2e-stratus-rocks block-mode="automine" test="":
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus:
     #!/bin/bash
+    just build
     just _log "Starting Stratus"
     just run --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
@@ -218,6 +257,8 @@ e2e-clock-stratus:
 # E2E Clock: Builds and runs Stratus Rocks with block-time flag, then validates average block generation time
 e2e-clock-stratus-rocks:
     #!/bin/bash
+    just build
+
     just _log "Starting Stratus"
     just run --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
 
@@ -269,19 +310,13 @@ e2e-flamegraph:
     just _log "Running cargo flamegraph"
     cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
-# E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc" release_flag="--release":
+e2e-leader:
     #!/bin/bash
-
-    mkdir e2e_logs
-
-    # Start Stratus with leader flag
-    RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 --tokio-console-address=0.0.0.0:6668 --metrics-exporter-address=0.0.0.0:9000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
-
-    # Wait for Stratus with leader flag to start
+    RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
     just _wait_for_stratus 3000
 
-    # Start Stratus with follower flag
+e2e-follower test="brlc":
+    #!/bin/bash
     if [ "{{test}}" = "kafka" ]; then
     # Start Kafka using Docker Compose
         just _log "Starting Kafka"
@@ -289,12 +324,25 @@ e2e-leader-follower-up test="brlc" release_flag="--release":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none > e2e_logs/importer.log &
+        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none > e2e_logs/importer.log &
     else
-        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 --tokio-console-address=0.0.0.0:6669 --metrics-exporter-address=0.0.0.0:9001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
+        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
     fi
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
+
+
+_e2e-leader-follower-up-impl test="brlc" release_flag="--release":
+    #!/bin/bash
+    just build
+
+    mkdir e2e_logs
+
+    # Start Stratus with leader flag
+    just e2e-leader
+
+    # Start Stratus with follower flag
+    just e2e-follower {{test}}
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
@@ -336,6 +384,10 @@ e2e-leader-follower-up test="brlc" release_flag="--release":
         fi
     )
     fi
+
+# E2E: Leader & Follower Up
+e2e-leader-follower-up test="brlc" release_flag="--release":
+    just _e2e-leader-follower-up-impl {{test}} {{release_flag}}
     killport 3000 -s sigterm
     killport 3001 -s sigterm
 
@@ -412,6 +464,8 @@ contracts-remove *args="":
 # Contracts: Start Stratus and run contracts tests with InMemory storage
 contracts-test-stratus *args="":
     #!/bin/bash
+    just build
+
     just _log "Starting Stratus"
     just run -a 0.0.0.0:3000 &
 
@@ -428,6 +482,8 @@ contracts-test-stratus *args="":
 # Contracts: Start Stratus and run contracts tests with RocksDB storage
 contracts-test-stratus-rocks *args="":
     #!/bin/bash
+    just build
+
     just _log "Starting Stratus"
     just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
 
@@ -453,76 +509,61 @@ contracts-coverage-erase:
     just _log "Erasing coverage info..."
     rm -rf ./*/coverage && echo "Coverage info erased."
 
-stratus-test-coverage output="":
-    just contracts-clone
 
+_e2e-leader-follower-up-coverage test="":
+    -rm -r temp_3000-rocksdb
+    -rm -r temp_3001-rocksdb
+    just _coverage-run-stratus-recipe e2e-leader-follower-up {{test}} " "
+    sleep 10
+    -rm -r e2e_logs
+    -rm utils/deploy/deploy_01.log
+    -rm utils/deploy/deploy_02.log
+
+_coverage-run-stratus-recipe *recipe="":
+    just {{recipe}}
+    sleep 10
+    -rm -r e2e_logs
+
+stratus-test-coverage *args="":
+    #!/bin/bash
+    # setup
     cargo llvm-cov clean --workspace
+    just build
+    source <(cargo llvm-cov show-env --export-prefix)
+    export RUST_LOG=error
+    just contracts-clone
+    just contracts-flatten
+
+    # cargo test
+    cargo llvm-cov --no-report
+    sleep 10
+
     # inmemory
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus automine
-    sleep 10
+    for test in "automine" "external"; do
+        just _coverage-run-stratus-recipe e2e-stratus $test
+    done
 
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus external
-    sleep 10
+    just _coverage-run-stratus-recipe e2e-clock-stratus
 
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-clock-stratus
-    sleep 10
-
-    CARGO_COMMAND="llvm-cov --no-report" just contracts-test-stratus
-    sleep 10
+    just _coverage-run-stratus-recipe contracts-test-stratus
 
     # rocksdb
-    -rm -r data/rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus-rocks automine
-    sleep 10
+    for test in "automine" "external"; do
+        -rm -r data/rocksdb
+        just _coverage-run-stratus-recipe e2e-stratus-rocks $test
+    done
 
     -rm -r data/rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-stratus-rocks external
-    sleep 10
+    just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
 
     -rm -r data/rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-clock-stratus-rocks
-    sleep 10
-
-    -rm -r data/rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just contracts-test-stratus-rocks
-    sleep 10
-
+    just _coverage-run-stratus-recipe contracts-test-stratus-rocks
 
     # other
-    CARGO_COMMAND="llvm-cov --no-report" cargo llvm-cov --no-report
-    sleep 10
+    for test in kafka deploy brlc change miner importer health; do
+        just _e2e-leader-follower-up-coverage $test
+    done
 
-    -just contracts-clone --token
-    -just contracts-flatten --token
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    -docker compose down -v
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up kafka " "
-    sleep 10
+    just e2e-admin-password
 
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up deploy " "
-    sleep 10
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up brlc " "
-    sleep 10
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up change " "
-    sleep 10
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up miner " "
-    sleep 10
-
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    CARGO_COMMAND="llvm-cov --no-report" just e2e-leader-follower-up importer " "
-    sleep 10
-
-    cargo llvm-cov report {{output}}
+    cargo llvm-cov report {{args}}

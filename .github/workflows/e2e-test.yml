@@ -67,6 +67,16 @@ jobs:
       group: ${{ github.workflow }}-external-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
+  e2e-interval-stratus:
+    name: E2E Interval Stratus
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-stratus 10ms"
+
+    concurrency:
+      group: ${{ github.workflow }}-interval-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
   e2e-clock-stratus:
     name: E2E Clock Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
@@ -85,4 +95,14 @@ jobs:
 
     concurrency:
       group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-admin-password:
+    name: E2E Admin Password
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-admin-password"
+
+    concurrency:
+      group: ${{ github.workflow }}-admin-password-${{ github.ref || github.run_id }}
       cancel-in-progress: true

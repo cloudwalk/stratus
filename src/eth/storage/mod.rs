@@ -1,32 +1,144 @@
 //! Ethereum / EVM storage.
 
-mod external_rpc_storage;
-mod inmemory;
-mod permanent_storage;
-mod postgres_external_rpc;
-pub mod rocks;
-
-mod redis;
-mod storage_point_in_time;
-mod stratus_storage;
-mod temporary_storage;
-
-pub use external_rpc_storage::ExternalBlockWithReceipts;
-pub use external_rpc_storage::ExternalRpcStorage;
-pub use external_rpc_storage::ExternalRpcStorageConfig;
-pub use external_rpc_storage::ExternalRpcStorageKind;
-pub use inmemory::InMemoryPermanentStorage;
-pub use inmemory::InMemoryPermanentStorageState;
-pub use inmemory::InMemoryTemporaryStorage;
-pub use permanent_storage::PermanentStorage;
-pub use permanent_storage::PermanentStorageConfig;
-pub use permanent_storage::PermanentStorageKind;
-pub use postgres_external_rpc::PostgresExternalRpcStorage;
-pub use postgres_external_rpc::PostgresExternalRpcStorageConfig;
-pub use rocks::rocks_permanent::RocksPermanentStorage;
-pub use storage_point_in_time::StoragePointInTime;
+use cache::CacheConfig;
+pub use cache::StorageCache;
+pub use permanent::InMemoryPermanentStorage;
+pub use permanent::PermanentStorage;
+pub use permanent::PermanentStorageConfig;
+pub use permanent::PermanentStorageKind;
 pub use stratus_storage::StratusStorage;
-pub use stratus_storage::StratusStorageConfig;
-pub use temporary_storage::TemporaryStorage;
-pub use temporary_storage::TemporaryStorageConfig;
-pub use temporary_storage::TemporaryStorageKind;
+pub use temporary::InMemoryTemporaryStorage;
+pub use temporary::TemporaryStorage;
+pub use temporary::TemporaryStorageConfig;
+pub use temporary::TemporaryStorageKind;
+
+mod cache;
+pub mod permanent;
+mod stratus_storage;
+mod temporary;
+
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use clap::Parser;
+use display_json::DebugAsJson;
+
+use super::primitives::StorageError;
+use crate::eth::primitives::Account;
+use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
+use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Hash;
+use crate::eth::primitives::LogFilter;
+use crate::eth::primitives::LogMined;
+use crate::eth::primitives::PendingBlock;
+use crate::eth::primitives::PendingBlockHeader;
+use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::Slot;
+use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionStage;
+
+pub trait Storage: Send + Sync + 'static {
+    // -------------------------------------------------------------------------
+    // Block number
+    // -------------------------------------------------------------------------
+
+    fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError>;
+
+    fn read_pending_block_header(&self) -> PendingBlockHeader;
+
+    fn read_mined_block_number(&self) -> Result<BlockNumber, StorageError>;
+
+    fn set_mined_block_number(&self, block_number: BlockNumber) -> Result<(), StorageError>;
+
+    // -------------------------------------------------------------------------
+    // Accounts and slots
+    // -------------------------------------------------------------------------
+
+    fn save_accounts(&self, accounts: Vec<Account>) -> Result<(), StorageError>;
+
+    fn read_account(&self, address: Address, point_in_time: PointInTime) -> Result<Account, StorageError>;
+
+    fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> Result<Slot, StorageError>;
+
+    // -------------------------------------------------------------------------
+    // Blocks
+    // -------------------------------------------------------------------------
+
+    fn save_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StorageError>;
+
+    /// Retrieves pending transactions being mined.
+    fn pending_transactions(&self) -> Vec<TransactionExecution>;
+
+    fn finish_pending_block(&self) -> Result<PendingBlock, StorageError>;
+
+    fn save_block(&self, block: Block) -> Result<(), StorageError>;
+
+    fn save_block_batch(&self, blocks: Vec<Block>) -> Result<(), StratusError> {
+        blocks.into_iter().try_for_each(|block| self.save_block(block).map_err(|err| err.into()))
+    }
+
+    fn read_block(&self, filter: BlockFilter) -> Result<Option<Block>, StorageError>;
+
+    fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionStage>, StorageError>;
+
+    fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>, StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Resets the storage to the genesis state used in dev-mode.
+    ///
+    /// TODO: For now it uses the dev genesis block and test accounts, but it should be refactored to support genesis.json files.
+    fn reset_to_genesis(&self) -> Result<(), StorageError>;
+
+    /// Translates a block filter to a specific storage point-in-time indicator.
+    fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountWithSlots {
+    pub info: Account,
+    pub slots: HashMap<SlotIndex, Slot, hash_hasher::HashBuildHasher>,
+}
+
+impl AccountWithSlots {
+    /// Creates a new temporary account.
+    fn new(address: Address) -> Self {
+        Self {
+            info: Account::new_empty(address),
+            slots: HashMap::default(),
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Config
+// -----------------------------------------------------------------------------
+
+/// Configuration that can be used by any binary that interacts with Stratus storage.
+#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+pub struct StorageConfig {
+    #[clap(flatten)]
+    pub temp_storage: TemporaryStorageConfig,
+
+    #[clap(flatten)]
+    pub perm_storage: PermanentStorageConfig,
+
+    #[clap(flatten)]
+    pub cache: CacheConfig,
+}
+
+impl StorageConfig {
+    /// Initializes Stratus storage.
+    pub fn init(&self) -> Result<Arc<StratusStorage>, StratusError> {
+        let perm_storage = self.perm_storage.init()?;
+        let temp_storage = self.temp_storage.init(&*perm_storage)?;
+        let cache = self.cache.init();
+
+        let storage = StratusStorage::new(temp_storage, perm_storage, cache)?;
+
+        Ok(Arc::new(storage))
+    }
+}

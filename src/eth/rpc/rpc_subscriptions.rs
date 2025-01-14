@@ -17,12 +17,13 @@ use tokio::time::timeout;
 use tokio::time::Duration;
 
 use crate::eth::primitives::BlockHeader;
-use crate::eth::primitives::DateTimeNow;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogFilterInput;
 use crate::eth::primitives::LogMined;
+use crate::eth::primitives::RpcError;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::UnixTimeNow;
 use crate::eth::rpc::RpcClientApp;
 use crate::ext::not;
 use crate::ext::spawn_named;
@@ -297,7 +298,7 @@ impl RpcSubscriptionsHandles {
 #[derive(Debug, derive_new::new)]
 pub struct Subscription {
     #[new(default)]
-    created_at: DateTimeNow,
+    created_at: UnixTimeNow,
 
     client: RpcClientApp,
     sink: Arc<SubscriptionSink>,
@@ -366,7 +367,7 @@ impl RpcSubscriptionsConnected {
         tracing::info!(%pending_txs, %new_heads, %logs, "current client subscriptions");
 
         if pending_txs + new_heads + logs >= max_subscriptions as usize {
-            return Err(StratusError::RpcSubscriptionLimit { max: max_subscriptions });
+            return Err(RpcError::SubscriptionLimit { max: max_subscriptions }.into());
         }
 
         Ok(())

@@ -34,9 +34,11 @@ e2e_logs/
 temp_*-rocksdb/
 
 # Build
+crates/*/target
 /target
 vendor
 stratus.log
 
 # OS specific
 .DS_Store
+.aider*

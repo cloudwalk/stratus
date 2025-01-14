@@ -15,12 +15,12 @@ use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::external_rpc::ExternalRpcConfig;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::MinerConfig;
 use crate::eth::primitives::Address;
 use crate::eth::rpc::RpcServerConfig;
-use crate::eth::storage::ExternalRpcStorageConfig;
-use crate::eth::storage::StratusStorageConfig;
+use crate::eth::storage::StorageConfig;
 use crate::ext::parse_duration;
 use crate::infra::build_info;
 use crate::infra::kafka::KafkaConfig;
@@ -149,12 +149,20 @@ impl CommonConfig {
                 // identify async threads
                 let async_id = ASYNC_ID.fetch_add(1, Ordering::SeqCst);
                 if async_id <= num_async_threads {
-                    return format!("tokio-async-{}", async_id);
+                    if cfg!(feature = "flamegraph") {
+                        return "tokio-async".to_string();
+                    } else {
+                        return format!("tokio-async-{}", async_id);
+                    }
                 }
 
                 // identify blocking threads
                 let blocking_id = BLOCKING_ID.fetch_add(1, Ordering::SeqCst);
-                format!("tokio-blocking-{}", blocking_id)
+                if cfg!(feature = "flamegraph") {
+                    "tokio-blocking".to_string()
+                } else {
+                    format!("tokio-blocking-{}", blocking_id)
+                }
             })
             .build();
 
@@ -174,12 +182,12 @@ impl CommonConfig {
 
 /// Configuration for main Stratus service.
 #[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-#[clap(group = ArgGroup::new("mode").required(true).args(&["leader", "follower"]))]
+#[clap(group = ArgGroup::new("mode").required(true).args(&["leader", "follower", "fake_leader"]))]
 pub struct StratusConfig {
-    #[arg(long = "leader", env = "LEADER", conflicts_with_all = ["follower", "fake-leader", "ImporterConfig"])]
+    #[arg(long = "leader", env = "LEADER", conflicts_with_all = ["follower", "fake_leader", "ImporterConfig"])]
     pub leader: bool,
 
-    #[arg(long = "follower", env = "FOLLOWER", conflicts_with_all = ["leader", "fake-leader"], requires = "ImporterConfig")]
+    #[arg(long = "follower", env = "FOLLOWER", conflicts_with_all = ["leader", "fake_leader"], requires = "ImporterConfig")]
     pub follower: bool,
 
     /// The fake leader imports blocks like a follower, but executes the blocks's txs locally like a leader.
@@ -190,7 +198,7 @@ pub struct StratusConfig {
     pub rpc_server: RpcServerConfig,
 
     #[clap(flatten)]
-    pub storage: StratusStorageConfig,
+    pub storage: StorageConfig,
 
     #[clap(flatten)]
     pub executor: ExecutorConfig,
@@ -227,7 +235,7 @@ pub struct RpcDownloaderConfig {
     pub block_end: Option<u64>,
 
     #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
+    pub rpc_storage: ExternalRpcConfig,
 
     /// External RPC endpoint to sync blocks with Stratus.
     #[arg(short = 'r', long = "external-rpc", env = "EXTERNAL_RPC")]
@@ -294,10 +302,10 @@ pub struct ImporterOfflineConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub storage: StratusStorageConfig,
+    pub storage: StorageConfig,
 
     #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
+    pub rpc_storage: ExternalRpcConfig,
 
     /// Daemon mode - keeps running and checking for new blocks
     #[arg(short = 'd', long = "daemon", env = "DAEMON", default_value = "false")]
@@ -359,10 +367,10 @@ pub struct IntegrationTestConfig {
     pub miner: MinerConfig,
 
     #[clap(flatten)]
-    pub storage: StratusStorageConfig,
+    pub storage: StorageConfig,
 
     #[clap(flatten)]
-    pub rpc_storage: ExternalRpcStorageConfig,
+    pub rpc_storage: ExternalRpcConfig,
 }
 
 impl WithCommonConfig for IntegrationTestConfig {
@@ -403,7 +411,7 @@ impl FromStr for Environment {
             "staging" | "test" => Ok(Self::Staging),
             "production" | "prod" => Ok(Self::Production),
             "canary" => Ok(Self::Canary),
-            s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Environment::VARIANTS)),
+            s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Self::VARIANTS)),
         }
     }
 }

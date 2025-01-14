@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 use std::cmp::min;
+use std::mem;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::try_join;
 use futures::StreamExt;
@@ -16,19 +18,20 @@ use tracing::Span;
 
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
+use crate::eth::miner::miner::interval_miner::mine_and_commit;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::Hash;
+use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
-use crate::if_else;
 use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -58,11 +61,14 @@ pub enum ImporterMode {
 /// Current block number of the external RPC blockchain.
 static EXTERNAL_RPC_CURRENT_BLOCK: AtomicU64 = AtomicU64::new(0);
 
+/// Timestamp of when EXTERNAL_RPC_CURRENT_BLOCK was updated last.
+static LATEST_FETCHED_BLOCK_TIME: AtomicU64 = AtomicU64::new(0);
+
 /// Only sets the external RPC current block number if it is equals or greater than the current one.
 fn set_external_rpc_current_block(new_number: BlockNumber) {
-    let new_number_u64 = new_number.as_u64();
+    LATEST_FETCHED_BLOCK_TIME.store(chrono::Utc::now().timestamp() as u64, Ordering::Relaxed);
     let _ = EXTERNAL_RPC_CURRENT_BLOCK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
-        if_else!(new_number_u64 >= current_number, Some(new_number_u64), None)
+        Some(current_number.max(new_number.as_u64()))
     });
 }
 
@@ -212,24 +218,17 @@ impl Importer {
             #[cfg(feature = "metrics")]
             let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
 
-            // if it's fake miner, execute each tx and skip mining and commiting
             if let ImporterMode::FakeLeader = importer_mode {
-                for tx in &block.transactions {
-                    let Ok(tx_input) = rlp::decode(&tx.0.input) else {
-                        tracing::error!("Failed to decode processed transaction");
-                        continue; // skip this tx
-                    };
-
-                    if let Err(e) = executor.execute_local_transaction(tx_input) {
-                        if e.is_internal() {
-                            tracing::error!(reason = ?e, "internal error while executing imported transaction");
-                        } else {
-                            tracing::error!(reason = ?e, "transaction failed");
-                        }
+                for tx in block.0.transactions {
+                    tracing::info!(?tx, "executing tx as fake miner");
+                    if let Err(e) = executor.execute_local_transaction(tx.try_into()?) {
+                        tracing::error!(reason = ?e, "transaction failed");
+                        GlobalState::shutdown_from("Importer (FakeMiner)", "Transaction Failed");
+                        return Err(anyhow!(e));
                     }
                 }
-
-                return Ok(());
+                mine_and_commit(&miner);
+                continue;
             }
 
             if let Err(e) = executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts)) {
@@ -254,7 +253,7 @@ impl Importer {
 
             let mined_block = match miner.mine_external(block) {
                 Ok(mined_block) => {
-                    tracing::info!("mined external block");
+                    tracing::info!(number = %mined_block.number(), "mined external block");
                     mined_block
                 }
                 Err(e) => {
@@ -264,15 +263,12 @@ impl Importer {
             };
 
             if let Some(ref kafka_conn) = kafka_connector {
-                for tx in &mined_block.transactions {
-                    let events = transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx));
-                    let mut buffer = kafka_conn.send_buffered(events, 30)?;
-                    while let Some(res) = buffer.next().await {
-                        if let Err(e) = res {
-                            return log_and_err!(reason = e, "failed to send events");
-                        }
-                    }
-                }
+                let events = mined_block
+                    .transactions
+                    .iter()
+                    .flat_map(|tx| transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx)));
+
+                kafka_conn.send_buffered(events, 50).await?;
             }
 
             match miner.commit(mined_block) {
@@ -439,7 +435,27 @@ impl Importer {
 
             // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
-            while let Some((block, receipts)) = tasks.next().await {
+            while let Some((mut block, mut receipts)) = tasks.next().await {
+                // Stably sort transactions and receipts by transaction_index
+                block.transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+                receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+
+                // perform additional checks on the transaction index
+                for window in block.transactions.windows(2) {
+                    let tx_index = window[0].transaction_index.map_or(u32::MAX, |index| index.as_u32());
+                    let next_tx_index = window[1].transaction_index.map_or(u32::MAX, |index| index.as_u32());
+                    if tx_index + 1 != next_tx_index {
+                        tracing::error!(tx_index, next_tx_index, "two consecutive transactions must have consecutive indices");
+                    }
+                }
+                for window in receipts.windows(2) {
+                    let tx_index = window[0].transaction_index.as_u32();
+                    let next_tx_index = window[1].transaction_index.as_u32();
+                    if tx_index + 1 != next_tx_index {
+                        tracing::error!(tx_index, next_tx_index, "two consecutive receipts must have consecutive indices");
+                    }
+                }
+
                 if backlog_tx.send((block, receipts)).is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
@@ -459,6 +475,28 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
         s.rec_str("block_number", &block_number);
     });
 
+    async fn try_reading_block_and_receipts_with_temporary_endpoint(
+        chain: Arc<BlockchainClient>,
+        block_number: BlockNumber,
+    ) -> Option<(ExternalBlock, Vec<ExternalReceipt>)> {
+        let mut json = chain.fetch_block_and_receipts_with_temporary_endpoint(block_number).await.ok()?;
+
+        let block = mem::take(json.get_mut("block")?);
+        let block: ExternalBlock = serde_json::from_value(block).ok()?;
+
+        let receipts = mem::take(json.get_mut("receipts")?);
+        let receipts: Vec<ExternalReceipt> = serde_json::from_value(receipts).ok()?;
+
+        Some((block, receipts))
+    }
+
+    if let Some(res) = try_reading_block_and_receipts_with_temporary_endpoint(Arc::clone(&chain), block_number).await {
+        tracing::info!("successfully imported block and receipts using endpoint stratus_getBlockAndReceipts");
+        return res;
+    } else {
+        tracing::warn!("failed to import block and receipts with endpoint stratus_getBlockAndReceipts, falling back to get block + get each receipt");
+    }
+
     // fetch block
     let block = fetch_block(Arc::clone(&chain), block_number).await;
 
@@ -475,6 +513,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     (block, receipts)
 }
 
+#[allow(clippy::expect_used)]
 #[tracing::instrument(name = "importer::fetch_block", skip_all, fields(block_number))]
 async fn fetch_block(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ExternalBlock {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
@@ -529,7 +568,15 @@ async fn fetch_receipt(chain: Arc<BlockchainClient>, block_number: BlockNumber, 
 #[async_trait]
 impl Consensus for Importer {
     async fn lag(&self) -> anyhow::Result<u64> {
-        Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number()?.as_u64())
+        let elapsed = chrono::Utc::now().timestamp() as u64 - LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
+        if elapsed > 4 {
+            Err(anyhow::anyhow!(
+                "too much time elapsed without communicating with the leader. elapsed: {}s",
+                elapsed
+            ))
+        } else {
+            Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number()?.as_u64())
+        }
     }
 
     fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>> {

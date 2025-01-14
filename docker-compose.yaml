@@ -24,22 +24,7 @@ services:
       - manual
 
   # ----------------------------------------------------------------------------
-  # Redis
-  # ----------------------------------------------------------------------------
-  redis:
-    image: redis:7.2.5
-    ports:
-      - "6379:6379"
-
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    ports:
-      - "8081:8081"
-    environment:
-    - REDIS_HOSTS=local:redis:6379
-
-  # ----------------------------------------------------------------------------
-  # PromethMeus
+  # Prometheus
   # ----------------------------------------------------------------------------
   prometheus:
     image: prom/prometheus

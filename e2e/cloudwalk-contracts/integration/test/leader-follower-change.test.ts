@@ -3,7 +3,7 @@ import { expect } from "chai";
 import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
 
 describe("Leader & Follower change integration test", function () {
-    it("Validate initial Leader state and health", async function () {
+    it("Validate initial Leader state, health and version", async function () {
         updateProviderUrl("stratus");
         const leaderNode = await sendWithRetry("stratus_state", []);
         expect(leaderNode.is_importer_shutdown).to.equal(true);
@@ -13,9 +13,13 @@ describe("Leader & Follower change integration test", function () {
         expect(leaderNode.transactions_enabled).to.equal(true);
         const leaderHealth = await sendWithRetry("stratus_health", []);
         expect(leaderHealth).to.equal(true);
+        const version = await sendWithRetry("stratus_version", []);
+        expect(version).to.have.nested.property("git.commit");
+        expect(version.git.commit).to.be.a("string");
+        expect(version.git.commit.length).to.be.oneOf([7, 8]);
     });
 
-    it("Validate initial Follower state and health", async function () {
+    it("Validate initial Follower state, health and version", async function () {
         updateProviderUrl("stratus-follower");
         const followerNode = await sendWithRetry("stratus_state", []);
         expect(followerNode.is_importer_shutdown).to.equal(false);
@@ -25,6 +29,10 @@ describe("Leader & Follower change integration test", function () {
         expect(followerNode.transactions_enabled).to.equal(true);
         const followerHealth = await sendWithRetry("stratus_health", []);
         expect(followerHealth).to.equal(true);
+        const version = await sendWithRetry("stratus_version", []);
+        expect(version).to.have.nested.property("git.commit");
+        expect(version.git.commit).to.be.a("string");
+        expect(version.git.commit.length).to.be.oneOf([7, 8]);
     });
 
     it("Change Leader to Leader should return false", async function () {
@@ -41,7 +49,7 @@ describe("Leader & Follower change integration test", function () {
             "2s",
             "100ms",
         ]);
-        expect(response.data.error.code).to.equal(-32009);
+        expect(response.data.error.code).to.equal(7007);
         expect(response.data.error.message).to.equal("Can't change miner mode while transactions are enabled.");
     });
 
@@ -54,7 +62,7 @@ describe("Leader & Follower change integration test", function () {
             "2s",
             "100ms",
         ]);
-        expect(response.data.error.code).to.equal(-32603);
+        expect(response.data.error.code).to.equal(6002);
         expect(response.data.error.message.split("\n")[0]).to.equal(
             "Unexpected error: can't change miner mode from Interval without pausing it first",
         );
@@ -95,7 +103,7 @@ describe("Leader & Follower change integration test", function () {
     it("Change Follower to Leader with transactions enabled should fail", async function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
-        expect(response.data.error.code).to.equal(-32009);
+        expect(response.data.error.code).to.equal(7007);
         expect(response.data.error.message).to.equal("Can't change miner mode while transactions are enabled.");
     });
 
@@ -188,7 +196,7 @@ describe("Leader & Follower change integration test", function () {
         let successCount = 0;
         let semaphoreFailureCount = 0;
 
-        const SEMAPHORE_ERROR_CODE = -32009;
+        const SEMAPHORE_ERROR_CODE = 7005;
         const SEMAPHORE_ERROR_MESSAGE = "Stratus node is already in the process of changing mode.";
 
         allResponses.forEach((response, index) => {

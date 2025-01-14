@@ -99,27 +99,28 @@ done
 log "Removing repositories"
 
 if [ "$token" == 1 ]; then
-    remove brlc-token 80bdba3
+    remove brlc-token
 fi
 
 if [ "$pix" == 1 ]; then
     # Cashier Transition: remove regardless of the repository name at the moment
-    remove brlc-cashier && remove brlc-pix-cashier a528d0c
+    remove brlc-cashier && remove brlc-pix-cashier
 fi
 
 if [ "$yield" == 1 ]; then
-    remove brlc-yield-streamer 7683517
+    remove brlc-balance-tracker
+    remove brlc-yield-streamer
 fi
 
 if [ "$periphery" == 1 ]; then
     # Periphery Transition: remove regardless of the repository name at the moment
-    remove brlc-card-payment-processor && remove brlc-periphery fed9fcb
+    remove brlc-card-payment-processor && remove brlc-periphery
 fi
 
 if [ "$multisig" == 1 ]; then
-    remove brlc-multisig 918a226
+    remove brlc-multisig
 fi
 
 if [ "$compound" == 1 ]; then
-    remove compound-periphery e4d68df
+    remove compound-periphery
 fi

@@ -14,10 +14,7 @@ metrics! {
     histogram_duration rpc_requests_finished{client, method, contract, function, result, result_code, success},
 
     "Number of JSON-RPC subscriptions active right now."
-    gauge rpc_subscriptions_active{subscription, client},
-
-    "Number of times we respons a client with an error."
-    counter rpc_error_response{error_type, client, method}
+    gauge rpc_subscriptions_active{subscription, client}
 }
 
 // Storage reads.
@@ -215,4 +212,18 @@ metrics! {
 
     "The readiness of Stratus."
     gauge consensus_is_ready{}
+}
+
+// Kafka Metrics
+metrics! {
+    group: kafka,
+
+    "Time to run KafkaConnector::queue_event"
+    histogram_duration kafka_queue_event{},
+
+    "Time to run KafkaConnector::send_buffered"
+    histogram_duration kafka_send_buffered{},
+
+    "Time to run KafkaConnector::create_buffer"
+    histogram_duration kafka_create_buffer{}
 }

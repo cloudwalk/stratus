@@ -32,9 +32,9 @@ mod log_topic;
 pub mod logs_bloom;
 mod miner_nonce;
 mod nonce;
-mod now;
 mod pending_block;
 mod pending_block_header;
+mod point_in_time;
 mod size;
 mod slot;
 mod slot_index;
@@ -45,6 +45,7 @@ mod transaction_input;
 mod transaction_mined;
 mod transaction_stage;
 mod unix_time;
+mod unix_time_now;
 mod wei;
 
 pub use account::test_accounts;
@@ -85,14 +86,22 @@ pub use log_mined::LogMined;
 pub use log_topic::LogTopic;
 pub use miner_nonce::MinerNonce;
 pub use nonce::Nonce;
-pub use now::DateTimeNow;
 pub use pending_block::PendingBlock;
 pub use pending_block_header::PendingBlockHeader;
+pub use point_in_time::PointInTime;
 pub use size::Size;
 pub use slot::Slot;
 pub use slot_index::SlotIndex;
 pub use slot_value::SlotValue;
+pub use stratus_error::ConsensusError;
+pub use stratus_error::ErrorCode;
+pub use stratus_error::ImporterError;
+pub use stratus_error::RpcError;
+pub use stratus_error::StateError;
+pub use stratus_error::StorageError;
 pub use stratus_error::StratusError;
+pub use stratus_error::TransactionError;
+pub use stratus_error::UnexpectedError;
 pub use transaction_execution::ExternalTransactionExecution;
 pub use transaction_execution::LocalTransactionExecution;
 pub use transaction_execution::TransactionExecution;
@@ -100,6 +109,7 @@ pub use transaction_input::TransactionInput;
 pub use transaction_mined::TransactionMined;
 pub use transaction_stage::TransactionStage;
 pub use unix_time::UnixTime;
+pub use unix_time_now::UnixTimeNow;
 pub use wei::Wei;
 
 // -----------------------------------------------------------------------------
@@ -138,7 +148,6 @@ mod tests {
     gen_test_serde!(CallInput);
     gen_test_serde!(ChainId);
     gen_test_serde!(CodeHash);
-    gen_test_serde!(DateTimeNow);
     gen_test_serde!(Difficulty);
     gen_test_serde!(EcdsaRs);
     gen_test_serde!(EcdsaV);
@@ -171,5 +180,6 @@ mod tests {
     gen_test_serde!(TransactionInput);
     gen_test_serde!(TransactionMined);
     gen_test_serde!(UnixTime);
+    gen_test_serde!(UnixTimeNow);
     gen_test_serde!(Wei);
 }

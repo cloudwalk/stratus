@@ -10,6 +10,9 @@ use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::Importer;
 use crate::eth::miner::Miner;
+use crate::eth::primitives::ConsensusError;
+use crate::eth::primitives::ImporterError;
+use crate::eth::primitives::StateError;
 use crate::eth::primitives::StratusError;
 use crate::eth::rpc::RpcContext;
 use crate::eth::storage::StratusStorage;
@@ -96,12 +99,12 @@ impl ImporterConfig {
     pub async fn init_follower_importer(&self, ctx: Arc<RpcContext>) -> Result<serde_json::Value, StratusError> {
         if GlobalState::get_node_mode() != NodeMode::Follower {
             tracing::error!("node is currently not a follower");
-            return Err(StratusError::StratusNotFollower);
+            return Err(StateError::StratusNotFollower.into());
         }
 
         if not(GlobalState::is_importer_shutdown()) {
             tracing::error!("importer is already running");
-            return Err(StratusError::ImporterAlreadyRunning);
+            return Err(ImporterError::AlreadyRunning.into());
         }
 
         GlobalState::set_importer_shutdown(false);
@@ -114,7 +117,7 @@ impl ImporterConfig {
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to initialize importer");
                 GlobalState::set_importer_shutdown(true);
-                return Err(StratusError::ImporterInitError);
+                return Err(ImporterError::InitError.into());
             }
         };
 
@@ -125,7 +128,7 @@ impl ImporterConfig {
             None => {
                 tracing::error!("failed to update consensus: Consensus is not set.");
                 GlobalState::set_importer_shutdown(true);
-                return Err(StratusError::ConsensusNotSet);
+                return Err(ConsensusError::NotSet.into());
             }
         }
 
