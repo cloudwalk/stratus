@@ -1,6 +1,5 @@
 //! RPC server for HTTP and WS.
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::str::FromStr;
@@ -35,7 +34,6 @@ use tracing::Span;
 
 use crate::alias::EthersReceipt;
 use crate::alias::JsonValue;
-use crate::eth::codegen::function_sig_for_o11y_opt;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::ImporterConfig;
@@ -830,7 +828,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_estimateGas with failure");
-            Err(TransactionError::Reverted { output: result.output }.into())
+            Err(TransactionError::RevertedCall { output: result.output }.into())
         }
 
         // internal error
@@ -870,7 +868,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_call with failure");
-            Err(TransactionError::Reverted { output: result.output }.into())
+            Err(TransactionError::RevertedCall { output: result.output }.into())
         }
 
         // internal error
@@ -916,17 +914,7 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
         NodeMode::Leader | NodeMode::FakeLeader => match ctx.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
-                match &e {
-                    StratusError::Transaction(TransactionError::Reverted { output }) => {
-                        let sig: Cow<str> = function_sig_for_o11y_opt(output)
-                            .map(Cow::Borrowed)
-                            .unwrap_or_else(|| Cow::Owned(output.to_string()));
-                        tracing::warn!(error = ?sig, ?tx_hash, "transaction reverted");
-                    }
-                    e => {
-                        tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
-                    }
-                }
+                tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
                 Err(e)
             }
         },

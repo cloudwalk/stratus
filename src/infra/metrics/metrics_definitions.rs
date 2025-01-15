@@ -111,6 +111,9 @@ metrics! {
     "Time executing a local transaction."
     histogram_duration executor_local_transaction{success, contract, function},
 
+    "Time executing a local transaction."
+    counter executor_local_transaction_reverts{contract, function, reason},
+
     "Number of account reads when executing a local transaction."
     histogram_counter executor_local_transaction_account_reads{contract, function},
 

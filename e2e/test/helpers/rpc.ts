@@ -201,6 +201,13 @@ export async function deployTestContractDenseStorage(): Promise<TestContractDens
     return await testContractFactory.connect(CHARLIE.signer()).deploy();
 }
 
+// Deploys the "TestRevertReason" contract.
+export async function deployTestRevertReason() {
+    const testContractFactory = await ethers.getContractFactory("TestRevertReason");
+    return await testContractFactory.connect(CHARLIE.signer()).deploy();
+}
+
+
 // Converts a number to Blockchain hex representation (prefixed with 0x).
 export function toHex(number: number | bigint): string {
     return "0x" + number.toString(16);

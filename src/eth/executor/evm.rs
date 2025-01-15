@@ -338,8 +338,8 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
             (result, output, logs, gas)
         }
         RevmExecutionResult::Revert { output, gas_used } => {
-            let result = ExecutionResult::Reverted;
             let output = Bytes::from(output);
+            let result = ExecutionResult::Reverted { reason: (&output).into() };
             let gas = Gas::from(gas_used);
             (result, output, Vec::new(), gas)
         }

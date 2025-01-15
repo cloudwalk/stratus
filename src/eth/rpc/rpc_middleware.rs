@@ -296,8 +296,8 @@ impl TransactionTracingIdentifiers {
         Ok(Self {
             client: client.map(|(_, client)| client).ok(),
             hash: Some(tx.hash),
-            contract: codegen::contract_name_for_o11y(&tx.to),
-            function: codegen::function_sig_for_o11y(&tx.input),
+            contract: codegen::contract_name(&tx.to),
+            function: codegen::function_sig(&tx.input),
             from: Some(tx.signer),
             to: tx.to,
             nonce: Some(tx.nonce),
@@ -310,8 +310,8 @@ impl TransactionTracingIdentifiers {
         Ok(Self {
             client: None,
             hash: None,
-            contract: codegen::contract_name_for_o11y(&call.to),
-            function: codegen::function_sig_for_o11y(&call.data),
+            contract: codegen::contract_name(&call.to),
+            function: codegen::function_sig(&call.data),
             from: call.from,
             to: call.to,
             nonce: None,
