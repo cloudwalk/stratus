@@ -9,31 +9,12 @@ use ethereum_types::U64;
 use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::encode::IsNull;
-use sqlx::error::BoxDynError;
-use sqlx::postgres::PgHasArrayType;
-use sqlx::types::BigDecimal;
 
 use crate::alias::RevmU256;
 use crate::eth::primitives::Hash;
 use crate::gen_newtype_from;
 
-#[derive(
-    DebugAsJson,
-    derive_more::Display,
-    Clone,
-    Copy,
-    Default,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    derive_more::Add,
-    derive_more::Sub,
-    serde::Serialize,
-    serde::Deserialize,
-)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct BlockNumber(pub U64);
 
@@ -134,15 +115,6 @@ impl FromStr for BlockNumber {
     }
 }
 
-impl TryFrom<BigDecimal> for BlockNumber {
-    type Error = anyhow::Error;
-
-    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
-        let value_str = value.to_string();
-        Ok(BlockNumber(U64::from_str_radix(&value_str, 10)?))
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
@@ -175,33 +147,5 @@ impl TryFrom<BlockNumber> for i64 {
 impl From<BlockNumber> for [u8; 8] {
     fn from(block_number: BlockNumber) -> Self {
         block_number.0.as_u64().to_be_bytes()
-    }
-}
-
-// -----------------------------------------------------------------------------
-// sqlx traits
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for BlockNumber {
-    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let value = <BigDecimal as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.try_into()?)
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for BlockNumber {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for BlockNumber {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
-        BigDecimal::from(u64::from(*self)).encode(buf)
-    }
-}
-
-impl PgHasArrayType for BlockNumber {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <BigDecimal as PgHasArrayType>::array_type_info()
     }
 }

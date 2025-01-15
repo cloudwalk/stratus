@@ -20,16 +20,6 @@ impl ExternalReceipts {
             }
         }
     }
-
-    /// Returns the number of receipts.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    /// Returns `true` if not contains any receipts.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
 }
 
 impl From<Vec<ExternalReceipt>> for ExternalReceipts {

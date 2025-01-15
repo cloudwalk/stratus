@@ -1,45 +1,22 @@
 use std::str::FromStr;
 
 use display_json::DebugAsJson;
-use ethabi::Token;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::encode::IsNull;
-use sqlx::error::BoxDynError;
-use sqlx::postgres::PgHasArrayType;
 use sqlx::types::BigDecimal;
-use sqlx::Decode;
 
 use crate::alias::RevmU256;
 use crate::gen_newtype_from;
 
 /// Native token amount in wei.
-#[derive(
-    DebugAsJson,
-    derive_more::Display,
-    Clone,
-    Copy,
-    Default,
-    PartialOrd,
-    Ord,
-    PartialEq,
-    Eq,
-    derive_more::Add,
-    derive_more::Sub,
-    serde::Serialize,
-    serde::Deserialize,
-)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq, derive_more::Sub, serde::Serialize, serde::Deserialize)]
 pub struct Wei(pub U256);
 
 impl Wei {
     pub const ZERO: Wei = Wei(U256::zero());
     pub const ONE: Wei = Wei(U256::one());
     pub const TEST_BALANCE: Wei = Wei(U256([u64::MAX, 0, 0, 0]));
-
-    pub fn new(value: U256) -> Self {
-        Self(value)
-    }
 
     /// Checks if current value is zero.
     pub fn is_zero(&self) -> bool {
@@ -80,60 +57,8 @@ impl TryFrom<BigDecimal> for Wei {
 }
 
 // -----------------------------------------------------------------------------
-// sqlx traits
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Wei {
-    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let value = <BigDecimal as Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.try_into()?)
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for Wei {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Wei {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
-        match BigDecimal::try_from(*self) {
-            Ok(res) => res.encode(buf),
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to encode gas");
-                Ok(IsNull::Yes)
-            }
-        }
-    }
-
-    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError>
-    where
-        Self: Sized,
-    {
-        match BigDecimal::try_from(self) {
-            Ok(res) => res.encode(buf),
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to encode gas");
-                Ok(IsNull::Yes)
-            }
-        }
-    }
-}
-
-impl PgHasArrayType for Wei {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <BigDecimal as PgHasArrayType>::array_type_info()
-    }
-}
-
-// -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<Wei> for Token {
-    fn from(value: Wei) -> Self {
-        Token::Uint(value.0)
-    }
-}
 
 impl From<Wei> for RevmU256 {
     fn from(value: Wei) -> Self {

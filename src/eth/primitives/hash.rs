@@ -6,8 +6,6 @@ use display_json::DebugAsJson;
 use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::encode::IsNull;
-use sqlx::postgres::PgHasArrayType;
 
 use crate::gen_newtype_from;
 
@@ -21,24 +19,6 @@ impl Hash {
     /// Creates a hash from the given bytes.
     pub const fn new(bytes: [u8; 32]) -> Self {
         Self(H256(bytes))
-    }
-
-    pub fn new_from_h256(h256: H256) -> Self {
-        Self(h256)
-    }
-
-    /// Creates a new random hash.
-    pub fn new_random() -> Self {
-        Self(H256::random())
-    }
-
-    pub fn into_hash_partition(self) -> i16 {
-        let n = self.0.to_low_u64_ne() % 10;
-        n as i16
-    }
-
-    pub fn as_fixed_bytes(&self) -> &[u8; 32] {
-        self.0.as_fixed_bytes()
     }
 }
 
@@ -76,41 +56,6 @@ impl FromStr for Hash {
                 Err(anyhow!("Failed to parse field 'hash' with value '{}'", s.to_owned()))
             }
         }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// sqlx traits
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Hash {
-    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let value = <[u8; 32] as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.into())
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Hash {
-    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError>
-    where
-        Self: Sized,
-    {
-        <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
-    }
-
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
-        <&[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.0.as_fixed_bytes(), buf)
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for Hash {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
-    }
-}
-
-impl PgHasArrayType for Hash {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <&[u8; 32] as PgHasArrayType>::array_type_info()
     }
 }
 

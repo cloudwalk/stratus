@@ -33,12 +33,6 @@ impl TryFrom<U256> for Size {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // ----------------------------------------------------------------------------
-impl From<Size> for U256 {
-    fn from(value: Size) -> Self {
-        value.0.as_u64().into()
-    }
-}
-
 impl From<Size> for u64 {
     fn from(value: Size) -> Self {
         value.0.as_u64()

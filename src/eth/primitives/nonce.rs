@@ -16,18 +16,9 @@ pub struct Nonce(U64);
 impl Nonce {
     pub const ZERO: Nonce = Nonce(U64::zero());
 
-    /// Checks if current value is zero.
-    pub fn is_zero(&self) -> bool {
-        self == &Self::ZERO
-    }
-
     /// Returns the next nonce.
     pub fn next_nonce(&self) -> Self {
         Self(self.0 + 1)
-    }
-
-    pub fn as_u64(&self) -> u64 {
-        self.0.as_u64()
     }
 }
 

@@ -1,9 +1,8 @@
 use std::net::SocketAddr;
 
 use clap::Parser;
-use display_json::DebugAsJson;
 
-#[derive(Parser, DebugAsJson, Clone, serde::Serialize)]
+#[derive(Parser, Clone, serde::Serialize)]
 pub struct RpcServerConfig {
     /// JSON-RPC server binding address.
     #[arg(short = 'a', long = "address", env = "ADDRESS", default_value = "0.0.0.0:3000")]

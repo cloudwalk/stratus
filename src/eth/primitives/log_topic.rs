@@ -12,12 +12,6 @@ use crate::gen_newtype_from;
 #[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Hash)]
 pub struct LogTopic(pub H256);
 
-impl LogTopic {
-    pub fn new(inner: H256) -> Self {
-        Self(inner)
-    }
-}
-
 impl Display for LogTopic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", const_hex::encode_prefixed(self.0))

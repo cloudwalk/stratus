@@ -3,15 +3,11 @@ use std::collections::HashMap;
 use display_json::DebugAsJson;
 use ethereum_types::H256;
 use itertools::Itertools;
-use serde::Deserialize;
 
-use super::LogMined;
-use super::TransactionInput;
 use crate::alias::EthersBlockEthersTransaction;
 use crate::alias::EthersBlockH256;
 use crate::alias::EthersTransaction;
 use crate::alias::JsonValue;
-use crate::eth::executor::EvmExecutionResult;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -20,7 +16,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
-use crate::log_and_err;
 
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -40,33 +35,6 @@ impl Block {
     /// Constructs an empty genesis block.
     pub fn genesis() -> Block {
         Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
-    }
-
-    /// Pushes a single transaction execution to the blocks transactions.
-    pub fn push_execution(&mut self, input: TransactionInput, evm_result: EvmExecutionResult) {
-        let transaction_index = (self.transactions.len() as u64).into();
-        self.transactions.push(TransactionMined {
-            logs: evm_result
-                .execution
-                .logs
-                .iter()
-                .cloned()
-                .enumerate()
-                .map(|(i, log)| LogMined {
-                    log_index: (i as u64).into(),
-                    log,
-                    transaction_hash: input.hash,
-                    transaction_index,
-                    block_number: self.header.number,
-                    block_hash: self.header.hash,
-                })
-                .collect(),
-            input,
-            execution: evm_result.execution,
-            transaction_index,
-            block_number: self.header.number,
-            block_hash: self.header.hash,
-        }); // TODO: update logs bloom
     }
 
     /// Calculates block size label by the number of transactions.
@@ -176,17 +144,6 @@ impl From<Block> for EthersBlockH256 {
         Self {
             transactions: ethers_block_transactions,
             ..ethers_block
-        }
-    }
-}
-
-impl TryFrom<JsonValue> for Block {
-    type Error = anyhow::Error;
-
-    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
-        match Block::deserialize(&value) {
-            Ok(v) => Ok(v),
-            Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to Block"),
         }
     }
 }

@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -39,15 +38,5 @@ impl RpcContext {
 
     pub fn set_consensus(&self, new_consensus: Option<Arc<dyn Consensus>>) {
         *self.consensus.write() = new_consensus;
-    }
-}
-
-impl Debug for RpcContext {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RpcContext")
-            .field("chain_id", &self.chain_id)
-            .field("client_version", &self.client_version)
-            .field("gas_price", &self.gas_price)
-            .finish_non_exhaustive()
     }
 }
