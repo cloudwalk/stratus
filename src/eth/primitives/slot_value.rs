@@ -1,13 +1,9 @@
 use std::fmt::Display;
-use std::str::FromStr;
 
 use display_json::DebugAsJson;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::encode::IsNull;
-use sqlx::postgres::PgHasArrayType;
-use sqlx::Decode;
 
 use crate::alias::RevmU256;
 use crate::gen_newtype_from;
@@ -16,11 +12,6 @@ use crate::gen_newtype_from;
 pub struct SlotValue(pub U256);
 
 impl SlotValue {
-    /// Checks if the value is zero.
-    pub fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-
     /// Converts itself to [`U256`].
     pub fn as_u256(&self) -> U256 {
         self.0
@@ -51,22 +42,6 @@ impl From<SlotValue> for RevmU256 {
     }
 }
 
-impl From<SlotValue> for [u8; 32] {
-    fn from(value: SlotValue) -> Self {
-        let mut buf: [u8; 32] = [1; 32];
-        value.0.to_big_endian(&mut buf);
-        buf
-    }
-}
-
-impl From<SlotValue> for Vec<u8> {
-    fn from(value: SlotValue) -> Self {
-        let mut vec = vec![0u8; 32]; // Initialize a vector with 32 bytes set to 0
-        value.0.to_big_endian(&mut vec);
-        vec
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
@@ -80,66 +55,5 @@ impl From<RevmU256> for SlotValue {
 impl From<[u64; 4]> for SlotValue {
     fn from(value: [u64; 4]) -> Self {
         Self(U256(value))
-    }
-}
-
-impl From<Vec<u8>> for SlotValue {
-    fn from(bytes: Vec<u8>) -> Self {
-        // Initialize U256 to zero
-        // Assuming the byte array is in big-endian format,
-        let u256: U256 = if bytes.len() <= 32 {
-            let mut padded_bytes = [0u8; 32];
-            padded_bytes[32 - bytes.len()..].copy_from_slice(&bytes);
-            U256::from_big_endian(&padded_bytes)
-        } else {
-            // Handle the error or truncate the Vec<u8> as needed
-            // For simplicity, this example will only load the first 32 bytes if the Vec is too large
-            U256::from_big_endian(&bytes[0..32])
-        };
-        SlotValue(u256)
-    }
-}
-
-impl FromStr for SlotValue {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let inner = U256::from_str(s)?;
-        Ok(SlotValue(inner))
-    }
-}
-
-// -----------------------------------------------------------------------------
-// sqlx traits
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SlotValue {
-    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let value = <[u8; 32] as Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.into())
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for SlotValue {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SlotValue {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
-        <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode((*self).into(), buf)
-    }
-
-    fn encode(self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError>
-    where
-        Self: Sized,
-    {
-        <[u8; 32] as sqlx::Encode<sqlx::Postgres>>::encode(self.into(), buf)
-    }
-}
-
-impl PgHasArrayType for SlotValue {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <[u8; 32] as PgHasArrayType>::array_type_info()
     }
 }

@@ -9,12 +9,6 @@ use crate::gen_newtype_from;
 #[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EcdsaRs(U256);
 
-impl From<EcdsaRs> for U256 {
-    fn from(value: EcdsaRs) -> Self {
-        value.0
-    }
-}
-
 impl Dummy<Faker> for EcdsaRs {
     fn dummy_with_rng<R: rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(U256([rng.next_u64(), rng.next_u64(), rng.next_u64(), rng.next_u64()]))

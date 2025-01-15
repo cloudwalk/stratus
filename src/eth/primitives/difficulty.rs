@@ -25,18 +25,3 @@ impl From<[u64; 4]> for Difficulty {
         Self(U256(value))
     }
 }
-
-// -----------------------------------------------------------------------------
-// Conversions: Self -> Other
-// ----------------------------------------------------------------------------
-impl From<Difficulty> for U256 {
-    fn from(value: Difficulty) -> Self {
-        value.0
-    }
-}
-
-impl From<Difficulty> for u64 {
-    fn from(value: Difficulty) -> Self {
-        value.0.low_u64()
-    }
-}

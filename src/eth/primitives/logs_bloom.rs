@@ -11,14 +11,6 @@ use crate::gen_newtype_from;
 pub struct LogsBloom(pub Bloom);
 
 impl LogsBloom {
-    pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        Self(Bloom::from_slice(bytes))
-    }
-
     pub fn accrue_log(&mut self, log: &Log) {
         self.accrue(ethereum_types::BloomInput::Raw(log.address.as_ref()));
         for topic in log.topics_non_empty() {

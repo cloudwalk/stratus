@@ -1,5 +1,3 @@
-use std::hash::Hash as HashTrait;
-
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
@@ -48,12 +46,6 @@ impl PartialOrd for TransactionMined {
 impl Ord for TransactionMined {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         (self.block_number, self.transaction_index).cmp(&(other.block_number, other.transaction_index))
-    }
-}
-
-impl HashTrait for TransactionMined {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.input.hash.hash(state);
     }
 }
 

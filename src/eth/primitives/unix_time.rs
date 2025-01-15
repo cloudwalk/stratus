@@ -1,6 +1,4 @@
-use std::num::TryFromIntError;
 use std::ops::Deref;
-use std::str::FromStr;
 
 use chrono::DateTime;
 use chrono::Utc;
@@ -36,15 +34,6 @@ impl UnixTime {
     #[cfg(feature = "dev")]
     pub fn evm_set_next_block_timestamp_was_called() -> bool {
         offset::evm_set_next_block_timestamp_was_called()
-    }
-}
-
-impl FromStr for UnixTime {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self> {
-        let without_prefix = s.trim_start_matches("0x");
-        Ok(u64::from_str_radix(without_prefix, 16)?.into())
     }
 }
 
@@ -91,22 +80,6 @@ impl From<UnixTime> for RevmU256 {
 impl From<UnixTime> for DateTime<Utc> {
     fn from(value: UnixTime) -> Self {
         DateTime::from_timestamp(value.0 as i64, 0).expect_infallible()
-    }
-}
-
-impl TryFrom<UnixTime> for i64 {
-    type Error = TryFromIntError;
-
-    fn try_from(timestamp: UnixTime) -> Result<i64, TryFromIntError> {
-        timestamp.0.try_into()
-    }
-}
-
-impl TryFrom<UnixTime> for i32 {
-    type Error = TryFromIntError;
-
-    fn try_from(timestamp: UnixTime) -> Result<i32, TryFromIntError> {
-        timestamp.0.try_into()
     }
 }
 

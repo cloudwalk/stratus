@@ -1,12 +1,10 @@
 use display_json::DebugAsJson;
 use ethereum_types::H256;
-use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::FixedBytes;
 use revm::primitives::KECCAK_EMPTY;
 
-use crate::eth::primitives::Bytes;
 use crate::gen_newtype_from;
 
 /// Digest of the bytecode of a contract.
@@ -25,13 +23,6 @@ impl CodeHash {
     pub fn new(inner: H256) -> Self {
         CodeHash(inner)
     }
-
-    pub fn from_bytecode(maybe_bytecode: Option<Bytes>) -> Self {
-        match maybe_bytecode {
-            Some(bytecode) => CodeHash(H256::from_slice(&keccak256(bytecode.as_ref()))),
-            None => CodeHash::default(),
-        }
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -48,11 +39,6 @@ impl Default for CodeHash {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> other
 // -----------------------------------------------------------------------------
-impl AsRef<[u8]> for CodeHash {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-}
 
 impl From<FixedBytes<32>> for CodeHash {
     fn from(value: FixedBytes<32>) -> Self {

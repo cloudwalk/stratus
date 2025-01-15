@@ -27,6 +27,7 @@ use crate::eth::codegen::SoliditySignature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
+#[cfg(feature = "metrics")]
 use crate::eth::primitives::ErrorCode;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;

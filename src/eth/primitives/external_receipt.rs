@@ -6,7 +6,6 @@ use crate::alias::JsonValue;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
-use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::log_and_err;
 
@@ -45,21 +44,6 @@ impl ExternalReceipt {
             Some(status) => status.as_u64() == 1,
             None => false,
         }
-    }
-
-    /// Checks if the transaction was completed with error.
-    pub fn is_failure(&self) -> bool {
-        not(self.is_success())
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Conversions: Self -> Other
-// -----------------------------------------------------------------------------
-
-impl From<EthersReceipt> for ExternalReceipt {
-    fn from(value: EthersReceipt) -> Self {
-        ExternalReceipt(value)
     }
 }
 
