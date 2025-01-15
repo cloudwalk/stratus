@@ -207,7 +207,6 @@ export async function deployTestRevertReason() {
     return await testContractFactory.connect(CHARLIE.signer()).deploy();
 }
 
-
 // Converts a number to Blockchain hex representation (prefixed with 0x).
 export function toHex(number: number | bigint): string {
     return "0x" + number.toString(16);
