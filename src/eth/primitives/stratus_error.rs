@@ -86,7 +86,7 @@ pub enum TransactionError {
 
     #[error("Transaction reverted during execution.")]
     #[error_code = 6]
-    Reverted { output: Bytes },
+    RevertedCall { output: Bytes },
 
     #[error("Transaction from zero address is not allowed.")]
     #[error_code = 7]
@@ -281,7 +281,7 @@ impl StratusError {
             // Transaction
             Self::RPC(RpcError::TransactionInvalid { decode_error }) => to_json_value(decode_error),
             Self::Transaction(TransactionError::EvmFailed(e)) => JsonValue::String(e.to_string()),
-            Self::Transaction(TransactionError::Reverted { output }) => to_json_value(output),
+            Self::Transaction(TransactionError::RevertedCall { output }) => to_json_value(output),
 
             // Unexpected
             Self::Unexpected(UnexpectedError::Unexpected(e)) => JsonValue::String(e.to_string()),

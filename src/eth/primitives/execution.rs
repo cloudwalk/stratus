@@ -74,8 +74,8 @@ impl EvmExecution {
         let mut execution = Self {
             block_timestamp,
             receipt_applied: false,
-            result: ExecutionResult::new_reverted(), // assume it reverted
-            output: Bytes::default(),                // we cannot really know without performing an eth_call to the external system
+            result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
+            output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
             gas: receipt.gas_used.unwrap_or_default().try_into()?,
             changes: HashMap::from([(sender_changes.address, sender_changes)]),

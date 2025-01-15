@@ -21,6 +21,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
+use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
@@ -286,11 +287,7 @@ impl Executor {
     ) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
-        let (start, tx_function, tx_contract) = (
-            metrics::now(),
-            codegen::function_sig_for_o11y(&tx.0.input),
-            codegen::contract_name_for_o11y(&tx.0.to.map_into()),
-        );
+        let (start, tx_function, tx_contract) = (metrics::now(), codegen::function_sig(&tx.0.input), codegen::contract_name(&tx.0.to.map_into()));
 
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash).entered();
@@ -376,9 +373,9 @@ impl Executor {
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
     pub fn execute_local_transaction(&self, tx: TransactionInput) -> Result<(), StratusError> {
         #[cfg(feature = "metrics")]
-        let function = codegen::function_sig_for_o11y(&tx.input);
+        let function = codegen::function_sig(&tx.input);
         #[cfg(feature = "metrics")]
-        let contract = codegen::contract_name_for_o11y(&tx.to);
+        let contract = codegen::contract_name(&tx.to);
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -486,15 +483,22 @@ impl Executor {
             let tx_metrics = tx_execution.metrics();
             #[cfg(feature = "metrics")]
             let gas_used = tx_execution.execution().gas;
+            #[cfg(feature = "metrics")]
+            let function = codegen::function_sig(&tx_input.input);
+            #[cfg(feature = "metrics")]
+            let contract = codegen::contract_name(&tx_input.to);
+
+            if let ExecutionResult::Reverted { reason } = &tx_execution.result().execution.result {
+                tracing::info!(?reason, "Local transaction execution reverted");
+                #[cfg(feature = "metrics")]
+                metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
+            }
 
             match self.miner.save_execution(tx_execution, matches!(evm_route, EvmRoute::Parallel)) {
                 Ok(_) => {
                     // track metrics
                     #[cfg(feature = "metrics")]
                     {
-                        let function = codegen::function_sig_for_o11y(&tx_input.input);
-                        let contract = codegen::contract_name_for_o11y(&tx_input.to);
-
                         metrics::inc_executor_local_transaction_account_reads(tx_metrics.account_reads, contract, function);
                         metrics::inc_executor_local_transaction_slot_reads(tx_metrics.slot_reads, contract, function);
                         metrics::inc_executor_local_transaction_gas(gas_used.as_u64() as usize, true, contract, function);
@@ -565,8 +569,8 @@ impl Executor {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            let function = codegen::function_sig_for_o11y(&call_input.data);
-            let contract = codegen::contract_name_for_o11y(&call_input.to);
+            let function = codegen::function_sig(&call_input.data);
+            let contract = codegen::contract_name(&call_input.to);
 
             match &evm_result {
                 Ok(evm_result) => {
