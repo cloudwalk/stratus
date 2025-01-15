@@ -1,6 +1,6 @@
 [package]
 name = "stratus"
-version = "0.1.0"
+version = "0.20.1"
 edition = "2021"
 default-run = "stratus"
 
