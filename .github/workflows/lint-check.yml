@@ -29,7 +29,7 @@ on:
 jobs:
   run_lint:
     name: Lint and Style checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 25
 
     concurrency:
@@ -67,7 +67,7 @@ jobs:
 
   e2e_lint:
     name: E2E Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
 
     concurrency:
