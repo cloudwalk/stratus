@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::ops::Add;
 
 use crate::eth::primitives::BlockNumber;
 use crate::gen_newtype_from;
@@ -21,12 +20,6 @@ impl From<BlockNumberRocksdb> for BlockNumber {
     }
 }
 
-impl From<BlockNumberRocksdb> for u32 {
-    fn from(value: BlockNumberRocksdb) -> Self {
-        value.0
-    }
-}
-
 impl serde::Serialize for BlockNumberRocksdb {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.0.to_be().serialize(serializer)
@@ -36,13 +29,5 @@ impl serde::Serialize for BlockNumberRocksdb {
 impl<'de> serde::Deserialize<'de> for BlockNumberRocksdb {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         u32::deserialize(deserializer).map(|v| Self(u32::from_be(v)))
-    }
-}
-
-impl Add<u32> for BlockNumberRocksdb {
-    type Output = Self;
-
-    fn add(self, other: u32) -> Self {
-        BlockNumberRocksdb(self.0 + other)
     }
 }

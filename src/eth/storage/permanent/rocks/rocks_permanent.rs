@@ -59,18 +59,6 @@ impl RocksPermanentStorage {
 
         Ok(Self { state, block_number })
     }
-
-    // -------------------------------------------------------------------------
-    // State methods
-    // -------------------------------------------------------------------------
-    #[cfg(feature = "dev")]
-    pub fn clear(&self) -> anyhow::Result<()> {
-        self.state.clear().inspect_err(|e| {
-            tracing::error!(reason = ?e, "failed to clear RocksPermanent DB");
-        })?;
-        self.block_number.store(0, Ordering::SeqCst);
-        Ok(())
-    }
 }
 
 impl PermanentStorage for RocksPermanentStorage {

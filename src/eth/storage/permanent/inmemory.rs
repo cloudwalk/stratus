@@ -60,19 +60,6 @@ impl InMemoryPermanentStorage {
     fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryPermanentStorageState> {
         self.state.write()
     }
-
-    // -------------------------------------------------------------------------
-    // State methods
-    // -------------------------------------------------------------------------
-
-    /// Clears in-memory state.
-    pub fn clear(&self) {
-        let mut state = self.lock_write();
-        state.accounts.clear();
-        state.transactions.clear();
-        state.blocks_by_hash.clear();
-        state.blocks_by_number.clear();
-    }
 }
 
 impl Default for InMemoryPermanentStorage {
@@ -339,11 +326,5 @@ where
     /// Returns the most recent value.
     pub fn get_current(&self) -> T {
         self.0.last().value.clone()
-    }
-}
-
-impl<T: Clone + Debug + serde::Serialize + for<'a> serde::Deserialize<'a>> From<InMemoryHistory<T>> for Vec<InMemoryHistoryValue<T>> {
-    fn from(value: InMemoryHistory<T>) -> Self {
-        value.0.into()
     }
 }

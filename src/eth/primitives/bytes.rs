@@ -5,7 +5,6 @@ use std::ops::DerefMut;
 use display_json::DebugAsJson;
 
 use crate::alias::EthersBytes;
-use crate::alias::RevmBytecode;
 use crate::alias::RevmBytes;
 use crate::alias::RevmOutput;
 use crate::gen_newtype_from;
@@ -68,12 +67,6 @@ impl From<RevmBytes> for Bytes {
     }
 }
 
-impl From<&RevmBytes> for Bytes {
-    fn from(value: &RevmBytes) -> Self {
-        Self(value.0.clone().into())
-    }
-}
-
 impl From<RevmOutput> for Bytes {
     fn from(value: RevmOutput) -> Self {
         match value {
@@ -115,11 +108,5 @@ impl From<Bytes> for EthersBytes {
 impl From<Bytes> for RevmBytes {
     fn from(value: Bytes) -> Self {
         value.0.into()
-    }
-}
-
-impl From<Bytes> for RevmBytecode {
-    fn from(value: Bytes) -> Self {
-        RevmBytecode::new_raw(value.0.into())
     }
 }
