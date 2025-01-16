@@ -25,7 +25,7 @@ on:
 jobs:
   check_features:
     name: Check Features
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 35
 
     concurrency:
