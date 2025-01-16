@@ -297,6 +297,7 @@ def main() -> None:
                 log(message=f"Process completed in {elapsed_time:.2f} seconds.")
             except DeploymentError as e:
                 log(message=f"Process failed: {str(e)}", error=True)
+                raise DeploymentError(f"Process failed: {str(e)}", error_type="DeploymentError")
 
     except IOError as e:
         log(message=f"Error opening log file: {e}")
