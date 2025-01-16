@@ -6,6 +6,7 @@ use jsonrpsee::MethodResponse;
 use jsonrpsee::ResponsePayload;
 use stratus_macros::ErrorCode;
 
+use super::execution_result::RevertReason;
 use crate::alias::JsonValue;
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Address;
@@ -91,6 +92,10 @@ pub enum TransactionError {
     #[error("Transaction from zero address is not allowed.")]
     #[error_code = 7]
     FromZeroAddress,
+
+    #[error("Transaction reverted during execution.")]
+    #[error_code = 8]
+    RevertedCallWithReason { reason: RevertReason },
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
@@ -282,6 +287,7 @@ impl StratusError {
             Self::RPC(RpcError::TransactionInvalid { decode_error }) => to_json_value(decode_error),
             Self::Transaction(TransactionError::EvmFailed(e)) => JsonValue::String(e.to_string()),
             Self::Transaction(TransactionError::RevertedCall { output }) => to_json_value(output),
+            Self::Transaction(TransactionError::RevertedCallWithReason { reason }) => to_json_value(reason),
 
             // Unexpected
             Self::Unexpected(UnexpectedError::Unexpected(e)) => JsonValue::String(e.to_string()),

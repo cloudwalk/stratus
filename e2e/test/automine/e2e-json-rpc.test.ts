@@ -16,6 +16,7 @@ import {
     ZERO,
     deployTestContractBalances,
     deployTestContractBlockTimestamp,
+    deployTestRevertReason,
     prepareSignedTx,
     send,
     sendAndGetError,
@@ -281,6 +282,33 @@ describe("JSON-RPC", () => {
                 // validate
                 const expectedAliceBalance = toPaddedHex(0, 32);
                 expect(currentAliceBalance).eq(expectedAliceBalance);
+            });
+        });
+
+        describe("stratus_call", () => {
+            it("Returns decoded error through stratus_call", async () => {
+                if (!isStratus) return;
+
+                // deploy
+                const contract = await deployTestRevertReason();
+                // Test revert with known error
+                const knownErrorData = contract.interface.encodeFunctionData("revertWithKnownError");
+
+                const knownErrorTx = { to: contract.target, data: knownErrorData };
+                const knownErrorResult = await sendAndGetError("stratus_call", [knownErrorTx, "latest"]);
+                expect(knownErrorResult.data).to.equal("KnownError()");
+
+                // Test revert with unknown error
+                const unknownErrorData = contract.interface.encodeFunctionData("revertWithUnknownError");
+                const unknownErrorTx = { to: contract.target, data: unknownErrorData };
+                const unknownErrorResult = await sendAndGetError("stratus_call", [unknownErrorTx, "latest"]);
+                expect(unknownErrorResult.data).to.equal("0xc39a0557");
+
+                // Test revert with string
+                const stringErrorData = contract.interface.encodeFunctionData("revertWithString");
+                const stringErrorTx = { to: contract.target, data: stringErrorData };
+                const stringErrorResult = await sendAndGetError("stratus_call", [stringErrorTx, "latest"]);
+                expect(stringErrorResult.data).to.equal("Custom error message");
             });
         });
     });
