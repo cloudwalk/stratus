@@ -231,6 +231,11 @@ e2e-stratus-rocks block-mode="automine" test="":
     just _wait_for_stratus
 
     just _log "Running E2E tests"
+    if [[ {{block-mode}} =~ ^[0-9]+(ms|s)$ ]]; then
+        just e2e stratus interval "{{test}}"
+    else
+        just e2e stratus {{block-mode}} "{{test}}"
+    fi
     result_code=$?
 
     just _log "Killing Stratus"
