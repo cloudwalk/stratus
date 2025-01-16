@@ -33,7 +33,7 @@ jobs:
       matrix:
         contract: [token, pix, periphery, compound, yield, multisig, cppv2]
     name: E2E InMemory on ${{ matrix.contract }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 35
 
     concurrency:
