@@ -40,7 +40,6 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::UnexpectedError;
-use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::OptionExt;
