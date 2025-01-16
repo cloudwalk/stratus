@@ -77,17 +77,6 @@ pub enum MinerMode {
     External,
 }
 
-impl MinerMode {
-    /// Checks if the mode allow to mine new blocks.
-    pub fn can_mine_new_blocks(&self) -> bool {
-        match self {
-            Self::Automine => true,
-            Self::Interval(_) => true,
-            Self::External => false,
-        }
-    }
-}
-
 impl FromStr for MinerMode {
     type Err = anyhow::Error;
 

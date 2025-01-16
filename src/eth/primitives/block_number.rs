@@ -1,4 +1,3 @@
-use std::num::TryFromIntError;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::str::FromStr;
@@ -124,23 +123,9 @@ impl From<BlockNumber> for U64 {
     }
 }
 
-impl From<BlockNumber> for u64 {
-    fn from(block_number: BlockNumber) -> Self {
-        block_number.0.as_u64()
-    }
-}
-
 impl From<BlockNumber> for RevmU256 {
     fn from(block_number: BlockNumber) -> Self {
         Self::from_limbs([block_number.0.as_u64(), 0, 0, 0])
-    }
-}
-
-impl TryFrom<BlockNumber> for i64 {
-    type Error = TryFromIntError;
-
-    fn try_from(block_number: BlockNumber) -> Result<i64, TryFromIntError> {
-        i64::try_from(block_number.0.as_u64())
     }
 }
 

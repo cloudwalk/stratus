@@ -8,7 +8,6 @@ use anyhow::anyhow;
 use chrono::DateTime;
 use chrono::Utc;
 use jsonrpsee::types::SubscriptionId;
-use rust_decimal::Decimal;
 use serde::Serialize;
 use serde::Serializer;
 use tokio::select;
@@ -143,16 +142,6 @@ where
     }
 }
 
-impl InfallibleExt<Decimal, ()> for Option<Decimal> {
-    #[allow(clippy::expect_used)]
-    fn expect_infallible(self) -> Decimal {
-        if self.is_none() {
-            tracing::error!("expected infallible decimal conversion");
-        }
-        self.expect("infallible decimal conversion")
-    }
-}
-
 impl InfallibleExt<DateTime<Utc>, ()> for Option<DateTime<Utc>> {
     #[allow(clippy::expect_used)]
     fn expect_infallible(self) -> DateTime<Utc> {
@@ -240,21 +229,6 @@ where
         .expect("spawning named async task should not fail")
 }
 
-/// Spawns a blocking Tokio task with a name to be displayed in tokio-console.
-#[track_caller]
-#[allow(clippy::expect_used)]
-pub fn spawn_blocking_named<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> tokio::task::JoinHandle<T>
-where
-    T: Send + 'static,
-{
-    info_task_spawn(name);
-
-    tokio::task::Builder::new()
-        .name(name)
-        .spawn_blocking(task)
-        .expect("spawning named blocking task should not fail")
-}
-
 /// Spawns a thread with the given name. Thread has access to Tokio current runtime.
 #[allow(clippy::expect_used)]
 #[track_caller]
@@ -318,17 +292,6 @@ pub fn to_json_string_pretty<V: serde::Serialize>(value: &V) -> String {
 /// Serializes any serializable value to [`serde_json::Value`] without having to check for errors.
 pub fn to_json_value<V: serde::Serialize>(value: V) -> serde_json::Value {
     serde_json::to_value(value).expect_infallible()
-}
-
-/// Serializes any serializable value to [`serde_json::Map`] without having to check for errors.
-pub fn to_json_object<V: serde::Serialize>(value: V) -> serde_json::Map<String, serde_json::Value> {
-    match serde_json::to_value(value).expect_infallible() {
-        serde_json::Value::Object(map) => map,
-        _ => unreachable!(
-            "to_json_object called with type {} which didn't serialize to a JSON object",
-            type_basename::<V>(),
-        ),
-    }
 }
 
 /// Deserializes any deserializable value from [`&str`] without having to check for errors.
