@@ -45,6 +45,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::ConsensusError;
+use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::ImporterError;
 use crate::eth::primitives::LogFilterInput;
@@ -226,6 +227,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("eth_estimateGas", eth_estimate_gas)?;
     module.register_blocking_method("eth_call", eth_call)?;
     module.register_blocking_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
+    module.register_blocking_method("stratus_call", stratus_call)?;
 
     // logs
     module.register_blocking_method("eth_getLogs", eth_get_logs)?;
@@ -839,11 +841,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     }
 }
 
-fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
-    // enter span
-    let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
-
+fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<EvmExecution, StratusError> {
     // parse params
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
@@ -858,22 +856,55 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
 
     // execute
     let point_in_time = ctx.storage.translate_to_point_in_time(filter)?;
-    match ctx.executor.execute_local_call(call, point_in_time) {
+    ctx.executor.execute_local_call(call, point_in_time)
+}
+
+fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
+
+    match rpc_call(params, ctx) {
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_call with success");
             Ok(hex_data(result.output))
         }
-
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_call with failure");
             Err(TransactionError::RevertedCall { output: result.output }.into())
         }
-
         // internal error
         Err(e) => {
             tracing::warn!(reason = ?e, "failed to execute eth_call");
+            Err(e)
+        }
+    }
+}
+
+fn stratus_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!("rpc::stratus_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
+
+    match rpc_call(params, ctx) {
+        // result is success
+        Ok(result) if result.is_success() => {
+            tracing::info!(tx_output = %result.output, "executed stratus_call with success");
+            Ok(hex_data(result.output))
+        }
+        // result is failure
+        Ok(result) => {
+            tracing::warn!(tx_output = %result.output, "executed stratus_call with failure");
+            Err(TransactionError::RevertedCallWithReason {
+                reason: (&result.output).into(),
+            }
+            .into())
+        }
+        // internal error
+        Err(e) => {
+            tracing::warn!(reason = ?e, "failed to execute stratus_call");
             Err(e)
         }
     }
