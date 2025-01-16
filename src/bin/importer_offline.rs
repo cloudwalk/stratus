@@ -25,7 +25,6 @@ use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::eth::primitives::ExternalTransaction;
-use stratus::eth::storage::Storage;
 use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
 use stratus::log_and_err;
