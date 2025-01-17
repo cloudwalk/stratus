@@ -4,6 +4,7 @@ mod tests {
     use std::str::FromStr;
 
     use crate::eth::primitives::Hash;
+    use super::*;
 
     #[test]
     fn test_hash_new() {
