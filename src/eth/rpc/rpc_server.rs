@@ -57,6 +57,7 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::TransactionStage;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parse_rpc_rlp;
@@ -227,6 +228,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("eth_call", eth_call)?;
     module.register_blocking_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
     module.register_blocking_method("stratus_call", stratus_call)?;
+    module.register_blocking_method("stratus_getTransactionResult", stratus_get_transaction_result)?;
 
     // logs
     module.register_blocking_method("eth_getLogs", eth_get_logs)?;
@@ -772,17 +774,13 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     }
 }
 
-fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    // enter span
-    let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::eth_getTransactionReceipt", tx_hash = field::Empty, found = field::Empty).entered();
-
+fn rpc_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<Option<TransactionStage>, StratusError> {
     // parse params
     let (_, tx_hash) = next_rpc_param::<Hash>(params.sequence())?;
 
     // track
     Span::with(|s| s.rec_str("tx_hash", &tx_hash));
-    tracing::info!(%tx_hash, "reading transaction receipt");
+    tracing::info!("reading transaction receipt");
 
     // execute
     let tx = ctx.storage.read_transaction(tx_hash)?;
@@ -790,13 +788,38 @@ fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         s.record("found", tx.is_some());
     });
 
-    match tx {
+    Ok(tx)
+}
+
+fn eth_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!("rpc::eth_getTransactionReceipt", tx_hash = field::Empty, found = field::Empty).entered();
+
+    match rpc_get_transaction_receipt(params, ctx)? {
         Some(tx) => {
-            tracing::info!(%tx_hash, "transaction receipt found");
+            tracing::info!("transaction receipt found");
             Ok(tx.to_json_rpc_receipt())
         }
         None => {
-            tracing::info!(%tx_hash, "transaction receipt not found");
+            tracing::info!("transaction receipt not found");
+            Ok(JsonValue::Null)
+        }
+    }
+}
+
+fn stratus_get_transaction_result(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!("rpc::stratus_get_transaction_result", tx_hash = field::Empty, found = field::Empty).entered();
+
+    match rpc_get_transaction_receipt(params, ctx)? {
+        Some(tx) => {
+            tracing::info!("transaction receipt found");
+            Ok(to_json_value(tx.result()))
+        }
+        None => {
+            tracing::info!("transaction receipt not found");
             Ok(JsonValue::Null)
         }
     }

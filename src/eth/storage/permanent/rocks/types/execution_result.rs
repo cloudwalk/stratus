@@ -1,3 +1,5 @@
+use super::bytes::BytesRocksdb;
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionResult;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
@@ -17,13 +19,22 @@ impl From<ExecutionResult> for ExecutionResultRocksdb {
     }
 }
 
-impl From<ExecutionResultRocksdb> for ExecutionResult {
-    fn from(item: ExecutionResultRocksdb) -> Self {
-        match item {
-            ExecutionResultRocksdb::Success => ExecutionResult::Success,
-            // TODO: can use the output to derive this information
-            ExecutionResultRocksdb::Reverted => ExecutionResult::Reverted { reason: "unknown".into() },
-            ExecutionResultRocksdb::Halted { reason } => ExecutionResult::Halted { reason },
+pub struct ExecutionResultBuilder(pub (ExecutionResultRocksdb, BytesRocksdb));
+
+impl ExecutionResultBuilder {
+    pub fn build(self) -> (ExecutionResult, Bytes) {
+        self.into()
+    }
+}
+
+impl From<ExecutionResultBuilder> for (ExecutionResult, Bytes) {
+    fn from(item: ExecutionResultBuilder) -> Self {
+        let (result, out) = item.0;
+        let output: Bytes = out.into();
+        match result {
+            ExecutionResultRocksdb::Success => (ExecutionResult::Success, output),
+            ExecutionResultRocksdb::Reverted => (ExecutionResult::Reverted { reason: (&output).into() }, output),
+            ExecutionResultRocksdb::Halted { reason } => (ExecutionResult::Halted { reason }, output),
         }
     }
 }

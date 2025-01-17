@@ -1,3 +1,4 @@
+use super::ExecutionResult;
 use crate::alias::EthersReceipt;
 use crate::alias::EthersTransaction;
 use crate::alias::JsonValue;
@@ -46,6 +47,13 @@ impl TransactionStage {
                 let json_rpc_format: EthersReceipt = tx.into();
                 to_json_value(json_rpc_format)
             }
+        }
+    }
+
+    pub fn result(&self) -> &ExecutionResult {
+        match self {
+            Self::Executed(tx) => &tx.result().execution.result,
+            Self::Mined(tx) => &tx.execution.result,
         }
     }
 }
