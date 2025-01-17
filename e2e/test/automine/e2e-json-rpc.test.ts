@@ -248,7 +248,7 @@ describe("JSON-RPC", () => {
                 expect(actualTxHash).eq(expectedTxHash);
             });
         });
-        describe("stratus_getTransactionStatus", () => {
+        describe("stratus_getTransactionResult", () => {
             it("Returns decoded error message when transaction is reverted", async function () {
                 if (!isStratus) {
                     this.skip();
@@ -433,7 +433,7 @@ describe("JSON-RPC", () => {
 
                 // Record timestamp in contract
                 const tx = await contract.recordTimestamp();
-                const receipt: TransactionReceipt = (await tx.wait()) as any;
+                const receipt = await tx.wait() as TransactionReceipt;
 
                 // Get the timestamp from contract event
                 const event = receipt.logs[0];
