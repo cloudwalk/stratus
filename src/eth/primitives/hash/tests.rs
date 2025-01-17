@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use ethereum_types::H256;
     use std::str::FromStr;
+    use ethereum_types::H256;
 
-    use crate::eth::primitives::Hash;
     use super::*;
+    use crate::eth::primitives::Hash;
 
     #[test]
     fn test_hash_new() {
