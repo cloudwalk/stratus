@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { keccak256 } from "ethers";
+import { keccak256, TransactionReceipt } from "ethers";
 import { JsonRpcProvider } from "ethers";
 import { Block, Bytes } from "web3-types";
 
@@ -248,6 +248,55 @@ describe("JSON-RPC", () => {
                 expect(actualTxHash).eq(expectedTxHash);
             });
         });
+        describe("stratus_getTransactionStatus", () => {
+            it("Returns decoded error message when transaction is reverted", async function () {
+                if (!isStratus) {
+                    this.skip();
+                    return;
+                }
+
+                // Deploy test contract
+                const contract = await deployTestRevertReason();
+
+                // Execute transaction that will revert with known error
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await ETHERJS.getTransactionReceipt(txHash);
+
+                // Get transaction result
+                const result = await send("stratus_getTransactionResult", [txHash]);
+                expect(result.reverted.reason).to.equal("KnownError()");
+            });
+
+            it("Returns success when transaction succeeds", async function () {
+                if (!isStratus) {
+                    this.skip();
+                    return;
+                }
+
+                // Deploy test contract
+                const contract = await deployTestContractBalances();
+
+                // Execute transaction that will succeed
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "add",
+                    methodParameters: [ALICE.address, 10],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await ETHERJS.getTransactionReceipt(txHash);
+
+                // Get transaction result
+                const result = await send("stratus_getTransactionResult", [txHash]);
+                expect(result).to.equal("success");
+            });
+        });
     });
 
     describe("Call", () => {
@@ -384,7 +433,7 @@ describe("JSON-RPC", () => {
 
                 // Record timestamp in contract
                 const tx = await contract.recordTimestamp();
-                const receipt: TransactionReceipt = await tx.wait();
+                const receipt: TransactionReceipt = await tx.wait() as any;
 
                 // Get the timestamp from contract event
                 const event = receipt.logs[0];
