@@ -433,7 +433,7 @@ describe("JSON-RPC", () => {
 
                 // Record timestamp in contract
                 const tx = await contract.recordTimestamp();
-                const receipt = await tx.wait() as TransactionReceipt;
+                const receipt = (await tx.wait()) as TransactionReceipt;
 
                 // Get the timestamp from contract event
                 const event = receipt.logs[0];
