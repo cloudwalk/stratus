@@ -9,6 +9,9 @@ use fake::Faker;
 
 use crate::gen_newtype_from;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Hash(pub H256);
