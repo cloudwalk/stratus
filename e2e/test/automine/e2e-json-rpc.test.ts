@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { keccak256, TransactionReceipt } from "ethers";
+import { TransactionReceipt, keccak256 } from "ethers";
 import { JsonRpcProvider } from "ethers";
 import { Block, Bytes } from "web3-types";
 
@@ -433,7 +433,7 @@ describe("JSON-RPC", () => {
 
                 // Record timestamp in contract
                 const tx = await contract.recordTimestamp();
-                const receipt: TransactionReceipt = await tx.wait() as any;
+                const receipt: TransactionReceipt = (await tx.wait()) as any;
 
                 // Get the timestamp from contract event
                 const event = receipt.logs[0];
