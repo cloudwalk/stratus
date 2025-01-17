@@ -1,10 +1,9 @@
 #[cfg(test)]
-mod tests {
+mod test {
     use std::str::FromStr;
 
     use ethereum_types::H256;
 
-    use super::*;
     use crate::eth::primitives::Hash;
 
     #[test]
