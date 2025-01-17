@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+
     use ethereum_types::H256;
 
     use super::*;
