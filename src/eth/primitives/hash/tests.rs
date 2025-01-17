@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ethereum_types::H256;
+    use crate::eth::primitives::Hash;
 
     #[test]
     fn test_hash_new() {
@@ -18,10 +20,7 @@ mod tests {
     fn test_hash_display() {
         let bytes = [0xffu8; 32];
         let hash = Hash::new(bytes);
-        assert_eq!(
-            hash.to_string(),
-            "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-        );
+        assert_eq!(hash.to_string(), "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
     }
 
     #[test]
