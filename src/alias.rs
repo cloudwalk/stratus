@@ -31,5 +31,5 @@ pub type RevmBytecode = revm::primitives::Bytecode;
 pub type RevmBytes = revm::primitives::Bytes;
 pub type RevmLog = revm::primitives::Log;
 pub type RevmOutput = revm::primitives::Output;
-pub type RevmState = revm::primitives::State;
+pub type RevmState = revm::primitives::EvmState;
 pub type RevmU256 = revm::primitives::U256;

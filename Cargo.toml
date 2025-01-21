@@ -23,7 +23,7 @@ hash_hasher = "=2.0.3"
 hex_fmt = "=0.3.0"
 hex-literal = "=0.4.1"
 humantime = "=2.1.0"
-indexmap = { version = "=2.2.6", features = ["serde"] }
+indexmap = { version = "=2.7.1", features = ["serde"] }
 itertools = "=0.13.0"
 lazy_static = "=1.4.0"
 nanoid = "=0.4.0"
@@ -136,10 +136,10 @@ indicatif = "=0.17.8"
 # ------------------------------------------------------------------------------
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
-revm = { version = "=9.0.0", features = ["asm-keccak", "serde"] }
+revm = { version = "=19.3.0", features = ["asm-keccak", "serde"] }
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
-revm = { version = "=9.0.0", features = ["serde"]}
+revm = { version = "=19.3.0", features = ["serde"]}
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { version = "=0.6", optional = true }
