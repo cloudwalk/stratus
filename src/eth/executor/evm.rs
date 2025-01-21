@@ -126,13 +126,10 @@ impl Evm {
         let evm = &mut self.evm;
         evm.db_mut().reset(input.clone());
 
-        // configure block params
-        let block_env = evm.block_mut().fill_env(&input);
-        let block_env_log = block_env.clone();
+        evm.fill_env(input);
 
-        // configure tx params
-        let tx_env = &mut evm.tx_mut().fill_env(input);
-        let tx_env_log = tx_env.clone();
+        let block_env_log = evm.block().clone();
+        let tx_env_log = evm.tx().clone();
 
         // execute transaction
         tracing::info!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
@@ -207,7 +204,7 @@ impl Evm {
             .with_handler(handler)
             .build();
 
-
+        let evm_input: EvmInput = self.evm.db().storage.read_transaction(input)?.unwrap().try_into()?;
         let block = self.evm.db().storage.read_block(BlockFilter::Number(evm_input.block_number))?.unwrap();
 
         // Execute all transactions before target tx_hash
@@ -218,8 +215,7 @@ impl Evm {
             let tx_input: EvmInput = tx.try_into().unwrap();
 
             // Configure EVM state
-            evm.block_mut().fill_env(&tx_input);
-            evm.tx_mut().fill_env(tx_input);
+            evm.fill_env(tx_input);
 
             evm.transact_commit();
         }
@@ -243,7 +239,6 @@ impl Evm {
             ))),
         };
 
-        let evm_input: EvmInput = self.evm.db().storage.read_transaction(input)?.unwrap().try_into()?;
 
         let handler = Handler::mainnet_with_spec(SpecId::LONDON);
         let mut evm = RevmEvm::builder()
@@ -252,8 +247,7 @@ impl Evm {
             .with_handler(handler)
             .build();
 
-        evm.block_mut().fill_env(&evm_input);
-        evm.tx_mut().fill_env(evm_input);
+        evm.fill_env(evm_input);
         evm.transact();
 
         // track metrics
@@ -268,6 +262,17 @@ impl Evm {
 
 trait TxEnvExt {
     fn fill_env(&mut self, input: EvmInput);
+}
+
+trait EvmExt {
+    fn fill_env(&mut self, input: EvmInput);
+}
+
+impl<'a, EXT, DB: Database> EvmExt for RevmEvm<'a, EXT, DB> {
+    fn fill_env(&mut self, input: EvmInput) {
+        self.block_mut().fill_env(&input);
+        self.tx_mut().fill_env(input);
+    }
 }
 
 impl TxEnvExt for TxEnv {
