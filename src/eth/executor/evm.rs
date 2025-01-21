@@ -2,10 +2,14 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use alloy_rpc_types_trace::geth::GethDebugBuiltInTracerType;
+use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use anyhow::anyhow;
 use itertools::Itertools;
+use revm::db::CacheDB;
 use revm::primitives::AccountInfo;
 use revm::primitives::AnalysisKind;
+use revm::primitives::BlockEnv;
 use revm::primitives::EVMError;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
 use revm::primitives::InvalidTransaction;
@@ -13,11 +17,19 @@ use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::SpecId;
 use revm::primitives::State as RevmState;
 use revm::primitives::TransactTo;
+use revm::primitives::TxEnv;
 use revm::primitives::B256;
 use revm::primitives::U256;
 use revm::Database;
+use revm::DatabaseCommit;
+use revm::DatabaseRef;
 use revm::Evm as RevmEvm;
 use revm::Handler;
+use revm::Inspector;
+use revm_inspectors::tracing::FourByteInspector;
+use revm_inspectors::tracing::MuxInspector;
+use revm_inspectors::tracing::TracingInspector;
+use revm_inspectors::tracing::TracingInspectorConfig;
 
 use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
@@ -26,6 +38,7 @@ use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
@@ -34,6 +47,7 @@ use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -112,25 +126,11 @@ impl Evm {
         evm.db_mut().reset(input.clone());
 
         // configure block params
-        let block_env = evm.block_mut();
-        block_env.basefee = U256::ZERO;
-        block_env.timestamp = input.block_timestamp.into();
-        block_env.number = input.block_number.into();
+        let block_env = evm.block_mut().fill_env(&input);
         let block_env_log = block_env.clone();
 
         // configure tx params
-        let tx_env = &mut evm.tx_mut();
-        tx_env.caller = input.from.into();
-        tx_env.transact_to = match input.to {
-            Some(contract) => TransactTo::Call(contract.into()),
-            None => TransactTo::Create,
-        };
-        tx_env.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
-        tx_env.gas_price = input.gas_price.into();
-        tx_env.chain_id = input.chain_id.map_into();
-        tx_env.nonce = input.nonce.map_into();
-        tx_env.data = input.data.into();
-        tx_env.value = input.value.into();
+        let tx_env = &mut evm.tx_mut().fill_env(input);
         let tx_env_log = tx_env.clone();
 
         // execute transaction
@@ -186,6 +186,98 @@ impl Evm {
             execution,
             metrics: session_metrics,
         })
+    }
+
+    /// Execute a transaction that deploys a contract or call a contract function.
+    pub fn inspect(
+        &mut self,
+        input: Hash,
+        trace_type: GethDebugBuiltInTracerType,
+        opts: Option<GethDebugTracingOptions>,
+    ) -> Result<EvmExecutionResult, StratusError> {
+        #[cfg(feature = "metrics")]
+        let start = metrics::now();
+
+        let mut cache_db = CacheDB::new(self.evm.db());
+        let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
+        let mut evm = RevmEvm::builder().with_external_context(()).with_db(&mut cache_db).with_handler(handler).build();
+
+        let input: EvmInput = self.evm.db().storage.read_transaction(input)?.unwrap().try_into()?;
+
+        let mut block = self.evm.db().storage.read_block(BlockFilter::Number(input.block_number))?.unwrap();
+
+        // Execute all transactions before target tx_hash
+        for tx in block.transactions {
+            let tx_input: EvmInput = tx.try_into().unwrap();
+
+            // Configure EVM state
+            evm.block_mut().fill_env(&tx_input);
+            evm.tx_mut().fill_env(tx_input);
+
+            let result = evm.transact();
+            if let Ok(result) = result {
+                cache_db.commit(result.state);
+            }
+        }
+
+        let opts = opts.unwrap_or_default();
+
+        let mut inspector: Box<dyn Inspector<CacheDB<&RevmSession>>> = match trace_type {
+            GethDebugBuiltInTracerType::FourByteTracer => todo!(), //FourByteInspector::default(),
+            GethDebugBuiltInTracerType::CallTracer => {
+                Box::new(TracingInspector::new(TracingInspectorConfig::from_geth_call_config(&opts.tracer_config.into_call_config().unwrap())))
+            }
+            GethDebugBuiltInTracerType::PreStateTracer => TracingInspector::new(TracingInspectorConfig::from_geth_prestate_config(
+                &opts.tracer_config.into_pre_state_config().unwrap(),
+            )),
+            GethDebugBuiltInTracerType::NoopTracer => TracingInspector::new(TracingInspectorConfig::default()),
+            GethDebugBuiltInTracerType::MuxTracer => {
+                MuxInspector::try_from_config(&opts.tracer_config.into_mux_config().unwrap()).unwrap()
+            }
+            GethDebugBuiltInTracerType::FlatCallTracer => TracingInspector::new(TracingInspectorConfig::from_flat_call_config(
+                &opts.tracer_config.into_flat_call_config().unwrap(),
+            )),
+        };
+
+        // track metrics
+        #[cfg(feature = "metrics")]
+        {
+            metrics::inc_evm_execution(start.elapsed(), session_point_in_time, execution.is_ok());
+        }
+
+        todo!()
+    }
+}
+
+trait TxEnvExt {
+    fn fill_env(&mut self, input: EvmInput);
+}
+
+impl TxEnvExt for TxEnv {
+    fn fill_env(&mut self, input: EvmInput) {
+        self.caller = input.from.into();
+        self.transact_to = match input.to {
+            Some(contract) => TransactTo::Call(contract.into()),
+            None => TransactTo::Create,
+        };
+        self.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
+        self.gas_price = input.gas_price.into();
+        self.chain_id = input.chain_id.map_into();
+        self.nonce = input.nonce.map_into();
+        self.data = input.data.into();
+        self.value = input.value.into();
+    }
+}
+
+trait BlockEnvExt {
+    fn fill_env(&mut self, input: &EvmInput);
+}
+
+impl BlockEnvExt for BlockEnv {
+    fn fill_env(&mut self, input: &EvmInput) {
+        self.timestamp = input.block_timestamp.into();
+        self.number = input.block_number.into();
+        self.basefee = U256::ZERO;
     }
 }
 
@@ -295,6 +387,50 @@ impl Database for RevmSession {
     }
 
     fn block_hash(&mut self, _: U256) -> Result<B256, StratusError> {
+        todo!()
+    }
+}
+
+impl DatabaseRef for RevmSession {
+    type Error = StratusError;
+
+    fn basic_ref(&self, address: revm::primitives::Address) -> Result<Option<AccountInfo>, Self::Error> {
+        // retrieve account
+        let address: Address = address.into();
+        let account = self.storage.read_account(address, self.input.point_in_time)?;
+
+        // warn if the loaded account is the `to` account and it does not have a bytecode
+        if let Some(ref to_address) = self.input.to {
+            if account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
+                if self.config.executor_reject_not_contract {
+                    return Err(TransactionError::AccountNotContract { address: *to_address }.into());
+                } else {
+                    tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
+                }
+            }
+        }
+
+        let revm_account: AccountInfo = (&account).into();
+
+        Ok(Some(revm_account))
+    }
+
+    fn storage_ref(&self, address: revm::primitives::Address, index: U256) -> Result<U256, Self::Error> {
+        // convert slot
+        let address: Address = address.into();
+        let index: SlotIndex = index.into();
+
+        // load slot from storage
+        let slot = self.storage.read_slot(address, index, self.input.point_in_time)?;
+
+        Ok(slot.value.into())
+    }
+
+    fn block_hash_ref(&self, _: U256) -> Result<B256, Self::Error> {
+        todo!()
+    }
+
+    fn code_by_hash_ref(&self, _: B256) -> Result<revm::primitives::Bytecode, Self::Error> {
         todo!()
     }
 }
