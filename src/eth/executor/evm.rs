@@ -224,6 +224,7 @@ impl Evm {
 
         let opts = opts.unwrap_or_default();
 
+        // TODO, it will be easier for the entire trace logic to be inside the match arms after all, too many types to handle
         let mut inspector: Box<dyn Inspector<CacheDB<&RevmSession>>> = match trace_type {
             GethDebugBuiltInTracerType::FourByteTracer => Box::new(FourByteInspector::default()), //FourByteInspector::default(),
             GethDebugBuiltInTracerType::CallTracer => Box::new(TracingInspector::new(TracingInspectorConfig::from_geth_call_config(
