@@ -1,4 +1,6 @@
+use super::BlockNumber;
 use super::ExecutionResult;
+use super::Index;
 use crate::alias::EthersReceipt;
 use crate::alias::EthersTransaction;
 use crate::alias::JsonValue;
@@ -54,6 +56,22 @@ impl TransactionStage {
         match self {
             Self::Executed(tx) => &tx.result().execution.result,
             Self::Mined(tx) => &tx.execution.result,
+        }
+    }
+
+    pub fn index(&self) -> Option<Index> {
+        match self {
+            Self::Executed(TransactionExecution::External(tx)) => Some(tx.receipt.transaction_index.into()),
+            Self::Mined(tx) => Some(tx.transaction_index),
+            _ => None,
+        }
+    }
+
+    pub fn block_number(&self) -> BlockNumber {
+        match self {
+            Self::Executed(TransactionExecution::External(tx)) => tx.receipt.block_number(),
+            Self::Executed(TransactionExecution::Local(tx)) => tx.evm_input.block_number,
+            Self::Mined(tx) => tx.block_number,
         }
     }
 }

@@ -35,6 +35,14 @@ impl From<U64> for Index {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+
+impl From<Index> for u64 {
+    fn from(value: Index) -> u64 {
+        value.0
+    }
+}
+
+
 impl From<Index> for U64 {
     fn from(value: Index) -> U64 {
         value.0.into()
