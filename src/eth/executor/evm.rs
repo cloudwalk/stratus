@@ -11,11 +11,11 @@ use revm::primitives::AccountInfo;
 use revm::primitives::AnalysisKind;
 use revm::primitives::BlockEnv;
 use revm::primitives::EVMError;
+use revm::primitives::EvmState;
 use revm::primitives::ExecutionResult as RevmExecutionResult;
 use revm::primitives::InvalidTransaction;
 use revm::primitives::ResultAndState as RevmResultAndState;
 use revm::primitives::SpecId;
-use revm::primitives::State as RevmState;
 use revm::primitives::TransactTo;
 use revm::primitives::TxEnv;
 use revm::primitives::B256;
@@ -386,7 +386,7 @@ impl Database for RevmSession {
         Ok(slot.value.into())
     }
 
-    fn block_hash(&mut self, _: U256) -> Result<B256, StratusError> {
+    fn block_hash(&mut self, _: u64) -> Result<B256, StratusError> {
         todo!()
     }
 }
@@ -487,7 +487,7 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
     }
 }
 
-fn parse_revm_state(revm_state: RevmState, mut execution_changes: ExecutionChanges) -> Result<ExecutionChanges, StratusError> {
+fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChanges) -> Result<ExecutionChanges, StratusError> {
     for (revm_address, revm_account) in revm_state {
         let address: Address = revm_address.into();
         if address.is_ignored() {
