@@ -94,14 +94,12 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_mined_block_number").entered();
         tracing::debug!(storage = %label::PERM, "reading mined block number");
 
-        timed(|| self.perm.read_mined_block_number())
-            .with(|m| {
-                metrics::inc_storage_read_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to read miner block number");
-                }
-            })
-            .map_err(Into::into)
+        timed(|| self.perm.read_mined_block_number()).with(|m| {
+            metrics::inc_storage_read_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read miner block number");
+            }
+        })
     }
 
     pub fn set_mined_block_number(&self, block_number: BlockNumber) -> Result<(), StorageError> {
@@ -109,14 +107,12 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::set_mined_block_number", %block_number).entered();
         tracing::debug!(storage = %label::PERM, %block_number, "setting mined block number");
 
-        timed(|| self.perm.set_mined_block_number(block_number))
-            .with(|m| {
-                metrics::inc_storage_set_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to set miner block number");
-                }
-            })
-            .map_err(Into::into)
+        timed(|| self.perm.set_mined_block_number(block_number)).with(|m| {
+            metrics::inc_storage_set_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to set miner block number");
+            }
+        })
     }
 
     // -------------------------------------------------------------------------
@@ -137,14 +133,12 @@ impl StratusStorage {
         }
 
         tracing::debug!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
-        timed(|| self.perm.save_accounts(missing_accounts))
-            .with(|m| {
-                metrics::inc_storage_save_accounts(m.elapsed, label::PERM, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to save accounts");
-                }
-            })
-            .map_err(Into::into)
+        timed(|| self.perm.save_accounts(missing_accounts)).with(|m| {
+            metrics::inc_storage_save_accounts(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to save accounts");
+            }
+        })
     }
 
     pub fn read_account(&self, address: Address, point_in_time: PointInTime) -> Result<Account, StorageError> {
@@ -274,7 +268,6 @@ impl StratusStorage {
                     _ => (),
                 }
             })
-            .map_err(Into::into)
             .inspect(|_| self.cache.cache_account_and_slots_from_changes(changes))
     }
 
@@ -288,14 +281,12 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::finish_pending_block", block_number = tracing::field::Empty).entered();
         tracing::debug!(storage = %label::TEMP, "finishing pending block");
 
-        let result = timed(|| self.temp.finish_pending_block())
-            .with(|m| {
-                metrics::inc_storage_finish_pending_block(m.elapsed, label::TEMP, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to finish pending block");
-                }
-            })
-            .map_err(Into::into);
+        let result = timed(|| self.temp.finish_pending_block()).with(|m| {
+            metrics::inc_storage_finish_pending_block(m.elapsed, label::TEMP, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to finish pending block");
+            }
+        });
 
         if let Ok(ref block) = result {
             Span::with(|s| s.rec_str("block_number", &block.header.number));
@@ -340,14 +331,12 @@ impl StratusStorage {
 
         // save block
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
-        timed(|| self.perm.save_block(block))
-            .with(|m| {
-                metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, %block_number, "failed to save block");
-                }
-            })
-            .map_err(Into::into)
+        timed(|| self.perm.save_block(block)).with(|m| {
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, %block_number, "failed to save block");
+            }
+        })
     }
 
     pub fn save_block_batch(&self, blocks: Vec<Block>) -> Result<(), StratusError> {
@@ -404,14 +393,12 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_block", %filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading block");
 
-        timed(|| self.perm.read_block(filter))
-            .with(|m| {
-                metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to read block");
-                }
-            })
-            .map_err(Into::into)
+        timed(|| self.perm.read_block(filter)).with(|m| {
+            metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read block");
+            }
+        })
     }
 
     pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionStage>, StorageError> {
@@ -449,14 +436,12 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_logs", ?filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading logs");
 
-        timed(|| self.perm.read_logs(filter))
-            .with(|m| {
-                metrics::inc_storage_read_logs(m.elapsed, label::PERM, m.result.is_ok());
-                if let Err(ref e) = m.result {
-                    tracing::error!(reason = ?e, "failed to read logs");
-                }
-            })
-            .map_err(Into::into)
+        timed(|| self.perm.read_logs(filter)).with(|m| {
+            metrics::inc_storage_read_logs(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read logs");
+            }
+        })
     }
 
     // -------------------------------------------------------------------------

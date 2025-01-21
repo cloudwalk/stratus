@@ -185,7 +185,7 @@ pub struct RpcResponse<'a> {
     future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 }
 
-impl<'a> Future for RpcResponse<'a> {
+impl Future for RpcResponse<'_> {
     type Output = MethodResponse;
 
     fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {

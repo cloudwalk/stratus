@@ -470,10 +470,7 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            let evm_result = match self.evms.execute(evm_input.clone(), evm_route) {
-                Ok(evm_result) => evm_result,
-                Err(e) => return Err(e),
-            };
+            let evm_result = self.evms.execute(evm_input.clone(), evm_route)?;
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error

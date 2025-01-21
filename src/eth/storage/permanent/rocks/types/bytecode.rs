@@ -1,15 +1,18 @@
 use std::ops::Deref;
+use std::sync::Arc;
 
 use revm::primitives::eof::TypesSection;
 use revm::primitives::Bytecode;
 
 use super::bytes::BytesRocksdb;
+use super::AddressRocksdb;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub enum BytecodeRocksdb {
     LegacyRaw(BytesRocksdb),
     LegacyAnalyzed(LegacyAnalyzedBytecodeRocksdb),
     Eof(EofRocksdb),
+    Eip7702(Eip7702BytecodeRocksdb),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
@@ -52,6 +55,13 @@ pub struct EofRocksdb {
     pub raw: BytesRocksdb,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+pub struct Eip7702BytecodeRocksdb {
+    pub delegated_address: AddressRocksdb,
+    pub version: u8,
+    pub raw: BytesRocksdb,
+}
+
 impl From<TypesSection> for TypesSectionRocksdb {
     fn from(value: TypesSection) -> Self {
         Self {
@@ -74,20 +84,25 @@ impl From<Bytecode> for BytecodeRocksdb {
             Bytecode::Eof(eof) => BytecodeRocksdb::Eof(EofRocksdb {
                 header: EofHeaderRocksdb {
                     types_size: eof.header.types_size,
-                    code_sizes: eof.header.code_sizes,
-                    container_sizes: eof.header.container_sizes,
+                    code_sizes: eof.header.code_sizes.clone(),
+                    container_sizes: eof.header.container_sizes.clone(),
                     data_size: eof.header.data_size,
                     sum_code_sizes: eof.header.sum_code_sizes,
                     sum_container_sizes: eof.header.sum_container_sizes,
                 },
                 body: EofBodyRocksdb {
-                    types_section: eof.body.types_section.into_iter().map(Into::into).collect(),
-                    code_section: eof.body.code_section.into_iter().map(Into::into).collect(),
-                    container_section: eof.body.container_section.into_iter().map(Into::into).collect(),
-                    data_section: eof.body.data_section.into(),
+                    types_section: eof.body.types_section.iter().copied().map(Into::into).collect(),
+                    code_section: eof.body.code_section.iter().cloned().map(Into::into).collect(),
+                    container_section: eof.body.container_section.iter().cloned().map(Into::into).collect(),
+                    data_section: eof.body.data_section.clone().into(),
                     is_data_filled: eof.body.is_data_filled,
                 },
-                raw: eof.raw.into(),
+                raw: eof.raw.clone().into(),
+            }),
+            Bytecode::Eip7702(bytecode) => BytecodeRocksdb::Eip7702(Eip7702BytecodeRocksdb {
+                delegated_address: AddressRocksdb(bytecode.delegated_address.0 .0),
+                version: bytecode.version,
+                raw: bytecode.raw.into(),
             }),
         }
     }
@@ -127,12 +142,17 @@ impl From<BytecodeRocksdb> for Bytecode {
                     data_section: eof.body.data_section.into(),
                     is_data_filled: eof.body.is_data_filled,
                 };
-                Bytecode::Eof(revm::primitives::eof::Eof {
+                Bytecode::Eof(Arc::new(revm::primitives::eof::Eof {
                     header,
                     body,
                     raw: eof.raw.into(),
-                })
+                }))
             }
+            BytecodeRocksdb::Eip7702(bytecode) => Bytecode::Eip7702(revm::primitives::Eip7702Bytecode {
+                delegated_address: bytecode.delegated_address.0.into(),
+                version: bytecode.version,
+                raw: bytecode.raw.into(),
+            }),
         }
     }
 }
