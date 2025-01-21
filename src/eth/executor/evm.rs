@@ -7,6 +7,7 @@ use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use anyhow::anyhow;
 use itertools::Itertools;
 use revm::db::CacheDB;
+use revm::inspectors::NoOpInspector;
 use revm::primitives::AccountInfo;
 use revm::primitives::AnalysisKind;
 use revm::primitives::BlockEnv;
@@ -199,50 +200,66 @@ impl Evm {
         let start = metrics::now();
 
         let mut cache_db = CacheDB::new(self.evm.db());
-        let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
-        let mut evm = RevmEvm::builder().with_external_context(()).with_db(&mut cache_db).with_handler(handler).build();
+        let handler = Handler::mainnet_with_spec(SpecId::LONDON);
+        let mut evm = RevmEvm::builder()
+            .with_external_context(())
+            .with_db(&mut cache_db)
+            .with_handler(handler)
+            .build();
 
-        let input: EvmInput = self.evm.db().storage.read_transaction(input)?.unwrap().try_into()?;
 
-        let mut block = self.evm.db().storage.read_block(BlockFilter::Number(input.block_number))?.unwrap();
+        let block = self.evm.db().storage.read_block(BlockFilter::Number(evm_input.block_number))?.unwrap();
 
         // Execute all transactions before target tx_hash
-        for tx in block.transactions {
+        for tx in block.transactions.into_iter().sorted_by_key(|item| item.transaction_index) {
+            if tx.input.hash == input {
+                break;
+            }
             let tx_input: EvmInput = tx.try_into().unwrap();
 
             // Configure EVM state
             evm.block_mut().fill_env(&tx_input);
             evm.tx_mut().fill_env(tx_input);
 
-            let result = evm.transact();
-            if let Ok(result) = result {
-                cache_db.commit(result.state);
-            }
+            evm.transact_commit();
         }
+
+        drop(evm);
 
         let opts = opts.unwrap_or_default();
 
         let mut inspector: Box<dyn Inspector<CacheDB<&RevmSession>>> = match trace_type {
-            GethDebugBuiltInTracerType::FourByteTracer => todo!(), //FourByteInspector::default(),
-            GethDebugBuiltInTracerType::CallTracer => {
-                Box::new(TracingInspector::new(TracingInspectorConfig::from_geth_call_config(&opts.tracer_config.into_call_config().unwrap())))
-            }
-            GethDebugBuiltInTracerType::PreStateTracer => TracingInspector::new(TracingInspectorConfig::from_geth_prestate_config(
+            GethDebugBuiltInTracerType::FourByteTracer => Box::new(FourByteInspector::default()), //FourByteInspector::default(),
+            GethDebugBuiltInTracerType::CallTracer => Box::new(TracingInspector::new(TracingInspectorConfig::from_geth_call_config(
+                &opts.tracer_config.into_call_config().unwrap(),
+            ))),
+            GethDebugBuiltInTracerType::PreStateTracer => Box::new(TracingInspector::new(TracingInspectorConfig::from_geth_prestate_config(
                 &opts.tracer_config.into_pre_state_config().unwrap(),
-            )),
-            GethDebugBuiltInTracerType::NoopTracer => TracingInspector::new(TracingInspectorConfig::default()),
-            GethDebugBuiltInTracerType::MuxTracer => {
-                MuxInspector::try_from_config(&opts.tracer_config.into_mux_config().unwrap()).unwrap()
-            }
-            GethDebugBuiltInTracerType::FlatCallTracer => TracingInspector::new(TracingInspectorConfig::from_flat_call_config(
+            ))),
+            GethDebugBuiltInTracerType::NoopTracer => Box::new(NoOpInspector::default()),
+            GethDebugBuiltInTracerType::MuxTracer => Box::new(MuxInspector::try_from_config(opts.tracer_config.into_mux_config().unwrap()).unwrap()),
+            GethDebugBuiltInTracerType::FlatCallTracer => Box::new(TracingInspector::new(TracingInspectorConfig::from_flat_call_config(
                 &opts.tracer_config.into_flat_call_config().unwrap(),
-            )),
+            ))),
         };
+
+        let evm_input: EvmInput = self.evm.db().storage.read_transaction(input)?.unwrap().try_into()?;
+
+        let handler = Handler::mainnet_with_spec(SpecId::LONDON);
+        let mut evm = RevmEvm::builder()
+            .with_external_context(inspector)
+            .with_db(&mut cache_db)
+            .with_handler(handler)
+            .build();
+
+        evm.block_mut().fill_env(&evm_input);
+        evm.tx_mut().fill_env(evm_input);
+        evm.transact();
 
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            metrics::inc_evm_execution(start.elapsed(), session_point_in_time, execution.is_ok());
+            //metrics::inc_evm_execution(start.elapsed(), session_point_in_time, execution.is_ok());
         }
 
         todo!()
@@ -426,7 +443,7 @@ impl DatabaseRef for RevmSession {
         Ok(slot.value.into())
     }
 
-    fn block_hash_ref(&self, _: U256) -> Result<B256, Self::Error> {
+    fn block_hash_ref(&self, _: u64) -> Result<B256, Self::Error> {
         todo!()
     }
 
