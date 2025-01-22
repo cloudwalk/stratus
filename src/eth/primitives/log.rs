@@ -1,6 +1,6 @@
 use display_json::DebugAsJson;
 
-use crate::alias::EthersLog;
+use crate::alias::AlloyLog;
 use crate::alias::RevmLog;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
@@ -75,18 +75,17 @@ impl From<RevmLog> for Log {
     }
 }
 
-impl From<EthersLog> for Log {
-    fn from(value: EthersLog) -> Self {
-        let topics = value.topics;
+impl From<AlloyLog> for Log {
+    fn from(value: AlloyLog) -> Self {
+        let topics = value.inner.topics().to_vec();
         let topics_len = topics.len();
 
         let mut log = Self {
-            address: value.address.into(),
-            data: value.data.into(),
+            address: value.inner.address.into(),
+            data: value.inner.data.data.into(),
             ..Default::default()
         };
 
-        // you may not like it but this is what peak performance looks like
         match topics_len {
             4 => {
                 log.topic0 = Some(topics[0].into());

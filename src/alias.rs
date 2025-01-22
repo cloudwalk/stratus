@@ -1,6 +1,7 @@
 //! Type aliases for external crates types that conflict with our own types or are too verbose.
 
 use ethereum_types::H256;
+use revm::primitives::alloy_primitives;
 
 use crate::eth::primitives::ExternalTransaction;
 
@@ -8,6 +9,18 @@ use crate::eth::primitives::ExternalTransaction;
 // Serde
 // -----------------------------------------------------------------------------
 pub type JsonValue = serde_json::Value;
+
+// -----------------------------------------------------------------------------
+// Alloy
+// -----------------------------------------------------------------------------
+pub type AlloyBlockVoid = alloy_rpc_types::Block<()>;
+pub type AlloyBlockAlloyTransaction = alloy_rpc_types::Block<alloy_rpc_types::Transaction>;
+pub type AlloyBlockAlloyExternalTransaction = alloy_rpc_types::Block<ExternalTransaction>;
+pub type AlloyBlockH256 = alloy_rpc_types::Block<H256>;
+pub type AlloyBytes = alloy_primitives::Bytes;
+pub type AlloyLog = alloy_rpc_types::Log;
+pub type AlloyReceipt = alloy_rpc_types::TransactionReceipt;
+pub type AlloyTransaction = alloy_rpc_types::Transaction;
 
 // -----------------------------------------------------------------------------
 // Ethers
