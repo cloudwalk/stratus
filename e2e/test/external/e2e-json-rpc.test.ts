@@ -17,9 +17,11 @@ import {
     ZERO,
     deployTestContractBalances,
     deployTestContractBlockTimestamp,
+    deployTestRevertReason,
     prepareSignedTx,
     send,
     sendAndGetError,
+    sendAndGetFullResponse,
     sendEvmMine,
     sendExpect,
     sendGetBlockNumber,
@@ -298,6 +300,179 @@ describe("JSON-RPC", () => {
                 expect(txReceiptAfterMining).to.not.be.null;
                 expect(txReceiptAfterMining?.status).eq(REVERSAL);
                 expect(actualTxHash).eq(expectedTxHash);
+            });
+        });
+
+        describe("debug_traceTransaction", () => {
+            it("callTracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "callTracer" },
+                ]);
+
+                expect(trace.data.result.from).to.eq("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266");
+                expect(trace.data.result.input).to.eq("0x2b3d7bd2");
+                expect(trace.data.result.output).to.eq("0x22aa4404");
+                expect(trace.data.result.error).to.eq("execution reverted");
+                expect(trace.data.result.value).to.eq("0x0");
+                expect(trace.data.result.type).to.eq("CALL");
+            });
+
+            it("4byteTracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "4byteTracer" },
+                ]);
+
+                expect(trace.data.result["0x2b3d7bd2-0"]).to.eq(1);
+            });
+
+            it("prestateTracer", async () => {
+                const contract = await deployTestContractBalances();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const contractOps = contract.connect(ALICE.signer());
+                await contractOps.add(ALICE.address, 10);
+                await contractOps.add(ALICE.address, 10);
+                await contractOps.add(ALICE.address, 10);
+                const txResponse = await contractOps.add(ALICE.address, 10);
+                const txHash = txResponse.hash;
+                await contractOps.add(ALICE.address, 10);
+                await contractOps.add(ALICE.address, 10);
+                await contractOps.add(ALICE.address, 10);
+
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "prestateTracer", tracerConfig: { diffMode: false } },
+                ]);
+
+                expect(trace.data.result[(await contract.getAddress()).toLowerCase()]).to.deep.equal({
+                    balance: "0x0",
+                    code: "0x608060405234801561001057600080fd5b50600436106100675760003560e01c80633825d828116100505780633825d828146100b1578063c2bc2efc146100c4578063f5d82b6b146100ed57600080fd5b806326ffee081461006c57806327e235e314610091575b600080fd5b61007f61007a3660046102db565b610100565b60405190815260200160405180910390f35b61007f61009f366004610305565b60006020819052908152604090205481565b61007f6100bf3660046102db565b61020a565b61007f6100d2366004610305565b6001600160a01b031660009081526020819052604090205490565b61007f6100fb3660046102db565b610255565b6001600160a01b038216600090815260208190526040812054821115610186576040517f08c379a000000000000000000000000000000000000000000000000000000000815260206004820152601460248201527f496e73756666696369656e742062616c616e6365000000000000000000000000604482015260640160405180910390fd5b6001600160a01b038316600090815260208190526040812080548492906101ae908490610356565b90915550506040518281526001600160a01b038416907ff9c652bcdb0eed6299c6a878897eb3af110dbb265833e7af75ad3d2c2f4a980c906020015b60405180910390a250336000908152602081905260409020545b92915050565b6001600160a01b038216600081815260208181526040808320859055518481529192917ffd28ec3ec2555238d8ad6f9faf3e4cd10e574ce7e7ef28b73caa53f9512f65b991016101ea565b6001600160a01b03821660009081526020819052604081208054839190839061027f908490610369565b90915550506040518281526001600160a01b038416907f2728c9d3205d667bbc0eefdfeda366261b4d021949630c047f3e5834b30611ab906020016101ea565b80356001600160a01b03811681146102d657600080fd5b919050565b600080604083850312156102ee57600080fd5b6102f7836102bf565b946020939093013593505050565b60006020828403121561031757600080fd5b610320826102bf565b9392505050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b8181038181111561020457610204610327565b808201808211156102045761020461032756fea2646970667358221220d9e0843c97e3be54f0f2da0b4f159ccb1fd0e9b3189aef5dacb44af21dbfd22564736f6c63430008180033",
+                    nonce: 1,
+                    storage: {
+                        "0x723077b8a1b173adc35e5f0e7e3662fd1208212cb629f9c128551ea7168da722":
+                            "0x000000000000000000000000000000000000000000000000000000000000001e",
+                    },
+                });
+            });
+
+            it("noopTracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "noopTracer" },
+                ]);
+
+                expect(trace.data.result).to.be.empty;
+            });
+
+            it("muxTracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    {
+                        tracer: "muxTracer",
+                        tracerConfig: { noopTracer: null, "4byteTracer": null },
+                    },
+                ]);
+
+                expect(trace.data.result["4byteTracer"]["0x2b3d7bd2-0"]).to.eq(1);
+                expect(trace.data.result.noopTracer).to.be.empty;
+            });
+
+            it("flatCallTracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "flatCallTracer" },
+                ]);
+                const result = trace.data.result[0];
+                expect(result.action.from).to.eq("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266");
+                expect(result.action.callType).to.eq("call");
+                expect(result.action.gas).to.eq("0x52fc");
+                expect(result.action.input).to.eq("0x2b3d7bd2");
+                expect(result.action.to).to.eq((await contract.getAddress()).toLowerCase());
+                expect(result.action.value).to.eq("0x0");
+                expect(result.error).to.eq("Reverted");
+                expect(result.result.gasUsed).to.eq("0xb4");
+                expect(result.result.output).to.eq("0x22aa4404");
+                expect(result.subtraces).to.eq(0);
+                expect(result.traceAddress).to.deep.eq([]);
+                expect(result.transactionHash).to.eq(txReceipt?.hash);
+                expect(result.transactionPosition).to.eq(0);
+                expect(result.type).to.eq("call");
             });
         });
     });

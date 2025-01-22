@@ -4,6 +4,7 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Id;
 use jsonrpsee::MethodResponse;
 use jsonrpsee::ResponsePayload;
+use revm::primitives::EVMError;
 use stratus_macros::ErrorCode;
 
 use super::execution_result::RevertReason;
@@ -73,7 +74,7 @@ pub enum TransactionError {
     #[error_code = 2]
     Nonce { transaction: Nonce, account: Nonce },
 
-    #[error("Failed to executed transaction in EVM: {0:?}.")]
+    #[error("Failed to execute transaction in EVM: {0:?}.")]
     #[error_code = 3]
     EvmFailed(String), // TODO: split this in multiple errors
 
@@ -310,6 +311,23 @@ impl StratusError {
 impl From<anyhow::Error> for StratusError {
     fn from(value: anyhow::Error) -> Self {
         Self::Unexpected(UnexpectedError::Unexpected(value))
+    }
+}
+
+impl From<serde_json::Error> for StratusError {
+    fn from(value: serde_json::Error) -> Self {
+        Self::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(value)))
+    }
+}
+
+impl From<EVMError<StratusError>> for StratusError {
+    fn from(value: EVMError<StratusError>) -> Self {
+        match value {
+            EVMError::Transaction(err) => StratusError::Transaction(TransactionError::EvmFailed(err.to_string())),
+            EVMError::Header(err) => StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(err.to_string()))),
+            EVMError::Custom(err) | EVMError::Precompile(err) => StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(err.to_string()))),
+            EVMError::Database(err) => err,
+        }
     }
 }
 

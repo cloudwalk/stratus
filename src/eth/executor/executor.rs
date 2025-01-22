@@ -3,12 +3,15 @@ use std::mem;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
+use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
 use tracing::info_span;
 use tracing::Span;
 
+use super::evm_input::InspectorInput;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
 use crate::eth::executor::Evm;
@@ -27,6 +30,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::RpcError;
 use crate::eth::primitives::StorageError;
@@ -68,6 +72,22 @@ impl EvmTask {
     }
 }
 
+pub struct InspectorTask {
+    pub span: Span,
+    pub input: InspectorInput,
+    pub response_tx: oneshot::Sender<Result<GethTrace, StratusError>>,
+}
+
+impl InspectorTask {
+    pub fn new(input: InspectorInput, response_tx: oneshot::Sender<Result<GethTrace, StratusError>>) -> Self {
+        Self {
+            span: Span::current(),
+            input,
+            response_tx,
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Evm communication channels
 // -----------------------------------------------------------------------------
@@ -88,6 +108,8 @@ struct Evms {
 
     /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from past state. Usually contains multiple EVMs.
     pub call_past: crossbeam_channel::Sender<EvmTask>,
+
+    pub inspector: crossbeam_channel::Sender<InspectorTask>,
 }
 
 impl Evms {
@@ -110,7 +132,6 @@ impl Evms {
                     tracing::error!(reason = ?e, "failed to send evm task execution result");
                 }
             }
-
             warn_task_tx_closed(task_name);
         }
 
@@ -131,6 +152,42 @@ impl Evms {
             evm_tx
         };
 
+        fn inspector_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<InspectorTask>) {
+            let mut evm = Evm::new(storage, config);
+
+            // keep executing transactions until the channel is closed
+            while let Ok(task) = task_rx.recv() {
+                if GlobalState::is_shutdown_warn(task_name) {
+                    return;
+                }
+
+                // execute
+                let _enter = task.span.enter();
+                let result = evm.inspect(task.input);
+                if let Err(e) = task.response_tx.send(result) {
+                    tracing::error!(reason = ?e, "failed to send evm task execution result");
+                }
+            }
+            warn_task_tx_closed(task_name);
+        }
+
+        // function that spawn inspector threads
+        let spawn_inspectors = |task_name: &str, num_evms: usize| {
+            let (tx, rx) = crossbeam_channel::unbounded::<InspectorTask>();
+
+            for index in 1..=num_evms {
+                let task_name = format!("{}-{}", task_name, index);
+                let storage = Arc::clone(&storage);
+                let config = config.clone();
+                let rx = rx.clone();
+                let thread_name = task_name.clone();
+                spawn_thread(&thread_name, move || {
+                    inspector_loop(&task_name, storage, config, rx);
+                });
+            }
+            tx
+        };
+
         let tx_parallel = match config.executor_strategy {
             ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1), // should not really be used if strategy is serial, but keep 1 for fallback
             ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.executor_evms),
@@ -139,6 +196,7 @@ impl Evms {
         let tx_external = spawn_evms("evm-tx-external", 1);
         let call_present = spawn_evms("evm-call-present", max(config.executor_evms / 2, 1));
         let call_past = spawn_evms("evm-call-past", max(config.executor_evms / 4, 1));
+        let inspector = spawn_inspectors("inspector", 1);
 
         Evms {
             tx_parallel,
@@ -146,6 +204,7 @@ impl Evms {
             tx_external,
             call_present,
             call_past,
+            inspector,
         }
     }
 
@@ -163,6 +222,16 @@ impl Evms {
         };
 
         match execution_rx.recv() {
+            Ok(result) => result,
+            Err(_) => Err(UnexpectedError::ChannelClosed { channel: "evm" }.into()),
+        }
+    }
+
+    fn inspect(&self, input: InspectorInput) -> Result<GethTrace, StratusError> {
+        let (inspector_tx, inspector_rx) = oneshot::channel::<Result<GethTrace, StratusError>>();
+        let task = InspectorTask::new(input, inspector_tx);
+        let _ = self.inspector.send(task);
+        match inspector_rx.recv() {
             Ok(result) => result,
             Err(_) => Err(UnexpectedError::ChannelClosed { channel: "evm" }.into()),
         }
@@ -583,6 +652,15 @@ impl Executor {
 
         let execution = evm_result?.execution;
         Ok(execution)
+    }
+
+    pub fn trace_transaction(&self, tx_hash: Hash, opts: Option<GethDebugTracingOptions>) -> Result<GethTrace, StratusError> {
+        Span::with(|s| {
+            s.rec_str("tx_hash", &tx_hash);
+        });
+
+        tracing::info!("inspecting transaction");
+        self.evms.inspect(InspectorInput { tx_hash, opts })
     }
 }
 
