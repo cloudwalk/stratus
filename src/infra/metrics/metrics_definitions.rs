@@ -146,7 +146,10 @@ metrics! {
     histogram_counter evm_execution_account_reads{},
 
     "Number of slots read in a single EVM execution."
-    histogram_counter evm_execution_slot_reads{}
+    histogram_counter evm_execution_slot_reads{},
+
+    "Time executing trace_transaction"
+    histogram_duration evm_inspect{trace_type}
 }
 
 metrics! {

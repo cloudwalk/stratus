@@ -252,8 +252,9 @@ impl Evm {
         drop(evm);
 
         let opts = opts.unwrap_or_default();
+        let tracer_type = opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))?;
 
-        let trace_result: GethTrace = match opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))? {
+        let trace_result: GethTrace = match tracer_type {
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => {
                 let mut inspector = FourByteInspector::default();
                 RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector)?;
@@ -294,7 +295,7 @@ impl Evm {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            //metrics::inc_evm_execution(start.elapsed(), session_point_in_time, execution.is_ok());
+            metrics::inc_evm_inspect(start.elapsed(), serde_json::to_string(&tracer_type)?);
         }
 
         Ok(trace_result)
