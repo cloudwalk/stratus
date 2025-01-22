@@ -288,7 +288,7 @@ impl Evm {
                     .into_localized_transaction_traces(tx_info)
                     .into()
             }
-            _ => return Err(anyhow!("tracer not implemented")),
+            _ => return Err(anyhow!("tracer not implemented").into()),
         };
 
         // track metrics
