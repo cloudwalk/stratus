@@ -187,7 +187,7 @@ impl TryFrom<ExternalTransactionExecution> for EvmInput {
 impl From<TransactionMined> for EvmInput {
     fn from(value: TransactionMined) -> Self {
         Self {
-            from: value.input.from,
+            from: value.input.signer,
             to: value.input.to,
             value: value.input.value,
             data: value.input.input,

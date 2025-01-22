@@ -54,6 +54,7 @@ use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
@@ -199,13 +200,6 @@ impl Evm {
         let start = metrics::now();
 
         let InspectorInput { tx_hash, opts } = input;
-        let mut cache_db = CacheDB::new(self.evm.db());
-        let handler = Handler::mainnet_with_spec(SpecId::LONDON);
-        let mut evm = RevmEvm::builder()
-            .with_external_context(())
-            .with_db(&mut cache_db)
-            .with_handler(handler)
-            .build();
 
         let tx = self
             .evm
@@ -228,6 +222,20 @@ impl Evm {
             base_fee: None,
         };
         let inspect_input: EvmInput = tx.try_into()?;
+        self.evm.db_mut().reset(EvmInput {
+            point_in_time: PointInTime::MinedPast(inspect_input.block_number.prev().unwrap_or_default()),
+            ..Default::default()
+        });
+        let mut cache_db = CacheDB::new(self.evm.db());
+        let handler = Handler::mainnet_with_spec(SpecId::LONDON);
+
+        let mut evm = RevmEvm::builder()
+            .with_external_context(())
+            .with_db(&mut cache_db)
+            .with_handler(handler)
+            .build();
+
+        dbg!(&inspect_input);
         evm.cfg_mut().chain_id = inspect_input.chain_id.unwrap_or_default().into();
 
         // Execute all transactions before target tx_hash
@@ -473,18 +481,6 @@ impl DatabaseRef for RevmSession {
         // retrieve account
         let address: Address = address.into();
         let account = self.storage.read_account(address, self.input.point_in_time)?;
-
-        // warn if the loaded account is the `to` account and it does not have a bytecode
-        if let Some(ref to_address) = self.input.to {
-            if account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
-                if self.config.executor_reject_not_contract {
-                    return Err(TransactionError::AccountNotContract { address: *to_address }.into());
-                } else {
-                    tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
-                }
-            }
-        }
-
         let revm_account: AccountInfo = (&account).into();
 
         Ok(Some(revm_account))

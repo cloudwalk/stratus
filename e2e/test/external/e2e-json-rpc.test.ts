@@ -17,9 +17,11 @@ import {
     ZERO,
     deployTestContractBalances,
     deployTestContractBlockTimestamp,
+    deployTestRevertReason,
     prepareSignedTx,
     send,
     sendAndGetError,
+    sendAndGetFullResponse,
     sendEvmMine,
     sendExpect,
     sendGetBlockNumber,
@@ -298,6 +300,35 @@ describe("JSON-RPC", () => {
                 expect(txReceiptAfterMining).to.not.be.null;
                 expect(txReceiptAfterMining?.status).eq(REVERSAL);
                 expect(actualTxHash).eq(expectedTxHash);
+            });
+        });
+
+        describe("debug_traceTransaction", () => {
+            it("traces a transaction", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "callTracer" },
+                ]);
+                expect(trace.data.result.from).to.eq("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266");
+                expect(trace.data.result.input).to.eq("0x2b3d7bd2");
+                expect(trace.data.result.output).to.eq("0x22aa4404");
+                expect(trace.data.result.error).to.eq("execution reverted");
+                expect(trace.data.result.value).to.eq("0x0");
+                expect(trace.data.result.type).to.eq("CALL");
             });
         });
     });
