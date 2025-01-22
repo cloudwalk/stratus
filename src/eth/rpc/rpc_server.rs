@@ -911,11 +911,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
 fn debug_trace_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<GethTrace, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!(
-        "rpc::debug_traceTransaction",
-        tx_hash = field::Empty,
-    )
-    .entered();
+    let _method_enter = info_span!("rpc::debug_traceTransaction", tx_hash = field::Empty,).entered();
 
     let (params, tx_hash) = next_rpc_param::<Hash>(params.sequence())?;
     let (_, opts) = next_rpc_param_or_default::<Option<GethDebugTracingOptions>>(params)?;

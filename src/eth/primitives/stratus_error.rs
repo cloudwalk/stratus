@@ -320,7 +320,6 @@ impl From<serde_json::Error> for StratusError {
     }
 }
 
-
 impl From<EVMError<StratusError>> for StratusError {
     fn from(value: EVMError<StratusError>) -> Self {
         match value {

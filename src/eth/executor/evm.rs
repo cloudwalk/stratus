@@ -36,6 +36,7 @@ use revm_inspectors::tracing::MuxInspector;
 use revm_inspectors::tracing::TracingInspector;
 use revm_inspectors::tracing::TracingInspectorConfig;
 
+use super::evm_input::InspectorInput;
 use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
 use crate::eth::executor::EvmExecutionResult;
@@ -65,8 +66,6 @@ use crate::ext::not;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
-
-use super::evm_input::InspectorInput;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
 const GAS_MAX_LIMIT: u64 = 1_000_000_000;
@@ -289,7 +288,7 @@ impl Evm {
                     .into_localized_transaction_traces(tx_info)
                     .into()
             }
-            _ => todo!(),
+            _ => return Err(anyhow!("tracer not implemented")),
         };
 
         // track metrics
@@ -311,7 +310,7 @@ trait EvmExt<DB: Database> {
     fn inspect(input: EvmInput, db: DB, inspector: impl GetInspector<DB>) -> EVMResult<DB::Error>;
 }
 
-impl<'a, EXT, DB: Database> EvmExt<DB> for RevmEvm<'a, EXT, DB> {
+impl<EXT, DB: Database> EvmExt<DB> for RevmEvm<'_, EXT, DB> {
     fn fill_env(&mut self, input: EvmInput) {
         self.block_mut().fill_env(&input);
         self.tx_mut().fill_env(input);

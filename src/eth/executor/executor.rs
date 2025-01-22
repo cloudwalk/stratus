@@ -11,6 +11,7 @@ use parking_lot::Mutex;
 use tracing::info_span;
 use tracing::Span;
 
+use super::evm_input::InspectorInput;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
 use crate::eth::executor::Evm;
@@ -49,8 +50,6 @@ use crate::infra::metrics;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
-
-use super::evm_input::InspectorInput;
 
 // -----------------------------------------------------------------------------
 // Evm task
@@ -480,13 +479,12 @@ impl Executor {
                 let parallel_attempt = self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Parallel, 1);
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
-                    Err(e) => {
+                    Err(e) =>
                         if let StratusError::Storage(StorageError::TransactionConflict(_)) = e {
                             self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
                         } else {
                             Err(e)
-                        }
-                    }
+                        },
                 }
             }
         };

@@ -42,7 +42,6 @@ impl From<Index> for u64 {
     }
 }
 
-
 impl From<Index> for U64 {
     fn from(value: Index) -> U64 {
         value.0.into()

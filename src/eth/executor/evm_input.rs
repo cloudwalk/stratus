@@ -180,7 +180,12 @@ impl PartialEq<(&TransactionInput, &PendingBlockHeader)> for EvmInput {
 impl TryFrom<ExternalTransactionExecution> for EvmInput {
     type Error = anyhow::Error;
     fn try_from(value: ExternalTransactionExecution) -> Result<Self, Self::Error> {
-        EvmInput::from_external(&value.tx, &value.receipt, value.receipt.block_number(), value.evm_execution.execution.block_timestamp)
+        EvmInput::from_external(
+            &value.tx,
+            &value.receipt,
+            value.receipt.block_number(),
+            value.evm_execution.execution.block_timestamp,
+        )
     }
 }
 
@@ -197,7 +202,7 @@ impl From<TransactionMined> for EvmInput {
             block_number: value.block_number,
             block_timestamp: value.execution.block_timestamp,
             point_in_time: PointInTime::MinedPast(value.block_number),
-            chain_id: value.input.chain_id
+            chain_id: value.input.chain_id,
         }
     }
 }
@@ -207,9 +212,7 @@ impl TryFrom<TransactionStage> for EvmInput {
 
     fn try_from(value: TransactionStage) -> Result<Self, Self::Error> {
         match value {
-            TransactionStage::Executed(TransactionExecution::External(tx)) => {
-                tx.try_into()
-            }
+            TransactionStage::Executed(TransactionExecution::External(tx)) => tx.try_into(),
             TransactionStage::Executed(TransactionExecution::Local(tx)) => Ok(tx.evm_input),
             TransactionStage::Mined(tx) => Ok(tx.into()),
         }
@@ -218,5 +221,5 @@ impl TryFrom<TransactionStage> for EvmInput {
 
 pub struct InspectorInput {
     pub tx_hash: Hash,
-    pub opts: Option<GethDebugTracingOptions>
+    pub opts: Option<GethDebugTracingOptions>,
 }
