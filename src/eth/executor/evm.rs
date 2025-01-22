@@ -5,7 +5,7 @@ use std::sync::Arc;
 use alloy_consensus::transaction::TransactionInfo;
 use alloy_rpc_types_trace::geth::FourByteFrame;
 use alloy_rpc_types_trace::geth::GethDebugBuiltInTracerType;
-use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
+use alloy_rpc_types_trace::geth::GethDebugTracerType;
 use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::NoopFrame;
 use anyhow::anyhow;
@@ -51,7 +51,6 @@ use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
-use crate::eth::primitives::Hash;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -64,6 +63,8 @@ use crate::ext::not;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+
+use super::evm_input::InspectorInput;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
 const GAS_MAX_LIMIT: u64 = 1_000_000_000;
@@ -190,11 +191,12 @@ impl Evm {
         })
     }
 
-    /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn inspect(&mut self, input: Hash, trace_type: GethDebugBuiltInTracerType, opts: Option<GethDebugTracingOptions>) -> Result<GethTrace, StratusError> {
+    /// Execute a transaction using a tracer.
+    pub fn inspect(&mut self, input: InspectorInput) -> Result<GethTrace, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
+        let InspectorInput { tx_hash, opts } = input;
         let mut cache_db = CacheDB::new(self.evm.db());
         let handler = Handler::mainnet_with_spec(SpecId::LONDON);
         let mut evm = RevmEvm::builder()
@@ -207,8 +209,8 @@ impl Evm {
             .evm
             .db()
             .storage
-            .read_transaction(input)?
-            .ok_or_else(|| anyhow!("transaction not found: {}", input))?;
+            .read_transaction(tx_hash)?
+            .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
         let block = self.evm.db().storage.read_block(BlockFilter::Number(tx.block_number()))?.ok_or_else(|| {
             StratusError::Storage(StorageError::BlockNotFound {
                 filter: BlockFilter::Number(tx.block_number()),
@@ -217,7 +219,7 @@ impl Evm {
 
         let tx_info = TransactionInfo {
             block_hash: Some(block.hash().0 .0.into()),
-            hash: Some(input.0 .0.into()),
+            hash: Some(tx_hash.0 .0.into()),
             index: tx.index().map_into(),
             block_number: Some(block.number().as_u64()),
             base_fee: None,
@@ -225,10 +227,10 @@ impl Evm {
 
         // Execute all transactions before target tx_hash
         for tx in block.transactions.into_iter().sorted_by_key(|item| item.transaction_index) {
-            if tx.input.hash == input {
+            if tx.input.hash == tx_hash {
                 break;
             }
-            let tx_input= tx.into();
+            let tx_input = tx.into();
 
             // Configure EVM state
             evm.fill_env(tx_input);
@@ -242,32 +244,32 @@ impl Evm {
 
         let inspect_input: EvmInput = tx.try_into()?;
 
-        let trace_result: GethTrace = match trace_type {
-            GethDebugBuiltInTracerType::FourByteTracer => {
+        let trace_result: GethTrace = match opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))? {
+            GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => {
                 let mut inspector = FourByteInspector::default();
                 RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector)?;
                 FourByteFrame::from(&inspector).into()
-            } //FourByteInspector::default(),
-            GethDebugBuiltInTracerType::CallTracer => {
+            }
+            GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
                 let call_config = opts.tracer_config.into_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_call_config(&call_config));
                 let res = RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector)?;
                 inspector.geth_builder().geth_call_traces(call_config, res.result.gas_used()).into()
             }
-            GethDebugBuiltInTracerType::PreStateTracer => {
+            GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::PreStateTracer) => {
                 let prestate_config = opts.tracer_config.into_pre_state_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_prestate_config(&prestate_config));
                 let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector)?;
                 inspector.geth_builder().geth_prestate_traces(&res, &prestate_config, &cache_db)?.into()
             }
-            GethDebugBuiltInTracerType::NoopTracer => NoopFrame::default().into(),
-            GethDebugBuiltInTracerType::MuxTracer => {
+            GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer) => NoopFrame::default().into(),
+            GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => {
                 let mux_config = opts.tracer_config.into_mux_config()?;
                 let mut inspector = MuxInspector::try_from_config(mux_config).map_err(|e| anyhow!(e))?;
                 let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector)?;
                 inspector.try_into_mux_frame(&res, &cache_db, tx_info)?.into()
             }
-            GethDebugBuiltInTracerType::FlatCallTracer => {
+            GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => {
                 let flat_call_config = opts.tracer_config.into_flat_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_flat_call_config(&flat_call_config));
                 let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector)?;
@@ -277,6 +279,7 @@ impl Evm {
                     .into_localized_transaction_traces(tx_info)
                     .into()
             }
+            _ => todo!(),
         };
 
         // track metrics

@@ -1,3 +1,5 @@
+use alloy_rpc_types_trace::geth::GethDebugBuiltInTracerType;
+use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use display_json::DebugAsJson;
 
 use crate::eth::primitives::Address;
@@ -10,6 +12,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Gas;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::PointInTime;
@@ -212,4 +215,9 @@ impl TryFrom<TransactionStage> for EvmInput {
             TransactionStage::Mined(tx) => Ok(tx.into()),
         }
     }
+}
+
+pub struct InspectorInput {
+    pub tx_hash: Hash,
+    pub opts: Option<GethDebugTracingOptions>
 }

@@ -6,6 +6,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
+use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
 use ethereum_types::U256;
 use futures::join;
@@ -229,6 +231,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
     module.register_blocking_method("stratus_call", stratus_call)?;
     module.register_blocking_method("stratus_getTransactionResult", stratus_get_transaction_result)?;
+    module.register_blocking_method("debug_traceTransaction", debug_trace_transaction)?;
 
     // logs
     module.register_blocking_method("eth_getLogs", eth_get_logs)?;
@@ -901,6 +904,29 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
         Err(e) => {
             tracing::warn!(reason = ?e, "failed to execute eth_call");
             Err(e)
+        }
+    }
+}
+
+fn debug_trace_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<GethTrace, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!(
+        "rpc::debug_traceTransaction",
+        tx_hash = field::Empty,
+    )
+    .entered();
+
+    let (params, tx_hash) = next_rpc_param::<Hash>(params.sequence())?;
+    let (_, opts) = next_rpc_param_or_default::<Option<GethDebugTracingOptions>>(params)?;
+    match ctx.executor.trace_transaction(tx_hash, opts) {
+        Ok(result) => {
+            tracing::info!(?tx_hash, "executed debug_traceTransaction successfully");
+            Ok(result)
+        }
+        Err(err) => {
+            tracing::warn!(?err, "error executing debug_traceTransaction");
+            Err(err)
         }
     }
 }
