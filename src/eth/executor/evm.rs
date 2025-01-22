@@ -11,6 +11,7 @@ use alloy_rpc_types_trace::geth::NoopFrame;
 use anyhow::anyhow;
 use itertools::Itertools;
 use revm::db::CacheDB;
+use revm::inspector_handle_register;
 use revm::primitives::AccountInfo;
 use revm::primitives::AnalysisKind;
 use revm::primitives::BlockEnv;
@@ -28,6 +29,7 @@ use revm::primitives::U256;
 use revm::Database;
 use revm::DatabaseRef;
 use revm::Evm as RevmEvm;
+use revm::GetInspector;
 use revm::Handler;
 use revm::Inspector;
 use revm_inspectors::tracing::FourByteInspector;
@@ -211,6 +213,7 @@ impl Evm {
             .storage
             .read_transaction(tx_hash)?
             .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
+
         let block = self.evm.db().storage.read_block(BlockFilter::Number(tx.block_number()))?.ok_or_else(|| {
             StratusError::Storage(StorageError::BlockNotFound {
                 filter: BlockFilter::Number(tx.block_number()),
@@ -224,6 +227,8 @@ impl Evm {
             block_number: Some(block.number().as_u64()),
             base_fee: None,
         };
+        let inspect_input: EvmInput = tx.try_into()?;
+        evm.cfg_mut().chain_id = inspect_input.chain_id.unwrap_or_default().into();
 
         // Execute all transactions before target tx_hash
         for tx in block.transactions.into_iter().sorted_by_key(|item| item.transaction_index) {
@@ -242,8 +247,6 @@ impl Evm {
 
         let opts = opts.unwrap_or_default();
 
-        let inspect_input: EvmInput = tx.try_into()?;
-
         let trace_result: GethTrace = match opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))? {
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => {
                 let mut inspector = FourByteInspector::default();
@@ -254,6 +257,7 @@ impl Evm {
                 let call_config = opts.tracer_config.into_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_call_config(&call_config));
                 let res = RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector)?;
+                dbg!(&res);
                 inspector.geth_builder().geth_call_traces(call_config, res.result.gas_used()).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::PreStateTracer) => {
@@ -298,7 +302,7 @@ trait TxEnvExt {
 
 trait EvmExt<DB: Database> {
     fn fill_env(&mut self, input: EvmInput);
-    fn inspect(input: EvmInput, db: DB, inspector: impl Inspector<DB>) -> EVMResult<DB::Error>;
+    fn inspect(input: EvmInput, db: DB, inspector: impl GetInspector<DB>) -> EVMResult<DB::Error>;
 }
 
 impl<'a, EXT, DB: Database> EvmExt<DB> for RevmEvm<'a, EXT, DB> {
@@ -307,16 +311,19 @@ impl<'a, EXT, DB: Database> EvmExt<DB> for RevmEvm<'a, EXT, DB> {
         self.tx_mut().fill_env(input);
     }
 
-    fn inspect(input: EvmInput, mut db: DB, mut inspector: impl Inspector<DB>) -> EVMResult<DB::Error> {
+    fn inspect(input: EvmInput, db: DB, inspector: impl GetInspector<DB>) -> EVMResult<DB::Error> {
         let handler = Handler::mainnet_with_spec(SpecId::LONDON);
 
         let mut evm = RevmEvm::builder()
-            .with_external_context(&mut inspector)
-            .with_db(&mut db)
+            .with_external_context(inspector)
+            .with_db(db)
             .with_handler(handler)
+            .append_handler_register(inspector_handle_register)
             .build();
 
+        evm.cfg_mut().chain_id = input.chain_id.unwrap_or_default().into();
         evm.fill_env(input);
+
         evm.transact()
     }
 }

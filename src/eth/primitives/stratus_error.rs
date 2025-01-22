@@ -74,7 +74,7 @@ pub enum TransactionError {
     #[error_code = 2]
     Nonce { transaction: Nonce, account: Nonce },
 
-    #[error("Failed to executed transaction in EVM: {0:?}.")]
+    #[error("Failed to execute transaction in EVM: {0:?}.")]
     #[error_code = 3]
     EvmFailed(String), // TODO: split this in multiple errors
 

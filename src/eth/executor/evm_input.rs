@@ -1,4 +1,3 @@
-use alloy_rpc_types_trace::geth::GethDebugBuiltInTracerType;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use display_json::DebugAsJson;
 
