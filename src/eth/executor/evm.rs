@@ -31,7 +31,6 @@ use revm::DatabaseRef;
 use revm::Evm as RevmEvm;
 use revm::GetInspector;
 use revm::Handler;
-use revm::Inspector;
 use revm_inspectors::tracing::FourByteInspector;
 use revm_inspectors::tracing::MuxInspector;
 use revm_inspectors::tracing::TracingInspector;
@@ -235,7 +234,6 @@ impl Evm {
             .with_handler(handler)
             .build();
 
-        dbg!(&inspect_input);
         evm.cfg_mut().chain_id = inspect_input.chain_id.unwrap_or_default().into();
 
         // Execute all transactions before target tx_hash
@@ -265,7 +263,6 @@ impl Evm {
                 let call_config = opts.tracer_config.into_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_call_config(&call_config));
                 let res = RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector)?;
-                dbg!(&res);
                 inspector.geth_builder().geth_call_traces(call_config, res.result.gas_used()).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::PreStateTracer) => {
