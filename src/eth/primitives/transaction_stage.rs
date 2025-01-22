@@ -61,7 +61,7 @@ impl TransactionStage {
 
     pub fn index(&self) -> Option<Index> {
         match self {
-            Self::Executed(TransactionExecution::External(tx)) => Some(tx.receipt.transaction_index.into()),
+            Self::Executed(TransactionExecution::External(tx)) => tx.receipt.transaction_index.map(Index::from),
             Self::Mined(tx) => Some(tx.transaction_index),
             _ => None,
         }

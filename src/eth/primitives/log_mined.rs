@@ -58,7 +58,8 @@ impl LogMined {
 impl TryFrom<AlloyLog> for LogMined {
     type Error = anyhow::Error;
     fn try_from(value: AlloyLog) -> Result<Self, Self::Error> {
-        let transaction_hash = value.transaction_hash
+        let transaction_hash = value
+            .transaction_hash
             .ok_or_else(|| anyhow::anyhow!("log must have transaction_hash"))
             .map(|bytes| Hash::from(bytes.0))?;
         let transaction_index = value
@@ -67,7 +68,8 @@ impl TryFrom<AlloyLog> for LogMined {
             .try_into()?;
         let log_index = value.log_index.ok_or_else(|| anyhow::anyhow!("log must have log_index"))?.try_into()?;
         let block_number = value.block_number.ok_or_else(|| anyhow::anyhow!("log must have block_number"))?.try_into()?;
-        let block_hash = value.block_hash
+        let block_hash = value
+            .block_hash
             .ok_or_else(|| anyhow::anyhow!("log must have block_hash"))
             .map(|bytes| Hash::from(bytes.0))?;
 
@@ -99,8 +101,7 @@ impl From<LogMined> for AlloyLog {
         AlloyLog {
             inner: alloy_primitives::Log {
                 address: value.log.address.into(),
-                data: alloy_primitives::LogData::new(topics, value.log.data.into())
-                    .expect("log topics length should be valid"),
+                data: alloy_primitives::LogData::new(topics, value.log.data.into()).expect("log topics length should be valid"),
             },
             block_hash: Some({
                 let bytes: [u8; 32] = value.block_hash.0.to_fixed_bytes();
