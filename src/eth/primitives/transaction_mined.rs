@@ -134,7 +134,7 @@ impl From<TransactionMined> for AlloyReceipt {
             logs_bloom: value.compute_bloom().into(),
         };
 
-        let inner = ReceiptEnvelope::Legacy(receipt_with_bloom);
+        let inner = ReceiptEnvelope::Legacy(receipt_with_bloom); // Validate envelope type
 
         Self {
             inner,
