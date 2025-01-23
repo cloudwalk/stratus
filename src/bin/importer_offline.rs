@@ -308,8 +308,8 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
             );
         }
         for window in receipts.windows(2) {
-            let tx_index = window[0].transaction_index.unwrap() as u32;
-            let next_tx_index = window[1].transaction_index.unwrap() as u32;
+            let tx_index = window[0].transaction_index.map_or(u32::MAX, |index| index as u32);
+            let next_tx_index = window[1].transaction_index.map_or(u32::MAX, |index| index as u32);
             assert!(
                 tx_index + 1 == next_tx_index,
                 "two consecutive receipts must have consecutive indices: {} and {}",
