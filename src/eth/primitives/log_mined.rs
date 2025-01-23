@@ -86,14 +86,7 @@ impl TryFrom<AlloyLog> for LogMined {
 // -----------------------------------------------------------------------------
 impl From<LogMined> for AlloyLog {
     fn from(value: LogMined) -> Self {
-        let topics: Vec<alloy_primitives::B256> = value
-            .topics_non_empty()
-            .into_iter()
-            .map(|topic| {
-                let bytes: [u8; 32] = topic.0.to_fixed_bytes(); // TODO: improve before merging move-to-alloy
-                alloy_primitives::B256::from(bytes)
-            })
-            .collect();
+        let topics: Vec<alloy_primitives::B256> = value.topics_non_empty().into_iter().map(Into::into).collect();
 
         AlloyLog {
             inner: alloy_primitives::Log {

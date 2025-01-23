@@ -55,3 +55,9 @@ impl From<LogTopic> for [u8; 32] {
         value.0 .0
     }
 }
+
+impl From<LogTopic> for alloy_primitives::B256 {
+    fn from(value: LogTopic) -> Self {
+        Self::from(value.0.to_fixed_bytes())
+    }
+}
