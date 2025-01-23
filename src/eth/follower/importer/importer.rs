@@ -448,8 +448,8 @@ impl Importer {
                     }
                 }
                 for window in receipts.windows(2) {
-                    let tx_index = window[0].transaction_index.as_u32();
-                    let next_tx_index = window[1].transaction_index.as_u32();
+                    let tx_index = window[0].transaction_index.unwrap() as u32; // TODO: improve before merging move-to-alloy
+                    let next_tx_index = window[1].transaction_index.unwrap() as u32; // TODO: improve before merging move-to-alloy
                     if tx_index + 1 != next_tx_index {
                         tracing::error!(tx_index, next_tx_index, "two consecutive receipts must have consecutive indices");
                     }
