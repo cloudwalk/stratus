@@ -94,16 +94,10 @@ impl From<LogMined> for AlloyLog {
                 // Using new_unchecked is safe because topics_non_empty() guarantees ≤ 4 topics
                 data: alloy_primitives::LogData::new_unchecked(topics, value.log.data.into()),
             },
-            block_hash: Some({
-                let bytes: [u8; 32] = value.block_hash.0.to_fixed_bytes(); // TODO: improve before merging move-to-alloy
-                alloy_primitives::B256::from(bytes)
-            }),
+            block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.0.as_u64()),
             block_timestamp: None,
-            transaction_hash: Some({
-                let bytes: [u8; 32] = value.transaction_hash.0.to_fixed_bytes(); // TODO: improve before merging move-to-alloy
-                alloy_primitives::B256::from(bytes)
-            }),
+            transaction_hash: Some(value.transaction_hash.into()),
             transaction_index: Some(value.transaction_index.into()),
             log_index: Some(value.log_index.into()),
             removed: false,

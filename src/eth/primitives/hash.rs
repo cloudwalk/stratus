@@ -68,3 +68,9 @@ impl From<Hash> for H256 {
         value.0
     }
 }
+
+impl From<Hash> for alloy_primitives::B256 {
+    fn from(value: Hash) -> Self {
+        Self::from(value.0.to_fixed_bytes())
+    }
+}
