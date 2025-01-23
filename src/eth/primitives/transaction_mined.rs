@@ -1,3 +1,7 @@
+use alloy_consensus::Eip658Value;
+use alloy_consensus::Receipt;
+use alloy_consensus::ReceiptEnvelope;
+use alloy_consensus::ReceiptWithBloom;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use itertools::Itertools;
@@ -118,24 +122,19 @@ impl From<TransactionMined> for EthersTransaction {
 }
 
 impl From<TransactionMined> for AlloyReceipt {
-    // TODO: improve before merging move-to-alloy
     fn from(value: TransactionMined) -> Self {
-        let receipt = alloy_consensus::Receipt {
-            status: if value.is_success() {
-                alloy_consensus::Eip658Value::Eip658(true)
-            } else {
-                alloy_consensus::Eip658Value::Eip658(false)
-            },
+        let receipt = Receipt {
+            status: Eip658Value::Eip658(value.is_success()),
             cumulative_gas_used: value.execution.gas.into(),
             logs: value.logs.clone().into_iter().map_into().collect(),
         };
 
-        let receipt_with_bloom = alloy_consensus::ReceiptWithBloom {
+        let receipt_with_bloom = ReceiptWithBloom {
             receipt,
             logs_bloom: value.compute_bloom().into(),
         };
 
-        let inner = alloy_consensus::ReceiptEnvelope::Legacy(receipt_with_bloom);
+        let inner = ReceiptEnvelope::Legacy(receipt_with_bloom);
 
         Self {
             inner,
