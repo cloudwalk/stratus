@@ -5333,6 +5333,7 @@ name = "stratus"
 version = "0.20.1"
 dependencies = [
  "alloy-consensus",
+ "alloy-primitives",
  "alloy-rpc-types-eth",
  "alloy-rpc-types-trace",
  "anyhow",

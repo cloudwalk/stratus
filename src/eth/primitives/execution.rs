@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use anyhow::Ok;
 use display_json::DebugAsJson;
 use hex_literal::hex;
-use revm::primitives::alloy_primitives;
+use alloy_primitives;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
