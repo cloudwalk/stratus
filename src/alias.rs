@@ -1,7 +1,6 @@
 //! Type aliases for external crates types that conflict with our own types or are too verbose.
 
 use ethereum_types::H256;
-use revm::primitives::alloy_primitives;
 
 use crate::eth::primitives::ExternalTransaction;
 
