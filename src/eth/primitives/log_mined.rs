@@ -1,8 +1,9 @@
 use display_json::DebugAsJson;
 use jsonrpsee::SubscriptionMessage;
-use revm::primitives::alloy_primitives;
 
 use crate::alias::AlloyLog;
+use crate::alias::AlloyLogData;
+use crate::alias::AlloyLogPrimitive;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -87,10 +88,10 @@ impl TryFrom<AlloyLog> for LogMined {
 impl From<LogMined> for AlloyLog {
     fn from(value: LogMined) -> Self {
         Self {
-            inner: alloy_primitives::Log {
+            inner: AlloyLogPrimitive {
                 address: value.log.address.into(),
                 // Using new_unchecked is safe because topics_non_empty() guarantees ≤ 4 topics
-                data: alloy_primitives::LogData::new_unchecked(value.topics_non_empty().into_iter().map(Into::into).collect(), value.log.data.into()),
+                data: AlloyLogData::new_unchecked(value.topics_non_empty().into_iter().map(Into::into).collect(), value.log.data.into()),
             },
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.0.as_u64()),
