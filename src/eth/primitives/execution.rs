@@ -231,9 +231,11 @@ impl EvmExecution {
 
         const EVENT_HASHES: [&[u8]; 2] = [&ERC20_TRACE_EVENT_HASH, &BALANCE_TRACKER_TRACE_EVENT_HASH];
 
-        for (execution_log, receipt_log) in self.logs.iter_mut().zip(&receipt.logs) {
+        let receipt_logs = receipt.inner.logs();
+
+        for (execution_log, receipt_log) in self.logs.iter_mut().zip(receipt_logs) {
             let execution_log_matches = || execution_log.topic0.is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
-            let receipt_log_matches = || receipt_log.topics.first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
+            let receipt_log_matches = || receipt_log.topics().first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
 
             // only try overwriting if both logs refer to the target event
             let should_overwrite = execution_log_matches() && receipt_log_matches();
@@ -241,7 +243,7 @@ impl EvmExecution {
                 continue;
             }
 
-            let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data.get(0..32)) else {
+            let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data().data.get(0..32)) else {
                 continue;
             };
             destination.copy_from_slice(source);
