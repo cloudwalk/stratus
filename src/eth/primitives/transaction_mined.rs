@@ -1,6 +1,6 @@
+use alloy_primitives;
 use display_json::DebugAsJson;
 use itertools::Itertools;
-use alloy_primitives;
 
 use crate::alias::AlloyReceipt;
 use crate::alias::EthersTransaction;

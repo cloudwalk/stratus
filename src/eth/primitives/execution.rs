@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
+use alloy_primitives;
 use anyhow::anyhow;
 use anyhow::Ok;
 use display_json::DebugAsJson;
 use hex_literal::hex;
-use alloy_primitives;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;

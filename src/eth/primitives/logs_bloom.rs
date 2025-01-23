@@ -1,8 +1,8 @@
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use ethereum_types::Bloom;
 use alloy_primitives;
+use ethereum_types::Bloom;
 
 use crate::eth::primitives::Log;
 use crate::gen_newtype_from;
