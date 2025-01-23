@@ -86,13 +86,11 @@ impl TryFrom<AlloyLog> for LogMined {
 // -----------------------------------------------------------------------------
 impl From<LogMined> for AlloyLog {
     fn from(value: LogMined) -> Self {
-        let topics: Vec<alloy_primitives::B256> = value.topics_non_empty().into_iter().map(Into::into).collect();
-
-        AlloyLog {
+        Self {
             inner: alloy_primitives::Log {
                 address: value.log.address.into(),
                 // Using new_unchecked is safe because topics_non_empty() guarantees ≤ 4 topics
-                data: alloy_primitives::LogData::new_unchecked(topics, value.log.data.into()),
+                data: alloy_primitives::LogData::new_unchecked(value.topics_non_empty().into_iter().map(Into::into).collect(), value.log.data.into()),
             },
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.0.as_u64()),
