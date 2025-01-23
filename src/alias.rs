@@ -13,14 +13,14 @@ pub type JsonValue = serde_json::Value;
 // -----------------------------------------------------------------------------
 // Alloy
 // -----------------------------------------------------------------------------
-pub type AlloyBlockVoid = alloy_rpc_types::Block<()>;
-pub type AlloyBlockAlloyTransaction = alloy_rpc_types::Block<alloy_rpc_types::Transaction>;
-pub type AlloyBlockAlloyExternalTransaction = alloy_rpc_types::Block<ExternalTransaction>;
-pub type AlloyBlockH256 = alloy_rpc_types::Block<H256>;
+pub type AlloyBlockVoid = alloy_rpc_types_eth::Block<()>;
+pub type AlloyBlockAlloyTransaction = alloy_rpc_types_eth::Block<alloy_rpc_types_eth::Transaction>;
+pub type AlloyBlockAlloyExternalTransaction = alloy_rpc_types_eth::Block<ExternalTransaction>;
+pub type AlloyBlockH256 = alloy_rpc_types_eth::Block<H256>;
 pub type AlloyBytes = alloy_primitives::Bytes;
-pub type AlloyLog = alloy_rpc_types::Log;
-pub type AlloyReceipt = alloy_rpc_types::TransactionReceipt;
-pub type AlloyTransaction = alloy_rpc_types::Transaction;
+pub type AlloyLog = alloy_rpc_types_eth::Log;
+pub type AlloyReceipt = alloy_rpc_types_eth::TransactionReceipt;
+pub type AlloyTransaction = alloy_rpc_types_eth::Transaction;
 
 // -----------------------------------------------------------------------------
 // Ethers
