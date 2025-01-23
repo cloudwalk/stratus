@@ -30,7 +30,6 @@ pub type EthersBlockEthersTransaction = ethers_core::types::Block<ethers_core::t
 pub type EthersBlockExternalTransaction = ethers_core::types::Block<ExternalTransaction>;
 pub type EthersBlockH256 = ethers_core::types::Block<H256>;
 pub type EthersBytes = ethers_core::types::Bytes;
-// pub type EthersLog = ethers_core::types::Log;
 pub type EthersReceipt = ethers_core::types::TransactionReceipt;
 pub type EthersTransaction = ethers_core::types::Transaction;
 
