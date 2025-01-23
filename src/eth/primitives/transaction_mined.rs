@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 use revm::primitives::alloy_primitives;
@@ -59,15 +60,17 @@ impl TransactionMined {
             execution,
             block_number: receipt.block_number(),
             block_hash: receipt.block_hash(),
-            transaction_index: receipt.0.transaction_index.unwrap_or_default().into(),
+            transaction_index: receipt
+                .0
+                .transaction_index
+                .map_into()
+                .ok_or_else(|| anyhow!("external receipt missing transaction index"))?,
             logs: receipt
                 .0
                 .inner
-                .as_receipt()
-                .unwrap()
-                .logs
-                .clone() // TODO: improve before merging move-to-alloy
-                .into_iter()
+                .logs()
+                .iter()
+                .cloned()
                 .map(LogMined::try_from)
                 .collect::<Result<Vec<LogMined>, _>>()?,
         })
