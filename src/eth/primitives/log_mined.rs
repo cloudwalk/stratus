@@ -1,6 +1,6 @@
-use alloy_primitives;
 use display_json::DebugAsJson;
 use jsonrpsee::SubscriptionMessage;
+use revm::primitives::alloy_primitives;
 
 use crate::alias::AlloyLog;
 use crate::alias::JsonValue;
