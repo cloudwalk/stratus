@@ -34,7 +34,7 @@ pub struct EvmExecution {
     /// Status of the execution.
     pub result: ExecutionResult,
 
-    /// Output returned by the function execution (can be the function output or an exeception).
+    /// Output returned by the function execution (can be the function output or an exception).
     pub output: Bytes,
 
     /// Logs emitted by the function execution.
@@ -57,7 +57,7 @@ impl EvmExecution {
         if receipt.is_success() {
             return log_and_err!("cannot create failed execution for successful transaction");
         }
-        if not(receipt.logs.is_empty()) {
+        if not(receipt.inner.logs().is_empty()) {
             return log_and_err!("failed receipt should not have produced logs");
         }
 
@@ -77,7 +77,7 @@ impl EvmExecution {
             result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
-            gas: receipt.gas_used.unwrap_or_default().try_into()?,
+            gas: receipt.gas_used.try_into()?,
             changes: HashMap::from([(sender_changes.address, sender_changes)]),
             deployed_contract_address: None,
         };
