@@ -134,7 +134,14 @@ impl From<TransactionMined> for AlloyReceipt {
             logs_bloom: value.compute_bloom().into(),
         };
 
-        let inner = ReceiptEnvelope::Legacy(receipt_with_bloom);
+        let inner = match value.input.tx_type.map(|tx| tx.as_u64()) {
+            Some(0) | None => ReceiptEnvelope::Legacy(receipt_with_bloom),
+            Some(1) => ReceiptEnvelope::Eip2930(receipt_with_bloom),
+            Some(2) => ReceiptEnvelope::Eip1559(receipt_with_bloom),
+            Some(3) => ReceiptEnvelope::Eip4844(receipt_with_bloom),
+            Some(4) => ReceiptEnvelope::Eip7702(receipt_with_bloom),
+            Some(_) => ReceiptEnvelope::Legacy(receipt_with_bloom),
+        };
 
         Self {
             inner,
