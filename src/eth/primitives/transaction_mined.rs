@@ -125,7 +125,7 @@ impl From<TransactionMined> for AlloyReceipt {
     fn from(value: TransactionMined) -> Self {
         let receipt = Receipt {
             status: Eip658Value::Eip658(value.is_success()),
-            cumulative_gas_used: value.execution.gas.into(),
+            cumulative_gas_used: value.execution.gas.into(), // TODO: implement cumulative gas used correctly
             logs: value.logs.clone().into_iter().map_into().collect(),
         };
 
@@ -134,7 +134,7 @@ impl From<TransactionMined> for AlloyReceipt {
             logs_bloom: value.compute_bloom().into(),
         };
 
-        let inner = ReceiptEnvelope::Legacy(receipt_with_bloom); // Validate envelope type
+        let inner = ReceiptEnvelope::Legacy(receipt_with_bloom);
 
         Self {
             inner,
