@@ -186,7 +186,7 @@ impl EvmExecution {
         self.receipt_applied = true;
 
         // fix gas
-        self.gas = receipt.gas_used.unwrap_or_default().try_into()?;
+        self.gas = receipt.gas_used.try_into()?;
 
         // fix logs
         self.fix_logs_gas_left(receipt);
