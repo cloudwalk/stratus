@@ -2,6 +2,7 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 
 use ethereum_types::Bloom;
+use revm::primitives::alloy_primitives;
 
 use crate::eth::primitives::Log;
 use crate::gen_newtype_from;
@@ -51,6 +52,12 @@ impl From<LogsBloom> for Bloom {
 impl From<LogsBloom> for [u8; 256] {
     fn from(value: LogsBloom) -> Self {
         value.0 .0
+    }
+}
+
+impl From<LogsBloom> for alloy_primitives::Bloom {
+    fn from(value: LogsBloom) -> Self {
+        alloy_primitives::Bloom::from(value.0 .0)
     }
 }
 

@@ -1,7 +1,7 @@
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
-use crate::alias::EthersReceipt;
+use crate::alias::AlloyReceipt;
 use crate::alias::EthersTransaction;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::BlockNumber;
@@ -115,31 +115,42 @@ impl From<TransactionMined> for EthersTransaction {
     }
 }
 
-impl From<TransactionMined> for EthersReceipt {
+impl From<TransactionMined> for AlloyReceipt {
     fn from(value: TransactionMined) -> Self {
-        let logs_bloom = value.compute_bloom().into();
+        // Create the inner receipt structure
+        let receipt = alloy_consensus::Receipt {
+            status: if value.is_success() {
+                alloy_consensus::Eip658Value::Eip658(true)
+            } else {
+                alloy_consensus::Eip658Value::Eip658(false)
+            },
+            cumulative_gas_used: value.execution.gas.into(),
+            logs: value.logs.into_iter().map_into().collect(),
+        };
+
+        // Create receipt with bloom
+        let receipt_with_bloom = alloy_consensus::ReceiptWithBloom {
+            receipt,
+            logs_bloom: value.compute_bloom().into(),
+        };
+
+        // Create the envelope (assuming Legacy type for simplicity)
+        let inner = alloy_consensus::ReceiptEnvelope::Legacy(receipt_with_bloom);
+
         Self {
-            // receipt specific
-            status: Some(if_else!(value.is_success(), 1, 0).into()),
-            contract_address: value.execution.contract_address().map_into(),
-            gas_used: Some(value.execution.gas.into()),
-
-            // transaction
+            inner,
             transaction_hash: value.input.hash.into(),
-            from: value.input.signer.into(),
-            to: value.input.to.map_into(),
-
-            // block
+            transaction_index: Some(value.transaction_index.into()),
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.into()),
-            transaction_index: value.transaction_index.into(),
-
-            // logs
-            logs: value.logs.into_iter().map_into().collect(),
-            logs_bloom, // TODO: save this to the database instead of computing it every time (could also be useful for eth_getLogs)
-
-            // TODO: there are more fields to populate here
-            ..Default::default()
+            gas_used: value.execution.gas,
+            effective_gas_price: value.input.gas_price.as_u128(),
+            blob_gas_used: None,
+            blob_gas_price: None,
+            from: value.input.signer.into(),
+            to: value.input.to.map_into(),
+            contract_address: value.execution.contract_address().map_into(),
+            authorization_list: None,
         }
     }
 }

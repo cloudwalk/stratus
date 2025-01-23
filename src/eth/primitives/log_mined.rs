@@ -93,7 +93,7 @@ impl From<LogMined> for AlloyLog {
             .topics_non_empty()
             .into_iter()
             .map(|topic| {
-                let bytes: [u8; 32] = topic.0.to_fixed_bytes();  // TODO: improve before merging move-to-alloy
+                let bytes: [u8; 32] = topic.0.to_fixed_bytes(); // TODO: improve before merging move-to-alloy
                 alloy_primitives::B256::from(bytes)
             })
             .collect();
@@ -104,13 +104,13 @@ impl From<LogMined> for AlloyLog {
                 data: alloy_primitives::LogData::new(topics, value.log.data.into()).expect("log topics length should be valid"),
             },
             block_hash: Some({
-                let bytes: [u8; 32] = value.block_hash.0.to_fixed_bytes();  // TODO: improve before merging move-to-alloy
+                let bytes: [u8; 32] = value.block_hash.0.to_fixed_bytes(); // TODO: improve before merging move-to-alloy
                 alloy_primitives::B256::from(bytes)
             }),
             block_number: Some(value.block_number.0.as_u64()),
             block_timestamp: None,
             transaction_hash: Some({
-                let bytes: [u8; 32] = value.transaction_hash.0.to_fixed_bytes();  // TODO: improve before merging move-to-alloy
+                let bytes: [u8; 32] = value.transaction_hash.0.to_fixed_bytes(); // TODO: improve before merging move-to-alloy
                 alloy_primitives::B256::from(bytes)
             }),
             transaction_index: Some(value.transaction_index.into()),
