@@ -62,12 +62,9 @@ impl TryFrom<AlloyLog> for LogMined {
             .transaction_hash
             .ok_or_else(|| anyhow::anyhow!("log must have transaction_hash"))
             .map(|bytes| Hash::from(bytes.0))?;
-        let transaction_index = value
-            .transaction_index
-            .ok_or_else(|| anyhow::anyhow!("log must have transaction_index"))?
-            .try_into()?;
-        let log_index = value.log_index.ok_or_else(|| anyhow::anyhow!("log must have log_index"))?.try_into()?;
-        let block_number = value.block_number.ok_or_else(|| anyhow::anyhow!("log must have block_number"))?.try_into()?;
+        let transaction_index = Index::from(value.transaction_index.ok_or_else(|| anyhow::anyhow!("log must have transaction_index"))?);
+        let log_index = Index::from(value.log_index.ok_or_else(|| anyhow::anyhow!("log must have log_index"))?);
+        let block_number = BlockNumber::from(value.block_number.ok_or_else(|| anyhow::anyhow!("log must have block_number"))?);
         let block_hash = value
             .block_hash
             .ok_or_else(|| anyhow::anyhow!("log must have block_hash"))
@@ -101,7 +98,8 @@ impl From<LogMined> for AlloyLog {
         AlloyLog {
             inner: alloy_primitives::Log {
                 address: value.log.address.into(),
-                data: alloy_primitives::LogData::new(topics, value.log.data.into()).expect("log topics length should be valid"),
+                // Using new_unchecked is safe because topics_non_empty() guarantees ≤ 4 topics
+                data: alloy_primitives::LogData::new_unchecked(topics, value.log.data.into()),
             },
             block_hash: Some({
                 let bytes: [u8; 32] = value.block_hash.0.to_fixed_bytes(); // TODO: improve before merging move-to-alloy
