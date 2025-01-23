@@ -1,7 +1,7 @@
 use super::BlockNumber;
 use super::ExecutionResult;
 use super::Index;
-use crate::alias::EthersReceipt;
+use crate::alias::AlloyReceipt;
 use crate::alias::EthersTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::TransactionExecution;
@@ -46,7 +46,7 @@ impl TransactionStage {
         match self {
             TransactionStage::Executed(_) => JsonValue::Null,
             TransactionStage::Mined(tx) => {
-                let json_rpc_format: EthersReceipt = tx.into();
+                let json_rpc_format: AlloyReceipt = tx.into();
                 to_json_value(json_rpc_format)
             }
         }
