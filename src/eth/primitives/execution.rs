@@ -78,7 +78,7 @@ impl EvmExecution {
             result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
-            gas: receipt.gas_used.try_into()?,
+            gas: Gas::from(receipt.gas_used),
             changes: HashMap::from([(sender_changes.address, sender_changes)]),
             deployed_contract_address: None,
         };
@@ -186,7 +186,7 @@ impl EvmExecution {
         self.receipt_applied = true;
 
         // fix gas
-        self.gas = receipt.gas_used.try_into()?;
+        self.gas = Gas::from(receipt.gas_used);
 
         // fix logs
         self.fix_logs_gas_left(receipt);
