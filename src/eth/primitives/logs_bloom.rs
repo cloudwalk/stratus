@@ -2,8 +2,8 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 
 use ethereum_types::Bloom;
-use revm::primitives::alloy_primitives;
 
+use crate::alias::AlloyBloom;
 use crate::eth::primitives::Log;
 use crate::gen_newtype_from;
 
@@ -55,9 +55,9 @@ impl From<LogsBloom> for [u8; 256] {
     }
 }
 
-impl From<LogsBloom> for alloy_primitives::Bloom {
+impl From<LogsBloom> for AlloyBloom {
     fn from(value: LogsBloom) -> Self {
-        alloy_primitives::Bloom::from(value.0 .0)
+        AlloyBloom::from(value.0 .0)
     }
 }
 

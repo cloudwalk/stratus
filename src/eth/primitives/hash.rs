@@ -1,6 +1,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
+use alloy_primitives::B256;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::H256;
@@ -69,7 +70,7 @@ impl From<Hash> for H256 {
     }
 }
 
-impl From<Hash> for alloy_primitives::B256 {
+impl From<Hash> for B256 {
     fn from(value: Hash) -> Self {
         Self::from(value.0.to_fixed_bytes())
     }

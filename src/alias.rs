@@ -19,6 +19,7 @@ pub type AlloyBlockAlloyExternalTransaction = alloy_rpc_types_eth::Block<Externa
 pub type AlloyBlockH256 = alloy_rpc_types_eth::Block<H256>;
 pub type AlloyBytes = alloy_primitives::Bytes;
 pub type AlloyLog = alloy_rpc_types_eth::Log;
+pub type AlloyBloom = alloy_primitives::Bloom;
 pub type AlloyReceipt = alloy_rpc_types_eth::TransactionReceipt;
 pub type AlloyTransaction = alloy_rpc_types_eth::Transaction;
 
