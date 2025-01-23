@@ -17,6 +17,10 @@ impl Wei {
     pub const ZERO: Wei = Wei(U256::zero());
     pub const ONE: Wei = Wei(U256::one());
     pub const TEST_BALANCE: Wei = Wei(U256([u64::MAX, 0, 0, 0]));
+
+    pub fn as_u128(&self) -> u128 {
+        self.0.as_u128()
+    }
 }
 
 impl Dummy<Faker> for Wei {

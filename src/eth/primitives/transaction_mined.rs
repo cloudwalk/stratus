@@ -1,5 +1,6 @@
 use display_json::DebugAsJson;
 use itertools::Itertools;
+use revm::primitives::alloy_primitives;
 
 use crate::alias::AlloyReceipt;
 use crate::alias::EthersTransaction;
@@ -13,7 +14,6 @@ use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
 use crate::ext::OptionExt;
-use crate::if_else;
 
 /// Transaction that was executed by the EVM and added to a block.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -116,8 +116,8 @@ impl From<TransactionMined> for EthersTransaction {
 }
 
 impl From<TransactionMined> for AlloyReceipt {
+    // TODO: improve before merging move-to-alloy
     fn from(value: TransactionMined) -> Self {
-        // Create the inner receipt structure
         let receipt = alloy_consensus::Receipt {
             status: if value.is_success() {
                 alloy_consensus::Eip658Value::Eip658(true)
@@ -125,25 +125,29 @@ impl From<TransactionMined> for AlloyReceipt {
                 alloy_consensus::Eip658Value::Eip658(false)
             },
             cumulative_gas_used: value.execution.gas.into(),
-            logs: value.logs.into_iter().map_into().collect(),
+            logs: value.logs.clone().into_iter().map_into().collect(),
         };
 
-        // Create receipt with bloom
         let receipt_with_bloom = alloy_consensus::ReceiptWithBloom {
             receipt,
             logs_bloom: value.compute_bloom().into(),
         };
 
-        // Create the envelope (assuming Legacy type for simplicity)
         let inner = alloy_consensus::ReceiptEnvelope::Legacy(receipt_with_bloom);
 
         Self {
             inner,
-            transaction_hash: value.input.hash.into(),
+            transaction_hash: {
+                let bytes: [u8; 32] = value.input.hash.0.to_fixed_bytes();
+                alloy_primitives::B256::from(bytes)
+            },
             transaction_index: Some(value.transaction_index.into()),
-            block_hash: Some(value.block_hash.into()),
-            block_number: Some(value.block_number.into()),
-            gas_used: value.execution.gas,
+            block_hash: Some({
+                let bytes: [u8; 32] = value.block_hash.0.to_fixed_bytes();
+                alloy_primitives::B256::from(bytes)
+            }),
+            block_number: Some(value.block_number.as_u64()),
+            gas_used: value.execution.gas.into(),
             effective_gas_price: value.input.gas_price.as_u128(),
             blob_gas_used: None,
             blob_gas_price: None,
