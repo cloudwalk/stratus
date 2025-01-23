@@ -112,32 +112,34 @@ impl EvmExecution {
                 "transaction status mismatch | hash={} execution={:?} receipt={:?}",
                 receipt.hash(),
                 self.result,
-                receipt.status
+                receipt.status()
             ));
         }
 
+        let receipt_logs = receipt.inner.logs();
+
         // compare logs length
-        if self.logs.len() != receipt.logs.len() {
+        if self.logs.len() != receipt_logs.len() {
             tracing::trace!(logs = ?self.logs, "execution logs");
-            tracing::trace!(logs = ?receipt.logs, "receipt logs");
+            tracing::trace!(logs = ?receipt_logs, "receipt logs");
             return log_and_err!(format!(
                 "logs length mismatch | hash={} execution={} receipt={}",
                 receipt.hash(),
                 self.logs.len(),
-                receipt.logs.len()
+                receipt_logs.len()
             ));
         }
 
         // compare logs pairs
-        for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(&receipt.logs).enumerate() {
+        for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(receipt_logs).enumerate() {
             // compare log topics length
-            if execution_log.topics_non_empty().len() != receipt_log.topics.len() {
+            if execution_log.topics_non_empty().len() != receipt_log.topics().len() {
                 return log_and_err!(format!(
                     "log topics length mismatch | hash={} log_index={} execution={} receipt={}",
                     receipt.hash(),
                     log_index,
                     execution_log.topics_non_empty().len(),
-                    receipt_log.topics.len(),
+                    receipt_log.topics().len(),
                 ));
             }
 
@@ -156,13 +158,13 @@ impl EvmExecution {
             }
 
             // compare log data content
-            if execution_log.data.as_ref() != receipt_log.data.as_ref() {
+            if execution_log.data.as_ref() != receipt_log.data().data.as_ref() {
                 return log_and_err!(format!(
                     "log data content mismatch | hash={} log_index={} execution={} receipt={:#x}",
                     receipt.hash(),
                     log_index,
                     execution_log.data,
-                    receipt_log.data,
+                    receipt_log.data().data,
                 ));
             }
         }
