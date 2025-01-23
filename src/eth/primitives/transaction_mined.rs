@@ -66,7 +66,7 @@ impl TransactionMined {
                 .as_receipt()
                 .unwrap()
                 .logs
-                .clone()
+                .clone() // TODO: improve before merging move-to-alloy
                 .into_iter()
                 .map(LogMined::try_from)
                 .collect::<Result<Vec<LogMined>, _>>()?,
