@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use itertools::Itertools;
-use revm::primitives::alloy_primitives;
 
 use crate::alias::AlloyReceipt;
 use crate::alias::EthersTransaction;
@@ -140,15 +139,9 @@ impl From<TransactionMined> for AlloyReceipt {
 
         Self {
             inner,
-            transaction_hash: {
-                let bytes: [u8; 32] = value.input.hash.0.to_fixed_bytes();
-                alloy_primitives::B256::from(bytes)
-            },
+            transaction_hash: value.input.hash.into(),
             transaction_index: Some(value.transaction_index.into()),
-            block_hash: Some({
-                let bytes: [u8; 32] = value.block_hash.0.to_fixed_bytes();
-                alloy_primitives::B256::from(bytes)
-            }),
+            block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             gas_used: value.execution.gas.into(),
             effective_gas_price: value.input.gas_price.as_u128(),
