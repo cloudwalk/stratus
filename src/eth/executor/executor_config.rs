@@ -16,10 +16,17 @@ pub struct ExecutorConfig {
     pub executor_chain_id: u64,
 
     /// Number of EVM instances to run.
-    ///
-    /// TODO: should be configured for each kind of EvmRoute instead of being a single value.
     #[arg(long = "executor-evms", alias = "evms", env = "EXECUTOR_EVMS", default_value = "30")]
     pub executor_evms: usize,
+
+    #[arg(long = "executor-call-present-evms", alias = "evms", env = "EXECUTOR_CALL_PRESENT_EVMS", default_value = "30")]
+    pub executor_call_present_evms: Option<usize>,
+
+    #[arg(long = "executor-call-past-evms", alias = "evms", env = "EXECUTOR_CALL_PAST_EVMS", default_value = "30")]
+    pub executor_call_past_evms: Option<usize>,
+
+    #[arg(long = "executor-inspector-evms", alias = "evms", env = "EXECUTOR_INSPECTOR_EVMS", default_value = "30")]
+    pub executor_inspector_evms: Option<usize>,
 
     /// EVM execution strategy.
     #[arg(long = "executor-strategy", alias = "strategy", env = "EXECUTOR_STRATEGY", default_value = "serial")]
