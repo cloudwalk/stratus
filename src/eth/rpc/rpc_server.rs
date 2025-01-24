@@ -34,7 +34,7 @@ use tracing::info_span;
 use tracing::Instrument;
 use tracing::Span;
 
-use crate::alias::EthersReceipt;
+use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
@@ -669,7 +669,7 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     };
 
     tracing::info!(%filter, "block with transactions found");
-    let receipts = block.transactions.iter().cloned().map(EthersReceipt::from).collect::<Vec<_>>();
+    let receipts = block.transactions.iter().cloned().map(AlloyReceipt::from).collect::<Vec<_>>();
 
     Ok(json!({
         "block": block.to_json_rpc_with_full_transactions(),
