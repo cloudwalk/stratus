@@ -150,7 +150,7 @@ impl From<TransactionMined> for AlloyReceipt {
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             gas_used: value.execution.gas.into(),
-            effective_gas_price: value.input.gas_price.as_u128(),
+            effective_gas_price: value.input.gas_price.as_u128(), // TODO: implement effective gas price used correctly
             blob_gas_used: None,
             blob_gas_price: None,
             from: value.input.signer.into(),
