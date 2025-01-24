@@ -194,9 +194,12 @@ impl Evms {
         };
         let tx_serial = spawn_evms("evm-tx-serial", 1);
         let tx_external = spawn_evms("evm-tx-external", 1);
-        let call_present = spawn_evms("evm-call-present", max(config.executor_evms / 2, 1));
-        let call_past = spawn_evms("evm-call-past", max(config.executor_evms / 4, 1));
-        let inspector = spawn_inspectors("inspector", 1);
+        let call_present = spawn_evms(
+            "evm-call-present",
+            max(config.executor_call_present_evms.unwrap_or(config.executor_evms / 2), 1),
+        );
+        let call_past = spawn_evms("evm-call-past", max(config.executor_call_past_evms.unwrap_or(config.executor_evms / 4), 1));
+        let inspector = spawn_inspectors("inspector", max(config.executor_inspector_evms.unwrap_or(config.executor_evms / 4), 1));
 
         Evms {
             tx_parallel,
