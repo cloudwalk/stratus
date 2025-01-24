@@ -4,7 +4,6 @@ use anyhow::anyhow;
 use anyhow::Ok;
 use display_json::DebugAsJson;
 use hex_literal::hex;
-use revm::primitives::alloy_primitives;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -14,6 +13,7 @@ use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
+use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
@@ -147,7 +147,7 @@ impl EvmExecution {
             // compare log topics content
             for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics_non_empty().iter().zip(receipt_log.topics().iter()).enumerate()
             {
-                if execution_log_topic.as_ref() != <alloy_primitives::FixedBytes<32> as AsRef<[u8]>>::as_ref(receipt_log_topic) {
+                if execution_log_topic != &LogTopic::from(*receipt_log_topic) {
                     return log_and_err!(format!(
                         "log topic content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
                         receipt.hash(),
