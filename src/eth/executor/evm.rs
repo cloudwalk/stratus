@@ -199,6 +199,10 @@ impl Evm {
 
         let InspectorInput { tx_hash, opts } = input;
 
+        if opts.as_ref().is_some_and(|opts| matches!(opts.tracer, Some(GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer)))) {
+            return Ok(NoopFrame::default().into());
+        }
+
         let tx = self
             .evm
             .db()
