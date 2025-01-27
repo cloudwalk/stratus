@@ -96,8 +96,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_deserialize_old_receipt() {
-        let old_receipt = r#"{
+    fn test_deserialize_ethers_receipt() {
+        let ethers_receipt = r#"{
             "blockHash": "0xc05ff25c9e4bcfb57a5bab271a38b46a8c8b2d5d9ef815ba449d6e211da42251",
             "blockNumber": "0x20",
             "contractAddress": null,
@@ -126,14 +126,14 @@ mod tests {
             "transactionIndex": "0x20"
         }"#;
 
-        let receipt: ExternalReceipt = serde_json::from_str(old_receipt).unwrap();
+        let receipt: ExternalReceipt = serde_json::from_str(ethers_receipt).unwrap();
         assert_eq!(receipt.0.effective_gas_price, 0);
         assert_eq!(receipt.0.transaction_type(), TxType::Legacy);
     }
 
     #[test]
-    fn test_deserialize_new_receipt() {
-        let new_receipt = r#"{
+    fn test_deserialize_alloy_receipt() {
+        let alloy_receipt = r#"{
             "blockHash": "0x20dd72172e4bd9c99a919c217dd8c0154cbe0f9e305e67c5247f2ee8ae987c06",
             "blockNumber": "0x16",
             "contractAddress": null,
@@ -164,7 +164,7 @@ mod tests {
             "type": "0x0"
         }"#;
 
-        let receipt: ExternalReceipt = serde_json::from_str(new_receipt).unwrap();
+        let receipt: ExternalReceipt = serde_json::from_str(alloy_receipt).unwrap();
         assert_eq!(receipt.0.effective_gas_price, 0);
         assert_eq!(receipt.0.transaction_type(), TxType::Legacy);
     }
