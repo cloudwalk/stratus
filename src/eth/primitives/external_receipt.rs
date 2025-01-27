@@ -1,8 +1,8 @@
 use ethereum_types::U256;
 use serde::Deserialize;
-use crate::alias::JsonValue;
 
 use crate::alias::AlloyReceipt;
+use crate::alias::JsonValue;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
@@ -44,7 +44,7 @@ impl ExternalReceipt {
 }
 
 // -----------------------------------------------------------------------------
-// Serialization / Deserilization
+// Serialization / Deserialization
 // -----------------------------------------------------------------------------
 
 impl<'de> serde::Deserialize<'de> for ExternalReceipt {
