@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
+use alloy_rpc_types_trace::geth::call::FlatCallFrame;
+use alloy_rpc_types_trace::geth::mux::MuxFrame;
+use alloy_rpc_types_trace::geth::CallFrame;
 use alloy_rpc_types_trace::geth::FourByteFrame;
 use alloy_rpc_types_trace::geth::GethDebugBuiltInTracerType;
 use alloy_rpc_types_trace::geth::GethDebugTracerType;
@@ -199,8 +202,9 @@ impl Evm {
             opts,
             trace_unsuccessful_only,
         } = input;
+        let tracer_type = opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))?;
 
-        if matches!(opts.tracer, Some(GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer))) {
+        if matches!(tracer_type, GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer)) {
             return Ok(NoopFrame::default().into());
         }
 
@@ -212,7 +216,7 @@ impl Evm {
             .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
 
         if trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
-            return Ok(NoopFrame::default().into());
+            return Ok(default_trace(tracer_type));
         }
 
         let block = self.evm.db().storage.read_block(BlockFilter::Number(tx.block_number()))?.ok_or_else(|| {
@@ -258,8 +262,6 @@ impl Evm {
         }
 
         drop(evm);
-
-        let tracer_type = opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))?;
 
         let trace_result: GethTrace = match tracer_type {
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => {
@@ -599,4 +601,14 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
         }
     }
     Ok(execution_changes)
+}
+
+pub fn default_trace(tracer_type: GethDebugTracerType) -> GethTrace {
+    match tracer_type {
+        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => FourByteFrame::default().into(),
+        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => CallFrame::default().into(),
+        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => MuxFrame::default().into(),
+        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => FlatCallFrame::default().into(),
+        _ => NoopFrame::default().into(),
+    }
 }
