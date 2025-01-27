@@ -1,22 +1,21 @@
 use ethereum_types::U256;
 use serde::Deserialize;
 
-use crate::alias::EthersReceipt;
+use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
-use crate::ext::OptionExt;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more::Deref, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
-pub struct ExternalReceipt(#[deref] pub EthersReceipt);
+pub struct ExternalReceipt(#[deref] pub AlloyReceipt);
 
 impl ExternalReceipt {
     /// Returns the transaction hash.
     pub fn hash(&self) -> Hash {
-        self.0.transaction_hash.into()
+        Hash::from(self.0.transaction_hash.0)
     }
 
     /// Returns the block number.
@@ -28,22 +27,19 @@ impl ExternalReceipt {
     /// Returns the block hash.
     #[allow(clippy::expect_used)]
     pub fn block_hash(&self) -> Hash {
-        self.0.block_hash.expect("external receipt must have block hash").into()
+        Hash::from(self.0.block_hash.expect("external receipt must have block hash").0)
     }
 
     /// Retuns the effective price the sender had to pay to execute the transaction.
     pub fn execution_cost(&self) -> Wei {
-        let gas_price = self.0.effective_gas_price.map_into().unwrap_or(U256::zero());
-        let gas_used = self.0.gas_used.map_into().unwrap_or(U256::zero());
+        let gas_price = U256::from(self.0.effective_gas_price);
+        let gas_used = U256::from(self.0.gas_used);
         (gas_price * gas_used).into()
     }
 
     /// Checks if the transaction was completed with success.
     pub fn is_success(&self) -> bool {
-        match self.0.status {
-            Some(status) => status.as_u64() == 1,
-            None => false,
-        }
+        self.0.inner.status()
     }
 }
 

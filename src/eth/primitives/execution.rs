@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
+use alloy_primitives::B256;
 use anyhow::anyhow;
 use anyhow::Ok;
 use display_json::DebugAsJson;
 use hex_literal::hex;
+use revm::primitives::alloy_primitives;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -34,7 +36,7 @@ pub struct EvmExecution {
     /// Status of the execution.
     pub result: ExecutionResult,
 
-    /// Output returned by the function execution (can be the function output or an exeception).
+    /// Output returned by the function execution (can be the function output or an exception).
     pub output: Bytes,
 
     /// Logs emitted by the function execution.
@@ -57,7 +59,7 @@ impl EvmExecution {
         if receipt.is_success() {
             return log_and_err!("cannot create failed execution for successful transaction");
         }
-        if not(receipt.logs.is_empty()) {
+        if not(receipt.inner.logs().is_empty()) {
             return log_and_err!("failed receipt should not have produced logs");
         }
 
@@ -77,7 +79,7 @@ impl EvmExecution {
             result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
-            gas: receipt.gas_used.unwrap_or_default().try_into()?,
+            gas: Gas::from(receipt.gas_used),
             changes: HashMap::from([(sender_changes.address, sender_changes)]),
             deployed_contract_address: None,
         };
@@ -112,38 +114,41 @@ impl EvmExecution {
                 "transaction status mismatch | hash={} execution={:?} receipt={:?}",
                 receipt.hash(),
                 self.result,
-                receipt.status
+                receipt.status()
             ));
         }
 
+        let receipt_logs = receipt.inner.logs();
+
         // compare logs length
-        if self.logs.len() != receipt.logs.len() {
+        if self.logs.len() != receipt_logs.len() {
             tracing::trace!(logs = ?self.logs, "execution logs");
-            tracing::trace!(logs = ?receipt.logs, "receipt logs");
+            tracing::trace!(logs = ?receipt_logs, "receipt logs");
             return log_and_err!(format!(
                 "logs length mismatch | hash={} execution={} receipt={}",
                 receipt.hash(),
                 self.logs.len(),
-                receipt.logs.len()
+                receipt_logs.len()
             ));
         }
 
         // compare logs pairs
-        for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(&receipt.logs).enumerate() {
+        for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(receipt_logs).enumerate() {
             // compare log topics length
-            if execution_log.topics_non_empty().len() != receipt_log.topics.len() {
+            if execution_log.topics_non_empty().len() != receipt_log.topics().len() {
                 return log_and_err!(format!(
                     "log topics length mismatch | hash={} log_index={} execution={} receipt={}",
                     receipt.hash(),
                     log_index,
                     execution_log.topics_non_empty().len(),
-                    receipt_log.topics.len(),
+                    receipt_log.topics().len(),
                 ));
             }
 
             // compare log topics content
-            for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics_non_empty().iter().zip(&receipt_log.topics).enumerate() {
-                if execution_log_topic.as_ref() != receipt_log_topic.as_ref() {
+            for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics_non_empty().iter().zip(receipt_log.topics().iter()).enumerate()
+            {
+                if B256::from(*execution_log_topic) != *receipt_log_topic {
                     return log_and_err!(format!(
                         "log topic content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
                         receipt.hash(),
@@ -156,13 +161,13 @@ impl EvmExecution {
             }
 
             // compare log data content
-            if execution_log.data.as_ref() != receipt_log.data.as_ref() {
+            if execution_log.data.as_ref() != receipt_log.data().data.as_ref() {
                 return log_and_err!(format!(
                     "log data content mismatch | hash={} log_index={} execution={} receipt={:#x}",
                     receipt.hash(),
                     log_index,
                     execution_log.data,
-                    receipt_log.data,
+                    receipt_log.data().data,
                 ));
             }
         }
@@ -182,7 +187,7 @@ impl EvmExecution {
         self.receipt_applied = true;
 
         // fix gas
-        self.gas = receipt.gas_used.unwrap_or_default().try_into()?;
+        self.gas = Gas::from(receipt.gas_used);
 
         // fix logs
         self.fix_logs_gas_left(receipt);
@@ -227,9 +232,11 @@ impl EvmExecution {
 
         const EVENT_HASHES: [&[u8]; 2] = [&ERC20_TRACE_EVENT_HASH, &BALANCE_TRACKER_TRACE_EVENT_HASH];
 
-        for (execution_log, receipt_log) in self.logs.iter_mut().zip(&receipt.logs) {
+        let receipt_logs = receipt.inner.logs();
+
+        for (execution_log, receipt_log) in self.logs.iter_mut().zip(receipt_logs) {
             let execution_log_matches = || execution_log.topic0.is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
-            let receipt_log_matches = || receipt_log.topics.first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
+            let receipt_log_matches = || receipt_log.topics().first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
 
             // only try overwriting if both logs refer to the target event
             let should_overwrite = execution_log_matches() && receipt_log_matches();
@@ -237,7 +244,7 @@ impl EvmExecution {
                 continue;
             }
 
-            let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data.get(0..32)) else {
+            let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data().data.get(0..32)) else {
                 continue;
             };
             destination.copy_from_slice(source);
