@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use alloy_primitives::B256;
 use display_json::DebugAsJson;
 use ethereum_types::H256;
 use fake::Dummy;
@@ -53,5 +54,11 @@ impl From<LogTopic> for H256 {
 impl From<LogTopic> for [u8; 32] {
     fn from(value: LogTopic) -> Self {
         value.0 .0
+    }
+}
+
+impl From<LogTopic> for B256 {
+    fn from(value: LogTopic) -> Self {
+        Self::from(value.0.to_fixed_bytes())
     }
 }
