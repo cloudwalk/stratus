@@ -664,7 +664,6 @@ impl Executor {
 
         tracing::info!("inspecting transaction");
         let opts = opts.unwrap_or_default();
-        #[cfg(feature = "metrics")]
         let tracer_type = opts.tracer.clone();
 
         timed(|| {
