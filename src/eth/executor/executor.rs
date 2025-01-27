@@ -45,8 +45,8 @@ use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
 #[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
-#[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::metrics::timed;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
@@ -657,13 +657,23 @@ impl Executor {
         Ok(execution)
     }
 
-    pub fn trace_transaction(&self, tx_hash: Hash, opts: Option<GethDebugTracingOptions>) -> Result<GethTrace, StratusError> {
+    pub fn trace_transaction(&self, tx_hash: Hash, opts: Option<GethDebugTracingOptions>, trace_unsuccessful_only: bool) -> Result<GethTrace, StratusError> {
         Span::with(|s| {
             s.rec_str("tx_hash", &tx_hash);
         });
 
         tracing::info!("inspecting transaction");
-        self.evms.inspect(InspectorInput { tx_hash, opts })
+        let opts = opts.unwrap_or_default();
+        let tracer_type = opts.tracer.clone();
+
+        timed(|| {
+            self.evms.inspect(InspectorInput {
+                tx_hash,
+                opts,
+                trace_unsuccessful_only,
+            })
+        })
+        .with(|m| metrics::inc_evm_inspect(m.elapsed, serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned())))
     }
 }
 
