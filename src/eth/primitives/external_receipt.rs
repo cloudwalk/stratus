@@ -1,4 +1,6 @@
 use ethereum_types::U256;
+use serde::de::Deserializer;
+use serde::de::{self};
 use serde::Deserialize;
 
 use crate::alias::AlloyReceipt;
@@ -8,7 +10,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, derive_more::Deref, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, derive_more::Deref, serde::Serialize)]
 #[serde(transparent)]
 pub struct ExternalReceipt(#[deref] pub AlloyReceipt);
 
@@ -40,6 +42,37 @@ impl ExternalReceipt {
     /// Checks if the transaction was completed with success.
     pub fn is_success(&self) -> bool {
         self.0.inner.status()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Serialization / Deserilization
+// -----------------------------------------------------------------------------
+
+impl<'de> Deserialize<'de> for ExternalReceipt {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // During migration from ethers to alloy, we need to handle receipts from both libraries.
+        // Ethers receipts do not include `effectiveGasPrice` and `type` fields which are
+        // required by alloy.
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+
+        if let Some(obj) = value.as_object_mut() {
+            if !obj.contains_key("effectiveGasPrice") {
+                obj.insert("effectiveGasPrice".to_string(), serde_json::json!("0x0"));
+            }
+            if !obj.contains_key("type") {
+                obj.insert("type".to_string(), serde_json::json!("0x0"));
+            }
+        } else {
+            return Err(de::Error::custom("ExternalReceipt must be a JSON object, received invalid type"));
+        }
+
+        let receipt = serde_json::from_value(value).map_err(|e| de::Error::custom(format!("Failed to deserialize ExternalReceipt: {}", e)))?;
+
+        Ok(ExternalReceipt(receipt))
     }
 }
 
