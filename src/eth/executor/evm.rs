@@ -194,19 +194,13 @@ impl Evm {
 
     /// Execute a transaction using a tracer.
     pub fn inspect(&mut self, input: InspectorInput) -> Result<GethTrace, StratusError> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
         let InspectorInput {
             tx_hash,
             opts,
             trace_unsuccessful_only,
         } = input;
 
-        if opts
-            .as_ref()
-            .is_some_and(|opts| matches!(opts.tracer, Some(GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer))))
-        {
+        if matches!(opts.tracer, Some(GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer))) {
             return Ok(NoopFrame::default().into());
         }
 
@@ -265,7 +259,6 @@ impl Evm {
 
         drop(evm);
 
-        let opts = opts.unwrap_or_default();
         let tracer_type = opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))?;
 
         let trace_result: GethTrace = match tracer_type {
@@ -305,12 +298,6 @@ impl Evm {
             }
             _ => return Err(anyhow!("tracer not implemented").into()),
         };
-
-        // track metrics
-        #[cfg(feature = "metrics")]
-        {
-            metrics::inc_evm_inspect(start.elapsed(), serde_json::to_string(&tracer_type)?);
-        }
 
         Ok(trace_result)
     }

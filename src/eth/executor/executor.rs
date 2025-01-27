@@ -47,6 +47,7 @@ use crate::ext::to_json_string;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::metrics::timed;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
@@ -663,11 +664,18 @@ impl Executor {
         });
 
         tracing::info!("inspecting transaction");
-        self.evms.inspect(InspectorInput {
-            tx_hash,
-            opts,
-            trace_unsuccessful_only,
+        let opts = opts.unwrap_or_default();
+        #[cfg(feature = "metrics")]
+        let tracer_type = opts.tracer.clone();
+
+        timed(|| {
+            self.evms.inspect(InspectorInput {
+                tx_hash,
+                opts,
+                trace_unsuccessful_only,
+            })
         })
+        .with(|m| metrics::inc_evm_inspect(m.elapsed, serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned())))
     }
 }
 
