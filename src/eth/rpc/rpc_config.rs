@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::net::SocketAddr;
 
+use anyhow::anyhow;
 use clap::Parser;
 
 use super::RpcClientApp;
@@ -19,22 +20,22 @@ pub struct RpcServerConfig {
     #[arg(long = "max-subscriptions", env = "MAX_SUBSCRIPTIONS", default_value = "30")]
     pub rpc_max_subscriptions: u32,
 
-    #[arg(long = "rpc-debug-trace-only-unsuccessful", value_parser=Self::parse_rpc_client_app_hashset ,env = "RPC_DEBUG_TRACE_UNSUCCESSFUL_ONLY")]
-    pub rpc_debug_trac_unsuccessfule_only: Option<HashSet<RpcClientApp>>,
+    #[arg(long = "rpc-debug-trace-unsuccessful-only", value_parser=Self::parse_rpc_client_app_hashset ,env = "RPC_DEBUG_TRACE_UNSUCCESSFUL_ONLY")]
+    pub rpc_debug_trace_unsuccessful_only: Option<HashSet<RpcClientApp>>,
 }
 
 impl RpcServerConfig {
-    pub fn parse_rpc_client_app_hashset(input: &str) -> anyhow::Result<Option<HashSet<RpcClientApp>>> {
+    pub fn parse_rpc_client_app_hashset(input: &str) -> anyhow::Result<HashSet<RpcClientApp>> {
         if input.is_empty() {
-            return Ok(None);
+            return Err(anyhow!("invalid client list"));
         }
 
         let set: HashSet<RpcClientApp> = input.split(',').map(|s| RpcClientApp::parse(s.trim())).collect();
 
         if set.is_empty() {
-            Ok(None)
+            Err(anyhow!("invalid client list"))
         } else {
-            Ok(Some(set))
+            Ok(set)
         }
     }
 }

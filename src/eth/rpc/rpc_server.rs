@@ -917,7 +917,7 @@ fn debug_trace_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extens
     let (_, opts) = next_rpc_param_or_default::<Option<GethDebugTracingOptions>>(params)?;
     let trace_unsuccessful_only = ctx
         .rpc_server
-        .rpc_debug_trac_unsuccessfule_only
+        .rpc_debug_trace_unsuccessful_only
         .as_ref()
         .is_some_and(|inner| inner.contains(ext.rpc_client()));
 
