@@ -45,7 +45,6 @@ use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
 #[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
-#[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::warn_task_tx_closed;
