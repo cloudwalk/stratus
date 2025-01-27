@@ -915,7 +915,13 @@ fn debug_trace_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extens
 
     let (params, tx_hash) = next_rpc_param::<Hash>(params.sequence())?;
     let (_, opts) = next_rpc_param_or_default::<Option<GethDebugTracingOptions>>(params)?;
-    match ctx.executor.trace_transaction(tx_hash, opts) {
+    let trace_unsuccessful_only = ctx
+        .rpc_server
+        .rpc_debug_trac_unsuccessfule_only
+        .as_ref()
+        .is_some_and(|inner| inner.contains(ext.rpc_client()));
+
+    match ctx.executor.trace_transaction(tx_hash, opts, trace_unsuccessful_only) {
         Ok(result) => {
             tracing::info!(?tx_hash, "executed debug_traceTransaction successfully");
             Ok(result)

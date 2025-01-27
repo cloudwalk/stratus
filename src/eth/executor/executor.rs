@@ -657,13 +657,17 @@ impl Executor {
         Ok(execution)
     }
 
-    pub fn trace_transaction(&self, tx_hash: Hash, opts: Option<GethDebugTracingOptions>) -> Result<GethTrace, StratusError> {
+    pub fn trace_transaction(&self, tx_hash: Hash, opts: Option<GethDebugTracingOptions>, trace_unsuccessful_only: bool) -> Result<GethTrace, StratusError> {
         Span::with(|s| {
             s.rec_str("tx_hash", &tx_hash);
         });
 
         tracing::info!("inspecting transaction");
-        self.evms.inspect(InspectorInput { tx_hash, opts })
+        self.evms.inspect(InspectorInput {
+            tx_hash,
+            opts,
+            trace_unsuccessful_only,
+        })
     }
 }
 

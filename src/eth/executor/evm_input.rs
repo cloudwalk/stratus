@@ -222,4 +222,5 @@ impl TryFrom<TransactionStage> for EvmInput {
 pub struct InspectorInput {
     pub tx_hash: Hash,
     pub opts: Option<GethDebugTracingOptions>,
+    pub trace_unsuccessful_only: bool,
 }

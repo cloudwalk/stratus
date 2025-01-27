@@ -197,7 +197,11 @@ impl Evm {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        let InspectorInput { tx_hash, opts } = input;
+        let InspectorInput {
+            tx_hash,
+            opts,
+            trace_unsuccessful_only,
+        } = input;
 
         if opts
             .as_ref()
@@ -212,6 +216,10 @@ impl Evm {
             .storage
             .read_transaction(tx_hash)?
             .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
+
+        if trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
+            return Ok(NoopFrame::default().into());
+        }
 
         let block = self.evm.db().storage.read_block(BlockFilter::Number(tx.block_number()))?.ok_or_else(|| {
             StratusError::Storage(StorageError::BlockNotFound {
