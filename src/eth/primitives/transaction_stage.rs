@@ -1,3 +1,4 @@
+use super::Address;
 use super::BlockNumber;
 use super::ExecutionResult;
 use super::Index;
@@ -7,6 +8,7 @@ use crate::alias::JsonValue;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
 use crate::ext::to_json_value;
+use crate::ext::OptionExt;
 
 /// Stages that a transaction can be in.
 #[allow(clippy::large_enum_variant)]
@@ -72,6 +74,22 @@ impl TransactionStage {
             Self::Executed(TransactionExecution::External(tx)) => tx.receipt.block_number(),
             Self::Executed(TransactionExecution::Local(tx)) => tx.evm_input.block_number,
             Self::Mined(tx) => tx.block_number,
+        }
+    }
+
+    pub fn from(&self) -> Address {
+        match self {
+            Self::Executed(TransactionExecution::External(tx)) => tx.receipt.from.into(),
+            Self::Executed(TransactionExecution::Local(tx)) => tx.evm_input.from,
+            Self::Mined(tx) => tx.input.signer,
+        }
+    }
+
+    pub fn to(&self) -> Option<Address> {
+        match self {
+            Self::Executed(TransactionExecution::External(tx)) => tx.receipt.to.map_into(),
+            Self::Executed(TransactionExecution::Local(tx)) => tx.evm_input.to,
+            Self::Mined(tx) => tx.input.to,
         }
     }
 }
