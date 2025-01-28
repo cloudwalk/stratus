@@ -607,6 +607,7 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
 pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionStage) -> GethTrace {
     match tracer_type {
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => FourByteFrame::default().into(),
+        // HACK: Spoof empty call frame to prevent Blockscout from retrying unnecessary trace calls
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => CallFrame {
             from: tx.from().into(),
             to: tx.to().map_into(),
