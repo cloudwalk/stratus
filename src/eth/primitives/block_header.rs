@@ -164,7 +164,7 @@ where
 // TODO: improve before merging - validate default fields
 impl<T> From<BlockHeader> for AlloyBlock<T> {
     fn from(header: BlockHeader) -> Self {
-        use alloy_consensus::Header as ConsensusHeader; // TODO: improve before merging - simplify imports
+        use alloy_consensus::Header as ConsensusHeader;
         use alloy_primitives::Address;
         use alloy_primitives::Bloom;
         use alloy_primitives::B256;
@@ -172,32 +172,44 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
         use alloy_rpc_types_eth::Block;
         use alloy_rpc_types_eth::Header;
 
-        // Create the inner consensus header with all the block data
+        // TODO: improve before merging - simplify imports
         let inner = ConsensusHeader {
-            parent_hash: B256::from(header.parent_hash),
-            ommers_hash: B256::from(HASH_EMPTY_UNCLES),
-            beneficiary: Address::from(header.miner),
-            state_root: B256::from(header.state_root),
-            transactions_root: B256::from(header.transactions_root),
-            receipts_root: B256::from(header.receipts_root),
-            withdrawals_root: None, // We don't support withdrawals yet
-            logs_bloom: Bloom::from(header.bloom),
-            difficulty: Uint::<256, 4>::ZERO,
+            // block: identifiers
             number: header.number.as_u64(),
+            mix_hash: B256::ZERO,
+
+            // block: relation with other blocks
+            ommers_hash: B256::from(HASH_EMPTY_UNCLES),
+            parent_hash: B256::from(header.parent_hash),
+            parent_beacon_block_root: None,
+
+            // mining: identifiers
+            timestamp: *header.timestamp,
+            beneficiary: Address::from(header.miner),
+
+            // mining: difficulty
+            difficulty: Uint::<256, 4>::ZERO,
+            nonce: B64::from(header.nonce),
+
+            // mining: gas
             gas_limit: header.gas_limit.as_u64(),
             gas_used: header.gas_used.as_u64(),
-            timestamp: *header.timestamp,
+            base_fee_per_gas: None,
+            blob_gas_used: None,
+            excess_blob_gas: None,
+
+            // transactions
+            transactions_root: B256::from(header.transactions_root),
+            receipts_root: B256::from(header.receipts_root),
+            withdrawals_root: None,
+
+            // data
+            logs_bloom: Bloom::from(header.bloom),
             extra_data: header.extra_data.into(),
-            mix_hash: B256::ZERO, // Default value as we don't track this
-            nonce: B64::from(header.nonce),
-            base_fee_per_gas: None,         // We don't support EIP-1559 yet
-            blob_gas_used: None,            // We don't support EIP-4844 yet
-            excess_blob_gas: None,          // We don't support EIP-4844 yet
-            parent_beacon_block_root: None, // We don't support beacon chain yet
-            requests_hash: None,            // Not used in our implementation
+            state_root: B256::from(header.state_root),
+            requests_hash: None,
         };
 
-        // Create the RPC header that wraps the consensus header
         let rpc_header = Header {
             hash: header.hash.into(),
             inner,
@@ -205,12 +217,11 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
             size: Some(header.size.into()),
         };
 
-        // Create the full block
         Block {
             header: rpc_header,
             uncles: Vec::new(),
             transactions: BlockTransactions::default(),
-            withdrawals: None, // We don't support withdrawals yet
+            withdrawals: None,
         }
     }
 }
