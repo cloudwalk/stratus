@@ -1,3 +1,4 @@
+use alloy_primitives::B64;
 use display_json::DebugAsJson;
 use ethereum_types::H64;
 use fake::Dummy;
@@ -35,9 +36,8 @@ impl From<MinerNonce> for [u8; 8] {
     }
 }
 
-// TODO: improve before merging - add to the correct place and simplify imports
-impl From<MinerNonce> for alloy_primitives::B64 {
+impl From<MinerNonce> for B64 {
     fn from(value: MinerNonce) -> Self {
-        alloy_primitives::B64::new(<[u8; 8]>::from(value))
+        B64::new(<[u8; 8]>::from(value))
     }
 }
