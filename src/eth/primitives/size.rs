@@ -1,3 +1,4 @@
+use alloy_primitives::Uint;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
@@ -39,9 +40,8 @@ impl From<Size> for u64 {
     }
 }
 
-// TODO: improve before merging - add to the correct place and improve import
-impl From<Size> for alloy_primitives::Uint<256, 4> {
+impl From<Size> for Uint<256, 4> {
     fn from(value: Size) -> Self {
-        alloy_primitives::Uint::from(value.0.as_u64())
+        Uint::from(value.0.as_u64())
     }
 }
