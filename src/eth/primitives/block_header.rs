@@ -171,7 +171,6 @@ where
     }
 }
 
-// TODO: improve before merging - validate default fields
 impl<T> From<BlockHeader> for AlloyBlock<T> {
     fn from(header: BlockHeader) -> Self {
         let inner = AlloyConsensusHeader {
@@ -221,7 +220,7 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
         Self {
             header: rpc_header,
             uncles: Vec::new(),
-            transactions: BlockTransactions::default(), // can't fill transactions from header, must be modified afterward
+            transactions: BlockTransactions::default(),
             withdrawals: None,
         }
     }
