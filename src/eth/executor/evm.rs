@@ -203,8 +203,7 @@ impl Evm {
             trace_unsuccessful_only,
         } = input;
         let tracer_type = opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))?;
-        dbg!(serde_json::to_string(&default_trace(tracer_type.clone())));
-
+      
         if matches!(tracer_type, GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer)) {
             return Ok(NoopFrame::default().into());
         }
