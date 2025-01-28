@@ -536,6 +536,7 @@ stratus-test-coverage *args="":
     just build
     source <(cargo llvm-cov show-env --export-prefix)
     export RUST_LOG=error
+    export TRACING_LOG_FORMAT=json
     just contracts-clone
     just contracts-flatten
 
