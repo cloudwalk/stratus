@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
 use display_json::DebugAsJson;
-use ethereum_types::H256;
 use itertools::Itertools;
 
+use crate::alias::AlloyBlockH256;
 use crate::alias::EthersBlockEthersTransaction;
-use crate::alias::EthersBlockH256;
 use crate::alias::EthersTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
@@ -75,8 +74,8 @@ impl Block {
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
     pub fn to_json_rpc_with_transactions_hashes(self) -> JsonValue {
-        let ethers_block: EthersBlockH256 = self.into();
-        to_json_value(ethers_block)
+        let alloy_block: AlloyBlockH256 = self.into();
+        to_json_value(alloy_block)
     }
 
     /// Returns the block number.
@@ -137,13 +136,20 @@ impl From<Block> for EthersBlockEthersTransaction {
     }
 }
 
-impl From<Block> for EthersBlockH256 {
+// TODO: improve before merging - simplify logic
+impl From<Block> for AlloyBlockH256 {
     fn from(block: Block) -> Self {
-        let ethers_block = EthersBlockH256::from(block.header);
-        let ethers_block_transactions: Vec<H256> = block.transactions.into_iter().map(|x| x.input.hash).map_into().collect();
+        let alloy_block: AlloyBlockH256 = block.header.into();
+        let transaction_hashes: Vec<alloy_primitives::B256> = block
+            .transactions
+            .into_iter()
+            .map(|x| x.input.hash)
+            .map(alloy_primitives::B256::from) // Simplified: removed redundant closure
+            .collect();
+
         Self {
-            transactions: ethers_block_transactions,
-            ..ethers_block
+            transactions: alloy_rpc_types_eth::BlockTransactions::Hashes(transaction_hashes),
+            ..alloy_block
         }
     }
 }

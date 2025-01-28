@@ -161,7 +161,6 @@ where
     }
 }
 
-
 // TODO: improve before merging - validate default fields
 impl<T> From<BlockHeader> for AlloyBlock<T> {
     fn from(header: BlockHeader) -> Self {
@@ -187,7 +186,7 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
             number: header.number.as_u64(),
             gas_limit: header.gas_limit.as_u64(),
             gas_used: header.gas_used.as_u64(),
-            timestamp: (*header.timestamp).into(),
+            timestamp: *header.timestamp,
             extra_data: header.extra_data.into(),
             mix_hash: B256::ZERO, // Default value as we don't track this
             nonce: B64::from(header.nonce),
@@ -210,8 +209,8 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
         Block {
             header: rpc_header,
             uncles: Vec::new(),
-            transactions: BlockTransactions::default(), 
-            withdrawals: None,                      // We don't support withdrawals yet
+            transactions: BlockTransactions::default(),
+            withdrawals: None, // We don't support withdrawals yet
         }
     }
 }
