@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use alloy_primitives::B256;
+use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
@@ -136,14 +138,13 @@ impl From<Block> for EthersBlockEthersTransaction {
     }
 }
 
-// TODO: improve before merging - simplify logic
 impl From<Block> for AlloyBlockH256 {
     fn from(block: Block) -> Self {
         let alloy_block: AlloyBlockH256 = block.header.into();
-        let transaction_hashes: Vec<alloy_primitives::B256> = block.transactions.into_iter().map(|x| x.input.hash).map(alloy_primitives::B256::from).collect();
+        let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.hash).map(B256::from).collect();
 
         Self {
-            transactions: alloy_rpc_types_eth::BlockTransactions::Hashes(transaction_hashes),
+            transactions: BlockTransactions::Hashes(transaction_hashes),
             ..alloy_block
         }
     }
