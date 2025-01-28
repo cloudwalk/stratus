@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
+use alloy_rpc_types_trace::geth::call::FlatCallFrame;
+use alloy_rpc_types_trace::geth::mux::MuxFrame;
+use alloy_rpc_types_trace::geth::CallFrame;
 use alloy_rpc_types_trace::geth::FourByteFrame;
 use alloy_rpc_types_trace::geth::GethDebugBuiltInTracerType;
 use alloy_rpc_types_trace::geth::GethDebugTracerType;
@@ -60,6 +63,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
+use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -194,15 +198,14 @@ impl Evm {
 
     /// Execute a transaction using a tracer.
     pub fn inspect(&mut self, input: InspectorInput) -> Result<GethTrace, StratusError> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
+        let InspectorInput {
+            tx_hash,
+            opts,
+            trace_unsuccessful_only,
+        } = input;
+        let tracer_type = opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))?;
 
-        let InspectorInput { tx_hash, opts } = input;
-
-        if opts
-            .as_ref()
-            .is_some_and(|opts| matches!(opts.tracer, Some(GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer))))
-        {
+        if matches!(tracer_type, GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer)) {
             return Ok(NoopFrame::default().into());
         }
 
@@ -212,6 +215,10 @@ impl Evm {
             .storage
             .read_transaction(tx_hash)?
             .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
+
+        if trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
+            return Ok(default_trace(tracer_type, tx));
+        }
 
         let block = self.evm.db().storage.read_block(BlockFilter::Number(tx.block_number()))?.ok_or_else(|| {
             StratusError::Storage(StorageError::BlockNotFound {
@@ -257,9 +264,6 @@ impl Evm {
 
         drop(evm);
 
-        let opts = opts.unwrap_or_default();
-        let tracer_type = opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))?;
-
         let trace_result: GethTrace = match tracer_type {
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => {
                 let mut inspector = FourByteInspector::default();
@@ -297,12 +301,6 @@ impl Evm {
             }
             _ => return Err(anyhow!("tracer not implemented").into()),
         };
-
-        // track metrics
-        #[cfg(feature = "metrics")]
-        {
-            metrics::inc_evm_inspect(start.elapsed(), serde_json::to_string(&tracer_type)?);
-        }
 
         Ok(trace_result)
     }
@@ -604,4 +602,21 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
         }
     }
     Ok(execution_changes)
+}
+
+pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionStage) -> GethTrace {
+    match tracer_type {
+        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => FourByteFrame::default().into(),
+        // HACK: Spoof empty call frame to prevent Blockscout from retrying unnecessary trace calls
+        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => CallFrame {
+            from: tx.from().into(),
+            to: tx.to().map_into(),
+            typ: "CALL".to_string(),
+            ..Default::default()
+        }
+        .into(),
+        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => MuxFrame::default().into(),
+        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => FlatCallFrame::default().into(),
+        _ => NoopFrame::default().into(),
+    }
 }
