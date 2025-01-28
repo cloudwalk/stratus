@@ -86,7 +86,7 @@ impl Evm {
         tracing::info!(?config, "creating revm");
 
         // configure handler
-        let mut handler = Handler::mainnet_with_spec(SpecId::LONDON);
+        let mut handler = Handler::mainnet_with_spec(SpecId::CANCUN);
 
         // handler custom validators
         let validate_tx_against_state = handler.validation.tx_against_state;
