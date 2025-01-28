@@ -34,3 +34,10 @@ impl From<MinerNonce> for [u8; 8] {
         H64::from(value).0
     }
 }
+
+impl From<MinerNonce> for alloy_primitives::B64 {
+    fn from(value: MinerNonce) -> Self {
+        // Convert MinerNonce to [u8; 8] and then wrap it in B64
+        alloy_primitives::B64::new(<[u8; 8]>::from(value))
+    }
+}

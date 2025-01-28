@@ -38,3 +38,9 @@ impl From<Size> for u64 {
         value.0.as_u64()
     }
 }
+
+impl From<Size> for alloy_primitives::Uint<256, 4> {
+    fn from(value: Size) -> Self {
+        alloy_primitives::Uint::from(value.0.as_u64())
+    }
+}

@@ -1,3 +1,6 @@
+use alloy_primitives::Uint;
+use alloy_rpc_types_eth::Block as AlloyBlock;
+use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
 use ethereum_types::H256;
 use ethereum_types::H64;
@@ -154,6 +157,61 @@ where
             state_root: header.state_root.into(),
             seal_fields: Vec::default(),
             other: OtherFields::default(),
+        }
+    }
+}
+
+
+// TODO: improve before merging - validate default fields
+impl From<BlockHeader> for AlloyBlock {
+    fn from(header: BlockHeader) -> Self {
+        use alloy_consensus::Header as ConsensusHeader; // TODO: improve before merging - simplify imports
+        use alloy_primitives::Address;
+        use alloy_primitives::Bloom;
+        use alloy_primitives::B256;
+        use alloy_primitives::B64;
+        use alloy_rpc_types_eth::Block;
+        use alloy_rpc_types_eth::Header;
+
+        // Create the inner consensus header with all the block data
+        let inner = ConsensusHeader {
+            parent_hash: B256::from(header.parent_hash),
+            ommers_hash: B256::from(HASH_EMPTY_UNCLES),
+            beneficiary: Address::from(header.miner),
+            state_root: B256::from(header.state_root),
+            transactions_root: B256::from(header.transactions_root),
+            receipts_root: B256::from(header.receipts_root),
+            withdrawals_root: None, // We don't support withdrawals yet
+            logs_bloom: Bloom::from(header.bloom),
+            difficulty: Uint::<256, 4>::ZERO,
+            number: header.number.as_u64(),
+            gas_limit: header.gas_limit.as_u64(),
+            gas_used: header.gas_used.as_u64(),
+            timestamp: (*header.timestamp).into(),
+            extra_data: header.extra_data.into(),
+            mix_hash: B256::ZERO, // Default value as we don't track this
+            nonce: B64::from(header.nonce),
+            base_fee_per_gas: None,         // We don't support EIP-1559 yet
+            blob_gas_used: None,            // We don't support EIP-4844 yet
+            excess_blob_gas: None,          // We don't support EIP-4844 yet
+            parent_beacon_block_root: None, // We don't support beacon chain yet
+            requests_hash: None,            // Not used in our implementation
+        };
+
+        // Create the RPC header that wraps the consensus header
+        let rpc_header = Header {
+            hash: header.hash.into(),
+            inner,
+            total_difficulty: Some(Uint::<256, 4>::ZERO),
+            size: Some(header.size.into()),
+        };
+
+        // Create the full block
+        Block {
+            header: rpc_header,
+            uncles: Vec::new(),
+            transactions: BlockTransactions::Full(Vec::new()), // No transactions in void block
+            withdrawals: None,                      // We don't support withdrawals yet
         }
     }
 }
