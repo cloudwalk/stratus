@@ -39,6 +39,7 @@ impl From<Size> for u64 {
     }
 }
 
+// TODO: improve before merging - add to the correct place and improve import
 impl From<Size> for alloy_primitives::Uint<256, 4> {
     fn from(value: Size) -> Self {
         alloy_primitives::Uint::from(value.0.as_u64())
