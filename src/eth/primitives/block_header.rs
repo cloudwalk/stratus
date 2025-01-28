@@ -163,7 +163,7 @@ where
 
 
 // TODO: improve before merging - validate default fields
-impl From<BlockHeader> for AlloyBlock {
+impl<T> From<BlockHeader> for AlloyBlock<T> {
     fn from(header: BlockHeader) -> Self {
         use alloy_consensus::Header as ConsensusHeader; // TODO: improve before merging - simplify imports
         use alloy_primitives::Address;
@@ -210,7 +210,7 @@ impl From<BlockHeader> for AlloyBlock {
         Block {
             header: rpc_header,
             uncles: Vec::new(),
-            transactions: BlockTransactions::Full(Vec::new()), // No transactions in void block
+            transactions: BlockTransactions::default(), 
             withdrawals: None,                      // We don't support withdrawals yet
         }
     }
