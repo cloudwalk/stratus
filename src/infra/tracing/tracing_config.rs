@@ -65,6 +65,15 @@ impl TracingConfig {
     ///
     /// Uses println! to have information available in stdout before tracing is initialized.
     pub fn init(&self, sentry_config: &Option<SentryConfig>) -> anyhow::Result<()> {
+        match self.create_subscriber(sentry_config).try_init() {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                println!("failed to create tracing registry | reason={:?}", e);
+                Err(e.into())
+            }
+        }
+    }
+    pub fn create_subscriber(&self, sentry_config: &Option<SentryConfig>) -> impl SubscriberInitExt {
         println!("creating tracing registry");
 
         // configure tracing context layer
@@ -148,21 +157,12 @@ impl TracingConfig {
             }
         };
 
-        let result = tracing_subscriber::registry()
+        tracing_subscriber::registry()
             .with(tracing_context_layer)
             .with(stdout_layer)
             .with(opentelemetry_layer)
             .with(sentry_layer)
             .with(tokio_console_layer)
-            .try_init();
-
-        match result {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                println!("failed to create tracing registry | reason={:?}", e);
-                Err(e.into())
-            }
-        }
     }
 }
 
@@ -310,5 +310,119 @@ impl FromStr for TracingLogFormat {
             "verbose" | "full" => Ok(Self::Verbose),
             s => Err(anyhow!("unknown log format: {}", s)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tracing_config_with_json_format() {
+        let config = TracingConfig {
+            tracing_url: None,
+            tracing_protocol: TracingProtocol::Grpc,
+            tracing_headers: vec![],
+            tracing_log_format: TracingLogFormat::Json,
+            tracing_tokio_console_address: None,
+        };
+        config.create_subscriber(&None);
+    }
+
+    #[test]
+    fn test_tracing_config_with_minimal_format() {
+        let config = TracingConfig {
+            tracing_url: None,
+            tracing_protocol: TracingProtocol::Grpc,
+            tracing_headers: vec![],
+            tracing_log_format: TracingLogFormat::Minimal,
+            tracing_tokio_console_address: None,
+        };
+        config.create_subscriber(&None);
+    }
+
+    #[test]
+    fn test_tracing_config_with_normal_format() {
+        let config = TracingConfig {
+            tracing_url: None,
+            tracing_protocol: TracingProtocol::Grpc,
+            tracing_headers: vec![],
+            tracing_log_format: TracingLogFormat::Normal,
+            tracing_tokio_console_address: None,
+        };
+        config.create_subscriber(&None);
+    }
+
+    #[test]
+    fn test_tracing_config_with_verbose_format() {
+        let config = TracingConfig {
+            tracing_url: None,
+            tracing_protocol: TracingProtocol::Grpc,
+            tracing_headers: vec![],
+            tracing_log_format: TracingLogFormat::Verbose,
+            tracing_tokio_console_address: None,
+        };
+        config.create_subscriber(&None);
+    }
+
+    #[tokio::test]
+    async fn test_tracing_config_with_opentelemetry() {
+        let config = TracingConfig {
+            tracing_url: Some("http://localhost:4317".to_string()),
+            tracing_protocol: TracingProtocol::Grpc,
+            tracing_headers: vec![],
+            tracing_log_format: TracingLogFormat::Normal,
+            tracing_tokio_console_address: None,
+        };
+        config.create_subscriber(&None);
+    }
+
+    #[test]
+    fn test_tracing_config_with_sentry() {
+        let sentry_config = SentryConfig {
+            sentry_url: "http://localhost:1234".to_string(),
+        };
+        let config = TracingConfig {
+            tracing_url: None,
+            tracing_protocol: TracingProtocol::Grpc,
+            tracing_headers: vec![],
+            tracing_log_format: TracingLogFormat::Normal,
+            tracing_tokio_console_address: None,
+        };
+        config.create_subscriber(&Some(sentry_config));
+    }
+
+    #[tokio::test]
+    async fn test_tracing_config_with_tokio_console() {
+        let config = TracingConfig {
+            tracing_url: None,
+            tracing_protocol: TracingProtocol::Grpc,
+            tracing_headers: vec![],
+            tracing_log_format: TracingLogFormat::Normal,
+            tracing_tokio_console_address: Some("127.0.0.1:6669".parse().unwrap()),
+        };
+        config.create_subscriber(&None);
+    }
+
+    #[test]
+    fn test_tracing_protocol_from_str() {
+        assert_eq!(TracingProtocol::from_str("grpc").unwrap(), TracingProtocol::Grpc);
+        assert_eq!(TracingProtocol::from_str("http-binary").unwrap(), TracingProtocol::HttpBinary);
+        assert_eq!(TracingProtocol::from_str("http-json").unwrap(), TracingProtocol::HttpJson);
+        assert!(TracingProtocol::from_str("invalid").is_err());
+    }
+
+    #[test]
+    fn test_tracing_protocol_display() {
+        assert_eq!(TracingProtocol::Grpc.to_string(), "grpc");
+        assert_eq!(TracingProtocol::HttpBinary.to_string(), "http-binary");
+        assert_eq!(TracingProtocol::HttpJson.to_string(), "http-json");
+    }
+
+    #[test]
+    fn test_tracing_protocol_into_protocol() {
+        assert_eq!(Protocol::from(TracingProtocol::Grpc), Protocol::Grpc);
+        assert_eq!(Protocol::from(TracingProtocol::HttpBinary), Protocol::HttpBinary);
+        assert_eq!(Protocol::from(TracingProtocol::HttpJson), Protocol::HttpJson);
     }
 }
