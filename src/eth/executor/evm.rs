@@ -607,13 +607,13 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
 pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionStage) -> GethTrace {
     match tracer_type {
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => FourByteFrame::default().into(),
-        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
-            let mut trace = CallFrame::default();
-            trace.from = tx.from().into();
-            trace.to = tx.to().map_into();
-            trace.typ = "CALL".to_string();
-            trace.into()
+        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => CallFrame {
+            from: tx.from().into(),
+            to: tx.to().map_into(),
+            typ: "CALL".to_string(),
+            ..Default::default()
         }
+        .into(),
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => MuxFrame::default().into(),
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => FlatCallFrame::default().into(),
         _ => NoopFrame::default().into(),
