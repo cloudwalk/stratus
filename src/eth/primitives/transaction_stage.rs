@@ -85,6 +85,14 @@ impl TransactionStage {
         }
     }
 
+    pub fn signer(&self) -> Address {
+        match self {
+            Self::Executed(TransactionExecution::External(tx)) => tx.receipt.from.into(),
+            Self::Executed(TransactionExecution::Local(tx)) => tx.evm_input.from,
+            Self::Mined(tx) => tx.input.signer,
+        }
+    }
+
     pub fn to(&self) -> Option<Address> {
         match self {
             Self::Executed(TransactionExecution::External(tx)) => tx.receipt.to.map_into(),
