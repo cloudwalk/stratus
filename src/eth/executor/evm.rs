@@ -203,7 +203,7 @@ impl Evm {
             trace_unsuccessful_only,
         } = input;
         let tracer_type = opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))?;
-      
+
         if matches!(tracer_type, GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer)) {
             return Ok(NoopFrame::default().into());
         }
@@ -608,7 +608,7 @@ pub fn default_trace(tracer_type: GethDebugTracerType) -> GethTrace {
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => FourByteFrame::default().into(),
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
             let mut trace = CallFrame::default();
-            trace.typ = "0".to_string();
+            trace.typ = "CALL".to_string();
             trace.into()
         }
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => MuxFrame::default().into(),
