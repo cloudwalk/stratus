@@ -406,18 +406,9 @@ mod tests {
 
     #[test]
     fn test_tracing_protocol_from_str() {
-        assert_eq!(
-            TracingProtocol::from_str("grpc").unwrap(),
-            TracingProtocol::Grpc
-        );
-        assert_eq!(
-            TracingProtocol::from_str("http-binary").unwrap(),
-            TracingProtocol::HttpBinary
-        );
-        assert_eq!(
-            TracingProtocol::from_str("http-json").unwrap(),
-            TracingProtocol::HttpJson
-        );
+        assert_eq!(TracingProtocol::from_str("grpc").unwrap(), TracingProtocol::Grpc);
+        assert_eq!(TracingProtocol::from_str("http-binary").unwrap(), TracingProtocol::HttpBinary);
+        assert_eq!(TracingProtocol::from_str("http-json").unwrap(), TracingProtocol::HttpJson);
         assert!(TracingProtocol::from_str("invalid").is_err());
     }
 
