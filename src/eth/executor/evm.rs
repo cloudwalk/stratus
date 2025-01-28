@@ -63,6 +63,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
+use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -216,7 +217,7 @@ impl Evm {
             .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
 
         if trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
-            return Ok(default_trace(tracer_type));
+            return Ok(default_trace(tracer_type, tx));
         }
 
         let block = self.evm.db().storage.read_block(BlockFilter::Number(tx.block_number()))?.ok_or_else(|| {
@@ -603,11 +604,13 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
     Ok(execution_changes)
 }
 
-pub fn default_trace(tracer_type: GethDebugTracerType) -> GethTrace {
+pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionStage) -> GethTrace {
     match tracer_type {
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => FourByteFrame::default().into(),
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
             let mut trace = CallFrame::default();
+            trace.from = tx.from().into();
+            trace.to = tx.to().map_into();
             trace.typ = "CALL".to_string();
             trace.into()
         }
