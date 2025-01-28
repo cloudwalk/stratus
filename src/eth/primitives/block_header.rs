@@ -1,4 +1,3 @@
-use alloy_primitives::Uint;
 use alloy_rpc_types_eth::Block as AlloyBlock;
 use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
@@ -13,6 +12,13 @@ use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
+use crate::alias::AlloyAddress;
+use crate::alias::AlloyB256;
+use crate::alias::AlloyB64;
+use crate::alias::AlloyBloom;
+use crate::alias::AlloyConsensusHeader;
+use crate::alias::AlloyHeader;
+use crate::alias::AlloyUint256;
 use crate::alias::EthersBlockVoid;
 use crate::alias::EthersBytes;
 use crate::eth::primitives::logs_bloom::LogsBloom;
@@ -164,32 +170,23 @@ where
 // TODO: improve before merging - validate default fields
 impl<T> From<BlockHeader> for AlloyBlock<T> {
     fn from(header: BlockHeader) -> Self {
-        use alloy_consensus::Header as ConsensusHeader;
-        use alloy_primitives::Address;
-        use alloy_primitives::Bloom;
-        use alloy_primitives::B256;
-        use alloy_primitives::B64;
-        use alloy_rpc_types_eth::Block;
-        use alloy_rpc_types_eth::Header;
-
-        // TODO: improve before merging - simplify imports
-        let inner = ConsensusHeader {
+        let inner = AlloyConsensusHeader {
             // block: identifiers
             number: header.number.as_u64(),
-            mix_hash: B256::ZERO,
+            mix_hash: AlloyB256::ZERO,
 
             // block: relation with other blocks
-            ommers_hash: B256::from(HASH_EMPTY_UNCLES),
-            parent_hash: B256::from(header.parent_hash),
+            ommers_hash: AlloyB256::from(HASH_EMPTY_UNCLES),
+            parent_hash: AlloyB256::from(header.parent_hash),
             parent_beacon_block_root: None,
 
             // mining: identifiers
             timestamp: *header.timestamp,
-            beneficiary: Address::from(header.miner),
+            beneficiary: AlloyAddress::from(header.miner),
 
             // mining: difficulty
-            difficulty: Uint::<256, 4>::ZERO,
-            nonce: B64::from(header.nonce),
+            difficulty: AlloyUint256::ZERO,
+            nonce: AlloyB64::from(header.nonce),
 
             // mining: gas
             gas_limit: header.gas_limit.as_u64(),
@@ -199,25 +196,25 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
             excess_blob_gas: None,
 
             // transactions
-            transactions_root: B256::from(header.transactions_root),
-            receipts_root: B256::from(header.receipts_root),
+            transactions_root: AlloyB256::from(header.transactions_root),
+            receipts_root: AlloyB256::from(header.receipts_root),
             withdrawals_root: None,
 
             // data
-            logs_bloom: Bloom::from(header.bloom),
+            logs_bloom: AlloyBloom::from(header.bloom),
             extra_data: header.extra_data.into(),
-            state_root: B256::from(header.state_root),
+            state_root: AlloyB256::from(header.state_root),
             requests_hash: None,
         };
 
-        let rpc_header = Header {
+        let rpc_header = AlloyHeader {
             hash: header.hash.into(),
             inner,
-            total_difficulty: Some(Uint::<256, 4>::ZERO),
+            total_difficulty: Some(AlloyUint256::ZERO),
             size: Some(header.size.into()),
         };
 
-        Block {
+        Self {
             header: rpc_header,
             uncles: Vec::new(),
             transactions: BlockTransactions::default(),
