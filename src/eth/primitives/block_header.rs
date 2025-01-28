@@ -129,7 +129,7 @@ where
             // block: identifiers
             hash: Some(header.hash.into()),
             number: Some(header.number.into()),
-            mix_hash: Some(H256::default()), // Validate
+            mix_hash: Some(H256::default()),
 
             // block: relation with other blocks
             uncles_hash: HASH_EMPTY_UNCLES.into(),
