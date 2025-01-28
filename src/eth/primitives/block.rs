@@ -144,7 +144,7 @@ impl From<Block> for AlloyBlockH256 {
             .transactions
             .into_iter()
             .map(|x| x.input.hash)
-            .map(alloy_primitives::B256::from) // Simplified: removed redundant closure
+            .map(alloy_primitives::B256::from) 
             .collect();
 
         Self {
