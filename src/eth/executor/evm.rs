@@ -86,7 +86,7 @@ impl Evm {
         tracing::info!(?config, "creating revm");
 
         // configure handler
-        let mut handler = Handler::mainnet_with_spec(SpecId::CANCUN);
+        let mut handler = Handler::mainnet_with_spec(config.executor_evm_spec);
 
         // handler custom validators
         let validate_tx_against_state = handler.validation.tx_against_state;
@@ -239,7 +239,7 @@ impl Evm {
             ..Default::default()
         });
         let mut cache_db = CacheDB::new(self.evm.db());
-        let handler = Handler::mainnet_with_spec(SpecId::LONDON);
+        let handler = Handler::mainnet_with_spec(self.evm.spec_id());
 
         let mut evm = RevmEvm::builder()
             .with_external_context(())
@@ -267,32 +267,32 @@ impl Evm {
         let trace_result: GethTrace = match tracer_type {
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => {
                 let mut inspector = FourByteInspector::default();
-                RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector)?;
+                RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector, self.evm.spec_id())?;
                 FourByteFrame::from(&inspector).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
                 let call_config = opts.tracer_config.into_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_call_config(&call_config));
-                let res = RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector)?;
+                let res = RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector, self.evm.spec_id())?;
                 inspector.geth_builder().geth_call_traces(call_config, res.result.gas_used()).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::PreStateTracer) => {
                 let prestate_config = opts.tracer_config.into_pre_state_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_prestate_config(&prestate_config));
-                let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector)?;
+                let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector, self.evm.spec_id())?;
                 inspector.geth_builder().geth_prestate_traces(&res, &prestate_config, &cache_db)?.into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer) => NoopFrame::default().into(),
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => {
                 let mux_config = opts.tracer_config.into_mux_config()?;
                 let mut inspector = MuxInspector::try_from_config(mux_config).map_err(|e| anyhow!(e))?;
-                let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector)?;
+                let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector, self.evm.spec_id())?;
                 inspector.try_into_mux_frame(&res, &cache_db, tx_info)?.into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => {
                 let flat_call_config = opts.tracer_config.into_flat_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_flat_call_config(&flat_call_config));
-                let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector)?;
+                let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector, self.evm.spec_id())?;
                 inspector
                     .with_transaction_gas_limit(res.result.gas_used())
                     .into_parity_builder()
@@ -312,7 +312,7 @@ trait TxEnvExt {
 
 trait EvmExt<DB: Database> {
     fn fill_env(&mut self, input: EvmInput);
-    fn inspect(input: EvmInput, db: DB, inspector: impl GetInspector<DB>) -> EVMResult<DB::Error>;
+    fn inspect(input: EvmInput, db: DB, inspector: impl GetInspector<DB>, spec: SpecId) -> EVMResult<DB::Error>;
 }
 
 impl<EXT, DB: Database> EvmExt<DB> for RevmEvm<'_, EXT, DB> {
@@ -321,8 +321,8 @@ impl<EXT, DB: Database> EvmExt<DB> for RevmEvm<'_, EXT, DB> {
         self.tx_mut().fill_env(input);
     }
 
-    fn inspect(input: EvmInput, db: DB, inspector: impl GetInspector<DB>) -> EVMResult<DB::Error> {
-        let handler = Handler::mainnet_with_spec(SpecId::LONDON);
+    fn inspect(input: EvmInput, db: DB, inspector: impl GetInspector<DB>, spec: SpecId) -> EVMResult<DB::Error> {
+        let handler = Handler::mainnet_with_spec(spec);
 
         let mut evm = RevmEvm::builder()
             .with_external_context(inspector)
