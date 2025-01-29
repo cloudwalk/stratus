@@ -173,6 +173,19 @@ e2e-admin-password:
         killport 3000 -s sigterm
     done
 
+# E2E: Execute EOF (EVM Object Format) tests
+e2e-eof:
+    #!/bin/bash
+    cd e2e/eof
+
+    # Start Stratus
+    just run -a 0.0.0.0:3000 --executor-evm-spec Osaka > stratus.log &
+    just _wait_for_stratus
+
+    # Run tests using alice pk
+    forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "deploy()"
+    forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "run()"
+
 # E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat block-mode="automine" test="":
     #!/bin/bash
@@ -570,6 +583,7 @@ stratus-test-coverage *args="":
         just _e2e-leader-follower-up-coverage $test
     done
 
-    just e2e-admin-password
+    just _coverage-run-stratus-recipe e2e-eof
+    just _coverage-run-stratus-recipe e2e-admin-password
 
     cargo llvm-cov report {{args}}
