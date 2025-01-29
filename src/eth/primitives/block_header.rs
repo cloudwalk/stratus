@@ -1,3 +1,8 @@
+use alloy_consensus::constants::EMPTY_OMMER_ROOT_HASH;
+use alloy_consensus::constants::EMPTY_ROOT_HASH;
+use alloy_primitives::FixedBytes;
+use alloy_rpc_types_eth::Block as AlloyBlock;
+use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
 use ethereum_types::H256;
 use ethereum_types::H64;
@@ -10,6 +15,14 @@ use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
+use crate::alias::AlloyAddress;
+use crate::alias::AlloyB256;
+use crate::alias::AlloyB64;
+use crate::alias::AlloyBloom;
+use crate::alias::AlloyBytes;
+use crate::alias::AlloyConsensusHeader;
+use crate::alias::AlloyHeader;
+use crate::alias::AlloyUint256;
 use crate::alias::EthersBlockVoid;
 use crate::alias::EthersBytes;
 use crate::eth::primitives::logs_bloom::LogsBloom;
@@ -154,6 +167,61 @@ where
             state_root: header.state_root.into(),
             seal_fields: Vec::default(),
             other: OtherFields::default(),
+        }
+    }
+}
+
+impl<T> From<BlockHeader> for AlloyBlock<T> {
+    fn from(header: BlockHeader) -> Self {
+        let inner = AlloyConsensusHeader {
+            // block: identifiers
+            number: header.number.as_u64(),
+            mix_hash: FixedBytes::default(),
+
+            // block: relation with other blocks
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
+            parent_hash: AlloyB256::from(header.parent_hash),
+            parent_beacon_block_root: None,
+
+            // mining: identifiers
+            timestamp: *header.timestamp,
+            beneficiary: AlloyAddress::from(Address::COINBASE),
+
+            // mining: difficulty
+            difficulty: AlloyUint256::ZERO,
+            nonce: AlloyB64::ZERO,
+
+            // mining: gas
+            gas_limit: 100_000_000u64,
+            gas_used: header.gas_used.as_u64(),
+            base_fee_per_gas: Some(0u64),
+            blob_gas_used: None,
+            excess_blob_gas: None,
+
+            // transactions
+            transactions_root: AlloyB256::from(header.transactions_root),
+            receipts_root: EMPTY_ROOT_HASH,
+            withdrawals_root: None,
+
+            // data
+            logs_bloom: AlloyBloom::from(header.bloom),
+            extra_data: AlloyBytes::default(),
+            state_root: AlloyB256::from(header.state_root),
+            requests_hash: None,
+        };
+
+        let rpc_header = AlloyHeader {
+            hash: header.hash.into(),
+            inner,
+            total_difficulty: Some(AlloyUint256::ZERO),
+            size: Some(header.size.into()),
+        };
+
+        Self {
+            header: rpc_header,
+            uncles: Vec::new(),
+            transactions: BlockTransactions::default(),
+            withdrawals: None,
         }
     }
 }

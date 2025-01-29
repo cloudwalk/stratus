@@ -1,3 +1,4 @@
+use alloy_primitives::B64;
 use display_json::DebugAsJson;
 use ethereum_types::H64;
 use fake::Dummy;
@@ -32,5 +33,11 @@ impl From<MinerNonce> for H64 {
 impl From<MinerNonce> for [u8; 8] {
     fn from(value: MinerNonce) -> Self {
         H64::from(value).0
+    }
+}
+
+impl From<MinerNonce> for B64 {
+    fn from(value: MinerNonce) -> Self {
+        B64::new(<[u8; 8]>::from(value))
     }
 }
