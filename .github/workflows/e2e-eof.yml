@@ -1,4 +1,4 @@
-name: E2E Leader & Follower
+name: E2E EOF
 
 on:
   pull_request:
@@ -32,7 +32,6 @@ jobs:
   eof_test:
     strategy:
       fail-fast: false
-    name: E2E EOF
     runs-on: ubuntu-22.04
     timeout-minutes: 45
 
