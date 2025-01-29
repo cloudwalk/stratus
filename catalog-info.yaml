@@ -14,6 +14,12 @@ metadata:
     - url: https://github.com/cloudwalk/stratus
       title: Repository
       icon: github
+    - url: https://grafana.cloudwalk.network/d/fc5870d5-2b1d-4873-ab64-080d025df0eb/stratus-general
+      title: Application Metrics
+      icon: dashboard
+    - url: https://grafana.cloudwalk.network/d/rYdddlPWk2/node-exporter
+      title: VM Metrics
+      icon: dashboard
 spec:
   type: service
   system: Ledger
