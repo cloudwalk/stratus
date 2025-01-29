@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use display_json::DebugAsJson;
+use revm::primitives::SpecId;
 
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorStrategy;
@@ -40,6 +41,13 @@ pub struct ExecutorConfig {
         default_value = "true"
     )]
     pub executor_reject_not_contract: bool,
+
+    #[arg(long = "executor-evm-spec", env = "EXECUTOR_EVM_SPEC", default_value = "Cancun", value_parser = parse_evm_spec)]
+    pub executor_evm_spec: SpecId,
+}
+
+fn parse_evm_spec(input: &str) -> anyhow::Result<SpecId> {
+    Ok(SpecId::from(input))
 }
 
 impl ExecutorConfig {
