@@ -2,7 +2,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: stratus
-  description: Stratus blockchain execution system with EVM support and JSON-RPC server
+  description: An EVM-compatible blockchain providing an EVM executor and JSON-RPC server, with RocksDB for custom storage
   annotations:
     github.com/project-slug: cloudwalk/stratus
     backstage.io/techdocs-ref: dir:.
