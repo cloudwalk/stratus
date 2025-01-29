@@ -1,0 +1,21 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: stratus
+  description: Stratus blockchain execution system with EVM support and JSON-RPC server
+  annotations:
+    github.com/project-slug: cloudwalk/stratus
+    backstage.io/techdocs-ref: dir:.
+  tags:
+    - rust
+    - blockchain
+    - evm
+  links:
+    - url: https://github.com/cloudwalk/stratus
+      title: Repository
+      icon: github
+spec:
+  type: service
+  system: Ledger
+  lifecycle: production
+  owner: team-ledger
