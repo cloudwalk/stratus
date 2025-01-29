@@ -29,18 +29,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  leader_follower_test:
+  eof_test:
     strategy:
       fail-fast: false
-      matrix:
-        test: [brlc, importer, miner, change, deploy, kafka, health]
-    name: E2E Leader & Follower on ${{ matrix.test }}
+    name: E2E EOF
     runs-on: ubuntu-22.04
     timeout-minutes: 45
-
-    concurrency:
-      group: ${{ github.workflow }}-${{ matrix.test }}-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
 
     steps:
       - name: Checkout code
