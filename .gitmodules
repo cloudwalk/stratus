@@ -2,3 +2,6 @@
 	path = hive
 	url = git@github.com:cloudwalk/hive.git
 	branch = add_stratus
+[submodule "e2e/eof/lib/forge-std"]
+	path = e2e/eof/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
