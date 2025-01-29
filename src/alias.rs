@@ -23,6 +23,12 @@ pub type AlloyLogPrimitive = alloy_primitives::Log;
 pub type AlloyBloom = alloy_primitives::Bloom;
 pub type AlloyReceipt = alloy_rpc_types_eth::TransactionReceipt;
 pub type AlloyTransaction = alloy_rpc_types_eth::Transaction;
+pub type AlloyAddress = alloy_primitives::Address;
+pub type AlloyB256 = alloy_primitives::B256;
+pub type AlloyB64 = alloy_primitives::B64;
+pub type AlloyConsensusHeader = alloy_consensus::Header;
+pub type AlloyHeader = alloy_rpc_types_eth::Header;
+pub type AlloyUint256 = alloy_primitives::Uint<256, 4>;
 
 // -----------------------------------------------------------------------------
 // Ethers
@@ -30,7 +36,6 @@ pub type AlloyTransaction = alloy_rpc_types_eth::Transaction;
 pub type EthersBlockVoid = ethers_core::types::Block<()>;
 pub type EthersBlockEthersTransaction = ethers_core::types::Block<ethers_core::types::Transaction>;
 pub type EthersBlockExternalTransaction = ethers_core::types::Block<ExternalTransaction>;
-pub type EthersBlockH256 = ethers_core::types::Block<H256>;
 pub type EthersBytes = ethers_core::types::Bytes;
 pub type EthersTransaction = ethers_core::types::Transaction;
 

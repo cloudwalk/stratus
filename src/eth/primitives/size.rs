@@ -1,3 +1,4 @@
+use alloy_primitives::Uint;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
@@ -36,5 +37,11 @@ impl TryFrom<U256> for Size {
 impl From<Size> for u64 {
     fn from(value: Size) -> Self {
         value.0.as_u64()
+    }
+}
+
+impl From<Size> for Uint<256, 4> {
+    fn from(value: Size) -> Self {
+        Uint::from(value.0.as_u64())
     }
 }
