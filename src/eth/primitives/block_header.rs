@@ -4,11 +4,6 @@ use alloy_primitives::FixedBytes;
 use alloy_rpc_types_eth::Block as AlloyBlock;
 use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
-use ethereum_types::H256;
-use ethereum_types::H64;
-use ethereum_types::U256;
-use ethers_core::types::Block as EthersBlock;
-use ethers_core::types::OtherFields;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
@@ -18,13 +13,12 @@ use jsonrpsee::SubscriptionMessage;
 use crate::alias::AlloyAddress;
 use crate::alias::AlloyB256;
 use crate::alias::AlloyB64;
+use crate::alias::AlloyBlockVoid;
 use crate::alias::AlloyBloom;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyConsensusHeader;
 use crate::alias::AlloyHeader;
 use crate::alias::AlloyUint256;
-use crate::alias::EthersBlockVoid;
-use crate::alias::EthersBytes;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -120,56 +114,6 @@ impl Dummy<Faker> for BlockHeader {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl<T> From<BlockHeader> for EthersBlock<T>
-where
-    T: Default,
-{
-    fn from(header: BlockHeader) -> Self {
-        Self {
-            // block: identifiers
-            hash: Some(header.hash.into()),
-            number: Some(header.number.into()),
-            mix_hash: Some(H256::default()),
-
-            // block: relation with other blocks
-            uncles_hash: HASH_EMPTY_UNCLES.into(),
-            uncles: Vec::new(),
-            parent_beacon_block_root: None,
-            parent_hash: header.parent_hash.into(),
-
-            // mining: identifiers
-            timestamp: (*header.timestamp).into(),
-            author: Some(Address::COINBASE.into()),
-
-            // minining: difficulty
-            difficulty: U256::zero(),
-            total_difficulty: Some(U256::zero()),
-            nonce: Some(H64::zero()),
-
-            // mining: gas
-            gas_limit: Gas::from(100_000_000u64).into(),
-            gas_used: header.gas_used.into(),
-            base_fee_per_gas: Some(U256::zero()),
-            blob_gas_used: None,
-            excess_blob_gas: None,
-
-            // transactions
-            transactions: vec![], // can't fill transactions from header, must be modified afterward
-            transactions_root: header.transactions_root.into(),
-            receipts_root: HASH_EMPTY_TRIE.into(),
-            withdrawals_root: None,
-            withdrawals: None,
-
-            // data
-            size: Some(u64::from(header.size).into()),
-            logs_bloom: Some(*header.bloom),
-            extra_data: EthersBytes::default(),
-            state_root: header.state_root.into(),
-            seal_fields: Vec::default(),
-            other: OtherFields::default(),
-        }
-    }
-}
 
 impl<T> From<BlockHeader> for AlloyBlock<T> {
     fn from(header: BlockHeader) -> Self {
@@ -258,8 +202,8 @@ impl TryFrom<&ExternalBlock> for BlockHeader {
 
 impl From<BlockHeader> for SubscriptionMessage {
     fn from(value: BlockHeader) -> Self {
-        let ethers_block = EthersBlockVoid::from(value);
-        Self::from_json(&ethers_block).expect_infallible()
+        let alloy_block = AlloyBlockVoid::from(value);
+        Self::from_json(&alloy_block).expect_infallible()
     }
 }
 
