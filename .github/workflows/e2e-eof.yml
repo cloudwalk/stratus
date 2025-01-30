@@ -32,8 +32,8 @@ jobs:
   eof_test:
     strategy:
       fail-fast: false
-    matrix:
-        test: [inmemory, rocks]
+      matrix:
+          test: [inmemory, rocks]
     name: E2E EOF on ${{ matrix.test }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
