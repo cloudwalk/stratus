@@ -174,14 +174,14 @@ e2e-admin-password:
     done
 
 # E2E: Execute EOF (EVM Object Format) tests
-e2e-eof:
+e2e-eof perm-storage="inmemory":
     #!/bin/bash
     cd e2e/eof
 
     forge install
 
     # Start Stratus
-    just run -a 0.0.0.0:3000 --executor-evm-spec Osaka > stratus.log &
+    just run -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}} > stratus.log &
     just _wait_for_stratus
 
     # Run tests using alice pk
