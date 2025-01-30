@@ -568,12 +568,16 @@ stratus-test-coverage *args="":
     just _coverage-run-stratus-recipe e2e-clock-stratus
 
     just _coverage-run-stratus-recipe contracts-test-stratus
+    just _coverage-run-stratus-recipe e2e-eof
 
     # rocksdb
     for test in "automine" "external"; do
         -rm -r data/rocksdb
         just _coverage-run-stratus-recipe e2e-stratus-rocks $test
     done
+
+    -rm -r data/rocksdb
+    just _coverage-run-stratus-recipe e2e-eof rocks
 
     -rm -r data/rocksdb
     just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
@@ -586,7 +590,6 @@ stratus-test-coverage *args="":
         just _e2e-leader-follower-up-coverage $test
     done
 
-    just _coverage-run-stratus-recipe e2e-eof
     just _coverage-run-stratus-recipe e2e-admin-password
 
     cargo llvm-cov report {{args}}
