@@ -20,4 +20,4 @@ jobs:
           self: Merge Gatekeeper
           interval: 5
           timeout: 1800
-          ignored: Codacy Static Code Analysis
+          ignored: PR Agent
