@@ -181,6 +181,7 @@ e2e-eof:
     forge install
 
     # Start Stratus
+    just build
     just run -a 0.0.0.0:3000 --executor-evm-spec Osaka > stratus.log &
     just _wait_for_stratus
 
