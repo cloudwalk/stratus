@@ -5,8 +5,8 @@ use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
+use crate::alias::AlloyBlockEthersTransaction;
 use crate::alias::AlloyBlockH256;
-use crate::alias::EthersBlockEthersTransaction;
 use crate::alias::EthersTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
@@ -70,8 +70,8 @@ impl Block {
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
-        let ethers_block: EthersBlockEthersTransaction = self.into();
-        to_json_value(ethers_block)
+        let alloy_block: AlloyBlockEthersTransaction = self.into();
+        to_json_value(alloy_block)
     }
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
@@ -127,13 +127,14 @@ impl Block {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<Block> for EthersBlockEthersTransaction {
+impl From<Block> for AlloyBlockEthersTransaction {
     fn from(block: Block) -> Self {
-        let ethers_block = EthersBlockEthersTransaction::from(block.header.clone());
-        let ethers_block_transactions: Vec<EthersTransaction> = block.transactions.clone().into_iter().map_into().collect();
+        let alloy_block: AlloyBlockEthersTransaction = block.header.into();
+        let transactions: Vec<EthersTransaction> = block.transactions.into_iter().map_into().collect();
+
         Self {
-            transactions: ethers_block_transactions,
-            ..ethers_block
+            transactions: BlockTransactions::Full(transactions),
+            ..alloy_block
         }
     }
 }
