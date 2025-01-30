@@ -32,8 +32,15 @@ jobs:
   eof_test:
     strategy:
       fail-fast: false
+      matrix:
+          test: [inmemory, rocks]
+    name: E2E EOF on ${{ matrix.test }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.test }}-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout code
@@ -68,7 +75,7 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Run e2e tests
-        run: just e2e-eof
+        run: just e2e-eof ${{ matrix.test }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error

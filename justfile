@@ -174,7 +174,7 @@ e2e-admin-password:
     done
 
 # E2E: Execute EOF (EVM Object Format) tests
-e2e-eof:
+e2e-eof perm-storage="inmemory":
     #!/bin/bash
     cd e2e/eof
 
@@ -182,7 +182,7 @@ e2e-eof:
 
     # Start Stratus
     just build
-    just run -a 0.0.0.0:3000 --executor-evm-spec Osaka > stratus.log &
+    just run -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}} > stratus.log &
     just _wait_for_stratus
 
     # Run tests using alice pk
@@ -568,12 +568,16 @@ stratus-test-coverage *args="":
     just _coverage-run-stratus-recipe e2e-clock-stratus
 
     just _coverage-run-stratus-recipe contracts-test-stratus
+    just _coverage-run-stratus-recipe e2e-eof
 
     # rocksdb
     for test in "automine" "external"; do
         -rm -r data/rocksdb
         just _coverage-run-stratus-recipe e2e-stratus-rocks $test
     done
+
+    -rm -r data/rocksdb
+    just _coverage-run-stratus-recipe e2e-eof rocks
 
     -rm -r data/rocksdb
     just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
@@ -586,7 +590,6 @@ stratus-test-coverage *args="":
         just _e2e-leader-follower-up-coverage $test
     done
 
-    just _coverage-run-stratus-recipe e2e-eof
     just _coverage-run-stratus-recipe e2e-admin-password
 
     cargo llvm-cov report {{args}}
