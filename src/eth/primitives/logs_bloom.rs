@@ -38,9 +38,9 @@ impl DerefMut for LogsBloom {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = LogsBloom, other = [u8; 256], Bloom);
-// TODO: improve before merging
-impl From<alloy_primitives::Bloom> for LogsBloom {
-    fn from(value: alloy_primitives::Bloom) -> Self {
+
+impl From<AlloyBloom> for LogsBloom {
+    fn from(value: AlloyBloom) -> Self {
         let bytes: [u8; 256] = *value.0;
         Self(Bloom::from(bytes))
     }

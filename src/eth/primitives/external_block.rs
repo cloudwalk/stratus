@@ -32,7 +32,7 @@ impl ExternalBlock {
 
     /// Returns the block author.
     pub fn author(&self) -> Address {
-        self.0.header.inner.beneficiary.into() // TODO: improve before merging - author -> beneficiary?
+        self.0.header.inner.beneficiary.into()
     }
 }
 

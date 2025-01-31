@@ -173,7 +173,7 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-// TODO: improve before merging
+
 impl TryFrom<&ExternalBlock> for BlockHeader {
     type Error = anyhow::Error;
     fn try_from(value: &ExternalBlock) -> Result<Self, Self::Error> {

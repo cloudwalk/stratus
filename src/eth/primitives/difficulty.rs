@@ -3,6 +3,7 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 
+use crate::alias::AlloyUint256;
 use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -25,9 +26,9 @@ impl From<[u64; 4]> for Difficulty {
         Self(U256(value))
     }
 }
-// TODO: improve before merging
-impl From<alloy_primitives::Uint<256, 4>> for Difficulty {
-    fn from(value: alloy_primitives::Uint<256, 4>) -> Self {
+
+impl From<AlloyUint256> for Difficulty {
+    fn from(value: AlloyUint256) -> Self {
         Self(U256::from_big_endian(&value.to_be_bytes::<32>()))
     }
 }
