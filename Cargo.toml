@@ -200,7 +200,7 @@ path = "src/bin/historic_events_processor.rs"
 # ------------------------------------------------------------------------------
 
 [features]
-default = ["metrics", "tracing", "dev", "rocks_metrics", "flamegraph", "jemalloc", "jeprof"]
+default = ["metrics", "tracing"]
 
 # Application is running in develoment mode.
 dev = []
