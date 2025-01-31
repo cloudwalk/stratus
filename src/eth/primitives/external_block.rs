@@ -22,8 +22,7 @@ impl ExternalBlock {
     /// Returns the block number.
     #[allow(clippy::expect_used)]
     pub fn number(&self) -> BlockNumber {
-        BlockNumber::try_from(self.0.header.inner.number).expect("external block must have valid number")
-        // TODO: improve before merging
+        BlockNumber::from(self.0.header.inner.number)
     }
 
     /// Returns the block timestamp.

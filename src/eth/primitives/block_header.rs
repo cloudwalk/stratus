@@ -178,11 +178,11 @@ impl TryFrom<&ExternalBlock> for BlockHeader {
     type Error = anyhow::Error;
     fn try_from(value: &ExternalBlock) -> Result<Self, Self::Error> {
         Ok(Self {
-            number: BlockNumber::try_from(value.0.header.inner.number)?,
+            number: BlockNumber::from(value.0.header.inner.number),
             hash: Hash::from(value.0.header.hash),
             transactions_root: Hash::from(value.0.header.inner.transactions_root),
-            gas_used: Gas::try_from(value.0.header.inner.gas_used)?,
-            gas_limit: Gas::try_from(value.0.header.inner.gas_limit)?,
+            gas_used: Gas::from(value.0.header.inner.gas_used),
+            gas_limit: Gas::from(value.0.header.inner.gas_limit),
             bloom: LogsBloom::from(value.0.header.inner.logs_bloom),
             timestamp: UnixTime::from(value.0.header.inner.timestamp),
             parent_hash: Hash::from(value.0.header.inner.parent_hash),
@@ -192,7 +192,7 @@ impl TryFrom<&ExternalBlock> for BlockHeader {
             difficulty: Difficulty::from(value.0.header.inner.difficulty),
             receipts_root: Hash::from(value.0.header.inner.receipts_root),
             uncle_hash: Hash::from(value.0.header.inner.ommers_hash),
-            size: Size::try_from(value.0.header.size.unwrap_or_default())?,
+            size: Size::from(value.0.header.size.unwrap_or_default()),
             state_root: Hash::from(value.0.header.inner.state_root),
             total_difficulty: Difficulty::from(value.0.header.total_difficulty.unwrap_or_default()),
             nonce: MinerNonce::from(value.0.header.inner.nonce.0),
