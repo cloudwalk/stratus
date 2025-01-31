@@ -516,7 +516,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     let tx_hashes = if let BlockTransactions::Full(txs) = &block.transactions {
         txs.iter().map(|tx| tx.hash()).collect::<Vec<_>>()
     } else {
-        tracing::error!("Expected full transactions, got hashes or uncle");
+        tracing::error!("expected full transactions, got hashes or uncle");
         Vec::new()
     };
 
