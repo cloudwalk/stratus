@@ -38,6 +38,7 @@ use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
+use crate::eth::follower::importer::Importer;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
@@ -93,7 +94,7 @@ pub async fn serve_rpc(
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
     miner: Arc<Miner>,
-    consensus: Option<Arc<dyn Consensus>>,
+    consensus: Option<Arc<Importer>>,
 
     // config
     app_config: impl serde::Serialize,

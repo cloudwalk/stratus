@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
-
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::StratusError;
@@ -10,7 +8,7 @@ use crate::eth::rpc::RpcClientApp;
 use crate::infra::metrics;
 use crate::infra::BlockchainClient;
 
-#[async_trait]
+#[allow(async_fn_in_trait)]
 pub trait Consensus: Send + Sync {
     /// Whether this node should serve requests.
     async fn should_serve(&self) -> bool {
@@ -28,7 +26,7 @@ pub trait Consensus: Send + Sync {
             tracing::info!(?lag, "validator and replica are too far apart");
         }
 
-        return should_serve;
+        should_serve
     }
 
     /// Forwards a transaction to leader.

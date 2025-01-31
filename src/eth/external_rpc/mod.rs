@@ -8,7 +8,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
-use async_trait::async_trait;
 use clap::Parser;
 use display_json::DebugAsJson;
 
@@ -24,7 +23,7 @@ use crate::ext::parse_duration;
 
 pub type ExternalBlockWithReceipts = (ExternalBlock, Vec<ExternalReceipt>);
 
-#[async_trait]
+#[allow(async_fn_in_trait)]
 pub trait ExternalRpc: Send + Sync {
     /// Read the largest block number saved inside a block range.
     async fn read_max_block_number_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>>;
@@ -73,7 +72,7 @@ pub enum ExternalRpcKind {
 
 impl ExternalRpcConfig {
     /// Initializes external rpc storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<dyn ExternalRpc>> {
+    pub async fn init(&self) -> anyhow::Result<Arc<PostgresExternalRpc>> {
         tracing::info!(config = ?self, "creating external rpc storage");
 
         let ExternalRpcKind::Postgres { url } = &self.external_rpc_storage_kind;

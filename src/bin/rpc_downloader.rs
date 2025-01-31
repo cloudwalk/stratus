@@ -13,6 +13,7 @@ use itertools::Itertools;
 use serde::Deserialize;
 use stratus::config::RpcDownloaderConfig;
 use stratus::eth::external_rpc::ExternalRpc;
+use stratus::eth::external_rpc::PostgresExternalRpc;
 use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::Hash;
@@ -60,7 +61,7 @@ async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn download_balances(rpc_storage: Arc<dyn ExternalRpc>, chain: &BlockchainClient, accounts: Vec<Address>) -> anyhow::Result<()> {
+async fn download_balances(rpc_storage: Arc<PostgresExternalRpc>, chain: &BlockchainClient, accounts: Vec<Address>) -> anyhow::Result<()> {
     let _timer = DropTimer::start("rpc-downloader::download_balances");
 
     if accounts.is_empty() {
@@ -89,7 +90,7 @@ async fn download_balances(rpc_storage: Arc<dyn ExternalRpc>, chain: &Blockchain
     Ok(())
 }
 
-async fn download_blocks(rpc_storage: Arc<dyn ExternalRpc>, chain: Arc<BlockchainClient>, paralellism: usize, end: BlockNumber) -> anyhow::Result<()> {
+async fn download_blocks(rpc_storage: Arc<PostgresExternalRpc>, chain: Arc<BlockchainClient>, paralellism: usize, end: BlockNumber) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-downloader::download_blocks";
     let _timer = DropTimer::start(TASK_NAME);
 
@@ -125,7 +126,7 @@ async fn download_blocks(rpc_storage: Arc<dyn ExternalRpc>, chain: Arc<Blockchai
     Ok(())
 }
 
-async fn download(rpc_storage: Arc<dyn ExternalRpc>, chain: Arc<BlockchainClient>, start: BlockNumber, end_inclusive: BlockNumber) -> anyhow::Result<()> {
+async fn download(rpc_storage: Arc<PostgresExternalRpc>, chain: Arc<BlockchainClient>, start: BlockNumber, end_inclusive: BlockNumber) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-downloader::download";
 
     // calculate current block
