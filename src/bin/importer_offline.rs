@@ -12,6 +12,7 @@ use std::cmp::min;
 use std::sync::mpsc;
 use std::sync::Arc;
 
+use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -239,7 +240,12 @@ fn run_external_block_executor(
                 }
 
                 // fill missing transaction_type with `v`
-                block.transactions.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
+                if let BlockTransactions::Full(txs) = &mut block.transactions {
+                    // TODO: improve before merging
+                    txs.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
+                } else {
+                    anyhow::bail!("Expected full transactions, got hashes or uncle");
+                }
 
                 // TODO: remove clone
                 executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
@@ -292,12 +298,18 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
     tracing::info!(parent: None, %block_start, %block_end, "fetching blocks and receipts");
     let mut blocks = rpc_storage.read_block_and_receipts_in_range(block_start, block_end).await?;
     for (block, receipts) in blocks.iter_mut() {
+        // Get mutable access to the transactions vector
+        let transactions = match &mut block.transactions { // TODO: improve before merging
+            BlockTransactions::Full(txs) => txs,
+            _ => anyhow::bail!("Expected full transactions, got hashes or uncle"),
+        };
+
         // Stably sort transactions and receipts by transaction_index
-        block.transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+        transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
         receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
 
         // perform additional checks on the transaction index
-        for window in block.transactions.windows(2) {
+        for window in transactions.windows(2) {
             let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))?.as_u32();
             let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))?.as_u32();
             assert!(

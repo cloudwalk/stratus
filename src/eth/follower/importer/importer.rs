@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
+use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::try_join;
@@ -218,7 +219,7 @@ impl Importer {
             let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
 
             if let ImporterMode::FakeLeader = importer_mode {
-                for tx in block.0.transactions {
+                for tx in block.0.transactions.into_transactions() {
                     tracing::info!(?tx, "executing tx as fake miner");
                     if let Err(e) = executor.execute_local_transaction(tx.try_into()?) {
                         tracing::error!(reason = ?e, "transaction failed");
@@ -435,12 +436,18 @@ impl Importer {
             // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
             while let Some((mut block, mut receipts)) = tasks.next().await {
+                // Extract transactions into a vector we can sort
+                let transactions = match &mut block.transactions {
+                    BlockTransactions::Full(txs) => txs,
+                    _ => anyhow::bail!("Expected full transactions, got hashes or uncle"),
+                };
+
                 // Stably sort transactions and receipts by transaction_index
-                block.transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+                transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
                 receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
 
                 // perform additional checks on the transaction index
-                for window in block.transactions.windows(2) {
+                for window in transactions.windows(2) {
                     let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))?.as_u32();
                     let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))?.as_u32();
                     if tx_index + 1 != next_tx_index {
@@ -504,9 +511,18 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
 
     // fetch receipts in parallel
     let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
-    for hash in block.transactions.iter().map(|tx| tx.hash()) {
+
+    // Get transaction hashes based on the BlockTransactions variant
+    let tx_hashes = match &block.transactions {
+        BlockTransactions::Full(txs) => txs.iter().map(|tx| tx.hash()).map(Hash::from).collect::<Vec<_>>(),
+        BlockTransactions::Hashes(hashes) => hashes.iter().map(|&hash| Hash::from(hash)).collect(),
+        BlockTransactions::Uncle => Vec::new(),
+    };
+
+    for hash in tx_hashes {
         receipts_tasks.push(fetch_receipt(Arc::clone(&chain), block_number, hash));
     }
+
     let receipts = futures::stream::iter(receipts_tasks).buffer_unordered(PARALLEL_RECEIPTS).collect().await;
 
     (block, receipts)

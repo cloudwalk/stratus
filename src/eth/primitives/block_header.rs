@@ -173,29 +173,29 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-
+// TODO: improve before merging
 impl TryFrom<&ExternalBlock> for BlockHeader {
     type Error = anyhow::Error;
     fn try_from(value: &ExternalBlock) -> Result<Self, Self::Error> {
         Ok(Self {
-            number: value.number(),
-            hash: value.hash(),
-            transactions_root: value.transactions_root.into(),
-            gas_used: value.gas_used.try_into()?,
-            bloom: value.logs_bloom.unwrap_or_default().into(),
-            timestamp: value.timestamp.into(),
-            parent_hash: value.parent_hash.into(),
-            gas_limit: value.gas_limit.try_into()?,
-            author: value.author(),
-            extra_data: value.extra_data.clone().into(),
-            miner: value.author.unwrap_or_default().into(),
-            difficulty: value.difficulty.into(),
-            receipts_root: value.receipts_root.into(),
-            uncle_hash: value.uncles_hash.into(),
-            size: value.size.unwrap_or_default().try_into()?,
-            state_root: value.state_root.into(),
-            total_difficulty: value.total_difficulty.unwrap_or_default().into(),
-            nonce: value.nonce.unwrap_or_default().into(),
+            number: BlockNumber::try_from(value.0.header.inner.number)?,
+            hash: Hash::from(value.0.header.hash),
+            transactions_root: Hash::from(value.0.header.inner.transactions_root),
+            gas_used: Gas::try_from(value.0.header.inner.gas_used)?,
+            gas_limit: Gas::try_from(value.0.header.inner.gas_limit)?,
+            bloom: LogsBloom::from(value.0.header.inner.logs_bloom),
+            timestamp: UnixTime::from(value.0.header.inner.timestamp),
+            parent_hash: Hash::from(value.0.header.inner.parent_hash),
+            author: Address::from(value.0.header.inner.beneficiary),
+            extra_data: Bytes::from(value.0.header.inner.extra_data.clone()),
+            miner: Address::from(value.0.header.inner.beneficiary),
+            difficulty: Difficulty::from(value.0.header.inner.difficulty),
+            receipts_root: Hash::from(value.0.header.inner.receipts_root),
+            uncle_hash: Hash::from(value.0.header.inner.ommers_hash),
+            size: Size::try_from(value.0.header.size.unwrap_or_default())?,
+            state_root: Hash::from(value.0.header.inner.state_root),
+            total_difficulty: Difficulty::from(value.0.header.total_difficulty.unwrap_or_default()),
+            nonce: MinerNonce::from(value.0.header.inner.nonce.0),
         })
     }
 }

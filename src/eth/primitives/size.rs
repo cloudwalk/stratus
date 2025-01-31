@@ -30,6 +30,15 @@ impl TryFrom<U256> for Size {
         Ok(Size(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
     }
 }
+// TODO: improve before merging
+impl TryFrom<alloy_primitives::Uint<256, 4>> for Size {
+    type Error = anyhow::Error;
+
+    fn try_from(value: alloy_primitives::Uint<256, 4>) -> Result<Self, Self::Error> {
+        let as_u64 = u64::try_from(value).map_err(|_| anyhow!("Value too large for Size (must fit in u64)"))?;
+        Ok(Size(as_u64.into()))
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

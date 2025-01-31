@@ -25,3 +25,9 @@ impl From<[u64; 4]> for Difficulty {
         Self(U256(value))
     }
 }
+// TODO: improve before merging
+impl From<alloy_primitives::Uint<256, 4>> for Difficulty {
+    fn from(value: alloy_primitives::Uint<256, 4>) -> Self {
+        Self(U256::from_big_endian(&value.to_be_bytes::<32>()))
+    }
+}

@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::alias::EthersBlockExternalTransaction;
+use crate::alias::AlloyBlockAlloyExternalTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -10,29 +10,29 @@ use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more::Deref, derive_more::DerefMut, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
-pub struct ExternalBlock(#[deref] pub EthersBlockExternalTransaction);
+pub struct ExternalBlock(#[deref] pub AlloyBlockAlloyExternalTransaction);
 
 impl ExternalBlock {
     /// Returns the block hash.
     #[allow(clippy::expect_used)]
     pub fn hash(&self) -> Hash {
-        self.0.hash.expect("external block must have hash").into()
+        Hash::from(self.0.header.hash)
     }
 
     /// Returns the block number.
     #[allow(clippy::expect_used)]
     pub fn number(&self) -> BlockNumber {
-        self.0.number.expect("external block must have number").into()
+        BlockNumber::try_from(self.0.header.inner.number).expect("external block must have valid number") // TODO: improve before merging
     }
 
     /// Returns the block timestamp.
     pub fn timestamp(&self) -> UnixTime {
-        self.0.timestamp.into()
+        self.0.header.inner.timestamp.into()
     }
 
-    /// Returns the block timestamp.
+    /// Returns the block author.
     pub fn author(&self) -> Address {
-        self.0.author.unwrap_or_default().into()
+        self.0.header.inner.beneficiary.into() // TODO: improve before merging - author -> beneficiary?
     }
 }
 

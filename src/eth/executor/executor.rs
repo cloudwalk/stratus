@@ -321,7 +321,7 @@ impl Executor {
         let block_transactions = mem::take(&mut block.transactions);
 
         // determine how to execute each transaction
-        for tx in block_transactions {
+        for tx in block_transactions.into_transactions() {
             let receipt = receipts.try_remove(tx.hash())?;
             self.execute_external_transaction(
                 tx,
