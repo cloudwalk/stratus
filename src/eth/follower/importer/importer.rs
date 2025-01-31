@@ -437,10 +437,11 @@ impl Importer {
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
             while let Some((mut block, mut receipts)) = tasks.next().await {
                 // Extract transactions into a vector we can sort
-                let transactions = match &mut block.transactions {
-                    BlockTransactions::Full(txs) => txs,
-                    _ => anyhow::bail!("Expected full transactions, got hashes or uncle"),
-                };
+                let transactions = if let BlockTransactions::Full(txs) = &mut block.transactions {
+                    Ok(txs)
+                } else {
+                    Err(anyhow!("expected full transactions, got hashes or uncle"))
+                }?;
 
                 // Stably sort transactions and receipts by transaction_index
                 transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
@@ -513,10 +514,11 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
 
     // TODO: improve before merging
-    let tx_hashes = match &block.transactions {
-        BlockTransactions::Full(txs) => txs.iter().map(|tx| tx.hash()).collect::<Vec<_>>(),
-        BlockTransactions::Hashes(hashes) => hashes.iter().map(|&hash| Hash::from(hash)).collect(),
-        BlockTransactions::Uncle => Vec::new(),
+    let tx_hashes = if let BlockTransactions::Full(txs) = &block.transactions {
+        txs.iter().map(|tx| tx.hash()).collect::<Vec<_>>()
+    } else {
+        tracing::error!("Expected full transactions, got hashes or uncle");
+        Vec::new()
     };
 
     for hash in tx_hashes {

@@ -299,10 +299,8 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
     let mut blocks = rpc_storage.read_block_and_receipts_in_range(block_start, block_end).await?;
     for (block, receipts) in blocks.iter_mut() {
         // Get mutable access to the transactions vector
-        let transactions = match &mut block.transactions {
-            // TODO: improve before merging
-            BlockTransactions::Full(txs) => txs,
-            _ => anyhow::bail!("Expected full transactions, got hashes or uncle"),
+        let BlockTransactions::Full(transactions) = &mut block.transactions else {
+            anyhow::bail!("expected full transactions, got hashes or uncle")
         };
 
         // Stably sort transactions and receipts by transaction_index
