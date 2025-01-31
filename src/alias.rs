@@ -14,7 +14,7 @@ pub type JsonValue = serde_json::Value;
 // -----------------------------------------------------------------------------
 pub type AlloyBlockVoid = alloy_rpc_types_eth::Block<()>;
 pub type AlloyBlockAlloyTransaction = alloy_rpc_types_eth::Block<alloy_rpc_types_eth::Transaction>;
-pub type AlloyBlockAlloyExternalTransaction = alloy_rpc_types_eth::Block<ExternalTransaction>;
+pub type AlloyBlockExternalTransaction = alloy_rpc_types_eth::Block<ExternalTransaction>;
 pub type AlloyBlockH256 = alloy_rpc_types_eth::Block<H256>;
 pub type AlloyBytes = alloy_primitives::Bytes;
 pub type AlloyLog = alloy_rpc_types_eth::Log;

@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::alias::AlloyBlockAlloyExternalTransaction;
+use crate::alias::AlloyBlockExternalTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -10,7 +10,7 @@ use crate::log_and_err;
 
 #[derive(Debug, Clone, derive_more::Deref, derive_more::DerefMut, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
-pub struct ExternalBlock(#[deref] pub AlloyBlockAlloyExternalTransaction);
+pub struct ExternalBlock(#[deref] pub AlloyBlockExternalTransaction);
 
 impl ExternalBlock {
     /// Returns the block hash.
