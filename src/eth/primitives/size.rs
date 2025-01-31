@@ -6,6 +6,7 @@ use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 
+use crate::alias::AlloyUint256;
 use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -28,6 +29,12 @@ impl TryFrom<U256> for Size {
 
     fn try_from(value: U256) -> Result<Self, Self::Error> {
         Ok(Size(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
+    }
+}
+
+impl From<AlloyUint256> for Size {
+    fn from(value: AlloyUint256) -> Self {
+        Size(value.to::<u64>().into())
     }
 }
 

@@ -12,6 +12,7 @@ use std::cmp::min;
 use std::sync::mpsc;
 use std::sync::Arc;
 
+use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -240,7 +241,10 @@ fn run_external_block_executor(
                 }
 
                 // fill missing transaction_type with `v`
-                block.transactions.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
+                let BlockTransactions::Full(txs) = &mut block.transactions else {
+                    return log_and_err!(GlobalState::shutdown_from(TASK_NAME, "expected full transactions, got hashes or uncle"));
+                };
+                txs.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
 
                 // TODO: remove clone
                 executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
@@ -293,12 +297,27 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_
     tracing::info!(parent: None, %block_start, %block_end, "fetching blocks and receipts");
     let mut blocks = rpc_storage.read_block_and_receipts_in_range(block_start, block_end).await?;
     for (block, receipts) in blocks.iter_mut() {
+        let BlockTransactions::Full(transactions) = &mut block.transactions else {
+            tracing::error!(
+                block_number = ?block.number(),
+                block_hash = ?block.hash(),
+                transactions = ?block.transactions,
+                "expected full transactions but got {:?}", block.transactions
+            );
+            return Err(anyhow!(
+                "expected full transactions, got {:?} for block number {} hash {:?}",
+                block.transactions,
+                block.number(),
+                block.hash()
+            ));
+        };
+
         // Stably sort transactions and receipts by transaction_index
-        block.transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+        transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
         receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
 
         // perform additional checks on the transaction index
-        for window in block.transactions.windows(2) {
+        for window in transactions.windows(2) {
             let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))?.as_u32();
             let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))?.as_u32();
             assert!(

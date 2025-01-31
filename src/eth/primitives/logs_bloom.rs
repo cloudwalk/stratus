@@ -39,6 +39,13 @@ impl DerefMut for LogsBloom {
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = LogsBloom, other = [u8; 256], Bloom);
 
+impl From<AlloyBloom> for LogsBloom {
+    fn from(value: AlloyBloom) -> Self {
+        let bytes: [u8; 256] = *value.0;
+        Self(Bloom::from(bytes))
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
