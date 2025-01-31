@@ -2,7 +2,6 @@
 
 use std::time::Duration;
 
-use async_trait::async_trait;
 use log::LevelFilter;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::postgres::PgPoolOptions;
@@ -66,7 +65,6 @@ impl PostgresExternalRpc {
     }
 }
 
-#[async_trait]
 impl ExternalRpc for PostgresExternalRpc {
     async fn read_max_block_number_in_range(&self, start: BlockNumber, end: BlockNumber) -> anyhow::Result<Option<BlockNumber>> {
         tracing::debug!(%start, %end, "retrieving max external block");

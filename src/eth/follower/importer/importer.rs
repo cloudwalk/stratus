@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
-use async_trait::async_trait;
 use futures::try_join;
 use futures::StreamExt;
 use serde::Deserialize;
@@ -564,7 +563,6 @@ async fn fetch_receipt(chain: Arc<BlockchainClient>, block_number: BlockNumber, 
     }
 }
 
-#[async_trait]
 impl Consensus for Importer {
     async fn lag(&self) -> anyhow::Result<u64> {
         let elapsed = chrono::Utc::now().timestamp() as u64 - LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
