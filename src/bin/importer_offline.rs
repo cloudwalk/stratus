@@ -241,10 +241,9 @@ fn run_external_block_executor(
 
                 // fill missing transaction_type with `v`
                 if let BlockTransactions::Full(txs) = &mut block.transactions {
-                    // TODO: improve before merging
                     txs.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
                 } else {
-                    anyhow::bail!("Expected full transactions, got hashes or uncle");
+                    return log_and_err!(GlobalState::shutdown_from(TASK_NAME, "expected full transactions, got hashes or uncle"));
                 }
 
                 // TODO: remove clone
