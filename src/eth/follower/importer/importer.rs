@@ -514,7 +514,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
 
     // TODO: improve before merging
     let tx_hashes = match &block.transactions {
-        BlockTransactions::Full(txs) => txs.iter().map(|tx| tx.hash()).map(Hash::from).collect::<Vec<_>>(),
+        BlockTransactions::Full(txs) => txs.iter().map(|tx| tx.hash()).collect::<Vec<_>>(),
         BlockTransactions::Hashes(hashes) => hashes.iter().map(|&hash| Hash::from(hash)).collect(),
         BlockTransactions::Uncle => Vec::new(),
     };
