@@ -7,7 +7,6 @@ use serde_json::json;
 
 use super::importer::ImporterMode;
 use crate::eth::executor::Executor;
-use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::Importer;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::ConsensusError;
@@ -50,7 +49,7 @@ impl ImporterConfig {
         miner: Arc<Miner>,
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
-    ) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
+    ) -> anyhow::Result<Option<Arc<Importer>>> {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
             NodeMode::Follower =>
@@ -67,7 +66,7 @@ impl ImporterConfig {
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
         importer_mode: ImporterMode,
-    ) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
+    ) -> anyhow::Result<Option<Arc<Importer>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
 

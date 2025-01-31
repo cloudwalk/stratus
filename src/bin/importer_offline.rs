@@ -20,6 +20,7 @@ use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
 use stratus::eth::external_rpc::ExternalBlockWithReceipts;
 use stratus::eth::external_rpc::ExternalRpc;
+use stratus::eth::external_rpc::PostgresExternalRpc;
 use stratus::eth::miner::Miner;
 use stratus::eth::miner::MinerMode;
 use stratus::eth::primitives::Block;
@@ -138,7 +139,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 }
 
 async fn run_rpc_block_fetcher(
-    rpc_storage: Arc<dyn ExternalRpc>,
+    rpc_storage: Arc<PostgresExternalRpc>,
     blocks_by_fetch: usize,
     paralellism: usize,
     mut start: BlockNumber,
@@ -292,7 +293,7 @@ fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToS
     }
 }
 
-async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BlocksToExecute> {
+async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BlocksToExecute> {
     tracing::info!(parent: None, %block_start, %block_end, "fetching blocks and receipts");
     let mut blocks = rpc_storage.read_block_and_receipts_in_range(block_start, block_end).await?;
     for (block, receipts) in blocks.iter_mut() {
@@ -340,7 +341,7 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
     Ok(blocks)
 }
 
-async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpc>) -> anyhow::Result<BlockNumber> {
+async fn block_number_to_stop(rpc_storage: &Arc<PostgresExternalRpc>) -> anyhow::Result<BlockNumber> {
     match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
         Ok(Some(number)) => Ok(number),
         Ok(None) => Ok(BlockNumber::ZERO),
