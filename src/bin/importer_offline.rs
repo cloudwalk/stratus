@@ -305,7 +305,7 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
                 "expected full transactions but got {:?}", block.transactions
             );
             return Err(anyhow!(
-                "expected full transactions, got {:?} for block number {} hash {:?}", 
+                "expected full transactions, got {:?} for block number {} hash {:?}",
                 block.transactions,
                 block.number(),
                 block.hash()
