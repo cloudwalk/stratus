@@ -298,7 +298,18 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
     let mut blocks = rpc_storage.read_block_and_receipts_in_range(block_start, block_end).await?;
     for (block, receipts) in blocks.iter_mut() {
         let BlockTransactions::Full(transactions) = &mut block.transactions else {
-            anyhow::bail!("expected full transactions, got hashes or uncle")
+            tracing::error!(
+                block_number = ?block.number(),
+                block_hash = ?block.hash(),
+                transactions = ?block.transactions,
+                "expected full transactions but got {:?}", block.transactions
+            );
+            anyhow::bail!(
+                "expected full transactions, got {:?} for block number {} hash {:?}", 
+                block.transactions,
+                block.number(),
+                block.hash()
+            )
         };
 
         // Stably sort transactions and receipts by transaction_index
