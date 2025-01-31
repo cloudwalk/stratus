@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
@@ -21,7 +22,6 @@ use jsonrpsee::types::Params;
 use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
-use once_cell::sync::Lazy;
 use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::select;
@@ -313,7 +313,7 @@ fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<J
     Ok(to_json_value(true))
 }
 
-static MODE_CHANGE_SEMAPHORE: Lazy<Semaphore> = Lazy::new(|| Semaphore::new(1));
+static MODE_CHANGE_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));
 
 async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     ext.authentication().auth_admin()?;
