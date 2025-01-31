@@ -437,11 +437,9 @@ impl Importer {
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
             while let Some((mut block, mut receipts)) = tasks.next().await {
                 let block_number = block.number();
-                let transactions = if let BlockTransactions::Full(txs) = &mut block.transactions {
-                    Ok(txs)
-                } else {
-                    Err(anyhow!("expected full transactions, got hashes or uncle"))
-                }?;
+                let BlockTransactions::Full(transactions) = &mut block.transactions else {
+                    return Err(anyhow!("expected full transactions, got hashes or uncle"));
+                };
 
                 if transactions.len() != receipts.len() {
                     return Err(anyhow!(

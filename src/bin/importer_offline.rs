@@ -240,11 +240,10 @@ fn run_external_block_executor(
                 }
 
                 // fill missing transaction_type with `v`
-                if let BlockTransactions::Full(txs) = &mut block.transactions {
-                    txs.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
-                } else {
+                let BlockTransactions::Full(txs) = &mut block.transactions else {
                     return log_and_err!(GlobalState::shutdown_from(TASK_NAME, "expected full transactions, got hashes or uncle"));
-                }
+                };
+                txs.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
 
                 // TODO: remove clone
                 executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
