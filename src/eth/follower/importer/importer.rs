@@ -436,7 +436,6 @@ impl Importer {
             // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
             while let Some((mut block, mut receipts)) = tasks.next().await {
-                // Extract transactions into a vector we can sort
                 let transactions = if let BlockTransactions::Full(txs) = &mut block.transactions {
                     Ok(txs)
                 } else {
