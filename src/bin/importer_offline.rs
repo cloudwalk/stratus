@@ -304,12 +304,12 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
                 transactions = ?block.transactions,
                 "expected full transactions but got {:?}", block.transactions
             );
-            anyhow::bail!(
+            return Err(anyhow!(
                 "expected full transactions, got {:?} for block number {} hash {:?}", 
                 block.transactions,
                 block.number(),
                 block.hash()
-            )
+            ));
         };
 
         // Stably sort transactions and receipts by transaction_index
