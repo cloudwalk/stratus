@@ -2,10 +2,10 @@ use std::ops::Add;
 use std::ops::AddAssign;
 use std::str::FromStr;
 
+use alloy_primitives::keccak256;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U64;
-use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
 
@@ -24,7 +24,7 @@ impl BlockNumber {
 
     /// Calculates the keccak256 hash of the block number.
     pub fn hash(&self) -> Hash {
-        Hash::new(keccak256(<[u8; 8]>::from(*self)))
+        Hash::new(*keccak256(<[u8; 8]>::from(*self)))
     }
 
     /// Returns the previous block number.
