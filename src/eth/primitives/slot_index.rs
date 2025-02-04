@@ -34,7 +34,7 @@ impl SlotIndex {
         mapping_index_bytes[32..64].copy_from_slice(&slot_index_bytes);
 
         let hashed_bytes = keccak256(mapping_index_bytes);
-        Self::from(hashed_bytes.0)
+        Self::from(hashed_bytes)
     }
 }
 
