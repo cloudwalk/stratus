@@ -147,6 +147,55 @@ describe("JSON-RPC", () => {
                 expect(block).to.be.null;
             });
         });
+        describe("stratus_getBlockAndReceipts", () => {
+            it("fetches block with transaction and receipt", async () => {
+                await sendReset();
+
+                // Send a transaction
+                const amount = 1;
+                const nonce = await sendGetNonce(ALICE);
+                const signedTx = await ALICE.signWeiTransfer(BOB.address, amount, nonce);
+                const txHash = keccak256(signedTx);
+                await sendRawTransaction(signedTx);
+                await sendEvmMine();
+
+                // Get block number and hash
+                const blockNumber = await send("eth_blockNumber");
+                const block = await send("eth_getBlockByNumber", [blockNumber, true]);
+                const blockHash = block.hash;
+
+                // Get individual block and receipt
+                const individualBlock = await send("eth_getBlockByHash", [blockHash, true]);
+                const individualReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                // Get block and receipts using stratus endpoint
+                const response = await send("stratus_getBlockAndReceipts", [blockHash]);
+
+                // Validate block
+                expect(response.block).to.not.be.null;
+                expect(response.block.hash).eq(blockHash);
+                expect(response.block.transactions).to.have.length(1);
+                expect(response.block.transactions[0].hash).eq(txHash);
+                expect(response.block).to.deep.equal(individualBlock);
+
+                // Validate receipt
+                expect(response.receipts).to.have.length(1);
+                const combinedReceipt = response.receipts[0];
+                const safeIndividualReceipt = individualReceipt!;
+
+                // Compare receipt fields
+                expect(combinedReceipt.blockHash).eq(safeIndividualReceipt.blockHash);
+                expect(parseInt(combinedReceipt.blockNumber, 16)).eq(safeIndividualReceipt.blockNumber);
+                expect(parseInt(combinedReceipt.gasUsed, 16)).eq(parseInt(safeIndividualReceipt.gasUsed.toString()));
+                expect(combinedReceipt.transactionHash).eq(safeIndividualReceipt.hash);
+                expect(combinedReceipt.contractAddress).eq(safeIndividualReceipt.contractAddress);
+                expect(combinedReceipt.from.toLowerCase()).eq(safeIndividualReceipt.from.toLowerCase());
+                expect(combinedReceipt.to?.toLowerCase()).eq(safeIndividualReceipt.to?.toLowerCase());
+                expect(parseInt(combinedReceipt.status!, 16)).eq(safeIndividualReceipt.status);
+                expect(combinedReceipt.logs).to.deep.equal(safeIndividualReceipt.logs);
+                expect(combinedReceipt.logsBloom).eq(safeIndividualReceipt.logsBloom);
+            });
+        });
         it("eth_getUncleByBlockHashAndIndex", async function () {
             if (isStratus) {
                 (await sendExpect("eth_getUncleByBlockHashAndIndex", [ZERO, ZERO])).to.be.null;

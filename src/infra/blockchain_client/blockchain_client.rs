@@ -145,8 +145,8 @@ impl BlockchainClient {
         }
     }
 
-    /// Fetches a block by number.
-    pub async fn fetch_block_and_receipts_with_temporary_endpoint(&self, block_number: BlockNumber) -> anyhow::Result<JsonValue> {
+    /// Fetches a block by number with receipts.
+    pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<JsonValue> {
         tracing::debug!(%block_number, "fetching block");
 
         let number = to_json_value(block_number);

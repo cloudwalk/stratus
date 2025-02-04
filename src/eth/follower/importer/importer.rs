@@ -77,14 +77,8 @@ fn set_external_rpc_current_block(new_number: BlockNumber) {
 /// Number of blocks that are downloaded in parallel.
 const PARALLEL_BLOCKS: usize = 3;
 
-/// Number of receipts that are downloaded in parallel.
-const PARALLEL_RECEIPTS: usize = 100;
-
 /// Timeout awaiting for newHeads event before fallback to polling.
 const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
-
-/// Interval before we starting retrieving receipts because they are not immediately available after the block is retrieved.
-const INTERVAL_FETCH_RECEIPTS: Duration = Duration::from_millis(50);
 
 pub struct Importer {
     executor: Arc<Executor>,
@@ -487,50 +481,14 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
     });
+    // TODO: remove unwraps and loop until successful
+    let mut json = chain.fetch_block_and_receipts(block_number).await.unwrap();
 
-    async fn try_reading_block_and_receipts_with_temporary_endpoint(
-        chain: Arc<BlockchainClient>,
-        block_number: BlockNumber,
-    ) -> Option<(ExternalBlock, Vec<ExternalReceipt>)> {
-        let mut json = chain.fetch_block_and_receipts_with_temporary_endpoint(block_number).await.ok()?;
+    let block = mem::take(json.get_mut("block").unwrap());
+    let block: ExternalBlock = serde_json::from_value(block).unwrap();
 
-        let block = mem::take(json.get_mut("block")?);
-        let block: ExternalBlock = serde_json::from_value(block).ok()?;
-
-        let receipts = mem::take(json.get_mut("receipts")?);
-        let receipts: Vec<ExternalReceipt> = serde_json::from_value(receipts).ok()?;
-
-        Some((block, receipts))
-    }
-
-    if let Some(res) = try_reading_block_and_receipts_with_temporary_endpoint(Arc::clone(&chain), block_number).await {
-        tracing::info!("successfully imported block and receipts using endpoint stratus_getBlockAndReceipts");
-        return res;
-    } else {
-        tracing::warn!("failed to import block and receipts with endpoint stratus_getBlockAndReceipts, falling back to get block + get each receipt");
-    }
-
-    // fetch block
-    let block = fetch_block(Arc::clone(&chain), block_number).await;
-
-    // wait some time until receipts are available
-    let _ = traced_sleep(INTERVAL_FETCH_RECEIPTS, SleepReason::SyncData).await;
-
-    // fetch receipts in parallel
-    let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
-
-    let tx_hashes = if let BlockTransactions::Full(txs) = &block.transactions {
-        txs.iter().map(|tx| tx.hash()).collect::<Vec<_>>()
-    } else {
-        tracing::error!("expected full transactions, got hashes or uncle");
-        return (block, Vec::new());
-    };
-
-    for hash in tx_hashes {
-        receipts_tasks.push(fetch_receipt(Arc::clone(&chain), block_number, hash));
-    }
-
-    let receipts = futures::stream::iter(receipts_tasks).buffer_unordered(PARALLEL_RECEIPTS).collect().await;
+    let receipts = mem::take(json.get_mut("receipts").unwrap());
+    let receipts: Vec<ExternalReceipt> = serde_json::from_value(receipts).unwrap();
 
     (block, receipts)
 }
