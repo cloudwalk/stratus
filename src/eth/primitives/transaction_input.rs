@@ -1,4 +1,5 @@
 use alloy_consensus::Signed;
+use alloy_consensus::Transaction;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_primitives::TxKind;
@@ -21,7 +22,6 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
-use crate::ext::OptionExt;
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
@@ -114,21 +114,29 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
         false => value.from.into(),
     };
 
+    // Get signature components from the envelope
+    let signature = value.inner.signature();
+    let (r, s) = signature.rs();
+    let v = if signature.parity() { U64::from(1) } else { U64::from(0) };
+
     Ok(TransactionInput {
-        tx_type: value.inner.tx_type().map(|t| t.into()),
+        tx_type: Some(U64::from(value.inner.to())),
         chain_id: value.inner.chain_id().map(TryInto::try_into).transpose()?,
-        hash: value.hash().into(),
+        hash: *value.inner.tx_hash().into(),
         nonce: value.inner.nonce().try_into()?,
         signer,
         from: Address::new(value.from.into()),
-        to: value.inner.to().map_into(),
+        to: match value.inner.kind() {
+            TxKind::Call(addr) => Some(addr.into()),
+            TxKind::Create => None,
+        },
         value: value.inner.value().try_into()?,
         input: value.inner.input().clone().into(),
         gas_limit: value.inner.gas_limit().try_into()?,
         gas_price: value.effective_gas_price.unwrap_or_default().try_into()?,
-        v: value.inner.v().map(Into::into).unwrap_or_default(),
-        r: value.inner.r().into(),
-        s: value.inner.s().into(),
+        v,
+        r: r.into(),
+        s: s.into(),
     })
 }
 
