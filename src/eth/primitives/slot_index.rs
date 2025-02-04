@@ -33,7 +33,7 @@ impl SlotIndex {
         mapping_index_bytes[32..64].copy_from_slice(&slot_index_bytes);
 
         let hashed_bytes = keccak256(mapping_index_bytes);
-        Self::from(hashed_bytes.0)
+        Self::from(hashed_bytes)
     }
 }
 
@@ -64,6 +64,12 @@ impl From<[u64; 4]> for SlotIndex {
 impl From<RevmU256> for SlotIndex {
     fn from(value: RevmU256) -> Self {
         Self(value.to_be_bytes().into())
+    }
+}
+
+impl From<FixedBytes<32>> for SlotIndex {
+    fn from(value: FixedBytes<32>) -> Self {
+        Self::from(value.0)
     }
 }
 
