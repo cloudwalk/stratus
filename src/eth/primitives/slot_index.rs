@@ -1,9 +1,9 @@
 use std::fmt::Display;
 use std::io::Read;
 
+use alloy_primitives::keccak256;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
-use alloy_primitives::keccak256;
 use fake::Dummy;
 use fake::Faker;
 
@@ -38,7 +38,7 @@ impl SlotIndex {
 }
 
 impl Dummy<Faker> for SlotIndex {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
     }
 }

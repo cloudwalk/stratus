@@ -9,6 +9,7 @@ use fake::Fake;
 use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
+use rand_core;
 
 use crate::alias::AlloyAddress;
 use crate::alias::AlloyB256;
@@ -87,7 +88,7 @@ impl BlockHeader {
 }
 
 impl Dummy<Faker> for BlockHeader {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         Self {
             number: faker.fake_with_rng(rng),
             hash: faker.fake_with_rng(rng),

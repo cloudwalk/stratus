@@ -12,8 +12,8 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
-use crate::alias::EthersBytes;
 use crate::alias::AlloyTransaction;
+use crate::alias::EthersBytes;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;

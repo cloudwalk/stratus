@@ -250,9 +250,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro"
-version = "0.8.19"
+version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d039d267aa5cbb7732fa6ce1fd9b5e9e29368f580f80ba9d7a8450c794de4b2"
+checksum = "d9d64f851d95619233f74b310f12bcf16e0cbc27ee3762b6115c14a84809280a"
 dependencies = [
  "alloy-sol-macro-expander",
  "alloy-sol-macro-input",
@@ -264,9 +264,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro-expander"
-version = "0.8.19"
+version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "620ae5eee30ee7216a38027dec34e0585c55099f827f92f50d11e3d2d3a4a954"
+checksum = "6bf7ed1574b699f48bf17caab4e6e54c6d12bc3c006ab33d58b1e227c1c3559f"
 dependencies = [
  "alloy-sol-macro-input",
  "const-hex",
@@ -282,9 +282,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-sol-macro-input"
-version = "0.8.19"
+version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad9f7d057e00f8c5994e4ff4492b76532c51ead39353aa2ed63f8c50c0f4d52e"
+checksum = "8c02997ccef5f34f9c099277d4145f183b422938ed5322dc57a089fe9b9ad9ee"
 dependencies = [
  "const-hex",
  "dunce",
@@ -5391,6 +5391,7 @@ dependencies = [
  "prost-types",
  "quick_cache",
  "rand",
+ "rand_core",
  "rdkafka",
  "reqwest 0.12.4",
  "revm",
