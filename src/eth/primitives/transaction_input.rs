@@ -73,6 +73,7 @@ impl Dummy<Faker> for TransactionInput {
 // -----------------------------------------------------------------------------
 // Serialization / Deserialization
 // -----------------------------------------------------------------------------
+// TODO: improve before merging
 impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         // Decode the raw bytes using decode_2718
