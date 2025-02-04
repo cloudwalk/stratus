@@ -31,10 +31,10 @@ impl TransactionStage {
             }
             TransactionStage::Executed(TransactionExecution::External(tx)) => {
                 // remove block information because we don't know to which local block the transaction will be added to.
-                let mut ethers_tx = tx.tx.0;
-                ethers_tx.block_number = None;
-                ethers_tx.block_hash = None;
-                to_json_value(ethers_tx)
+                let mut alloy_tx = tx.tx.0;
+                alloy_tx.block_number = None;
+                alloy_tx.block_hash = None;
+                to_json_value(alloy_tx)
             }
             TransactionStage::Mined(tx) => {
                 let json_rpc_payload: AlloyTransaction = tx.into();

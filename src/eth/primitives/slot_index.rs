@@ -3,7 +3,7 @@ use std::io::Read;
 
 use display_json::DebugAsJson;
 use ethereum_types::U256;
-use ethers_core::utils::keccak256;
+use alloy_primitives::keccak256;
 use fake::Dummy;
 use fake::Faker;
 
@@ -33,7 +33,7 @@ impl SlotIndex {
         mapping_index_bytes[32..64].copy_from_slice(&slot_index_bytes);
 
         let hashed_bytes = keccak256(mapping_index_bytes);
-        Self::from(hashed_bytes)
+        Self::from(hashed_bytes.0)
     }
 }
 
