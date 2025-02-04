@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::io::Read;
 
 use alloy_primitives::keccak256;
+use alloy_primitives::FixedBytes;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
 use fake::Dummy;
