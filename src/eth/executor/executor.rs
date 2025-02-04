@@ -362,7 +362,7 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, tx_function, tx_contract) = (
             metrics::now(),
-            codegen::function_sig(&tx.inner.input()),
+            codegen::function_sig(tx.inner.input()),
             codegen::contract_name(&tx.0.to().map_into()),
         );
 
