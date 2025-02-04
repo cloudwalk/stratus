@@ -44,7 +44,7 @@ pub struct TransactionInput {
 }
 
 impl Dummy<Faker> for TransactionInput {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         Self {
             tx_type: Some(rng.next_u64().into()),
             chain_id: faker.fake_with_rng(rng),

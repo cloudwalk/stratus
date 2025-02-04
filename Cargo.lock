@@ -5389,6 +5389,7 @@ dependencies = [
  "prost-types",
  "quick_cache",
  "rand",
+ "rand_core",
  "rdkafka",
  "reqwest 0.12.4",
  "revm",
