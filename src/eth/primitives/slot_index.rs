@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::io::Read;
 
 use alloy_primitives::keccak256;
+use alloy_primitives::FixedBytes;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
 use fake::Dummy;
@@ -64,6 +65,12 @@ impl From<[u64; 4]> for SlotIndex {
 impl From<RevmU256> for SlotIndex {
     fn from(value: RevmU256) -> Self {
         Self(value.to_be_bytes().into())
+    }
+}
+
+impl From<FixedBytes<32>> for SlotIndex {
+    fn from(value: FixedBytes<32>) -> Self {
+        Self::from(value.0)
     }
 }
 
