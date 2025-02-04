@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
 use crate::alias::EthersBytes;
-use crate::alias::EthersTransaction;
+use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -170,12 +170,12 @@ impl BlockchainClient {
     }
 
     /// Fetches a transaction by hash.
-    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<EthersTransaction>> {
+    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<AlloyTransaction>> {
         tracing::debug!(%tx_hash, "fetching transaction");
 
         let hash = to_json_value(tx_hash);
 
-        let result = self.http.request::<Option<EthersTransaction>, _>("eth_getTransactionByHash", [hash]).await;
+        let result = self.http.request::<Option<AlloyTransaction>, _>("eth_getTransactionByHash", [hash]).await;
 
         match result {
             Ok(tx) => Ok(tx),
