@@ -12,6 +12,7 @@ use fake::Faker;
 use rlp::Decodable;
 
 use crate::alias::AlloyTransaction;
+use crate::eth::primitives::signature::SignatureComponent;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
@@ -149,11 +150,7 @@ impl From<TransactionInput> for alloy_rpc_types_eth::Transaction {
                 value: value.value.into(),
                 input: value.input.clone().into(),
             },
-            alloy_primitives::PrimitiveSignature::new(
-                value.r.into(),
-                value.s.into(),
-                value.v.as_u64() == 1
-            ),
+            alloy_primitives::PrimitiveSignature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_u64() == 1),
             Default::default(),
         ));
 

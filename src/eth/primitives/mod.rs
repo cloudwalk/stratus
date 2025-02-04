@@ -35,6 +35,7 @@ mod nonce;
 mod pending_block;
 mod pending_block_header;
 mod point_in_time;
+mod signature;
 mod size;
 mod slot;
 mod slot_index;
