@@ -29,3 +29,9 @@ impl From<SignatureComponent> for U256 {
         value.0
     }
 }
+
+impl From<alloy_primitives::Uint<256, 4>> for SignatureComponent {
+    fn from(value: alloy_primitives::Uint<256, 4>) -> Self {
+        Self(U256::from(value.to_be_bytes::<32>()))
+    }
+}

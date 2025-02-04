@@ -117,13 +117,14 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
 
     // Get signature components from the envelope
     let signature = value.inner.signature();
-    let (r, s) = signature.rs();
-    let v = if signature.parity() { U64::from(1) } else { U64::from(0) };
+    let r = U256::from(signature.r().to_be_bytes::<32>());
+    let s = U256::from(signature.s().to_be_bytes::<32>());
+    let v = if signature.v() { U64::from(1) } else { U64::from(0) };
 
     Ok(TransactionInput {
         tx_type: Some(U64::from(value.inner.tx_type() as u8)),
         chain_id: value.inner.chain_id().map(TryInto::try_into).transpose()?,
-        hash: *value.inner.tx_hash().into(),
+        hash: Hash::from(*value.inner.tx_hash()),
         nonce: value.inner.nonce().try_into()?,
         signer,
         from: Address::new(value.from.into()),
