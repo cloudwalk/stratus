@@ -145,13 +145,13 @@ impl EvmInput {
             to: tx.inner.to().map_into(),
             value: tx.inner.value().into(),
             data: tx.inner.input().clone().into(),
-            nonce: Some(tx.inner.nonce().try_into()?),
-            gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.inner.gas_limit().try_into()?),
+            nonce: Some(tx.inner.nonce().into()),
+            gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.inner.gas_limit().into()),
             gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.inner.gas_price().map_into().unwrap_or(Wei::ZERO)),
             point_in_time: PointInTime::Pending,
             block_number,
             block_timestamp,
-            chain_id: tx.inner.chain_id().map(|id| id.try_into()).transpose()?,
+            chain_id: tx.inner.chain_id().map(Into::into),
         })
     }
 
