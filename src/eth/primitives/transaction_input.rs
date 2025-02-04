@@ -2,6 +2,7 @@ use alloy_consensus::Signed;
 use alloy_consensus::Transaction;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
+use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::TxKind;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
@@ -74,10 +75,21 @@ impl Dummy<Faker> for TransactionInput {
 // -----------------------------------------------------------------------------
 impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        let alloy_transaction = AlloyTransaction::decode(rlp)?;
-        match Self::try_from(alloy_transaction) {
+        // Decode the raw bytes using decode_2718
+        let raw_bytes = rlp.as_raw();
+        let envelope =
+            alloy_consensus::TxEnvelope::decode_2718(&mut &raw_bytes[..]).map_err(|_| rlp::DecoderError::Custom("failed to decode transaction envelope"))?;
+
+        match Self::try_from(alloy_rpc_types_eth::Transaction {
+            inner: envelope,
+            block_hash: None,
+            block_number: None,
+            transaction_index: None,
+            from: Default::default(),
+            effective_gas_price: None,
+        }) {
             Ok(transaction) => Ok(transaction),
-            Err(_) => Err(rlp::DecoderError::Custom("decoding error")),
+            Err(_) => Err(rlp::DecoderError::Custom("failed to convert transaction")),
         }
     }
 }
