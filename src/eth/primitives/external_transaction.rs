@@ -3,6 +3,7 @@ use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_consensus::Typed2718;
 use alloy_primitives::Address;
+use alloy_primitives::FixedBytes;
 use alloy_primitives::PrimitiveSignature;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
@@ -44,7 +45,7 @@ impl ExternalTransaction {
             self.0.inner = alloy_consensus::TxEnvelope::Eip1559(alloy_consensus::Signed::new_unchecked(
                 alloy_consensus::TxEip1559::default(),
                 signature,
-                Default::default(),
+                FixedBytes::default(),
             ));
         }
     }
