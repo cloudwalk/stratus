@@ -3,6 +3,7 @@ use alloy_consensus::Transaction;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_eips::eip2718::Decodable2718;
+use alloy_primitives::FixedBytes;
 use alloy_primitives::TxKind;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
@@ -86,7 +87,7 @@ impl Decodable for TransactionInput {
             block_hash: None,
             block_number: None,
             transaction_index: None,
-            from: Default::default(),
+            from: Address::default().into(),
             effective_gas_price: None,
         }) {
             Ok(transaction) => Ok(transaction),
@@ -138,20 +139,20 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
         tx_type: Some(U64::from(value.inner.tx_type() as u8)),
         chain_id: value.inner.chain_id().map(TryInto::try_into).transpose()?,
         hash: Hash::from(*value.inner.tx_hash()),
-        nonce: value.inner.nonce().try_into()?,
+        nonce: value.inner.nonce().into(),
         signer,
         from: Address::new(value.from.into()),
         to: match value.inner.kind() {
             TxKind::Call(addr) => Some(addr.into()),
             TxKind::Create => None,
         },
-        value: value.inner.value().try_into()?,
+        value: value.inner.value().into(),
         input: value.inner.input().clone().into(),
-        gas_limit: value.inner.gas_limit().try_into()?,
-        gas_price: value.effective_gas_price.unwrap_or_default().try_into()?,
+        gas_limit: value.inner.gas_limit().into(),
+        gas_price: value.effective_gas_price.unwrap_or_default().into(),
         v,
-        r: r.into(),
-        s: s.into(),
+        r,
+        s,
     })
 }
 
@@ -174,7 +175,7 @@ impl From<TransactionInput> for alloy_rpc_types_eth::Transaction {
                 input: value.input.clone().into(),
             },
             alloy_primitives::PrimitiveSignature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_u64() == 1),
-            Default::default(),
+            FixedBytes::default(),
         ));
 
         Self {
