@@ -120,7 +120,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
     let v = if signature.parity() { U64::from(1) } else { U64::from(0) };
 
     Ok(TransactionInput {
-        tx_type: Some(U64::from(value.inner.to())),
+        tx_type: Some(U64::from(value.inner.tx_type() as u8)),
         chain_id: value.inner.chain_id().map(TryInto::try_into).transpose()?,
         hash: *value.inner.tx_hash().into(),
         nonce: value.inner.nonce().try_into()?,
