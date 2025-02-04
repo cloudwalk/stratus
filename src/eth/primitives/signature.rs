@@ -17,9 +17,9 @@ gen_newtype_from!(self = SignatureComponent, other = U256);
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
+// TODO: improve before merging
 impl From<SignatureComponent> for AlloyUint256 {
     fn from(value: SignatureComponent) -> Self {
-        // Convert through limbs (internal u64 array) similar to Wei -> RevmU256 conversion
         Self::from_limbs(value.0 .0)
     }
 }
