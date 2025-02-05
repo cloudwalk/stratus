@@ -74,24 +74,37 @@ impl Dummy<Faker> for TransactionInput {
 // -----------------------------------------------------------------------------
 // Serialization / Deserialization
 // -----------------------------------------------------------------------------
-// TODO: improve before merging
+
 impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        // Decode the raw bytes using decode_2718
-        let raw_bytes = rlp.as_raw();
-        let envelope =
-            alloy_consensus::TxEnvelope::decode_2718(&mut &raw_bytes[..]).map_err(|_| rlp::DecoderError::Custom("failed to decode transaction envelope"))?;
+        fn convert_tx(envelope: TxEnvelope) -> Result<TransactionInput, rlp::DecoderError> {
+            TransactionInput::try_from(alloy_rpc_types_eth::Transaction {
+                inner: envelope,
+                block_hash: None,
+                block_number: None,
+                transaction_index: None,
+                from: Address::default().into(),
+                effective_gas_price: None,
+            })
+            .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))
+        }
 
-        match Self::try_from(alloy_rpc_types_eth::Transaction {
-            inner: envelope,
-            block_hash: None,
-            block_number: None,
-            transaction_index: None,
-            from: Address::default().into(),
-            effective_gas_price: None,
-        }) {
-            Ok(transaction) => Ok(transaction),
-            Err(_) => Err(rlp::DecoderError::Custom("failed to convert transaction")),
+        let mut raw_bytes = rlp.as_raw();
+
+        if rlp.is_list() {
+            // Legacy transaction
+            TxEnvelope::fallback_decode(&mut raw_bytes)
+                .map_err(|_| rlp::DecoderError::Custom("failed to decode legacy transaction"))
+                .and_then(convert_tx)
+        } else {
+            // Typed transaction (EIP-2718)
+            raw_bytes
+                .first()
+                .ok_or(rlp::DecoderError::Custom("empty transaction bytes"))
+                .and_then(|&first_byte| {
+                    TxEnvelope::typed_decode(first_byte, &mut &raw_bytes[1..]).map_err(|_| rlp::DecoderError::Custom("failed to decode transaction envelope"))
+                })
+                .and_then(convert_tx)
         }
     }
 }
