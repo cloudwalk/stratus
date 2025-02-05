@@ -96,7 +96,7 @@ impl TransactionMined {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-// TODO: improve before merging
+
 impl From<TransactionMined> for AlloyTransaction {
     fn from(value: TransactionMined) -> Self {
         let signer = value.input.signer;
