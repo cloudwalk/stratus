@@ -178,7 +178,6 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
 impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
         let inner = TxEnvelope::Legacy(Signed::new_unchecked(
-            // TODO: improve before merging - implement other types
             TxLegacy {
                 chain_id: value.chain_id.map(Into::into),
                 nonce: value.nonce.into(),
