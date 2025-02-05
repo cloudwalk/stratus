@@ -115,7 +115,6 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
     }
 }
 
-// TODO: improve before merging
 fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_signer: bool) -> anyhow::Result<TransactionInput> {
     // extract signer
     let signer: Address = match compute_signer {
