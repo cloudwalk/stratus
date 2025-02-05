@@ -3,7 +3,8 @@ use alloy_consensus::Transaction;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_eips::eip2718::Decodable2718;
-use alloy_primitives::FixedBytes;
+use alloy_primitives::Address as AlloyAddress;
+use alloy_primitives::PrimitiveSignature;
 use alloy_primitives::TxKind;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
@@ -160,22 +161,21 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-// TODO: improve before merging
-impl From<TransactionInput> for alloy_rpc_types_eth::Transaction {
+impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
-        // Create legacy transaction envelope
         let inner = TxEnvelope::Legacy(Signed::new_unchecked(
+            // TODO: improve before merging - implement other types
             TxLegacy {
                 chain_id: value.chain_id.map(Into::into),
                 nonce: value.nonce.into(),
                 gas_price: value.gas_price.into(),
                 gas_limit: value.gas_limit.into(),
-                to: Into::<TxKind>::into(value.to.map(Into::<alloy_primitives::Address>::into).unwrap_or_default()),
+                to: Into::<TxKind>::into(value.to.map(Into::<AlloyAddress>::into).unwrap_or_default()),
                 value: value.value.into(),
                 input: value.input.clone().into(),
             },
-            alloy_primitives::PrimitiveSignature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_u64() == 1),
-            FixedBytes::default(),
+            PrimitiveSignature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_u64() == 1),
+            value.hash.into(),
         ));
 
         Self {
