@@ -23,6 +23,12 @@ impl Dummy<Faker> for SignatureComponent {
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = SignatureComponent, other = U256);
 
+impl From<Uint<256, 4>> for SignatureComponent {
+    fn from(value: Uint<256, 4>) -> Self {
+        Self(U256::from(value.to_be_bytes::<32>()))
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
@@ -35,11 +41,5 @@ impl From<SignatureComponent> for AlloyUint256 {
 impl From<SignatureComponent> for U256 {
     fn from(value: SignatureComponent) -> Self {
         value.0
-    }
-}
-
-impl From<Uint<256, 4>> for SignatureComponent {
-    fn from(value: Uint<256, 4>) -> Self {
-        Self(U256::from(value.to_be_bytes::<32>()))
     }
 }
