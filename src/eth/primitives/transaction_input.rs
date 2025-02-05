@@ -3,7 +3,6 @@ use alloy_consensus::Transaction;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_eips::eip2718::Decodable2718;
-use alloy_primitives::Address as AlloyAddress;
 use alloy_primitives::PrimitiveSignature;
 use alloy_primitives::TxKind;
 use anyhow::anyhow;
@@ -170,7 +169,10 @@ impl From<TransactionInput> for AlloyTransaction {
                 nonce: value.nonce.into(),
                 gas_price: value.gas_price.into(),
                 gas_limit: value.gas_limit.into(),
-                to: Into::<TxKind>::into(value.to.map(Into::<AlloyAddress>::into).unwrap_or_default()),
+                to: match value.to {
+                    Some(addr) => TxKind::Call(addr.into()),
+                    None => TxKind::Create,
+                },
                 value: value.value.into(),
                 input: value.input.clone().into(),
             },
