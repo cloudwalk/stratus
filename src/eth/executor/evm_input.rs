@@ -138,7 +138,6 @@ impl EvmInput {
     /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
     ///
     /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
-    // TODO: improve before merging(validate conversions)
     pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block_number: BlockNumber, block_timestamp: UnixTime) -> anyhow::Result<Self> {
         Ok(Self {
             from: tx.from.into(),
