@@ -89,21 +89,24 @@ impl Decodable for TransactionInput {
             .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))
         }
 
-        let mut raw_bytes = rlp.as_raw();
+        let raw_bytes = rlp.as_raw();
+
+        if raw_bytes.is_empty() {
+            return Err(rlp::DecoderError::Custom("empty transaction bytes"));
+        }
 
         if rlp.is_list() {
             // Legacy transaction
-            TxEnvelope::fallback_decode(&mut raw_bytes)
+            let mut bytes = raw_bytes;
+            TxEnvelope::fallback_decode(&mut bytes)
                 .map_err(|_| rlp::DecoderError::Custom("failed to decode legacy transaction"))
                 .and_then(convert_tx)
         } else {
             // Typed transaction (EIP-2718)
-            raw_bytes
-                .first()
-                .ok_or(rlp::DecoderError::Custom("empty transaction bytes"))
-                .and_then(|&first_byte| {
-                    TxEnvelope::typed_decode(first_byte, &mut &raw_bytes[1..]).map_err(|_| rlp::DecoderError::Custom("failed to decode transaction envelope"))
-                })
+            let first_byte = raw_bytes[0];
+            let mut remaining_bytes = &raw_bytes[1..];
+            TxEnvelope::typed_decode(first_byte, &mut remaining_bytes)
+                .map_err(|_| rlp::DecoderError::Custom("failed to decode transaction envelope"))
                 .and_then(convert_tx)
         }
     }
