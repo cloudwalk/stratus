@@ -1,11 +1,3 @@
-use alloy_consensus::Signed;
-use alloy_consensus::TxEnvelope;
-use alloy_consensus::TxLegacy;
-use alloy_primitives::Address;
-use alloy_primitives::PrimitiveSignature;
-use alloy_primitives::B256;
-use alloy_primitives::U256;
-use alloy_rpc_types_eth::Transaction;
 use anyhow::Context;
 use anyhow::Result;
 
@@ -25,24 +17,6 @@ impl ExternalTransaction {
     /// Returns the transaction hash.
     pub fn hash(&self) -> Hash {
         Hash::from(*self.0.inner.tx_hash())
-    }
-}
-
-// TODO: improve before merging(add other tx types)
-impl Default for ExternalTransaction {
-    fn default() -> Self {
-        Self(Transaction {
-            inner: TxEnvelope::Legacy(Signed::new_unchecked(
-                TxLegacy::default(),
-                PrimitiveSignature::new(U256::ZERO, U256::ZERO, false),
-                B256::default(),
-            )),
-            block_hash: None,
-            block_number: None,
-            transaction_index: None,
-            from: Address::ZERO,
-            effective_gas_price: None,
-        })
     }
 }
 
