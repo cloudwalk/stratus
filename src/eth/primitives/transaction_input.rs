@@ -120,13 +120,13 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
     // extract signer
     let signer: Address = match compute_signer {
         true => match value.inner.recover_signer() {
-            Ok(signer) => signer.into(),
+            Ok(signer) => Address::from(signer),
             Err(e) => {
                 tracing::warn!(reason = ?e, "failed to recover transaction signer");
                 return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
             }
         },
-        false => value.from.into(),
+        false => Address::from(value.from),
     };
 
     // Get signature components from the envelope
@@ -137,19 +137,19 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
 
     Ok(TransactionInput {
         tx_type: Some(U64::from(value.inner.tx_type() as u8)),
-        chain_id: value.inner.chain_id().map(TryInto::try_into).transpose()?,
+        chain_id: value.inner.chain_id().map(Into::into),
         hash: Hash::from(*value.inner.tx_hash()),
-        nonce: value.inner.nonce().into(),
+        nonce: Nonce::from(value.inner.nonce()),
         signer,
-        from: Address::new(value.from.into()),
+        from: Address::from(value.from),
         to: match value.inner.kind() {
-            TxKind::Call(addr) => Some(addr.into()),
+            TxKind::Call(addr) => Some(Address::from(addr)),
             TxKind::Create => None,
         },
-        value: value.inner.value().into(),
-        input: value.inner.input().clone().into(),
-        gas_limit: value.inner.gas_limit().into(),
-        gas_price: value.effective_gas_price.unwrap_or_default().into(),
+        value: Wei::from(value.inner.value()),
+        input: Bytes::from(value.inner.input().clone()),
+        gas_limit: Gas::from(value.inner.gas_limit()),
+        gas_price: Wei::from(value.inner.gas_price().or(value.effective_gas_price).unwrap_or_default()),
         v,
         r,
         s,
