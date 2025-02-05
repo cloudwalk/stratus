@@ -1,9 +1,7 @@
 use alloy_consensus::Signed;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
-use alloy_consensus::Typed2718;
 use alloy_primitives::Address;
-use alloy_primitives::FixedBytes;
 use alloy_primitives::PrimitiveSignature;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
@@ -27,26 +25,6 @@ impl ExternalTransaction {
     /// Returns the transaction hash.
     pub fn hash(&self) -> Hash {
         Hash::from(*self.0.inner.tx_hash())
-    }
-
-    /// Fills the field transaction_type based on transaction envelope type
-    pub fn fill_missing_transaction_type(&mut self) {
-        // TODO: improve before merging
-        // Don't try overriding if it's already set
-        if self.0.inner.ty() != 0 {
-            return;
-        }
-
-        // Check if transaction is EIP-1559 based on inner type
-        if self.0.inner.is_eip1559() {
-            let signature = PrimitiveSignature::new(U256::ZERO, U256::ZERO, false);
-
-            self.0.inner = alloy_consensus::TxEnvelope::Eip1559(alloy_consensus::Signed::new_unchecked(
-                alloy_consensus::TxEip1559::default(),
-                signature,
-                FixedBytes::default(),
-            ));
-        }
     }
 }
 
