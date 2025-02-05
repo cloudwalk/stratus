@@ -15,7 +15,7 @@ use fake::Faker;
 use rlp::Decodable;
 
 use crate::alias::AlloyTransaction;
-use crate::eth::primitives::signature::SignatureComponent;
+use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;

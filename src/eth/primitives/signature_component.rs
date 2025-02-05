@@ -1,5 +1,7 @@
 use display_json::DebugAsJson;
 use ethereum_types::U256;
+use fake::Dummy;
+use fake::Faker;
 
 use crate::alias::AlloyUint256;
 use crate::gen_newtype_from;
@@ -7,6 +9,12 @@ use crate::gen_newtype_from;
 /// A signature component (r or s value)
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SignatureComponent(pub U256);
+
+impl Dummy<Faker> for SignatureComponent {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        Self(U256::from(rng.gen::<u64>()))
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
