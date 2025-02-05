@@ -358,7 +358,6 @@ impl Executor {
         #[cfg(feature = "metrics")] block_metrics: &mut EvmExecutionMetrics,
     ) -> anyhow::Result<()> {
         // track
-        // TODO: improve before merging(validate)
         #[cfg(feature = "metrics")]
         let (start, tx_function, tx_contract) = (
             metrics::now(),
