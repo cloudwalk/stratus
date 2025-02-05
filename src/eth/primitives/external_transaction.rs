@@ -26,8 +26,7 @@ impl ExternalTransaction {
 
     /// Returns the transaction hash.
     pub fn hash(&self) -> Hash {
-        let tx_hash: B256 = *self.0.inner.tx_hash(); // TODO: improve before merging
-        Hash::from(tx_hash)
+        Hash::from(*self.0.inner.tx_hash())
     }
 
     /// Fills the field transaction_type based on transaction envelope type
