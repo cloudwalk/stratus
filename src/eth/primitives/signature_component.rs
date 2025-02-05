@@ -1,7 +1,9 @@
+use alloy_primitives::Uint;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
+use rand::Rng;
 
 use crate::alias::AlloyUint256;
 use crate::gen_newtype_from;
@@ -11,7 +13,7 @@ use crate::gen_newtype_from;
 pub struct SignatureComponent(pub U256);
 
 impl Dummy<Faker> for SignatureComponent {
-    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(U256::from(rng.gen::<u64>()))
     }
 }
@@ -24,8 +26,6 @@ gen_newtype_from!(self = SignatureComponent, other = U256);
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-
-// TODO: improve before merging
 impl From<SignatureComponent> for AlloyUint256 {
     fn from(value: SignatureComponent) -> Self {
         Self::from_limbs(value.0 .0)
@@ -38,8 +38,8 @@ impl From<SignatureComponent> for U256 {
     }
 }
 
-impl From<alloy_primitives::Uint<256, 4>> for SignatureComponent {
-    fn from(value: alloy_primitives::Uint<256, 4>) -> Self {
+impl From<Uint<256, 4>> for SignatureComponent {
+    fn from(value: Uint<256, 4>) -> Self {
         Self(U256::from(value.to_be_bytes::<32>()))
     }
 }
