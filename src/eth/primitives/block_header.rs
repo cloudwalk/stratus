@@ -9,7 +9,6 @@ use fake::Fake;
 use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
-use rand_core;
 
 use crate::alias::AlloyAddress;
 use crate::alias::AlloyB256;
