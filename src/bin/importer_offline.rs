@@ -26,7 +26,6 @@ use stratus::eth::miner::MinerMode;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalReceipts;
-use stratus::eth::primitives::ExternalTransaction;
 use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
 use stratus::log_and_err;
@@ -235,16 +234,10 @@ fn run_external_block_executor(
         for blocks in Itertools::chunks(blocks.into_iter(), SAVER_BATCH_SIZE).into_iter() {
             let mut executed_batch = Vec::with_capacity(SAVER_BATCH_SIZE);
 
-            for (mut block, receipts) in blocks {
+            for (block, receipts) in blocks {
                 if GlobalState::is_shutdown_warn(TASK_NAME) {
                     return Ok(());
                 }
-
-                // fill missing transaction_type with `v`
-                let BlockTransactions::Full(txs) = &mut block.transactions else {
-                    return log_and_err!(GlobalState::shutdown_from(TASK_NAME, "expected full transactions, got hashes or uncle"));
-                };
-                txs.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
 
                 // TODO: remove clone
                 executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
@@ -318,8 +311,8 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_
 
         // perform additional checks on the transaction index
         for window in transactions.windows(2) {
-            let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))?.as_u32();
-            let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))?.as_u32();
+            let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+            let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
             assert!(
                 tx_index + 1 == next_tx_index,
                 "two consecutive transactions must have consecutive indices: {} and {}",

@@ -53,7 +53,7 @@ impl std::fmt::Display for RevertReason {
 
 #[cfg(test)]
 mod tests {
-    use ethers_core::utils::hex;
+    use alloy_primitives::hex;
 
     use super::*;
 

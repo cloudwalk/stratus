@@ -7,7 +7,7 @@ use display_json::DebugAsJson;
 use itertools::Itertools;
 
 use crate::alias::AlloyReceipt;
-use crate::alias::EthersTransaction;
+use crate::alias::AlloyTransaction;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
@@ -96,27 +96,20 @@ impl TransactionMined {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<TransactionMined> for EthersTransaction {
+
+impl From<TransactionMined> for AlloyTransaction {
     fn from(value: TransactionMined) -> Self {
-        let input = value.input;
+        let signer = value.input.signer;
+        let gas_price = value.input.gas_price;
+        let tx: AlloyTransaction = value.input.into();
+
         Self {
-            chain_id: input.chain_id.map_into(),
-            hash: input.hash.into(),
-            nonce: input.nonce.into(),
+            inner: tx.inner,
             block_hash: Some(value.block_hash.into()),
-            block_number: Some(value.block_number.into()),
+            block_number: Some(value.block_number.as_u64()),
             transaction_index: Some(value.transaction_index.into()),
-            from: input.signer.into(),
-            to: input.to.map_into(),
-            value: input.value.into(),
-            gas_price: Some(input.gas_price.into()),
-            gas: input.gas_limit.into(),
-            input: input.input.into(),
-            v: input.v,
-            r: input.r,
-            s: input.s,
-            transaction_type: input.tx_type,
-            ..Default::default()
+            from: signer.into(),
+            effective_gas_price: Some(gas_price.into()),
         }
     }
 }

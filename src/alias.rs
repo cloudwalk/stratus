@@ -33,9 +33,7 @@ pub type AlloyUint256 = alloy_primitives::Uint<256, 4>;
 // -----------------------------------------------------------------------------
 // Ethers
 // -----------------------------------------------------------------------------
-pub type AlloyBlockEthersTransaction = alloy_rpc_types_eth::Block<ethers_core::types::Transaction>;
 pub type EthersBytes = ethers_core::types::Bytes;
-pub type EthersTransaction = ethers_core::types::Transaction;
 
 // -----------------------------------------------------------------------------
 // REVM

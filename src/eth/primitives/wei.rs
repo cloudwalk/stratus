@@ -59,6 +59,12 @@ impl TryFrom<BigDecimal> for Wei {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
+impl From<Wei> for u128 {
+    fn from(value: Wei) -> Self {
+        value.as_u128()
+    }
+}
+
 impl From<Wei> for RevmU256 {
     fn from(value: Wei) -> Self {
         RevmU256::from_limbs(value.0 .0)

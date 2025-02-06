@@ -3,6 +3,7 @@ use std::mem;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
@@ -358,10 +359,14 @@ impl Executor {
     ) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
-        let (start, tx_function, tx_contract) = (metrics::now(), codegen::function_sig(&tx.0.input), codegen::contract_name(&tx.0.to.map_into()));
+        let (start, tx_function, tx_contract) = (
+            metrics::now(),
+            codegen::function_sig(tx.inner.input()),
+            codegen::contract_name(&tx.0.to().map_into()),
+        );
 
         #[cfg(feature = "tracing")]
-        let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash).entered();
+        let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         // when transaction externally failed, create fake transaction instead of reexecuting

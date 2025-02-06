@@ -5,9 +5,9 @@ use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
-use crate::alias::AlloyBlockEthersTransaction;
+use crate::alias::AlloyBlockAlloyTransaction;
 use crate::alias::AlloyBlockH256;
-use crate::alias::EthersTransaction;
+use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
@@ -70,7 +70,7 @@ impl Block {
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
-        let alloy_block: AlloyBlockEthersTransaction = self.into();
+        let alloy_block: AlloyBlockAlloyTransaction = self.into();
         to_json_value(alloy_block)
     }
 
@@ -127,10 +127,10 @@ impl Block {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<Block> for AlloyBlockEthersTransaction {
+impl From<Block> for AlloyBlockAlloyTransaction {
     fn from(block: Block) -> Self {
-        let alloy_block: AlloyBlockEthersTransaction = block.header.into();
-        let transactions: Vec<EthersTransaction> = block.transactions.into_iter().map_into().collect();
+        let alloy_block: AlloyBlockAlloyTransaction = block.header.into();
+        let transactions: Vec<AlloyTransaction> = block.transactions.into_iter().map_into().collect();
 
         Self {
             transactions: BlockTransactions::Full(transactions),
