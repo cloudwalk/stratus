@@ -6,8 +6,8 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
+use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
-use async_trait::async_trait;
 use futures::try_join;
 use futures::StreamExt;
 use serde::Deserialize;
@@ -25,7 +25,6 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::Hash;
-use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -219,7 +218,7 @@ impl Importer {
             let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
 
             if let ImporterMode::FakeLeader = importer_mode {
-                for tx in block.0.transactions {
+                for tx in block.0.transactions.into_transactions() {
                     tracing::info!(?tx, "executing tx as fake miner");
                     if let Err(e) = executor.execute_local_transaction(tx.try_into()?) {
                         tracing::error!(reason = ?e, "transaction failed");
@@ -436,21 +435,35 @@ impl Importer {
             // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
             while let Some((mut block, mut receipts)) = tasks.next().await {
+                let block_number = block.number();
+                let BlockTransactions::Full(transactions) = &mut block.transactions else {
+                    return Err(anyhow!("expected full transactions, got hashes or uncle"));
+                };
+
+                if transactions.len() != receipts.len() {
+                    return Err(anyhow!(
+                        "block {} has mismatched transaction and receipt length: {} transactions but {} receipts",
+                        block_number,
+                        transactions.len(),
+                        receipts.len()
+                    ));
+                }
+
                 // Stably sort transactions and receipts by transaction_index
-                block.transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+                transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
                 receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
 
                 // perform additional checks on the transaction index
-                for window in block.transactions.windows(2) {
-                    let tx_index = window[0].transaction_index.map_or(u32::MAX, |index| index.as_u32());
-                    let next_tx_index = window[1].transaction_index.map_or(u32::MAX, |index| index.as_u32());
+                for window in transactions.windows(2) {
+                    let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+                    let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
                     if tx_index + 1 != next_tx_index {
                         tracing::error!(tx_index, next_tx_index, "two consecutive transactions must have consecutive indices");
                     }
                 }
                 for window in receipts.windows(2) {
-                    let tx_index = window[0].transaction_index.as_u32();
-                    let next_tx_index = window[1].transaction_index.as_u32();
+                    let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+                    let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
                     if tx_index + 1 != next_tx_index {
                         tracing::error!(tx_index, next_tx_index, "two consecutive receipts must have consecutive indices");
                     }
@@ -505,9 +518,18 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
 
     // fetch receipts in parallel
     let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
-    for hash in block.transactions.iter().map(|tx| tx.hash()) {
+
+    let tx_hashes = if let BlockTransactions::Full(txs) = &block.transactions {
+        txs.iter().map(|tx| tx.hash()).collect::<Vec<_>>()
+    } else {
+        tracing::error!("expected full transactions, got hashes or uncle");
+        return (block, Vec::new());
+    };
+
+    for hash in tx_hashes {
         receipts_tasks.push(fetch_receipt(Arc::clone(&chain), block_number, hash));
     }
+
     let receipts = futures::stream::iter(receipts_tasks).buffer_unordered(PARALLEL_RECEIPTS).collect().await;
 
     (block, receipts)
@@ -565,7 +587,6 @@ async fn fetch_receipt(chain: Arc<BlockchainClient>, block_number: BlockNumber, 
     }
 }
 
-#[async_trait]
 impl Consensus for Importer {
     async fn lag(&self) -> anyhow::Result<u64> {
         let elapsed = chrono::Utc::now().timestamp() as u64 - LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);

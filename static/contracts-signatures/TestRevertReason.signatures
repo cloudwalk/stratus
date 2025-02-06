@@ -1,0 +1,7 @@
+Function signatures:
+2b3d7bd2: revertWithKnownError()
+0323d234: revertWithString()
+2e6b10d2: revertWithUnknownError()
+
+Error signatures:
+22aa4404: KnownError()

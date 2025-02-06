@@ -11,14 +11,8 @@ use crate::gen_newtype_try_from;
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(pub U64);
 
-impl ChainId {
-    pub fn new(value: U64) -> Self {
-        Self(value)
-    }
-}
-
 impl Dummy<Faker> for ChainId {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
     }
 }

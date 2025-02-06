@@ -1,17 +1,14 @@
 use std::collections::HashMap;
 
+use alloy_primitives::B256;
+use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
-use ethereum_types::H256;
 use itertools::Itertools;
-use serde::Deserialize;
 
-use super::LogMined;
-use super::TransactionInput;
-use crate::alias::EthersBlockEthersTransaction;
-use crate::alias::EthersBlockH256;
-use crate::alias::EthersTransaction;
+use crate::alias::AlloyBlockAlloyTransaction;
+use crate::alias::AlloyBlockH256;
+use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
-use crate::eth::executor::EvmExecutionResult;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
@@ -20,7 +17,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
-use crate::log_and_err;
 
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
@@ -40,33 +36,6 @@ impl Block {
     /// Constructs an empty genesis block.
     pub fn genesis() -> Block {
         Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
-    }
-
-    /// Pushes a single transaction execution to the blocks transactions.
-    pub fn push_execution(&mut self, input: TransactionInput, evm_result: EvmExecutionResult) {
-        let transaction_index = (self.transactions.len() as u64).into();
-        self.transactions.push(TransactionMined {
-            logs: evm_result
-                .execution
-                .logs
-                .iter()
-                .cloned()
-                .enumerate()
-                .map(|(i, log)| LogMined {
-                    log_index: (i as u64).into(),
-                    log,
-                    transaction_hash: input.hash,
-                    transaction_index,
-                    block_number: self.header.number,
-                    block_hash: self.header.hash,
-                })
-                .collect(),
-            input,
-            execution: evm_result.execution,
-            transaction_index,
-            block_number: self.header.number,
-            block_hash: self.header.hash,
-        }); // TODO: update logs bloom
     }
 
     /// Calculates block size label by the number of transactions.
@@ -101,14 +70,14 @@ impl Block {
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
-        let ethers_block: EthersBlockEthersTransaction = self.into();
-        to_json_value(ethers_block)
+        let alloy_block: AlloyBlockAlloyTransaction = self.into();
+        to_json_value(alloy_block)
     }
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
     pub fn to_json_rpc_with_transactions_hashes(self) -> JsonValue {
-        let ethers_block: EthersBlockH256 = self.into();
-        to_json_value(ethers_block)
+        let alloy_block: AlloyBlockH256 = self.into();
+        to_json_value(alloy_block)
     }
 
     /// Returns the block number.
@@ -158,35 +127,26 @@ impl Block {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<Block> for EthersBlockEthersTransaction {
+impl From<Block> for AlloyBlockAlloyTransaction {
     fn from(block: Block) -> Self {
-        let ethers_block = EthersBlockEthersTransaction::from(block.header.clone());
-        let ethers_block_transactions: Vec<EthersTransaction> = block.transactions.clone().into_iter().map_into().collect();
+        let alloy_block: AlloyBlockAlloyTransaction = block.header.into();
+        let transactions: Vec<AlloyTransaction> = block.transactions.into_iter().map_into().collect();
+
         Self {
-            transactions: ethers_block_transactions,
-            ..ethers_block
+            transactions: BlockTransactions::Full(transactions),
+            ..alloy_block
         }
     }
 }
 
-impl From<Block> for EthersBlockH256 {
+impl From<Block> for AlloyBlockH256 {
     fn from(block: Block) -> Self {
-        let ethers_block = EthersBlockH256::from(block.header);
-        let ethers_block_transactions: Vec<H256> = block.transactions.into_iter().map(|x| x.input.hash).map_into().collect();
+        let alloy_block: AlloyBlockH256 = block.header.into();
+        let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.hash).map(B256::from).collect();
+
         Self {
-            transactions: ethers_block_transactions,
-            ..ethers_block
-        }
-    }
-}
-
-impl TryFrom<JsonValue> for Block {
-    type Error = anyhow::Error;
-
-    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
-        match Block::deserialize(&value) {
-            Ok(v) => Ok(v),
-            Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to Block"),
+            transactions: BlockTransactions::Hashes(transaction_hashes),
+            ..alloy_block
         }
     }
 }

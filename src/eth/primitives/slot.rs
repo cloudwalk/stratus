@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use display_json::DebugAsJson;
 
 use crate::eth::primitives::SlotIndex;
@@ -23,16 +21,5 @@ impl Slot {
             index,
             value: SlotValue::default(),
         }
-    }
-
-    /// Checks if the value is zero.
-    pub fn is_zero(&self) -> bool {
-        self.value.is_zero()
-    }
-}
-
-impl Display for Slot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}={}", self.index, self.value)
     }
 }

@@ -327,59 +327,6 @@ impl WithCommonConfig for ImporterOfflineConfig {
 }
 
 // -----------------------------------------------------------------------------
-// Config: RocksRevertToBlockConfig
-// -----------------------------------------------------------------------------
-
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
-pub struct RocksRevertToBlockConfig {
-    /// Block number to revert to.
-    #[arg(long = "block", env = "BLOCK")]
-    pub block_number: u64,
-
-    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
-    pub rocks_path_prefix: Option<String>,
-
-    #[clap(flatten)]
-    pub common: CommonConfig,
-}
-
-impl WithCommonConfig for RocksRevertToBlockConfig {
-    fn common(&self) -> &CommonConfig {
-        &self.common
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config: Test
-// -----------------------------------------------------------------------------
-
-/// Configuration for integration tests.
-#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-pub struct IntegrationTestConfig {
-    #[deref]
-    #[clap(flatten)]
-    pub common: CommonConfig,
-
-    #[clap(flatten)]
-    pub executor: ExecutorConfig,
-
-    #[clap(flatten)]
-    pub miner: MinerConfig,
-
-    #[clap(flatten)]
-    pub storage: StorageConfig,
-
-    #[clap(flatten)]
-    pub rpc_storage: ExternalRpcConfig,
-}
-
-impl WithCommonConfig for IntegrationTestConfig {
-    fn common(&self) -> &CommonConfig {
-        &self.common
-    }
-}
-
-// -----------------------------------------------------------------------------
 // Enum: Env
 // -----------------------------------------------------------------------------
 #[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]
@@ -412,27 +359,6 @@ impl FromStr for Environment {
             "production" | "prod" => Ok(Self::Production),
             "canary" => Ok(Self::Canary),
             s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Self::VARIANTS)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enum: ValidatorMethodConfig
-// -----------------------------------------------------------------------------
-
-#[derive(DebugAsJson, Clone, strum::Display, serde::Serialize)]
-pub enum ValidatorMethodConfig {
-    Rpc { url: String },
-    CompareTables,
-}
-
-impl FromStr for ValidatorMethodConfig {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s {
-            "compare_tables" => Ok(Self::CompareTables),
-            s => Ok(Self::Rpc { url: s.to_string() }),
         }
     }
 }

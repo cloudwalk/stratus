@@ -347,7 +347,7 @@ where
     }
 }
 
-impl<'a, K, V> Iterator for RocksCfIter<'a, K, V>
+impl<K, V> Iterator for RocksCfIter<'_, K, V>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
@@ -394,7 +394,7 @@ pub struct RocksCfKeysIter<'a, K> {
     _marker: PhantomData<K>,
 }
 
-impl<'a, K> Iterator for RocksCfKeysIter<'a, K>
+impl<K> Iterator for RocksCfKeysIter<'_, K>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {

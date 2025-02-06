@@ -22,7 +22,7 @@ concurrency:
 jobs:
   # Build the documentation and upload as an artifact
   docs-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code
@@ -30,7 +30,7 @@ jobs:
 
       - name: Set up Rust Nightly and Rust Docs
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2024-07-19
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2025-01-21
           rustup component add rust-docs
 
       - name: Rust Cache
@@ -54,7 +54,7 @@ jobs:
 
       - name: Generate docs
         run: |
-          just doc -2024-07-19
+          just doc -2025-01-21
           echo "<meta http-equiv='refresh' content='0; URL=./stratus/'>" >> target/doc/index.html
           chmod -c -R +rX target/doc/
 
@@ -65,7 +65,7 @@ jobs:
 
   # Upload the documentation to GitHub Pages
   docs-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: docs-build
 
     environment:

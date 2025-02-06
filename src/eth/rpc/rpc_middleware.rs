@@ -27,6 +27,7 @@ use crate::eth::codegen::SoliditySignature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
+#[cfg(feature = "metrics")]
 use crate::eth::primitives::ErrorCode;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
@@ -184,7 +185,7 @@ pub struct RpcResponse<'a> {
     future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 }
 
-impl<'a> Future for RpcResponse<'a> {
+impl Future for RpcResponse<'_> {
     type Output = MethodResponse;
 
     fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
@@ -296,8 +297,8 @@ impl TransactionTracingIdentifiers {
         Ok(Self {
             client: client.map(|(_, client)| client).ok(),
             hash: Some(tx.hash),
-            contract: codegen::contract_name_for_o11y(&tx.to),
-            function: codegen::function_sig_for_o11y(&tx.input),
+            contract: codegen::contract_name(&tx.to),
+            function: codegen::function_sig(&tx.input),
             from: Some(tx.signer),
             to: tx.to,
             nonce: Some(tx.nonce),
@@ -310,8 +311,8 @@ impl TransactionTracingIdentifiers {
         Ok(Self {
             client: None,
             hash: None,
-            contract: codegen::contract_name_for_o11y(&call.to),
-            function: codegen::function_sig_for_o11y(&call.data),
+            contract: codegen::contract_name(&call.to),
+            function: codegen::function_sig(&call.data),
             from: call.from,
             to: call.to,
             nonce: None,

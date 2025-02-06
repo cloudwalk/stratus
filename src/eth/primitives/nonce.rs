@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
@@ -16,23 +14,14 @@ pub struct Nonce(U64);
 impl Nonce {
     pub const ZERO: Nonce = Nonce(U64::zero());
 
-    /// Checks if current value is zero.
-    pub fn is_zero(&self) -> bool {
-        self == &Self::ZERO
-    }
-
     /// Returns the next nonce.
     pub fn next_nonce(&self) -> Self {
         Self(self.0 + 1)
     }
-
-    pub fn as_u64(&self) -> u64 {
-        self.0.as_u64()
-    }
 }
 
 impl Dummy<Faker> for Nonce {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
     }
 }
@@ -48,21 +37,6 @@ impl TryFrom<U256> for Nonce {
 
     fn try_from(value: U256) -> Result<Self, Self::Error> {
         Ok(Nonce(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
-    }
-}
-
-impl FromStr for Nonce {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self> {
-        // This parses a hexadecimal string
-        match U64::from_str(s) {
-            Ok(parsed) => Ok(Self(parsed)),
-            Err(e) => {
-                tracing::warn!(reason = ?e, value = %s, "failed to parse nonce");
-                Err(anyhow!("Failed to parse field '{}' with value '{}'", "nonce", s))
-            }
-        }
     }
 }
 

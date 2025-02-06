@@ -1,10 +1,13 @@
-use std::hash::Hash as HashTrait;
-
+use alloy_consensus::Eip658Value;
+use alloy_consensus::Receipt;
+use alloy_consensus::ReceiptEnvelope;
+use alloy_consensus::ReceiptWithBloom;
+use anyhow::anyhow;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
-use crate::alias::EthersReceipt;
-use crate::alias::EthersTransaction;
+use crate::alias::AlloyReceipt;
+use crate::alias::AlloyTransaction;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
@@ -15,7 +18,6 @@ use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
 use crate::ext::OptionExt;
-use crate::if_else;
 
 /// Transaction that was executed by the EVM and added to a block.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -51,12 +53,6 @@ impl Ord for TransactionMined {
     }
 }
 
-impl HashTrait for TransactionMined {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.input.hash.hash(state);
-    }
-}
-
 impl TransactionMined {
     /// Creates a new mined transaction from an external mined transaction that was re-executed locally.
     ///
@@ -67,8 +63,19 @@ impl TransactionMined {
             execution,
             block_number: receipt.block_number(),
             block_hash: receipt.block_hash(),
-            transaction_index: receipt.transaction_index.into(),
-            logs: receipt.0.logs.into_iter().map(LogMined::try_from).collect::<Result<Vec<LogMined>, _>>()?,
+            transaction_index: receipt
+                .0
+                .transaction_index
+                .map_into()
+                .ok_or_else(|| anyhow!("external receipt missing transaction index"))?,
+            logs: receipt
+                .0
+                .inner
+                .logs()
+                .iter()
+                .cloned()
+                .map(LogMined::try_from)
+                .collect::<Result<Vec<LogMined>, _>>()?,
         })
     }
 
@@ -89,56 +96,60 @@ impl TransactionMined {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<TransactionMined> for EthersTransaction {
+
+impl From<TransactionMined> for AlloyTransaction {
     fn from(value: TransactionMined) -> Self {
-        let input = value.input;
+        let signer = value.input.signer;
+        let gas_price = value.input.gas_price;
+        let tx: AlloyTransaction = value.input.into();
+
         Self {
-            chain_id: input.chain_id.map_into(),
-            hash: input.hash.into(),
-            nonce: input.nonce.into(),
+            inner: tx.inner,
             block_hash: Some(value.block_hash.into()),
-            block_number: Some(value.block_number.into()),
+            block_number: Some(value.block_number.as_u64()),
             transaction_index: Some(value.transaction_index.into()),
-            from: input.signer.into(),
-            to: input.to.map_into(),
-            value: input.value.into(),
-            gas_price: Some(input.gas_price.into()),
-            gas: input.gas_limit.into(),
-            input: input.input.into(),
-            v: input.v,
-            r: input.r,
-            s: input.s,
-            transaction_type: input.tx_type,
-            ..Default::default()
+            from: signer.into(),
+            effective_gas_price: Some(gas_price.into()),
         }
     }
 }
 
-impl From<TransactionMined> for EthersReceipt {
+impl From<TransactionMined> for AlloyReceipt {
     fn from(value: TransactionMined) -> Self {
-        let logs_bloom = value.compute_bloom().into();
-        Self {
-            // receipt specific
-            status: Some(if_else!(value.is_success(), 1, 0).into()),
-            contract_address: value.execution.contract_address().map_into(),
-            gas_used: Some(value.execution.gas.into()),
+        let receipt = Receipt {
+            status: Eip658Value::Eip658(value.is_success()),
+            cumulative_gas_used: value.execution.gas.into(), // TODO: implement cumulative gas used correctly
+            logs: value.logs.clone().into_iter().map_into().collect(),
+        };
 
-            // transaction
+        let receipt_with_bloom = ReceiptWithBloom {
+            receipt,
+            logs_bloom: value.compute_bloom().into(),
+        };
+
+        let inner = match value.input.tx_type.map(|tx| tx.as_u64()) {
+            Some(0) | None => ReceiptEnvelope::Legacy(receipt_with_bloom),
+            Some(1) => ReceiptEnvelope::Eip2930(receipt_with_bloom),
+            Some(2) => ReceiptEnvelope::Eip1559(receipt_with_bloom),
+            Some(3) => ReceiptEnvelope::Eip4844(receipt_with_bloom),
+            Some(4) => ReceiptEnvelope::Eip7702(receipt_with_bloom),
+            Some(_) => ReceiptEnvelope::Legacy(receipt_with_bloom),
+        };
+
+        Self {
+            inner,
             transaction_hash: value.input.hash.into(),
+            transaction_index: Some(value.transaction_index.into()),
+            block_hash: Some(value.block_hash.into()),
+            block_number: Some(value.block_number.as_u64()),
+            gas_used: value.execution.gas.into(),
+            effective_gas_price: value.input.gas_price.as_u128(), // TODO: implement effective gas price used correctly
+            blob_gas_used: None,
+            blob_gas_price: None,
             from: value.input.signer.into(),
             to: value.input.to.map_into(),
-
-            // block
-            block_hash: Some(value.block_hash.into()),
-            block_number: Some(value.block_number.into()),
-            transaction_index: value.transaction_index.into(),
-
-            // logs
-            logs: value.logs.into_iter().map_into().collect(),
-            logs_bloom, // TODO: save this to the database instead of computing it every time (could also be useful for eth_getLogs)
-
-            // TODO: there are more fields to populate here
-            ..Default::default()
+            contract_address: value.execution.contract_address().map_into(),
+            authorization_list: None,
         }
     }
 }

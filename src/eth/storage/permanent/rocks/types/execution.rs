@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
+use super::execution_result::ExecutionResultBuilder;
 use super::execution_result::ExecutionResultRocksdb;
 use super::gas::GasRocksdb;
 use super::log::LogRocksdb;
@@ -37,11 +38,12 @@ impl From<EvmExecution> for ExecutionRocksdb {
 
 impl From<ExecutionRocksdb> for EvmExecution {
     fn from(item: ExecutionRocksdb) -> Self {
+        let (result, output) = ExecutionResultBuilder((item.result, item.output)).build();
         Self {
             block_timestamp: item.block_timestamp.into(),
             receipt_applied: item.execution_costs_applied,
-            result: item.result.into(),
-            output: item.output.into(),
+            result,
+            output,
             logs: item.logs.into_iter().map(Log::from).collect(),
             gas: item.gas.into(),
             changes: HashMap::default(),

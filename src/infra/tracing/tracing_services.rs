@@ -143,7 +143,7 @@ struct TracingLog<'a> {
     context: Option<TracingLogContextField<'a>>,
 }
 
-impl<'a> Serialize for TracingLog<'a> {
+impl Serialize for TracingLog<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,

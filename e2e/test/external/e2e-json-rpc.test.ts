@@ -17,9 +17,11 @@ import {
     ZERO,
     deployTestContractBalances,
     deployTestContractBlockTimestamp,
+    deployTestRevertReason,
     prepareSignedTx,
     send,
     sendAndGetError,
+    sendAndGetFullResponse,
     sendEvmMine,
     sendExpect,
     sendGetBlockNumber,
@@ -298,6 +300,177 @@ describe("JSON-RPC", () => {
                 expect(txReceiptAfterMining).to.not.be.null;
                 expect(txReceiptAfterMining?.status).eq(REVERSAL);
                 expect(actualTxHash).eq(expectedTxHash);
+            });
+        });
+
+        describe("debug_traceTransaction", () => {
+            it("callTracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "callTracer" },
+                ]);
+
+                expect(trace.data.result.from).to.eq("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266");
+                expect(trace.data.result.input).to.eq("0x2b3d7bd2");
+                expect(trace.data.result.output).to.eq("0x22aa4404");
+                expect(trace.data.result.error).to.eq("execution reverted");
+                expect(trace.data.result.value).to.eq("0x0");
+                expect(trace.data.result.type).to.eq("CALL");
+            });
+
+            it("4byteTracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "4byteTracer" },
+                ]);
+
+                expect(trace.data.result["0x2b3d7bd2-0"]).to.eq(1);
+            });
+
+            it("prestateTracer", async () => {
+                const contract = await deployTestContractBalances();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const contractOps = contract.connect(ALICE.signer());
+                await contractOps.add(ALICE.address, 10);
+                await contractOps.add(ALICE.address, 10);
+                await contractOps.add(ALICE.address, 10);
+                const txResponse = await contractOps.add(ALICE.address, 10);
+                const txHash = txResponse.hash;
+                await contractOps.add(ALICE.address, 10);
+                await contractOps.add(ALICE.address, 10);
+                await contractOps.add(ALICE.address, 10);
+
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "prestateTracer", tracerConfig: { diffMode: false } },
+                ]);
+
+                const resultObj = trace.data.result[(await contract.getAddress()).toLowerCase()];
+                expect(resultObj.balance).to.equal("0x0");
+                expect(resultObj.nonce).to.equal(1);
+                expect(resultObj.storage).to.deep.equal({
+                    "0x723077b8a1b173adc35e5f0e7e3662fd1208212cb629f9c128551ea7168da722":
+                        "0x000000000000000000000000000000000000000000000000000000000000001e",
+                });
+            });
+
+            it("noopTracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "noopTracer" },
+                ]);
+
+                expect(trace.data.result).to.be.empty;
+            });
+
+            it("muxTracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    {
+                        tracer: "muxTracer",
+                        tracerConfig: { noopTracer: null, "4byteTracer": null },
+                    },
+                ]);
+
+                expect(trace.data.result["4byteTracer"]["0x2b3d7bd2-0"]).to.eq(1);
+                expect(trace.data.result.noopTracer).to.be.empty;
+            });
+
+            it("flatCallTracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: "flatCallTracer" },
+                ]);
+                const result = trace.data.result[0];
+                expect(result.action.from).to.eq("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266");
+                expect(result.action.callType).to.eq("call");
+                expect(result.action.gas).to.eq("0x52fc");
+                expect(result.action.input).to.eq("0x2b3d7bd2");
+                expect(result.action.to).to.eq((await contract.getAddress()).toLowerCase());
+                expect(result.action.value).to.eq("0x0");
+                expect(result.error).to.eq("Reverted");
+                expect(result.result.gasUsed).to.eq("0xb4");
+                expect(result.result.output).to.eq("0x22aa4404");
+                expect(result.subtraces).to.eq(0);
+                expect(result.traceAddress).to.deep.eq([]);
+                expect(result.transactionHash).to.eq(txReceipt?.hash);
+                expect(result.transactionPosition).to.eq(0);
+                expect(result.type).to.eq("call");
             });
         });
     });

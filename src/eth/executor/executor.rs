@@ -3,12 +3,16 @@ use std::mem;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use alloy_consensus::Transaction;
+use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
+use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
 use tracing::info_span;
 use tracing::Span;
 
+use super::evm_input::InspectorInput;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
 use crate::eth::executor::Evm;
@@ -21,11 +25,13 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
+use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::ExternalTransactionExecution;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::RpcError;
 use crate::eth::primitives::StorageError;
@@ -35,14 +41,13 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::primitives::UnixTime;
-use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
 use crate::ext::to_json_string;
 #[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
-#[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::metrics::timed;
 use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
 use crate::GlobalState;
@@ -60,6 +65,22 @@ pub struct EvmTask {
 
 impl EvmTask {
     pub fn new(input: EvmInput, response_tx: oneshot::Sender<Result<EvmExecutionResult, StratusError>>) -> Self {
+        Self {
+            span: Span::current(),
+            input,
+            response_tx,
+        }
+    }
+}
+
+pub struct InspectorTask {
+    pub span: Span,
+    pub input: InspectorInput,
+    pub response_tx: oneshot::Sender<Result<GethTrace, StratusError>>,
+}
+
+impl InspectorTask {
+    pub fn new(input: InspectorInput, response_tx: oneshot::Sender<Result<GethTrace, StratusError>>) -> Self {
         Self {
             span: Span::current(),
             input,
@@ -88,6 +109,8 @@ struct Evms {
 
     /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from past state. Usually contains multiple EVMs.
     pub call_past: crossbeam_channel::Sender<EvmTask>,
+
+    pub inspector: crossbeam_channel::Sender<InspectorTask>,
 }
 
 impl Evms {
@@ -110,7 +133,6 @@ impl Evms {
                     tracing::error!(reason = ?e, "failed to send evm task execution result");
                 }
             }
-
             warn_task_tx_closed(task_name);
         }
 
@@ -131,14 +153,54 @@ impl Evms {
             evm_tx
         };
 
+        fn inspector_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<InspectorTask>) {
+            let mut evm = Evm::new(storage, config);
+
+            // keep executing transactions until the channel is closed
+            while let Ok(task) = task_rx.recv() {
+                if GlobalState::is_shutdown_warn(task_name) {
+                    return;
+                }
+
+                // execute
+                let _enter = task.span.enter();
+                let result = evm.inspect(task.input);
+                if let Err(e) = task.response_tx.send(result) {
+                    tracing::error!(reason = ?e, "failed to send evm task execution result");
+                }
+            }
+            warn_task_tx_closed(task_name);
+        }
+
+        // function that spawn inspector threads
+        let spawn_inspectors = |task_name: &str, num_evms: usize| {
+            let (tx, rx) = crossbeam_channel::unbounded::<InspectorTask>();
+
+            for index in 1..=num_evms {
+                let task_name = format!("{}-{}", task_name, index);
+                let storage = Arc::clone(&storage);
+                let config = config.clone();
+                let rx = rx.clone();
+                let thread_name = task_name.clone();
+                spawn_thread(&thread_name, move || {
+                    inspector_loop(&task_name, storage, config, rx);
+                });
+            }
+            tx
+        };
+
         let tx_parallel = match config.executor_strategy {
             ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1), // should not really be used if strategy is serial, but keep 1 for fallback
             ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.executor_evms),
         };
         let tx_serial = spawn_evms("evm-tx-serial", 1);
         let tx_external = spawn_evms("evm-tx-external", 1);
-        let call_present = spawn_evms("evm-call-present", max(config.executor_evms / 2, 1));
-        let call_past = spawn_evms("evm-call-past", max(config.executor_evms / 4, 1));
+        let call_present = spawn_evms(
+            "evm-call-present",
+            max(config.executor_call_present_evms.unwrap_or(config.executor_evms / 2), 1),
+        );
+        let call_past = spawn_evms("evm-call-past", max(config.executor_call_past_evms.unwrap_or(config.executor_evms / 4), 1));
+        let inspector = spawn_inspectors("inspector", max(config.executor_inspector_evms.unwrap_or(config.executor_evms / 4), 1));
 
         Evms {
             tx_parallel,
@@ -146,6 +208,7 @@ impl Evms {
             tx_external,
             call_present,
             call_past,
+            inspector,
         }
     }
 
@@ -163,6 +226,16 @@ impl Evms {
         };
 
         match execution_rx.recv() {
+            Ok(result) => result,
+            Err(_) => Err(UnexpectedError::ChannelClosed { channel: "evm" }.into()),
+        }
+    }
+
+    fn inspect(&self, input: InspectorInput) -> Result<GethTrace, StratusError> {
+        let (inspector_tx, inspector_rx) = oneshot::channel::<Result<GethTrace, StratusError>>();
+        let task = InspectorTask::new(input, inspector_tx);
+        let _ = self.inspector.send(task);
+        match inspector_rx.recv() {
             Ok(result) => result,
             Err(_) => Err(UnexpectedError::ChannelClosed { channel: "evm" }.into()),
         }
@@ -249,7 +322,7 @@ impl Executor {
         let block_transactions = mem::take(&mut block.transactions);
 
         // determine how to execute each transaction
-        for tx in block_transactions {
+        for tx in block_transactions.into_transactions() {
             let receipt = receipts.try_remove(tx.hash())?;
             self.execute_external_transaction(
                 tx,
@@ -288,12 +361,12 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let (start, tx_function, tx_contract) = (
             metrics::now(),
-            codegen::function_sig_for_o11y(&tx.0.input),
-            codegen::contract_name_for_o11y(&tx.0.to.map_into()),
+            codegen::function_sig(tx.inner.input()),
+            codegen::contract_name(&tx.0.to().map_into()),
         );
 
         #[cfg(feature = "tracing")]
-        let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash).entered();
+        let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         // when transaction externally failed, create fake transaction instead of reexecuting
@@ -376,9 +449,9 @@ impl Executor {
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
     pub fn execute_local_transaction(&self, tx: TransactionInput) -> Result<(), StratusError> {
         #[cfg(feature = "metrics")]
-        let function = codegen::function_sig_for_o11y(&tx.input);
+        let function = codegen::function_sig(&tx.input);
         #[cfg(feature = "metrics")]
-        let contract = codegen::contract_name_for_o11y(&tx.to);
+        let contract = codegen::contract_name(&tx.to);
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -474,10 +547,7 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            let evm_result = match self.evms.execute(evm_input.clone(), evm_route) {
-                Ok(evm_result) => evm_result,
-                Err(e) => return Err(e),
-            };
+            let evm_result = self.evms.execute(evm_input.clone(), evm_route)?;
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
@@ -486,15 +556,22 @@ impl Executor {
             let tx_metrics = tx_execution.metrics();
             #[cfg(feature = "metrics")]
             let gas_used = tx_execution.execution().gas;
+            #[cfg(feature = "metrics")]
+            let function = codegen::function_sig(&tx_input.input);
+            #[cfg(feature = "metrics")]
+            let contract = codegen::contract_name(&tx_input.to);
+
+            if let ExecutionResult::Reverted { reason } = &tx_execution.result().execution.result {
+                tracing::info!(?reason, "Local transaction execution reverted");
+                #[cfg(feature = "metrics")]
+                metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
+            }
 
             match self.miner.save_execution(tx_execution, matches!(evm_route, EvmRoute::Parallel)) {
                 Ok(_) => {
                     // track metrics
                     #[cfg(feature = "metrics")]
                     {
-                        let function = codegen::function_sig_for_o11y(&tx_input.input);
-                        let contract = codegen::contract_name_for_o11y(&tx_input.to);
-
                         metrics::inc_executor_local_transaction_account_reads(tx_metrics.account_reads, contract, function);
                         metrics::inc_executor_local_transaction_slot_reads(tx_metrics.slot_reads, contract, function);
                         metrics::inc_executor_local_transaction_gas(gas_used.as_u64() as usize, true, contract, function);
@@ -565,8 +642,8 @@ impl Executor {
         // track metrics
         #[cfg(feature = "metrics")]
         {
-            let function = codegen::function_sig_for_o11y(&call_input.data);
-            let contract = codegen::contract_name_for_o11y(&call_input.to);
+            let function = codegen::function_sig(&call_input.data);
+            let contract = codegen::contract_name(&call_input.to);
 
             match &evm_result {
                 Ok(evm_result) => {
@@ -583,6 +660,25 @@ impl Executor {
 
         let execution = evm_result?.execution;
         Ok(execution)
+    }
+
+    pub fn trace_transaction(&self, tx_hash: Hash, opts: Option<GethDebugTracingOptions>, trace_unsuccessful_only: bool) -> Result<GethTrace, StratusError> {
+        Span::with(|s| {
+            s.rec_str("tx_hash", &tx_hash);
+        });
+
+        tracing::info!("inspecting transaction");
+        let opts = opts.unwrap_or_default();
+        let tracer_type = opts.tracer.clone();
+
+        timed(|| {
+            self.evms.inspect(InspectorInput {
+                tx_hash,
+                opts,
+                trace_unsuccessful_only,
+            })
+        })
+        .with(|m| metrics::inc_evm_inspect(m.elapsed, serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned())))
     }
 }
 

@@ -13,6 +13,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -20,13 +21,12 @@ use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
 use stratus::eth::external_rpc::ExternalBlockWithReceipts;
 use stratus::eth::external_rpc::ExternalRpc;
+use stratus::eth::external_rpc::PostgresExternalRpc;
 use stratus::eth::miner::Miner;
 use stratus::eth::miner::MinerMode;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalReceipts;
-use stratus::eth::primitives::ExternalTransaction;
-use stratus::eth::storage::Storage;
 use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
 use stratus::log_and_err;
@@ -139,7 +139,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 }
 
 async fn run_rpc_block_fetcher(
-    rpc_storage: Arc<dyn ExternalRpc>,
+    rpc_storage: Arc<PostgresExternalRpc>,
     blocks_by_fetch: usize,
     paralellism: usize,
     mut start: BlockNumber,
@@ -235,13 +235,10 @@ fn run_external_block_executor(
         for blocks in Itertools::chunks(blocks.into_iter(), SAVER_BATCH_SIZE).into_iter() {
             let mut executed_batch = Vec::with_capacity(SAVER_BATCH_SIZE);
 
-            for (mut block, receipts) in blocks {
+            for (block, receipts) in blocks {
                 if GlobalState::is_shutdown_warn(TASK_NAME) {
                     return Ok(());
                 }
-
-                // fill missing transaction_type with `v`
-                block.transactions.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
 
                 // TODO: remove clone
                 executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
@@ -290,18 +287,33 @@ fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToS
     }
 }
 
-async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BlocksToExecute> {
+async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BlocksToExecute> {
     tracing::info!(parent: None, %block_start, %block_end, "fetching blocks and receipts");
     let mut blocks = rpc_storage.read_block_and_receipts_in_range(block_start, block_end).await?;
     for (block, receipts) in blocks.iter_mut() {
+        let BlockTransactions::Full(transactions) = &mut block.transactions else {
+            tracing::error!(
+                block_number = ?block.number(),
+                block_hash = ?block.hash(),
+                transactions = ?block.transactions,
+                "expected full transactions but got {:?}", block.transactions
+            );
+            return Err(anyhow!(
+                "expected full transactions, got {:?} for block number {} hash {:?}",
+                block.transactions,
+                block.number(),
+                block.hash()
+            ));
+        };
+
         // Stably sort transactions and receipts by transaction_index
-        block.transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+        transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
         receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
 
         // perform additional checks on the transaction index
-        for window in block.transactions.windows(2) {
-            let tx_index = window[0].transaction_index.map_or(u32::MAX, |index| index.as_u32());
-            let next_tx_index = window[1].transaction_index.map_or(u32::MAX, |index| index.as_u32());
+        for window in transactions.windows(2) {
+            let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+            let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
             assert!(
                 tx_index + 1 == next_tx_index,
                 "two consecutive transactions must have consecutive indices: {} and {}",
@@ -310,8 +322,8 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
             );
         }
         for window in receipts.windows(2) {
-            let tx_index = window[0].transaction_index.as_u32();
-            let next_tx_index = window[1].transaction_index.as_u32();
+            let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+            let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
             assert!(
                 tx_index + 1 == next_tx_index,
                 "two consecutive receipts must have consecutive indices: {} and {}",
@@ -323,7 +335,7 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
     Ok(blocks)
 }
 
-async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpc>) -> anyhow::Result<BlockNumber> {
+async fn block_number_to_stop(rpc_storage: &Arc<PostgresExternalRpc>) -> anyhow::Result<BlockNumber> {
     match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
         Ok(Some(number)) => Ok(number),
         Ok(None) => Ok(BlockNumber::ZERO),

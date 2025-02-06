@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   coverage-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 300
 
     steps:
@@ -23,7 +23,7 @@ jobs:
 
       - name: Set up Rust
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.81
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.84
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
@@ -56,10 +56,10 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.12"
-    
+
       - name: Install Poetry
         run: curl -sSL https://install.python-poetry.org | python3 -
-      
+
       - name: Install Docker Compose
         run: |
           sudo apt-get update
