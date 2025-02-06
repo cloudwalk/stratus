@@ -37,7 +37,7 @@ rust_decimal = "=1.36.0"
 rustc-hash = "=2.0.0"
 smallvec = "=1.13.2"
 static_assertions = "=1.1.0"
-strum = "=0.26.2"
+strum = { version = "=0.26.2", features = ["derive"] }
 quick_cache = "=0.6.9"
 sugars = "=3.0.1"
 thiserror = "=1.0.61"
@@ -75,7 +75,6 @@ futures-channel = "=0.3.31"
 # ethereum / rpc
 ethabi = "=18.0.0"
 ethereum-types = "=0.14.1"
-ethers-core = "=2.0.14"
 keccak-hasher = "=0.15.3"  # this version must be compatible with triehash
 rlp = "=0.5.2"
 triehash = "=0.8.4"
