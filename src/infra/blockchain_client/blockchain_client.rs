@@ -12,8 +12,8 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
+use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
-use crate::alias::EthersBytes;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -215,7 +215,7 @@ impl BlockchainClient {
     // -------------------------------------------------------------------------
 
     /// Forwards a transaction to leader.
-    pub async fn send_raw_transaction_to_leader(&self, tx: EthersBytes, rpc_client: &RpcClientApp) -> Result<Hash, StratusError> {
+    pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes, rpc_client: &RpcClientApp) -> Result<Hash, StratusError> {
         tracing::debug!("sending raw transaction to leader");
 
         let tx = to_json_value(tx);

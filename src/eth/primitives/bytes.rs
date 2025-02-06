@@ -4,7 +4,6 @@ use std::ops::DerefMut;
 
 use display_json::DebugAsJson;
 
-use crate::alias::EthersBytes;
 use crate::alias::RevmBytes;
 use crate::alias::RevmOutput;
 use crate::gen_newtype_from;
@@ -55,12 +54,6 @@ impl<'de> serde::Deserialize<'de> for Bytes {
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = Bytes, other = Vec<u8>, &[u8], [u8; 32]);
 
-impl From<EthersBytes> for Bytes {
-    fn from(value: EthersBytes) -> Self {
-        Self(value.0.into())
-    }
-}
-
 impl From<RevmBytes> for Bytes {
     fn from(value: RevmBytes) -> Self {
         Self(value.0.into())
@@ -96,12 +89,6 @@ impl Deref for Bytes {
 impl DerefMut for Bytes {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    }
-}
-
-impl From<Bytes> for EthersBytes {
-    fn from(value: Bytes) -> Self {
-        value.0.into()
     }
 }
 

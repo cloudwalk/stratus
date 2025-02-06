@@ -31,11 +31,6 @@ pub type AlloyHeader = alloy_rpc_types_eth::Header;
 pub type AlloyUint256 = alloy_primitives::Uint<256, 4>;
 
 // -----------------------------------------------------------------------------
-// Ethers
-// -----------------------------------------------------------------------------
-pub type EthersBytes = ethers_core::types::Bytes;
-
-// -----------------------------------------------------------------------------
 // REVM
 // -----------------------------------------------------------------------------
 pub type RevmAccountInfo = revm::primitives::AccountInfo;
