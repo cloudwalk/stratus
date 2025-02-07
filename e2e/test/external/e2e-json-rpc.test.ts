@@ -148,7 +148,7 @@ describe("JSON-RPC", () => {
             });
         });
         describe("stratus_getBlockAndReceipts", () => {
-            it("fetches block with transaction and receipt", async () => {
+            it("fetches block with receipt", async () => {
                 await sendReset();
 
                 // Send a transaction
