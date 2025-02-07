@@ -151,7 +151,10 @@ impl BlockchainClient {
         tracing::debug!(%block_number, "fetching block");
 
         let number = to_json_value(block_number);
-        let result = self.http.request::<Option<ExternalBlockWithReceipts>, _>("stratus_getBlockAndReceipts", [number]).await;
+        let result = self
+            .http
+            .request::<Option<ExternalBlockWithReceipts>, _>("stratus_getBlockAndReceipts", [number])
+            .await;
 
         match result {
             Ok(block) => Ok(block),
@@ -164,7 +167,10 @@ impl BlockchainClient {
         tracing::debug!(%block_number, "fetching block");
 
         let number = to_json_value(block_number);
-        let result = self.http.request::<Option<ExternalBlock>, _>("eth_getBlockByNumber", [number, JsonValue::Bool(true)]).await;
+        let result = self
+            .http
+            .request::<Option<ExternalBlock>, _>("eth_getBlockByNumber", [number, JsonValue::Bool(true)])
+            .await;
 
         match result {
             Ok(block) => Ok(block),
