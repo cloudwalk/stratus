@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::cmp::min;
-use std::mem;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -10,7 +9,6 @@ use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::try_join;
 use futures::StreamExt;
-use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::timeout;
@@ -24,7 +22,6 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
-use crate::eth::primitives::Hash;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -475,8 +472,6 @@ impl Importer {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-#[allow(clippy::expect_used)]
-#[tracing::instrument(name = "importer::fetch_block_and_receipts", skip_all, fields(block_number))]
 async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
@@ -486,96 +481,17 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     loop {
         tracing::info!(%block_number, "fetching block and receipts");
 
-        let mut json = match chain.fetch_block_and_receipts(block_number).await {
-            Ok(json) => json,
+        match chain.fetch_block_and_receipts(block_number).await {
+            Ok(Some(response)) => return (response.block, response.receipts),
+            Ok(None) => {
+                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block and receipts not available yet, retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+            }
             Err(e) => {
                 tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch block and receipts, retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
-                continue;
             }
         };
-
-        let block = match json.get_mut("block") {
-            Some(block) => mem::take(block),
-            None => {
-                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "missing block in response, retrying with delay.");
-                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
-                continue;
-            }
-        };
-
-        if block.is_null() {
-            tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block not mined yet. retrying with delay.");
-            traced_sleep(RETRY_DELAY, SleepReason::SyncData).await;
-            continue;
-        }
-
-        let block: ExternalBlock = serde_json::from_value(block).expect("cannot fail to deserialize external block");
-
-        let receipts = match json.get_mut("receipts") {
-            Some(receipts) => mem::take(receipts),
-            None => {
-                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "missing receipts in response, retrying with delay.");
-                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
-                continue;
-            }
-        };
-
-        let receipts: Vec<ExternalReceipt> = serde_json::from_value(receipts).expect("cannot fail to deserialize external receipts");
-
-        return (block, receipts);
-    }
-}
-
-#[allow(clippy::expect_used)]
-#[tracing::instrument(name = "importer::fetch_block", skip_all, fields(block_number))]
-async fn fetch_block(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ExternalBlock {
-    const RETRY_DELAY: Duration = Duration::from_millis(10);
-    Span::with(|s| {
-        s.rec_str("block_number", &block_number);
-    });
-
-    loop {
-        tracing::info!(%block_number, "fetching block");
-        let block = match chain.fetch_block(block_number).await {
-            Ok(json) => json,
-            Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, delay_ms=%RETRY_DELAY.as_millis(), "failed to retrieve block. retrying with delay.");
-                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
-                continue;
-            }
-        };
-
-        if block.is_null() {
-            tracing::warn!(%block_number, delay_ms=%RETRY_DELAY.as_millis(), "block not mined yet. retrying with delay.");
-            traced_sleep(RETRY_DELAY, SleepReason::SyncData).await;
-            continue;
-        }
-
-        return ExternalBlock::deserialize(&block).expect("cannot fail to deserialize external block");
-    }
-}
-
-#[tracing::instrument(name = "importer::fetch_receipt", skip_all, fields(block_number, tx_hash))]
-async fn fetch_receipt(chain: Arc<BlockchainClient>, block_number: BlockNumber, tx_hash: Hash) -> ExternalReceipt {
-    Span::with(|s| {
-        s.rec_str("block_number", &block_number);
-        s.rec_str("tx_hash", &tx_hash);
-    });
-
-    loop {
-        tracing::info!(%block_number, %tx_hash, "fetching receipt");
-
-        match chain.fetch_receipt(tx_hash).await {
-            Ok(Some(receipt)) => return receipt,
-            Ok(None) => {
-                tracing::warn!(%block_number, %tx_hash, "receipt not available yet because block is not mined. retrying now.");
-                continue;
-            }
-            Err(e) => {
-                tracing::error!(reason = ?e, %block_number, %tx_hash, "failed to fetch receipt. retrying now.");
-            }
-        }
     }
 }
 
