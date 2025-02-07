@@ -1,4 +1,11 @@
+use alloy_consensus::ReceiptEnvelope;
+use alloy_consensus::TxType;
+use alloy_primitives::Bloom;
+use alloy_primitives::Bytes;
+use alloy_primitives::B256;
 use ethereum_types::U256;
+use fake::Dummy;
+use fake::Faker;
 use serde::Deserialize;
 
 use crate::alias::AlloyReceipt;
@@ -8,7 +15,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, derive_more::Deref, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, derive_more::Deref, serde::Serialize)]
 #[serde(transparent)]
 pub struct ExternalReceipt(#[deref] pub AlloyReceipt);
 
@@ -40,6 +47,63 @@ impl ExternalReceipt {
     /// Checks if the transaction was completed with success.
     pub fn is_success(&self) -> bool {
         self.0.inner.status()
+    }
+}
+
+impl Dummy<Faker> for ExternalReceipt {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_faker: &Faker, rng: &mut R) -> Self {
+        // Generate random bytes for addresses and hashes
+        let mut addr_bytes = [0u8; 20];
+        let mut hash_bytes = [0u8; 32];
+        rng.fill_bytes(&mut addr_bytes);
+        rng.fill_bytes(&mut hash_bytes);
+
+        // Create a dummy log
+        let log = alloy_rpc_types_eth::Log {
+            inner: alloy_primitives::Log {
+                address: alloy_primitives::Address::from_slice(&addr_bytes),
+                data: alloy_primitives::LogData::new_unchecked(vec![B256::from_slice(&hash_bytes)], Bytes::default()),
+            },
+            block_hash: Some(B256::from_slice(&hash_bytes)),
+            block_number: Some(rng.next_u64()),
+            transaction_hash: Some(B256::from_slice(&hash_bytes)),
+            transaction_index: Some(rng.next_u64()),
+            log_index: Some(rng.next_u64()),
+            removed: false,
+            block_timestamp: Some(rng.next_u64()),
+        };
+
+        // Create a receipt with legacy format
+        let receipt = alloy_consensus::Receipt {
+            status: alloy_consensus::Eip658Value::Eip658(true),
+            cumulative_gas_used: rng.next_u64(),
+            logs: vec![log],
+        };
+
+        // Create the receipt envelope
+        let receipt_envelope = ReceiptEnvelope::Legacy(alloy_consensus::ReceiptWithBloom {
+            receipt,
+            logs_bloom: Bloom::default(),
+        });
+
+        // Create the full receipt with all required fields
+        let receipt = alloy_rpc_types_eth::TransactionReceipt {
+            inner: receipt_envelope,
+            transaction_hash: B256::from_slice(&hash_bytes),
+            transaction_index: Some(rng.next_u64()),
+            block_hash: Some(B256::from_slice(&hash_bytes)),
+            block_number: Some(rng.next_u64()),
+            from: alloy_primitives::Address::from_slice(&addr_bytes),
+            to: Some(alloy_primitives::Address::from_slice(&addr_bytes)),
+            contract_address: None,
+            gas_used: rng.next_u64(),
+            effective_gas_price: rng.next_u64() as u128,
+            blob_gas_used: None,
+            blob_gas_price: None,
+            authorization_list: None,
+        };
+
+        ExternalReceipt(receipt)
     }
 }
 
@@ -91,9 +155,49 @@ impl TryFrom<JsonValue> for ExternalReceipt {
 
 #[cfg(test)]
 mod tests {
-    use alloy_consensus::TxType;
+    use std::env;
+    use std::fs;
+    use std::path::Path;
+
+    use anyhow::bail;
+    use anyhow::ensure;
+    use anyhow::Result;
 
     use super::*;
+    use crate::ext::not;
+    use crate::utils::test_utils::fake_first;
+
+    /// Test that JSON serialization and deserialization work consistently for ExternalReceipt.
+    /// This helps catch breaking changes to the serialization format.
+    #[test]
+    fn test_external_receipt_json_snapshot() -> Result<()> {
+        let expected: ExternalReceipt = fake_first::<ExternalReceipt>();
+        let snapshot_parent_path = "tests/fixtures/primitives";
+        let snapshot_path = format!("{snapshot_parent_path}/external_receipt.json");
+
+        // Create snapshot if it doesn't exist
+        if not(Path::new(&snapshot_path).exists()) {
+            if env::var("DANGEROUS_UPDATE_SNAPSHOTS").is_ok() {
+                let serialized = serde_json::to_string_pretty(&expected)?;
+                fs::create_dir_all(&snapshot_parent_path)?;
+                fs::write(&snapshot_path, serialized)?;
+            } else {
+                bail!("snapshot file at '{snapshot_path}' doesn't exist and DANGEROUS_UPDATE_SNAPSHOTS is not set");
+            }
+        }
+
+        // Read and deserialize the snapshot
+        let snapshot_content = fs::read_to_string(&snapshot_path)?;
+        let deserialized = serde_json::from_str::<ExternalReceipt>(&snapshot_content)?;
+
+        // Compare the deserialized value with the expected value
+        ensure!(
+            expected == deserialized,
+            "deserialized value doesn't match expected\n deserialized = {deserialized:?}\n expected = {expected:?}",
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn test_deserialize_ethers_receipt() {
