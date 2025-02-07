@@ -154,50 +154,10 @@ impl TryFrom<JsonValue> for ExternalReceipt {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-    use std::fs;
-    use std::path::Path;
 
     use alloy_consensus::TxType;
-    use anyhow::bail;
-    use anyhow::ensure;
-    use anyhow::Result;
 
     use super::*;
-    use crate::ext::not;
-    use crate::utils::test_utils::fake_first;
-
-    /// Test that JSON serialization and deserialization work consistently for ExternalReceipt.
-    /// This helps catch breaking changes to the serialization format.
-    #[test]
-    fn test_external_receipt_json_snapshot() -> Result<()> {
-        let expected: ExternalReceipt = fake_first::<ExternalReceipt>();
-        let snapshot_parent_path = "tests/fixtures/primitives";
-        let snapshot_path = format!("{snapshot_parent_path}/external_receipt.json");
-
-        // Create snapshot if it doesn't exist
-        if not(Path::new(&snapshot_path).exists()) {
-            if env::var("DANGEROUS_UPDATE_SNAPSHOTS").is_ok() {
-                let serialized = serde_json::to_string_pretty(&expected)?;
-                fs::create_dir_all(&snapshot_parent_path)?;
-                fs::write(&snapshot_path, serialized)?;
-            } else {
-                bail!("snapshot file at '{snapshot_path}' doesn't exist and DANGEROUS_UPDATE_SNAPSHOTS is not set");
-            }
-        }
-
-        // Read and deserialize the snapshot
-        let snapshot_content = fs::read_to_string(&snapshot_path)?;
-        let deserialized = serde_json::from_str::<ExternalReceipt>(&snapshot_content)?;
-
-        // Compare the deserialized value with the expected value
-        ensure!(
-            expected == deserialized,
-            "deserialized value doesn't match expected\n deserialized = {deserialized:?}\n expected = {expected:?}",
-        );
-
-        Ok(())
-    }
 
     #[test]
     fn test_deserialize_ethers_receipt() {

@@ -122,6 +122,7 @@ pub use wei::Wei;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gen_snapshot_serde_test;
     use crate::gen_test_serde;
 
     type TransactionExecutionValueChangeBytes = ExecutionValueChange<Bytes>;
@@ -133,14 +134,15 @@ mod tests {
     // TODO: Test external structs and internal structs that contain external strtucts that do no implement faker::Dummy
     // gen_test_serde!(ExecutionConflicts);
     // gen_test_serde!(ExecutionConflictsBuilder);
-    // gen_test_serde!(ExternalBlock);
-    // gen_test_serde!(ExternalReceipt);
     // gen_test_serde!(ExternalReceipts);
-    // gen_test_serde!(ExternalTransaction);
     // gen_test_serde!(ExternalTransactionExecution);
     // gen_test_serde!(PendingBlock);
     // gen_test_serde!(TransactionExecution);
     // gen_test_serde!(TransactionStage);
+
+    gen_snapshot_serde_test!(ExternalBlock);
+    gen_snapshot_serde_test!(ExternalReceipt);
+    gen_snapshot_serde_test!(ExternalTransaction);
 
     gen_test_serde!(Account);
     gen_test_serde!(Address);

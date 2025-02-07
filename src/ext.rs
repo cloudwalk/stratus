@@ -346,6 +346,57 @@ macro_rules! gen_test_serde {
     };
 }
 
+/// Generates a test that verifies JSON snapshot serialization/deserialization for a type
+#[macro_export]
+macro_rules! gen_snapshot_serde_test {
+    ($type:ty) => {
+        paste::paste! {
+            #[test]
+            fn [<test_ $type:snake _json_snapshot>]() -> anyhow::Result<()> {
+                use anyhow::bail;
+                use std::path::Path;
+                use std::{env, fs};
+
+                let expected: $type = $crate::utils::test_utils::fake_first::<$type>();
+                let expected_json = serde_json::to_string_pretty(&expected)?;
+                let snapshot_parent_path = "tests/fixtures/primitives";
+                let snapshot_name = format!("{}.json", stringify!($type));
+                let snapshot_path = format!("{}/{}", snapshot_parent_path, snapshot_name);
+
+                // Create snapshot if it doesn't exist
+                if !Path::new(&snapshot_path).exists() {
+                    if env::var("DANGEROUS_UPDATE_SNAPSHOTS").is_ok() {
+                        fs::create_dir_all(snapshot_parent_path)?;
+                        fs::write(&snapshot_path, &expected_json)?;
+                    } else {
+                        bail!("snapshot file at '{snapshot_path}' doesn't exist and DANGEROUS_UPDATE_SNAPSHOTS is not set");
+                    }
+                }
+
+                // Read and attempt to deserialize the snapshot
+                let snapshot_content = fs::read_to_string(&snapshot_path)?;
+                let deserialized = match serde_json::from_str::<$type>(&snapshot_content) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        bail!("Failed to deserialize snapshot:\nError: {}\n\nExpected JSON:\n{}\n\nActual JSON from snapshot:\n{}",
+                            e, expected_json, snapshot_content);
+                    }
+                };
+
+                // Compare the values
+                assert_eq!(
+                    expected, deserialized,
+                    "\nDeserialized value doesn't match expected:\n\nExpected JSON:\n{}\n\nDeserialized JSON:\n{}",
+                    expected_json,
+                    serde_json::to_string_pretty(&deserialized)?
+                );
+
+                Ok(())
+            }
+        }
+    };
+}
+
 /// Generates unit test that checks that bincode's serialization and deserialization are compatible
 #[macro_export]
 macro_rules! gen_test_bincode {
