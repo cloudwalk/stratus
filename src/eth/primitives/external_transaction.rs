@@ -36,32 +36,27 @@ impl ExternalTransaction {
 
 impl Dummy<Faker> for ExternalTransaction {
     fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
-        // Create a dummy AlloyTransaction
         let from: Address = faker.fake_with_rng(rng);
         let block_hash: Hash = faker.fake_with_rng(rng);
 
-        // Create monetary values using Wei
         let gas_price: Wei = Wei::from(rng.next_u64());
         let value: Wei = Wei::from(rng.next_u64());
 
-        // Create a dummy TxEnvelope (Legacy transaction for simplicity)
         let tx = TxLegacy {
-            chain_id: Some(1), // mainnet
+            chain_id: Some(1),
             nonce: rng.next_u64(),
             gas_price: gas_price.into(),
             gas_limit: rng.next_u64(),
-            to: TxKind::Call(from.into()), // Using from address as the to address for simplicity
+            to: TxKind::Call(from.into()),
             value: value.into(),
             input: Bytes::default(),
         };
 
-        // Create a dummy signature
         let r = U256::from(rng.next_u64());
         let s = U256::from(rng.next_u64());
         let v = rng.next_u64() % 2 == 0;
         let signature = PrimitiveSignature::new(SignatureComponent(r).into(), SignatureComponent(s).into(), v);
 
-        // Create the signed envelope with a hash
         let hash: Hash = faker.fake_with_rng(rng);
         let inner_tx = TxEnvelope::Legacy(Signed::new_unchecked(tx, signature, hash.into()));
 

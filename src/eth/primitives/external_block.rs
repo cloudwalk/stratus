@@ -48,7 +48,6 @@ impl ExternalBlock {
 
 impl Dummy<Faker> for ExternalBlock {
     fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
-        // Create random bytes for addresses and hashes
         let mut addr_bytes = [0u8; 20];
         let mut hash_bytes = [0u8; 32];
         let mut nonce_bytes = [0u8; 8];
@@ -56,10 +55,8 @@ impl Dummy<Faker> for ExternalBlock {
         rng.fill_bytes(&mut hash_bytes);
         rng.fill_bytes(&mut nonce_bytes);
 
-        // Create a dummy transaction
         let transaction: ExternalTransaction = faker.fake_with_rng(rng);
 
-        // Create a block with the transaction
         let block = alloy_rpc_types_eth::Block {
             header: alloy_rpc_types_eth::Header {
                 hash: B256::from_slice(&hash_bytes),

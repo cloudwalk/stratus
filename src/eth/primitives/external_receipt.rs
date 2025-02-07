@@ -51,13 +51,11 @@ impl ExternalReceipt {
 
 impl Dummy<Faker> for ExternalReceipt {
     fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_faker: &Faker, rng: &mut R) -> Self {
-        // Generate random bytes for addresses and hashes
         let mut addr_bytes = [0u8; 20];
         let mut hash_bytes = [0u8; 32];
         rng.fill_bytes(&mut addr_bytes);
         rng.fill_bytes(&mut hash_bytes);
 
-        // Create a dummy log
         let log = alloy_rpc_types_eth::Log {
             inner: alloy_primitives::Log {
                 address: alloy_primitives::Address::from_slice(&addr_bytes),
@@ -72,20 +70,17 @@ impl Dummy<Faker> for ExternalReceipt {
             block_timestamp: Some(rng.next_u64()),
         };
 
-        // Create a receipt with legacy format
         let receipt = alloy_consensus::Receipt {
             status: alloy_consensus::Eip658Value::Eip658(true),
             cumulative_gas_used: rng.next_u64(),
             logs: vec![log],
         };
 
-        // Create the receipt envelope
         let receipt_envelope = ReceiptEnvelope::Legacy(alloy_consensus::ReceiptWithBloom {
             receipt,
             logs_bloom: Bloom::default(),
         });
 
-        // Create the full receipt with all required fields
         let receipt = alloy_rpc_types_eth::TransactionReceipt {
             inner: receipt_envelope,
             transaction_hash: B256::from_slice(&hash_bytes),
