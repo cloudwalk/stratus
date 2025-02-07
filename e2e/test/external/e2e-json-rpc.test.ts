@@ -147,6 +147,43 @@ describe("JSON-RPC", () => {
                 expect(block).to.be.null;
             });
         });
+        describe("stratus_getBlockAndReceipts", () => {
+            it("fetches block with receipt", async () => {
+                await sendReset();
+
+                // Send a transaction
+                const amount = 1;
+                const nonce = await sendGetNonce(ALICE);
+                const signedTx = await ALICE.signWeiTransfer(BOB.address, amount, nonce);
+                const txHash = keccak256(signedTx);
+                await sendRawTransaction(signedTx);
+                await sendEvmMine();
+
+                // Get block number and hash
+                const blockNumber = await send("eth_blockNumber");
+                const block = await send("eth_getBlockByNumber", [blockNumber, true]);
+                const blockHash = block.hash;
+
+                // Get individual block and receipt
+                const individualBlock = await send("eth_getBlockByHash", [blockHash, true]);
+                const individualReceipt = await send("eth_getTransactionReceipt", [txHash, true]);
+
+                // Get block and receipts using stratus endpoint
+                const response = await send("stratus_getBlockAndReceipts", [blockHash]);
+
+                // Validate block
+                expect(response.block).to.not.be.null;
+                expect(response.block).to.deep.equal(individualBlock);
+
+                // Validate receipt
+                expect(response.receipts).to.have.length(1);
+                const combinedReceipt = response.receipts[0];
+                const safeIndividualReceipt = individualReceipt!;
+
+                // Compare receipt fields
+                expect(combinedReceipt).to.deep.equal(safeIndividualReceipt);
+            });
+        });
         it("eth_getUncleByBlockHashAndIndex", async function () {
             if (isStratus) {
                 (await sendExpect("eth_getUncleByBlockHashAndIndex", [ZERO, ZERO])).to.be.null;
