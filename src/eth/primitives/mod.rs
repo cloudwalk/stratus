@@ -134,7 +134,10 @@ mod tests {
     // TODO: Test external structs and internal structs that contain external strtucts that do no implement faker::Dummy
     // gen_test_serde!(ExecutionConflicts);
     // gen_test_serde!(ExecutionConflictsBuilder);
+    // gen_test_serde!(ExternalBlock);
+    // gen_test_serde!(ExternalReceipt);
     // gen_test_serde!(ExternalReceipts);
+    // gen_test_serde!(ExternalTransaction);
     // gen_test_serde!(ExternalTransactionExecution);
     // gen_test_serde!(PendingBlock);
     // gen_test_serde!(TransactionExecution);
