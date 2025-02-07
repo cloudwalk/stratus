@@ -1,5 +1,4 @@
 use alloy_consensus::ReceiptEnvelope;
-use alloy_consensus::TxType;
 use alloy_primitives::Bloom;
 use alloy_primitives::Bytes;
 use alloy_primitives::B256;
@@ -159,6 +158,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
+    use alloy_consensus::TxType;
     use anyhow::bail;
     use anyhow::ensure;
     use anyhow::Result;
