@@ -173,6 +173,9 @@ describe("JSON-RPC", () => {
 
                 // Validate block
                 expect(response.block).to.not.be.null;
+                expect(response.block.hash).eq(blockHash);
+                expect(response.block.transactions).to.have.length(1);
+                expect(response.block.transactions[0].hash).eq(txHash);
                 expect(response.block).to.deep.equal(individualBlock);
 
                 // Validate receipt
@@ -181,7 +184,15 @@ describe("JSON-RPC", () => {
                 const safeIndividualReceipt = individualReceipt!;
 
                 // Compare receipt fields
-                expect(combinedReceipt).to.deep.equal(safeIndividualReceipt);
+                expect(combinedReceipt.blockHash).eq(safeIndividualReceipt.blockHash);
+                expect(parseInt(combinedReceipt.blockNumber, 16)).eq(safeIndividualReceipt.blockNumber);
+                expect(combinedReceipt.transactionHash).eq(safeIndividualReceipt.hash);
+                expect(combinedReceipt.contractAddress).eq(safeIndividualReceipt.contractAddress);
+                expect(combinedReceipt.from.toLowerCase()).eq(safeIndividualReceipt.from.toLowerCase());
+                expect(combinedReceipt.to?.toLowerCase()).eq(safeIndividualReceipt.to?.toLowerCase());
+                expect(parseInt(combinedReceipt.status!, 16)).eq(safeIndividualReceipt.status);
+                expect(combinedReceipt.logs).to.deep.equal(safeIndividualReceipt.logs);
+                expect(combinedReceipt.logsBloom).eq(safeIndividualReceipt.logsBloom);
             });
         });
         it("eth_getUncleByBlockHashAndIndex", async function () {

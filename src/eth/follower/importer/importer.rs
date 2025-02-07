@@ -475,7 +475,7 @@ impl Importer {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
+#[allow(clippy::expect_used)]
 #[tracing::instrument(name = "importer::fetch_block_and_receipts", skip_all, fields(block_number))]
 async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
@@ -510,14 +510,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
             continue;
         }
 
-        let block: ExternalBlock = match serde_json::from_value(block) {
-            Ok(block) => block,
-            Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to parse block, retrying with delay.");
-                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
-                continue;
-            }
-        };
+        let block: ExternalBlock = serde_json::from_value(block).expect("cannot fail to deserialize external block");
 
         let receipts = match json.get_mut("receipts") {
             Some(receipts) => mem::take(receipts),
@@ -528,14 +521,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
             }
         };
 
-        let receipts: Vec<ExternalReceipt> = match serde_json::from_value(receipts) {
-            Ok(receipts) => receipts,
-            Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to parse receipts, retrying with delay.");
-                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
-                continue;
-            }
-        };
+        let receipts: Vec<ExternalReceipt> = serde_json::from_value(receipts).expect("cannot fail to deserialize external receipts");
 
         return (block, receipts);
     }
