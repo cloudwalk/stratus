@@ -1,3 +1,4 @@
+use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use display_json::DebugAsJson;
 
@@ -139,20 +140,17 @@ impl EvmInput {
     /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
     pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block_number: BlockNumber, block_timestamp: UnixTime) -> anyhow::Result<Self> {
         Ok(Self {
-            from: tx.0.from.into(),
-            to: tx.0.to.map_into(),
-            value: tx.0.value.into(),
-            data: tx.0.input.clone().into(),
-            nonce: Some(tx.0.nonce.try_into()?),
-            gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.0.gas.try_into()?),
-            gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.0.gas_price.map_into().unwrap_or(Wei::ZERO)),
+            from: tx.from.into(),
+            to: tx.inner.to().map_into(),
+            value: tx.inner.value().into(),
+            data: tx.inner.input().clone().into(),
+            nonce: Some(tx.inner.nonce().into()),
+            gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.inner.gas_limit().into()),
+            gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.inner.gas_price().map_into().unwrap_or(Wei::ZERO)),
             point_in_time: PointInTime::Pending,
             block_number,
             block_timestamp,
-            chain_id: match tx.0.chain_id {
-                Some(chain_id) => Some(chain_id.try_into()?),
-                None => None,
-            },
+            chain_id: tx.inner.chain_id().map(Into::into),
         })
     }
 

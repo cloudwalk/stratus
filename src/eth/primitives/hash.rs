@@ -30,7 +30,7 @@ impl Display for Hash {
 }
 
 impl Dummy<Faker> for Hash {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         H256::random_using(rng).into()
     }
 }

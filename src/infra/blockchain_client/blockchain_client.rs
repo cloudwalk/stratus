@@ -12,8 +12,8 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
-use crate::alias::EthersBytes;
-use crate::alias::EthersTransaction;
+use crate::alias::AlloyBytes;
+use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -170,12 +170,12 @@ impl BlockchainClient {
     }
 
     /// Fetches a transaction by hash.
-    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<EthersTransaction>> {
+    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<AlloyTransaction>> {
         tracing::debug!(%tx_hash, "fetching transaction");
 
         let hash = to_json_value(tx_hash);
 
-        let result = self.http.request::<Option<EthersTransaction>, _>("eth_getTransactionByHash", [hash]).await;
+        let result = self.http.request::<Option<AlloyTransaction>, _>("eth_getTransactionByHash", [hash]).await;
 
         match result {
             Ok(tx) => Ok(tx),
@@ -215,7 +215,7 @@ impl BlockchainClient {
     // -------------------------------------------------------------------------
 
     /// Forwards a transaction to leader.
-    pub async fn send_raw_transaction_to_leader(&self, tx: EthersBytes, rpc_client: &RpcClientApp) -> Result<Hash, StratusError> {
+    pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes, rpc_client: &RpcClientApp) -> Result<Hash, StratusError> {
         tracing::debug!("sending raw transaction to leader");
 
         let tx = to_json_value(tx);

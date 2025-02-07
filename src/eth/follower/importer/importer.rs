@@ -449,8 +449,8 @@ impl Importer {
 
                 // perform additional checks on the transaction index
                 for window in transactions.windows(2) {
-                    let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))?.as_u32();
-                    let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))?.as_u32();
+                    let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+                    let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
                     if tx_index + 1 != next_tx_index {
                         tracing::error!(tx_index, next_tx_index, "two consecutive transactions must have consecutive indices");
                     }

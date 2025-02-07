@@ -3,7 +3,7 @@ use super::BlockNumber;
 use super::ExecutionResult;
 use super::Index;
 use crate::alias::AlloyReceipt;
-use crate::alias::EthersTransaction;
+use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionMined;
@@ -26,18 +26,18 @@ impl TransactionStage {
     pub fn to_json_rpc_transaction(self) -> JsonValue {
         match self {
             TransactionStage::Executed(TransactionExecution::Local(tx)) => {
-                let json_rpc_payload: EthersTransaction = tx.input.into();
+                let json_rpc_payload: AlloyTransaction = tx.input.into();
                 to_json_value(json_rpc_payload)
             }
             TransactionStage::Executed(TransactionExecution::External(tx)) => {
                 // remove block information because we don't know to which local block the transaction will be added to.
-                let mut ethers_tx = tx.tx.0;
-                ethers_tx.block_number = None;
-                ethers_tx.block_hash = None;
-                to_json_value(ethers_tx)
+                let mut alloy_tx = tx.tx.0;
+                alloy_tx.block_number = None;
+                alloy_tx.block_hash = None;
+                to_json_value(alloy_tx)
             }
             TransactionStage::Mined(tx) => {
-                let json_rpc_payload: EthersTransaction = tx.into();
+                let json_rpc_payload: AlloyTransaction = tx.into();
                 to_json_value(json_rpc_payload)
             }
         }

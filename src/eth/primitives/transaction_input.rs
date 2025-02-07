@@ -1,3 +1,10 @@
+use alloy_consensus::Signed;
+use alloy_consensus::Transaction;
+use alloy_consensus::TxEnvelope;
+use alloy_consensus::TxLegacy;
+use alloy_eips::eip2718::Decodable2718;
+use alloy_primitives::PrimitiveSignature;
+use alloy_primitives::TxKind;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
@@ -7,7 +14,8 @@ use fake::Fake;
 use fake::Faker;
 use rlp::Decodable;
 
-use crate::alias::EthersTransaction;
+use crate::alias::AlloyTransaction;
+use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
@@ -16,7 +24,6 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
-use crate::ext::OptionExt;
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
@@ -44,7 +51,7 @@ pub struct TransactionInput {
 }
 
 impl Dummy<Faker> for TransactionInput {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         Self {
             tx_type: Some(rng.next_u64().into()),
             chain_id: faker.fake_with_rng(rng),
@@ -67,12 +74,40 @@ impl Dummy<Faker> for TransactionInput {
 // -----------------------------------------------------------------------------
 // Serialization / Deserialization
 // -----------------------------------------------------------------------------
+
 impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        let ethers_transaction = EthersTransaction::decode(rlp)?;
-        match Self::try_from(ethers_transaction) {
-            Ok(transaction) => Ok(transaction),
-            Err(_) => Err(rlp::DecoderError::Custom("decoding error")),
+        fn convert_tx(envelope: TxEnvelope) -> Result<TransactionInput, rlp::DecoderError> {
+            TransactionInput::try_from(alloy_rpc_types_eth::Transaction {
+                inner: envelope,
+                block_hash: None,
+                block_number: None,
+                transaction_index: None,
+                from: Address::default().into(),
+                effective_gas_price: None,
+            })
+            .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))
+        }
+
+        let raw_bytes = rlp.as_raw();
+
+        if raw_bytes.is_empty() {
+            return Err(rlp::DecoderError::Custom("empty transaction bytes"));
+        }
+
+        if rlp.is_list() {
+            // Legacy transaction
+            let mut bytes = raw_bytes;
+            TxEnvelope::fallback_decode(&mut bytes)
+                .map_err(|_| rlp::DecoderError::Custom("failed to decode legacy transaction"))
+                .and_then(convert_tx)
+        } else {
+            // Typed transaction (EIP-2718)
+            let first_byte = raw_bytes[0];
+            let mut remaining_bytes = &raw_bytes[1..];
+            TxEnvelope::typed_decode(first_byte, &mut remaining_bytes)
+                .map_err(|_| rlp::DecoderError::Custom("failed to decode transaction envelope"))
+                .and_then(convert_tx)
         }
     }
 }
@@ -84,49 +119,55 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        try_from_ethers_transaction(value.0, false)
+        try_from_alloy_transaction(value.0, false)
     }
 }
 
-impl TryFrom<EthersTransaction> for TransactionInput {
+impl TryFrom<AlloyTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
-    fn try_from(value: EthersTransaction) -> anyhow::Result<Self> {
-        try_from_ethers_transaction(value, true)
+    fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
+        try_from_alloy_transaction(value, true)
     }
 }
 
-fn try_from_ethers_transaction(value: EthersTransaction, compute_signer: bool) -> anyhow::Result<TransactionInput> {
+fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_signer: bool) -> anyhow::Result<TransactionInput> {
     // extract signer
     let signer: Address = match compute_signer {
-        true => match value.recover_from() {
-            Ok(signer) => signer.into(),
+        true => match value.inner.recover_signer() {
+            Ok(signer) => Address::from(signer),
             Err(e) => {
                 tracing::warn!(reason = ?e, "failed to recover transaction signer");
                 return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
             }
         },
-        false => value.from.into(),
+        false => Address::from(value.from),
     };
 
+    // Get signature components from the envelope
+    let signature = value.inner.signature();
+    let r = U256::from(signature.r().to_be_bytes::<32>());
+    let s = U256::from(signature.s().to_be_bytes::<32>());
+    let v = if signature.v() { U64::from(1) } else { U64::from(0) };
+
     Ok(TransactionInput {
-        tx_type: value.transaction_type,
-        chain_id: match value.chain_id {
-            Some(chain_id) => Some(chain_id.try_into()?),
-            None => None,
-        },
-        hash: value.hash.into(),
-        nonce: value.nonce.try_into()?,
+        tx_type: Some(U64::from(value.inner.tx_type() as u8)),
+        chain_id: value.inner.chain_id().map(Into::into),
+        hash: Hash::from(*value.inner.tx_hash()),
+        nonce: Nonce::from(value.inner.nonce()),
         signer,
-        from: Address::new(value.from.into()),
-        to: value.to.map_into(),
-        value: value.value.into(),
-        input: value.input.clone().into(),
-        gas_limit: value.gas.try_into()?,
-        gas_price: value.gas_price.unwrap_or_default().into(),
-        v: value.v,
-        r: value.r,
-        s: value.s,
+        from: Address::from(value.from),
+        to: match value.inner.kind() {
+            TxKind::Call(addr) => Some(Address::from(addr)),
+            TxKind::Create => None,
+        },
+        value: Wei::from(value.inner.value()),
+        input: Bytes::from(value.inner.input().clone()),
+        gas_limit: Gas::from(value.inner.gas_limit()),
+        gas_price: Wei::from(value.inner.gas_price().or(value.effective_gas_price).unwrap_or_default()),
+        v,
+        r,
+        s,
     })
 }
 
@@ -134,23 +175,32 @@ fn try_from_ethers_transaction(value: EthersTransaction, compute_signer: bool) -
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl From<TransactionInput> for EthersTransaction {
+impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
+        let inner = TxEnvelope::Legacy(Signed::new_unchecked(
+            TxLegacy {
+                chain_id: value.chain_id.map(Into::into),
+                nonce: value.nonce.into(),
+                gas_price: value.gas_price.into(),
+                gas_limit: value.gas_limit.into(),
+                to: match value.to {
+                    Some(addr) => TxKind::Call(addr.into()),
+                    None => TxKind::Create,
+                },
+                value: value.value.into(),
+                input: value.input.clone().into(),
+            },
+            PrimitiveSignature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_u64() == 1),
+            value.hash.into(),
+        ));
+
         Self {
-            chain_id: value.chain_id.map_into(),
-            hash: value.hash.into(),
-            nonce: value.nonce.into(),
+            inner,
+            block_hash: None,
+            block_number: None,
+            transaction_index: None,
             from: value.signer.into(),
-            to: value.to.map_into(),
-            value: value.value.into(),
-            input: value.input.clone().into(),
-            gas: value.gas_limit.into(),
-            gas_price: Some(value.gas_price.into()),
-            v: value.v,
-            r: value.r,
-            s: value.s,
-            transaction_type: value.tx_type,
-            ..Default::default()
+            effective_gas_price: Some(value.gas_price.into()),
         }
     }
 }

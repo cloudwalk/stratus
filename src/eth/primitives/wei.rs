@@ -24,7 +24,7 @@ impl Wei {
 }
 
 impl Dummy<Faker> for Wei {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
     }
 }
@@ -58,6 +58,12 @@ impl TryFrom<BigDecimal> for Wei {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+
+impl From<Wei> for u128 {
+    fn from(value: Wei) -> Self {
+        value.as_u128()
+    }
+}
 
 impl From<Wei> for RevmU256 {
     fn from(value: Wei) -> Self {
