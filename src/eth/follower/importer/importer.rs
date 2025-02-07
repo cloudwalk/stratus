@@ -481,16 +481,58 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
     });
-    // TODO: remove unwraps and loop until successful
-    let mut json = chain.fetch_block_and_receipts(block_number).await.unwrap();
+    const RETRY_DELAY: Duration = Duration::from_millis(10);
 
-    let block = mem::take(json.get_mut("block").unwrap());
-    let block: ExternalBlock = serde_json::from_value(block).unwrap();
+    loop {
+        tracing::info!(%block_number, "fetching block and receipts");
 
-    let receipts = mem::take(json.get_mut("receipts").unwrap());
-    let receipts: Vec<ExternalReceipt> = serde_json::from_value(receipts).unwrap();
+        let mut json = match chain.fetch_block_and_receipts(block_number).await {
+            Ok(json) => json,
+            Err(e) => {
+                tracing::warn!(reason = ?e, %block_number, "failed to fetch block and receipts, retrying...");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+                continue;
+            }
+        };
 
-    (block, receipts)
+        let block = match json.get_mut("block") {
+            Some(block) => mem::take(block),
+            None => {
+                tracing::warn!(%block_number, "missing block in response, retrying...");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+                continue;
+            }
+        };
+
+        let block: ExternalBlock = match serde_json::from_value(block) {
+            Ok(block) => block,
+            Err(e) => {
+                tracing::warn!(reason = ?e, %block_number, "failed to parse block, retrying...");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+                continue;
+            }
+        };
+
+        let receipts = match json.get_mut("receipts") {
+            Some(receipts) => mem::take(receipts),
+            None => {
+                tracing::warn!(%block_number, "missing receipts in response, retrying...");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+                continue;
+            }
+        };
+
+        let receipts: Vec<ExternalReceipt> = match serde_json::from_value(receipts) {
+            Ok(receipts) => receipts,
+            Err(e) => {
+                tracing::warn!(reason = ?e, %block_number, "failed to parse receipts, retrying...");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+                continue;
+            }
+        };
+
+        return (block, receipts);
+    }
 }
 
 #[allow(clippy::expect_used)]
