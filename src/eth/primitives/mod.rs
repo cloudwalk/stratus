@@ -144,7 +144,10 @@ mod tests {
     // gen_test_serde!(TransactionStage);
 
     gen_snapshot_serde_test!(ExternalBlock);
+    gen_snapshot_serde_test!(ExternalBlockWithReceipts);
+
     gen_snapshot_serde_test!(ExternalReceipt);
+    gen_snapshot_serde_test!(ExternalReceipts);
     gen_snapshot_serde_test!(ExternalTransaction);
 
     gen_test_serde!(Account);
