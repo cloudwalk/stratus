@@ -152,7 +152,7 @@ impl BlockchainClient {
         let number = to_json_value(block_number);
         match self.http.request::<JsonValue, _>("stratus_getBlockAndReceipts", [number]).await {
             Ok(json) => Ok(json),
-            Err(e) => log_and_err!(reason = e, "failed to fetch block by number"),
+            Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
         }
     }
 
