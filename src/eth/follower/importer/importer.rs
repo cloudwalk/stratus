@@ -478,10 +478,10 @@ impl Importer {
 
 #[tracing::instrument(name = "importer::fetch_block_and_receipts", skip_all, fields(block_number))]
 async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
+    const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
     });
-    const RETRY_DELAY: Duration = Duration::from_millis(10);
 
     loop {
         tracing::info!(%block_number, "fetching block and receipts");
@@ -489,7 +489,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
         let mut json = match chain.fetch_block_and_receipts(block_number).await {
             Ok(json) => json,
             Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, "failed to fetch block and receipts, retrying...");
+                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch block and receipts, retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
                 continue;
             }
@@ -498,16 +498,22 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
         let block = match json.get_mut("block") {
             Some(block) => mem::take(block),
             None => {
-                tracing::warn!(%block_number, "missing block in response, retrying...");
+                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "missing block in response, retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
                 continue;
             }
         };
 
+        if block.is_null() {
+            tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block not mined yet. retrying with delay.");
+            traced_sleep(RETRY_DELAY, SleepReason::SyncData).await;
+            continue;
+        }
+
         let block: ExternalBlock = match serde_json::from_value(block) {
             Ok(block) => block,
             Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, "failed to parse block, retrying...");
+                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to parse block, retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
                 continue;
             }
@@ -516,7 +522,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
         let receipts = match json.get_mut("receipts") {
             Some(receipts) => mem::take(receipts),
             None => {
-                tracing::warn!(%block_number, "missing receipts in response, retrying...");
+                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "missing receipts in response, retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
                 continue;
             }
@@ -525,7 +531,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
         let receipts: Vec<ExternalReceipt> = match serde_json::from_value(receipts) {
             Ok(receipts) => receipts,
             Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, "failed to parse receipts, retrying...");
+                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to parse receipts, retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
                 continue;
             }
