@@ -346,9 +346,9 @@ macro_rules! gen_test_serde {
     };
 }
 
-/// Generates a test that verifies JSON snapshot serialization/deserialization for a type
+/// Generates unit test that checks that JSON's serialization and deserialization are compatible
 #[macro_export]
-macro_rules! gen_snapshot_serde_test {
+macro_rules! gen_test_json {
     ($type:ty) => {
         paste::paste! {
             #[test]
