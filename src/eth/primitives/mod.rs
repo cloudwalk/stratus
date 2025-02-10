@@ -145,7 +145,6 @@ mod tests {
 
     gen_test_json!(ExternalBlock);
     gen_test_json!(ExternalBlockWithReceipts);
-
     gen_test_json!(ExternalReceipt);
     gen_test_json!(ExternalReceipts);
     gen_test_json!(ExternalTransaction);
