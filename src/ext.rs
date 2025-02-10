@@ -363,7 +363,8 @@ macro_rules! gen_test_json {
                 let snapshot_name = format!("{}.json", stringify!($type));
                 let snapshot_path = format!("{}/{}", snapshot_parent_path, snapshot_name);
 
-                // Create snapshot if it doesn't exist
+                // WARNING: If you need to update snapshots (DANGEROUS_UPDATE_SNAPSHOTS=1), you have likely
+                // broken backwards compatibility! Make sure this is intentional.
                 if !Path::new(&snapshot_path).exists() {
                     if env::var("DANGEROUS_UPDATE_SNAPSHOTS").is_ok() {
                         fs::create_dir_all(snapshot_parent_path)?;
