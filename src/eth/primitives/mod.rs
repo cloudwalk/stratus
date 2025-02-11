@@ -122,6 +122,7 @@ pub use wei::Wei;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gen_test_json;
     use crate::gen_test_serde;
 
     type TransactionExecutionValueChangeBytes = ExecutionValueChange<Bytes>;
@@ -141,6 +142,12 @@ mod tests {
     // gen_test_serde!(PendingBlock);
     // gen_test_serde!(TransactionExecution);
     // gen_test_serde!(TransactionStage);
+
+    gen_test_json!(ExternalBlock);
+    gen_test_json!(ExternalBlockWithReceipts);
+    gen_test_json!(ExternalReceipt);
+    gen_test_json!(ExternalReceipts);
+    gen_test_json!(ExternalTransaction);
 
     gen_test_serde!(Account);
     gen_test_serde!(Address);
