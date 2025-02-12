@@ -1,4 +1,5 @@
 use serde_json::json;
+use hostname;
 
 use crate::alias::JsonValue;
 
@@ -57,6 +58,13 @@ pub fn version() -> &'static str {
     }
 }
 
+// returns the hostname
+fn get_hostname() -> String {
+    hostname::get()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned()
+}
 /// Returns build info as JSON.
 pub fn as_json() -> JsonValue {
     json!(
@@ -67,6 +75,7 @@ pub fn as_json() -> JsonValue {
                 "version": version(),
                 "service_name_with_version": service_name_with_version(),
                 "timestamp": BUILD_TIMESTAMP,
+                "hostname": get_hostname(),
             },
             "cargo": {
                 "debug": CARGO_DEBUG,
