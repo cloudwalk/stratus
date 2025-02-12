@@ -30,7 +30,8 @@ on:
 
 jobs:
   rpc_downloader_test:
-
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
