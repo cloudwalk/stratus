@@ -89,7 +89,7 @@ jobs:
         run: just contracts-flatten --token
 
       - name: Run e2e tests
-        run: just just e2e-rpc-downloader
+        run: just e2e-rpc-downloader
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error
