@@ -608,13 +608,21 @@ pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionStage) -> 
     match tracer_type {
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => FourByteFrame::default().into(),
         // HACK: Spoof empty call frame to prevent Blockscout from retrying unnecessary trace calls
-        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => CallFrame {
-            from: tx.from().into(),
-            to: tx.to().map_into(),
-            typ: "CALL".to_string(),
-            ..Default::default()
+        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
+            let typ = match tx.to() {
+                Some(_) => "CALL",
+                None => "CREATE",
+            }
+            .to_string();
+
+            CallFrame {
+                from: tx.from().into(),
+                to: tx.to().map_into(),
+                typ,
+                ..Default::default()
+            }
+            .into()
         }
-        .into(),
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => MuxFrame::default().into(),
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => FlatCallFrame::default().into(),
         _ => NoopFrame::default().into(),
