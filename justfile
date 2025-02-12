@@ -431,6 +431,67 @@ e2e-leader-follower-down:
     # Delete zeppelin directory
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
 
+# E2E: RPC Downloader test
+e2e-rpc-downloader:
+    #!/bin/bash
+    just build rpc-downloader dev
+
+    mkdir e2e_logs
+
+    just _log "Starting Stratus"
+    just run -a 0.0.0.0:3000 > e2e_logs/e2e-rpc-downloader-stratus.log &
+    just _wait_for_stratus
+
+    just _log "Starting PostgreSQL"
+    docker-compose up -d postgres
+
+    just _log "Running TestContractBalances tests"
+    just e2e stratus automine
+    
+    just _log "Running RPC Downloader test"
+    cargo run --bin rpc-downloader -- --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
+
+    cargo run --bin rpc-downloader -- --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
+
+    just _log "Checking content of postgres"
+    POSTGRES_DB=stratus POSTGRES_PASSWORD=123 ETH_RPC_URL=http://localhost:3000/ python utils/check_rpc_downloader/main.py --start 0
+
+    just _log "Killing Stratus"
+    killport 3000 -s sigterm
+
+    just _log "Killing PostgreSQL"
+    docker-compose down postgres
+
+just e2e-importer-offline:
+    #!/bin/bash
+    just build
+
+    mkdir e2e_logs
+
+    just _log "Starting Stratus"
+    just run -a 0.0.0.0:3000 > e2e_logs/e2e-importer-offline-stratus.log &
+    just _wait_for_stratus
+
+    just _log "Running TestContractBalances tests"
+    just e2e stratus interval "test/automine/e2e-tx-serial-contract.test.ts"
+    
+    just _log "Running importer-offline"
+    cargo run --bin importer-offline -- --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus
+
+    just _log "Killing Stratus"
+    killport 3000 -s sigterm
+
+    just _log "Run importer-offline"
+    cargo run --bin importer-offline -- --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=tests/importer-offline-database
+
+    just _log "Killing PostgreSQL"
+    docker-compose down postgres
+
+    just _log "Check content of importer-offline database"
+    docker exec -it postgres-persistent psql -U postgres -d stratus -c "SELECT * FROM external_rpc_transactions;"
+    
+
+
 # ------------------------------------------------------------------------------
 # Hive tests
 # ------------------------------------------------------------------------------
