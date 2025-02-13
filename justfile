@@ -469,7 +469,7 @@ e2e-importer-offline:
     just build importer-offline
     just build rpc-downloader
 
-    mkdir e2e_logs
+    mkdir -p e2e_logs
 
     rm -rf tests/importer-offline-database
 
@@ -491,9 +491,9 @@ e2e-importer-offline:
 
     just _log "Stratus for importer-offline"
     just stratus -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=tests/importer-offline-database > e2e_logs/e2e-importer-offline-stratus-3001.log &
+    just _wait_for_stratus 3001
 
     just _log "Compare blocks of stratus and importer-offline"
-    sleep 3
     pip install -r utils/compare_block/requirements.txt
     python utils/compare_block/main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp --ignore type
     
