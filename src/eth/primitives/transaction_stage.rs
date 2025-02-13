@@ -54,6 +54,14 @@ impl TransactionStage {
         }
     }
 
+    pub fn deployed_contract_address(&self) -> Option<Address> {
+        match self {
+            Self::Executed(TransactionExecution::Local(tx)) => tx.result.execution.deployed_contract_address,
+            Self::Executed(TransactionExecution::External(tx)) => tx.receipt.contract_address.map_into(),
+            Self::Mined(tx) => tx.execution.deployed_contract_address,
+        }
+    }
+
     pub fn result(&self) -> &ExecutionResult {
         match self {
             Self::Executed(tx) => &tx.result().execution.result,
