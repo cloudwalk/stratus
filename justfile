@@ -431,6 +431,38 @@ e2e-leader-follower-down:
     # Delete zeppelin directory
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
 
+# E2E: RPC Downloader test
+e2e-rpc-downloader:
+    #!/bin/bash
+    just build rpc-downloader dev
+
+    mkdir e2e_logs
+
+    just _log "Starting Stratus"
+    just run -a 0.0.0.0:3000 > e2e_logs/e2e-rpc-downloader-stratus.log &
+    just _wait_for_stratus
+
+    just _log "Starting PostgreSQL"
+    docker-compose up -d postgres
+
+    just _log "Running TestContractBalances tests"
+    just e2e stratus automine
+    
+    just _log "Running RPC Downloader test"
+    cargo run --bin rpc-downloader -- --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
+
+    cargo run --bin rpc-downloader -- --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
+
+    just _log "Checking content of postgres"
+    POSTGRES_DB=stratus POSTGRES_PASSWORD=123 ETH_RPC_URL=http://localhost:3000/ python utils/check_rpc_downloader/main.py --start 0
+
+    just _log "Killing Stratus"
+    killport 3000 -s sigterm
+
+    just _log "Killing PostgreSQL"
+    docker-compose down postgres
+
+# E2E Importer Offline
 e2e-importer-offline:
     #!/bin/bash
     just build
@@ -461,13 +493,13 @@ e2e-importer-offline:
     just _log "Compare blocks of stratus and importer-offline"
     sleep 3
     python utils/compare_block/main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp --ignore type
-
+    
     just _log "Killing Stratus"
     killport 3000 -s sigterm
 
     just _log "Killing importer-offline"
     killport 3001 -s sigterm
-
+    
     just _log "Killing PostgreSQL"
     docker-compose down postgres
 

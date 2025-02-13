@@ -39,6 +39,12 @@ fn print_build_directives() {
 // Code generation: Build Info
 // -----------------------------------------------------------------------------
 fn generate_build_info() {
+    // Capture the hostname of the machine where the binary is being built
+    let build_hostname = hostname::get().unwrap_or_default().to_string_lossy().into_owned();
+
+    // Export BUILD_HOSTNAME as a compile-time environment variable
+    println!("cargo:rustc-env=BUILD_HOSTNAME={}", build_hostname);
+
     if let Err(e) = EmitBuilder::builder()
         .build_timestamp()
         .git_branch()

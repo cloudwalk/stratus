@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "check_rpc_downloader"
+version = "0.1.0"
+description = ""
+authors = ["Arthur Meskelis <arthur.meskelis@cloudwalk.io>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+typer = "^0.12.3"
+web3 = "^6.17.2"
+deepdiff = "^7.0.1"
+pprintpp = "^0.4.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
