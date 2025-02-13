@@ -1,5 +1,7 @@
 import "justfile_helpers"
 
+set shell := ["bash", "-e", "-o", "pipefail", "-c"]
+
 # Environment variables automatically passed to executed commands.
 export CARGO_PROFILE_RELEASE_DEBUG := env("CARGO_PROFILE_RELEASE_DEBUG", "1")
 export RUST_BACKTRACE := env("RUST_BACKTRACE", "0")
@@ -495,6 +497,7 @@ e2e-importer-offline:
     pip install -r utils/compare_block/requirements.txt
     python utils/compare_block/main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp --ignore type
     
+    echo "$?"
     just _log "Killing Stratus"
     killport 3000 -s sigterm
 
