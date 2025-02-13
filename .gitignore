@@ -32,7 +32,7 @@ node_modules/
 # E2E (Run With Importer)
 e2e_logs/
 temp_*-rocksdb/
-tests/importer-offline-database/
+tests/importer-offline-database/*
 
 # Build
 crates/*/target
