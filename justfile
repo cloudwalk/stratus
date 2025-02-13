@@ -492,6 +492,7 @@ e2e-importer-offline:
 
     just _log "Compare blocks of stratus and importer-offline"
     sleep 3
+    pip install -r utils/compare_block/requirements.txt
     python utils/compare_block/main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp --ignore type
     
     just _log "Killing Stratus"

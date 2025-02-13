@@ -1,0 +1,5 @@
+deepdiff
+web3
+hexbytes
+typer
+rich 
