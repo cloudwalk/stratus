@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 use glob::glob;
 use nom::bytes::complete::tag;
@@ -44,6 +45,31 @@ fn generate_build_info() {
 
     // Export BUILD_HOSTNAME as a compile-time environment variable
     println!("cargo:rustc-env=BUILD_HOSTNAME={}", build_hostname);
+
+    // Capture OpenSSL version
+    let openssl_version = Command::new("openssl")
+        .arg("version")
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Capture glibc version (Linux only)
+    let glibc_version = if cfg!(target_os = "linux") {
+        Command::new("ldd")
+            .arg("--version")
+            .output()
+            .ok()
+            .and_then(|output| String::from_utf8(output.stdout).ok())
+            .and_then(|s| s.lines().next().map(|s| s.to_string()))
+            .unwrap_or_else(|| "unknown".to_string())
+    } else {
+        "not applicable".to_string()
+    };
+
+    // Export as compile-time environment variables
+    println!("cargo:rustc-env=BUILD_OPENSSL_VERSION={}", openssl_version.trim());
+    println!("cargo:rustc-env=BUILD_GLIBC_VERSION={}", glibc_version.trim());
 
     if let Err(e) = EmitBuilder::builder()
         .build_timestamp()
