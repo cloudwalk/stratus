@@ -466,8 +466,8 @@ e2e-rpc-downloader:
 
 # E2E Importer Offline
 e2e-importer-offline:
-    just build importer-offline release
-    just build rpc-downloader release
+    just build importer-offline
+    just build rpc-downloader
 
     mkdir e2e_logs
 
