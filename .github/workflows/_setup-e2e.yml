@@ -54,6 +54,9 @@ jobs:
       - name: Install jq
         run: sudo apt-get install jq -y
 
+      - name: Install docker docker-compose
+        run: sudo apt-get install docker-compose -y
+
       - name: Set up Test Dependencies
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         run: |

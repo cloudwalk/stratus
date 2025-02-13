@@ -106,3 +106,13 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-admin-password-${{ github.ref || github.run_id }}
       cancel-in-progress: true
+
+  e2e-rpc-downloader:
+    name: E2E RPC Downloader
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-rpc-downloader"
+
+    concurrency:
+      group: ${{ github.workflow }}-rpc-downloader-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
