@@ -7,6 +7,8 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use glob::glob;
 use nom::bytes::complete::tag;
@@ -15,6 +17,8 @@ use nom::combinator::rest;
 use nom::sequence::preceded;
 use nom::sequence::separated_pair;
 use nom::IResult;
+use sha2::Digest;
+use sha2::Sha256;
 use vergen::EmitBuilder;
 
 fn main() {
@@ -75,6 +79,29 @@ fn generate_build_info() {
     // Export as compile-time environment variables
     println!("cargo:rustc-env=BUILD_OPENSSL_VERSION={}", openssl_version.trim());
     println!("cargo:rustc-env=BUILD_GLIBC_VERSION={}", glibc_version.trim());
+
+    // Coletar informações disponíveis durante o build
+    let build_info = format!(
+        "{}-{}-{}-{}-{}",
+        // Timestamp do build
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+        // Versão do pacote
+        std::env::var("CARGO_PKG_VERSION").unwrap_or_default(),
+        // Target
+        std::env::var("TARGET").unwrap_or_default(),
+        // Profile (debug/release)
+        std::env::var("PROFILE").unwrap_or_default(),
+        // Features ativadas
+        std::env::var("CARGO_FEATURES").unwrap_or_default()
+    );
+
+    // Gerar o hash
+    let mut hasher = Sha256::new();
+    hasher.update(build_info.as_bytes());
+    let build_checksum = format!("{:x}", hasher.finalize());
+
+    // Exportar como variável de ambiente em tempo de compilação
+    println!("cargo:rustc-env=BUILD_BINARY_CHECKSUM={}", build_checksum);
 
     if let Err(e) = EmitBuilder::builder()
         .build_timestamp()

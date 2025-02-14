@@ -5315,6 +5315,7 @@ dependencies = [
  "serde_plain",
  "serde_urlencoded",
  "serde_with",
+ "sha2",
  "smallvec",
  "sqlx",
  "static_assertions",
