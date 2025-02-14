@@ -464,9 +464,6 @@ e2e-rpc-downloader:
 
 # E2E Importer Offline
 e2e-importer-offline:
-    just build importer-offline
-    just build rpc-downloader
-
     mkdir -p e2e_logs
 
     rm -rf data/importer-offline-database-rocksdb
