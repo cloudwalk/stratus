@@ -52,6 +52,10 @@ fn generate_build_info() {
         .output()
         .ok()
         .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|s| {
+            // take just the version number
+            s.split_whitespace().nth(1).unwrap_or("unknown").to_string()
+        })
         .unwrap_or_else(|| "unknown".to_string());
 
     // Capture glibc version (Linux only)
@@ -61,7 +65,8 @@ fn generate_build_info() {
             .output()
             .ok()
             .and_then(|output| String::from_utf8(output.stdout).ok())
-            .and_then(|s| s.lines().next().map(|s| s.to_string()))
+            .and_then(|s| s.lines().next().map(|s| s.to_string())) // take just the first line
+            .map(|s| s.replace("ldd (GNU libc) ", "")) // take just the version number
             .unwrap_or_else(|| "unknown".to_string())
     } else {
         "not applicable".to_string()
