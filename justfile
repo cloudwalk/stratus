@@ -434,8 +434,6 @@ e2e-leader-follower-down:
 # E2E: RPC Downloader test
 e2e-rpc-downloader:
     #!/bin/bash
-    just build rpc-downloader dev
-
     mkdir e2e_logs
 
     just _log "Starting Stratus"
