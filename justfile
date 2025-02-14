@@ -449,11 +449,12 @@ e2e-rpc-downloader:
     just e2e stratus automine
     
     just _log "Running RPC Downloader test"
-    cargo run --bin rpc-downloader -- --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
+    just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
 
-    cargo run --bin rpc-downloader -- --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
+    just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
 
     just _log "Checking content of postgres"
+    pip install -r utils/check_rpc_downloader/requirements.txt
     POSTGRES_DB=stratus POSTGRES_PASSWORD=123 ETH_RPC_URL=http://localhost:3000/ python utils/check_rpc_downloader/main.py --start 0
 
     just _log "Killing Stratus"
