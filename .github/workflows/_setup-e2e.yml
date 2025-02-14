@@ -51,6 +51,9 @@ jobs:
         with:
           node-version-file: .tool-versions
 
+      - name: Install docker-compose
+        run: sudo apt-get install docker-compose -y
+        
       - name: Install jq
         run: sudo apt-get install jq -y
 

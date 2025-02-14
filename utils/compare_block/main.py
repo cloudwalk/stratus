@@ -10,7 +10,7 @@ def print_items(changes: list, ignore: list[str], indent: int = 0):
     for change in changes:
         field = change.path(root="", output_format="list")[0]
         if field not in ignore:
-            print(f"{'\t'*indent}[bold red]{field}[/bold red]")
+            print(f"{'    ' * indent}[bold red]{field}[/bold red]")
     print()
 
 
@@ -20,11 +20,11 @@ def print_changes(changes: list, ignore: list[str], left, right, indent: int = 0
         if field not in ignore:
             if isinstance(left[field], HexBytes) and isinstance(right[field], HexBytes):
                 print(
-                    f"{'\t'*indent}{field}:\n{'\t'*indent}\t[bold red]Left: {left[field].hex()}[/bold red]\n{'\t'*indent}\t[bold green]Right: {right[field].hex()}[/bold green]"
+                    f"{'    ' * indent}{field}:\n{'    ' * indent}    [bold red]Left: {left[field].hex()}[/bold red]\n{'    ' * indent}    [bold green]Right: {right[field].hex()}[/bold green]"
                 )
             else:
                 print(
-                    f"{'\t'*indent}{field}:\n{'\t'*indent}\t[bold red]Left: {left[field]}[/bold red]\n{'\t'*indent}\t[bold green]Right: {right[field]}[/bold green]"
+                    f"{'    ' * indent}{field}:\n{'    ' * indent}    [bold red]Left: {left[field]}[/bold red]\n{'    ' * indent}    [bold green]Right: {right[field]}[/bold green]"
                 )
     print()
 
@@ -38,10 +38,10 @@ def print_diff(
     ignore_in_item: list[str],
     indent: int = 0,
 ):
-    print(f"{'\t'*indent}[bold blue]{name} Diff:[/bold blue]")
+    print(f"{'    ' * indent}[bold blue]{name} Diff:[/bold blue]")
     if len(diff.get("dictionary_item_added", [])):
         print(
-            f"{'\t'*indent}\t[red]The left {name} is missing the following fields:[/red]"
+            f"{'    ' * indent}    [red]The left {name} is missing the following fields:[/red]"
         )
         print_items(
             diff["dictionary_item_added"], [*ignore, *ignore_in_item], indent + 2
@@ -49,14 +49,14 @@ def print_diff(
 
     if len(diff.get("dictionary_item_removed", [])):
         print(
-            f"{'\t'*indent}\t[red]The right {name} is missing the following fields:[/red]"
+            f"{'    ' * indent}    [red]The right {name} is missing the following fields:[/red]"
         )
         print_items(
             diff["dictionary_item_removed"], [*ignore, *ignore_in_item], indent + 2
         )
 
     if len(diff.get("values_changed", [])):
-        print(f"{'\t'*indent}\t[red]The follwing values don't match:[/red]")
+        print(f"{'    ' * indent}    [red]The follwing values don't match:[/red]")
         print_changes(diff["values_changed"], ignore, left, right, indent + 2)
 
 
