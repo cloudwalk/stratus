@@ -65,12 +65,25 @@ jobs:
           NO_COLOR: 1
           FEATURES: "${{ github.event.inputs.features || 'default' }}"
 
+      - name: Generate checksums
+        run: |
+          cd target/release
+          sha256sum stratus > ../../checksums.txt
+
       - name: Upload stratus
         uses: actions/upload-artifact@v4
         id: upload-str
         with:
           name: stratus-${{ github.sha }}
           path: target/release/stratus
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ github.sha }}
+          path: checksums.txt
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
 
