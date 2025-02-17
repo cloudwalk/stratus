@@ -54,6 +54,62 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
+name: Build Binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      features:
+        description: "List of features to enable"
+        required: false
+        default: ""
+  push:
+    branches:
+      - "main"
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "tests/fixtures/**"
+      - "static/**"
+      - ".sqlx/**"
+
+env:
+  RETENTION_DAYS: 90
+
+jobs:
+  build_binaries:
+    name: Build and upload
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    concurrency:
+      group: ${{ github.workflow }}-{{ github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.84
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: ${{ runner.os }}-v3-cargo
+          shared-key: artifact
+          cache-provider: "github"
+          save-if: ${{ github.ref_name == 'main' && github.event_name == 'push' }}
+
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
+      - name: Install libsasl2-dev libssl-dev
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+
       - name: Build binaries
         run: |
           cargo build --release \
@@ -65,12 +121,25 @@ jobs:
           NO_COLOR: 1
           FEATURES: "${{ github.event.inputs.features || 'default' }}"
 
+      - name: Generate checksums
+        run: |
+          cd target/release
+          sha256sum stratus > ../../checksums.txt
+
       - name: Upload stratus
         uses: actions/upload-artifact@v4
         id: upload-str
         with:
           name: stratus-${{ github.sha }}
           path: target/release/stratus
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ github.sha }}
+          path: checksums.txt
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
 
