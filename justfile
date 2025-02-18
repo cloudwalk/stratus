@@ -661,4 +661,16 @@ stratus-test-coverage *args="":
 
     just _coverage-run-stratus-recipe e2e-admin-password
 
+    # Run RPC downloader test
+    -rm -rf e2e_logs
+    just _coverage-run-stratus-recipe e2e-rpc-downloader
+    -docker-compose down postgres
+
+    # Run importer offline test
+    -rm -rf e2e_logs
+    -rm -rf data/importer-offline-database-rocksdb
+    just _coverage-run-stratus-recipe e2e-importer-offline
+    -docker-compose down postgres
+    -rm -rf data/importer-offline-database-rocksdb
+
     cargo llvm-cov report {{args}}
