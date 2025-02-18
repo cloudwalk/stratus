@@ -629,38 +629,6 @@ stratus-test-coverage *args="":
     cargo llvm-cov --no-report
     sleep 10
 
-#    # inmemory
-#    for test in "automine" "external"; do
-#        just _coverage-run-stratus-recipe e2e-stratus $test
-#    done
-#
-#    just _coverage-run-stratus-recipe e2e-clock-stratus
-#
-#    just _coverage-run-stratus-recipe contracts-test-stratus
-#    just _coverage-run-stratus-recipe e2e-eof
-#
-#    # rocksdb
-#    for test in "automine" "external"; do
-#        -rm -r data/rocksdb
-#        just _coverage-run-stratus-recipe e2e-stratus-rocks $test
-#    done
-#
-#    -rm -r data/rocksdb
-#    just _coverage-run-stratus-recipe e2e-eof rocks
-#
-#    -rm -r data/rocksdb
-#    just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
-#
-#    -rm -r data/rocksdb
-#    just _coverage-run-stratus-recipe contracts-test-stratus-rocks
-#
-#    # other
-#    for test in kafka deploy brlc change miner importer health; do
-#        just _e2e-leader-follower-up-coverage $test
-#    done
-#
-#    just _coverage-run-stratus-recipe e2e-admin-password
-
     # Run RPC downloader test
     -rm -rf e2e_logs
     just _coverage-run-stratus-recipe e2e-rpc-downloader
