@@ -616,17 +616,13 @@ _coverage-run-stratus-recipe *recipe="":
 
 stratus-test-coverage *args="":
     #!/bin/bash
-    # setup
     cargo llvm-cov clean --workspace
     just build
     source <(cargo llvm-cov show-env --export-prefix)
     export RUST_LOG=error
     export TRACING_LOG_FORMAT=json
-#    just contracts-clone
-#    just contracts-flatten
 
-    # cargo test
-    cargo llvm-cov --no-report
+    cargo llvm-cov no-report
     sleep 10
 
     # Run RPC downloader test
