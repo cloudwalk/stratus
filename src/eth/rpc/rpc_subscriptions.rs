@@ -172,6 +172,13 @@ impl RpcSubscriptions {
 
                 let interested_subs = subs.pending_txs.read().await;
                 let interested_subs = interested_subs.values().collect_vec();
+
+                tracing::info!(
+                    tx_hash = ?tx_hash,
+                    subscribers_count = interested_subs.len(),
+                    "notifying subscribers about new pending transaction"
+                );
+
                 Self::notify(interested_subs, tx_hash.to_string());
             }
             warn_task_rx_closed(TASK_NAME);
@@ -196,6 +203,14 @@ impl RpcSubscriptions {
 
                 let interested_subs = subs.new_heads.read().await;
                 let interested_subs = interested_subs.values().collect_vec();
+                
+                tracing::info!(
+                    block_number = ?block_header.number,
+                    block_hash = ?block_header.hash,   
+                    subscribers_count = interested_subs.len(),
+                    "notifying subscribers about new block"
+                );
+
                 Self::notify(interested_subs, block_header);
             }
             warn_task_rx_closed(TASK_NAME);
@@ -224,6 +239,13 @@ impl RpcSubscriptions {
                     .flat_map(HashMap::values)
                     .filter_map(|s| if_else!(s.filter.matches(&log), Some(&s.inner), None))
                     .collect_vec();
+
+                tracing::info!(
+                    log_block_number = ?log.block_number,
+                    log_tx_hash = ?log.transaction_hash,
+                    subscribers_count = interested_subs.len(),
+                    "notifying subscribers about new logs"
+                );
 
                 Self::notify(interested_subs, log);
             }
