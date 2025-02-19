@@ -4,10 +4,15 @@
 
 Welcome to Stratus, the cutting-edge EVM executor and JSON-RPC server with custom storage that scales horizontally. Built in Rust 🦀 for speed and reliability, Stratus is here to take your blockchain projects to the next level!
 
-## Current storage implementations
+## Architecture Overview
 
-- In Memory
-- RocksDB (default)
+Stratus is built on several key components:
+- EVM Executor: Processes smart contract transactions
+- JSON-RPC Server: Provides API access to the blockchain
+- Custom Storage Layer: Supports horizontal scaling
+  - In Memory (development)
+  - RocksDB (production default)
+- OpenTelemetry Integration: Comprehensive monitoring
 
 ## Performance Landscape
 
@@ -20,21 +25,39 @@ We aim to reach 5k write transactions per second with a unique node and 1M in a 
 
 ## Getting Started with Stratus
 
-To run the optimized version of Stratus, ensure you have installed the dependencies:
+### Prerequisites
+- [Rust](https://www.rust-lang.org/tools/install) - Latest stable version
+- [just](https://github.com/casey/just) - Command runner for development tasks
+- Git - For version control
+- [asdf](https://asdf-vm.com/) - Version manager (required for testing)
 
-- [Rust](https://www.rust-lang.org/tools/install)
-- [just](https://github.com/casey/just)
+### Quick Start
+1. Clone and enter the repository:
+   ```bash
+   git clone https://github.com/cloudwalk/stratus.git
+   cd stratus
+   ```
 
-Then simply run:
+2. Set up the development environment:
+   ```bash
+   just setup
+   ```
 
-```bash
-RELEASE=1 just run
-```
+3. Run Stratus in optimized mode:
+   ```bash
+   RELEASE=1 just run
+   ```
 
-If you want to use OpenTelemery use the flag `--tracing-url <url>` and pass
-the url of your OpenTelemetry collector of choice. Jaeger is included in the compose
-file, its collector url is `http://localhost:4317` and the ui can be accessed at
-`localhost:16686` on your browser.
+### Monitoring
+Stratus includes comprehensive monitoring through OpenTelemetry:
+- Use `--tracing-url <url>` to specify your collector
+- Default Jaeger collector: `http://localhost:4317`
+- Access Jaeger UI at `localhost:16686`
+
+### Troubleshooting
+- Ensure all prerequisites are installed
+- Check the logs for detailed error messages
+- Refer to our [wiki](https://github.com/cloudwalk/stratus/wiki) for detailed guides
 
 ### Testing
 
