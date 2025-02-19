@@ -203,10 +203,10 @@ impl RpcSubscriptions {
 
                 let interested_subs = subs.new_heads.read().await;
                 let interested_subs = interested_subs.values().collect_vec();
-                
+
                 tracing::info!(
                     block_number = ?block_header.number,
-                    block_hash = ?block_header.hash,   
+                    block_hash = ?block_header.hash,
                     subscribers_count = interested_subs.len(),
                     "notifying subscribers about new block"
                 );
