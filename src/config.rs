@@ -249,6 +249,10 @@ pub struct RpcDownloaderConfig {
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
     pub paralellism: usize,
 
+    /// Daemon mode.
+    #[arg(short = 'd', long = "daemon", env = "DAEMON", default_value = "false")]
+    pub daemon: bool,
+
     /// Accounts to retrieve initial balance information.
     ///
     /// For Cloudwalk networks, provide these addresses:
@@ -302,6 +306,14 @@ pub struct ImporterOfflineConfig {
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcConfig,
+
+    /// Daemon mode - keeps running and checking for new blocks
+    #[arg(short = 'd', long = "daemon", env = "DAEMON", default_value = "false")]
+    pub daemon: bool,
+
+    /// Interval between daemon checks in seconds
+    #[arg(long = "daemon-interval", env = "DAEMON_INTERVAL", default_value = "60")]
+    pub daemon_interval: u64,
 
     #[deref]
     #[clap(flatten)]

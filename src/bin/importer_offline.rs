@@ -11,6 +11,7 @@
 use std::cmp::min;
 use std::sync::mpsc;
 use std::sync::Arc;
+use std::time::Duration;
 
 use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
