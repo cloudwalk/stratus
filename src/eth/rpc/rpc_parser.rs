@@ -2,7 +2,7 @@
 
 use jsonrpsee::types::ParamsSequence;
 use jsonrpsee::Extensions;
-use rlp::Decodable;
+use alloy_rlp::Decodable;
 use tracing::Span;
 
 use super::rpc_http_middleware::Authentication;

@@ -12,7 +12,7 @@ use ethereum_types::U64;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
-use rlp::Decodable;
+use alloy_rlp::Decodable;
 
 use crate::alias::AlloyTransaction;
 use crate::eth::primitives::signature_component::SignatureComponent;
