@@ -175,7 +175,7 @@ impl RpcSubscriptions {
 
                 tracing::info!(
                     tx_hash = ?tx_hash,
-                    subscribers_count = interested_subs.len(),
+                    subscribers = ?interested_subs,  // em vez de subscribers_count
                     "notifying subscribers about new pending transaction"
                 );
 
@@ -207,7 +207,7 @@ impl RpcSubscriptions {
                 tracing::info!(
                     block_number = ?block_header.number,
                     block_hash = ?block_header.hash,
-                    subscribers_count = interested_subs.len(),
+                    subscribers = ?interested_subs,  // em vez de subscribers_count
                     "notifying subscribers about new block"
                 );
 
@@ -243,7 +243,7 @@ impl RpcSubscriptions {
                 tracing::info!(
                     log_block_number = ?log.block_number,
                     log_tx_hash = ?log.transaction_hash,
-                    subscribers_count = interested_subs.len(),
+                    subscribers = ?interested_subs,
                     "notifying subscribers about new logs"
                 );
 
