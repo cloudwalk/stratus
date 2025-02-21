@@ -1,10 +1,16 @@
 use alloy_consensus::Signed;
 use alloy_consensus::Transaction;
+use alloy_consensus::TxEip1559;
+use alloy_consensus::TxEip2930;
+use alloy_consensus::TxEip4844;
+use alloy_consensus::TxEip4844Variant;
+use alloy_consensus::TxEip7702;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::PrimitiveSignature;
 use alloy_primitives::TxKind;
+use alloy_rpc_types_eth::AccessList;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
@@ -177,22 +183,96 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
 
 impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
-        let inner = TxEnvelope::Legacy(Signed::new_unchecked(
-            TxLegacy {
-                chain_id: value.chain_id.map(Into::into),
-                nonce: value.nonce.into(),
-                gas_price: value.gas_price.into(),
-                gas_limit: value.gas_limit.into(),
-                to: match value.to {
-                    Some(addr) => TxKind::Call(addr.into()),
-                    None => TxKind::Create,
+        let signature = PrimitiveSignature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_u64() == 1);
+
+        let tx_type = value.tx_type.map(|t| t.as_u64()).unwrap_or(0);
+
+        let inner = match tx_type {
+            // EIP-2930
+            1 => TxEnvelope::Eip2930(Signed::new_unchecked(
+                TxEip2930 {
+                    chain_id: value.chain_id.unwrap_or_default().into(),
+                    nonce: value.nonce.into(),
+                    gas_price: value.gas_price.into(),
+                    gas_limit: value.gas_limit.into(),
+                    to: value.to.map(|a| TxKind::Call(a.into())).unwrap_or(TxKind::Create),
+                    value: value.value.into(),
+                    input: value.input.clone().into(),
+                    access_list: AccessList::default(),
                 },
-                value: value.value.into(),
-                input: value.input.clone().into(),
-            },
-            PrimitiveSignature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_u64() == 1),
-            value.hash.into(),
-        ));
+                signature,
+                value.hash.into(),
+            )),
+
+            // EIP-1559
+            2 => TxEnvelope::Eip1559(Signed::new_unchecked(
+                TxEip1559 {
+                    chain_id: value.chain_id.unwrap_or_default().into(),
+                    nonce: value.nonce.into(),
+                    max_fee_per_gas: value.gas_price.into(),
+                    max_priority_fee_per_gas: value.gas_price.into(),
+                    gas_limit: value.gas_limit.into(),
+                    to: value.to.map(|a| TxKind::Call(a.into())).unwrap_or(TxKind::Create),
+                    value: value.value.into(),
+                    input: value.input.clone().into(),
+                    access_list: AccessList::default(),
+                },
+                signature,
+                value.hash.into(),
+            )),
+
+            // EIP-4844
+            3 => TxEnvelope::Eip4844(Signed::new_unchecked(
+                TxEip4844Variant::TxEip4844(TxEip4844 {
+                    chain_id: value.chain_id.unwrap_or_default().into(),
+                    nonce: value.nonce.into(),
+                    max_fee_per_gas: value.gas_price.into(),
+                    max_priority_fee_per_gas: value.gas_price.into(),
+                    gas_limit: value.gas_limit.into(),
+                    to: value.to.map(Into::into).unwrap_or_default(),
+                    value: value.value.into(),
+                    input: value.input.clone().into(),
+                    access_list: AccessList::default(),
+                    blob_versioned_hashes: Vec::new(),
+                    max_fee_per_blob_gas: 0u64.into(),
+                }),
+                signature,
+                value.hash.into(),
+            )),
+
+            // EIP-7702
+            4 => TxEnvelope::Eip7702(Signed::new_unchecked(
+                TxEip7702 {
+                    chain_id: value.chain_id.unwrap_or_default().into(),
+                    nonce: value.nonce.into(),
+                    gas_limit: value.gas_limit.into(),
+                    max_fee_per_gas: value.gas_price.into(),
+                    max_priority_fee_per_gas: value.gas_price.into(),
+                    to: value.to.map(Into::into).unwrap_or_default(),
+                    value: value.value.into(),
+                    input: value.input.clone().into(),
+                    access_list: AccessList::default(),
+                    authorization_list: Vec::new(),
+                },
+                signature,
+                value.hash.into(),
+            )),
+
+            // Legacy (default)
+            _ => TxEnvelope::Legacy(Signed::new_unchecked(
+                TxLegacy {
+                    chain_id: value.chain_id.map(Into::into),
+                    nonce: value.nonce.into(),
+                    gas_price: value.gas_price.into(),
+                    gas_limit: value.gas_limit.into(),
+                    to: value.to.map(|a| TxKind::Call(a.into())).unwrap_or(TxKind::Create),
+                    value: value.value.into(),
+                    input: value.input.clone().into(),
+                },
+                signature,
+                value.hash.into(),
+            )),
+        };
 
         Self {
             inner,
