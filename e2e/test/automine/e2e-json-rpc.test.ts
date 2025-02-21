@@ -311,37 +311,58 @@ describe("JSON-RPC", () => {
             it("handles legacy transaction with type 0", async () => {
                 const signedTx = await createLegacyTransaction(ALICE, 0);
                 const txHash = await sendRawTransaction(signedTx);
-                await pollReceipt(txHash);
 
-                const tx = await ETHERJS.getTransaction(txHash);
-                expect(tx?.type).to.equal(0);
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x0");
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x0");
             });
 
             it("handles EIP-2930 (type 1) transaction", async () => {
                 const signedTx = await createEIP2930Transaction(ALICE);
                 const txHash = await sendRawTransaction(signedTx);
-                await pollReceipt(txHash);
 
-                const tx = await ETHERJS.getTransaction(txHash);
-                expect(tx?.type).to.equal(1);
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x1");
+                expect(tx.accessList).to.be.an("array");
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x1");
             });
 
             it("handles EIP-1559 (type 2) transaction", async () => {
                 const signedTx = await createEIP1559Transaction(ALICE);
                 const txHash = await sendRawTransaction(signedTx);
-                await pollReceipt(txHash);
 
-                const tx = await ETHERJS.getTransaction(txHash);
-                expect(tx?.type).to.equal(2);
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x2");
+                expect(tx.maxFeePerGas).to.match(HEX_PATTERN);
+                expect(tx.maxPriorityFeePerGas).to.match(HEX_PATTERN);
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x2");
             });
 
             it("handles EIP-4844 (type 3) transaction", async function () {
                 const signedTx = await createEIP4844Transaction(ALICE);
                 const txHash = await sendRawTransaction(signedTx);
-                await pollReceipt(txHash);
 
-                const tx = await ETHERJS.getTransaction(txHash);
-                expect(tx?.type).to.equal(3);
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x3");
+                expect(tx.maxFeePerBlobGas).to.match(HEX_PATTERN);
+                expect(tx.blobVersionedHashes).to.be.an("array");
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x3");
             });
         });
     });
