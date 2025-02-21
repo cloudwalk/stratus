@@ -1,3 +1,4 @@
+import { RLP } from "@ethereumjs/rlp";
 import axios from "axios";
 import { expect } from "chai";
 import {
@@ -6,8 +7,12 @@ import {
     Contract,
     JsonRpcApiProviderOptions,
     JsonRpcProvider,
+    SigningKey,
     TransactionReceipt,
     TransactionResponse,
+    concat,
+    getBytes,
+    hexlify,
     keccak256,
 } from "ethers";
 import { config, ethers } from "hardhat";
@@ -22,7 +27,7 @@ import {
     TestContractDenseStorage,
     TestEvmInput,
 } from "../../typechain-types";
-import { Account, CHARLIE } from "./account";
+import { Account, BOB, CHARLIE } from "./account";
 import { currentMiningIntervalInMs, currentNetwork, isStratus } from "./network";
 
 // -----------------------------------------------------------------------------
@@ -477,8 +482,8 @@ export async function pollReceipt(
     }
     tx = await tx;
     const txHash = typeof tx === "string" ? tx : tx.hash;
-    const [txReceipt] = await pollReceipts([txHash], options);
-    return txReceipt;
+    const result = await pollReceipts([txHash], options);
+    return result.receipts[0];
 }
 
 // Polls for the block with a given number is minted
@@ -531,4 +536,72 @@ function normalizePollingOptions(
         timeoutInMs,
         pollingIntervalInMs,
     };
+}
+
+// Creates and signs a legacy (type 0 or empty) transaction
+export async function createLegacyTransaction(account: Account, type?: number) {
+    const tx = {
+        to: BOB.address,
+        value: toHex(TEST_TRANSFER),
+        gasPrice: toHex(1),
+        gasLimit: toHex(21000),
+        nonce: toHex(await sendGetNonce(account)),
+        chainId: parseInt(CHAIN_ID, 16),
+    };
+
+    if (type === 0) {
+        (tx as any).type = 0;
+    }
+
+    return await account.signer().signTransaction(tx);
+}
+
+// Creates and signs an EIP-2930 (type 1) transaction
+export async function createEIP2930Transaction(account: Account) {
+    const tx = {
+        to: BOB.address,
+        value: toHex(TEST_TRANSFER),
+        gasPrice: toHex(1),
+        gasLimit: toHex(21000),
+        nonce: toHex(await sendGetNonce(account)),
+        chainId: parseInt(CHAIN_ID, 16),
+        accessList: [],
+        type: 1,
+    };
+
+    return await account.signer().signTransaction(tx);
+}
+
+// Creates and signs an EIP-1559 (type 2) transaction
+export async function createEIP1559Transaction(account: Account) {
+    const tx = {
+        to: BOB.address,
+        value: toHex(TEST_TRANSFER),
+        maxFeePerGas: toHex(2),
+        maxPriorityFeePerGas: toHex(1),
+        gasLimit: toHex(21000),
+        nonce: toHex(await sendGetNonce(account)),
+        chainId: parseInt(CHAIN_ID, 16),
+        type: 2,
+    };
+
+    return await account.signer().signTransaction(tx);
+}
+
+// Creates and signs a EIP-4844 (type 3) transaction
+export async function createEIP4844Transaction(account: Account) {
+    const tx = {
+        to: BOB.address,
+        value: toHex(TEST_TRANSFER),
+        maxFeePerGas: toHex(2),
+        maxPriorityFeePerGas: toHex(1),
+        gasLimit: toHex(21000),
+        nonce: toHex(await sendGetNonce(account)),
+        chainId: parseInt(CHAIN_ID, 16),
+        type: 3,
+        blobVersionedHashes: [],
+        maxFeePerBlobGas: toHex(1),
+    };
+
+    return await account.signer().signTransaction(tx);
 }
