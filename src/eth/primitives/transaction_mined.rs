@@ -101,7 +101,8 @@ impl From<TransactionMined> for AlloyTransaction {
     fn from(value: TransactionMined) -> Self {
         let signer = value.input.signer;
         let gas_price = value.input.gas_price;
-        let tx: AlloyTransaction = value.input.into();
+
+        let tx = AlloyTransaction::from(value.input);
 
         Self {
             inner: tx.inner,
@@ -128,12 +129,11 @@ impl From<TransactionMined> for AlloyReceipt {
         };
 
         let inner = match value.input.tx_type.map(|tx| tx.as_u64()) {
-            Some(0) | None => ReceiptEnvelope::Legacy(receipt_with_bloom),
             Some(1) => ReceiptEnvelope::Eip2930(receipt_with_bloom),
             Some(2) => ReceiptEnvelope::Eip1559(receipt_with_bloom),
             Some(3) => ReceiptEnvelope::Eip4844(receipt_with_bloom),
             Some(4) => ReceiptEnvelope::Eip7702(receipt_with_bloom),
-            Some(_) => ReceiptEnvelope::Legacy(receipt_with_bloom),
+            _ => ReceiptEnvelope::Legacy(receipt_with_bloom),
         };
 
         Self {
