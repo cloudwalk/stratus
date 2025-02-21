@@ -10,6 +10,8 @@ use alloy_consensus::TxLegacy;
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::PrimitiveSignature;
 use alloy_primitives::TxKind;
+use alloy_rlp::Decodable;
+use alloy_rlp::Error as RlpError;
 use alloy_rpc_types_eth::AccessList;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
@@ -18,7 +20,6 @@ use ethereum_types::U64;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
-use rlp::Decodable;
 
 use crate::alias::AlloyTransaction;
 use crate::eth::primitives::signature_component::SignatureComponent;
@@ -82,8 +83,8 @@ impl Dummy<Faker> for TransactionInput {
 // -----------------------------------------------------------------------------
 
 impl Decodable for TransactionInput {
-    fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-        fn convert_tx(envelope: TxEnvelope) -> Result<TransactionInput, rlp::DecoderError> {
+    fn decode(buf: &mut &[u8]) -> Result<Self, RlpError> {
+        fn convert_tx(envelope: TxEnvelope) -> Result<TransactionInput, RlpError> {
             TransactionInput::try_from(alloy_rpc_types_eth::Transaction {
                 inner: envelope,
                 block_hash: None,
@@ -92,27 +93,25 @@ impl Decodable for TransactionInput {
                 from: Address::default().into(),
                 effective_gas_price: None,
             })
-            .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))
+            .map_err(|_| RlpError::Custom("failed to convert transaction"))
         }
 
-        let raw_bytes = rlp.as_raw();
-
-        if raw_bytes.is_empty() {
-            return Err(rlp::DecoderError::Custom("empty transaction bytes"));
+        if buf.is_empty() {
+            return Err(RlpError::Custom("empty transaction bytes"));
         }
 
-        if rlp.is_list() {
+        let first_byte = buf[0];
+        if first_byte >= 0xc0 {
             // Legacy transaction
-            let mut bytes = raw_bytes;
-            TxEnvelope::fallback_decode(&mut bytes)
-                .map_err(|_| rlp::DecoderError::Custom("failed to decode legacy transaction"))
+            TxEnvelope::fallback_decode(buf)
+                .map_err(|_| RlpError::Custom("failed to decode legacy transaction"))
                 .and_then(convert_tx)
         } else {
             // Typed transaction (EIP-2718)
-            let first_byte = raw_bytes[0];
-            let mut remaining_bytes = &raw_bytes[1..];
-            TxEnvelope::typed_decode(first_byte, &mut remaining_bytes)
-                .map_err(|_| rlp::DecoderError::Custom("failed to decode transaction envelope"))
+            let first_byte = buf[0];
+            *buf = &buf[1..];
+            TxEnvelope::typed_decode(first_byte, buf)
+                .map_err(|_| RlpError::Custom("failed to decode transaction envelope"))
                 .and_then(convert_tx)
         }
     }
