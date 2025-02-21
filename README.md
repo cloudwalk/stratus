@@ -61,6 +61,22 @@ Stratus includes comprehensive monitoring through OpenTelemetry:
 
 ### Testing
 
+#### E2E Tests
+
+The e2e test suite is organized into the following directories:
+
+- `admin/`: Tests for admin password functionality and access control
+- `automine/`: Tests for automatic block mining and transaction processing
+- `external/`: Tests for external blockchain interactions and RPC calls
+- `interval/`: Tests for interval-based operations and block timing
+- `helpers/`: Shared test utilities and common functions
+
+Each test category focuses on specific functionality:
+- Admin tests verify password protection and access control
+- Automine tests ensure proper transaction execution and mining
+- External tests validate blockchain interaction and RPC functionality
+- Interval tests verify timing-based operations
+
 To run tests, you also need to:
 
 - Install Git
