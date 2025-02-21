@@ -14,9 +14,14 @@ import {
     ONE,
     TEST_BALANCE,
     ZERO,
+    createEIP1559Transaction,
+    createEIP2930Transaction,
+    createEIP4844Transaction,
+    createLegacyTransaction,
     deployTestContractBalances,
     deployTestContractBlockTimestamp,
     deployTestRevertReason,
+    pollReceipt,
     prepareSignedTx,
     send,
     sendAndGetError,
@@ -295,6 +300,48 @@ describe("JSON-RPC", () => {
                 // Get transaction result
                 const result = await send("stratus_getTransactionResult", [txHash]);
                 expect(result).to.equal("success");
+            });
+        });
+
+        describe("Transaction Types", () => {
+            beforeEach(async () => {
+                await sendReset();
+            });
+
+            it("handles legacy transaction with type 0", async () => {
+                const signedTx = await createLegacyTransaction(ALICE, 0);
+                const txHash = await sendRawTransaction(signedTx);
+                await pollReceipt(txHash);
+
+                const tx = await ETHERJS.getTransaction(txHash);
+                expect(tx?.type).to.equal(0);
+            });
+
+            it("handles EIP-2930 (type 1) transaction", async () => {
+                const signedTx = await createEIP2930Transaction(ALICE);
+                const txHash = await sendRawTransaction(signedTx);
+                await pollReceipt(txHash);
+
+                const tx = await ETHERJS.getTransaction(txHash);
+                expect(tx?.type).to.equal(1);
+            });
+
+            it("handles EIP-1559 (type 2) transaction", async () => {
+                const signedTx = await createEIP1559Transaction(ALICE);
+                const txHash = await sendRawTransaction(signedTx);
+                await pollReceipt(txHash);
+
+                const tx = await ETHERJS.getTransaction(txHash);
+                expect(tx?.type).to.equal(2);
+            });
+
+            it("handles EIP-4844 (type 3) transaction", async function () {
+                const signedTx = await createEIP4844Transaction(ALICE);
+                const txHash = await sendRawTransaction(signedTx);
+                await pollReceipt(txHash);
+
+                const tx = await ETHERJS.getTransaction(txHash);
+                expect(tx?.type).to.equal(3);
             });
         });
     });
