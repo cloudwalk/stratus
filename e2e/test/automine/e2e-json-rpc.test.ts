@@ -14,9 +14,14 @@ import {
     ONE,
     TEST_BALANCE,
     ZERO,
+    createEIP1559Transaction,
+    createEIP2930Transaction,
+    createEIP4844Transaction,
+    createLegacyTransaction,
     deployTestContractBalances,
     deployTestContractBlockTimestamp,
     deployTestRevertReason,
+    pollReceipt,
     prepareSignedTx,
     send,
     sendAndGetError,
@@ -295,6 +300,69 @@ describe("JSON-RPC", () => {
                 // Get transaction result
                 const result = await send("stratus_getTransactionResult", [txHash]);
                 expect(result).to.equal("success");
+            });
+        });
+
+        describe("Transaction Types", () => {
+            beforeEach(async () => {
+                await sendReset();
+            });
+
+            it("handles legacy transaction with type 0", async () => {
+                const signedTx = await createLegacyTransaction(ALICE, 0);
+                const txHash = await sendRawTransaction(signedTx);
+
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x0");
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x0");
+            });
+
+            it("handles EIP-2930 (type 1) transaction", async () => {
+                const signedTx = await createEIP2930Transaction(ALICE);
+                const txHash = await sendRawTransaction(signedTx);
+
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x1");
+                expect(tx.accessList).to.be.an("array");
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x1");
+            });
+
+            it("handles EIP-1559 (type 2) transaction", async () => {
+                const signedTx = await createEIP1559Transaction(ALICE);
+                const txHash = await sendRawTransaction(signedTx);
+
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x2");
+                expect(tx.maxFeePerGas).to.match(HEX_PATTERN);
+                expect(tx.maxPriorityFeePerGas).to.match(HEX_PATTERN);
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x2");
+            });
+
+            it("handles EIP-4844 (type 3) transaction", async function () {
+                const signedTx = await createEIP4844Transaction(ALICE);
+                const txHash = await sendRawTransaction(signedTx);
+
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x3");
+                expect(tx.maxFeePerBlobGas).to.match(HEX_PATTERN);
+                expect(tx.blobVersionedHashes).to.be.an("array");
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x3");
             });
         });
     });
