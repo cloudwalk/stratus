@@ -241,12 +241,9 @@ impl BlockchainClient {
         };
 
         // Parse the response into the expected format
-        let logs = match response.as_array() {
-            Some(logs) => logs,
-            None => {
-                tracing::error!(response = ?response, "invalid logs response format, expected array");
-                return Err(anyhow::anyhow!("Invalid logs response"));
-            }
+        let Some(logs) = response.as_array() else {
+            tracing::error!(response = ?response, "invalid logs response format, expected array");
+            return Err(anyhow::anyhow!("Invalid logs response"));
         };
 
         tracing::info!(log_count = logs.len(), "received replication logs");
@@ -254,30 +251,21 @@ impl BlockchainClient {
         let mut result = Vec::with_capacity(logs.len());
         for (idx, log) in logs.iter().enumerate() {
             // Extract object fields
-            let obj = match log.as_object() {
-                Some(obj) => obj,
-                None => {
-                    tracing::error!(index = idx, log = ?log, "invalid log entry format, expected object");
-                    return Err(anyhow::anyhow!("Invalid log entry format"));
-                }
+            let Some(obj) = log.as_object() else {
+                tracing::error!(index = idx, log = ?log, "invalid log entry format, expected object");
+                return Err(anyhow::anyhow!("Invalid log entry format"));
             };
 
             // Extract sequence number
-            let seq = match obj.get("sequence").and_then(|v| v.as_u64()) {
-                Some(seq) => seq,
-                None => {
-                    tracing::error!(index = idx, "missing or invalid sequence field");
-                    return Err(anyhow::anyhow!("Invalid sequence number"));
-                }
+            let Some(seq) = obj.get("sequence").and_then(|v| v.as_u64()) else {
+                tracing::error!(index = idx, "missing or invalid sequence field");
+                return Err(anyhow::anyhow!("Invalid sequence number"));
             };
 
             // Extract base64 data
-            let data_base64 = match obj.get("data").and_then(|v| v.as_str()) {
-                Some(data) => data,
-                None => {
-                    tracing::error!(index = idx, "missing or invalid data field");
-                    return Err(anyhow::anyhow!("Invalid data field"));
-                }
+            let Some(data_base64) = obj.get("data").and_then(|v| v.as_str()) else {
+                tracing::error!(index = idx, "missing or invalid data field");
+                return Err(anyhow::anyhow!("Invalid data field"));
             };
 
             // Decode base64 data
