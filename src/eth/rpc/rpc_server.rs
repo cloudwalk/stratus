@@ -1285,7 +1285,6 @@ fn rocksdb_replicate_logs(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extens
 
     tracing::info!("rocksdb_replicate_logs called with params: {:?}", params);
 
-    // Use next_rpc_param to properly extract the sequence number from the parameters array
     let (_, seq_number) = next_rpc_param::<u64>(params.sequence())?;
 
     tracing::info!("Successfully parsed sequence number: {}", seq_number);
@@ -1294,7 +1293,6 @@ fn rocksdb_replicate_logs(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extens
         Ok(updates) => {
             tracing::info!("Found {} updates since sequence {}", updates.len(), seq_number);
 
-            // Convert updates to a format suitable for JSON
             let json_updates: Vec<serde_json::Value> = updates
                 .into_iter()
                 .map(|(seq, data)| {
