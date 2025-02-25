@@ -175,7 +175,6 @@ impl PermanentStorage for RocksPermanentStorage {
         for update in wal_iterator {
             match update {
                 Ok((seq, write_batch)) => {
-                    // Convert the WriteBatch to its raw bytes and clone to an owned Vec<u8>
                     let data = write_batch.data().to_vec();
                     updates.push((seq, data));
                 }
