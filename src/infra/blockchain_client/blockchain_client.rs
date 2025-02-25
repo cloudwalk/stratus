@@ -1,6 +1,9 @@
 use std::time::Duration;
 
 use anyhow::Context;
+use base64;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::client::Subscription;
 use jsonrpsee::core::client::SubscriptionClientT;
@@ -216,6 +219,37 @@ impl BlockchainClient {
             Ok(receipt) => Ok(receipt),
             Err(e) => log_and_err!(reason = e, "failed to fetch account balance"),
         }
+    }
+
+    /// Fetch the latest RocksDB sequence number from the leader node
+    pub async fn fetch_latest_sequence_number(&self) -> anyhow::Result<u64> {
+        let response = self.http.request::<JsonValue, _>("rocksdb_latestSequenceNumber", [(); 0]).await?;
+        let sequence = response.as_u64().ok_or_else(|| anyhow::anyhow!("Invalid sequence number response"))?;
+        Ok(sequence)
+    }
+
+    /// Fetch replication logs from the leader node since a given sequence number
+    pub async fn fetch_replication_logs(&self, since_sequence: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>> {
+        let response = self.http.request::<JsonValue, _>("rocksdb_replicateLogs", [since_sequence]).await?;
+
+        // Parse the response into the expected format
+        let logs = response.as_array().ok_or_else(|| anyhow::anyhow!("Invalid logs response"))?;
+
+        let mut result = Vec::with_capacity(logs.len());
+        for log in logs {
+            let log_array = log.as_array().ok_or_else(|| anyhow::anyhow!("Invalid log entry"))?;
+            if log_array.len() != 2 {
+                return Err(anyhow::anyhow!("Invalid log entry format"));
+            }
+
+            let seq = log_array[0].as_u64().ok_or_else(|| anyhow::anyhow!("Invalid sequence number"))?;
+            let data_base64 = log_array[1].as_str().ok_or_else(|| anyhow::anyhow!("Invalid data"))?;
+            let data = STANDARD.decode(data_base64).map_err(|e| anyhow::anyhow!("Failed to decode data: {}", e))?;
+
+            result.push((seq, data));
+        }
+
+        Ok(result)
     }
 
     // -------------------------------------------------------------------------

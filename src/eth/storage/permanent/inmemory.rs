@@ -236,15 +236,15 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 
     fn get_latest_sequence_number(&self) -> anyhow::Result<u64, StorageError> {
-        Err(StorageError::Unexpected {
-            msg: "Sequence numbers are not supported for in-memory storage".to_string(),
-        })
+        Ok(0)
     }
 
     fn get_updates_since(&self, _seq_number: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>, StorageError> {
-        Err(StorageError::Unexpected {
-            msg: "WAL updates are not supported for in-memory storage".to_string(),
-        })
+        Ok(Vec::new())
+    }
+
+    fn apply_replication_logs(&self, _logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<(), StorageError> {
+        Ok(())
     }
 }
 

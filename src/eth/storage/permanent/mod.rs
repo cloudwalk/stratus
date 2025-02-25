@@ -86,6 +86,9 @@ pub trait PermanentStorage: Send + Sync + 'static {
 
     /// Returns the WAL (Write-Ahead Log) updates that have occurred since the given sequence number.
     fn get_updates_since(&self, seq_number: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>, StorageError>;
+
+    /// Applies WAL (Write-Ahead Log) updates received from a leader node.
+    fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<(), StorageError>;
 }
 
 // -----------------------------------------------------------------------------

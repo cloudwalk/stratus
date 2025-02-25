@@ -431,7 +431,8 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
     let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
     let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
-    let (_, raw_sync_interval) = next_rpc_param::<String>(params)?;
+    let (params, raw_sync_interval) = next_rpc_param::<String>(params)?;
+    let (_, use_rocksdb_replication) = next_rpc_param::<bool>(params)?;
 
     let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
@@ -448,6 +449,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
+        use_rocksdb_replication,
     };
 
     importer_config.init_follower_importer(ctx).await
@@ -1270,7 +1272,7 @@ fn hex_null() -> String {
 fn rocksdb_latest_sequence_number(_params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
     let storage = &ctx.storage;
 
-    match storage.get_rocksdb_latest_sequence_number() {
+    match storage.get_latest_sequence_number() {
         Ok(seq_number) => Ok(to_json_value(seq_number)),
         Err(e) => {
             tracing::error!(reason = ?e, "failed to get latest RocksDB sequence number");
@@ -1289,7 +1291,7 @@ fn rocksdb_replicate_logs(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extens
 
     tracing::info!("Successfully parsed sequence number: {}", seq_number);
 
-    match storage.get_rocksdb_updates_since(seq_number) {
+    match storage.get_updates_since(seq_number) {
         Ok(updates) => {
             tracing::info!("Found {} updates since sequence {}", updates.len(), seq_number);
 

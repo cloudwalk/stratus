@@ -186,4 +186,23 @@ impl PermanentStorage for RocksPermanentStorage {
 
         Ok(updates)
     }
+
+    fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<(), StorageError> {
+        for (_, log_data) in logs {
+            let write_batch = rocksdb::WriteBatch::from_data(&log_data);
+
+            if let Err(err) = self.state.write_in_batch_for_multiple_cfs(write_batch) {
+                return Err(StorageError::RocksError { err });
+            }
+        }
+
+        match self.state.preload_block_number() {
+            Ok(block_number) => {
+                self.block_number
+                    .store(block_number.load(std::sync::atomic::Ordering::SeqCst), std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            }
+            Err(err) => Err(StorageError::RocksError { err }),
+        }
+    }
 }

@@ -48,6 +48,8 @@ pub enum ImporterMode {
     NormalFollower,
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     FakeLeader,
+    /// Efficient follower that replicates RocksDB WAL logs directly without re-execution
+    RocksDbReplication,
 }
 
 // -----------------------------------------------------------------------------
@@ -132,46 +134,56 @@ impl Importer {
     pub async fn run_importer_online(self: Arc<Self>) -> anyhow::Result<()> {
         let _timer = DropTimer::start("importer-online::run_importer_online");
 
-        let storage = &self.storage;
-        let number = storage.read_block_number_to_resume_import()?;
+        match self.importer_mode {
+            ImporterMode::RocksDbReplication => {
+                // Use the new RocksDB replication mechanism
+                tracing::info!("Starting RocksDB replication from leader node");
+                Self::start_rocksdb_replication(Arc::clone(&self.storage), Arc::clone(&self.chain), self.sync_interval).await
+            }
+            _ => {
+                // Use the original block execution mechanism for other modes
+                let storage = &self.storage;
+                let number = storage.read_block_number_to_resume_import()?;
 
-        let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
+                let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
 
-        // spawn block executor:
-        // it executes and mines blocks and expects to receive them via channel in the correct order.
-        let task_executor = spawn_named(
-            "importer::executor",
-            Importer::start_block_executor(
-                Arc::clone(&self.executor),
-                Arc::clone(&self.miner),
-                backlog_rx,
-                self.kafka_connector.clone(),
-                self.importer_mode,
-            ),
-        );
+                // spawn block executor:
+                // it executes and mines blocks and expects to receive them via channel in the correct order.
+                let task_executor = spawn_named(
+                    "importer::executor",
+                    Importer::start_block_executor(
+                        Arc::clone(&self.executor),
+                        Arc::clone(&self.miner),
+                        backlog_rx,
+                        self.kafka_connector.clone(),
+                        self.importer_mode,
+                    ),
+                );
 
-        // spawn block number:
-        // it keeps track of the blockchain current block number.
-        let number_fetcher_chain = Arc::clone(&self.chain);
-        let task_number_fetcher = spawn_named(
-            "importer::number-fetcher",
-            Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
-        );
+                // spawn block number:
+                // it keeps track of the blockchain current block number.
+                let number_fetcher_chain = Arc::clone(&self.chain);
+                let task_number_fetcher = spawn_named(
+                    "importer::number-fetcher",
+                    Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
+                );
 
-        // spawn block fetcher:
-        // it fetches blocks and receipts in parallel and sends them to the executor in the correct order.
-        // it uses the number fetcher current block to determine if should keep downloading more blocks or not.
-        let block_fetcher_chain = Arc::clone(&self.chain);
-        let task_block_fetcher = spawn_named(
-            "importer::block-fetcher",
-            Importer::start_block_fetcher(block_fetcher_chain, backlog_tx, number),
-        );
+                // spawn block fetcher:
+                // it fetches blocks and receipts in parallel and sends them to the executor in the correct order.
+                // it uses the number fetcher current block to determine if should keep downloading more blocks or not.
+                let block_fetcher_chain = Arc::clone(&self.chain);
+                let task_block_fetcher = spawn_named(
+                    "importer::block-fetcher",
+                    Importer::start_block_fetcher(block_fetcher_chain, backlog_tx, number),
+                );
 
-        // await all tasks
-        if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
-            tracing::error!(reason = ?e, "importer-online failed");
+                // await all tasks
+                if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
+                    tracing::error!(reason = ?e, "importer-online failed");
+                }
+                Ok(())
+            }
         }
-        Ok(())
     }
 
     // -----------------------------------------------------------------------------
@@ -463,6 +475,67 @@ impl Importer {
                 if backlog_tx.send((block, receipts)).is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
+                }
+            }
+        }
+    }
+
+    /// Replicates RocksDB WAL logs from a leader node
+    async fn start_rocksdb_replication(storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>, sync_interval: Duration) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "rocksdb-replication";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
+
+        // Track our latest applied sequence number
+        let mut last_applied_sequence = storage.get_latest_sequence_number()?;
+
+        loop {
+            if Self::should_shutdown(TASK_NAME) {
+                return Ok(());
+            }
+
+            // Get latest sequence number from leader
+            match chain.fetch_latest_sequence_number().await {
+                Ok(leader_sequence) => {
+                    if leader_sequence > last_applied_sequence {
+                        tracing::info!(
+                            local_sequence = %last_applied_sequence,
+                            leader_sequence = %leader_sequence,
+                            "Found new WAL logs to replicate"
+                        );
+
+                        // Fetch logs since our last sequence
+                        match chain.fetch_replication_logs(last_applied_sequence).await {
+                            Ok(logs) => {
+                                if !logs.is_empty() {
+                                    tracing::info!(
+                                        log_count = %logs.len(),
+                                        "Applying WAL logs from leader"
+                                    );
+
+                                    // Apply the logs to our local RocksDB instance
+                                    if let Err(e) = storage.apply_replication_logs(logs) {
+                                        tracing::error!(reason = ?e, "Failed to apply replication logs");
+                                        traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
+                                        continue;
+                                    }
+
+                                    // Update our tracking of last applied sequence
+                                    last_applied_sequence = storage.get_latest_sequence_number()?;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!(reason = ?e, "Failed to fetch replication logs");
+                                traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
+                            }
+                        }
+                    } else {
+                        // Up to date, wait for sync interval
+                        traced_sleep(sync_interval, SleepReason::SyncData).await;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(reason = ?e, "Failed to fetch latest sequence number");
+                    traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
                 }
             }
         }

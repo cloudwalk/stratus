@@ -511,12 +511,17 @@ impl StratusStorage {
     }
 
     /// Gets the RocksDB latest sequence number from the permanent storage
-    pub fn get_rocksdb_latest_sequence_number(&self) -> Result<u64, StorageError> {
+    pub fn get_latest_sequence_number(&self) -> Result<u64, StorageError> {
         self.perm.get_latest_sequence_number()
     }
 
     /// Gets the RocksDB WAL updates since the given sequence number
-    pub fn get_rocksdb_updates_since(&self, seq_number: u64) -> Result<Vec<(u64, Vec<u8>)>, StorageError> {
+    pub fn get_updates_since(&self, seq_number: u64) -> Result<Vec<(u64, Vec<u8>)>, StorageError> {
         self.perm.get_updates_since(seq_number)
+    }
+
+    /// Apply replication logs to the permanent storage
+    pub fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> Result<(), StorageError> {
+        self.perm.apply_replication_logs(logs)
     }
 }
