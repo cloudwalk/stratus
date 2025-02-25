@@ -230,25 +230,69 @@ impl BlockchainClient {
 
     /// Fetch replication logs from the leader node since a given sequence number
     pub async fn fetch_replication_logs(&self, since_sequence: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>> {
-        let response = self.http.request::<JsonValue, _>("rocksdb_replicateLogs", [since_sequence]).await?;
+        tracing::info!(since_sequence, "fetching replication logs");
+
+        let response = match self.http.request::<JsonValue, _>("rocksdb_replicateLogs", [since_sequence]).await {
+            Ok(resp) => resp,
+            Err(e) => {
+                tracing::error!(reason = ?e, since_sequence, "failed to fetch replication logs from leader");
+                return Err(anyhow::anyhow!("Failed to fetch replication logs: {}", e));
+            }
+        };
 
         // Parse the response into the expected format
-        let logs = response.as_array().ok_or_else(|| anyhow::anyhow!("Invalid logs response"))?;
+        let logs = match response.as_array() {
+            Some(logs) => logs,
+            None => {
+                tracing::error!(response = ?response, "invalid logs response format, expected array");
+                return Err(anyhow::anyhow!("Invalid logs response"));
+            }
+        };
+
+        tracing::info!(log_count = logs.len(), "received replication logs");
 
         let mut result = Vec::with_capacity(logs.len());
-        for log in logs {
-            let log_array = log.as_array().ok_or_else(|| anyhow::anyhow!("Invalid log entry"))?;
-            if log_array.len() != 2 {
-                return Err(anyhow::anyhow!("Invalid log entry format"));
-            }
+        for (idx, log) in logs.iter().enumerate() {
+            // Extract object fields
+            let obj = match log.as_object() {
+                Some(obj) => obj,
+                None => {
+                    tracing::error!(index = idx, log = ?log, "invalid log entry format, expected object");
+                    return Err(anyhow::anyhow!("Invalid log entry format"));
+                }
+            };
 
-            let seq = log_array[0].as_u64().ok_or_else(|| anyhow::anyhow!("Invalid sequence number"))?;
-            let data_base64 = log_array[1].as_str().ok_or_else(|| anyhow::anyhow!("Invalid data"))?;
-            let data = STANDARD.decode(data_base64).map_err(|e| anyhow::anyhow!("Failed to decode data: {}", e))?;
+            // Extract sequence number
+            let seq = match obj.get("sequence").and_then(|v| v.as_u64()) {
+                Some(seq) => seq,
+                None => {
+                    tracing::error!(index = idx, "missing or invalid sequence field");
+                    return Err(anyhow::anyhow!("Invalid sequence number"));
+                }
+            };
+
+            // Extract base64 data
+            let data_base64 = match obj.get("data").and_then(|v| v.as_str()) {
+                Some(data) => data,
+                None => {
+                    tracing::error!(index = idx, "missing or invalid data field");
+                    return Err(anyhow::anyhow!("Invalid data field"));
+                }
+            };
+
+            // Decode base64 data
+            let data = match STANDARD.decode(data_base64) {
+                Ok(data) => data,
+                Err(e) => {
+                    tracing::error!(index = idx, reason = ?e, "failed to decode base64 data");
+                    return Err(anyhow::anyhow!("Failed to decode data: {}", e));
+                }
+            };
 
             result.push((seq, data));
         }
 
+        tracing::debug!(count = result.len(), "successfully parsed replication logs");
         Ok(result)
     }
 

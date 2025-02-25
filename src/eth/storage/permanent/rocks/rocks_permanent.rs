@@ -21,6 +21,9 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 
+/// Maximum number of replication logs to return in a single call to `get_updates_since`
+const MAX_REPLICATION_LOGS: usize = 20000;
+
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
     pub state: RocksStorageState,
@@ -177,6 +180,12 @@ impl PermanentStorage for RocksPermanentStorage {
                 Ok((seq, write_batch)) => {
                     let data = write_batch.data().to_vec();
                     updates.push((seq, data));
+
+                    // Limit the number of logs returned
+                    if updates.len() >= MAX_REPLICATION_LOGS {
+                        tracing::debug!("Reached maximum log limit of {MAX_REPLICATION_LOGS}, truncating results");
+                        break;
+                    }
                 }
                 Err(err) => {
                     return Err(StorageError::RocksError { err: err.into() });
