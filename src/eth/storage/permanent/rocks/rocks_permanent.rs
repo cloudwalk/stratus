@@ -163,4 +163,28 @@ impl PermanentStorage for RocksPermanentStorage {
     fn get_latest_sequence_number(&self) -> anyhow::Result<u64, StorageError> {
         Ok(self.state.db.latest_sequence_number())
     }
+
+    fn get_updates_since(&self, seq_number: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>, StorageError> {
+        let wal_iterator = self
+            .state
+            .db
+            .get_updates_since(seq_number)
+            .map_err(|err| StorageError::RocksError { err: err.into() })?;
+
+        let mut updates = Vec::new();
+        for update in wal_iterator {
+            match update {
+                Ok((seq, write_batch)) => {
+                    // Convert the WriteBatch to its raw bytes and clone to an owned Vec<u8>
+                    let data = write_batch.data().to_vec();
+                    updates.push((seq, data));
+                }
+                Err(err) => {
+                    return Err(StorageError::RocksError { err: err.into() });
+                }
+            }
+        }
+
+        Ok(updates)
+    }
 }

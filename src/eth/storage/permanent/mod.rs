@@ -83,6 +83,9 @@ pub trait PermanentStorage: Send + Sync + 'static {
 
     /// Returns the RocksDB latest sequence number for replication purposes.
     fn get_latest_sequence_number(&self) -> anyhow::Result<u64, StorageError>;
+
+    /// Returns the WAL (Write-Ahead Log) updates that have occurred since the given sequence number.
+    fn get_updates_since(&self, seq_number: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>, StorageError>;
 }
 
 // -----------------------------------------------------------------------------

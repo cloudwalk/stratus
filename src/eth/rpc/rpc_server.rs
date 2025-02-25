@@ -10,6 +10,8 @@ use std::time::Duration;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use ethereum_types::U256;
 use futures::join;
 use http::Method;
@@ -218,6 +220,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
     module.register_blocking_method("rocksdb_latestSequenceNumber", rocksdb_latest_sequence_number)?;
+    module.register_blocking_method("rocksdb_replicateLogs", rocksdb_replicate_logs)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -1271,6 +1274,41 @@ fn rocksdb_latest_sequence_number(_params: Params<'_>, ctx: Arc<RpcContext>, _ex
         Ok(seq_number) => Ok(to_json_value(seq_number)),
         Err(e) => {
             tracing::error!(reason = ?e, "failed to get latest RocksDB sequence number");
+            Err(e.into())
+        }
+    }
+}
+
+// TODO: add proper tracing
+fn rocksdb_replicate_logs(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
+    let storage = &ctx.storage;
+
+    tracing::info!("rocksdb_replicate_logs called with params: {:?}", params);
+
+    // Use next_rpc_param to properly extract the sequence number from the parameters array
+    let (_, seq_number) = next_rpc_param::<u64>(params.sequence())?;
+
+    tracing::info!("Successfully parsed sequence number: {}", seq_number);
+
+    match storage.get_rocksdb_updates_since(seq_number) {
+        Ok(updates) => {
+            tracing::info!("Found {} updates since sequence {}", updates.len(), seq_number);
+
+            // Convert updates to a format suitable for JSON
+            let json_updates: Vec<serde_json::Value> = updates
+                .into_iter()
+                .map(|(seq, data)| {
+                    serde_json::json!({
+                        "sequence": seq,
+                        "data": STANDARD.encode(&data)
+                    })
+                })
+                .collect();
+
+            Ok(to_json_value(json_updates))
+        }
+        Err(e) => {
+            tracing::error!(reason = ?e, seq_number = seq_number, "failed to get RocksDB updates since sequence number");
             Err(e.into())
         }
     }

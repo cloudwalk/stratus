@@ -240,6 +240,12 @@ impl PermanentStorage for InMemoryPermanentStorage {
             msg: "Sequence numbers are not supported for in-memory storage".to_string(),
         })
     }
+
+    fn get_updates_since(&self, _seq_number: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>, StorageError> {
+        Err(StorageError::Unexpected {
+            msg: "WAL updates are not supported for in-memory storage".to_string(),
+        })
+    }
 }
 
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.

@@ -514,4 +514,9 @@ impl StratusStorage {
     pub fn get_rocksdb_latest_sequence_number(&self) -> Result<u64, StorageError> {
         self.perm.get_latest_sequence_number()
     }
+
+    /// Gets the RocksDB WAL updates since the given sequence number
+    pub fn get_rocksdb_updates_since(&self, seq_number: u64) -> Result<Vec<(u64, Vec<u8>)>, StorageError> {
+        self.perm.get_updates_since(seq_number)
+    }
 }

@@ -5246,6 +5246,7 @@ dependencies = [
  "alloy-rpc-types-eth",
  "alloy-rpc-types-trace",
  "anyhow",
+ "base64 0.22.1",
  "bincode",
  "bytes",
  "cfg-if",
