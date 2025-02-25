@@ -234,6 +234,12 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
         Ok(())
     }
+
+    fn get_latest_sequence_number(&self) -> anyhow::Result<u64, StorageError> {
+        Err(StorageError::Unexpected {
+            msg: "Sequence numbers are not supported for in-memory storage".to_string(),
+        })
+    }
 }
 
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.

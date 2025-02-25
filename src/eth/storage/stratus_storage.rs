@@ -509,4 +509,9 @@ impl StratusStorage {
             },
         }
     }
+
+    /// Gets the RocksDB latest sequence number from the permanent storage
+    pub fn get_rocksdb_latest_sequence_number(&self) -> Result<u64, StorageError> {
+        self.perm.get_latest_sequence_number()
+    }
 }

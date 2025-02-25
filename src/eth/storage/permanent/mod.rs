@@ -80,6 +80,9 @@ pub trait PermanentStorage: Send + Sync + 'static {
     #[cfg(feature = "dev")]
     /// Resets all state to a specific block number.
     fn reset(&self) -> anyhow::Result<(), StorageError>;
+
+    /// Returns the RocksDB latest sequence number for replication purposes.
+    fn get_latest_sequence_number(&self) -> anyhow::Result<u64, StorageError>;
 }
 
 // -----------------------------------------------------------------------------

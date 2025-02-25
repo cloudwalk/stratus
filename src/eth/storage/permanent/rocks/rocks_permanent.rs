@@ -159,4 +159,8 @@ impl PermanentStorage for RocksPermanentStorage {
             tracing::error!(reason = ?e, "failed to reset in RocksPermanent");
         })
     }
+
+    fn get_latest_sequence_number(&self) -> anyhow::Result<u64, StorageError> {
+        Ok(self.state.db.latest_sequence_number())
+    }
 }

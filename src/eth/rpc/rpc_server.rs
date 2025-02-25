@@ -217,6 +217,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
+    module.register_blocking_method("rocksdb_latestSequenceNumber", rocksdb_latest_sequence_number)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -1256,4 +1257,21 @@ fn hex_zero() -> String {
 
 fn hex_null() -> String {
     "0x".to_owned()
+}
+
+// -----------------------------------------------------------------------------
+// RocksDB Replication
+// -----------------------------------------------------------------------------
+
+// TODO: add proper tracing
+fn rocksdb_latest_sequence_number(_params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
+    let storage = &ctx.storage;
+
+    match storage.get_rocksdb_latest_sequence_number() {
+        Ok(seq_number) => Ok(to_json_value(seq_number)),
+        Err(e) => {
+            tracing::error!(reason = ?e, "failed to get latest RocksDB sequence number");
+            Err(e.into())
+        }
+    }
 }
