@@ -175,10 +175,8 @@ impl RpcSubscriptions {
 
                 if subscribers.len() > 0 {
                     // Extrai apenas os nomes dos clientes
-                    let client_names: Vec<String> = subscribers.iter()
-                        .map(|s| s.client.to_string())
-                        .collect();
-                    
+                    let client_names: Vec<String> = subscribers.iter().map(|s| s.client.to_string()).collect();
+
                     tracing::info!(
                         tx_hash = ?tx_hash,
                         clients = ?client_names,
@@ -213,10 +211,8 @@ impl RpcSubscriptions {
 
                 if subscribers.len() > 0 {
                     // Extrai apenas os nomes dos clientes
-                    let client_names: Vec<String> = subscribers.iter()
-                        .map(|s| s.client.to_string())
-                        .collect();
-                    
+                    let client_names: Vec<String> = subscribers.iter().map(|s| s.client.to_string()).collect();
+
                     tracing::info!(
                         block_number = ?block_header.number,
                         block_hash = ?block_header.hash,
@@ -253,13 +249,11 @@ impl RpcSubscriptions {
                     .flat_map(HashMap::values)
                     .filter_map(|s| if_else!(s.filter.matches(&log), Some(&s.inner), None))
                     .collect_vec();
-                
+
                 if matching_subscribers.len() > 0 {
                     // Extrai apenas os nomes dos clientes
-                    let client_names: Vec<String> = matching_subscribers.iter()
-                        .map(|s| s.client.to_string())
-                        .collect();
-                    
+                    let client_names: Vec<String> = matching_subscribers.iter().map(|s| s.client.to_string()).collect();
+
                     tracing::info!(
                         log_block_number = ?log.block_number,
                         log_tx_hash = ?log.transaction_hash,
