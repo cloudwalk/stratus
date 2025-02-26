@@ -219,8 +219,12 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
+
+    // rocksdb replication
     module.register_blocking_method("rocksdb_latestSequenceNumber", rocksdb_latest_sequence_number)?;
     module.register_blocking_method("rocksdb_replicateLogs", rocksdb_replicate_logs)?;
+    module.register_blocking_method("rocksdb_createCheckpoint", rocksdb_create_checkpoint)?;
+    module.register_blocking_method("rocksdb_cleanupCheckpoint", rocksdb_cleanup_checkpoint)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -1310,6 +1314,48 @@ fn rocksdb_replicate_logs(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extens
         Err(e) => {
             tracing::error!(reason = ?e, seq_number = seq_number, "failed to get RocksDB updates since sequence number");
             Err(e.into())
+        }
+    }
+}
+
+fn rocksdb_create_checkpoint(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
+    tracing::info!("rocksdb_create_checkpoint called with params: {:?}", params);
+
+    let (_, checkpoint_path) = next_rpc_param::<String>(params.sequence())?;
+
+    tracing::info!("Creating checkpoint at path: {}", checkpoint_path);
+
+    let path = std::path::Path::new(&checkpoint_path);
+
+    match ctx.storage.create_checkpoint(path) {
+        Ok(_) => {
+            tracing::info!("Successfully created checkpoint at: {}", checkpoint_path);
+            Ok(json!(true))
+        }
+        Err(e) => {
+            tracing::error!(reason = ?e, path = %checkpoint_path, "Failed to create RocksDB checkpoint");
+            Err(StorageError::RocksError { err: e.into() }.into())
+        }
+    }
+}
+
+fn rocksdb_cleanup_checkpoint(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
+    tracing::info!("rocksdb_cleanup_checkpoint called with params: {:?}", params);
+
+    let (_, checkpoint_path) = next_rpc_param::<String>(params.sequence())?;
+
+    tracing::info!("Cleaning up checkpoint at path: {}", checkpoint_path);
+
+    let path = std::path::Path::new(&checkpoint_path);
+
+    match ctx.storage.cleanup_checkpoint(path) {
+        Ok(_) => {
+            tracing::info!("Successfully cleaned up checkpoint at: {}", checkpoint_path);
+            Ok(json!(true))
+        }
+        Err(e) => {
+            tracing::error!(reason = ?e, path = %checkpoint_path, "Failed to clean up RocksDB checkpoint");
+            Err(StorageError::RocksError { err: e.into() }.into())
         }
     }
 }
