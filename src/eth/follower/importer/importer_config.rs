@@ -74,7 +74,7 @@ impl ImporterConfig {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
 
-        let effective_mode = if self.use_rocksdb_replication {
+        let importer_mode = if self.use_rocksdb_replication {
             ImporterMode::RocksDbReplication
         } else {
             importer_mode
@@ -89,7 +89,7 @@ impl ImporterConfig {
             Arc::clone(&chain),
             kafka_connector.map(Arc::new),
             self.sync_interval,
-            effective_mode,
+            importer_mode,
         );
         let importer = Arc::new(importer);
 
