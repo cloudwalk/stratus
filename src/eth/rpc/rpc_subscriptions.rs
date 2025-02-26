@@ -179,25 +179,9 @@ impl RpcSubscriptions {
 
                     for sub in &subscribers {
                         let client_str = sub.client.to_string();
-                        let client_type = if client_str.starts_with("banking::") {
-                            "banking"
-                        } else if client_str.starts_with("issuing::") {
-                            "issuing"
-                        } else if client_str.starts_with("stratus::") {
-                            "stratus"
-                        } else if client_str.starts_with("acquiring::") {
-                            "acquiring"
-                        } else if client_str.starts_with("lending::") {
-                            "lending"
-                        } else if client_str.starts_with("infra::") {
-                            "infra"
-                        } else if client_str.starts_with("user::") {
-                            "user"
-                        } else {
-                            "other"
-                        };
+                        let client_type = Self::get_client_type(&client_str);
 
-                        *client_type_counts.entry(client_type.to_string()).or_insert(0) += 1;
+                        *client_type_counts.entry(client_type).or_insert(0) += 1;
                     }
 
                     // Format the log message
@@ -244,25 +228,9 @@ impl RpcSubscriptions {
 
                     for sub in &subscribers {
                         let client_str = sub.client.to_string();
-                        let client_type = if client_str.starts_with("banking::") {
-                            "banking"
-                        } else if client_str.starts_with("issuing::") {
-                            "issuing"
-                        } else if client_str.starts_with("stratus::") {
-                            "stratus"
-                        } else if client_str.starts_with("acquiring::") {
-                            "acquiring"
-                        } else if client_str.starts_with("lending::") {
-                            "lending"
-                        } else if client_str.starts_with("infra::") {
-                            "infra"
-                        } else if client_str.starts_with("user::") {
-                            "user"
-                        } else {
-                            "other"
-                        };
+                        let client_type = Self::get_client_type(&client_str);
 
-                        *client_type_counts.entry(client_type.to_string()).or_insert(0) += 1;
+                        *client_type_counts.entry(client_type).or_insert(0) += 1;
                     }
 
                     // Format the log message
@@ -314,25 +282,9 @@ impl RpcSubscriptions {
 
                     for sub in &matching_subscribers {
                         let client_str = sub.client.to_string();
-                        let client_type = if client_str.starts_with("banking::") {
-                            "banking"
-                        } else if client_str.starts_with("issuing::") {
-                            "issuing"
-                        } else if client_str.starts_with("stratus::") {
-                            "stratus"
-                        } else if client_str.starts_with("acquiring::") {
-                            "acquiring"
-                        } else if client_str.starts_with("lending::") {
-                            "lending"
-                        } else if client_str.starts_with("infra::") {
-                            "infra"
-                        } else if client_str.starts_with("user::") {
-                            "user"
-                        } else {
-                            "other"
-                        };
+                        let client_type = Self::get_client_type(&client_str);
 
-                        *client_type_counts.entry(client_type.to_string()).or_insert(0) += 1;
+                        *client_type_counts.entry(client_type).or_insert(0) += 1;
                     }
 
                     // Format the log message
@@ -393,6 +345,17 @@ impl RpcSubscriptions {
                     tracing::error!(reason = ?e, "failed to send subscription notification");
                 }
             });
+        }
+    }
+
+    fn get_client_type(client_str: &str) -> String {
+        // Split the client string by "::" and take the first part
+        if let Some(index) = client_str.find("::") {
+            // Extract the type part (before the first "::")
+            client_str[..index].to_string()
+        } else {
+            // If there's no "::", return "other"
+            "other".to_string()
         }
     }
 }
