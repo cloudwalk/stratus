@@ -173,13 +173,42 @@ impl RpcSubscriptions {
                 let interested_subs = subs.pending_txs.read().await;
                 let subscribers = interested_subs.values().collect_vec();
 
-                if subscribers.len() > 0 {
-                    // Extrai apenas os nomes dos clientes
-                    let client_names: Vec<String> = subscribers.iter().map(|s| s.client.to_string()).collect();
+                if !subscribers.is_empty() {
+                    // Group clients by type and count how many of each type
+                    let mut client_type_counts = std::collections::HashMap::new();
+                    
+                    for sub in &subscribers {
+                        let client_str = sub.client.to_string();
+                        let client_type = if client_str.starts_with("banking::") {
+                            "banking"
+                        } else if client_str.starts_with("issuing::") {
+                            "issuing"
+                        } else if client_str.starts_with("stratus::") {
+                            "stratus"
+                        } else if client_str.starts_with("acquiring::") {
+                            "acquiring"
+                        } else if client_str.starts_with("lending::") {
+                            "lending"
+                        } else if client_str.starts_with("infra::") {
+                            "infra"
+                        } else if client_str.starts_with("user::") {
+                            "user"
+                        } else {
+                            "other"
+                        };
+                        
+                        *client_type_counts.entry(client_type.to_string()).or_insert(0) += 1;
+                    }
+                    
+                    // Format the log message
+                    let mut client_summary = Vec::new();
+                    for (client_type, count) in client_type_counts.iter() {
+                        client_summary.push(format!("{}: {}", client_type, count));
+                    }
 
                     tracing::info!(
                         tx_hash = ?tx_hash,
-                        clients = ?client_names,
+                        clients = ?client_summary.join(", "),
                         "notifying subscribers about new pending transaction"
                     );
                 }
@@ -209,14 +238,43 @@ impl RpcSubscriptions {
                 let interested_subs = subs.new_heads.read().await;
                 let subscribers = interested_subs.values().collect_vec();
 
-                if subscribers.len() > 0 {
-                    // Extrai apenas os nomes dos clientes
-                    let client_names: Vec<String> = subscribers.iter().map(|s| s.client.to_string()).collect();
+                if !subscribers.is_empty() {
+                    // Group clients by type and count how many of each type
+                    let mut client_type_counts = std::collections::HashMap::new();
+                    
+                    for sub in &subscribers {
+                        let client_str = sub.client.to_string();
+                        let client_type = if client_str.starts_with("banking::") {
+                            "banking"
+                        } else if client_str.starts_with("issuing::") {
+                            "issuing"
+                        } else if client_str.starts_with("stratus::") {
+                            "stratus"
+                        } else if client_str.starts_with("acquiring::") {
+                            "acquiring"
+                        } else if client_str.starts_with("lending::") {
+                            "lending"
+                        } else if client_str.starts_with("infra::") {
+                            "infra"
+                        } else if client_str.starts_with("user::") {
+                            "user"
+                        } else {
+                            "other"
+                        };
+                        
+                        *client_type_counts.entry(client_type.to_string()).or_insert(0) += 1;
+                    }
+                    
+                    // Format the log message
+                    let mut client_summary = Vec::new();
+                    for (client_type, count) in client_type_counts.iter() {
+                        client_summary.push(format!("{}: {}", client_type, count));
+                    }
 
                     tracing::info!(
                         block_number = ?block_header.number,
                         block_hash = ?block_header.hash,
-                        clients = ?client_names,
+                        clients = ?client_summary.join(", "),
                         "notifying subscribers about new block"
                     );
                 }
@@ -250,14 +308,43 @@ impl RpcSubscriptions {
                     .filter_map(|s| if_else!(s.filter.matches(&log), Some(&s.inner), None))
                     .collect_vec();
 
-                if matching_subscribers.len() > 0 {
-                    // Extrai apenas os nomes dos clientes
-                    let client_names: Vec<String> = matching_subscribers.iter().map(|s| s.client.to_string()).collect();
+                if !matching_subscribers.is_empty() {
+                    // Group clients by type and count how many of each type
+                    let mut client_type_counts = std::collections::HashMap::new();
+                    
+                    for sub in &matching_subscribers {
+                        let client_str = sub.client.to_string();
+                        let client_type = if client_str.starts_with("banking::") {
+                            "banking"
+                        } else if client_str.starts_with("issuing::") {
+                            "issuing"
+                        } else if client_str.starts_with("stratus::") {
+                            "stratus"
+                        } else if client_str.starts_with("acquiring::") {
+                            "acquiring"
+                        } else if client_str.starts_with("lending::") {
+                            "lending"
+                        } else if client_str.starts_with("infra::") {
+                            "infra"
+                        } else if client_str.starts_with("user::") {
+                            "user"
+                        } else {
+                            "other"
+                        };
+                        
+                        *client_type_counts.entry(client_type.to_string()).or_insert(0) += 1;
+                    }
+                    
+                    // Format the log message
+                    let mut client_summary = Vec::new();
+                    for (client_type, count) in client_type_counts.iter() {
+                        client_summary.push(format!("{}: {}", client_type, count));
+                    }
 
                     tracing::info!(
                         log_block_number = ?log.block_number,
                         log_tx_hash = ?log.transaction_hash,
-                        clients = ?client_names,
+                        clients = ?client_summary.join(", "),
                         "notifying subscribers about new logs"
                     );
                 }
