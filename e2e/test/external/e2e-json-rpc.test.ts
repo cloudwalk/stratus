@@ -353,6 +353,21 @@ describe("JSON-RPC", () => {
                 expect(error.code).to.equal(2002);
                 expect(error.message).to.equal(`Transaction nonce ${tooHighNonce} does not match account nonce ${currentNonce}.`);
             });
+            
+            it("Returns an error when nonce is too low", async () => {
+                // get current nonce
+                const currentNonce = await sendGetNonce(ALICE);
+
+                // prepare transaction with nonce that's too low
+                const tooLowNonce = currentNonce - 1;
+                const signedTx = await ALICE.signWeiTransfer(BOB.address, 1, tooLowNonce);
+
+                // send transaction and check error
+                const error = await sendAndGetError("eth_sendRawTransaction", [signedTx]);
+                expect(error).to.be.an("object");
+                expect(error.code).to.equal(2002);
+                expect(error.message).to.equal(`Transaction nonce ${tooLowNonce} does not match account nonce ${currentNonce}.`);
+            });
         });
 
         describe("debug_traceTransaction", () => {
