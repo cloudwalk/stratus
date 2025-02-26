@@ -225,6 +225,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("rocksdb_replicateLogs", rocksdb_replicate_logs)?;
     module.register_blocking_method("rocksdb_createCheckpoint", rocksdb_create_checkpoint)?;
     module.register_blocking_method("rocksdb_cleanupCheckpoint", rocksdb_cleanup_checkpoint)?;
+    module.register_blocking_method("rocksdb_listCheckpointFiles", rocksdb_list_checkpoint_files)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -1355,6 +1356,27 @@ fn rocksdb_cleanup_checkpoint(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Ex
         }
         Err(e) => {
             tracing::error!(reason = ?e, path = %checkpoint_path, "Failed to clean up RocksDB checkpoint");
+            Err(StorageError::RocksError { err: e.into() }.into())
+        }
+    }
+}
+
+fn rocksdb_list_checkpoint_files(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
+    tracing::info!("rocksdb_list_checkpoint_files called with params: {:?}", params);
+
+    let (_, checkpoint_path) = next_rpc_param::<String>(params.sequence())?;
+
+    tracing::info!("Listing checkpoint files at path: {}", checkpoint_path);
+
+    let path = std::path::Path::new(&checkpoint_path);
+
+    match ctx.storage.list_checkpoint_files(path) {
+        Ok(files) => {
+            tracing::info!("Successfully listed {} checkpoint files at: {}", files.len(), checkpoint_path);
+            Ok(to_json_value(files))
+        }
+        Err(e) => {
+            tracing::error!(reason = ?e, path = %checkpoint_path, "Failed to list RocksDB checkpoint files");
             Err(StorageError::RocksError { err: e.into() }.into())
         }
     }

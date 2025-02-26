@@ -534,4 +534,11 @@ impl StratusStorage {
     pub fn cleanup_checkpoint(&self, checkpoint_dir: &std::path::Path) -> Result<(), StorageError> {
         self.perm.cleanup_checkpoint(checkpoint_dir)
     }
+
+    pub fn list_checkpoint_files(
+        &self,
+        checkpoint_dir: &std::path::Path,
+    ) -> Result<Vec<super::permanent::rocks::rocks_checkpoint::CheckpointFile>, StorageError> {
+        self.perm.list_checkpoint_files(checkpoint_dir)
+    }
 }

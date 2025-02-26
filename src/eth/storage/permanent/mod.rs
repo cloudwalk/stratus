@@ -1,4 +1,5 @@
 pub use self::inmemory::InMemoryPermanentStorage;
+pub use self::rocks::rocks_checkpoint::CheckpointFile;
 pub use self::rocks::RocksPermanentStorage;
 pub use self::rocks::RocksStorageState;
 
@@ -95,6 +96,9 @@ pub trait PermanentStorage: Send + Sync + 'static {
 
     /// Cleans up a checkpoint at the specified path.
     fn cleanup_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError>;
+
+    /// Lists all files in a checkpoint directory.
+    fn list_checkpoint_files(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<Vec<CheckpointFile>, StorageError>;
 }
 
 // -----------------------------------------------------------------------------
