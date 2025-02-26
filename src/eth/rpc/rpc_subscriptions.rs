@@ -176,7 +176,7 @@ impl RpcSubscriptions {
                 if !subscribers.is_empty() {
                     // Group clients by type and count how many of each type
                     let mut client_type_counts = std::collections::HashMap::new();
-                    
+
                     for sub in &subscribers {
                         let client_str = sub.client.to_string();
                         let client_type = if client_str.starts_with("banking::") {
@@ -196,10 +196,10 @@ impl RpcSubscriptions {
                         } else {
                             "other"
                         };
-                        
+
                         *client_type_counts.entry(client_type.to_string()).or_insert(0) += 1;
                     }
-                    
+
                     // Format the log message
                     let mut client_summary = Vec::new();
                     for (client_type, count) in client_type_counts.iter() {
@@ -241,7 +241,7 @@ impl RpcSubscriptions {
                 if !subscribers.is_empty() {
                     // Group clients by type and count how many of each type
                     let mut client_type_counts = std::collections::HashMap::new();
-                    
+
                     for sub in &subscribers {
                         let client_str = sub.client.to_string();
                         let client_type = if client_str.starts_with("banking::") {
@@ -261,10 +261,10 @@ impl RpcSubscriptions {
                         } else {
                             "other"
                         };
-                        
+
                         *client_type_counts.entry(client_type.to_string()).or_insert(0) += 1;
                     }
-                    
+
                     // Format the log message
                     let mut client_summary = Vec::new();
                     for (client_type, count) in client_type_counts.iter() {
@@ -311,7 +311,7 @@ impl RpcSubscriptions {
                 if !matching_subscribers.is_empty() {
                     // Group clients by type and count how many of each type
                     let mut client_type_counts = std::collections::HashMap::new();
-                    
+
                     for sub in &matching_subscribers {
                         let client_str = sub.client.to_string();
                         let client_type = if client_str.starts_with("banking::") {
@@ -331,10 +331,10 @@ impl RpcSubscriptions {
                         } else {
                             "other"
                         };
-                        
+
                         *client_type_counts.entry(client_type.to_string()).or_insert(0) += 1;
                     }
-                    
+
                     // Format the log message
                     let mut client_summary = Vec::new();
                     for (client_type, count) in client_type_counts.iter() {
