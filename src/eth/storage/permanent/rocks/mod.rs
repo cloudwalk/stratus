@@ -1,5 +1,6 @@
 //! RocksDB layers (top-to-bottom): permanent -> state -> rest.
 
+pub use rocks_checkpoint::RocksCheckpoint;
 pub use rocks_permanent::RocksPermanentStorage;
 pub use rocks_state::RocksStorageState;
 
@@ -23,3 +24,6 @@ pub mod rocks_db;
 
 /// All types to be serialized and desserialized in the db.
 pub mod types;
+
+/// Checkpoint functionality for RocksDB.
+pub mod rocks_checkpoint;
