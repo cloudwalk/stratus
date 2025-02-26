@@ -338,7 +338,7 @@ describe("JSON-RPC", () => {
                 expect(txReceiptAfterMining?.status).eq(REVERSAL);
                 expect(actualTxHash).eq(expectedTxHash);
             });
-            
+
             it("Returns an error when nonce is too high", async () => {
                 // get current nonce
                 const currentNonce = await sendGetNonce(ALICE);
@@ -351,9 +351,11 @@ describe("JSON-RPC", () => {
                 const error = await sendAndGetError("eth_sendRawTransaction", [signedTx]);
                 expect(error).to.be.an("object");
                 expect(error.code).to.equal(2002);
-                expect(error.message).to.equal(`Transaction nonce ${tooHighNonce} does not match account nonce ${currentNonce}.`);
+                expect(error.message).to.equal(
+                    `Transaction nonce ${tooHighNonce} does not match account nonce ${currentNonce}.`,
+                );
             });
-            
+
             it("Returns an error when nonce is too low", async () => {
                 // get current nonce
                 const currentNonce = await sendGetNonce(ALICE);
@@ -366,7 +368,9 @@ describe("JSON-RPC", () => {
                 const error = await sendAndGetError("eth_sendRawTransaction", [signedTx]);
                 expect(error).to.be.an("object");
                 expect(error.code).to.equal(2002);
-                expect(error.message).to.equal(`Transaction nonce ${tooLowNonce} does not match account nonce ${currentNonce}.`);
+                expect(error.message).to.equal(
+                    `Transaction nonce ${tooLowNonce} does not match account nonce ${currentNonce}.`,
+                );
             });
         });
 
