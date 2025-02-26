@@ -524,4 +524,14 @@ impl StratusStorage {
     pub fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> Result<(), StorageError> {
         self.perm.apply_replication_logs(logs)
     }
+
+    /// Creates a checkpoint of the RocksDB database at the specified path.
+    pub fn create_checkpoint(&self, checkpoint_dir: &std::path::Path) -> Result<(), StorageError> {
+        self.perm.create_checkpoint(checkpoint_dir)
+    }
+
+    /// Cleans up a checkpoint at the specified path.
+    pub fn cleanup_checkpoint(&self, checkpoint_dir: &std::path::Path) -> Result<(), StorageError> {
+        self.perm.cleanup_checkpoint(checkpoint_dir)
+    }
 }

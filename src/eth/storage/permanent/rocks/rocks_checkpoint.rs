@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -27,8 +26,7 @@ impl RocksCheckpoint {
     ///
     /// * `db` - The RocksDB instance to create checkpoints from
     /// * `checkpoint_dir` - The directory where checkpoints will be stored
-    pub fn new(db: Arc<DB>, checkpoint_dir: impl AsRef<Path>) -> Self {
-        let checkpoint_dir = checkpoint_dir.as_ref().to_path_buf();
+    pub fn new(db: Arc<DB>, checkpoint_dir: PathBuf) -> Self {
         Self { db, checkpoint_dir }
     }
 
@@ -112,7 +110,7 @@ mod tests {
         let (db, temp_dir) = setup_test_db();
         let checkpoint_dir = temp_dir.path().join("checkpoint");
 
-        let checkpoint = RocksCheckpoint::new(db, &checkpoint_dir);
+        let checkpoint = RocksCheckpoint::new(db, checkpoint_dir);
 
         // Initially, no checkpoint should exist
         assert!(!checkpoint.checkpoint_exists());

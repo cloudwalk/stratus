@@ -236,14 +236,27 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 
     fn get_latest_sequence_number(&self) -> anyhow::Result<u64, StorageError> {
+        tracing::warn!("get_latest_sequence_number called on InMemoryPermanentStorage (no-op)");
         Ok(0)
     }
 
     fn get_updates_since(&self, _seq_number: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>, StorageError> {
+        tracing::warn!("get_updates_since called on InMemoryPermanentStorage (no-op)");
         Ok(Vec::new())
     }
 
     fn apply_replication_logs(&self, _logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<(), StorageError> {
+        tracing::warn!("apply_replication_logs called on InMemoryPermanentStorage (no-op)");
+        Ok(())
+    }
+
+    fn create_checkpoint(&self, _checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {
+        tracing::warn!("create_checkpoint called on InMemoryPermanentStorage (no-op)");
+        Ok(())
+    }
+
+    fn cleanup_checkpoint(&self, _checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {
+        tracing::warn!("cleanup_checkpoint called on InMemoryPermanentStorage (no-op)");
         Ok(())
     }
 }

@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::bail;
@@ -213,5 +214,21 @@ impl PermanentStorage for RocksPermanentStorage {
             }
             Err(err) => Err(StorageError::RocksError { err }),
         }
+    }
+
+    fn create_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {
+        use super::rocks_checkpoint::RocksCheckpoint;
+
+        let checkpoint = RocksCheckpoint::new(Arc::clone(&self.state.db), checkpoint_dir.to_path_buf());
+
+        checkpoint.create_checkpoint()
+    }
+
+    fn cleanup_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {
+        use super::rocks_checkpoint::RocksCheckpoint;
+
+        let checkpoint = RocksCheckpoint::new(Arc::clone(&self.state.db), checkpoint_dir.to_path_buf());
+
+        checkpoint.cleanup_checkpoint()
     }
 }
