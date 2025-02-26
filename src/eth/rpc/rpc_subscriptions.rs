@@ -171,15 +171,22 @@ impl RpcSubscriptions {
                 };
 
                 let interested_subs = subs.pending_txs.read().await;
-                let interested_subs = interested_subs.values().collect_vec();
+                let subscribers = interested_subs.values().collect_vec();
 
-                tracing::info!(
-                    tx_hash = ?tx_hash,
-                    subscribers = ?interested_subs,
-                    "notifying subscribers about new pending transaction"
-                );
+                if subscribers.len() > 0 {
+                    // Extrai apenas os nomes dos clientes
+                    let client_names: Vec<String> = subscribers.iter()
+                        .map(|s| s.client.to_string())
+                        .collect();
+                    
+                    tracing::info!(
+                        tx_hash = ?tx_hash,
+                        clients = ?client_names,
+                        "notifying subscribers about new pending transaction"
+                    );
+                }
 
-                Self::notify(interested_subs, tx_hash.to_string());
+                Self::notify(subscribers, tx_hash.to_string());
             }
             warn_task_rx_closed(TASK_NAME);
             Ok(())
@@ -202,16 +209,23 @@ impl RpcSubscriptions {
                 };
 
                 let interested_subs = subs.new_heads.read().await;
-                let interested_subs = interested_subs.values().collect_vec();
+                let subscribers = interested_subs.values().collect_vec();
 
-                tracing::info!(
-                    block_number = ?block_header.number,
-                    block_hash = ?block_header.hash,
-                    subscribers = ?interested_subs,
-                    "notifying subscribers about new block"
-                );
+                if subscribers.len() > 0 {
+                    // Extrai apenas os nomes dos clientes
+                    let client_names: Vec<String> = subscribers.iter()
+                        .map(|s| s.client.to_string())
+                        .collect();
+                    
+                    tracing::info!(
+                        block_number = ?block_header.number,
+                        block_hash = ?block_header.hash,
+                        clients = ?client_names,
+                        "notifying subscribers about new block"
+                    );
+                }
 
-                Self::notify(interested_subs, block_header);
+                Self::notify(subscribers, block_header);
             }
             warn_task_rx_closed(TASK_NAME);
             Ok(())
@@ -234,20 +248,27 @@ impl RpcSubscriptions {
                 };
 
                 let interested_subs = subs.logs.read().await;
-                let interested_subs = interested_subs
+                let matching_subscribers = interested_subs
                     .values()
                     .flat_map(HashMap::values)
                     .filter_map(|s| if_else!(s.filter.matches(&log), Some(&s.inner), None))
                     .collect_vec();
+                
+                if matching_subscribers.len() > 0 {
+                    // Extrai apenas os nomes dos clientes
+                    let client_names: Vec<String> = matching_subscribers.iter()
+                        .map(|s| s.client.to_string())
+                        .collect();
+                    
+                    tracing::info!(
+                        log_block_number = ?log.block_number,
+                        log_tx_hash = ?log.transaction_hash,
+                        clients = ?client_names,
+                        "notifying subscribers about new logs"
+                    );
+                }
 
-                tracing::info!(
-                    log_block_number = ?log.block_number,
-                    log_tx_hash = ?log.transaction_hash,
-                    subscribers = ?interested_subs,
-                    "notifying subscribers about new logs"
-                );
-
-                Self::notify(interested_subs, log);
+                Self::notify(matching_subscribers, log);
             }
             warn_task_rx_closed(TASK_NAME);
             Ok(())
