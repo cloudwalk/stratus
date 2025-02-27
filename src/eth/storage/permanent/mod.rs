@@ -93,12 +93,6 @@ pub trait PermanentStorage: Send + Sync + 'static {
 
     /// Creates a checkpoint of the RocksDB database at the specified path.
     fn create_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError>;
-
-    /// Cleans up a checkpoint at the specified path.
-    fn cleanup_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError>;
-
-    /// Lists all files in a checkpoint directory.
-    fn list_checkpoint_files(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<Vec<CheckpointFile>, StorageError>;
 }
 
 // -----------------------------------------------------------------------------

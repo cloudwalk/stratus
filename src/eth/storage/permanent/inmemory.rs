@@ -254,16 +254,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
         tracing::warn!("create_checkpoint called on InMemoryPermanentStorage (no-op)");
         Ok(())
     }
-
-    fn cleanup_checkpoint(&self, _checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {
-        tracing::warn!("cleanup_checkpoint called on InMemoryPermanentStorage (no-op)");
-        Ok(())
-    }
-
-    fn list_checkpoint_files(&self, _checkpoint_dir: &std::path::Path) -> anyhow::Result<Vec<super::rocks::rocks_checkpoint::CheckpointFile>, StorageError> {
-        tracing::warn!("list_checkpoint_files called on InMemoryPermanentStorage (no-op)");
-        Ok(Vec::new())
-    }
 }
 
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.

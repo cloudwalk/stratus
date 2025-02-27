@@ -76,67 +76,6 @@ impl RocksCheckpoint {
         info!(path = ?self.checkpoint_dir, "RocksDB checkpoint created successfully");
         Ok(())
     }
-
-    /// Lists all files in the checkpoint directory recursively
-    ///
-    /// Returns a list of files with their relative paths and sizes
-    pub fn list_checkpoint_files(&self) -> Result<Vec<CheckpointFile>, StorageError> {
-        if !self.checkpoint_exists() {
-            warn!(path = ?self.checkpoint_dir, "No checkpoint exists at path, cannot list files");
-            return Ok(Vec::new());
-        }
-
-        info!(path = ?self.checkpoint_dir, "Listing RocksDB checkpoint files");
-
-        let mut files = Vec::new();
-        self.list_directory_files(&self.checkpoint_dir, &mut files)
-            .context("Failed to list checkpoint files")
-            .map_err(|e| StorageError::RocksError { err: e })?;
-
-        info!(path = ?self.checkpoint_dir, file_count = files.len(), "Listed RocksDB checkpoint files");
-        Ok(files)
-    }
-
-    /// Helper function to recursively list files in a directory
-    fn list_directory_files(&self, current_dir: &PathBuf, files: &mut Vec<CheckpointFile>) -> Result<(), anyhow::Error> {
-        for entry in fs::read_dir(current_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path.is_dir() {
-                // Recursively list files in subdirectories
-                self.list_directory_files(&path, files)?;
-            } else {
-                // Get the relative path from the base directory (checkpoint_dir)
-                let relative_path = path.strip_prefix(&self.checkpoint_dir)?.to_string_lossy().to_string();
-                let metadata = fs::metadata(&path)?;
-
-                files.push(CheckpointFile {
-                    path: relative_path,
-                    size: metadata.len(),
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Cleans up (removes) the checkpoint if it exists
-    pub fn cleanup_checkpoint(&self) -> Result<(), StorageError> {
-        if !self.checkpoint_exists() {
-            warn!(path = ?self.checkpoint_dir, "No checkpoint exists at path, nothing to clean up");
-            return Ok(());
-        }
-
-        info!(path = ?self.checkpoint_dir, "Removing RocksDB checkpoint");
-
-        fs::remove_dir_all(&self.checkpoint_dir)
-            .context("Failed to remove checkpoint directory")
-            .map_err(|e| StorageError::RocksError { err: e })?;
-
-        info!(path = ?self.checkpoint_dir, "RocksDB checkpoint removed successfully");
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -173,11 +112,5 @@ mod tests {
 
         // Now a checkpoint should exist
         assert!(checkpoint.checkpoint_exists());
-
-        // Clean up the checkpoint
-        checkpoint.cleanup_checkpoint().unwrap();
-
-        // After cleanup, no checkpoint should exist
-        assert!(!checkpoint.checkpoint_exists());
     }
 }

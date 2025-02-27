@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use anyhow::bail;
 
-use super::rocks_checkpoint::CheckpointFile;
 use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -223,21 +222,5 @@ impl PermanentStorage for RocksPermanentStorage {
         let checkpoint = RocksCheckpoint::new(Arc::clone(&self.state.db), checkpoint_dir.to_path_buf());
 
         checkpoint.create_checkpoint()
-    }
-
-    fn cleanup_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {
-        use super::rocks_checkpoint::RocksCheckpoint;
-
-        let checkpoint = RocksCheckpoint::new(Arc::clone(&self.state.db), checkpoint_dir.to_path_buf());
-
-        checkpoint.cleanup_checkpoint()
-    }
-
-    fn list_checkpoint_files(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<Vec<CheckpointFile>, StorageError> {
-        use super::rocks_checkpoint::RocksCheckpoint;
-
-        let checkpoint = RocksCheckpoint::new(Arc::clone(&self.state.db), checkpoint_dir.to_path_buf());
-
-        checkpoint.list_checkpoint_files()
     }
 }
