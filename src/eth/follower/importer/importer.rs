@@ -499,16 +499,14 @@ impl Importer {
         const TASK_NAME: &str = "rocksdb-replication";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
 
-        // Track our latest applied sequence number
         let mut last_applied_sequence = storage.get_latest_sequence_number()?;
 
         loop {
-            // This can be done more intelligently, by requesting to the leader, and making the leader hold the request and respond as soon as the leader has a new sequence number
+            // TODO: This can be done more intelligently, by requesting to the leader, and making the leader hold the request and respond as soon as the leader has a new sequence number
             if Self::should_shutdown(TASK_NAME) {
                 return Ok(());
             }
 
-            // Get latest sequence number from leader
             match chain.fetch_latest_sequence_number().await {
                 Ok(leader_sequence) => {
                     if leader_sequence > last_applied_sequence {
@@ -518,7 +516,6 @@ impl Importer {
                             "Found new WAL logs to replicate"
                         );
 
-                        // Fetch logs since our last sequence
                         match chain.fetch_replication_logs(last_applied_sequence).await {
                             Ok(logs) => {
                                 if !logs.is_empty() {
@@ -527,7 +524,7 @@ impl Importer {
                                         "Applying WAL logs from leader one by one"
                                     );
 
-                                    // Check if we have subscribers for blocks or logs
+                                    // Check if we have subscribers or kafka enabled
                                     let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
                                     let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
                                     let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
@@ -535,13 +532,11 @@ impl Importer {
 
                                     // Apply logs one by one
                                     for (seq, log_data) in logs {
-                                        // Apply a single log
                                         match storage.apply_replication_logs(vec![(seq, log_data)]) {
                                             Ok(applied_block_numbers) => {
-                                                // Update our tracking of last applied sequence
                                                 last_applied_sequence = seq;
 
-                                                // Only process notifications if we have subscribers or Kafka and blocks were applied
+                                                // Only process notifications if we have subscribers or kafka enabled and blocks were applied
                                                 if (has_block_subscribers || has_log_subscribers || has_pending_tx_subscribers || has_kafka)
                                                     && !applied_block_numbers.is_empty()
                                                 {
@@ -551,9 +546,7 @@ impl Importer {
                                                         "Processing notifications for blocks applied from log"
                                                     );
 
-                                                    // Process each applied block
                                                     for block_number in applied_block_numbers {
-                                                        // Read the block to get its header and logs
                                                         if let Ok(Some(block)) = storage.read_block(BlockFilter::Number(block_number)) {
                                                             // Send Kafka events if connector is available
                                                             if let Some(ref kafka_conn) = kafka_connector {
@@ -573,7 +566,7 @@ impl Importer {
                                                                 }
                                                             }
 
-                                                            // Notify about the block header
+                                                            // Notify about the block header for newHeads
                                                             if has_block_subscribers {
                                                                 tracing::debug!(
                                                                     block_number = %block_number,
@@ -621,7 +614,6 @@ impl Importer {
                                             Err(e) => {
                                                 tracing::error!(reason = ?e, sequence = %seq, "Failed to apply replication log");
                                                 traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
-                                                // Continue with the next log instead of breaking the entire loop
                                                 continue;
                                             }
                                         }
@@ -634,7 +626,6 @@ impl Importer {
                             }
                         }
                     } else {
-                        // Up to date, wait for sync interval
                         traced_sleep(sync_interval, SleepReason::SyncData).await;
                     }
                 }

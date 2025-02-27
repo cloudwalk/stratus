@@ -1,5 +1,4 @@
 pub use self::inmemory::InMemoryPermanentStorage;
-pub use self::rocks::rocks_checkpoint::CheckpointFile;
 pub use self::rocks::RocksPermanentStorage;
 pub use self::rocks::RocksStorageState;
 

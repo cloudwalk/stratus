@@ -11,15 +11,6 @@ use tracing::warn;
 
 use crate::eth::primitives::StorageError;
 
-/// Represents a file in a checkpoint directory
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct CheckpointFile {
-    /// Relative path of the file from the checkpoint directory
-    pub path: String,
-    /// Size of the file in bytes
-    pub size: u64,
-}
-
 /// Manages RocksDB checkpoints for the database
 pub struct RocksCheckpoint {
     /// The RocksDB instance
@@ -30,11 +21,6 @@ pub struct RocksCheckpoint {
 
 impl RocksCheckpoint {
     /// Creates a new RocksCheckpoint instance
-    ///
-    /// # Arguments
-    ///
-    /// * `db` - The RocksDB instance to create checkpoints from
-    /// * `checkpoint_dir` - The directory where checkpoints will be stored
     pub fn new(db: Arc<DB>, checkpoint_dir: PathBuf) -> Self {
         Self { db, checkpoint_dir }
     }
@@ -45,9 +31,6 @@ impl RocksCheckpoint {
     }
 
     /// Creates a checkpoint of the RocksDB database
-    ///
-    /// If a checkpoint already exists at the configured directory, this function
-    /// will return an error.
     pub fn create_checkpoint(&self) -> Result<(), StorageError> {
         if self.checkpoint_exists() {
             warn!(path = ?self.checkpoint_dir, "Checkpoint already exists, skipping creation");
