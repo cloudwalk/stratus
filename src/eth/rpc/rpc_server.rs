@@ -1317,6 +1317,7 @@ fn rocksdb_replicate_logs(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extens
     }
 }
 
+// TODO: add proper tracing
 fn rocksdb_create_checkpoint(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
     tracing::info!("rocksdb_create_checkpoint called with params: {:?}", params);
 
