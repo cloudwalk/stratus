@@ -197,6 +197,7 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(updates)
     }
 
+    /// TODO: add some kind of check for sequence number to avoid applying the same log twice
     fn apply_replication_log(&self, sequence: u64, log_data: Vec<u8>) -> anyhow::Result<BlockNumber, StorageError> {
         tracing::info!(sequence = %sequence, "applying replication log");
 
