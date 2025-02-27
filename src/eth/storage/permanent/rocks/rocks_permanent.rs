@@ -197,7 +197,14 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(updates)
     }
 
-    fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<(), StorageError> {
+    fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<Vec<BlockNumber>, StorageError> {
+        // Get the current block number before applying logs
+        let prev_block_number = match self.state.preload_block_number() {
+            Ok(block_number) => block_number.load(std::sync::atomic::Ordering::SeqCst),
+            Err(err) => return Err(StorageError::RocksError { err }),
+        };
+
+        // Apply all logs
         for (_, log_data) in logs {
             let write_batch = rocksdb::WriteBatch::from_data(&log_data);
 
@@ -206,14 +213,31 @@ impl PermanentStorage for RocksPermanentStorage {
             }
         }
 
-        match self.state.preload_block_number() {
+        // Get the new block number after applying logs
+        let new_block_number = match self.state.preload_block_number() {
             Ok(block_number) => {
                 let block_number_value = block_number.load(std::sync::atomic::Ordering::SeqCst);
                 self.set_mined_block_number(block_number_value.into())?;
-                Ok(())
+                block_number_value
             }
-            Err(err) => Err(StorageError::RocksError { err }),
+            Err(err) => return Err(StorageError::RocksError { err }),
+        };
+
+        // If block number increased, collect all new block numbers
+        let mut applied_blocks = Vec::new();
+        if new_block_number > prev_block_number {
+            for block_num in (prev_block_number + 1)..=new_block_number {
+                applied_blocks.push(BlockNumber::from(block_num));
+            }
+            tracing::info!(
+                prev_block = %prev_block_number,
+                new_block = %new_block_number,
+                applied_count = %applied_blocks.len(),
+                "Applied blocks during replication"
+            );
         }
+
+        Ok(applied_blocks)
     }
 
     fn create_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {

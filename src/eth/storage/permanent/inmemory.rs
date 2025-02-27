@@ -245,9 +245,9 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(Vec::new())
     }
 
-    fn apply_replication_logs(&self, _logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<(), StorageError> {
+    fn apply_replication_logs(&self, _logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<Vec<BlockNumber>, StorageError> {
         tracing::warn!("apply_replication_logs called on InMemoryPermanentStorage (no-op)");
-        Ok(())
+        Ok(Vec::new())
     }
 
     fn create_checkpoint(&self, _checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {

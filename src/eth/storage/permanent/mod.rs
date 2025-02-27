@@ -89,7 +89,8 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn get_updates_since(&self, seq_number: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>, StorageError>;
 
     /// Applies WAL (Write-Ahead Log) updates received from a leader node.
-    fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<(), StorageError>;
+    /// Returns the block numbers that were applied during this operation.
+    fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<Vec<BlockNumber>, StorageError>;
 
     /// Creates a checkpoint of the RocksDB database at the specified path.
     fn create_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError>;

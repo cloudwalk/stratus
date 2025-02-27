@@ -521,7 +521,8 @@ impl StratusStorage {
     }
 
     /// Apply replication logs to the permanent storage
-    pub fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> Result<(), StorageError> {
+    /// Returns the block numbers that were applied during this operation
+    pub fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> Result<Vec<BlockNumber>, StorageError> {
         self.perm.apply_replication_logs(logs)
     }
 

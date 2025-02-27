@@ -22,6 +22,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -138,7 +139,12 @@ impl Importer {
             ImporterMode::RocksDbReplication => {
                 // Use the new RocksDB replication mechanism
                 tracing::info!("Starting RocksDB replication from leader node");
-                Self::start_rocksdb_replication(Arc::clone(&self.storage), Arc::clone(&self.chain), self.sync_interval).await
+                Self::start_rocksdb_replication(
+                    Arc::clone(&self.storage), 
+                    Arc::clone(&self.chain), 
+                    Arc::clone(&self.miner),
+                    self.sync_interval
+                ).await
             }
             _ => {
                 // Use the original block execution mechanism for other modes
@@ -481,7 +487,7 @@ impl Importer {
     }
 
     /// Replicates RocksDB WAL logs from a leader node
-    async fn start_rocksdb_replication(storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>, sync_interval: Duration) -> anyhow::Result<()> {
+    async fn start_rocksdb_replication(storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>, miner: Arc<Miner>, sync_interval: Duration) -> anyhow::Result<()> {
         const TASK_NAME: &str = "rocksdb-replication";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
 
@@ -512,15 +518,84 @@ impl Importer {
                                         "Applying WAL logs from leader"
                                     );
 
-                                    // Apply the logs to our local RocksDB instance
-                                    if let Err(e) = storage.apply_replication_logs(logs) {
-                                        tracing::error!(reason = ?e, "Failed to apply replication logs");
-                                        traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
-                                        continue;
+                                    // Apply the logs to our local RocksDB instance and get applied block numbers
+                                    match storage.apply_replication_logs(logs) {
+                                        Ok(applied_block_numbers) => {
+                                            // Check if we have subscribers for blocks or logs
+                                            let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
+                                            let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
+                                            let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
+                                            
+                                            // Only process notifications if we have subscribers and blocks were applied
+                                            if (has_block_subscribers || has_log_subscribers || has_pending_tx_subscribers) && !applied_block_numbers.is_empty() {
+                                                tracing::info!(
+                                                    block_count = %applied_block_numbers.len(),
+                                                    has_block_subscribers = %has_block_subscribers,
+                                                    has_log_subscribers = %has_log_subscribers,
+                                                    has_pending_tx_subscribers = %has_pending_tx_subscribers,
+                                                    "Processing notifications for applied blocks"
+                                                );
+                                                
+                                                // Process each applied block
+                                                for block_number in applied_block_numbers {
+                                                    // Read the block to get its header and logs
+                                                    if let Ok(Some(block)) = storage.read_block(BlockFilter::Number(block_number)) {
+                                                        // Notify about the block header
+                                                        if has_block_subscribers {
+                                                            tracing::debug!(
+                                                                block_number = %block_number,
+                                                                "Sending block notification"
+                                                            );
+                                                            let _ = miner.notifier_blocks.send(block.header.clone());
+                                                        }
+                                                        
+                                                        // Notify about transaction hashes for newPendingTransactions
+                                                        if has_pending_tx_subscribers && !block.transactions.is_empty() {
+                                                            let tx_count = block.transactions.len();
+                                                            tracing::debug!(
+                                                                block_number = %block_number,
+                                                                tx_count = %tx_count,
+                                                                "Sending pending transaction notifications"
+                                                            );
+                                                            
+                                                            for tx in &block.transactions {
+                                                                let _ = miner.notifier_pending_txs.send(tx.input.hash);
+                                                            }
+                                                        }
+                                                        
+                                                        // Notify about transaction logs
+                                                        if has_log_subscribers {
+                                                            let logs_count = block.transactions.iter()
+                                                                .map(|tx| tx.logs.len())
+                                                                .sum::<usize>();
+                                                            
+                                                            if logs_count > 0 {
+                                                                tracing::debug!(
+                                                                    block_number = %block_number,
+                                                                    logs_count = %logs_count,
+                                                                    "Sending log notifications"
+                                                                );
+                                                                
+                                                                for tx in &block.transactions {
+                                                                    for log in &tx.logs {
+                                                                        let _ = miner.notifier_logs.send(log.clone());
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Update our tracking of last applied sequence
+                                            last_applied_sequence = storage.get_latest_sequence_number()?;
+                                        }
+                                        Err(e) => {
+                                            tracing::error!(reason = ?e, "Failed to apply replication logs");
+                                            traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
+                                            continue;
+                                        }
                                     }
-
-                                    // Update our tracking of last applied sequence
-                                    last_applied_sequence = storage.get_latest_sequence_number()?;
                                 }
                             }
                             Err(e) => {
