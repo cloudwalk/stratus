@@ -199,29 +199,26 @@ impl PermanentStorage for RocksPermanentStorage {
 
     fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<Vec<BlockNumber>, StorageError> {
         // Get the current block number before applying logs
-        let prev_block_number = match self.state.preload_block_number() {
-            Ok(block_number) => block_number.load(std::sync::atomic::Ordering::SeqCst),
-            Err(err) => return Err(StorageError::RocksError { err }),
-        };
+        let prev_block_number = self.read_mined_block_number()?.as_u32();
 
         // Apply all logs
         for (_, log_data) in logs {
             let write_batch = rocksdb::WriteBatch::from_data(&log_data);
-
-            if let Err(err) = self.state.write_in_batch_for_multiple_cfs(write_batch) {
-                return Err(StorageError::RocksError { err });
-            }
+            self.state
+                .write_in_batch_for_multiple_cfs(write_batch)
+                .map_err(|err| StorageError::RocksError { err })?;
         }
 
+        // Reload the block number from the state to ensure it's updated after applying logs
+        let block_number = self
+            .state
+            .preload_block_number()
+            .map_err(|err| StorageError::RocksError { err })?
+            .load(std::sync::atomic::Ordering::SeqCst);
+        self.set_mined_block_number(block_number.into())?;
+
         // Get the new block number after applying logs
-        let new_block_number = match self.state.preload_block_number() {
-            Ok(block_number) => {
-                let block_number_value = block_number.load(std::sync::atomic::Ordering::SeqCst);
-                self.set_mined_block_number(block_number_value.into())?;
-                block_number_value
-            }
-            Err(err) => return Err(StorageError::RocksError { err }),
-        };
+        let new_block_number = self.read_mined_block_number()?.as_u32();
 
         // If block number increased, collect all new block numbers
         let mut applied_blocks = Vec::new();
