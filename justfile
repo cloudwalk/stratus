@@ -662,3 +662,39 @@ stratus-test-coverage *args="":
     just _coverage-run-stratus-recipe e2e-admin-password
 
     cargo llvm-cov report {{args}}
+
+
+# E2E: Create RocksDB checkpoint and start follower with it
+e2e-rocksdb-checkpoint:
+    #!/bin/bash
+    just build
+
+    mkdir -p e2e_logs
+
+    # Start Stratus with leader flag
+    just _log "Starting leader node"
+    RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    just _wait_for_stratus 3000
+    
+    # Create a RocksDB checkpoint for the follower
+    just _log "Creating RocksDB checkpoint for follower"
+    curl -X POST \
+      http://localhost:3000 \
+      -H "Content-Type: application/json" \
+      -d '{
+        "jsonrpc": "2.0",
+        "method": "rocksdb_createCheckpoint",
+        "params": ["temp_3001_checkpoint-rocksdb"],
+        "id": 1
+      }'
+    
+    # Start follower with the checkpoint
+    just _log "Starting follower node with checkpoint"
+    RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001_checkpoint -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --use-rocksdb-replication > e2e_logs/follower.log &
+    just _wait_for_stratus 3001
+    
+    just _log "Both nodes are running. Press Ctrl+C to stop them."
+    
+    # Wait for user to press Ctrl+C
+    trap "killport 3000 -s sigterm; killport 3001 -s sigterm; rm -rf temp_300*; rm -rf e2e_logs; exit 0" INT
+    while true; do sleep 1; done
