@@ -197,44 +197,18 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(updates)
     }
 
-    fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> anyhow::Result<Vec<BlockNumber>, StorageError> {
-        // Get the current block number before applying logs
-        let prev_block_number = self.read_mined_block_number()?.as_u32();
+    fn apply_replication_log(&self, sequence: u64, log_data: Vec<u8>) -> anyhow::Result<BlockNumber, StorageError> {
+        tracing::info!(sequence = %sequence, "applying replication log");
 
-        // Apply all logs
-        for (_, log_data) in logs {
-            let write_batch = rocksdb::WriteBatch::from_data(&log_data);
-            self.state
-                .write_in_batch_for_multiple_cfs(write_batch)
-                .map_err(|err| StorageError::RocksError { err })?;
-        }
+        let write_batch = rocksdb::WriteBatch::from_data(&log_data);
+        self.state
+            .write_in_batch_for_multiple_cfs(write_batch)
+            .map_err(|err| StorageError::RocksError { err })?;
 
-        // Reload the block number from the state to ensure it's updated after applying logs
-        let block_number = self
-            .state
-            .preload_block_number()
-            .map_err(|err| StorageError::RocksError { err })?
-            .load(std::sync::atomic::Ordering::SeqCst);
-        self.set_mined_block_number(block_number.into())?;
-
-        // Get the new block number after applying logs
         let new_block_number = self.read_mined_block_number()?.as_u32();
+        self.set_mined_block_number(new_block_number.into())?;
 
-        // If block number increased, collect all new block numbers
-        let mut applied_blocks = Vec::new();
-        if new_block_number > prev_block_number {
-            for block_num in (prev_block_number + 1)..=new_block_number {
-                applied_blocks.push(BlockNumber::from(block_num));
-            }
-            tracing::info!(
-                prev_block = %prev_block_number,
-                new_block = %new_block_number,
-                applied_count = %applied_blocks.len(),
-                "Applied blocks during replication"
-            );
-        }
-
-        Ok(applied_blocks)
+        Ok(new_block_number.into())
     }
 
     fn create_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {

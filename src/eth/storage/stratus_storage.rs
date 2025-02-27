@@ -520,10 +520,9 @@ impl StratusStorage {
         self.perm.get_updates_since(seq_number)
     }
 
-    /// Apply replication logs to the permanent storage
-    /// Returns the block numbers that were applied during this operation
-    pub fn apply_replication_logs(&self, logs: Vec<(u64, Vec<u8>)>) -> Result<Vec<BlockNumber>, StorageError> {
-        self.perm.apply_replication_logs(logs)
+    /// Apply a single replication log to the permanent storage
+    pub fn apply_replication_log(&self, sequence: u64, log_data: Vec<u8>) -> Result<BlockNumber, StorageError> {
+        self.perm.apply_replication_log(sequence, log_data)
     }
 
     /// Creates a checkpoint of the RocksDB database at the specified path.
