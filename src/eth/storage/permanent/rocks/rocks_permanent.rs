@@ -209,8 +209,8 @@ impl PermanentStorage for RocksPermanentStorage {
 
         match self.state.preload_block_number() {
             Ok(block_number) => {
-                self.block_number
-                    .store(block_number.load(std::sync::atomic::Ordering::SeqCst), std::sync::atomic::Ordering::SeqCst);
+                let block_number_value = block_number.load(std::sync::atomic::Ordering::SeqCst);
+                self.set_mined_block_number(block_number_value.into())?;
                 Ok(())
             }
             Err(err) => Err(StorageError::RocksError { err }),
