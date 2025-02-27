@@ -524,90 +524,93 @@ impl Importer {
                                 if !logs.is_empty() {
                                     tracing::info!(
                                         log_count = %logs.len(),
-                                        "Applying WAL logs from leader"
+                                        "Applying WAL logs from leader one by one"
                                     );
 
-                                    // Apply the logs to our local RocksDB instance and get applied block numbers // TODO: maybe need to apply one by one to correctly emit events and stuff
-                                    match storage.apply_replication_logs(logs) {
-                                        Ok(applied_block_numbers) => {
-                                            // Check if we have subscribers for blocks or logs
-                                            let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
-                                            let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
-                                            let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
-                                            let has_kafka = kafka_connector.is_some();
+                                    // Check if we have subscribers for blocks or logs
+                                    let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
+                                    let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
+                                    let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
+                                    let has_kafka = kafka_connector.is_some();
 
-                                            // Only process notifications if we have subscribers or Kafka and blocks were applied
-                                            if (has_block_subscribers || has_log_subscribers || has_pending_tx_subscribers || has_kafka)
-                                                && !applied_block_numbers.is_empty()
-                                            {
-                                                tracing::info!(
-                                                    block_count = %applied_block_numbers.len(),
-                                                    has_block_subscribers = %has_block_subscribers,
-                                                    has_log_subscribers = %has_log_subscribers,
-                                                    has_pending_tx_subscribers = %has_pending_tx_subscribers,
-                                                    has_kafka = %has_kafka,
-                                                    "Processing notifications for applied blocks"
-                                                );
+                                    // Apply logs one by one
+                                    for (seq, log_data) in logs {
+                                        // Apply a single log
+                                        match storage.apply_replication_logs(vec![(seq, log_data)]) {
+                                            Ok(applied_block_numbers) => {
+                                                // Update our tracking of last applied sequence
+                                                last_applied_sequence = seq;
 
-                                                // Process each applied block
-                                                for block_number in applied_block_numbers {
-                                                    // Read the block to get its header and logs
-                                                    if let Ok(Some(block)) = storage.read_block(BlockFilter::Number(block_number)) {
-                                                        // Send Kafka events if connector is available
-                                                        if let Some(ref kafka_conn) = kafka_connector {
-                                                            tracing::info!(
-                                                                block_number = %block_number,
-                                                                tx_count = %block.transactions.len(),
-                                                                "Sending Kafka events for block"
-                                                            );
+                                                // Only process notifications if we have subscribers or Kafka and blocks were applied
+                                                if (has_block_subscribers || has_log_subscribers || has_pending_tx_subscribers || has_kafka)
+                                                    && !applied_block_numbers.is_empty()
+                                                {
+                                                    tracing::info!(
+                                                        block_count = %applied_block_numbers.len(),
+                                                        sequence = %seq,
+                                                        "Processing notifications for blocks applied from log"
+                                                    );
 
-                                                            let events = block
-                                                                .transactions
-                                                                .iter()
-                                                                .flat_map(|tx| transaction_to_events(block.header.timestamp, Cow::Borrowed(tx)));
+                                                    // Process each applied block
+                                                    for block_number in applied_block_numbers {
+                                                        // Read the block to get its header and logs
+                                                        if let Ok(Some(block)) = storage.read_block(BlockFilter::Number(block_number)) {
+                                                            // Send Kafka events if connector is available
+                                                            if let Some(ref kafka_conn) = kafka_connector {
+                                                                tracing::info!(
+                                                                    block_number = %block_number,
+                                                                    tx_count = %block.transactions.len(),
+                                                                    "Sending Kafka events for block"
+                                                                );
 
-                                                            if let Err(e) = kafka_conn.send_buffered(events, 50).await {
-                                                                tracing::error!(reason = ?e, "Failed to send Kafka events");
+                                                                let events = block
+                                                                    .transactions
+                                                                    .iter()
+                                                                    .flat_map(|tx| transaction_to_events(block.header.timestamp, Cow::Borrowed(tx)));
+
+                                                                if let Err(e) = kafka_conn.send_buffered(events, 50).await {
+                                                                    tracing::error!(reason = ?e, "Failed to send Kafka events");
+                                                                }
                                                             }
-                                                        }
 
-                                                        // Notify about the block header
-                                                        if has_block_subscribers {
-                                                            tracing::debug!(
-                                                                block_number = %block_number,
-                                                                "Sending block notification"
-                                                            );
-                                                            let _ = miner.notifier_blocks.send(block.header.clone());
-                                                        }
-
-                                                        // Notify about transaction hashes for newPendingTransactions
-                                                        if has_pending_tx_subscribers && !block.transactions.is_empty() {
-                                                            let tx_count = block.transactions.len();
-                                                            tracing::debug!(
-                                                                block_number = %block_number,
-                                                                tx_count = %tx_count,
-                                                                "Sending pending transaction notifications"
-                                                            );
-
-                                                            for tx in &block.transactions {
-                                                                let _ = miner.notifier_pending_txs.send(tx.input.hash);
-                                                            }
-                                                        }
-
-                                                        // Notify about transaction logs
-                                                        if has_log_subscribers {
-                                                            let logs_count = block.transactions.iter().map(|tx| tx.logs.len()).sum::<usize>();
-
-                                                            if logs_count > 0 {
+                                                            // Notify about the block header
+                                                            if has_block_subscribers {
                                                                 tracing::debug!(
                                                                     block_number = %block_number,
-                                                                    logs_count = %logs_count,
-                                                                    "Sending log notifications"
+                                                                    "Sending block notification"
+                                                                );
+                                                                let _ = miner.notifier_blocks.send(block.header.clone());
+                                                            }
+
+                                                            // Notify about transaction hashes for newPendingTransactions
+                                                            if has_pending_tx_subscribers && !block.transactions.is_empty() {
+                                                                let tx_count = block.transactions.len();
+                                                                tracing::debug!(
+                                                                    block_number = %block_number,
+                                                                    tx_count = %tx_count,
+                                                                    "Sending pending transaction notifications"
                                                                 );
 
                                                                 for tx in &block.transactions {
-                                                                    for log in &tx.logs {
-                                                                        let _ = miner.notifier_logs.send(log.clone());
+                                                                    let _ = miner.notifier_pending_txs.send(tx.input.hash);
+                                                                }
+                                                            }
+
+                                                            // Notify about transaction logs
+                                                            if has_log_subscribers {
+                                                                let logs_count = block.transactions.iter().map(|tx| tx.logs.len()).sum::<usize>();
+
+                                                                if logs_count > 0 {
+                                                                    tracing::debug!(
+                                                                        block_number = %block_number,
+                                                                        logs_count = %logs_count,
+                                                                        "Sending log notifications"
+                                                                    );
+
+                                                                    for tx in &block.transactions {
+                                                                        for log in &tx.logs {
+                                                                            let _ = miner.notifier_logs.send(log.clone());
+                                                                        }
                                                                     }
                                                                 }
                                                             }
@@ -615,14 +618,12 @@ impl Importer {
                                                     }
                                                 }
                                             }
-
-                                            // Update our tracking of last applied sequence
-                                            last_applied_sequence = storage.get_latest_sequence_number()?;
-                                        }
-                                        Err(e) => {
-                                            tracing::error!(reason = ?e, "Failed to apply replication logs");
-                                            traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
-                                            continue;
+                                            Err(e) => {
+                                                tracing::error!(reason = ?e, sequence = %seq, "Failed to apply replication log");
+                                                traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
+                                                // Continue with the next log instead of breaking the entire loop
+                                                continue;
+                                            }
                                         }
                                     }
                                 }
