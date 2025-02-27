@@ -436,6 +436,8 @@ e2e-rpc-downloader:
     #!/bin/bash
     mkdir e2e_logs
 
+    just build
+
     just _log "Starting Stratus"
     just run -a 0.0.0.0:3000 > e2e_logs/e2e-rpc-downloader-stratus.log &
     just _wait_for_stratus
@@ -466,6 +468,8 @@ e2e-importer-offline:
     mkdir -p e2e_logs
 
     rm -rf data/importer-offline-database-rocksdb
+
+    just build
 
     just _log "Starting Stratus"
     just stratus -a 0.0.0.0:3000 > e2e_logs/e2e-importer-offline-stratus.log &
@@ -660,6 +664,12 @@ stratus-test-coverage *args="":
     done
 
     just _coverage-run-stratus-recipe e2e-admin-password
+
+    just _coverage-run-stratus-recipe e2e-rpc-downloader
+
+    just _coverage-run-stratus-recipe e2e-importer-offline
+
+    -rm -r data/importer-offline-database-rocksdb
 
     cargo llvm-cov report {{args}}
 
