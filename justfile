@@ -189,12 +189,6 @@ stratus-test-coverage-group group="unit" *args="":
             done
             
             rm -rf data/rocksdb
-            just _coverage-run-stratus-recipe e2e-eof rocks
-            rm -rf e2e_logs
-            rm -rf temp_*
-            rm -rf data/rocksdb
-            
-            rm -rf data/rocksdb
             just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
             rm -rf e2e_logs
             rm -rf temp_*
@@ -202,6 +196,12 @@ stratus-test-coverage-group group="unit" *args="":
             
             rm -rf data/rocksdb
             just _coverage-run-stratus-recipe contracts-test-stratus-rocks
+            rm -rf e2e_logs
+            rm -rf temp_*
+            rm -rf data/rocksdb
+
+            rm -rf data/rocksdb
+            just _coverage-run-stratus-recipe e2e-eof rocks
             rm -rf e2e_logs
             rm -rf temp_*
             rm -rf data/rocksdb

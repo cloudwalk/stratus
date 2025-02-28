@@ -40,6 +40,9 @@ jobs:
         with:
           node-version-file: .tool-versions
 
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         id: cache-cargo
@@ -77,6 +80,8 @@ jobs:
         run: |
           mkdir -p target/llvm-cov/codecov
           just stratus-test-coverage-group ${{ matrix.group }} "--codecov --output-path target/llvm-cov/codecov/${{ matrix.group }}.json"
+          echo "Listing coverage directory contents:"
+          ls -la target/llvm-cov/codecov/
 
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
