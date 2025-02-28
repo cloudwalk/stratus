@@ -93,7 +93,8 @@ jobs:
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
         with:
-          directory: target/llvm-cov/codecov
+          files: target/llvm-cov/codecov/${{ matrix.group }}.json
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: ${{ matrix.group }}
           name: ${{ matrix.group }}
+          verbose: true
