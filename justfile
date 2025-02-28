@@ -239,7 +239,17 @@ stratus-test-coverage-group group="unit" *args="":
             ;;
     esac
     
-    cargo llvm-cov report {{args}}
+    # Ensure the output directory exists
+    mkdir -p target/llvm-cov/codecov
+    
+    # Generate the report with the specified arguments
+    # If --output-path is provided in args, use it, otherwise use the default path
+    if [[ "{{args}}" == *"--output-path"* ]]; then
+        cargo llvm-cov report {{args}}
+    else
+        # Default output path for codecov
+        cargo llvm-cov report --codecov --output-path target/llvm-cov/codecov/{{group}}.json {{args}}
+    fi
 
 # Test: Execute coverage for leader-follower tests
 stratus-test-coverage-leader-follower *args="":
@@ -321,14 +331,20 @@ e2e network="stratus" block_modes="automine" test="":
 # E2E: Execute admin password tests
 e2e-admin-password:
     #!/bin/bash
+
+    mkdir -p e2e_logs
     cd e2e
+    
+    npm install
 
     for test in "enabled|test123" "disabled|"; do
         IFS="|" read -r type pass <<< "$test"
         just _log "Running admin password tests with password $type"
         ADMIN_PASSWORD=$pass just run -a 0.0.0.0:3000 > /dev/null &
         just _wait_for_stratus
+        
         npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
+        
         killport 3000 -s sigterm
     done
 
@@ -773,9 +789,19 @@ _e2e-leader-follower-up-coverage test="":
     -rm utils/deploy/deploy_02.log
 
 _coverage-run-stratus-recipe *recipe="":
+    #!/bin/bash
+    # Create logs directory if it doesn't exist
+    mkdir -p e2e_logs
+    
+    # Run the recipe and capture the exit code
     just {{recipe}}
+    result=$?
+    
+    # Wait for processes to finish
     sleep 10
-    -rm -r e2e_logs
+    
+    # Return the original exit code
+    exit $result
 
 stratus-test-coverage *args="":
     #!/bin/bash
