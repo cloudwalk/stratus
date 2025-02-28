@@ -83,6 +83,13 @@ jobs:
           echo "Listing coverage directory contents:"
           ls -la target/llvm-cov/codecov/
 
+      - name: Upload coverage report artifact
+        uses: actions/upload-artifact@v4
+        with:
+            name: coverage-${{ matrix.group }}
+            path: target/llvm-cov/codecov/
+            retention-days: 90
+
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
         with:
@@ -90,10 +97,3 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: ${{ matrix.group }}
           name: ${{ matrix.group }}
-
-      - name: Upload coverage report artifact
-        uses: actions/upload-artifact@v4
-        with:
-            name: coverage-${{ matrix.group }}
-            path: target/llvm-cov/codecov/
-            retention-days: 90
