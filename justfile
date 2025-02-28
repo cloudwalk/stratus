@@ -287,10 +287,6 @@ stratus-test-coverage-misc *args="":
     export RUST_LOG=error
     export TRACING_LOG_FORMAT=json
     
-    just _coverage-run-stratus-recipe e2e-admin-password
-    rm -rf e2e_logs
-    rm -rf temp_*
-
     just _coverage-run-stratus-recipe e2e-rpc-downloader
     rm -rf e2e_logs
     rm -rf temp_*

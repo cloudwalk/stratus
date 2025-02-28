@@ -97,4 +97,3 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: ${{ matrix.group }}
           name: ${{ matrix.group }}
-          verbose: true
