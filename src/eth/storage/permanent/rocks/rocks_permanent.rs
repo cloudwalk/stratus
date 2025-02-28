@@ -23,7 +23,7 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 
 /// Maximum number of replication logs to return in a single call to `get_updates_since`
-const MAX_REPLICATION_LOGS: usize = 5;
+const MAX_REPLICATION_LOGS: usize = 1;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {

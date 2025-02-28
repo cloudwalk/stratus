@@ -508,6 +508,7 @@ impl Importer {
                 return Ok(());
             }
 
+            // TODO: maybe we can do this better by making possible to request a range of sequence numbers, and make many requests in parallel instead of sequentially
             match chain.fetch_latest_sequence_number().await {
                 Ok(leader_sequence) => {
                     if leader_sequence > last_applied_sequence {
