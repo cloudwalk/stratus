@@ -1285,6 +1285,7 @@ fn rocksdb_latest_sequence_number(_params: Params<'_>, ctx: Arc<RpcContext>, _ex
 }
 
 // TODO: add proper tracing
+// TODO: consider response size bytes dinamically before returning to allow more logs when size is lower than limit, and less logs when size is higher than limit
 fn rocksdb_replicate_logs(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
     let storage = &ctx.storage;
 
