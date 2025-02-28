@@ -18,6 +18,7 @@ use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::miner::interval_miner::mine_and_commit;
 use crate::eth::miner::Miner;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
@@ -48,6 +49,8 @@ pub enum ImporterMode {
     NormalFollower,
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     FakeLeader,
+    /// Efficient follower that replicates RocksDB WAL logs directly without re-execution
+    RocksDbReplication,
 }
 
 // -----------------------------------------------------------------------------
@@ -132,46 +135,63 @@ impl Importer {
     pub async fn run_importer_online(self: Arc<Self>) -> anyhow::Result<()> {
         let _timer = DropTimer::start("importer-online::run_importer_online");
 
-        let storage = &self.storage;
-        let number = storage.read_block_number_to_resume_import()?;
+        match self.importer_mode {
+            ImporterMode::RocksDbReplication => {
+                // Use the new RocksDB replication mechanism
+                tracing::info!("Starting RocksDB replication from leader node");
+                Self::start_rocksdb_replication(
+                    Arc::clone(&self.storage),
+                    Arc::clone(&self.chain),
+                    Arc::clone(&self.miner),
+                    self.sync_interval,
+                    self.kafka_connector.clone(),
+                )
+                .await
+            }
+            _ => {
+                // Use the original block execution mechanism for other modes
+                let storage = &self.storage;
+                let number = storage.read_block_number_to_resume_import()?;
 
-        let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
+                let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
 
-        // spawn block executor:
-        // it executes and mines blocks and expects to receive them via channel in the correct order.
-        let task_executor = spawn_named(
-            "importer::executor",
-            Importer::start_block_executor(
-                Arc::clone(&self.executor),
-                Arc::clone(&self.miner),
-                backlog_rx,
-                self.kafka_connector.clone(),
-                self.importer_mode,
-            ),
-        );
+                // spawn block executor:
+                // it executes and mines blocks and expects to receive them via channel in the correct order.
+                let task_executor = spawn_named(
+                    "importer::executor",
+                    Importer::start_block_executor(
+                        Arc::clone(&self.executor),
+                        Arc::clone(&self.miner),
+                        backlog_rx,
+                        self.kafka_connector.clone(),
+                        self.importer_mode,
+                    ),
+                );
 
-        // spawn block number:
-        // it keeps track of the blockchain current block number.
-        let number_fetcher_chain = Arc::clone(&self.chain);
-        let task_number_fetcher = spawn_named(
-            "importer::number-fetcher",
-            Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
-        );
+                // spawn block number:
+                // it keeps track of the blockchain current block number.
+                let number_fetcher_chain = Arc::clone(&self.chain);
+                let task_number_fetcher = spawn_named(
+                    "importer::number-fetcher",
+                    Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
+                );
 
-        // spawn block fetcher:
-        // it fetches blocks and receipts in parallel and sends them to the executor in the correct order.
-        // it uses the number fetcher current block to determine if should keep downloading more blocks or not.
-        let block_fetcher_chain = Arc::clone(&self.chain);
-        let task_block_fetcher = spawn_named(
-            "importer::block-fetcher",
-            Importer::start_block_fetcher(block_fetcher_chain, backlog_tx, number),
-        );
+                // spawn block fetcher:
+                // it fetches blocks and receipts in parallel and sends them to the executor in the correct order.
+                // it uses the number fetcher current block to determine if should keep downloading more blocks or not.
+                let block_fetcher_chain = Arc::clone(&self.chain);
+                let task_block_fetcher = spawn_named(
+                    "importer::block-fetcher",
+                    Importer::start_block_fetcher(block_fetcher_chain, backlog_tx, number),
+                );
 
-        // await all tasks
-        if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
-            tracing::error!(reason = ?e, "importer-online failed");
+                // await all tasks
+                if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
+                    tracing::error!(reason = ?e, "importer-online failed");
+                }
+                Ok(())
+            }
         }
-        Ok(())
     }
 
     // -----------------------------------------------------------------------------
@@ -463,6 +483,166 @@ impl Importer {
                 if backlog_tx.send((block, receipts)).is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
+                }
+            }
+        }
+    }
+
+    /// Replicates RocksDB WAL logs from a leader node
+    async fn start_rocksdb_replication(
+        storage: Arc<StratusStorage>,
+        chain: Arc<BlockchainClient>,
+        miner: Arc<Miner>,
+        sync_interval: Duration,
+        kafka_connector: Option<Arc<KafkaConnector>>,
+    ) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "rocksdb-replication";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
+
+        let mut last_applied_sequence = storage.get_latest_sequence_number()?;
+        let mut last_block_number = storage.read_mined_block_number()?;
+
+        loop {
+            // TODO: This can be done more intelligently, by requesting to the leader, and making the leader hold the request and respond as soon as the leader has a new sequence number
+            if Self::should_shutdown(TASK_NAME) {
+                return Ok(());
+            }
+
+            // TODO: maybe we can do this better by making possible to request a range of sequence numbers, and make many requests in parallel instead of sequentially
+            match chain.fetch_latest_sequence_number().await {
+                Ok(leader_sequence) => {
+                    if leader_sequence > last_applied_sequence {
+                        tracing::info!(
+                            local_sequence = %last_applied_sequence,
+                            leader_sequence = %leader_sequence,
+                            "Found new WAL logs to replicate"
+                        );
+
+                        match chain.fetch_replication_logs(last_applied_sequence).await {
+                            Ok(logs) => {
+                                if !logs.is_empty() {
+                                    tracing::info!(
+                                        log_count = %logs.len(),
+                                        "applying WAL logs"
+                                    );
+
+                                    // Check if we have subscribers or kafka enabled
+                                    let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
+                                    let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
+                                    let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
+                                    let has_kafka = kafka_connector.is_some();
+
+                                    // Apply logs one by one
+                                    for (seq, log_data) in logs {
+                                        match storage.apply_replication_log(seq, log_data) {
+                                            Ok(block_number) => {
+                                                last_applied_sequence = seq;
+
+                                                let block_number_increased = block_number > last_block_number;
+
+                                                if block_number_increased {
+                                                    tracing::info!(
+                                                        previous_block = %last_block_number,
+                                                        new_block = %block_number,
+                                                        "block number increased after log apply"
+                                                    );
+
+                                                    last_block_number = block_number;
+                                                }
+
+                                                if block_number_increased
+                                                    && (has_block_subscribers || has_log_subscribers || has_pending_tx_subscribers || has_kafka)
+                                                {
+                                                    tracing::info!(
+                                                        block_number = %block_number,
+                                                        sequence = %seq,
+                                                        "processing notifications for block applied from log"
+                                                    );
+
+                                                    if let Ok(Some(block)) = storage.read_block(BlockFilter::Number(block_number)) {
+                                                        // Send Kafka events if connector is available
+                                                        if let Some(ref kafka_conn) = kafka_connector {
+                                                            tracing::info!(
+                                                                block_number = %block_number,
+                                                                tx_count = %block.transactions.len(),
+                                                                "sending Kafka events for block"
+                                                            );
+
+                                                            let events = block
+                                                                .transactions
+                                                                .iter()
+                                                                .flat_map(|tx| transaction_to_events(block.header.timestamp, Cow::Borrowed(tx)));
+
+                                                            if let Err(e) = kafka_conn.send_buffered(events, 50).await {
+                                                                tracing::error!(reason = ?e, "failed to send Kafka events");
+                                                            }
+                                                        }
+
+                                                        // Notify about the block header for newHeads
+                                                        if has_block_subscribers {
+                                                            tracing::debug!(
+                                                                block_number = %block_number,
+                                                                "sending block notification"
+                                                            );
+                                                            let _ = miner.notifier_blocks.send(block.header.clone());
+                                                        }
+
+                                                        // Notify about transaction hashes for newPendingTransactions
+                                                        if has_pending_tx_subscribers && !block.transactions.is_empty() {
+                                                            let tx_count = block.transactions.len();
+                                                            tracing::debug!(
+                                                                block_number = %block_number,
+                                                                tx_count = %tx_count,
+                                                                "sending pending transaction notifications"
+                                                            );
+
+                                                            for tx in &block.transactions {
+                                                                let _ = miner.notifier_pending_txs.send(tx.input.hash);
+                                                            }
+                                                        }
+
+                                                        // Notify about transaction logs
+                                                        if has_log_subscribers {
+                                                            let logs_count = block.transactions.iter().map(|tx| tx.logs.len()).sum::<usize>();
+
+                                                            if logs_count > 0 {
+                                                                tracing::debug!(
+                                                                    block_number = %block_number,
+                                                                    logs_count = %logs_count,
+                                                                    "sending log notifications"
+                                                                );
+
+                                                                for tx in &block.transactions {
+                                                                    for log in &tx.logs {
+                                                                        let _ = miner.notifier_logs.send(log.clone());
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::error!(reason = ?e, sequence = %seq, "failed to apply replication log");
+                                                traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!(reason = ?e, "failed to fetch replication logs");
+                                traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
+                            }
+                        }
+                    } else {
+                        traced_sleep(sync_interval, SleepReason::SyncData).await;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(reason = ?e, "failed to fetch latest sequence number");
+                    traced_sleep(sync_interval, SleepReason::RetryBackoff).await;
                 }
             }
         }

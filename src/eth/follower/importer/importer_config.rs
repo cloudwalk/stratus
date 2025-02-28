@@ -40,6 +40,10 @@ pub struct ImporterConfig {
 
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms", required = false)]
     pub sync_interval: Duration,
+
+    /// Use direct RocksDB replication instead of block re-execution for better performance
+    #[arg(long = "use-rocksdb-replication", env = "USE_ROCKSDB_REPLICATION", default_value = "false")]
+    pub use_rocksdb_replication: bool,
 }
 
 impl ImporterConfig {
@@ -69,6 +73,12 @@ impl ImporterConfig {
     ) -> anyhow::Result<Option<Arc<Importer>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
+
+        let importer_mode = if self.use_rocksdb_replication {
+            ImporterMode::RocksDbReplication
+        } else {
+            importer_mode
+        };
 
         let chain = Arc::new(BlockchainClient::new_http_ws(&self.external_rpc, self.external_rpc_ws.as_deref(), self.external_rpc_timeout).await?);
 

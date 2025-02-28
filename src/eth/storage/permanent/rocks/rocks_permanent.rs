@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::bail;
@@ -20,6 +21,9 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
+
+/// Maximum number of replication logs to return in a single call to `get_updates_since`
+const MAX_REPLICATION_LOGS: usize = 1;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
@@ -158,5 +162,65 @@ impl PermanentStorage for RocksPermanentStorage {
         self.state.reset().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to reset in RocksPermanent");
         })
+    }
+
+    fn get_latest_sequence_number(&self) -> anyhow::Result<u64, StorageError> {
+        Ok(self.state.db.latest_sequence_number())
+    }
+
+    fn get_updates_since(&self, seq_number: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>, StorageError> {
+        let wal_iterator = self
+            .state
+            .db
+            .get_updates_since(seq_number)
+            .map_err(|err| StorageError::RocksError { err: err.into() })?;
+
+        let mut updates = Vec::new();
+        for update in wal_iterator {
+            match update {
+                Ok((seq, write_batch)) => {
+                    let data = write_batch.data().to_vec();
+                    updates.push((seq, data));
+
+                    // Limit the number of logs returned
+                    if updates.len() >= MAX_REPLICATION_LOGS {
+                        tracing::debug!("Reached maximum log limit of {MAX_REPLICATION_LOGS}, truncating results");
+                        break;
+                    }
+                }
+                Err(err) => {
+                    return Err(StorageError::RocksError { err: err.into() });
+                }
+            }
+        }
+
+        Ok(updates)
+    }
+
+    /// TODO: add some kind of check for sequence number to avoid applying the same log twice
+    fn apply_replication_log(&self, sequence: u64, log_data: Vec<u8>) -> anyhow::Result<BlockNumber, StorageError> {
+        tracing::info!(sequence = %sequence, "applying replication log");
+    
+        let write_batch = rocksdb::WriteBatch::from_data(&log_data);
+        self.state
+            .write_in_batch_for_multiple_cfs(write_batch)
+            .map_err(|err| StorageError::RocksError { err })?;
+    
+        let block_number = self.state.preload_block_number()
+            .map_err(|err| StorageError::RocksError { err })?
+            .load(Ordering::SeqCst);
+        
+        self.block_number.store(block_number, Ordering::SeqCst);
+        
+        tracing::info!(block_number = %block_number, "updated block number after replication");
+        Ok(block_number.into())
+    }
+
+    fn create_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {
+        use super::rocks_checkpoint::RocksCheckpoint;
+
+        let checkpoint = RocksCheckpoint::new(Arc::clone(&self.state.db), checkpoint_dir.to_path_buf());
+
+        checkpoint.create_checkpoint()
     }
 }

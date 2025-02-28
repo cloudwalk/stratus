@@ -29,6 +29,10 @@ impl DbConfig {
         opts.create_missing_column_families(true);
         opts.increase_parallelism(16);
 
+        // TODO: calculate production values and increase
+        opts.set_wal_ttl_seconds(60 * 60 * 24); // 24 hours
+        opts.set_wal_size_limit_mb(1024 * 10); // 10 GB
+
         block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
         block_based_options.set_cache_index_and_filter_blocks(true);
         block_based_options.set_bloom_filter(15.5, false);

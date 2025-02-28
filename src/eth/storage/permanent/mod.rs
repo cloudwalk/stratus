@@ -80,6 +80,18 @@ pub trait PermanentStorage: Send + Sync + 'static {
     #[cfg(feature = "dev")]
     /// Resets all state to a specific block number.
     fn reset(&self) -> anyhow::Result<(), StorageError>;
+
+    /// Returns the RocksDB latest sequence number for replication purposes.
+    fn get_latest_sequence_number(&self) -> anyhow::Result<u64, StorageError>;
+
+    /// Returns the WAL (Write-Ahead Log) updates that have occurred since the given sequence number.
+    fn get_updates_since(&self, seq_number: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>, StorageError>;
+
+    /// Applies a single WAL (Write-Ahead Log) update received from a leader node.
+    fn apply_replication_log(&self, sequence: u64, log_data: Vec<u8>) -> anyhow::Result<BlockNumber, StorageError>;
+
+    /// Creates a checkpoint of the RocksDB database at the specified path.
+    fn create_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError>;
 }
 
 // -----------------------------------------------------------------------------

@@ -11,6 +11,7 @@ default-run = "stratus"
 [dependencies]
 
 # general
+base64 = "0.22.1"
 anyhow = "=1.0.86"
 cfg-if = "=1.0.0"
 chrono = { version = "=0.4.38", features = ["serde"] }

@@ -509,4 +509,24 @@ impl StratusStorage {
             },
         }
     }
+
+    /// Gets the RocksDB latest sequence number from the permanent storage
+    pub fn get_latest_sequence_number(&self) -> Result<u64, StorageError> {
+        self.perm.get_latest_sequence_number()
+    }
+
+    /// Gets the RocksDB WAL updates since the given sequence number
+    pub fn get_updates_since(&self, seq_number: u64) -> Result<Vec<(u64, Vec<u8>)>, StorageError> {
+        self.perm.get_updates_since(seq_number)
+    }
+
+    /// Apply a single replication log to the permanent storage
+    pub fn apply_replication_log(&self, sequence: u64, log_data: Vec<u8>) -> Result<BlockNumber, StorageError> {
+        self.perm.apply_replication_log(sequence, log_data)
+    }
+
+    /// Creates a checkpoint of the RocksDB database at the specified path.
+    pub fn create_checkpoint(&self, checkpoint_dir: &std::path::Path) -> Result<(), StorageError> {
+        self.perm.create_checkpoint(checkpoint_dir)
+    }
 }
