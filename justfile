@@ -250,54 +250,6 @@ stratus-test-coverage-group group="unit" *args="":
         cargo llvm-cov report --codecov --output-path target/llvm-cov/codecov/{{group}}.json {{args}}
     fi
 
-# Test: Execute coverage for leader-follower tests
-stratus-test-coverage-leader-follower *args="":
-    #!/bin/bash
-    # setup
-    rm -rf temp_*
-    rm -rf e2e_logs
-    
-    just build
-    source <(cargo llvm-cov show-env --export-prefix)
-    export RUST_LOG=error
-    export TRACING_LOG_FORMAT=json
-    just contracts-clone
-    just contracts-flatten
-    
-    # other
-    for test in kafka deploy brlc change miner importer health; do
-        just _e2e-leader-follower-up-coverage $test
-        rm -rf e2e_logs
-        rm -rf temp_*
-        rm -rf utils/deploy/deploy_*.log
-    done
-    
-    cargo llvm-cov report {{args}}
-
-# Test: Execute coverage for misc tests
-stratus-test-coverage-misc *args="":
-    #!/bin/bash
-    # setup
-    rm -rf temp_*
-    rm -rf e2e_logs
-    rm -rf data/importer-offline-database-rocksdb
-    
-    just build
-    source <(cargo llvm-cov show-env --export-prefix)
-    export RUST_LOG=error
-    export TRACING_LOG_FORMAT=json
-    
-    just _coverage-run-stratus-recipe e2e-rpc-downloader
-    rm -rf e2e_logs
-    rm -rf temp_*
-
-    just _coverage-run-stratus-recipe e2e-importer-offline
-    rm -rf e2e_logs
-    rm -rf temp_*
-    rm -rf data/importer-offline-database-rocksdb
-    
-    cargo llvm-cov report {{args}}
-
 # ------------------------------------------------------------------------------
 # E2E tasks
 # ------------------------------------------------------------------------------
