@@ -200,18 +200,20 @@ impl PermanentStorage for RocksPermanentStorage {
     /// TODO: add some kind of check for sequence number to avoid applying the same log twice
     fn apply_replication_log(&self, sequence: u64, log_data: Vec<u8>) -> anyhow::Result<BlockNumber, StorageError> {
         tracing::info!(sequence = %sequence, "applying replication log");
-    
+
         let write_batch = rocksdb::WriteBatch::from_data(&log_data);
         self.state
             .write_in_batch_for_multiple_cfs(write_batch)
             .map_err(|err| StorageError::RocksError { err })?;
-    
-        let block_number = self.state.preload_block_number()
+
+        let block_number = self
+            .state
+            .preload_block_number()
             .map_err(|err| StorageError::RocksError { err })?
             .load(Ordering::SeqCst);
-        
+
         self.block_number.store(block_number, Ordering::SeqCst);
-        
+
         tracing::info!(block_number = %block_number, "updated block number after replication");
         Ok(block_number.into())
     }

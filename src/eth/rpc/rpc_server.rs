@@ -434,8 +434,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let (params, external_rpc) = next_rpc_param::<String>(params.sequence())?;
     let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
     let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
-    let (params, raw_sync_interval) = next_rpc_param::<String>(params)?;
-    let (_, use_rocksdb_replication) = next_rpc_param::<bool>(params)?;
+    let (_, raw_sync_interval) = next_rpc_param::<String>(params)?;
 
     let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
@@ -446,6 +445,13 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         tracing::error!(reason = ?e, "failed to parse sync_interval");
         ImporterError::ConfigParseError
     })?;
+
+    let use_rocksdb_replication = ctx
+        .app_config
+        .get("importer")
+        .and_then(|importer| importer.get("use_rocksdb_replication"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
 
     let importer_config = ImporterConfig {
         external_rpc,
