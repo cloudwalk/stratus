@@ -134,6 +134,122 @@ test-unit name="":
 test-int name="'*'":
     cargo test --test {{name}} {{release_flag}} -- --nocapture
 
+# Test: Execute coverage for a specific group
+stratus-test-coverage-group group="unit" *args="":
+    #!/bin/bash
+
+    cargo llvm-cov clean --workspace
+    
+    rm -rf temp_*
+    rm -rf data/rocksdb
+    rm -rf data/importer-offline-database-rocksdb
+    rm -rf e2e_logs
+    
+    source <(cargo llvm-cov show-env --export-prefix)
+    export RUST_LOG=error
+    export TRACING_LOG_FORMAT=json
+    
+    case "{{group}}" in
+        "unit")
+            cargo llvm-cov --no-report
+            ;;
+        "inmemory")
+            just contracts-clone
+            just contracts-flatten
+            
+            for test in "automine" "external"; do
+                just _coverage-run-stratus-recipe e2e-stratus $test
+                rm -rf e2e_logs
+                rm -rf temp_*
+            done
+            
+            just _coverage-run-stratus-recipe e2e-clock-stratus
+            rm -rf e2e_logs
+            rm -rf temp_*
+            
+            just _coverage-run-stratus-recipe contracts-test-stratus
+            rm -rf e2e_logs
+            rm -rf temp_*
+            
+            just _coverage-run-stratus-recipe e2e-eof
+            rm -rf e2e_logs
+            rm -rf temp_*
+            ;;
+        "rocksdb")
+            just contracts-clone
+            just contracts-flatten
+            
+            for test in "automine" "external"; do
+                rm -rf data/rocksdb
+                just _coverage-run-stratus-recipe e2e-stratus-rocks $test
+                rm -rf e2e_logs
+                rm -rf temp_*
+                rm -rf data/rocksdb
+            done
+            
+            rm -rf data/rocksdb
+            just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
+            rm -rf e2e_logs
+            rm -rf temp_*
+            rm -rf data/rocksdb
+            
+            rm -rf data/rocksdb
+            just _coverage-run-stratus-recipe contracts-test-stratus-rocks
+            rm -rf e2e_logs
+            rm -rf temp_*
+            rm -rf data/rocksdb
+
+            rm -rf data/rocksdb
+            just _coverage-run-stratus-recipe e2e-eof rocks
+            rm -rf e2e_logs
+            rm -rf temp_*
+            rm -rf data/rocksdb
+            ;;
+        "leader-follower")
+            just contracts-clone
+            just contracts-flatten
+            
+            for test in kafka deploy brlc change miner importer health; do
+                just _e2e-leader-follower-up-coverage $test
+                rm -rf e2e_logs
+                rm -rf temp_*
+                rm -rf utils/deploy/deploy_*.log
+            done
+            ;;
+        "admin-password")
+            just _coverage-run-stratus-recipe e2e-admin-password
+            rm -rf e2e_logs
+            rm -rf temp_*
+            ;;
+        "rpc-downloader")
+            just _coverage-run-stratus-recipe e2e-rpc-downloader
+            rm -rf e2e_logs
+            rm -rf temp_*
+            ;;
+        "importer-offline")
+            just _coverage-run-stratus-recipe e2e-importer-offline
+            rm -rf e2e_logs
+            rm -rf temp_*
+            rm -rf data/importer-offline-database-rocksdb
+            ;;
+        *)
+            echo "Unknown group: {{group}}"
+            exit 1
+            ;;
+    esac
+    
+    # Ensure the output directory exists
+    mkdir -p target/llvm-cov/codecov
+    
+    # Generate the report with the specified arguments
+    # If --output-path is provided in args, use it, otherwise use the default path
+    if [[ "{{args}}" == *"--output-path"* ]]; then
+        cargo llvm-cov report {{args}}
+    else
+        # Default output path for codecov
+        cargo llvm-cov report --codecov --output-path target/llvm-cov/codecov/{{group}}.json {{args}}
+    fi
+
 # ------------------------------------------------------------------------------
 # E2E tasks
 # ------------------------------------------------------------------------------
@@ -162,14 +278,20 @@ e2e network="stratus" block_modes="automine" test="":
 # E2E: Execute admin password tests
 e2e-admin-password:
     #!/bin/bash
+
+    mkdir -p e2e_logs
     cd e2e
+    
+    npm install
 
     for test in "enabled|test123" "disabled|"; do
         IFS="|" read -r type pass <<< "$test"
         just _log "Running admin password tests with password $type"
         ADMIN_PASSWORD=$pass just run -a 0.0.0.0:3000 > /dev/null &
         just _wait_for_stratus
+        
         npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
+        
         killport 3000 -s sigterm
     done
 
@@ -614,28 +736,25 @@ _e2e-leader-follower-up-coverage test="":
     -rm utils/deploy/deploy_02.log
 
 _coverage-run-stratus-recipe *recipe="":
+    #!/bin/bash
+    # Create logs directory if it doesn't exist
+    mkdir -p e2e_logs
+    
+    # Run the recipe and capture the exit code
     just {{recipe}}
+    result=$?
+    
+    # Wait for processes to finish
     sleep 10
-    -rm -r e2e_logs
+    
+    # Return the original exit code
+    exit $result
 
 stratus-test-coverage *args="":
     #!/bin/bash
-    # setup
-    cargo llvm-cov clean --workspace
-    just build
-    source <(cargo llvm-cov show-env --export-prefix)
-    export RUST_LOG=error
-    export TRACING_LOG_FORMAT=json
-    just contracts-clone
-    just contracts-flatten
 
-    # cargo test
-    cargo llvm-cov --no-report
-    sleep 10
-
-    # inmemory
-    for test in "automine" "external"; do
-        just _coverage-run-stratus-recipe e2e-stratus $test
+    for group in unit inmemory rocksdb leader-follower admin-password rpc-downloader importer-offline; do
+        just stratus-test-coverage-group $group {{args}}
     done
 
     just _coverage-run-stratus-recipe e2e-clock-stratus

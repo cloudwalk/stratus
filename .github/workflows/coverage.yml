@@ -13,9 +13,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  coverage-build:
+  coverage-matrix:
     runs-on: ubuntu-22.04
-    timeout-minutes: 300
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [unit, inmemory, rocksdb, leader-follower, admin-password, rpc-downloader, importer-offline]
 
     steps:
       - name: Checkout
@@ -35,6 +39,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .tool-versions
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -69,20 +76,24 @@ jobs:
         with:
           tool: cargo-llvm-cov@0.6.14
 
-      - name: Generate coverage
+      - name: Generate coverage for ${{ matrix.group }}
         run: |
           mkdir -p target/llvm-cov/codecov
-          just stratus-test-coverage "--codecov --output-path target/llvm-cov/codecov/codecov.json"
+          just stratus-test-coverage-group ${{ matrix.group }} "--codecov --output-path target/llvm-cov/codecov/${{ matrix.group }}.json"
+          echo "Listing coverage directory contents:"
+          ls -la target/llvm-cov/codecov/
 
       - name: Upload coverage report artifact
         uses: actions/upload-artifact@v4
         with:
-            name: coverage-report
+            name: coverage-${{ matrix.group }}
             path: target/llvm-cov/codecov/
             retention-days: 90
 
-      - name: Upload coverage reports to Codecov
+      - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
         with:
-          directory: target/llvm-cov/codecov
+          files: target/llvm-cov/codecov/${{ matrix.group }}.json
           token: ${{ secrets.CODECOV_TOKEN }}
+          flags: ${{ matrix.group }}
+          name: ${{ matrix.group }}
