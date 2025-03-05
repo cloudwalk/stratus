@@ -475,7 +475,7 @@ e2e-follower test="brlc":
     just _wait_for_stratus 3001
 
 
-_e2e-leader-follower-up-impl test="brlc" release_flag="--release" use_rocksdb_replication="false":
+_e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false" release_flag="--release":
     #!/bin/bash
     just build
 
@@ -554,8 +554,8 @@ _e2e-leader-follower-up-impl test="brlc" release_flag="--release" use_rocksdb_re
     fi
 
 # E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc" release_flag="--release" use_checkpoint="false":
-    just _e2e-leader-follower-up-impl {{test}} {{release_flag}} {{use_checkpoint}}
+e2e-leader-follower-up test="brlc" use_rocksdb_replication="false" release_flag="--release":
+    just _e2e-leader-follower-up-impl {{test}} {{use_rocksdb_replication}} {{release_flag}}
     killport 3000 -s sigterm
     killport 3001 -s sigterm
 
