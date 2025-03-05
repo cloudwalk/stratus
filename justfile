@@ -475,17 +475,42 @@ e2e-follower test="brlc":
     just _wait_for_stratus 3001
 
 
-_e2e-leader-follower-up-impl test="brlc" release_flag="--release":
+_e2e-leader-follower-up-impl test="brlc" release_flag="--release" use_rocksdb_replication="false":
     #!/bin/bash
     just build
 
     mkdir e2e_logs
 
     # Start Stratus with leader flag
-    just e2e-leader
+    if [ "{{use_rocksdb_replication}}" = "true" ]; then
+        just _log "Starting leader with RocksDB checkpoint enabled"
+        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 --use-rocksdb-replication > e2e_logs/stratus.log &
+        just _wait_for_stratus 3000
+        
+        # Create a RocksDB checkpoint for the follower
+        just _log "Creating RocksDB checkpoint for follower"
+        curl -X POST \
+          http://localhost:3000 \
+          -H "Content-Type: application/json" \
+          -d '{
+            "jsonrpc": "2.0",
+            "method": "rocksdb_createCheckpoint",
+            "params": ["temp_3001_checkpoint-rocksdb"],
+            "id": 1
+          }'
+    else
+        just e2e-leader
+    fi
 
     # Start Stratus with follower flag
-    just e2e-follower {{test}}
+    if [ "{{use_rocksdb_replication}}" = "true" ]; then
+        just _log "Starting follower with RocksDB checkpoint"
+        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001_checkpoint -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --use-rocksdb-replication > e2e_logs/importer.log &
+    else
+        just e2e-follower {{test}}
+    fi
+    # Wait for Stratus with follower flag to start
+    just _wait_for_stratus 3001
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
@@ -529,8 +554,8 @@ _e2e-leader-follower-up-impl test="brlc" release_flag="--release":
     fi
 
 # E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc" release_flag="--release":
-    just _e2e-leader-follower-up-impl {{test}} {{release_flag}}
+e2e-leader-follower-up test="brlc" release_flag="--release" use_checkpoint="false":
+    just _e2e-leader-follower-up-impl {{test}} {{release_flag}} {{use_checkpoint}}
     killport 3000 -s sigterm
     killport 3001 -s sigterm
 
@@ -802,7 +827,7 @@ e2e-rocksdb-checkpoint:
 
     # Start Stratus with leader flag
     just _log "Starting leader node"
-    RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 --use-rocksdb-replication > e2e_logs/stratus.log &
     just _wait_for_stratus 3000
     
     # Create a RocksDB checkpoint for the follower
