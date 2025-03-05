@@ -497,7 +497,7 @@ _e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false" release
     mkdir e2e_logs
 
     # Start leader with appropriate flags
-    just e2e-leader use_rocksdb_replication={{use_rocksdb_replication}}
+    just e2e-leader {{use_rocksdb_replication}}
 
     # Create RocksDB checkpoint for follower if needed
     if [ "{{use_rocksdb_replication}}" = "true" ]; then
@@ -515,7 +515,7 @@ _e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false" release
     fi
 
     # Start follower with appropriate flags
-    just e2e-follower {{test}} use_rocksdb_replication={{use_rocksdb_replication}}
+    just e2e-follower {{test}} {{use_rocksdb_replication}}
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
 
