@@ -483,7 +483,7 @@ _e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false" release
 
     # Start Stratus with leader flag
     if [ "{{use_rocksdb_replication}}" = "true" ]; then
-        just _log "Starting leader with RocksDB checkpoint enabled"
+        just _log "Starting leader with RocksDB replication enabled"
         RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 --use-rocksdb-replication > e2e_logs/stratus.log &
         just _wait_for_stratus 3000
         
