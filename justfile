@@ -453,39 +453,71 @@ e2e-flamegraph:
     just _log "Running cargo flamegraph"
     cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
 
-e2e-leader:
+e2e-leader use_rocksdb_replication="false":
     #!/bin/bash
-    RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    if [ "{{use_rocksdb_replication}}" = "true" ]; then
+        just _log "Starting leader with RocksDB replication"
+        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 --use-rocksdb-replication > e2e_logs/stratus.log &
+    else
+        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
+    fi
     just _wait_for_stratus 3000
 
-e2e-follower test="brlc":
+e2e-follower test="brlc" use_rocksdb_replication="false":
     #!/bin/bash
     if [ "{{test}}" = "kafka" ]; then
-    # Start Kafka using Docker Compose
+        # Start Kafka using Docker Compose
         just _log "Starting Kafka"
         docker-compose up kafka >> e2e_logs/kafka.log &
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none > e2e_logs/importer.log &
+        
+        if [ "{{use_rocksdb_replication}}" = "true" ]; then
+            RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001_checkpoint -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none --use-rocksdb-replication > e2e_logs/importer.log &
+        else
+            RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none > e2e_logs/importer.log &
+        fi
     else
-        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
+        if [ "{{use_rocksdb_replication}}" = "true" ]; then
+            just _log "Starting follower with RocksDB replication"
+            RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001_checkpoint -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --use-rocksdb-replication > e2e_logs/importer.log &
+        else
+            RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
+        fi
     fi
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
 
 
-_e2e-leader-follower-up-impl test="brlc" release_flag="--release":
+_e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false" release_flag="--release":
     #!/bin/bash
     just build
 
     mkdir e2e_logs
 
-    # Start Stratus with leader flag
-    just e2e-leader
+    # Start leader with appropriate flags
+    just e2e-leader {{use_rocksdb_replication}}
 
-    # Start Stratus with follower flag
-    just e2e-follower {{test}}
+    # Create RocksDB checkpoint for follower if needed
+    if [ "{{use_rocksdb_replication}}" = "true" ]; then
+        # Create a RocksDB checkpoint for the follower
+        just _log "Creating RocksDB checkpoint for follower"
+        curl -X POST \
+          http://localhost:3000 \
+          -H "Content-Type: application/json" \
+          -d '{
+            "jsonrpc": "2.0",
+            "method": "rocksdb_createCheckpoint",
+            "params": ["temp_3001_checkpoint-rocksdb"],
+            "id": 1
+          }'
+    fi
+
+    # Start follower with appropriate flags
+    just e2e-follower {{test}} {{use_rocksdb_replication}}
+    # Wait for Stratus with follower flag to start
+    just _wait_for_stratus 3001
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
@@ -529,8 +561,8 @@ _e2e-leader-follower-up-impl test="brlc" release_flag="--release":
     fi
 
 # E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc" release_flag="--release":
-    just _e2e-leader-follower-up-impl {{test}} {{release_flag}}
+e2e-leader-follower-up test="brlc" use_rocksdb_replication="false" release_flag="--release":
+    just _e2e-leader-follower-up-impl {{test}} {{use_rocksdb_replication}} {{release_flag}}
     killport 3000 -s sigterm
     killport 3001 -s sigterm
 
@@ -756,3 +788,38 @@ stratus-test-coverage *args="":
     for group in unit inmemory rocksdb leader-follower admin-password rpc-downloader importer-offline; do
         just stratus-test-coverage-group $group {{args}}
     done
+
+    just _coverage-run-stratus-recipe e2e-clock-stratus
+
+    just _coverage-run-stratus-recipe contracts-test-stratus
+    just _coverage-run-stratus-recipe e2e-eof
+
+    # rocksdb
+    for test in "automine" "external"; do
+        -rm -r data/rocksdb
+        just _coverage-run-stratus-recipe e2e-stratus-rocks $test
+    done
+
+    -rm -r data/rocksdb
+    just _coverage-run-stratus-recipe e2e-eof rocks
+
+    -rm -r data/rocksdb
+    just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
+
+    -rm -r data/rocksdb
+    just _coverage-run-stratus-recipe contracts-test-stratus-rocks
+
+    # other
+    for test in kafka deploy brlc change miner importer health; do
+        just _e2e-leader-follower-up-coverage $test
+    done
+
+    just _coverage-run-stratus-recipe e2e-admin-password
+
+    just _coverage-run-stratus-recipe e2e-rpc-downloader
+
+    just _coverage-run-stratus-recipe e2e-importer-offline
+
+    -rm -r data/importer-offline-database-rocksdb
+
+    cargo llvm-cov report {{args}}

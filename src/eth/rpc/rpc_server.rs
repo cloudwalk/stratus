@@ -10,6 +10,8 @@ use std::time::Duration;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use ethereum_types::U256;
 use futures::join;
 use http::Method;
@@ -217,6 +219,11 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
+
+    // rocksdb replication
+    module.register_blocking_method("rocksdb_latestSequenceNumber", rocksdb_latest_sequence_number)?;
+    module.register_blocking_method("rocksdb_replicateLogs", rocksdb_replicate_logs)?;
+    module.register_blocking_method("rocksdb_createCheckpoint", rocksdb_create_checkpoint)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -1256,4 +1263,77 @@ fn hex_zero() -> String {
 
 fn hex_null() -> String {
     "0x".to_owned()
+}
+
+// -----------------------------------------------------------------------------
+// RocksDB Replication
+// -----------------------------------------------------------------------------
+
+// TODO: add proper tracing
+fn rocksdb_latest_sequence_number(_params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
+    let storage = &ctx.storage;
+
+    match storage.get_latest_sequence_number() {
+        Ok(seq_number) => Ok(to_json_value(seq_number)),
+        Err(e) => {
+            tracing::error!(reason = ?e, "failed to get latest RocksDB sequence number");
+            Err(e.into())
+        }
+    }
+}
+
+// TODO: add proper tracing
+// TODO: consider response size bytes dinamically before returning to allow more logs when size is lower than limit, and less logs when size is higher than limit
+fn rocksdb_replicate_logs(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
+    let storage = &ctx.storage;
+
+    tracing::info!("rocksdb_replicate_logs called with params: {:?}", params);
+
+    let (_, seq_number) = next_rpc_param::<u64>(params.sequence())?;
+
+    tracing::info!("Successfully parsed sequence number: {}", seq_number);
+
+    match storage.get_updates_since(seq_number) {
+        Ok(updates) => {
+            tracing::info!("Found {} updates since sequence {}", updates.len(), seq_number);
+
+            let json_updates: Vec<serde_json::Value> = updates
+                .into_iter()
+                .map(|(seq, data)| {
+                    serde_json::json!({
+                        "sequence": seq,
+                        "data": STANDARD.encode(&data)
+                    })
+                })
+                .collect();
+
+            Ok(to_json_value(json_updates))
+        }
+        Err(e) => {
+            tracing::error!(reason = ?e, seq_number = seq_number, "failed to get RocksDB updates since sequence number");
+            Err(e.into())
+        }
+    }
+}
+
+// TODO: add proper tracing
+fn rocksdb_create_checkpoint(params: Params<'_>, ctx: Arc<RpcContext>, _ext: Extensions) -> Result<JsonValue, StratusError> {
+    tracing::info!("rocksdb_create_checkpoint called with params: {:?}", params);
+
+    let (_, checkpoint_path) = next_rpc_param::<String>(params.sequence())?;
+
+    tracing::info!("Creating checkpoint at path: {}", checkpoint_path);
+
+    let path = std::path::Path::new(&checkpoint_path);
+
+    match ctx.storage.create_checkpoint(path) {
+        Ok(_) => {
+            tracing::info!("Successfully created checkpoint at: {}", checkpoint_path);
+            Ok(json!(true))
+        }
+        Err(e) => {
+            tracing::error!(reason = ?e, path = %checkpoint_path, "Failed to create RocksDB checkpoint");
+            Err(StorageError::RocksError { err: e.into() }.into())
+        }
+    }
 }

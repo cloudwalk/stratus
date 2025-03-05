@@ -234,6 +234,31 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
         Ok(())
     }
+
+    fn get_latest_sequence_number(&self) -> anyhow::Result<u64, StorageError> {
+        tracing::warn!("get_latest_sequence_number called on InMemoryPermanentStorage (no-op)");
+        Ok(0)
+    }
+
+    fn get_updates_since(&self, _seq_number: u64) -> anyhow::Result<Vec<(u64, Vec<u8>)>, StorageError> {
+        tracing::warn!("get_updates_since called on InMemoryPermanentStorage (no-op)");
+        Ok(Vec::new())
+    }
+
+    fn apply_replication_log(&self, _sequence: u64, _log_data: Vec<u8>) -> anyhow::Result<BlockNumber, StorageError> {
+        tracing::warn!("apply_replication_log called on InMemoryPermanentStorage (no-op)");
+        Ok(BlockNumber::ZERO)
+    }
+
+    fn create_checkpoint(&self, _checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError> {
+        tracing::warn!("create_checkpoint called on InMemoryPermanentStorage (no-op)");
+        Ok(())
+    }
+
+    fn rocksdb_replication_enabled(&self) -> bool {
+        tracing::warn!("rocksdb_replication_enabled called on InMemoryPermanentStorage (no-op)");
+        false
+    }
 }
 
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
