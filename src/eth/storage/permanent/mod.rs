@@ -92,6 +92,9 @@ pub trait PermanentStorage: Send + Sync + 'static {
 
     /// Creates a checkpoint of the RocksDB database at the specified path.
     fn create_checkpoint(&self, checkpoint_dir: &std::path::Path) -> anyhow::Result<(), StorageError>;
+
+    /// Returns whether RocksDB replication is enabled
+    fn rocksdb_replication_enabled(&self) -> bool;
 }
 
 // -----------------------------------------------------------------------------
@@ -124,6 +127,10 @@ pub struct PermanentStorageConfig {
     /// Augments or decreases the size of Column Family caches based on a multiplier.
     #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
     pub rocks_disable_sync_write: bool,
+
+    /// Use direct RocksDB replication instead of block re-execution for better performance
+    #[arg(long = "use-rocksdb-replication", env = "USE_ROCKSDB_REPLICATION", default_value = "false")]
+    pub use_rocksdb_replication: bool,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -148,6 +155,7 @@ impl PermanentStorageConfig {
                 self.rocks_shutdown_timeout,
                 self.rocks_cache_size_multiplier,
                 !self.rocks_disable_sync_write,
+                self.use_rocksdb_replication,
             )?),
         };
         Ok(perm)

@@ -254,6 +254,11 @@ impl PermanentStorage for InMemoryPermanentStorage {
         tracing::warn!("create_checkpoint called on InMemoryPermanentStorage (no-op)");
         Ok(())
     }
+
+    fn rocksdb_replication_enabled(&self) -> bool {
+        tracing::warn!("rocksdb_replication_enabled called on InMemoryPermanentStorage (no-op)");
+        false
+    }
 }
 
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.

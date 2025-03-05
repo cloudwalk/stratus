@@ -446,19 +446,11 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         ImporterError::ConfigParseError
     })?;
 
-    let use_rocksdb_replication = ctx
-        .app_config
-        .get("importer")
-        .and_then(|importer| importer.get("use_rocksdb_replication"))
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false);
-
     let importer_config = ImporterConfig {
         external_rpc,
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
-        use_rocksdb_replication,
     };
 
     importer_config.init_follower_importer(ctx).await

@@ -40,10 +40,6 @@ pub struct ImporterConfig {
 
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms", required = false)]
     pub sync_interval: Duration,
-
-    /// Use direct RocksDB replication instead of block re-execution for better performance
-    #[arg(long = "use-rocksdb-replication", env = "USE_ROCKSDB_REPLICATION", default_value = "false")]
-    pub use_rocksdb_replication: bool,
 }
 
 impl ImporterConfig {
@@ -74,7 +70,7 @@ impl ImporterConfig {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
 
-        let importer_mode = if self.use_rocksdb_replication {
+        let importer_mode = if storage.rocksdb_replication_enabled() {
             ImporterMode::RocksDbReplication
         } else {
             importer_mode
