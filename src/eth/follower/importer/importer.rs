@@ -502,10 +502,30 @@ impl Importer {
         let mut last_applied_sequence = storage.get_latest_sequence_number()?;
         let mut last_block_number = storage.read_mined_block_number()?;
 
+        if let Ok(block_number) = chain.fetch_block_number().await {
+            tracing::info!(
+                initial_block = %block_number,
+                local_block = %last_block_number,
+                "Initial external RPC current block fetched"
+            );
+            set_external_rpc_current_block(block_number);
+        }
+
         loop {
             // TODO: This can be done more intelligently, by requesting to the leader, and making the leader hold the request and respond as soon as the leader has a new sequence number
             if Self::should_shutdown(TASK_NAME) {
                 return Ok(());
+            }
+
+            let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
+            if last_block_number.as_u64() > external_rpc_current_block {
+                tracing::info!(
+                    local_block = %last_block_number,
+                    external_block = %external_rpc_current_block,
+                    "Local block ahead of external RPC, waiting for external chain to catch up"
+                );
+                yield_now().await;
+                continue;
             }
 
             // TODO: maybe we can do this better by making possible to request a range of sequence numbers, and make many requests in parallel instead of sequentially
@@ -548,6 +568,7 @@ impl Importer {
                                                     );
 
                                                     last_block_number = block_number;
+                                                    set_external_rpc_current_block(block_number);
                                                 }
 
                                                 if block_number_increased
