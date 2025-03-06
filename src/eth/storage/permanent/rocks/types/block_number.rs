@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use crate::eth::primitives::BlockNumber;
 use crate::gen_newtype_from;
+use super::super::cf_versions::{CfBlocksByHashValue, CfTransactionsValue};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Ord, PartialOrd, Hash, derive_more::Display, fake::Dummy)]
 pub struct BlockNumberRocksdb(pub u32);
@@ -29,5 +30,21 @@ impl serde::Serialize for BlockNumberRocksdb {
 impl<'de> serde::Deserialize<'de> for BlockNumberRocksdb {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         u32::deserialize(deserializer).map(|v| Self(u32::from_be(v)))
+    }
+}
+
+impl From<CfBlocksByHashValue> for BlockNumberRocksdb {
+    fn from(value: CfBlocksByHashValue) -> Self {
+        match value {
+            CfBlocksByHashValue::V1(block_number) => block_number
+        }
+    }
+}
+
+impl From<CfTransactionsValue> for BlockNumberRocksdb {
+    fn from(value: CfTransactionsValue) -> Self {
+        match value {
+            CfTransactionsValue::V1(block_number) => block_number
+        }
     }
 }

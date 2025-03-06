@@ -59,6 +59,20 @@ impl RocksPermanentStorage {
 
         Ok(Self { state, block_number })
     }
+
+    // -------------------------------------------------------------------------
+    // State methods
+    // -------------------------------------------------------------------------
+
+    pub fn clear(&self) -> anyhow::Result<()> {
+        self.state.clear()?;
+        self.block_number.store(0, Ordering::SeqCst);
+        Ok(())
+    }
+
+    pub fn revert_state_to_block(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        self.state.revert_state_to_block(block_number.into())
+    }
 }
 
 impl PermanentStorage for RocksPermanentStorage {

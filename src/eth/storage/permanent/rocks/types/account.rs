@@ -9,6 +9,7 @@ use super::wei::WeiRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::ext::OptionExt;
+use super::super::cf_versions::CfAccountsHistoryValue;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct AccountRocksdb {
@@ -48,6 +49,14 @@ impl From<Account> for AccountRocksdb {
             balance: value.balance.into(),
             nonce: value.nonce.into(),
             bytecode: value.bytecode.map_into(),
+        }
+    }
+}
+
+impl From<CfAccountsHistoryValue> for AccountRocksdb {
+    fn from(value: CfAccountsHistoryValue) -> Self {
+        match value {
+            CfAccountsHistoryValue::V1(account) => account
         }
     }
 }

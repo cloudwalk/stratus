@@ -86,22 +86,10 @@ where
     // Clears the database
     #[cfg(feature = "dev")]
     pub fn clear(&self) -> Result<()> {
-        let cf = self.handle();
-
-        // try clearing everything
-        let first = self.db.iterator_cf(&cf, IteratorMode::Start).next();
-        let last = self.db.iterator_cf(&cf, IteratorMode::End).next();
-        if let (Some(Ok((first_key, _))), Some(Ok((last_key, _)))) = (first, last) {
-            self.db.delete_range_cf(&cf, first_key, last_key).context("when deleting elements in range")?;
-        }
-
-        // clear left-overs
-        let mut batch = WriteBatch::default();
-        for item in self.db.iterator_cf(&cf, IteratorMode::Start) {
-            let (key, _) = item.context("when reading an element from the iterator")?;
-            batch.delete_cf(&cf, key);
-        }
-        self.apply_batch_with_context(batch)?;
+        let batch = WriteBatch::default();
+        // Delete the range from start to end
+        self.db.delete_range_cf(&self.handle(), vec![], vec![0xff])?;
+        self.db.write(batch)?;
         Ok(())
     }
 
@@ -299,6 +287,36 @@ where
     fn serialize_value_with_context(&self, value: &V) -> Result<Vec<u8>> {
         serialize_with_context(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family))
     }
+
+    /// Deletes an entry from the database by key
+    pub fn delete(&self, key: &K) -> Result<()> {
+        self.delete_impl(key)
+            .with_context(|| format!("when trying to delete value from CF: '{}'", self.column_family))
+    }
+
+    #[inline]
+    fn delete_impl(&self, key: &K) -> Result<()> {
+        let serialized_key = self.serialize_key_with_context(key)?;
+        let cf = self.handle();
+
+        self.db.delete_cf(&cf, serialized_key).map_err(Into::into)
+    }
+
+    pub fn prepare_and_apply_insertion_batch_with_context<I>(&self, changes: I) -> Result<()>
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        let mut batch = WriteBatch::default();
+        self.prepare_batch_insertion(changes, &mut batch)?;
+        self.apply_batch_with_context(batch)
+    }
+
+    pub fn iter_end(&self) -> RocksCfIterator<K, V> {
+        let cf = self.handle();
+
+        let iter = self.db.iterator_cf(&cf, IteratorMode::End);
+        RocksCfIterator::new(iter, &self.column_family)
+    }
 }
 
 fn deserialize_with_context<T>(bytes: &[u8]) -> Result<T>
@@ -418,5 +436,67 @@ where
         };
 
         Some(Ok(deserialized_key))
+    }
+}
+
+/// An iterator over data in a CF.
+pub(super) struct RocksCfIterator<'a, K, V> {
+    iter: DBIteratorWithThreadMode<'a, DB>,
+    column_family: &'a str,
+    _marker: PhantomData<(K, V)>,
+}
+
+impl<'a, K, V> RocksCfIterator<'a, K, V>
+where
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+{
+    fn new(iter: DBIteratorWithThreadMode<'a, DB>, column_family: &'a str) -> Self {
+        Self {
+            iter,
+            column_family,
+            _marker: PhantomData,
+        }
+    }
+}
+
+/// Custom iterator for navigating RocksDB entries.
+impl<'a, K, V> Iterator for RocksCfIterator<'a, K, V>
+where
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+{
+    type Item = Result<(K, V)>;
+
+    /// Retrieves the next key-value pair from the database.
+    ///
+    /// Returns:
+    /// - `Some((K, V))` if a valid key-value pair is found.
+    /// - `None` if there are no more items to process, or if only special/control keys remain.
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = self
+            .iter
+            .next()?
+            .with_context(|| format!("rocksdb iterator failed while reading from cf '{}'", self.column_family));
+
+        let (key, value) = match next {
+            Ok(next) => next,
+            Err(e) => return Some(Err(e)),
+        };
+
+        let deserialized_key = deserialize_with_context(&key).with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family));
+        let deserialized_key = match deserialized_key {
+            Ok(inner) => inner,
+            Err(e) => return Some(Err(e)),
+        };
+
+        let deserialized_value =
+            deserialize_with_context(&value).with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family));
+        let deserialized_value = match deserialized_value {
+            Ok(inner) => inner,
+            Err(e) => return Some(Err(e)),
+        };
+
+        Some(Ok((deserialized_key, deserialized_value)))
     }
 }
