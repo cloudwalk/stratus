@@ -4,6 +4,8 @@ use tracing::Span;
 use super::StorageCache;
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -455,7 +457,7 @@ impl StratusStorage {
     /// If a genesis.json file is available, it will be used.
     /// Otherwise, it will use the hardcoded genesis block and test accounts.
     pub fn reset_to_genesis(&self) -> Result<(), StorageError> {
-        use crate::eth::primitives::test_accounts;
+        tracing::info!("Resetting storage to genesis state");
 
         self.cache.clear();
 
@@ -483,10 +485,10 @@ impl StratusStorage {
         })?;
 
         // Try to load genesis.json
-        let genesis_accounts = if let Some(genesis_path) = GenesisConfig::find_genesis_file(None) {
-            tracing::info!("Found genesis.json file at {:?}, using it for initialization", genesis_path);
-            match GenesisConfig::load_from_file(genesis_path) {
-                Ok(genesis_config) => match genesis_config.to_stratus_accounts() {
+        let genesis_accounts = if let Some(genesis_path) = crate::eth::genesis::GenesisConfig::find_genesis_file(None) {
+            tracing::info!("Found genesis file at: {:?}", genesis_path);
+            match crate::eth::genesis::GenesisConfig::load_from_file(genesis_path) {
+                Ok(genesis) => match genesis.to_stratus_accounts() {
                     Ok(accounts) => {
                         tracing::info!("Loaded {} accounts from genesis.json", accounts.len());
                         accounts
