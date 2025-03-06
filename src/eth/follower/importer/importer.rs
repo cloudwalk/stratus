@@ -569,6 +569,15 @@ impl Importer {
 
                                                     last_block_number = block_number;
                                                     set_external_rpc_current_block(block_number);
+
+                                                    // Update pending block after successful log application
+                                                    if let Err(e) = storage.finish_pending_block() {
+                                                        tracing::error!(
+                                                            reason = ?e,
+                                                            block_number = %block_number,
+                                                            "failed to finish pending block after log replication"
+                                                        );
+                                                    }
                                                 }
 
                                                 if block_number_increased
