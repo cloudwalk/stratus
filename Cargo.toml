@@ -192,6 +192,10 @@ path = "src/bin/importer_offline.rs"
 name = "historic_events_processor"
 path = "src/bin/historic_events_processor.rs"
 
+[[bin]]
+name = "rocks-revert-to-blocks"
+path = "src/bin/rocks_revert_to_blocks.rs"
+
 # ------------------------------------------------------------------------------
 # Features
 # ------------------------------------------------------------------------------

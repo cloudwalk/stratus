@@ -299,6 +299,36 @@ where
     fn serialize_value_with_context(&self, value: &V) -> Result<Vec<u8>> {
         serialize_with_context(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family))
     }
+
+    /// Deletes an entry from the database by key
+    pub fn delete(&self, key: &K) -> Result<()> {
+        self.delete_impl(key)
+            .with_context(|| format!("when trying to delete value from CF: '{}'", self.column_family))
+    }
+
+    #[inline]
+    fn delete_impl(&self, key: &K) -> Result<()> {
+        let serialized_key = self.serialize_key_with_context(key)?;
+        let cf = self.handle();
+
+        self.db.delete_cf(&cf, serialized_key).map_err(Into::into)
+    }
+
+    pub fn prepare_and_apply_insertion_batch_with_context<I>(&self, changes: I) -> Result<()>
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        let mut batch = WriteBatch::default();
+        self.prepare_batch_insertion(changes, &mut batch)?;
+        self.apply_batch_with_context(batch)
+    }
+
+    pub fn iter_end(&self) -> RocksCfIter<K, V> {
+        let cf = self.handle();
+
+        let iter = self.db.iterator_cf(&cf, IteratorMode::End);
+        RocksCfIter::new(iter, &self.column_family)
+    }
 }
 
 fn deserialize_with_context<T>(bytes: &[u8]) -> Result<T>

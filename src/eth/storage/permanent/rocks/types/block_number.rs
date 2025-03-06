@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::ops::Add;
 
 use crate::eth::primitives::BlockNumber;
+use crate::eth::storage::permanent::rocks::cf_versions::{CfBlocksByHashValue, CfTransactionsValue};
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Ord, PartialOrd, Hash, derive_more::Display, fake::Dummy)]
@@ -44,5 +45,21 @@ impl Add<u64> for BlockNumberRocksdb {
 
     fn add(self, other: u64) -> Self {
         BlockNumberRocksdb(self.0 + other)
+    }
+}
+
+impl From<CfBlocksByHashValue> for BlockNumberRocksdb {
+    fn from(value: CfBlocksByHashValue) -> Self {
+        match value {
+            CfBlocksByHashValue::V1(block_number) => block_number
+        }
+    }
+}
+
+impl From<CfTransactionsValue> for BlockNumberRocksdb {
+    fn from(value: CfTransactionsValue) -> Self {
+        match value {
+            CfTransactionsValue::V1(block_number) => block_number
+        }
     }
 }
