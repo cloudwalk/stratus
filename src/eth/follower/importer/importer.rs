@@ -531,6 +531,9 @@ impl Importer {
             // TODO: maybe we can do this better by making possible to request a range of sequence numbers, and make many requests in parallel instead of sequentially
             match chain.fetch_latest_sequence_number().await {
                 Ok(leader_sequence) => {
+                    // Update the latest fetched block time to signal that we are still connected to the leader
+                    LATEST_FETCHED_BLOCK_TIME.store(chrono::Utc::now().timestamp() as u64, Ordering::Relaxed);
+
                     if leader_sequence > last_applied_sequence {
                         tracing::info!(
                             local_sequence = %last_applied_sequence,
