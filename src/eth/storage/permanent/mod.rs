@@ -131,6 +131,10 @@ pub struct PermanentStorageConfig {
     /// Use direct RocksDB replication instead of block re-execution for better performance
     #[arg(long = "use-rocksdb-replication", env = "USE_ROCKSDB_REPLICATION", default_value = "false")]
     pub use_rocksdb_replication: bool,
+
+    /// Maximum number of replication logs to return in a single call to get_updates_since
+    #[arg(long = "rocks-max-replication-logs", env = "ROCKS_MAX_REPLICATION_LOGS", default_value = "1")]
+    pub rocks_max_replication_logs: usize,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -156,6 +160,7 @@ impl PermanentStorageConfig {
                 self.rocks_cache_size_multiplier,
                 !self.rocks_disable_sync_write,
                 self.use_rocksdb_replication,
+                self.rocks_max_replication_logs,
             )?),
         };
         Ok(perm)

@@ -22,13 +22,11 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::PermanentStorage;
 
-/// Maximum number of replication logs to return in a single call to `get_updates_since`
-const MAX_REPLICATION_LOGS: usize = 1;
-
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
     pub state: RocksStorageState,
     block_number: AtomicU32,
+    max_replication_logs: usize,
 }
 
 impl RocksPermanentStorage {
@@ -38,6 +36,7 @@ impl RocksPermanentStorage {
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
         use_rocksdb_replication: bool,
+        max_replication_logs: usize,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
@@ -62,7 +61,11 @@ impl RocksPermanentStorage {
         let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write, use_rocksdb_replication)?;
         let block_number = state.preload_block_number()?;
 
-        Ok(Self { state, block_number })
+        Ok(Self {
+            state,
+            block_number,
+            max_replication_logs,
+        })
     }
 }
 
@@ -184,8 +187,8 @@ impl PermanentStorage for RocksPermanentStorage {
                     updates.push((seq, data));
 
                     // Limit the number of logs returned
-                    if updates.len() >= MAX_REPLICATION_LOGS {
-                        tracing::debug!("Reached maximum log limit of {MAX_REPLICATION_LOGS}, truncating results");
+                    if updates.len() >= self.max_replication_logs {
+                        tracing::debug!("Reached maximum log limit of {}, truncating results", self.max_replication_logs);
                         break;
                     }
                 }
