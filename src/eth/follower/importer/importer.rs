@@ -391,6 +391,50 @@ impl Importer {
     // Block fetcher
     // -----------------------------------------------------------------------------
 
+    /// Retrieves raw block.
+    async fn start_raw_block_fetcher(
+        chain: Arc<BlockchainClient>,
+        backlog_tx: mpsc::UnboundedSender<Block>,
+        mut importer_block_number: BlockNumber,
+    ) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "external-block-fetcher";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
+
+        loop {
+            if Self::should_shutdown(TASK_NAME) {
+                return Ok(());
+            }
+
+            // if we are ahead of current block number, await until we are behind again
+            let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
+            if importer_block_number.as_u64() > external_rpc_current_block {
+                yield_now().await;
+                continue;
+            }
+
+            // we are behind current, so we will fetch multiple blocks in parallel to catch up
+            let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1; // TODO: use count_to from BlockNumber
+            let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
+            tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with blocks");
+
+            let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
+            while blocks_to_fetch > 0 {
+                blocks_to_fetch -= 1;
+                tasks.push(fetch_raw_block(Arc::clone(&chain), importer_block_number));
+                importer_block_number = importer_block_number.next_block_number();
+            }
+
+            // keep fetching in order
+            let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
+            while let Some(block) = tasks.next().await {
+                if backlog_tx.send(block?).is_err() {
+                    warn_task_rx_closed(TASK_NAME);
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     /// Retrieves blocks and receipts.
     async fn start_block_fetcher(
         chain: Arc<BlockchainClient>,
