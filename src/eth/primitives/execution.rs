@@ -279,22 +279,12 @@ mod tests {
         let mut receipt: ExternalReceipt = Faker.fake();
         let mut inner_receipt = receipt.0.clone();
 
-        // Set receipt to failed status
-        match &mut inner_receipt.inner {
-            alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) => r.receipt.status = alloy_consensus::Eip658Value::Eip658(false),
-            alloy_consensus::ReceiptEnvelope::Eip1559(ref mut r) => r.receipt.status = alloy_consensus::Eip658Value::Eip658(false),
-            alloy_consensus::ReceiptEnvelope::Eip2930(ref mut r) => r.receipt.status = alloy_consensus::Eip658Value::Eip658(false),
-            alloy_consensus::ReceiptEnvelope::Eip4844(ref mut r) => r.receipt.status = alloy_consensus::Eip658Value::Eip658(false),
-            alloy_consensus::ReceiptEnvelope::Eip7702(ref mut r) => r.receipt.status = alloy_consensus::Eip658Value::Eip658(false),
-        }
-
         // Clear logs for failed transaction
-        match &mut inner_receipt.inner {
-            alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) => r.receipt.logs.clear(),
-            alloy_consensus::ReceiptEnvelope::Eip1559(ref mut r) => r.receipt.logs.clear(),
-            alloy_consensus::ReceiptEnvelope::Eip2930(ref mut r) => r.receipt.logs.clear(),
-            alloy_consensus::ReceiptEnvelope::Eip4844(ref mut r) => r.receipt.logs.clear(),
-            alloy_consensus::ReceiptEnvelope::Eip7702(ref mut r) => r.receipt.logs.clear(),
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = inner_receipt.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(false);
+            r.receipt.logs.clear();
+        } else {
+            panic!("expected be legacy!")
         }
 
         // Update from address
@@ -338,12 +328,10 @@ mod tests {
 
         // Create a mock receipt (failed)
         let mut receipt: ExternalReceipt = Faker.fake();
-        match &mut receipt.0.inner {
-            alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) => r.receipt.status = alloy_consensus::Eip658Value::Eip658(false),
-            alloy_consensus::ReceiptEnvelope::Eip1559(ref mut r) => r.receipt.status = alloy_consensus::Eip658Value::Eip658(false),
-            alloy_consensus::ReceiptEnvelope::Eip2930(ref mut r) => r.receipt.status = alloy_consensus::Eip658Value::Eip658(false),
-            alloy_consensus::ReceiptEnvelope::Eip4844(ref mut r) => r.receipt.status = alloy_consensus::Eip658Value::Eip658(false),
-            alloy_consensus::ReceiptEnvelope::Eip7702(ref mut r) => r.receipt.status = alloy_consensus::Eip658Value::Eip658(false),
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(false);
+        } else {
+            panic!("expected be legacy!")
         }
 
         // Verify comparison fails
@@ -359,27 +347,11 @@ mod tests {
 
         // Create a mock receipt with different number of logs
         let mut receipt: ExternalReceipt = Faker.fake();
-        match &mut receipt.0.inner {
-            alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![alloy_rpc_types_eth::Log::default()]; // Only one log
-            }
-            alloy_consensus::ReceiptEnvelope::Eip1559(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![alloy_rpc_types_eth::Log::default()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip2930(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![alloy_rpc_types_eth::Log::default()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip4844(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![alloy_rpc_types_eth::Log::default()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip7702(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![alloy_rpc_types_eth::Log::default()];
-            }
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
+            r.receipt.logs = vec![alloy_rpc_types_eth::Log::default()]; // Only one log
+        } else {
+            panic!("expected be legacy!")
         }
 
         // Verify comparison fails
@@ -408,27 +380,11 @@ mod tests {
 
         // Create a receipt with this log
         let mut receipt: ExternalReceipt = Faker.fake();
-        match &mut receipt.0.inner {
-            alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip1559(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip2930(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip4844(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip7702(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log];
-            }
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
+            r.receipt.logs = vec![receipt_log.clone()];
+        } else {
+            panic!("expected be legacy!")
         }
 
         // Verify comparison fails
@@ -457,27 +413,11 @@ mod tests {
 
         // Create receipt with this log
         let mut receipt: ExternalReceipt = Faker.fake();
-        match &mut receipt.0.inner {
-            alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip1559(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip2930(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip4844(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip7702(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log];
-            }
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
+            r.receipt.logs = vec![receipt_log.clone()];
+        } else {
+            panic!("expected be legacy!")
         }
 
         // Verify comparison fails
@@ -504,27 +444,11 @@ mod tests {
 
         // Create receipt with this log
         let mut receipt: ExternalReceipt = Faker.fake();
-        match &mut receipt.0.inner {
-            alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip1559(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip2930(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip4844(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip7702(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![receipt_log];
-            }
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
+            r.receipt.logs = vec![receipt_log.clone()];
+        } else {
+            panic!("expected be legacy!")
         }
 
         // Verify comparison fails
@@ -586,27 +510,11 @@ mod tests {
 
         // Create receipt with these logs
         let mut receipt: ExternalReceipt = Faker.fake();
-        match &mut receipt.0.inner {
-            alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![erc20_receipt_log.clone(), balance_receipt_log.clone(), regular_receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip1559(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![erc20_receipt_log.clone(), balance_receipt_log.clone(), regular_receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip2930(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![erc20_receipt_log.clone(), balance_receipt_log.clone(), regular_receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip4844(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![erc20_receipt_log.clone(), balance_receipt_log.clone(), regular_receipt_log.clone()];
-            }
-            alloy_consensus::ReceiptEnvelope::Eip7702(ref mut r) => {
-                r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
-                r.receipt.logs = vec![erc20_receipt_log, balance_receipt_log, regular_receipt_log];
-            }
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
+            r.receipt.logs = vec![erc20_receipt_log.clone(), balance_receipt_log.clone(), regular_receipt_log.clone()];
+        } else {
+            panic!("expected be legacy!")
         }
 
         // Apply the fix
