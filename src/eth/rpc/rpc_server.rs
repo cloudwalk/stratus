@@ -218,7 +218,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
-    module.register_blocking_method("stratus_importBlocksSince", stratus_import_blocks_since)?;
+    module.register_blocking_method("stratus_getRawBlock", stratus_get_raw_block)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -680,44 +680,31 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     }))
 }
 
-const MAX_BLOCKS_PER_REQUEST: u64 = 100; // Adjust this limit as needed
-
-fn stratus_import_blocks_since(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_get_raw_block(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::stratus_import_blocks_since", start_block = field::Empty).entered();
+    let _method_enter = info_span!("rpc::stratus_getRawBlock", block_number = field::Empty).entered();
 
-    // Parse the starting block number from params
-    let (_, start_block) = next_rpc_param::<BlockNumber>(params.sequence())?;
+    // Parse the block number from params
+    let (_, block_number) = next_rpc_param::<BlockNumber>(params.sequence())?;
 
     // Track
-    Span::with(|s| s.rec_str("start_block", &start_block));
-    tracing::info!(%start_block, "reading blocks since");
+    Span::with(|s| s.rec_str("block_number", &block_number));
+    tracing::info!(%block_number, "reading raw block");
 
-    // Get current block number
-    let current_block = ctx.storage.read_mined_block_number()?;
-    
-    // Calculate how many blocks to fetch
-    let blocks_to_fetch = current_block
-        .as_u64()
-        .saturating_sub(start_block.as_u64())
-        .min(MAX_BLOCKS_PER_REQUEST);
+    // Fetch single block
+    let block = ctx.storage.read_block(BlockFilter::Number(block_number))?;
 
-    let mut blocks = Vec::new();
-    let mut block_number = start_block;
-
-    // Fetch blocks
-    for _ in 0..blocks_to_fetch {
-        if let Some(block) = ctx.storage.read_block(BlockFilter::Number(block_number))? {
-            blocks.push(block);
-            block_number = block_number.next_block_number();
-        } else {
-            break;
+    match block {
+        Some(block) => {
+            tracing::info!("returning raw block");
+            Ok(serde_json::to_value(block)?)
+        }
+        None => {
+            tracing::info!("block not found");
+            Ok(JsonValue::Null)
         }
     }
-
-    tracing::info!(blocks_count = blocks.len(), "returning blocks");
-    Ok(serde_json::to_value(blocks)?)
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {

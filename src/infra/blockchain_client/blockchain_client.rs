@@ -16,6 +16,7 @@ use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalBlockWithReceipts;
@@ -215,6 +216,19 @@ impl BlockchainClient {
         match result {
             Ok(receipt) => Ok(receipt),
             Err(e) => log_and_err!(reason = e, "failed to fetch account balance"),
+        }
+    }
+
+    /// Fetches all raw blocks since the specified block number.
+    pub async fn fetch_raw_blocks_since(&self, block_number: BlockNumber) -> anyhow::Result<Vec<Block>> {
+        tracing::debug!(%block_number, "fetching blocks since block number");
+
+        let number = to_json_value(block_number);
+        let result = self.http.request::<Vec<Block>, _>("stratus_getRawBlock", [number]).await;
+
+        match result {
+            Ok(blocks) => Ok(blocks),
+            Err(e) => log_and_err!(reason = e, "failed to fetch blocks since block number"),
         }
     }
 
