@@ -194,25 +194,18 @@ impl EvmExecution {
 
         // fix sender balance
         let execution_cost = receipt.execution_cost();
-        dbg!(receipt);
-        dbg!(&self);
 
         if execution_cost > Wei::ZERO {
-            dbg!();
             // find sender changes
             let sender_address: Address = receipt.0.from.into();
             let Some(sender_changes) = self.changes.get_mut(&sender_address) else {
                 return log_and_err!("sender changes not present in execution when applying execution costs");
             };
-            dbg!();
 
             // subtract execution cost from sender balance
             let sender_balance = *sender_changes.balance.take_ref().ok_or(anyhow!("sender balance was None"))?;
-            dbg!(execution_cost);
-            dbg!(sender_balance);
 
             let sender_new_balance = if sender_balance > execution_cost {
-                dbg!();
                 sender_balance - execution_cost
             } else {
                 Wei::ZERO
