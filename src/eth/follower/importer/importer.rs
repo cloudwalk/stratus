@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cmp::min;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
@@ -22,7 +21,6 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
-use crate::eth::primitives::ExternalReceipts;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -45,7 +43,7 @@ use crate::GlobalState;
 
 #[derive(Clone, Copy)]
 pub enum ImporterMode {
-    /// A normal follower imports a mined block.
+    /// A normal follower imports a mined block directly.
     NormalFollower,
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     FakeLeader,
@@ -136,41 +134,92 @@ impl Importer {
         let storage = &self.storage;
         let number = storage.read_block_number_to_resume_import()?;
 
-        let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
+        // Create appropriate channel and spawn tasks based on importer mode
+        let (task_processor, task_block_fetcher) = match self.importer_mode {
+            ImporterMode::FakeLeader => {
+                let (backlog_tx, backlog_rx) = mpsc::unbounded_channel::<(ExternalBlock, Vec<ExternalReceipt>)>();
+                (
+                    spawn_named(
+                        "importer::executor",
+                        Importer::start_block_executor(Arc::clone(&self.executor), Arc::clone(&self.miner), backlog_rx),
+                    ),
+                    spawn_named(
+                        "importer::block-fetcher",
+                        Importer::start_block_fetcher(Arc::clone(&self.chain), backlog_tx, number),
+                    ),
+                )
+            }
+            ImporterMode::NormalFollower => {
+                let (backlog_tx, backlog_rx) = mpsc::unbounded_channel::<Block>();
+                (
+                    spawn_named("importer::saver", Importer::start_block_saver(Arc::clone(storage), backlog_rx)),
+                    spawn_named(
+                        "importer::raw-block-fetcher",
+                        Importer::start_raw_block_fetcher(Arc::clone(&self.chain), backlog_tx, number),
+                    ),
+                )
+            }
+        };
 
-        // spawn block executor:
-        // it executes and mines blocks and expects to receive them via channel in the correct order.
-        let task_executor = spawn_named(
-            "importer::executor",
-            Importer::start_block_executor(
-                Arc::clone(&self.executor),
-                Arc::clone(&self.miner),
-                backlog_rx,
-                self.kafka_connector.clone(),
-                self.importer_mode,
-            ),
-        );
-
-        // spawn block number:
-        // it keeps track of the blockchain current block number.
+        // spawn block number fetcher (common to both modes):
         let number_fetcher_chain = Arc::clone(&self.chain);
         let task_number_fetcher = spawn_named(
             "importer::number-fetcher",
             Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
         );
 
-        // spawn block fetcher:
-        // it fetches blocks and receipts in parallel and sends them to the executor in the correct order.
-        // it uses the number fetcher current block to determine if should keep downloading more blocks or not.
-        let block_fetcher_chain = Arc::clone(&self.chain);
-        let task_block_fetcher = spawn_named(
-            "importer::block-fetcher",
-            Importer::start_block_fetcher(block_fetcher_chain, backlog_tx, number),
-        );
-
         // await all tasks
-        if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
+        if let Err(e) = try_join!(task_processor, task_block_fetcher, task_number_fetcher) {
             tracing::error!(reason = ?e, "importer-online failed");
+        }
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------------
+    // Raw Block Saver
+    // -----------------------------------------------------------------------------
+
+    async fn start_block_saver(storage: Arc<StratusStorage>, mut backlog_rx: mpsc::UnboundedReceiver<Block>) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "block-saver";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
+
+        loop {
+            if Self::should_shutdown(TASK_NAME) {
+                return Ok(());
+            }
+
+            let block = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
+                Ok(Some(block)) => block,
+                Ok(None) => break, // channel closed
+                Err(_timed_out) => {
+                    tracing::warn!(timeout = "2s", "timeout reading block saver channel, expected around 1 block per second");
+                    continue;
+                }
+            };
+
+            let block_number = block.number();
+            let mined_number = storage.read_mined_block_number()?;
+            
+            if block_number != mined_number.next_block_number() {
+                tracing::error!(
+                    block_number = %block_number,
+                    mined_number = %mined_number,
+                    "block number mismatch with mined block number"
+                );
+                continue;
+            }
+            
+            // Try to finish any pending block first
+            if let Err(e) = storage.finish_pending_block() {
+                tracing::error!(
+                    reason = ?e,
+                    block_number = %block_number,
+                    "failed to finish pending block"
+                );
+                continue;
+            }
+            
+            storage.save_block(block)?;
         }
         Ok(())
     }
@@ -186,8 +235,6 @@ impl Importer {
         executor: Arc<Executor>,
         miner: Arc<Miner>,
         mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
-        kafka_connector: Option<Arc<KafkaConnector>>,
-        importer_mode: ImporterMode,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "block-executor";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
@@ -197,7 +244,7 @@ impl Importer {
                 return Ok(());
             }
 
-            let (block, receipts) = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
+            let (block, _receipts) = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
                 Ok(Some(inner)) => inner,
                 Ok(None) => break, // channel closed
                 Err(_timed_out) => {
@@ -206,77 +253,16 @@ impl Importer {
                 }
             };
 
-            #[cfg(feature = "metrics")]
-            let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
-
-            if let ImporterMode::FakeLeader = importer_mode {
-                for tx in block.0.transactions.into_transactions() {
-                    tracing::info!(?tx, "executing tx as fake miner");
-                    if let Err(e) = executor.execute_local_transaction(tx.try_into()?) {
-                        tracing::error!(reason = ?e, "transaction failed");
-                        GlobalState::shutdown_from("Importer (FakeMiner)", "Transaction Failed");
-                        return Err(anyhow!(e));
-                    }
-                }
-                mine_and_commit(&miner);
-                continue;
-            }
-
-            if let Err(e) = executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts)) {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
-                return log_and_err!(reason = e, message);
-            };
-
-            // statistics
-            #[cfg(feature = "metrics")]
-            {
-                let duration = start.elapsed();
-                let tps = calculate_tps(duration, block_tx_len);
-
-                tracing::info!(
-                    tps,
-                    %block_number,
-                    duration = %duration.to_string_ext(),
-                    %receipts_len,
-                    "reexecuted external block",
-                );
-            }
-
-            let mined_block = match miner.mine_external(block) {
-                Ok(mined_block) => {
-                    tracing::info!(number = %mined_block.number(), "mined external block");
-                    mined_block
-                }
-                Err(e) => {
-                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
-                    return log_and_err!(reason = e, message);
-                }
-            };
-
-            if let Some(ref kafka_conn) = kafka_connector {
-                let events = mined_block
-                    .transactions
-                    .iter()
-                    .flat_map(|tx| transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx)));
-
-                kafka_conn.send_buffered(events, 50).await?;
-            }
-
-            match miner.commit(mined_block) {
-                Ok(_) => {
-                    tracing::info!("committed external block");
-                }
-                Err(e) => {
-                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to commit external block");
-                    return log_and_err!(reason = e, message);
+            for tx in block.0.transactions.into_transactions() {
+                tracing::info!(?tx, "executing tx as fake miner");
+                if let Err(e) = executor.execute_local_transaction(tx.try_into()?) {
+                    tracing::error!(reason = ?e, "transaction failed");
+                    GlobalState::shutdown_from("Importer (FakeMiner)", "Transaction Failed");
+                    return Err(anyhow!(e));
                 }
             }
-
-            #[cfg(feature = "metrics")]
-            {
-                metrics::inc_n_importer_online_transactions_total(receipts_len as u64);
-                metrics::inc_import_online_mined_block(start.elapsed());
-            }
+            mine_and_commit(&miner);
+            continue;
         }
 
         warn_task_tx_closed(TASK_NAME);
