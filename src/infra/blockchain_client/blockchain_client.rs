@@ -219,16 +219,16 @@ impl BlockchainClient {
         }
     }
 
-    /// Fetches all raw blocks since the specified block number.
-    pub async fn fetch_raw_blocks_since(&self, block_number: BlockNumber) -> anyhow::Result<Vec<Block>> {
-        tracing::debug!(%block_number, "fetching blocks since block number");
+    /// Fetches a raw block by number.
+    pub async fn fetch_raw_block(&self, block_number: BlockNumber) -> anyhow::Result<Option<Block>> {
+        tracing::debug!(%block_number, "fetching raw block");
 
         let number = to_json_value(block_number);
-        let result = self.http.request::<Vec<Block>, _>("stratus_getRawBlock", [number]).await;
+        let result = self.http.request::<Option<Block>, _>("stratus_getRawBlock", [number]).await;
 
         match result {
-            Ok(blocks) => Ok(blocks),
-            Err(e) => log_and_err!(reason = e, "failed to fetch blocks since block number"),
+            Ok(block) => Ok(block),
+            Err(e) => log_and_err!(reason = e, "failed to fetch raw block"),
         }
     }
 
