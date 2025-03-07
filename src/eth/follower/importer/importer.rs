@@ -18,6 +18,7 @@ use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::miner::interval_miner::mine_and_commit;
 use crate::eth::miner::Miner;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
@@ -492,6 +493,31 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
             }
         };
+    }
+}
+
+async fn fetch_raw_block(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> anyhow::Result<Block> {
+    const RETRY_DELAY: Duration = Duration::from_millis(10);
+    Span::with(|s| {
+        s.rec_str("block_number", &block_number);
+    });
+
+    loop {
+        tracing::info!(%block_number, "fetching raw block");
+
+        match chain.fetch_raw_block(block_number).await {
+            Ok(Some(raw_block)) => {
+                return Ok(raw_block);
+            }
+            Ok(None) => {
+                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "raw block not available yet, retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+            }
+            Err(e) => {
+                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch raw block, retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+            }
+        }
     }
 }
 
