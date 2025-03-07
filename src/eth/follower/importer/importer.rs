@@ -199,7 +199,7 @@ impl Importer {
 
             let block_number = block.number();
             let mined_number = storage.read_mined_block_number()?;
-            
+
             if block_number != mined_number.next_block_number() {
                 tracing::error!(
                     block_number = %block_number,
@@ -208,18 +208,10 @@ impl Importer {
                 );
                 continue;
             }
-            
-            // Try to finish any pending block first
-            if let Err(e) = storage.finish_pending_block() {
-                tracing::error!(
-                    reason = ?e,
-                    block_number = %block_number,
-                    "failed to finish pending block"
-                );
-                continue;
-            }
-            
+
+            storage.finish_pending_block()?;
             storage.save_block(block)?;
+            storage.set_mined_block_number(block_number)?;
         }
         Ok(())
     }
