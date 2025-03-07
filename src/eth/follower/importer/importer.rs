@@ -198,16 +198,6 @@ impl Importer {
             };
 
             let block_number = block.number();
-            let mined_number = storage.read_mined_block_number()?;
-
-            if block_number != mined_number.next_block_number() {
-                tracing::error!(
-                    block_number = %block_number,
-                    mined_number = %mined_number,
-                    "block number mismatch with mined block number"
-                );
-                continue;
-            }
 
             storage.finish_pending_block()?;
             storage.save_block(block)?;
