@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use alloy_primitives::hex;
 use alloy_primitives::U256 as AlloyU256;
@@ -96,10 +97,19 @@ impl GenesisConfig {
 
     /// Searches for a genesis.json file in the current directory or a specified path
     pub fn find_genesis_file(custom_path: Option<&str>) -> Option<PathBuf> {
+        // Check for custom path from parameter
         if let Some(path) = custom_path {
             let path_buf = PathBuf::from(path);
             if path_buf.exists() {
                 return Some(path_buf);
+            }
+        }
+
+        // Check for path from environment variable
+        if let Ok(env_path) = std::env::var("GENESIS_JSON_PATH") {
+            let env_path_buf = PathBuf::from(&env_path);
+            if env_path_buf.exists() {
+                return Some(env_path_buf);
             }
         }
 
@@ -135,7 +145,8 @@ impl GenesisConfig {
             // Remove 0x prefix if present
             let addr_str = addr_str.trim_start_matches("0x");
 
-            let address = Address::from_str_hex(addr_str)?;
+            // Use FromStr para converter o endereço
+            let address = Address::from_str(addr_str)?;
 
             // Create the account
             let mut account = Account::new_empty(address);
@@ -182,37 +193,108 @@ impl GenesisConfig {
     }
 }
 
-// Implementation of hex string conversion to internal types
-trait FromStrHex: Sized {
-    fn from_str_hex(hex: &str) -> Result<Self>;
+impl Default for GenesisConfig {
+    #[cfg(feature = "dev")]
+    fn default() -> Self {
+        // Default implementation for development environment
+        let mut alloc = BTreeMap::new();
+
+        // Add test accounts
+        let test_accounts = crate::eth::primitives::test_accounts();
+        for account in test_accounts {
+            let address_str = format!("0x{}", hex::encode(account.address.as_bytes()));
+            let balance_hex = format!("0x{:x}", account.balance.0);
+
+            let mut genesis_account = GenesisAccount {
+                balance: balance_hex,
+                code: None,
+                nonce: Some(format!("0x{:x}", u64::from(account.nonce))),
+                storage: None,
+            };
+
+            // Add code if not empty
+            if let Some(ref bytecode) = account.bytecode {
+                if !bytecode.is_empty() {
+                    genesis_account.code = Some(format!("0x{}", hex::encode(bytecode.bytes())));
+                }
+            }
+
+            alloc.insert(address_str, genesis_account);
+        }
+
+        Self {
+            config: ChainConfig {
+                chainId: 2008,
+                homesteadBlock: Some(0),
+                eip150Block: Some(0),
+                eip155Block: Some(0),
+                eip158Block: Some(0),
+                byzantiumBlock: Some(0),
+                constantinopleBlock: Some(0),
+                petersburgBlock: Some(0),
+                istanbulBlock: Some(0),
+                berlinBlock: Some(0),
+                londonBlock: Some(0),
+                shanghaiTime: Some(0),
+                cancunTime: Some(0),
+                pragueTime: None,
+            },
+            nonce: "0x0000000000000042".to_string(),
+            timestamp: "0x0".to_string(),
+            extraData: "0x0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            gasLimit: "0xffffffff".to_string(),
+            difficulty: "0x1".to_string(),
+            mixHash: "0x0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            coinbase: "0x0000000000000000000000000000000000000000".to_string(),
+            alloc,
+            number: Some("0x0".to_string()),
+            gasUsed: Some("0x0".to_string()),
+            parentHash: Some("0x0000000000000000000000000000000000000000000000000000000000000000".to_string()),
+            baseFeePerGas: Some("0x0".to_string()),
+        }
+    }
+
+    #[cfg(not(feature = "dev"))]
+    fn default() -> Self {
+        // Minimal default implementation for non-development environments
+        Self {
+            config: ChainConfig {
+                chainId: 2008,
+                homesteadBlock: None,
+                eip150Block: None,
+                eip155Block: None,
+                eip158Block: None,
+                byzantiumBlock: None,
+                constantinopleBlock: None,
+                petersburgBlock: None,
+                istanbulBlock: None,
+                berlinBlock: None,
+                londonBlock: None,
+                shanghaiTime: None,
+                cancunTime: None,
+                pragueTime: None,
+            },
+            nonce: "0x0".to_string(),
+            timestamp: "0x0".to_string(),
+            extraData: "0x0".to_string(),
+            gasLimit: "0x0".to_string(),
+            difficulty: "0x0".to_string(),
+            mixHash: "0x0".to_string(),
+            coinbase: "0x0000000000000000000000000000000000000000".to_string(),
+            alloc: BTreeMap::new(),
+            number: None,
+            gasUsed: None,
+            parentHash: None,
+            baseFeePerGas: None,
+        }
+    }
 }
 
-impl FromStrHex for Address {
-    fn from_str_hex(hex: &str) -> Result<Self> {
-        // Ensure the hex string has an even number of digits
-        let hex = if hex.len() % 2 == 1 {
-            format!("0{}", hex) // Add a leading zero if needed
-        } else {
-            hex.to_string()
-        };
-
-        if hex.len() != 40 {
-            return Err(anyhow!("Invalid address length: {}", hex.len()));
-        }
-
-        let bytes = match hex::decode(&hex) {
-            Ok(b) => b,
-            Err(e) => return Err(anyhow!("Failed to decode address: {}", e)),
-        };
-
-        if bytes.len() != 20 {
-            return Err(anyhow!("Unexpected bytes length: {}", bytes.len()));
-        }
-
-        let mut array = [0u8; 20];
-        array.copy_from_slice(&bytes);
-        Ok(Address::new(array))
-    }
+// Note: The FromStrHex trait is similar to the FromStr implementation for Address,
+// which also converts from a hex string. However, FromStrHex provides more detailed
+// error handling and ensures the hex string has an even number of digits.
+trait FromStrHex: Sized {
+    fn from_str_hex(hex: &str) -> Result<Self>;
 }
 
 impl FromStrHex for Wei {
@@ -290,7 +372,7 @@ mod tests {
 
         // Test address conversion
         let addr_str = "f39fd6e51aad88f6f4ce6ab8827279cfffb92266";
-        let addr = Address::from_str_hex(addr_str).unwrap();
+        let addr = Address::from_str(addr_str).unwrap();
 
         // Convert accounts
         let accounts = genesis.to_stratus_accounts().unwrap();
@@ -304,5 +386,36 @@ mod tests {
 
         // Clean up
         std::fs::remove_file(file_path).unwrap();
+    }
+
+    #[test]
+    fn test_default_genesis_config() {
+        // Test the default implementation
+        let default_genesis = GenesisConfig::default();
+
+        // Verify chain ID is set to 2008
+        assert_eq!(default_genesis.config.chainId, 2008);
+
+        #[cfg(feature = "dev")]
+        {
+            // In dev mode, we should have test accounts
+            let test_accounts = crate::eth::primitives::test_accounts();
+            let stratus_accounts = default_genesis.to_stratus_accounts().unwrap();
+
+            // Verify the number of accounts matches
+            assert_eq!(stratus_accounts.len(), test_accounts.len());
+
+            // Verify each account exists in the genesis config
+            for test_account in test_accounts {
+                let found = stratus_accounts.iter().any(|account| account.address == test_account.address);
+                assert!(found, "Test account not found in default genesis config");
+            }
+        }
+
+        #[cfg(not(feature = "dev"))]
+        {
+            // In non-dev mode, we should have an empty alloc
+            assert!(default_genesis.alloc.is_empty());
+        }
     }
 }

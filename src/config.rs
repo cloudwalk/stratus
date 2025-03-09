@@ -350,3 +350,40 @@ impl FromStr for Environment {
         }
     }
 }
+
+/// Genesis configuration
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+pub struct GenesisFileConfig {
+    /// Path to the genesis.json file
+    #[arg(long = "genesis-path", env = "GENESIS_JSON_PATH")]
+    pub genesis_path: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+
+    use super::*;
+
+    #[test]
+    fn test_genesis_file_config() {
+        // Test with command line argument
+        let args = vec!["program", "--genesis-path", "/path/to/genesis.json"];
+        let config = GenesisFileConfig::parse_from(args);
+        assert_eq!(config.genesis_path, Some("/path/to/genesis.json".to_string()));
+
+        // Test with environment variable
+        env::set_var("GENESIS_JSON_PATH", "/env/path/to/genesis.json");
+        let args = vec!["program"]; // No command line argument
+        let config = GenesisFileConfig::parse_from(args);
+        assert_eq!(config.genesis_path, Some("/env/path/to/genesis.json".to_string()));
+
+        // Command line argument should take precedence over environment variable
+        let args = vec!["program", "--genesis-path", "/cli/path/to/genesis.json"];
+        let config = GenesisFileConfig::parse_from(args);
+        assert_eq!(config.genesis_path, Some("/cli/path/to/genesis.json".to_string()));
+
+        // Clean up
+        env::remove_var("GENESIS_JSON_PATH");
+    }
+}
