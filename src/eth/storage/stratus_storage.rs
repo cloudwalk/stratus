@@ -2,6 +2,10 @@ use anyhow::anyhow;
 use tracing::Span;
 
 use super::StorageCache;
+#[cfg(feature = "dev")]
+use crate::eth::genesis::GenesisConfig;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -449,11 +453,11 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     #[cfg(feature = "dev")]
-    /// Resets the storage to the genesis state used in dev-mode.
-    ///
-    /// TODO: For now it uses the dev genesis block and test accounts, but it should be refactored to support genesis.json files.
+    /// Resets the storage to the genesis state.
+    /// If a genesis.json file is available, it will be used.
+    /// Otherwise, it will use the default genesis configuration.
     pub fn reset_to_genesis(&self) -> Result<(), StorageError> {
-        use crate::eth::primitives::test_accounts;
+        tracing::info!("Resetting storage to genesis state");
 
         self.cache.clear();
 
@@ -480,11 +484,49 @@ impl StratusStorage {
             }
         })?;
 
+        // Try to load genesis.json
+        let genesis_accounts = if let Some(genesis_path) = GenesisConfig::find_genesis_file(None) {
+            tracing::info!("Found genesis file at: {:?}", genesis_path);
+            match GenesisConfig::load_from_file(genesis_path) {
+                Ok(genesis) => match genesis.to_stratus_accounts() {
+                    Ok(accounts) => {
+                        tracing::info!("Loaded {} accounts from genesis.json", accounts.len());
+                        accounts
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to convert genesis accounts: {:?}", e);
+                        // Fallback to test accounts
+                        test_accounts()
+                    }
+                },
+                Err(e) => {
+                    tracing::error!("Failed to load genesis.json: {:?}", e);
+                    // Fallback to test accounts
+                    test_accounts()
+                }
+            }
+        } else {
+            tracing::info!("No genesis.json file found, using default genesis config");
+            // Use default genesis config
+            let default_genesis = GenesisConfig::default();
+            match default_genesis.to_stratus_accounts() {
+                Ok(accounts) => {
+                    tracing::info!("Using {} accounts from default genesis config", accounts.len());
+                    accounts
+                }
+                Err(e) => {
+                    tracing::error!("Failed to convert default genesis accounts: {:?}", e);
+                    // Fallback to test accounts
+                    test_accounts()
+                }
+            }
+        };
+
         // genesis block
         self.save_block(Block::genesis())?;
 
-        // test accounts
-        self.save_accounts(test_accounts())?;
+        // accounts
+        self.save_accounts(genesis_accounts)?;
 
         // block number
         self.set_mined_block_number(BlockNumber::ZERO)?;
