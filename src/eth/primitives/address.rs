@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
+use alloy_primitives::hex as alloy_hex;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::H160;
@@ -100,11 +101,51 @@ impl TryFrom<Vec<u8>> for Address {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+/// Converts a hexadecimal string representation to an Address.
+///
+/// The input string can be with or without the "0x" prefix.
+/// If the string has an odd number of digits, a leading zero will be added.
+///
+/// # Examples
+///
+/// ```
+/// use std::str::FromStr;
+/// use stratus::eth::primitives::Address;
+///
+/// // With 0x prefix
+/// let addr1 = Address::from_str("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266").unwrap();
+///
+/// // Without 0x prefix
+/// let addr2 = Address::from_str("f39fd6e51aad88f6f4ce6ab8827279cfffb92266").unwrap();
+///
+/// assert_eq!(addr1, addr2);
+/// ```
 impl FromStr for Address {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(H160::from_str(s)?))
+        // Remove 0x prefix if present
+        let s = s.trim_start_matches("0x");
+
+        // Ensure the hex string has an even number of digits
+        let s = if s.len() % 2 == 1 {
+            format!("0{}", s) // Add a leading zero if needed
+        } else {
+            s.to_string()
+        };
+
+        // Validate length
+        if s.len() != 40 {
+            return Err(anyhow!("Invalid address length: {}", s.len()));
+        }
+
+        // Decode hex string using alloy_hex instead of hex
+        let bytes = alloy_hex::decode(&s)?;
+
+        // Create address from bytes
+        let mut array = [0u8; 20];
+        array.copy_from_slice(&bytes);
+        Ok(Address::new(array))
     }
 }
 
