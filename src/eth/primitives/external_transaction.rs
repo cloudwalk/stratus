@@ -18,9 +18,53 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
 
-#[derive(Debug, Clone, PartialEq, derive_more::Deref, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, derive_more::Deref, serde::Serialize)]
 #[serde(transparent)]
 pub struct ExternalTransaction(#[deref] pub AlloyTransaction);
+
+impl<'de> serde::Deserialize<'de> for ExternalTransaction {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+        use serde_json::Value;
+
+        let mut value = Value::deserialize(deserializer)?;
+
+        if let Value::Object(ref mut map) = value {
+            // Check if this is a type 2 transaction
+            if let Some(Value::String(type_value)) = map.get("type") {
+                if type_value == "0x2" {
+                    // For EIP-1559 transactions, ensure max_fee_per_gas and max_priority_fee_per_gas are present
+                    if !map.contains_key("maxFeePerGas") {
+                        map.insert("maxFeePerGas".to_string(), Value::String("0x0".to_string()));
+                    }
+                    if !map.contains_key("maxPriorityFeePerGas") {
+                        map.insert("maxPriorityFeePerGas".to_string(), Value::String("0x0".to_string()));
+                    }
+                    if !map.contains_key("accessList") {
+                        map.insert("accessList".to_string(), Value::Array(Vec::new()));
+                    }
+                }
+            }
+            // Check if this is a type 1 transaction
+            if let Some(Value::String(type_value)) = map.get("type") {
+                if type_value == "0x1" {
+                    // For EIP-2930 transactions, ensure accessList is present
+                    if !map.contains_key("accessList") {
+                        map.insert("accessList".to_string(), Value::Array(Vec::new()));
+                    }
+                }
+            }
+        }
+
+        // Use the inner type's deserialization
+        let transaction = AlloyTransaction::deserialize(value).map_err(D::Error::custom)?;
+
+        Ok(ExternalTransaction(transaction))
+    }
+}
 
 impl ExternalTransaction {
     /// Returns the block number where the transaction was mined.
@@ -79,5 +123,86 @@ impl Dummy<Faker> for ExternalTransaction {
 impl From<AlloyTransaction> for ExternalTransaction {
     fn from(value: AlloyTransaction) -> Self {
         ExternalTransaction(value)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tests
+// -----------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn test_deserialize_type0_transaction() {
+        let json = json!({
+            "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            "type": "0x0",
+            "from": "0x1234567890123456789012345678901234567890",
+            "to": "0x0987654321098765432109876543210987654321",
+            "gas": "0x76c0",
+            "gasPrice": "0x9184e72a000",
+            "nonce": "0x1",
+            "value": "0x9184e72a",
+            "input": "0x",
+            "chainId": "0x1",
+            "r": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            "s": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "v": "0x1b"
+        });
+
+        let tx: ExternalTransaction = serde_json::from_value(json).unwrap();
+
+        assert!(matches!(tx.0.inner, TxEnvelope::Legacy(_)));
+    }
+
+    #[test]
+    fn test_deserialize_type1_transaction_with_missing_access_list() {
+        let json = json!({
+            "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            "type": "0x1",
+            "from": "0x1234567890123456789012345678901234567890",
+            "to": "0x0987654321098765432109876543210987654321",
+            "gas": "0x76c0",
+            "gasPrice": "0x9184e72a000",
+            "nonce": "0x1",
+            "value": "0x9184e72a",
+            "input": "0x",
+            "chainId": "0x1",
+            "r": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            "s": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "v": "0x0"
+            // accessList is missing
+        });
+
+        let tx: ExternalTransaction = serde_json::from_value(json).unwrap();
+
+        assert!(matches!(tx.0.inner, TxEnvelope::Eip2930(_)));
+    }
+
+    #[test]
+    fn test_deserialize_type2_transaction_with_missing_fields() {
+        let json = json!({
+            "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            "type": "0x2",
+            "from": "0x1234567890123456789012345678901234567890",
+            "to": "0x0987654321098765432109876543210987654321",
+            "gas": "0x76c0",
+            "nonce": "0x1",
+            "value": "0x9184e72a",
+            "input": "0x",
+            "chainId": "0x1",
+            "r": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            "s": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "v": "0x1"
+            // maxFeePerGas, maxPriorityFeePerGas, and accessList are missing
+        });
+
+        let tx: ExternalTransaction = serde_json::from_value(json).unwrap();
+
+        assert!(matches!(tx.0.inner, TxEnvelope::Eip1559(_)));
     }
 }
