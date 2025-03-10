@@ -339,7 +339,7 @@ mod tests {
         use std::fs::File;
         use std::io::Write;
 
-        // Criar um arquivo temporário sem usar tempfile
+        // Create a temporary file without using tempfile
         let file_path = "test_genesis.json";
 
         // Create a minimal genesis.json file
