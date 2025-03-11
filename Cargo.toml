@@ -133,7 +133,6 @@ sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
 # Historic events processor
 indicatif = "=0.17.8"
-serde_path_to_error = "0.1.17"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
