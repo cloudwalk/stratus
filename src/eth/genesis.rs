@@ -100,7 +100,7 @@ impl GenesisConfig {
             // Remove 0x prefix if present
             let addr_str = addr_str.trim_start_matches("0x");
 
-            // Use FromStr para converter o endereço
+            // Use FromStr to convert the address
             let address = Address::from_str(addr_str)?;
 
             // Create the account
