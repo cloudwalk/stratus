@@ -16,6 +16,10 @@ pub struct RpcServerConfig {
     #[arg(long = "max-connections", env = "MAX_CONNECTIONS", default_value = "400")]
     pub rpc_max_connections: u32,
 
+    /// JSON-RPC server max response size limit in bytes
+    #[arg(long = "max-response-size-bytes", env = "MAX_RESPONSE_SIZE_BYTES", default_value = "10485760")]
+    pub rpc_max_response_size_bytes: u32,
+
     /// JSON-RPC server max active subscriptions per client.
     #[arg(long = "max-subscriptions", env = "MAX_SUBSCRIPTIONS", default_value = "30")]
     pub rpc_max_subscriptions: u32,

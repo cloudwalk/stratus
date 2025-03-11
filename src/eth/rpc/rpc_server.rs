@@ -150,6 +150,7 @@ pub async fn serve_rpc(
         .set_http_middleware(http_middleware)
         .set_id_provider(RandomStringIdProvider::new(8))
         .max_connections(rpc_config.rpc_max_connections)
+        .max_response_body_size(rpc_config.rpc_max_response_size_bytes)
         .build(rpc_config.rpc_address)
         .await?;
 
