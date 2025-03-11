@@ -48,6 +48,7 @@ describe("Leader & Follower change integration test", function () {
             "ws://0.0.0.0:3001/",
             "2s",
             "100ms",
+            "10485760",
         ]);
         expect(response.data.error.code).to.equal(7007);
         expect(response.data.error.message).to.equal("Can't change miner mode while transactions are enabled.");
@@ -61,6 +62,7 @@ describe("Leader & Follower change integration test", function () {
             "ws://0.0.0.0:3001/",
             "2s",
             "100ms",
+            "10485760",
         ]);
         expect(response.data.error.code).to.equal(6002);
         expect(response.data.error.message.split("\n")[0]).to.equal(
@@ -77,6 +79,7 @@ describe("Leader & Follower change integration test", function () {
             "ws://0.0.0.0:3001/",
             "2s",
             "100ms",
+            "10485760",
         ]);
         expect(response.data.result).to.equal(true);
     });
@@ -137,6 +140,7 @@ describe("Leader & Follower change integration test", function () {
             "ws://0.0.0.0:3000/",
             "2s",
             "100ms",
+            "10485760",
         ]);
         expect(response.data.result).to.equal(true);
     });
