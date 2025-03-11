@@ -43,12 +43,24 @@ pub struct StratusStorage {
     temp: Box<dyn TemporaryStorage>,
     cache: StorageCache,
     perm: Box<dyn PermanentStorage>,
+    #[allow(dead_code)]
+    perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
 }
 
 impl StratusStorage {
     /// Creates a new storage with the specified temporary and permanent implementations.
-    pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>, cache: StorageCache) -> Result<Self, StorageError> {
-        let this = Self { temp, cache, perm };
+    pub fn new(
+        temp: Box<dyn TemporaryStorage>,
+        perm: Box<dyn PermanentStorage>,
+        cache: StorageCache,
+        perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
+    ) -> Result<Self, StorageError> {
+        let this = Self {
+            temp,
+            cache,
+            perm,
+            perm_config,
+        };
 
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
@@ -65,6 +77,18 @@ impl StratusStorage {
     #[cfg(test)]
     pub fn new_test() -> Result<Self, StorageError> {
         use super::cache::CacheConfig;
+        use super::permanent::PermanentStorageConfig;
+        use super::permanent::PermanentStorageKind;
+
+        let perm_config = PermanentStorageConfig {
+            perm_storage_kind: PermanentStorageKind::InMemory,
+            perm_storage_url: None,
+            rocks_path_prefix: None,
+            rocks_shutdown_timeout: std::time::Duration::from_secs(240),
+            rocks_cache_size_multiplier: None,
+            rocks_disable_sync_write: false,
+            genesis_file: crate::config::GenesisFileConfig::default(),
+        };
 
         let perm = Box::new(super::InMemoryPermanentStorage::default());
         let temp = Box::new(super::InMemoryTemporaryStorage::new(0.into()));
@@ -74,7 +98,7 @@ impl StratusStorage {
         }
         .init();
 
-        Self::new(temp, perm, cache)
+        Self::new(temp, perm, cache, perm_config)
     }
 
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
@@ -486,8 +510,7 @@ impl StratusStorage {
 
         // Try to load genesis.json from the path specified in GenesisFileConfig
         // or use default genesis configuration
-        let config = <crate::config::GenesisFileConfig as clap::Parser>::try_parse().unwrap_or_default();
-        let genesis_accounts = if let Some(genesis_path) = config.genesis_path {
+        let genesis_accounts = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
             tracing::info!("Found genesis file at: {:?}", genesis_path);
             match GenesisConfig::load_from_file(genesis_path) {
                 Ok(genesis) => match genesis.to_stratus_accounts() {

@@ -69,7 +69,7 @@ impl StorageConfig {
         let temp_storage = self.temp_storage.init(&*perm_storage)?;
         let cache = self.cache.init();
 
-        let storage = StratusStorage::new(temp_storage, perm_storage, cache)?;
+        let storage = StratusStorage::new(temp_storage, perm_storage, cache, self.perm_storage.clone())?;
 
         Ok(Arc::new(storage))
     }
