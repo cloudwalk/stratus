@@ -333,4 +333,63 @@ mod tests {
             assert!(default_genesis.alloc.is_empty());
         }
     }
+
+    #[test]
+    fn test_load_local_genesis_file() {
+        // Path to the local genesis file
+        let file_path = "config/genesis.local.json";
+
+        // Try to load the genesis config from the file
+        let genesis = GenesisConfig::load_from_file(file_path).expect("Failed to load genesis.local.json");
+
+        // Verify basic properties
+        assert_eq!(genesis.config.chainId, 2008);
+
+        // Verify accounts
+        let accounts = genesis.to_stratus_accounts().expect("Failed to convert accounts");
+        assert!(!accounts.is_empty(), "No accounts found in genesis.local.json");
+
+        // Verify the first account
+        let first_account_addr = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
+        let first_addr = Address::from_str(first_account_addr.trim_start_matches("0x")).unwrap();
+
+        let found = accounts.iter().any(|account| account.address == first_addr);
+        assert!(found, "First account not found in genesis.local.json");
+
+        // Verify account balance
+        if let Some(account) = accounts.iter().find(|account| account.address == first_addr) {
+            assert_eq!(account.balance, Wei::TEST_BALANCE);
+        }
+    }
+
+    #[test]
+    fn test_genesis_file_config_with_clap() {
+        use std::env;
+
+        use clap::Parser;
+
+        use crate::config::GenesisFileConfig;
+
+        // Test with command line argument
+        let args = vec!["program", "--genesis-path", "config/genesis.local.json"];
+        let config = GenesisFileConfig::parse_from(args);
+        assert_eq!(config.genesis_path, Some("config/genesis.local.json".to_string()));
+
+        // Verify that the file can be loaded
+        let genesis = GenesisConfig::load_from_file(config.genesis_path.unwrap()).expect("Failed to load genesis.local.json");
+        assert_eq!(genesis.config.chainId, 2008);
+
+        // Test with environment variable
+        env::set_var("GENESIS_JSON_PATH", "config/genesis.local.json");
+        let args = vec!["program"]; // No command line argument
+        let config = GenesisFileConfig::parse_from(args);
+        assert_eq!(config.genesis_path, Some("config/genesis.local.json".to_string()));
+
+        // Verify that the file can be loaded
+        let genesis = GenesisConfig::load_from_file(config.genesis_path.unwrap()).expect("Failed to load genesis.local.json");
+        assert_eq!(genesis.config.chainId, 2008);
+
+        // Clean up
+        env::remove_var("GENESIS_JSON_PATH");
+    }
 }
