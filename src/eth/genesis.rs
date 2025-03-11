@@ -335,11 +335,17 @@ mod tests {
     }
 
     #[test]
-    fn test_load_local_genesis_file() {
+    fn test_genesis_file_with_clap_integration() {
+        use std::env;
+
+        use clap::Parser;
+
+        use crate::config::GenesisFileConfig;
+
         // Path to the local genesis file
         let file_path = "config/genesis.local.json";
 
-        // Try to load the genesis config from the file
+        // Test 1: Direct file loading
         let genesis = GenesisConfig::load_from_file(file_path).expect("Failed to load genesis.local.json");
 
         // Verify basic properties
@@ -360,34 +366,29 @@ mod tests {
         if let Some(account) = accounts.iter().find(|account| account.address == first_addr) {
             assert_eq!(account.balance, Wei::TEST_BALANCE);
         }
-    }
 
-    #[test]
-    fn test_genesis_file_config_with_clap() {
-        use std::env;
-
-        use clap::Parser;
-
-        use crate::config::GenesisFileConfig;
-
-        // Test with command line argument
-        let args = vec!["program", "--genesis-path", "config/genesis.local.json"];
+        // Test 2: Clap integration - command line arguments
+        let args = vec!["program", "--genesis-path", file_path];
         let config = GenesisFileConfig::parse_from(args);
-        assert_eq!(config.genesis_path, Some("config/genesis.local.json".to_string()));
+        assert_eq!(config.genesis_path, Some(file_path.to_string()));
 
-        // Verify that the file can be loaded
-        let genesis = GenesisConfig::load_from_file(config.genesis_path.unwrap()).expect("Failed to load genesis.local.json");
-        assert_eq!(genesis.config.chainId, 2008);
+        // Load the file using the path obtained via clap
+        let genesis_from_clap = GenesisConfig::load_from_file(config.genesis_path.unwrap()).expect("Failed to load genesis.local.json via clap");
 
-        // Test with environment variable
-        env::set_var("GENESIS_JSON_PATH", "config/genesis.local.json");
-        let args = vec!["program"]; // No command line argument
+        // Verify that the file loaded via clap has the same chainId
+        assert_eq!(genesis_from_clap.config.chainId, 2008);
+
+        // Test 3: Clap integration - environment variables
+        env::set_var("GENESIS_JSON_PATH", file_path);
+        let args = vec!["program"]; // No command line arguments
         let config = GenesisFileConfig::parse_from(args);
-        assert_eq!(config.genesis_path, Some("config/genesis.local.json".to_string()));
+        assert_eq!(config.genesis_path, Some(file_path.to_string()));
 
-        // Verify that the file can be loaded
-        let genesis = GenesisConfig::load_from_file(config.genesis_path.unwrap()).expect("Failed to load genesis.local.json");
-        assert_eq!(genesis.config.chainId, 2008);
+        // Load the file using the path obtained via environment variable
+        let genesis_from_env = GenesisConfig::load_from_file(config.genesis_path.unwrap()).expect("Failed to load genesis.local.json via env var");
+
+        // Verify that the file loaded via environment variable has the same chainId
+        assert_eq!(genesis_from_env.config.chainId, 2008);
 
         // Clean up
         env::remove_var("GENESIS_JSON_PATH");
