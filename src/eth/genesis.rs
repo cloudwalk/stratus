@@ -2,12 +2,9 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use alloy_primitives::hex;
-use alloy_primitives::U256 as AlloyU256;
-use anyhow::anyhow;
 use anyhow::Result;
 use ethereum_types::U256 as EthereumU256;
 use serde::Deserialize;
@@ -87,57 +84,15 @@ pub struct GenesisAccount {
 }
 
 impl GenesisConfig {
-    /// Loads a genesis.json file from the specified path
+    /// Loads a genesis configuration from a file.
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-        let config: GenesisConfig = serde_json::from_reader(reader)?;
-        Ok(config)
+        let genesis: GenesisConfig = serde_json::from_reader(reader)?;
+        Ok(genesis)
     }
 
-    /// Searches for a genesis.json file in the current directory or a specified path
-    pub fn find_genesis_file(custom_path: Option<&str>) -> Option<PathBuf> {
-        // Check for custom path from parameter
-        if let Some(path) = custom_path {
-            let path_buf = PathBuf::from(path);
-            if path_buf.exists() {
-                return Some(path_buf);
-            }
-        }
-
-        // Check for path from environment variable
-        if let Ok(env_path) = std::env::var("GENESIS_JSON_PATH") {
-            let env_path_buf = PathBuf::from(&env_path);
-            if env_path_buf.exists() {
-                return Some(env_path_buf);
-            }
-        }
-
-        // Check for environment-specific genesis file
-        if let Ok(env) = std::env::var("ENV") {
-            let env_path = format!("config/genesis.{}.json", env.to_lowercase());
-            let env_path_buf = PathBuf::from(&env_path);
-            if env_path_buf.exists() {
-                return Some(env_path_buf);
-            }
-        }
-
-        // Check for default local genesis file
-        let local_path = PathBuf::from("config/genesis.local.json");
-        if local_path.exists() {
-            return Some(local_path);
-        }
-
-        // Fallback to current directory
-        let default_path = PathBuf::from("genesis.json");
-        if default_path.exists() {
-            return Some(default_path);
-        }
-
-        None
-    }
-
-    /// Converts accounts from genesis.json to Stratus internal format
+    /// Converts the genesis configuration to Stratus accounts.
     pub fn to_stratus_accounts(&self) -> Result<Vec<Account>> {
         let mut accounts = Vec::new();
 
@@ -287,46 +242,6 @@ impl Default for GenesisConfig {
             parentHash: None,
             baseFeePerGas: None,
         }
-    }
-}
-
-// Note: The FromStrHex trait is similar to the FromStr implementation for Address,
-// which also converts from a hex string. However, FromStrHex provides more detailed
-// error handling and ensures the hex string has an even number of digits.
-trait FromStrHex: Sized {
-    fn from_str_hex(hex: &str) -> Result<Self>;
-}
-
-impl FromStrHex for Wei {
-    fn from_str_hex(hex: &str) -> Result<Self> {
-        // Ensure the hex string has an even number of digits
-        let hex = if hex.len() % 2 == 1 {
-            format!("0{}", hex) // Add a leading zero if needed
-        } else {
-            hex.to_string()
-        };
-
-        // Decode the hex string
-        let bytes = match hex::decode(&hex) {
-            Ok(b) => b,
-            Err(e) => return Err(anyhow!("Failed to decode hex string: {}", e)),
-        };
-
-        let mut array = [0u8; 32];
-        let start = array.len() - bytes.len();
-        array[start..].copy_from_slice(&bytes);
-        let ethereum_u256 = EthereumU256::from_big_endian(&array);
-        Ok(Wei::from(ethereum_u256))
-    }
-}
-
-impl FromStrHex for AlloyU256 {
-    fn from_str_hex(hex: &str) -> Result<Self> {
-        let bytes = hex::decode(hex)?;
-        let mut array = [0u8; 32];
-        let start = array.len() - bytes.len();
-        array[start..].copy_from_slice(&bytes);
-        Ok(AlloyU256::from_be_bytes(array))
     }
 }
 

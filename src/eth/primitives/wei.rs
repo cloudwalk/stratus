@@ -1,7 +1,9 @@
 use std::str::FromStr;
 
+use alloy_primitives::hex;
 use display_json::DebugAsJson;
 use ethereum_types::U256;
+use ethereum_types::U256 as EthereumU256;
 use fake::Dummy;
 use fake::Faker;
 use sqlx::types::BigDecimal;
@@ -20,6 +22,49 @@ impl Wei {
 
     pub fn as_u128(&self) -> u128 {
         self.0.as_u128()
+    }
+
+    /// Converts a hexadecimal string to Wei
+    ///
+    /// # Arguments
+    ///
+    /// * `hex` - A hexadecimal string, with or without the "0x" prefix
+    ///
+    /// # Returns
+    ///
+    /// A Result containing the Wei value or an error
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use stratus::eth::primitives::Wei;
+    ///
+    /// let wei = Wei::from_str_hex("1a").unwrap();
+    /// assert_eq!(wei, Wei::from(26u64));
+    ///
+    /// let wei = Wei::from_str_hex("0x1a").unwrap();
+    /// assert_eq!(wei, Wei::from(26u64));
+    /// ```
+    pub fn from_str_hex(hex: &str) -> Result<Self, anyhow::Error> {
+        // Ensure the hex string has an even number of digits
+        let hex = hex.trim_start_matches("0x");
+        let hex = if hex.len() % 2 == 1 {
+            format!("0{}", hex) // Add a leading zero if needed
+        } else {
+            hex.to_string()
+        };
+
+        // Decode the hex string
+        let bytes = match hex::decode(&hex) {
+            Ok(b) => b,
+            Err(e) => return Err(anyhow::anyhow!("Failed to decode hex string: {}", e)),
+        };
+
+        let mut array = [0u8; 32];
+        let start = array.len() - bytes.len();
+        array[start..].copy_from_slice(&bytes);
+        let ethereum_u256 = EthereumU256::from_big_endian(&array);
+        Ok(Wei(ethereum_u256))
     }
 }
 

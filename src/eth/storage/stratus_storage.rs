@@ -484,8 +484,10 @@ impl StratusStorage {
             }
         })?;
 
-        // Try to load genesis.json
-        let genesis_accounts = if let Some(genesis_path) = GenesisConfig::find_genesis_file(None) {
+        // Try to load genesis.json from the path specified in GenesisFileConfig
+        // or use default genesis configuration
+        let config = <crate::config::GenesisFileConfig as clap::Parser>::try_parse().unwrap_or_default();
+        let genesis_accounts = if let Some(genesis_path) = config.genesis_path {
             tracing::info!("Found genesis file at: {:?}", genesis_path);
             match GenesisConfig::load_from_file(genesis_path) {
                 Ok(genesis) => match genesis.to_stratus_accounts() {
@@ -500,18 +502,16 @@ impl StratusStorage {
                     }
                 },
                 Err(e) => {
-                    tracing::error!("Failed to load genesis.json: {:?}", e);
+                    tracing::error!("Failed to load genesis file: {:?}", e);
                     // Fallback to test accounts
                     test_accounts()
                 }
             }
         } else {
-            tracing::info!("No genesis.json file found, using default genesis config");
-            // Use default genesis config
-            let default_genesis = GenesisConfig::default();
-            match default_genesis.to_stratus_accounts() {
+            // No genesis path specified, use default genesis configuration
+            match GenesisConfig::default().to_stratus_accounts() {
                 Ok(accounts) => {
-                    tracing::info!("Using {} accounts from default genesis config", accounts.len());
+                    tracing::info!("Using default genesis configuration with {} accounts", accounts.len());
                     accounts
                 }
                 Err(e) => {

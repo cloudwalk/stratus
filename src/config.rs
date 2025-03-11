@@ -352,7 +352,7 @@ impl FromStr for Environment {
 }
 
 /// Genesis configuration
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize, Default)]
 pub struct GenesisFileConfig {
     /// Path to the genesis.json file
     #[arg(long = "genesis-path", env = "GENESIS_JSON_PATH")]
