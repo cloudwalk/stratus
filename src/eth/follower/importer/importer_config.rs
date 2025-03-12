@@ -38,13 +38,13 @@ pub struct ImporterConfig {
     #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s", required = false)]
     pub external_rpc_timeout: Duration,
 
-    /// Maximum request size in bytes for external RPC requests
+    /// Maximum response size in bytes for external RPC requests
     #[arg(
-        long = "external-rpc-max-request-size-bytes",
-        env = "EXTERNAL_RPC_MAX_REQUEST_SIZE_BYTES",
+        long = "external-rpc-max-response-size-bytes",
+        env = "EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES",
         default_value = "10485760"
     )]
-    pub external_rpc_max_request_size_bytes: u32,
+    pub external_rpc_max_response_size_bytes: u32,
 
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms", required = false)]
     pub sync_interval: Duration,
@@ -83,7 +83,7 @@ impl ImporterConfig {
                 &self.external_rpc,
                 self.external_rpc_ws.as_deref(),
                 self.external_rpc_timeout,
-                self.external_rpc_max_request_size_bytes,
+                self.external_rpc_max_response_size_bytes,
             )
             .await?,
         );
