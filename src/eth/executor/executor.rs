@@ -9,6 +9,7 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
+use tracing::debug_span;
 use tracing::info_span;
 use tracing::Span;
 
@@ -516,10 +517,13 @@ impl Executor {
             attempt += 1;
 
             // track
-            let _span = info_span!(
+            let _span = debug_span!(
                 "executor::local_transaction_attempt",
                 %attempt,
                 tx_hash = %tx_input.hash,
+                tx_from = %tx_input.signer,
+                tx_to = tracing::field::Empty,
+                tx_nonce = %tx_input.nonce
             )
             .entered();
             Span::with(|s| {
@@ -531,9 +535,16 @@ impl Executor {
             let evm_input = EvmInput::from_eth_transaction(&tx_input, &pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
-            tracing::info!(
+            tracing::debug!(
                 %attempt,
                 tx_hash = %tx_input.hash,
+                tx_nonce = %tx_input.nonce,
+                tx_from = %tx_input.from,
+                tx_signer = %tx_input.signer,
+                tx_to = ?tx_input.to,
+                tx_data_len = %tx_input.input.len(),
+                tx_data = %tx_input.input,
+                ?evm_input,
                 "executing local transaction attempt"
             );
 
