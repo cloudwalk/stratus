@@ -516,7 +516,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
     let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
     let changes = parse_revm_state(revm_result.state, execution_changes)?;
 
-    tracing::info!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
+    tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
     let mut deployed_contract_address = None;
     for changes in changes.values() {
         if changes.bytecode.is_modified() {
