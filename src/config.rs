@@ -304,7 +304,7 @@ pub struct ImporterOfflineConfig {
     pub block_saver_batch_size: usize,
 
     /// Number of blocks batches that can be queued to the saver before blocking. (cache needs to be sufficiently big)
-    #[arg(long = "block-saver-batch-size", env = "BLOCK_SAVER_BATCH_SIZE", default_value = "10")]
+    #[arg(long = "block-saver-queue-size", env = "BLOCK_SAVER_QUEUE_SIZE", default_value = "10")]
     pub block_saver_queue_size: usize,
 
     #[clap(flatten)]
