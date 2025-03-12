@@ -456,7 +456,7 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        tracing::info!(tx_hash = %tx.hash, "executing local transaction");
+        tracing::debug!(tx_hash = %tx.hash, "executing local transaction");
 
         // track
         Span::with(|s| {

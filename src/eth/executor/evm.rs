@@ -142,7 +142,7 @@ impl Evm {
         let tx_env_log = evm.tx().clone();
 
         // execute transaction
-        tracing::info!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
+        tracing::debug!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
         let evm_result = evm.transact();
 
         // extract results
