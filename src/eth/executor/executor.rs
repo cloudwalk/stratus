@@ -9,6 +9,7 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
+use tracing::debug_span;
 use tracing::info_span;
 use tracing::Span;
 
