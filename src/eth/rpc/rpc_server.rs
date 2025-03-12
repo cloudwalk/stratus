@@ -429,7 +429,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
     let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
     let (params, raw_sync_interval) = next_rpc_param::<String>(params)?;
-    let (_, raw_external_rpc_max_request_size_bytes) = next_rpc_param::<String>(params)?;
+    let (_, raw_external_rpc_max_response_size_bytes) = next_rpc_param::<String>(params)?;
 
     let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
@@ -441,8 +441,8 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         ImporterError::ConfigParseError
     })?;
 
-    let external_rpc_max_request_size_bytes = raw_external_rpc_max_request_size_bytes.parse::<u32>().map_err(|e| {
-        tracing::error!(reason = ?e, "failed to parse external_rpc_max_request_size_bytes");
+    let external_rpc_max_response_size_bytes = raw_external_rpc_max_response_size_bytes.parse::<u32>().map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse external_rpc_max_response_size_bytes");
         ImporterError::ConfigParseError
     })?;
 
@@ -451,7 +451,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
-        external_rpc_max_request_size_bytes,
+        external_rpc_max_response_size_bytes,
     };
 
     importer_config.init_follower_importer(ctx).await
