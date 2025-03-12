@@ -245,13 +245,13 @@ pub struct RpcDownloaderConfig {
     #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
     pub external_rpc_timeout: Duration,
 
-    /// Maximum request size in bytes for external RPC requests
+    /// Maximum response size in bytes for external RPC requests
     #[arg(
-        long = "external-rpc-max-request-size-bytes",
-        env = "EXTERNAL_RPC_MAX_REQUEST_SIZE_BYTES",
+        long = "external-rpc-max-response-size-bytes",
+        env = "EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES",
         default_value = "10485760"
     )]
-    pub external_rpc_max_request_size_bytes: u32,
+    pub external_rpc_max_response_size_bytes: u32,
 
     /// Number of parallel downloads.
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
