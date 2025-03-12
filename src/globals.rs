@@ -13,6 +13,7 @@ use serde_json::json;
 use tokio::runtime::Runtime;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
+use tracing_appender::non_blocking::WorkerGuard;
 
 use crate::alias::JsonValue;
 use crate::config;
@@ -35,6 +36,7 @@ where
     pub config: T,
     pub runtime: Runtime,
     _sentry_guard: Option<ClientInitGuard>,
+    _non_blocking_guard: WorkerGuard,
 }
 
 impl<T> GlobalServices<T>
@@ -64,9 +66,7 @@ where
         let tokio = common.init_tokio_runtime().expect("failed to init tokio runtime");
 
         // init tracing
-        tokio.block_on(async {
-            common.tracing.init(&common.sentry).expect("failed to init tracing");
-        });
+        let non_blocking_guard = tokio.block_on(async { common.tracing.init(&common.sentry).expect("failed to init tracing") });
 
         // init observability services
         common.metrics.init().expect("failed to init metrics");
@@ -84,6 +84,7 @@ where
             config,
             runtime: tokio,
             _sentry_guard: sentry_guard,
+            _non_blocking_guard: non_blocking_guard,
         }
     }
 }

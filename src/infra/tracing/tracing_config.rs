@@ -20,6 +20,7 @@ use opentelemetry_sdk::trace::Tracer as SdkTracer;
 use opentelemetry_sdk::Resource as SdkResource;
 use tonic::metadata::MetadataKey;
 use tonic::metadata::MetadataMap;
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::fmt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -64,16 +65,17 @@ impl TracingConfig {
     /// Inits application global tracing registry.
     ///
     /// Uses println! to have information available in stdout before tracing is initialized.
-    pub fn init(&self, sentry_config: &Option<SentryConfig>) -> anyhow::Result<()> {
-        match self.create_subscriber(sentry_config).try_init() {
-            Ok(()) => Ok(()),
+    pub fn init(&self, sentry_config: &Option<SentryConfig>) -> anyhow::Result<WorkerGuard> {
+        let (subscriber, guard) = self.create_subscriber(sentry_config);
+        match subscriber.try_init() {
+            Ok(()) => Ok(guard),
             Err(e) => {
                 println!("failed to create tracing registry | reason={:?}", e);
                 Err(e.into())
             }
         }
     }
-    pub fn create_subscriber(&self, sentry_config: &Option<SentryConfig>) -> impl SubscriberInitExt {
+    pub fn create_subscriber(&self, sentry_config: &Option<SentryConfig>) -> (impl SubscriberInitExt, WorkerGuard) {
         println!("creating tracing registry");
 
         // configure tracing context layer
@@ -86,12 +88,16 @@ impl TracingConfig {
             "tracing registry: enabling console logs | format={} ansi={}",
             self.tracing_log_format, enable_ansi
         );
+        let (writer, guard) = tracing_appender::non_blocking(std::io::stdout());
+
         let stdout_layer = match self.tracing_log_format {
             TracingLogFormat::Json => fmt::Layer::default()
+                .with_writer(writer)
                 .event_format(TracingJsonFormatter)
                 .with_filter(EnvFilter::from_default_env())
                 .boxed(),
             TracingLogFormat::Minimal => fmt::Layer::default()
+                .with_writer(writer)
                 .with_thread_ids(false)
                 .with_thread_names(false)
                 .with_target(false)
@@ -99,8 +105,13 @@ impl TracingConfig {
                 .with_timer(TracingMinimalTimer)
                 .with_filter(EnvFilter::from_default_env())
                 .boxed(),
-            TracingLogFormat::Normal => fmt::Layer::default().with_ansi(enable_ansi).with_filter(EnvFilter::from_default_env()).boxed(),
+            TracingLogFormat::Normal => fmt::Layer::default()
+                .with_writer(writer)
+                .with_ansi(enable_ansi)
+                .with_filter(EnvFilter::from_default_env())
+                .boxed(),
             TracingLogFormat::Verbose => fmt::Layer::default()
+                .with_writer(writer)
                 .with_ansi(enable_ansi)
                 .with_target(true)
                 .with_thread_ids(true)
@@ -157,12 +168,15 @@ impl TracingConfig {
             }
         };
 
-        tracing_subscriber::registry()
-            .with(tracing_context_layer)
-            .with(stdout_layer)
-            .with(opentelemetry_layer)
-            .with(sentry_layer)
-            .with(tokio_console_layer)
+        (
+            tracing_subscriber::registry()
+                .with(tracing_context_layer)
+                .with(stdout_layer)
+                .with(opentelemetry_layer)
+                .with(sentry_layer)
+                .with(tokio_console_layer),
+            guard,
+        )
     }
 }
 
@@ -326,7 +340,7 @@ mod tests {
             tracing_log_format: TracingLogFormat::Json,
             tracing_tokio_console_address: None,
         };
-        config.create_subscriber(&None);
+        let _ = config.create_subscriber(&None);
     }
 
     #[test]
@@ -338,7 +352,7 @@ mod tests {
             tracing_log_format: TracingLogFormat::Minimal,
             tracing_tokio_console_address: None,
         };
-        config.create_subscriber(&None);
+        let _ = config.create_subscriber(&None);
     }
 
     #[test]
@@ -350,7 +364,7 @@ mod tests {
             tracing_log_format: TracingLogFormat::Normal,
             tracing_tokio_console_address: None,
         };
-        config.create_subscriber(&None);
+        let _ = config.create_subscriber(&None);
     }
 
     #[test]
@@ -362,7 +376,7 @@ mod tests {
             tracing_log_format: TracingLogFormat::Verbose,
             tracing_tokio_console_address: None,
         };
-        config.create_subscriber(&None);
+        let _ = config.create_subscriber(&None);
     }
 
     #[tokio::test]
@@ -374,7 +388,7 @@ mod tests {
             tracing_log_format: TracingLogFormat::Normal,
             tracing_tokio_console_address: None,
         };
-        config.create_subscriber(&None);
+        let _ = config.create_subscriber(&None);
     }
 
     #[test]
@@ -389,7 +403,7 @@ mod tests {
             tracing_log_format: TracingLogFormat::Normal,
             tracing_tokio_console_address: None,
         };
-        config.create_subscriber(&Some(sentry_config));
+        let _ = config.create_subscriber(&Some(sentry_config));
     }
 
     #[tokio::test]
@@ -401,7 +415,7 @@ mod tests {
             tracing_log_format: TracingLogFormat::Normal,
             tracing_tokio_console_address: Some("127.0.0.1:6669".parse().unwrap()),
         };
-        config.create_subscriber(&None);
+        let _ = config.create_subscriber(&None);
     }
 
     #[test]

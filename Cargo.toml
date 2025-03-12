@@ -133,6 +133,7 @@ sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
 # Historic events processor
 indicatif = "=0.17.8"
+tracing-appender = { version = "0.2.3", features = ["parking_lot"] }
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies
