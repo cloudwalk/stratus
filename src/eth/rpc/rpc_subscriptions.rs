@@ -344,9 +344,8 @@ impl RpcSubscriptions {
                 if let Err(e) = sink.send_timeout(msg_clone, NOTIFICATION_TIMEOUT).await {
                     match e {
                         jsonrpsee::SendTimeoutError::Timeout(msg) => tracing::error!(reason = ?msg, "failed to send subscription notification"),
-                        jsonrpsee::SendTimeoutError::Closed(msg) => {
-                            tracing::info!(reason = ?msg, "failed to send subscription notification because the connection was closed")
-                        }
+                        jsonrpsee::SendTimeoutError::Closed(msg) =>
+                            tracing::info!(reason = ?msg, "failed to send subscription notification because the connection was closed"),
                     }
                 }
             });
