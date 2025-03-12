@@ -299,6 +299,14 @@ pub struct ImporterOfflineConfig {
     #[arg(short = 'b', long = "blocks-by-fetch", env = "BLOCKS_BY_FETCH", default_value = "10000")]
     pub blocks_by_fetch: usize,
 
+    /// Number of blocks to be accumulated before sending to the block saver. (cache needs to be sufficiently big)
+    #[arg(long = "block-saver-batch-size", env = "BLOCK_SAVER_BATCH_SIZE", default_value = "100")]
+    pub block_saver_batch_size: usize,
+
+    /// Number of blocks batches that can be queued to the saver before blocking. (cache needs to be sufficiently big)
+    #[arg(long = "block-saver-queue-size", env = "BLOCK_SAVER_QUEUE_SIZE", default_value = "10")]
+    pub block_saver_queue_size: usize,
+
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 
