@@ -93,21 +93,11 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         if method == "eth_sendRawTransaction" {
             let tx_data_result = next_rpc_param::<Bytes>(params_clone.sequence());
 
-            if let Ok((params, tx_data)) = tx_data_result {
+            if let Ok((_, tx_data)) = tx_data_result {
                 let decoded_tx_result = parse_rpc_rlp::<TransactionInput>(&tx_data);
 
                 if let Ok(decoded_tx) = decoded_tx_result {
-                    let client_opt = next_rpc_param::<RpcClientApp>(params).map(|(_, client)| client).ok();
-
-                    tx = Some(TransactionTracingIdentifiers {
-                        client: client_opt,
-                        hash: Some(decoded_tx.hash),
-                        contract: codegen::contract_name(&decoded_tx.to),
-                        function: codegen::function_sig(&decoded_tx.input),
-                        from: Some(decoded_tx.signer),
-                        to: decoded_tx.to,
-                        nonce: Some(decoded_tx.nonce),
-                    });
+                    tx = TransactionTracingIdentifiers::from_raw_transaction(params_clone.clone(), &decoded_tx).ok();
 
                     request.extensions_mut().insert(tx_data);
                     request.extensions_mut().insert(decoded_tx);
@@ -315,6 +305,21 @@ struct TransactionTracingIdentifiers {
 }
 
 impl TransactionTracingIdentifiers {
+    /// eth_sendRawTransaction
+    fn from_raw_transaction(params: Params, decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
+        let client_opt = next_rpc_param::<RpcClientApp>(params.sequence()).map(|(_, client)| client).ok();
+
+        Ok(Self {
+            client: client_opt,
+            hash: Some(decoded_tx.hash),
+            contract: codegen::contract_name(&decoded_tx.to),
+            function: codegen::function_sig(&decoded_tx.input),
+            from: Some(decoded_tx.signer),
+            to: decoded_tx.to,
+            nonce: Some(decoded_tx.nonce),
+        })
+    }
+
     /// eth_call / eth_estimateGas
     fn from_call(params: Params) -> anyhow::Result<Self> {
         let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
