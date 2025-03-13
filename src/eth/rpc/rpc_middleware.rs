@@ -97,17 +97,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
                 let decoded_tx_result = parse_rpc_rlp::<TransactionInput>(&tx_data);
 
                 if let Ok(decoded_tx) = decoded_tx_result {
-                    let client_opt = next_rpc_param::<RpcClientApp>(params).map(|(_, client)| client).ok();
-
-                    tx = Some(TransactionTracingIdentifiers {
-                        client: client_opt,
-                        hash: Some(decoded_tx.hash),
-                        contract: codegen::contract_name(&decoded_tx.to),
-                        function: codegen::function_sig(&decoded_tx.input),
-                        from: Some(decoded_tx.signer),
-                        to: decoded_tx.to,
-                        nonce: Some(decoded_tx.nonce),
-                    });
+                    tx = TransactionTracingIdentifiers::from_raw_transaction(params, &decoded_tx).ok();
 
                     request.extensions_mut().insert(tx_data);
                     request.extensions_mut().insert(decoded_tx);
@@ -315,6 +305,21 @@ struct TransactionTracingIdentifiers {
 }
 
 impl TransactionTracingIdentifiers {
+    /// eth_sendRawTransaction
+    fn from_raw_transaction(params_seq: jsonrpsee::types::ParamsSequence<'_>, decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
+        let client_opt = next_rpc_param::<RpcClientApp>(params_seq).map(|(_, client)| client).ok();
+
+        Ok(Self {
+            client: client_opt,
+            hash: Some(decoded_tx.hash),
+            contract: codegen::contract_name(&decoded_tx.to),
+            function: codegen::function_sig(&decoded_tx.input),
+            from: Some(decoded_tx.signer),
+            to: decoded_tx.to,
+            nonce: Some(decoded_tx.nonce),
+        })
+    }
+
     /// eth_call / eth_estimateGas
     fn from_call(params: Params) -> anyhow::Result<Self> {
         let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
