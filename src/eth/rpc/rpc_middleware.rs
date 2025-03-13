@@ -13,7 +13,6 @@ use jsonrpsee::server::ConnectionGuard;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::Id;
 use jsonrpsee::types::Params;
-use jsonrpsee::types::ParamsSequence;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
 use tracing::field;
@@ -94,11 +93,11 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         if method == "eth_sendRawTransaction" {
             let tx_data_result = next_rpc_param::<Bytes>(params_clone.sequence());
 
-            if let Ok((params, tx_data)) = tx_data_result {
+            if let Ok((_, tx_data)) = tx_data_result {
                 let decoded_tx_result = parse_rpc_rlp::<TransactionInput>(&tx_data);
 
                 if let Ok(decoded_tx) = decoded_tx_result {
-                    tx = TransactionTracingIdentifiers::from_raw_transaction(params, &decoded_tx).ok();
+                    tx = TransactionTracingIdentifiers::from_raw_transaction(params_clone.clone(), &decoded_tx).ok();
 
                     request.extensions_mut().insert(tx_data);
                     request.extensions_mut().insert(decoded_tx);
@@ -307,8 +306,8 @@ struct TransactionTracingIdentifiers {
 
 impl TransactionTracingIdentifiers {
     /// eth_sendRawTransaction
-    fn from_raw_transaction(params_seq: ParamsSequence<'_>, decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
-        let client_opt = next_rpc_param::<RpcClientApp>(params_seq).map(|(_, client)| client).ok();
+    fn from_raw_transaction(params: Params, decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
+        let client_opt = next_rpc_param::<RpcClientApp>(params.sequence()).map(|(_, client)| client).ok();
 
         Ok(Self {
             client: client_opt,
