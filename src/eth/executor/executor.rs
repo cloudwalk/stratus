@@ -456,7 +456,7 @@ impl Executor {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        tracing::info!(tx_hash = %tx.hash, "executing local transaction");
+        tracing::debug!(tx_hash = %tx.hash, "executing local transaction");
 
         // track
         Span::with(|s| {
@@ -517,7 +517,7 @@ impl Executor {
             attempt += 1;
 
             // track
-            let _span = info_span!(
+            let _span = debug_span!(
                 "executor::local_transaction_attempt",
                 %attempt,
                 tx_hash = %tx_input.hash,
@@ -535,7 +535,7 @@ impl Executor {
             let evm_input = EvmInput::from_eth_transaction(&tx_input, &pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
-            tracing::info!(
+            tracing::debug!(
                 %attempt,
                 tx_hash = %tx_input.hash,
                 tx_nonce = %tx_input.nonce,
