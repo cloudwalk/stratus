@@ -97,7 +97,7 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
                 let decoded_tx_result = parse_rpc_rlp::<TransactionInput>(&tx_data);
 
                 if let Ok(decoded_tx) = decoded_tx_result {
-                    tx = TransactionTracingIdentifiers::from_raw_transaction(params_clone.clone(), &decoded_tx).ok();
+                    tx = TransactionTracingIdentifiers::from_raw_transaction(&decoded_tx).ok();
 
                     request.extensions_mut().insert(tx_data);
                     request.extensions_mut().insert(decoded_tx);
@@ -306,11 +306,9 @@ struct TransactionTracingIdentifiers {
 
 impl TransactionTracingIdentifiers {
     /// eth_sendRawTransaction
-    fn from_raw_transaction(params: Params, decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
-        let client_opt = next_rpc_param::<RpcClientApp>(params.sequence()).map(|(_, client)| client).ok();
-
+    fn from_raw_transaction(decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
         Ok(Self {
-            client: client_opt,
+            client: None,
             hash: Some(decoded_tx.hash),
             contract: codegen::contract_name(&decoded_tx.to),
             function: codegen::function_sig(&decoded_tx.input),
