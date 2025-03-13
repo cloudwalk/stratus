@@ -114,7 +114,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
                 }
             }
         } else {
-            // Handle other methods normally
             tx = match method.as_str() {
                 "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(params_clone.clone()).ok(),
                 "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(params_clone.clone()).ok(),
