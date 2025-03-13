@@ -342,7 +342,11 @@ impl RpcSubscriptions {
             let msg_clone = msg.clone();
             spawn_named("rpc::sub::notify", async move {
                 if let Err(e) = sink.send_timeout(msg_clone, NOTIFICATION_TIMEOUT).await {
-                    tracing::error!(reason = ?e, "failed to send subscription notification");
+                    match e {
+                        jsonrpsee::SendTimeoutError::Timeout(msg) => tracing::error!(reason = ?msg, "failed to send subscription notification"),
+                        jsonrpsee::SendTimeoutError::Closed(msg) =>
+                            tracing::info!(reason = ?msg, "failed to send subscription notification because the connection was closed"),
+                    }
                 }
             });
         }

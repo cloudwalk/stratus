@@ -142,7 +142,7 @@ impl TryFrom<JsonValue> for ExternalReceipt {
     fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
         match ExternalReceipt::deserialize(&value) {
             Ok(v) => Ok(v),
-            Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to ExternalBlock"),
+            Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to ExternalReceipt"),
         }
     }
 }

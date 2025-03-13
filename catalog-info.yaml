@@ -6,6 +6,9 @@ metadata:
   annotations:
     github.com/project-slug: cloudwalk/stratus
     backstage.io/techdocs-ref: dir:.
+  labels:
+    cloudwalk.io/regulation-scope: none
+    cloudwalk.io/critical-level: high
   tags:
     - rust
     - blockchain

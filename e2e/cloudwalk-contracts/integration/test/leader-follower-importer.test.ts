@@ -108,6 +108,7 @@ describe("Leader & Follower importer integration test", function () {
             "ws://0.0.0.0:3000/",
             "2s",
             "100ms",
+            "10485760",
         ]);
         expect(responseLeader.data.error.code).to.equal(7003);
         expect(responseLeader.data.error.message).to.equal("Stratus node is not a follower.");
@@ -126,6 +127,7 @@ describe("Leader & Follower importer integration test", function () {
             "ws://0.0.0.0:9999/",
             "2s",
             "100ms",
+            "10485760",
         ]);
         expect(responseInvalidAddressFollower.data.error.code).to.equal(4004);
         expect(responseInvalidAddressFollower.data.error.message).to.equal("Failed to initialize importer.");
@@ -137,6 +139,7 @@ describe("Leader & Follower importer integration test", function () {
             "ws://0.0.0.0:3000/",
             "2s",
             "100ms",
+            "10485760",
         ]);
         expect(responseValidFollower.data.result).to.equal(true);
     });
@@ -147,6 +150,7 @@ describe("Leader & Follower importer integration test", function () {
             "ws://0.0.0.0:3000/",
             "2s",
             "100ms",
+            "10485760",
         ]);
         expect(responseSecondInitFollower.data.error.code).to.equal(4001);
         expect(responseSecondInitFollower.data.error.message).to.equal("Importer is already running.");
