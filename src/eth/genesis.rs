@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use alloy_primitives::hex;
 use anyhow::Result;
+use ethereum_types::U256;
 use ethereum_types::U256 as EthereumU256;
 use serde::Deserialize;
 use serde::Serialize;
@@ -13,7 +14,11 @@ use serde::Serialize;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
+
+/// Type alias for a collection of storage slots in the format (address, slot_index, value)
+pub type GenesisSlots = Vec<(Address, SlotIndex, U256)>;
 
 /// Represents the configuration of an Ethereum genesis.json file
 #[allow(non_snake_case)]
@@ -145,6 +150,228 @@ impl GenesisConfig {
         }
 
         Ok(accounts)
+    }
+
+    /// Converts the genesis configuration to Stratus accounts and storage slots.
+    ///
+    /// Returns a tuple containing:
+    /// - A vector of accounts with their balance, nonce, and bytecode
+    /// - A vector of storage slots in the format (address, slot_index, value)
+    pub fn to_stratus_accounts_and_slots(&self) -> Result<(Vec<Account>, GenesisSlots)> {
+        let mut accounts = Vec::new();
+        let mut slots = Vec::new();
+
+        for (addr_str, genesis_account) in &self.alloc {
+            // Remove 0x prefix if present
+            let addr_str = addr_str.trim_start_matches("0x");
+
+            // Use FromStr to convert the address
+            let address = Address::from_str(addr_str)?;
+
+            // Create the account
+            let mut account = Account::new_empty(address);
+
+            // Convert balance
+            let balance_str = genesis_account.balance.trim_start_matches("0x");
+
+            let balance = if genesis_account.balance.starts_with("0x") {
+                // For hex strings
+                Wei::from_str_hex(balance_str)?
+            } else {
+                // For decimal strings
+                let value = balance_str.parse::<u64>().unwrap_or(0);
+                Wei::from(EthereumU256::from(value))
+            };
+
+            account.balance = balance;
+
+            // Add nonce if it exists
+            if let Some(nonce) = &genesis_account.nonce {
+                let nonce_str = nonce.trim_start_matches("0x");
+                let nonce_value = if nonce.starts_with("0x") {
+                    u64::from_str_radix(nonce_str, 16).unwrap_or(0)
+                } else {
+                    nonce_str.parse::<u64>().unwrap_or(0)
+                };
+                account.nonce = Nonce::from(nonce_value);
+            }
+
+            // Add code if it exists
+            if let Some(code) = &genesis_account.code {
+                let code_str = code.trim_start_matches("0x");
+                if let Ok(code_bytes) = hex::decode(code_str) {
+                    if !code_bytes.is_empty() {
+                        account.bytecode = Some(revm::primitives::Bytecode::new_raw(code_bytes.into()));
+                    }
+                }
+            }
+
+            // Process storage slots if they exist
+            if let Some(storage) = &genesis_account.storage {
+                for (slot_key, slot_value) in storage {
+                    // Parse slot key
+                    let slot_key_str = slot_key.trim_start_matches("0x");
+                    let slot_index = if slot_key.starts_with("0x") {
+                        if let Ok(bytes) = hex::decode(slot_key_str) {
+                            let mut array = [0u8; 32];
+                            let start = array.len().saturating_sub(bytes.len());
+                            let copy_len = bytes.len().min(array.len() - start);
+                            array[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
+                            SlotIndex::from(U256::from_big_endian(&array))
+                        } else {
+                            continue; // Skip invalid slot key
+                        }
+                    } else if let Ok(value) = slot_key_str.parse::<u64>() {
+                        SlotIndex::from(U256::from(value))
+                    } else {
+                        continue; // Skip invalid slot key
+                    };
+
+                    // Parse slot value
+                    let slot_value_str = slot_value.trim_start_matches("0x");
+                    let slot_value = if slot_value.starts_with("0x") {
+                        if let Ok(bytes) = hex::decode(slot_value_str) {
+                            let mut array = [0u8; 32];
+                            let start = array.len().saturating_sub(bytes.len());
+                            let copy_len = bytes.len().min(array.len() - start);
+                            array[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
+                            U256::from_big_endian(&array)
+                        } else {
+                            continue; // Skip invalid slot value
+                        }
+                    } else if let Ok(value) = slot_value_str.parse::<u64>() {
+                        U256::from(value)
+                    } else {
+                        continue; // Skip invalid slot value
+                    };
+
+                    // Add slot to the list
+                    slots.push((address, slot_index, slot_value));
+                }
+            }
+
+            accounts.push(account);
+        }
+
+        Ok((accounts, slots))
+    }
+
+    /// Creates a genesis block from the genesis configuration.
+    pub fn to_genesis_block(&self) -> Result<crate::eth::primitives::Block> {
+        use std::str::FromStr;
+
+        use alloy_primitives::hex;
+
+        use crate::eth::primitives::Block;
+        use crate::eth::primitives::BlockHeader;
+        use crate::eth::primitives::BlockNumber;
+        use crate::eth::primitives::Bytes;
+        use crate::eth::primitives::Gas;
+        use crate::eth::primitives::Hash;
+        use crate::eth::primitives::UnixTime;
+
+        // Parse timestamp
+        let timestamp_str = self.timestamp.trim_start_matches("0x");
+        let timestamp = if self.timestamp.starts_with("0x") {
+            u64::from_str_radix(timestamp_str, 16).unwrap_or(0)
+        } else {
+            timestamp_str.parse::<u64>().unwrap_or(0)
+        };
+
+        // Parse gas limit
+        let gas_limit_str = self.gasLimit.trim_start_matches("0x");
+        let gas_limit = if self.gasLimit.starts_with("0x") {
+            u64::from_str_radix(gas_limit_str, 16).unwrap_or(0)
+        } else {
+            gas_limit_str.parse::<u64>().unwrap_or(0)
+        };
+
+        // Parse gas used (if present)
+        let gas_used = if let Some(gas_used) = &self.gasUsed {
+            let gas_used_str = gas_used.trim_start_matches("0x");
+            if gas_used.starts_with("0x") {
+                u64::from_str_radix(gas_used_str, 16).unwrap_or(0)
+            } else {
+                gas_used_str.parse::<u64>().unwrap_or(0)
+            }
+        } else {
+            0
+        };
+
+        // Parse nonce
+        let nonce_str = self.nonce.trim_start_matches("0x");
+        let nonce_bytes = if let Ok(bytes) = hex::decode(nonce_str) {
+            let mut padded = [0u8; 8];
+            let start = padded.len().saturating_sub(bytes.len());
+            let copy_len = bytes.len().min(padded.len() - start);
+            padded[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
+            padded
+        } else {
+            [0u8; 8]
+        };
+
+        // Parse coinbase/miner address
+        let coinbase_str = self.coinbase.trim_start_matches("0x");
+        let miner = Address::from_str(coinbase_str).unwrap_or_default();
+
+        // Parse extra data
+        let extra_data_str = self.extraData.trim_start_matches("0x");
+        let extra_data = if let Ok(bytes) = hex::decode(extra_data_str) {
+            Bytes(bytes)
+        } else {
+            Bytes(vec![])
+        };
+
+        // Parse parent hash (if present)
+        let parent_hash = if let Some(parent_hash) = &self.parentHash {
+            let parent_hash_str = parent_hash.trim_start_matches("0x");
+            if let Ok(bytes) = hex::decode(parent_hash_str) {
+                let mut hash_bytes = [0u8; 32];
+                let start = hash_bytes.len().saturating_sub(bytes.len());
+                let copy_len = bytes.len().min(hash_bytes.len() - start);
+                hash_bytes[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
+                Hash::new(hash_bytes)
+            } else {
+                Hash::default()
+            }
+        } else {
+            Hash::default()
+        };
+
+        // Parse mix hash
+        let mix_hash_str = self.mixHash.trim_start_matches("0x");
+        let _mix_hash = if let Ok(bytes) = hex::decode(mix_hash_str) {
+            let mut hash_bytes = [0u8; 32];
+            let start = hash_bytes.len().saturating_sub(bytes.len());
+            let copy_len = bytes.len().min(hash_bytes.len() - start);
+            hash_bytes[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
+            Hash::new(hash_bytes)
+        } else {
+            Hash::default()
+        };
+
+        // Create a basic header
+        let mut header = BlockHeader::new(BlockNumber::ZERO, UnixTime::from(timestamp));
+
+        // Update with genesis.json values
+        header.gas_limit = Gas::from(gas_limit);
+        header.gas_used = Gas::from(gas_used);
+        header.miner = miner;
+        header.author = miner;
+        header.extra_data = extra_data;
+        header.parent_hash = parent_hash;
+
+        // For nonce, we need to convert to H64 first
+        let nonce_h64 = ethereum_types::H64::from_slice(&nonce_bytes);
+        header.nonce = nonce_h64.into();
+
+        // Create the block
+        let block = Block {
+            header,
+            transactions: Vec::new(),
+        };
+
+        Ok(block)
     }
 }
 

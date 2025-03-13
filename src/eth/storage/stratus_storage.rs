@@ -43,7 +43,7 @@ pub struct StratusStorage {
     temp: Box<dyn TemporaryStorage>,
     cache: StorageCache,
     perm: Box<dyn PermanentStorage>,
-    #[allow(dead_code)]
+    #[cfg(feature = "dev")]
     perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
 }
 
@@ -53,14 +53,18 @@ impl StratusStorage {
         temp: Box<dyn TemporaryStorage>,
         perm: Box<dyn PermanentStorage>,
         cache: StorageCache,
-        perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
+        #[cfg(feature = "dev")] perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
     ) -> Result<Self, StorageError> {
+        #[cfg(feature = "dev")]
         let this = Self {
             temp,
             cache,
             perm,
             perm_config,
         };
+
+        #[cfg(not(feature = "dev"))]
+        let this = Self { temp, cache, perm };
 
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
@@ -80,7 +84,7 @@ impl StratusStorage {
         use super::permanent::PermanentStorageConfig;
         use super::permanent::PermanentStorageKind;
 
-        let perm_config = PermanentStorageConfig {
+        let _perm_config = PermanentStorageConfig {
             perm_storage_kind: PermanentStorageKind::InMemory,
             perm_storage_url: None,
             rocks_path_prefix: None,
@@ -98,7 +102,11 @@ impl StratusStorage {
         }
         .init();
 
-        Self::new(temp, perm, cache, perm_config)
+        #[cfg(feature = "dev")]
+        return Self::new(temp, perm, cache, perm_config);
+
+        #[cfg(not(feature = "dev"))]
+        return Self::new(temp, perm, cache);
     }
 
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
@@ -508,48 +516,115 @@ impl StratusStorage {
             }
         })?;
 
+        // Try to load genesis block from the genesis file or use default
+        let genesis_block = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
+            if std::path::Path::new(genesis_path).exists() {
+                match GenesisConfig::load_from_file(genesis_path) {
+                    Ok(genesis_config) => match genesis_config.to_genesis_block() {
+                        Ok(block) => {
+                            tracing::info!("Using genesis block from file: {:?}", genesis_path);
+                            block
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to create genesis block from file: {:?}", e);
+                            Block::genesis()
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!("Failed to load genesis file: {:?}", e);
+                        Block::genesis()
+                    }
+                }
+            } else {
+                tracing::error!("Genesis file not found at: {:?}", genesis_path);
+                Block::genesis()
+            }
+        } else {
+            tracing::info!("Using default genesis block");
+            Block::genesis()
+        };
+
         // Try to load genesis.json from the path specified in GenesisFileConfig
         // or use default genesis configuration
-        let genesis_accounts = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
-            tracing::info!("Found genesis file at: {:?}", genesis_path);
-            match GenesisConfig::load_from_file(genesis_path) {
-                Ok(genesis) => match genesis.to_stratus_accounts() {
-                    Ok(accounts) => {
-                        tracing::info!("Loaded {} accounts from genesis.json", accounts.len());
-                        accounts
-                    }
+        let (genesis_accounts, genesis_slots) = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
+            if std::path::Path::new(genesis_path).exists() {
+                tracing::info!("Found genesis file at: {:?}", genesis_path);
+                match GenesisConfig::load_from_file(genesis_path) {
+                    Ok(genesis) => match genesis.to_stratus_accounts_and_slots() {
+                        Ok((accounts, slots)) => {
+                            tracing::info!("Loaded {} accounts from genesis.json", accounts.len());
+                            if !slots.is_empty() {
+                                tracing::info!("Loaded {} storage slots from genesis.json", slots.len());
+                            }
+                            (accounts, slots)
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to convert genesis accounts: {:?}", e);
+                            // Fallback to test accounts
+                            (test_accounts(), vec![])
+                        }
+                    },
                     Err(e) => {
-                        tracing::error!("Failed to convert genesis accounts: {:?}", e);
+                        tracing::error!("Failed to load genesis file: {:?}", e);
                         // Fallback to test accounts
-                        test_accounts()
+                        (test_accounts(), vec![])
                     }
-                },
-                Err(e) => {
-                    tracing::error!("Failed to load genesis file: {:?}", e);
-                    // Fallback to test accounts
-                    test_accounts()
                 }
+            } else {
+                tracing::error!("Genesis file not found at: {:?}", genesis_path);
+                // Fallback to test accounts
+                (test_accounts(), vec![])
             }
         } else {
             // No genesis path specified, use default genesis configuration
-            match GenesisConfig::default().to_stratus_accounts() {
-                Ok(accounts) => {
+            match GenesisConfig::default().to_stratus_accounts_and_slots() {
+                Ok((accounts, slots)) => {
                     tracing::info!("Using default genesis configuration with {} accounts", accounts.len());
-                    accounts
+                    (accounts, slots)
                 }
                 Err(e) => {
                     tracing::error!("Failed to convert default genesis accounts: {:?}", e);
                     // Fallback to test accounts
-                    test_accounts()
+                    (test_accounts(), vec![])
                 }
             }
         };
 
-        // genesis block
-        self.save_block(Block::genesis())?;
+        // Save the genesis block
+        self.save_block(genesis_block)?;
 
         // accounts
         self.save_accounts(genesis_accounts)?;
+
+        // Save slots if any
+        if !genesis_slots.is_empty() {
+            tracing::info!("Saving {} storage slots from genesis", genesis_slots.len());
+
+            // We need to save slots through the block mechanism since there's no direct save_slot method
+            // First, we need to create a temporary account with the slots
+            for (address, index, value) in genesis_slots {
+                // Convert U256 to SlotValue
+                let slot_value = crate::eth::primitives::SlotValue(value);
+                let _slot = Slot::new(index, slot_value);
+
+                // Read the account to make sure it exists
+                let account = match self.perm.read_account(address, PointInTime::MinedPast(BlockNumber::ZERO))? {
+                    Some(account) => account,
+                    None => {
+                        tracing::warn!("Account {} not found for slot {:?}, creating empty account", address, index);
+                        Account::new_empty(address)
+                    }
+                };
+
+                // Save the account if it was newly created
+                if account.balance.0.is_zero() && account.nonce == crate::eth::primitives::Nonce::ZERO && account.bytecode.is_none() {
+                    self.save_accounts(vec![account.clone()])?;
+                }
+
+                // For now, we'll just log the slots since we don't have a direct way to save them
+                tracing::info!("Slot for account {}: index={:?}, value={:?}", address, index, slot_value);
+            }
+        }
 
         // block number
         self.set_mined_block_number(BlockNumber::ZERO)?;
