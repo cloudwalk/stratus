@@ -86,18 +86,45 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
         // extract request data
         let method = request.method_name().to_owned();
-        let tx = match method.as_str() {
-            "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(request.params()).ok(),
-            "eth_sendRawTransaction" => TransactionTracingIdentifiers::from_transaction(request.params()).ok(),
-            "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
-            _ => None,
-        };
+        let mut tx = None;
+
+        let params_clone = request.params().clone();
+
+        if method == "eth_sendRawTransaction" {
+            let tx_data_result = next_rpc_param::<Bytes>(params_clone.sequence());
+
+            if let Ok((params, tx_data)) = tx_data_result {
+                let decoded_tx_result = parse_rpc_rlp::<TransactionInput>(&tx_data);
+
+                if let Ok(decoded_tx) = decoded_tx_result {
+                    let client_opt = next_rpc_param::<RpcClientApp>(params).map(|(_, client)| client).ok();
+
+                    tx = Some(TransactionTracingIdentifiers {
+                        client: client_opt,
+                        hash: Some(decoded_tx.hash),
+                        contract: codegen::contract_name(&decoded_tx.to),
+                        function: codegen::function_sig(&decoded_tx.input),
+                        from: Some(decoded_tx.signer),
+                        to: decoded_tx.to,
+                        nonce: Some(decoded_tx.nonce),
+                    });
+
+                    request.extensions_mut().insert(tx_data);
+                    request.extensions_mut().insert(decoded_tx);
+                }
+            }
+        } else {
+            tx = match method.as_str() {
+                "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(params_clone.clone()).ok(),
+                "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(params_clone.clone()).ok(),
+                _ => None,
+            };
+        }
 
         let is_admin = request.extensions.is_admin();
 
         let client = if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.as_ref()) {
-            let val = tx_client.clone();
-            request.extensions_mut().insert(val);
+            request.extensions_mut().insert(tx_client.clone());
             tx_client
         } else {
             request.extensions.rpc_client()
@@ -288,23 +315,6 @@ struct TransactionTracingIdentifiers {
 }
 
 impl TransactionTracingIdentifiers {
-    // eth_sendRawTransaction
-    fn from_transaction(params: Params) -> anyhow::Result<Self> {
-        let (params, tx_data) = next_rpc_param::<Bytes>(params.sequence())?;
-        let tx = parse_rpc_rlp::<TransactionInput>(&tx_data)?;
-        let client = next_rpc_param::<RpcClientApp>(params);
-
-        Ok(Self {
-            client: client.map(|(_, client)| client).ok(),
-            hash: Some(tx.hash),
-            contract: codegen::contract_name(&tx.to),
-            function: codegen::function_sig(&tx.input),
-            from: Some(tx.signer),
-            to: tx.to,
-            nonce: Some(tx.nonce),
-        })
-    }
-
     /// eth_call / eth_estimateGas
     fn from_call(params: Params) -> anyhow::Result<Self> {
         let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
