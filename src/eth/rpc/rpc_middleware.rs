@@ -13,6 +13,7 @@ use jsonrpsee::server::ConnectionGuard;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::Id;
 use jsonrpsee::types::Params;
+use jsonrpsee::types::ParamsSequence;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
 use tracing::field;
@@ -306,7 +307,7 @@ struct TransactionTracingIdentifiers {
 
 impl TransactionTracingIdentifiers {
     /// eth_sendRawTransaction
-    fn from_raw_transaction(params_seq: jsonrpsee::types::ParamsSequence<'_>, decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
+    fn from_raw_transaction(params_seq: ParamsSequence<'_>, decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
         let client_opt = next_rpc_param::<RpcClientApp>(params_seq).map(|(_, client)| client).ok();
 
         Ok(Self {
