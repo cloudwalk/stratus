@@ -124,7 +124,6 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         let is_admin = request.extensions.is_admin();
 
         let client = if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.as_ref()) {
-            // Insert the client directly into extensions
             request.extensions_mut().insert(tx_client.clone());
             tx_client
         } else {
