@@ -419,14 +419,23 @@ impl RocksStorageState {
             return Ok(Some(block));
         };
 
-        let changes = changes_rocksdb.into_inner().into_changes();
+        let changes_per_tx = changes_rocksdb.into_inner().into_changes();
 
-        // we know the index of the changes, and the transactions are also sorted by index. We can simply insert at index
-        
-        for tx in &mut block.transactions {
-            for (address, change) in &changes {
-                tx.execution.changes.insert(*address, change.clone());
-            }
+        if block.transactions.len() != changes_per_tx.len() {
+            return log_and_err!("mismatch between number of transactions and number of transaction changes for block").with_context(|| {
+                format!(
+                    "block_number = {:?} transactions = {} changes = {}",
+                    block_number,
+                    block.transactions.len(),
+                    changes_per_tx.len()
+                )
+            });
+        }
+
+        for (tx_idx, tx) in block.transactions.iter_mut().enumerate() {
+            tx.execution
+                .changes
+                .extend(changes_per_tx[tx_idx].iter().map(|(addr, change)| (*addr, change.clone())));
         }
 
         Ok(Some(block))
@@ -485,15 +494,14 @@ impl RocksStorageState {
 
         // this is an optimization, instead of saving the entire block into the database,
         // remove all discardable account changes keeping them for changes_by_block
-
-        // TODO: save tx index or tx hash as well to correctly map changes to transactions when reading the block with changes
+        // TODO: save tx index or tx hash?
         let (block_without_changes, removed_changes) = {
             let mut block_mut = block;
-            let mut removed = vec![];
+            let mut removed = Vec::with_capacity(block_mut.transactions.len());
 
             block_mut.transactions.iter_mut().for_each(|transaction| {
                 // Store the changes that will be removed with transaction index
-                let to_remove = transaction
+                let tx_changes = transaction
                     .execution
                     .changes
                     .iter()
@@ -501,7 +509,7 @@ impl RocksStorageState {
                     .map(|(addr, change)| (*addr, change.clone()))
                     .collect::<Vec<_>>();
 
-                removed.extend(to_remove);
+                removed.push(tx_changes);
 
                 // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
                 transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
