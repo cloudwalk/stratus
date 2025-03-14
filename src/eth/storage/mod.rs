@@ -70,8 +70,8 @@ impl StorageConfig {
         let cache = self.cache.init();
 
         let storage = StratusStorage::new(
-            temp_storage, 
-            perm_storage, 
+            temp_storage,
+            perm_storage,
             cache,
             #[cfg(feature = "dev")]
             self.perm_storage.clone(),

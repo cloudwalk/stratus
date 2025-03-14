@@ -55,9 +55,9 @@ impl StratusStorage {
         cache: StorageCache,
         #[cfg(feature = "dev")] perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
     ) -> Result<Self, StorageError> {
-        let this = Self { 
-            temp, 
-            cache, 
+        let this = Self {
+            temp,
+            cache,
             perm,
             #[cfg(feature = "dev")]
             perm_config,
@@ -91,7 +91,7 @@ impl StratusStorage {
         {
             use super::permanent::PermanentStorageConfig;
             use super::permanent::PermanentStorageKind;
-            
+
             let perm_config = PermanentStorageConfig {
                 perm_storage_kind: PermanentStorageKind::InMemory,
                 perm_storage_url: None,
@@ -102,20 +102,11 @@ impl StratusStorage {
                 genesis_file: crate::config::GenesisFileConfig::default(),
             };
 
-            return Self::new(
-                temp, 
-                perm, 
-                cache,
-                perm_config,
-            );
+            return Self::new(temp, perm, cache, perm_config);
         }
 
         #[cfg(not(feature = "dev"))]
-        return Self::new(
-            temp, 
-            perm, 
-            cache,
-        );
+        return Self::new(temp, perm, cache);
     }
 
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
