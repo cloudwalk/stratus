@@ -25,6 +25,7 @@ use super::cf_versions::CfAccountsHistoryValue;
 use super::cf_versions::CfAccountsValue;
 use super::cf_versions::CfBlocksByHashValue;
 use super::cf_versions::CfBlocksByNumberValue;
+use super::cf_versions::CfChangesByBlockValue;
 use super::cf_versions::CfTransactionsValue;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_config::CacheSetting;
@@ -83,7 +84,8 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'stati
         "account_slots_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(52)),
         "transactions" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
         "blocks_by_number" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled, None)
+        "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
+        "changes_by_block" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
     }
 }
 
@@ -116,6 +118,7 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<HashRocksdb, CfBlocksByHashValue>,
+    changes_by_block: RocksCfRef<BlockNumberRocksdb, CfChangesByBlockValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "rocks_metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -154,6 +157,7 @@ impl RocksStorageState {
             transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
+            changes_by_block: new_cf_ref(&db, "changes_by_block", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "rocks_metrics")]
@@ -438,15 +442,28 @@ impl RocksStorageState {
         let block_hash = block.hash();
 
         // this is an optimization, instead of saving the entire block into the database,
-        // remove all discardable account changes
-        let block_without_changes = {
+        // remove all discardable account changes keeping them for changes_by_block
+        let (block_without_changes, removed_changes) = {
             let mut block_mut = block;
-            // mutate it
+            let mut removed = vec![];
+
             block_mut.transactions.iter_mut().for_each(|transaction| {
+                // Store the changes that will be removed
+                let to_remove = transaction
+                    .execution
+                    .changes
+                    .iter()
+                    .filter(|(_, change)| !change.bytecode.is_modified())
+                    .map(|(addr, change)| (*addr, change.clone()))
+                    .collect::<Vec<_>>();
+
+                removed.extend(to_remove);
+
                 // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
                 transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
             });
-            block_mut
+
+            (block_mut, removed)
         };
 
         let block_by_number = (number.into(), block_without_changes.into());
@@ -454,6 +471,9 @@ impl RocksStorageState {
 
         let block_by_hash = (block_hash.into(), number.into());
         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], batch)?;
+
+        let changes_by_block = (number.into(), removed_changes.into());
+        self.changes_by_block.prepare_batch_insertion([changes_by_block], batch)?;
 
         self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
         Ok(())

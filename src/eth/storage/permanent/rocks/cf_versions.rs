@@ -14,12 +14,15 @@ use strum::IntoStaticStr;
 use strum::VariantNames;
 
 use super::types::AccountRocksdb;
+use super::types::BlockChangesRocksdb;
 use super::types::BlockNumberRocksdb;
 use super::types::BlockRocksdb;
 use super::types::SlotValueRocksdb;
 use crate::eth::primitives::Account;
+use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::SlotValue;
 
 macro_rules! impl_single_version_cf_value {
@@ -83,7 +86,7 @@ impl_single_version_cf_value!(CfTransactionsValue, BlockNumberRocksdb, BlockNumb
 impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
 impl_single_version_cf_value!(CfLogsValue, BlockNumberRocksdb, BlockNumber);
-
+impl_single_version_cf_value!(CfChangesByBlockValue, BlockChangesRocksdb, Vec<(Address, ExecutionAccountChanges)>);
 #[cfg_attr(not(test), allow(dead_code))]
 trait ToCfName {
     const CF_NAME: &'static str;
@@ -105,7 +108,7 @@ impl_to_cf_name!(CfTransactionsValue, "transactions");
 impl_to_cf_name!(CfBlocksByNumberValue, "blocks_by_number");
 impl_to_cf_name!(CfBlocksByHashValue, "blocks_by_hash");
 impl_to_cf_name!(CfLogsValue, "logs");
-
+impl_to_cf_name!(CfChangesByBlockValue, "changes_by_block");
 /// Test that deserialization works for each variant of the enum.
 ///
 /// This is intended to give an error when the following happens:
