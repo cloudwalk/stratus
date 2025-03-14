@@ -55,16 +55,13 @@ impl StratusStorage {
         cache: StorageCache,
         #[cfg(feature = "dev")] perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
     ) -> Result<Self, StorageError> {
-        #[cfg(feature = "dev")]
-        let this = Self {
-            temp,
-            cache,
+        let this = Self { 
+            temp, 
+            cache, 
             perm,
+            #[cfg(feature = "dev")]
             perm_config,
         };
-
-        #[cfg(not(feature = "dev"))]
-        let this = Self { temp, cache, perm };
 
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
@@ -81,21 +78,9 @@ impl StratusStorage {
     #[cfg(test)]
     pub fn new_test() -> Result<Self, StorageError> {
         use super::cache::CacheConfig;
-        use super::permanent::PermanentStorageConfig;
-        use super::permanent::PermanentStorageKind;
 
-        let _perm_config = PermanentStorageConfig {
-            perm_storage_kind: PermanentStorageKind::InMemory,
-            perm_storage_url: None,
-            rocks_path_prefix: None,
-            rocks_shutdown_timeout: std::time::Duration::from_secs(240),
-            rocks_cache_size_multiplier: None,
-            rocks_disable_sync_write: false,
-            genesis_file: crate::config::GenesisFileConfig::default(),
-        };
-
-        let perm = Box::new(super::InMemoryPermanentStorage::default());
         let temp = Box::new(super::InMemoryTemporaryStorage::new(0.into()));
+        let perm = Box::new(super::InMemoryPermanentStorage::default());
         let cache = CacheConfig {
             slot_cache_capacity: 100000,
             account_cache_capacity: 20000,
@@ -103,10 +88,34 @@ impl StratusStorage {
         .init();
 
         #[cfg(feature = "dev")]
-        return Self::new(temp, perm, cache, perm_config);
+        {
+            use super::permanent::PermanentStorageConfig;
+            use super::permanent::PermanentStorageKind;
+            
+            let perm_config = PermanentStorageConfig {
+                perm_storage_kind: PermanentStorageKind::InMemory,
+                perm_storage_url: None,
+                rocks_path_prefix: None,
+                rocks_shutdown_timeout: std::time::Duration::from_secs(240),
+                rocks_cache_size_multiplier: None,
+                rocks_disable_sync_write: false,
+                genesis_file: crate::config::GenesisFileConfig::default(),
+            };
+
+            return Self::new(
+                temp, 
+                perm, 
+                cache,
+                perm_config,
+            );
+        }
 
         #[cfg(not(feature = "dev"))]
-        return Self::new(temp, perm, cache);
+        return Self::new(
+            temp, 
+            perm, 
+            cache,
+        );
     }
 
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {

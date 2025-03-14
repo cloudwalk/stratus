@@ -5,6 +5,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use alloy_primitives::hex;
+use alloy_primitives::FixedBytes;
 use anyhow::Result;
 use ethereum_types::U256;
 use ethereum_types::U256 as EthereumU256;
@@ -15,6 +16,7 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::Wei;
 
 /// Type alias for a collection of storage slots in the format (address, slot_index, value)
@@ -116,7 +118,7 @@ impl GenesisConfig {
 
             let balance = if genesis_account.balance.starts_with("0x") {
                 // For hex strings
-                Wei::from_str_hex(balance_str)?
+                Wei::from_hex_str(balance_str)?
             } else {
                 // For decimal strings
                 let value = balance_str.parse::<u64>().unwrap_or(0);
@@ -176,7 +178,7 @@ impl GenesisConfig {
 
             let balance = if genesis_account.balance.starts_with("0x") {
                 // For hex strings
-                Wei::from_str_hex(balance_str)?
+                Wei::from_hex_str(balance_str)?
             } else {
                 // For decimal strings
                 let value = balance_str.parse::<u64>().unwrap_or(0);
@@ -212,14 +214,14 @@ impl GenesisConfig {
                     // Parse slot key
                     let slot_key_str = slot_key.trim_start_matches("0x");
                     let slot_index = if slot_key.starts_with("0x") {
-                        if let Ok(bytes) = hex::decode(slot_key_str) {
-                            let mut array = [0u8; 32];
-                            let start = array.len().saturating_sub(bytes.len());
-                            let copy_len = bytes.len().min(array.len() - start);
-                            array[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
-                            SlotIndex::from(U256::from_big_endian(&array))
+                        let slot_key_with_prefix = if slot_key.starts_with("0x") {
+                            slot_key.clone()
                         } else {
-                            continue; // Skip invalid slot key
+                            format!("0x{}", slot_key)
+                        };
+                        match slot_key_with_prefix.parse::<FixedBytes<32>>() {
+                            Ok(fixed_bytes) => fixed_bytes.into(),
+                            Err(_) => continue, // Skip invalid slot key
                         }
                     } else if let Ok(value) = slot_key_str.parse::<u64>() {
                         SlotIndex::from(U256::from(value))
@@ -230,14 +232,17 @@ impl GenesisConfig {
                     // Parse slot value
                     let slot_value_str = slot_value.trim_start_matches("0x");
                     let slot_value = if slot_value.starts_with("0x") {
-                        if let Ok(bytes) = hex::decode(slot_value_str) {
-                            let mut array = [0u8; 32];
-                            let start = array.len().saturating_sub(bytes.len());
-                            let copy_len = bytes.len().min(array.len() - start);
-                            array[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
-                            U256::from_big_endian(&array)
+                        let slot_value_with_prefix = if slot_value.starts_with("0x") {
+                            slot_value.clone()
                         } else {
-                            continue; // Skip invalid slot value
+                            format!("0x{}", slot_value)
+                        };
+                        match slot_value_with_prefix.parse::<FixedBytes<32>>() {
+                            Ok(fixed_bytes) => {
+                                let slot_value: SlotValue = fixed_bytes.into();
+                                slot_value.0
+                            }
+                            Err(_) => continue, // Skip invalid slot value
                         }
                     } else if let Ok(value) = slot_value_str.parse::<u64>() {
                         U256::from(value)
@@ -311,8 +316,7 @@ impl GenesisConfig {
         };
 
         // Parse coinbase/miner address
-        let coinbase_str = self.coinbase.trim_start_matches("0x");
-        let miner = Address::from_str(coinbase_str).unwrap_or_default();
+        let miner = Address::from_str(&self.coinbase).unwrap_or_default();
 
         // Parse extra data
         let extra_data_str = self.extraData.trim_start_matches("0x");
@@ -584,7 +588,7 @@ mod tests {
 
         // Verify the first account
         let first_account_addr = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
-        let first_addr = Address::from_str(first_account_addr.trim_start_matches("0x")).unwrap();
+        let first_addr = Address::from_str(first_account_addr).unwrap();
 
         let found = accounts.iter().any(|account| account.address == first_addr);
         assert!(found, "First account not found in genesis.local.json");

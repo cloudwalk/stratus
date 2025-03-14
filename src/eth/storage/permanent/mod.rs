@@ -12,6 +12,9 @@ use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
 
+/// Genesis file configuration
+#[cfg(feature = "dev")]
+use crate::config::GenesisFileConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -115,6 +118,7 @@ pub struct PermanentStorageConfig {
 
     /// Genesis file configuration
     #[clap(flatten)]
+    #[cfg(feature = "dev")]
     pub genesis_file: crate::config::GenesisFileConfig,
 }
 

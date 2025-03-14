@@ -2,7 +2,6 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use alloy_primitives::hex as alloy_hex;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::H160;
@@ -124,28 +123,7 @@ impl FromStr for Address {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Remove 0x prefix if present
-        let s = s.trim_start_matches("0x");
-
-        // Ensure the hex string has an even number of digits
-        let s = if s.len() % 2 == 1 {
-            format!("0{}", s) // Add a leading zero if needed
-        } else {
-            s.to_string()
-        };
-
-        // Validate length
-        if s.len() != 40 {
-            return Err(anyhow!("Invalid address length: {}", s.len()));
-        }
-
-        // Decode hex string using alloy_hex instead of hex
-        let bytes = alloy_hex::decode(&s)?;
-
-        // Create address from bytes
-        let mut array = [0u8; 20];
-        array.copy_from_slice(&bytes);
-        Ok(Address::new(array))
+        Ok(Self(H160::from_str(s)?))
     }
 }
 
