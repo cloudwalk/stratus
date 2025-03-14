@@ -486,7 +486,7 @@ impl RocksStorageState {
         // this is an optimization, instead of saving the entire block into the database,
         // remove all discardable account changes keeping them for changes_by_block
 
-        // TODO: save tx index as well to correctly map changes to transactions when reading the block with changes
+        // TODO: save tx index or tx hash as well to correctly map changes to transactions when reading the block with changes
         let (block_without_changes, removed_changes) = {
             let mut block_mut = block;
             let mut removed = vec![];
