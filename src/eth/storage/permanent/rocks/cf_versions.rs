@@ -86,7 +86,7 @@ impl_single_version_cf_value!(CfTransactionsValue, BlockNumberRocksdb, BlockNumb
 impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
 impl_single_version_cf_value!(CfLogsValue, BlockNumberRocksdb, BlockNumber);
-impl_single_version_cf_value!(CfChangesByBlockValue, BlockChangesRocksdb, Vec<(Address, ExecutionAccountChanges)>);
+impl_single_version_cf_value!(CfChangesByBlockValue, BlockChangesRocksdb, Vec<(Address, ExecutionAccountChanges)>); // TODO: add tx index or hash to map changes to tx
 #[cfg_attr(not(test), allow(dead_code))]
 trait ToCfName {
     const CF_NAME: &'static str;

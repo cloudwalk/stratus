@@ -390,6 +390,48 @@ impl RocksStorageState {
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
+    // TODO: optimize
+    // TODO: insert with tx index
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<Block>> {
+        tracing::debug!(?selection, "reading block with changes");
+
+        let block = match selection {
+            BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
+            BlockFilter::Earliest => self.blocks_by_number.first_value(),
+            BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
+            BlockFilter::Hash(block_hash) =>
+                if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
+                    self.blocks_by_number.get(&block_number)
+                } else {
+                    Ok(None)
+                },
+        }?;
+
+        let Some(block) = block else {
+            return Ok(None);
+        };
+
+        let mut block: Block = block.into_inner().into();
+
+        let block_number = block.number();
+
+        let Some(changes_rocksdb) = self.changes_by_block.get(&block_number.into())? else {
+            return Ok(Some(block));
+        };
+
+        let changes = changes_rocksdb.into_inner().into_changes();
+
+        // we know the index of the changes, and the transactions are also sorted by index. We can simply insert at index
+        
+        for tx in &mut block.transactions {
+            for (address, change) in &changes {
+                tx.execution.changes.insert(*address, change.clone());
+            }
+        }
+
+        Ok(Some(block))
+    }
+
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         let mut write_batch = WriteBatch::default();
 
@@ -443,12 +485,14 @@ impl RocksStorageState {
 
         // this is an optimization, instead of saving the entire block into the database,
         // remove all discardable account changes keeping them for changes_by_block
+
+        // TODO: save tx index as well to correctly map changes to transactions when reading the block with changes
         let (block_without_changes, removed_changes) = {
             let mut block_mut = block;
             let mut removed = vec![];
 
             block_mut.transactions.iter_mut().for_each(|transaction| {
-                // Store the changes that will be removed
+                // Store the changes that will be removed with transaction index
                 let to_remove = transaction
                     .execution
                     .changes
