@@ -494,28 +494,15 @@ impl RocksStorageState {
         let block_hash = block.hash();
 
         // this is an optimization, instead of saving the entire block into the database,
-        // remove all discardable account changes keeping them for changes_by_block
-        // TODO: save tx index or tx hash?
-        let (block_without_changes, removed_changes) = {
+        // remove all discardable account changes
+        let block_without_changes = {
             let mut block_mut = block;
-            let mut removed = Vec::with_capacity(block_mut.transactions.len());
-
+            // mutate it
             block_mut.transactions.iter_mut().for_each(|transaction| {
-                let tx_changes = transaction
-                    .execution
-                    .changes
-                    .iter()
-                    .filter(|(_, change)| !change.bytecode.is_modified())
-                    .map(|(addr, change)| ((*addr).into(), change.clone()))
-                    .collect::<Vec<_>>();
-
-                removed.push(tx_changes);
-
                 // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
                 transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
             });
-
-            (block_mut, removed)
+            block_mut
         };
 
         let block_by_number = (number.into(), block_without_changes.into());
@@ -526,8 +513,6 @@ impl RocksStorageState {
 
         // TODO: get the current writebatch here after block_by_hash is inserted
         // TODO: and prepare_batch_insertion with the write batch here to new cf: changes_by_block or replication_log_by_block or write_batch_by_block
-        let changes_by_block = (number.into(), removed_changes.into());
-        self.changes_by_block.prepare_batch_insertion([changes_by_block], batch)?;
 
         self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
         Ok(())
