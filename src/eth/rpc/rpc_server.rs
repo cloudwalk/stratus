@@ -720,8 +720,7 @@ fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
 
             Ok(json!({
                 "block_number": block_number,
-                "replication_log": encoded,
-                "size": log_data.len()
+                "replication_log": encoded
             }))
         }
         None => {
