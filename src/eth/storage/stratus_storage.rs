@@ -597,16 +597,12 @@ impl StratusStorage {
 
             // We need to save slots through the block mechanism since there's no direct save_slot method
             // First, we need to create a temporary account with the slots
-            for (address, index, value) in genesis_slots {
-                // Convert U256 to SlotValue
-                let slot_value = crate::eth::primitives::SlotValue(value);
-                let _slot = Slot::new(index, slot_value);
-
+            for (address, slot) in genesis_slots {
                 // Read the account to make sure it exists
                 let account = match self.perm.read_account(address, PointInTime::MinedPast(BlockNumber::ZERO))? {
                     Some(account) => account,
                     None => {
-                        tracing::warn!("Account {} not found for slot {:?}, creating empty account", address, index);
+                        tracing::warn!("Account {} not found for slot {:?}, creating empty account", address, slot);
                         Account::new_empty(address)
                     }
                 };
@@ -617,7 +613,7 @@ impl StratusStorage {
                 }
 
                 // For now, we'll just log the slots since we don't have a direct way to save them
-                tracing::info!("Slot for account {}: index={:?}, value={:?}", address, index, slot_value);
+                tracing::info!("Slot for account {}: index={:?}, value={:?}", address, slot.index, slot.value);
             }
         }
 

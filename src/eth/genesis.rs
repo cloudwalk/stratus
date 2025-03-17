@@ -8,7 +8,6 @@ use alloy_primitives::hex;
 use alloy_primitives::FixedBytes;
 use anyhow::Result;
 use const_hex::FromHex;
-use ethereum_types::U256;
 use ethereum_types::U256 as EthereumU256;
 use serde::Deserialize;
 use serde::Serialize;
@@ -16,12 +15,13 @@ use serde::Serialize;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
+use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::Wei;
 
-/// Type alias for a collection of storage slots in the format (address, slot_index, value)
-pub type GenesisSlots = Vec<(Address, SlotIndex, U256)>;
+/// Type alias for a collection of storage slots in the format (address, slot)
+pub type GenesisSlots = Vec<(Address, Slot)>;
 
 /// Represents the configuration of an Ethereum genesis.json file
 #[allow(non_snake_case)]
@@ -213,7 +213,7 @@ impl GenesisConfig {
                     let slot_value: SlotValue = FixedBytes::<32>::from_hex(slot_value)?.into();
 
                     // Add slot to the list
-                    slots.push((address, slot_index, slot_value.0));
+                    slots.push((address, Slot::new(slot_index, slot_value)));
                 }
             }
 
