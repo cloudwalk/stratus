@@ -430,7 +430,8 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
     let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
     let (params, raw_sync_interval) = next_rpc_param::<String>(params)?;
-    let (_, raw_external_rpc_max_response_size_bytes) = next_rpc_param::<String>(params)?;
+    let (params, raw_external_rpc_max_response_size_bytes) = next_rpc_param::<String>(params)?;
+    let (_, raw_direct_save) = next_rpc_param::<String>(params)?;
 
     let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
@@ -447,12 +448,18 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         ImporterError::ConfigParseError
     })?;
 
+    let direct_save = raw_direct_save.parse::<bool>().map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse direct_save");
+        ImporterError::ConfigParseError
+    })?;
+
     let importer_config = ImporterConfig {
         external_rpc,
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
         external_rpc_max_response_size_bytes,
+        direct_save,
     };
 
     importer_config.init_follower_importer(ctx).await

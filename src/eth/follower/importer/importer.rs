@@ -43,7 +43,7 @@ use crate::utils::calculate_tps;
 use crate::utils::DropTimer;
 use crate::GlobalState;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ImporterMode {
     /// A normal follower imports a mined block and re-executes its txs.
     NormalFollower,

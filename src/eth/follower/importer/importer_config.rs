@@ -48,6 +48,10 @@ pub struct ImporterConfig {
 
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms", required = false)]
     pub sync_interval: Duration,
+
+    /// Use direct save mode for follower (no re-execution of transactions)
+    #[arg(long = "direct-save", env = "DIRECT_SAVE", default_value = "false")]
+    pub direct_save: bool,
 }
 
 impl ImporterConfig {
@@ -60,9 +64,14 @@ impl ImporterConfig {
     ) -> anyhow::Result<Option<Arc<Importer>>> {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
-            NodeMode::Follower =>
-                self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::NormalFollower)
-                    .await,
+            NodeMode::Follower => {
+                let mode = if self.direct_save {
+                    ImporterMode::DirectSaveFollower
+                } else {
+                    ImporterMode::NormalFollower
+                };
+                self.init_follower(executor, miner, storage, kafka_connector, mode).await
+            }
             NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader).await,
         }
     }
