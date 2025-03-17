@@ -54,6 +54,9 @@ pub trait PermanentStorage: Send + Sync + 'static {
     /// Retrieves a block from the storage.
     fn read_block(&self, block_filter: BlockFilter) -> anyhow::Result<Option<Block>, StorageError>;
 
+    /// Retrieves a block from the storage with changes.
+    fn read_block_with_changes(&self, block_filter: BlockFilter) -> anyhow::Result<Option<Block>, StorageError>;
+
     /// Retrieves a transaction from the storage.
     fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError>;
 

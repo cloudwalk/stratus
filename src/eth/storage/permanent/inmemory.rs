@@ -132,6 +132,11 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
+    fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>, StorageError> {
+        // For in-memory, we can reuse the read_block implementation since we already store the full block
+        self.read_block(selection)
+    }
+
     fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError> {
         let state_lock = self.lock_read();
         let Some(block) = state_lock.transactions.get(&hash) else { return Ok(None) };

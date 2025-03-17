@@ -700,7 +700,7 @@ fn stratus_get_raw_block(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensio
     tracing::info!(%block_number, "reading raw block");
 
     // Fetch single block
-    let block = ctx.storage.read_block(BlockFilter::Number(block_number))?;
+    let block = ctx.storage.read_block_with_changes(BlockFilter::Number(block_number))?;
 
     match block {
         Some(block) => {
