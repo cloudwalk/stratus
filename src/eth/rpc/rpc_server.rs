@@ -694,6 +694,7 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     }))
 }
 
+/// TODO: make this return the rocksdb WriteBatch instead of json value
 fn stratus_get_raw_block(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
