@@ -217,7 +217,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
-    module.register_blocking_method("stratus_readReplicationLog", stratus_read_replication_log)?;
+    module.register_blocking_method("stratus_getReplicationLog", stratus_get_replication_log)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -686,10 +686,10 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     }))
 }
 
-fn stratus_read_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::stratus_readReplicationLog", filter = field::Empty).entered();
+    let _method_enter = info_span!("rpc::stratus_getReplicationLog", filter = field::Empty).entered();
 
     // parse params
     let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
