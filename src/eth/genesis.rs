@@ -7,6 +7,7 @@ use std::str::FromStr;
 use alloy_primitives::hex;
 use alloy_primitives::FixedBytes;
 use anyhow::Result;
+use const_hex::FromHex;
 use ethereum_types::U256;
 use ethereum_types::U256 as EthereumU256;
 use serde::Deserialize;
@@ -114,14 +115,12 @@ impl GenesisConfig {
             let mut account = Account::new_empty(address);
 
             // Convert balance
-            let balance_str = genesis_account.balance.trim_start_matches("0x");
-
             let balance = if genesis_account.balance.starts_with("0x") {
                 // For hex strings
-                Wei::from_hex_str(balance_str)?
+                Wei::from_hex_str(&genesis_account.balance)?
             } else {
                 // For decimal strings
-                let value = balance_str.parse::<u64>().unwrap_or(0);
+                let value = genesis_account.balance.parse::<u64>().unwrap_or(0);
                 Wei::from(EthereumU256::from(value))
             };
 
@@ -174,14 +173,12 @@ impl GenesisConfig {
             let mut account = Account::new_empty(address);
 
             // Convert balance
-            let balance_str = genesis_account.balance.trim_start_matches("0x");
-
             let balance = if genesis_account.balance.starts_with("0x") {
                 // For hex strings
-                Wei::from_hex_str(balance_str)?
+                Wei::from_hex_str(&genesis_account.balance)?
             } else {
                 // For decimal strings
-                let value = balance_str.parse::<u64>().unwrap_or(0);
+                let value = genesis_account.balance.parse::<u64>().unwrap_or(0);
                 Wei::from(EthereumU256::from(value))
             };
 
@@ -211,47 +208,12 @@ impl GenesisConfig {
             // Process storage slots if they exist
             if let Some(storage) = &genesis_account.storage {
                 for (slot_key, slot_value) in storage {
-                    // Parse slot key
-                    let slot_key_str = slot_key.trim_start_matches("0x");
-                    let slot_index = if slot_key.starts_with("0x") {
-                        let slot_key_with_prefix = if slot_key.starts_with("0x") {
-                            slot_key.clone()
-                        } else {
-                            format!("0x{}", slot_key)
-                        };
-                        match slot_key_with_prefix.parse::<FixedBytes<32>>() {
-                            Ok(fixed_bytes) => fixed_bytes.into(),
-                            Err(_) => continue, // Skip invalid slot key
-                        }
-                    } else if let Ok(value) = slot_key_str.parse::<u64>() {
-                        SlotIndex::from(U256::from(value))
-                    } else {
-                        continue; // Skip invalid slot key
-                    };
-
-                    // Parse slot value
-                    let slot_value_str = slot_value.trim_start_matches("0x");
-                    let slot_value = if slot_value.starts_with("0x") {
-                        let slot_value_with_prefix = if slot_value.starts_with("0x") {
-                            slot_value.clone()
-                        } else {
-                            format!("0x{}", slot_value)
-                        };
-                        match slot_value_with_prefix.parse::<FixedBytes<32>>() {
-                            Ok(fixed_bytes) => {
-                                let slot_value: SlotValue = fixed_bytes.into();
-                                slot_value.0
-                            }
-                            Err(_) => continue, // Skip invalid slot value
-                        }
-                    } else if let Ok(value) = slot_value_str.parse::<u64>() {
-                        U256::from(value)
-                    } else {
-                        continue; // Skip invalid slot value
-                    };
-
+                    // Parse slot key and value in just two lines
+                    let slot_index: SlotIndex = FixedBytes::<32>::from_hex(slot_key)?.into();
+                    let slot_value: SlotValue = FixedBytes::<32>::from_hex(slot_value)?.into();
+                    
                     // Add slot to the list
-                    slots.push((address, slot_index, slot_value));
+                    slots.push((address, slot_index, slot_value.0));
                 }
             }
 

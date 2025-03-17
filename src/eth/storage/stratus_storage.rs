@@ -87,26 +87,21 @@ impl StratusStorage {
         }
         .init();
 
-        #[cfg(feature = "dev")]
-        {
-            use super::permanent::PermanentStorageConfig;
-            use super::permanent::PermanentStorageKind;
-
-            let perm_config = PermanentStorageConfig {
-                perm_storage_kind: PermanentStorageKind::InMemory,
+        return Self::new(
+            temp,
+            perm,
+            cache,
+            #[cfg(feature = "dev")]
+            super::permanent::PermanentStorageConfig {
+                perm_storage_kind: super::permanent::PermanentStorageKind::InMemory,
                 perm_storage_url: None,
                 rocks_path_prefix: None,
                 rocks_shutdown_timeout: std::time::Duration::from_secs(240),
                 rocks_cache_size_multiplier: None,
                 rocks_disable_sync_write: false,
                 genesis_file: crate::config::GenesisFileConfig::default(),
-            };
-
-            return Self::new(temp, perm, cache, perm_config);
-        }
-
-        #[cfg(not(feature = "dev"))]
-        return Self::new(temp, perm, cache);
+            },
+        );
     }
 
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
