@@ -458,24 +458,26 @@ e2e-leader:
     RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
     just _wait_for_stratus 3000
 
-e2e-follower test="brlc":
+e2e-follower test="brlc" direct_save="false":
     #!/bin/bash
+    DIRECT_SAVE_FLAG=$([ "{{direct_save}}" = "true" ] && echo "--direct-save" || echo "")
+    
     if [ "{{test}}" = "kafka" ]; then
-    # Start Kafka using Docker Compose
+        # Start Kafka using Docker Compose
         just _log "Starting Kafka"
         docker-compose up kafka >> e2e_logs/kafka.log &
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none > e2e_logs/importer.log &
+        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none $DIRECT_SAVE_FLAG > e2e_logs/importer.log &
     else
-        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
+        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ $DIRECT_SAVE_FLAG > e2e_logs/importer.log &
     fi
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
 
 
-_e2e-leader-follower-up-impl test="brlc" release_flag="--release":
+_e2e-leader-follower-up-impl test="brlc" direct_save="false" release_flag="--release":
     #!/bin/bash
     just build
 
@@ -485,7 +487,7 @@ _e2e-leader-follower-up-impl test="brlc" release_flag="--release":
     just e2e-leader
 
     # Start Stratus with follower flag
-    just e2e-follower {{test}}
+    just e2e-follower {{test}} {{direct_save}}
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
