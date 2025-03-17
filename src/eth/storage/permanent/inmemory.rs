@@ -13,6 +13,7 @@ use parking_lot::RwLock;
 use parking_lot::RwLockReadGuard;
 use parking_lot::RwLockWriteGuard;
 use revm::primitives::Bytecode;
+use rocksdb::WriteBatch;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -161,6 +162,11 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
 
         Ok(filtered_logs.into_iter().cloned().collect_vec())
+    }
+
+    fn read_replication_log(&self, _block_number: BlockNumber) -> anyhow::Result<Option<WriteBatch>, StorageError> {
+        // In-memory storage doesn't store replication logs
+        Ok(None)
     }
 
     fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {

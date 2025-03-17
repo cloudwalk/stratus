@@ -4,6 +4,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
+use rocksdb::WriteBatch;
 
 use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
@@ -120,6 +121,15 @@ impl PermanentStorage for RocksPermanentStorage {
         self.state.read_logs(filter).map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read log in RocksPermanent");
         })
+    }
+
+    fn read_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<WriteBatch>, StorageError> {
+        self.state
+            .read_replication_log(block_number)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to read replication log in RocksPermanent");
+            })
     }
 
     fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {

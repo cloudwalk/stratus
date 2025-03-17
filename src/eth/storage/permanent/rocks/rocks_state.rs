@@ -391,6 +391,14 @@ impl RocksStorageState {
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
+    pub fn read_replication_log(&self, block_number: BlockNumber) -> Result<Option<WriteBatch>> {
+        let block_number_rocks = block_number.into();
+
+        let replication_log = self.replication_logs.get(&block_number_rocks)?.map(|value| value.into_inner().to_write_batch());
+
+        Ok(replication_log)
+    }
+
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         let mut write_batch = WriteBatch::default();
 

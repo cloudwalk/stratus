@@ -11,6 +11,7 @@ use std::time::Duration;
 use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
+use rocksdb::WriteBatch;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -59,6 +60,9 @@ pub trait PermanentStorage: Send + Sync + 'static {
 
     /// Retrieves logs from the storage.
     fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>, StorageError>;
+
+    /// Retrieves a replication log from the storage.
+    fn read_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<WriteBatch>, StorageError>;
 
     // -------------------------------------------------------------------------
     // Account and slots
