@@ -524,6 +524,8 @@ impl RocksStorageState {
         let block_by_hash = (block_hash.into(), number.into());
         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], batch)?;
 
+        // TODO: get the current writebatch here after block_by_hash is inserted
+        // TODO: and prepare_batch_insertion with the write batch here to new cf: changes_by_block or replication_log_by_block or write_batch_by_block
         let changes_by_block = (number.into(), removed_changes.into());
         self.changes_by_block.prepare_batch_insertion([changes_by_block], batch)?;
 
