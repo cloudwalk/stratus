@@ -169,6 +169,11 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(None)
     }
 
+    fn apply_replication_log(&self, _block_number: BlockNumber, _replication_log: WriteBatch) -> anyhow::Result<(), StorageError> {
+        // In-memory storage doesn't apply replication logs
+        Ok(())
+    }
+
     fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write();
 

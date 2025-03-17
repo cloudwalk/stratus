@@ -478,21 +478,16 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log_data: Vec<u8>) -> Result<()> {
-        // create a WriteBatch from the input data
-        let mut write_batch = WriteBatch::from_data(&replication_log_data);
+    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> Result<()> {
+        let mut write_batch = replication_log;
 
-        // clone the batch before converting it to WriteBatchRocksdb
         let batch_clone = WriteBatch::from_data(write_batch.data());
 
-        // convert the clone to WriteBatchRocksdb
         let batch_rocksdb: WriteBatchRocksdb = batch_clone.into();
 
-        // add the replication log to the replication_logs CF in the original batch
         self.replication_logs
             .prepare_batch_insertion([(block_number.into(), batch_rocksdb.into())], &mut write_batch)?;
 
-        // apply the write batch
         self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
