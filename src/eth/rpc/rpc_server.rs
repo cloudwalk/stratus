@@ -63,7 +63,6 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
-use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::proxy_get_request::ProxyGetRequestTempLayer;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcContext;
@@ -429,7 +428,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     let (params, external_rpc_ws) = next_rpc_param::<String>(params)?;
     let (params, raw_external_rpc_timeout) = next_rpc_param::<String>(params)?;
     let (params, raw_sync_interval) = next_rpc_param::<String>(params)?;
-    let (_, raw_external_rpc_max_request_size_bytes) = next_rpc_param::<String>(params)?;
+    let (_, raw_external_rpc_max_response_size_bytes) = next_rpc_param::<String>(params)?;
 
     let external_rpc_timeout = parse_duration(&raw_external_rpc_timeout).map_err(|e| {
         tracing::error!(reason = ?e, "failed to parse external_rpc_timeout");
@@ -441,8 +440,8 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         ImporterError::ConfigParseError
     })?;
 
-    let external_rpc_max_request_size_bytes = raw_external_rpc_max_request_size_bytes.parse::<u32>().map_err(|e| {
-        tracing::error!(reason = ?e, "failed to parse external_rpc_max_request_size_bytes");
+    let external_rpc_max_response_size_bytes = raw_external_rpc_max_response_size_bytes.parse::<u32>().map_err(|e| {
+        tracing::error!(reason = ?e, "failed to parse external_rpc_max_response_size_bytes");
         ImporterError::ConfigParseError
     })?;
 
@@ -451,7 +450,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         external_rpc_ws: Some(external_rpc_ws),
         external_rpc_timeout,
         sync_interval,
-        external_rpc_max_request_size_bytes,
+        external_rpc_max_response_size_bytes,
     };
 
     importer_config.init_follower_importer(ctx).await
@@ -969,7 +968,7 @@ fn stratus_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     }
 }
 
-fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
+fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
@@ -981,9 +980,18 @@ fn eth_send_raw_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exten
     )
     .entered();
 
-    // parse params
-    let (_, tx_data) = next_rpc_param::<Bytes>(params.sequence())?;
-    let tx = parse_rpc_rlp::<TransactionInput>(&tx_data)?;
+    // get the pre-decoded transaction from extensions
+    let (tx, tx_data) = match (ext.get::<TransactionInput>(), ext.get::<Bytes>()) {
+        (Some(tx), Some(data)) => (tx.clone(), data.clone()),
+        _ => {
+            tracing::error!("failed to execute eth_sendRawTransaction because transaction input is not available");
+            return Err(RpcError::TransactionInvalid {
+                decode_error: "transaction input is not available".to_string(),
+            }
+            .into());
+        }
+    };
+
     let tx_hash = tx.hash;
 
     // track

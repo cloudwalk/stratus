@@ -39,21 +39,21 @@ pub struct BlockchainClient {
     ws_url: Option<String>,
     timeout: Duration,
     #[allow(dead_code)]
-    max_request_size_bytes: u32,
+    max_response_size_bytes: u32,
 }
 
 impl BlockchainClient {
     /// Creates a new RPC client connected only to HTTP.
-    pub async fn new_http(http_url: &str, timeout: Duration, max_request_size_bytes: u32) -> anyhow::Result<Self> {
-        Self::new_http_ws(http_url, None, timeout, max_request_size_bytes).await
+    pub async fn new_http(http_url: &str, timeout: Duration, max_response_size_bytes: u32) -> anyhow::Result<Self> {
+        Self::new_http_ws(http_url, None, timeout, max_response_size_bytes).await
     }
 
     /// Creates a new RPC client connected to HTTP and optionally to WS.
-    pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>, timeout: Duration, max_request_size_bytes: u32) -> anyhow::Result<Self> {
+    pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>, timeout: Duration, max_response_size_bytes: u32) -> anyhow::Result<Self> {
         tracing::info!(%http_url, "creating blockchain client");
 
         // build http provider
-        let http = Self::build_http_client(http_url, timeout, max_request_size_bytes)?;
+        let http = Self::build_http_client(http_url, timeout, max_response_size_bytes)?;
 
         // build ws provider
         let ws = if let Some(ws_url) = ws_url {
@@ -68,7 +68,7 @@ impl BlockchainClient {
             ws,
             ws_url: ws_url.map(|x| x.to_owned()),
             timeout,
-            max_request_size_bytes,
+            max_response_size_bytes,
         };
 
         // check health before assuming it is ok
@@ -77,11 +77,11 @@ impl BlockchainClient {
         Ok(client)
     }
 
-    fn build_http_client(url: &str, timeout: Duration, max_request_size_bytes: u32) -> anyhow::Result<HttpClient> {
+    fn build_http_client(url: &str, timeout: Duration, max_response_size_bytes: u32) -> anyhow::Result<HttpClient> {
         tracing::info!(%url, timeout = %timeout.to_string_ext(), "creating blockchain http client");
         match HttpClientBuilder::default()
             .request_timeout(timeout)
-            .max_request_size(max_request_size_bytes)
+            .max_response_size(max_response_size_bytes)
             .build(url)
         {
             Ok(http) => {

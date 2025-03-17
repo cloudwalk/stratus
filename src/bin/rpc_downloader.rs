@@ -46,7 +46,7 @@ async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     }
 
     let rpc_storage = config.rpc_storage.init().await?;
-    let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc, config.external_rpc_timeout, config.external_rpc_max_request_size_bytes).await?);
+    let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc, config.external_rpc_timeout, config.external_rpc_max_response_size_bytes).await?);
 
     let block_end = match config.block_end {
         Some(end) => BlockNumber::from(end),
