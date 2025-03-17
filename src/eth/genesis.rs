@@ -211,7 +211,7 @@ impl GenesisConfig {
                     // Parse slot key and value in just two lines
                     let slot_index: SlotIndex = FixedBytes::<32>::from_hex(slot_key)?.into();
                     let slot_value: SlotValue = FixedBytes::<32>::from_hex(slot_value)?.into();
-                    
+
                     // Add slot to the list
                     slots.push((address, slot_index, slot_value.0));
                 }
