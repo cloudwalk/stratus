@@ -1,22 +1,22 @@
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::eth::primitives::Address;
+use super::address::AddressRocksdb;
 use crate::eth::primitives::ExecutionAccountChanges;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, fake::Dummy)]
 // TODO: improve naming
 // TODO: create rocksdb newtypes for Address and ExecutionAccountChanges
-pub struct BlockChangesRocksdb(pub Vec<Vec<(Address, ExecutionAccountChanges)>>);
+pub struct BlockChangesRocksdb(pub Vec<Vec<(AddressRocksdb, ExecutionAccountChanges)>>);
 
-impl From<Vec<Vec<(Address, ExecutionAccountChanges)>>> for BlockChangesRocksdb {
-    fn from(changes: Vec<Vec<(Address, ExecutionAccountChanges)>>) -> Self {
+impl From<Vec<Vec<(AddressRocksdb, ExecutionAccountChanges)>>> for BlockChangesRocksdb {
+    fn from(changes: Vec<Vec<(AddressRocksdb, ExecutionAccountChanges)>>) -> Self {
         Self(changes)
     }
 }
 
 impl BlockChangesRocksdb {
-    pub fn into_changes(self) -> Vec<Vec<(Address, ExecutionAccountChanges)>> {
+    pub fn into_changes(self) -> Vec<Vec<(AddressRocksdb, ExecutionAccountChanges)>> {
         self.0
     }
 }

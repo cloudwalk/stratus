@@ -436,7 +436,7 @@ impl RocksStorageState {
         for (tx_idx, tx) in block.transactions.iter_mut().enumerate() {
             tx.execution
                 .changes
-                .extend(changes_per_tx[tx_idx].iter().map(|(addr, change)| (*addr, change.clone())));
+                .extend(changes_per_tx[tx_idx].iter().map(|(addr, change)| ((*addr).into(), change.clone())));
         }
 
         Ok(Some(block))
@@ -507,7 +507,7 @@ impl RocksStorageState {
                     .changes
                     .iter()
                     .filter(|(_, change)| !change.bytecode.is_modified())
-                    .map(|(addr, change)| (*addr, change.clone()))
+                    .map(|(addr, change)| ((*addr).into(), change.clone()))
                     .collect::<Vec<_>>();
 
                 removed.push(tx_changes);

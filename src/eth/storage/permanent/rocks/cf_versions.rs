@@ -14,12 +14,12 @@ use strum::IntoStaticStr;
 use strum::VariantNames;
 
 use super::types::AccountRocksdb;
+use super::types::AddressRocksdb;
 use super::types::BlockChangesRocksdb;
 use super::types::BlockNumberRocksdb;
 use super::types::BlockRocksdb;
 use super::types::SlotValueRocksdb;
 use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionAccountChanges;
@@ -86,7 +86,7 @@ impl_single_version_cf_value!(CfTransactionsValue, BlockNumberRocksdb, BlockNumb
 impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
 impl_single_version_cf_value!(CfLogsValue, BlockNumberRocksdb, BlockNumber);
-impl_single_version_cf_value!(CfChangesByBlockValue, BlockChangesRocksdb, Vec<Vec<(Address, ExecutionAccountChanges)>>);
+impl_single_version_cf_value!(CfChangesByBlockValue, BlockChangesRocksdb, Vec<Vec<(AddressRocksdb, ExecutionAccountChanges)>>);
 
 #[cfg_attr(not(test), allow(dead_code))]
 trait ToCfName {
