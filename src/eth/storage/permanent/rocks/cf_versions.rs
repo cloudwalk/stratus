@@ -279,6 +279,7 @@ mod tests {
         let mut blocks_by_number_checker = EnumCoverageDropBombChecker::<CfBlocksByNumberValue>::new();
         let mut blocks_by_hash_checker = EnumCoverageDropBombChecker::<CfBlocksByHashValue>::new();
         let mut logs_checker = EnumCoverageDropBombChecker::<CfLogsValue>::new();
+        let mut changes_by_block_checker = EnumCoverageDropBombChecker::<CfChangesByBlockValue>::new();
 
         accounts_checker.add(test_deserialization::<_, AccountRocksdb, _>(CfAccountsValue::V1).unwrap());
         accounts_history_checker.add(test_deserialization::<_, AccountRocksdb, _>(CfAccountsHistoryValue::V1).unwrap());
@@ -288,5 +289,6 @@ mod tests {
         blocks_by_number_checker.add(test_deserialization::<_, BlockRocksdb, _>(CfBlocksByNumberValue::V1).unwrap());
         blocks_by_hash_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfBlocksByHashValue::V1).unwrap());
         logs_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfLogsValue::V1).unwrap());
+        changes_by_block_checker.add(test_deserialization::<_, BlockChangesRocksdb, _>(CfChangesByBlockValue::V1).unwrap());
     }
 }

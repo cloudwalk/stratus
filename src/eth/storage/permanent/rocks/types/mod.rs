@@ -67,6 +67,7 @@ mod tests {
     gen_test_bincode!(BlockRocksdb);
     gen_test_bincode!(BytesRocksdb);
     gen_test_bincode!(ChainIdRocksdb);
+    gen_test_bincode!(BlockChangesRocksdb);
     gen_test_bincode!(DifficultyRocksdb);
     gen_test_bincode!(ExecutionResultRocksdb);
     gen_test_bincode!(ExecutionRocksdb);
