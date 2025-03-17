@@ -391,7 +391,8 @@ impl RocksStorageState {
     }
 
     // TODO: optimize
-    // TODO: insert with tx index
+    // TODO: add validations and checks. Also unit test to guarantee order of txs changes
+    // TODO: keep separate or merge with read_block?
     pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<Block>> {
         tracing::debug!(?selection, "reading block with changes");
 

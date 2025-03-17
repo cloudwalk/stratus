@@ -211,6 +211,7 @@ impl Importer {
     // Raw Block Saver
     // -----------------------------------------------------------------------------
 
+    // TODO: metrics
     async fn start_block_saver(
         storage: Arc<StratusStorage>,
         miner: Arc<Miner>,
