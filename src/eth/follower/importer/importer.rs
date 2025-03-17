@@ -343,7 +343,6 @@ impl Importer {
                 continue;
             }
 
-            // This is the NormalFollower path
             if let Err(e) = executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts.clone())) {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
                 return log_and_err!(reason = e, message);
