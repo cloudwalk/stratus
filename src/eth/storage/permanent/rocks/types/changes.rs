@@ -5,8 +5,8 @@ use super::address::AddressRocksdb;
 use crate::eth::primitives::ExecutionAccountChanges;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, fake::Dummy)]
-// TODO: improve naming
-// TODO: create rocksdb newtypes for Address and ExecutionAccountChanges
+// TODO: improve struct and file naming
+// TODO: create rocksdb newtypes and ExecutionAccountChanges
 pub struct BlockChangesRocksdb(pub Vec<Vec<(AddressRocksdb, ExecutionAccountChanges)>>);
 
 impl From<Vec<Vec<(AddressRocksdb, ExecutionAccountChanges)>>> for BlockChangesRocksdb {

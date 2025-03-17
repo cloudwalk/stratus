@@ -501,7 +501,6 @@ impl RocksStorageState {
             let mut removed = Vec::with_capacity(block_mut.transactions.len());
 
             block_mut.transactions.iter_mut().for_each(|transaction| {
-                // Store the changes that will be removed with transaction index
                 let tx_changes = transaction
                     .execution
                     .changes
