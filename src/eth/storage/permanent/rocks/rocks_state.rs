@@ -25,6 +25,7 @@ use super::cf_versions::CfAccountsHistoryValue;
 use super::cf_versions::CfAccountsValue;
 use super::cf_versions::CfBlocksByHashValue;
 use super::cf_versions::CfBlocksByNumberValue;
+use super::cf_versions::CfReplicationLogsValue;
 use super::cf_versions::CfTransactionsValue;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_config::CacheSetting;
@@ -36,6 +37,7 @@ use super::types::BlockNumberRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
+use super::types::WriteBatchRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -83,7 +85,8 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'stati
         "account_slots_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(52)),
         "transactions" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
         "blocks_by_number" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled, None)
+        "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
+        "replication_logs" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
     }
 }
 
@@ -116,6 +119,7 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<HashRocksdb, CfBlocksByHashValue>,
+    replication_logs: RocksCfRef<BlockNumberRocksdb, CfReplicationLogsValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "rocks_metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -154,6 +158,7 @@ impl RocksStorageState {
             transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
+            replication_logs: new_cf_ref(&db, "replication_logs", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "rocks_metrics")]
@@ -456,7 +461,31 @@ impl RocksStorageState {
         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], batch)?;
 
         self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
+
+        let batch_clone = WriteBatch::from_data(batch.data());
+
+        let batch_rocksdb: WriteBatchRocksdb = batch_clone.into();
+        self.replication_logs.prepare_batch_insertion([(number.into(), batch_rocksdb.into())], batch)?;
+
         Ok(())
+    }
+
+    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log_data: Vec<u8>) -> Result<()> {
+        // create a WriteBatch from the input data
+        let mut write_batch = WriteBatch::from_data(&replication_log_data);
+
+        // clone the batch before converting it to WriteBatchRocksdb
+        let batch_clone = WriteBatch::from_data(write_batch.data());
+
+        // convert the clone to WriteBatchRocksdb
+        let batch_rocksdb: WriteBatchRocksdb = batch_clone.into();
+
+        // add the replication log to the replication_logs CF in the original batch
+        self.replication_logs
+            .prepare_batch_insertion([(block_number.into(), batch_rocksdb.into())], &mut write_batch)?;
+
+        // apply the write batch
+        self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
     /// Write to DB in a batch

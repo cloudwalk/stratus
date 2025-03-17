@@ -23,7 +23,7 @@ mod transaction_input;
 mod transaction_mined;
 mod unix_time;
 mod wei;
-
+mod write_batch;
 pub use account::AccountRocksdb;
 pub use address::AddressRocksdb;
 pub use block::BlockRocksdb;
@@ -34,7 +34,7 @@ pub use slot::SlotIndexRocksdb;
 pub use slot::SlotValueRocksdb;
 pub use transaction_mined::TransactionMinedRocksdb;
 pub use unix_time::UnixTimeRocksdb;
-
+pub use write_batch::WriteBatchRocksdb;
 #[cfg(test)]
 mod tests {
     use block_header::BlockHeaderRocksdb;
