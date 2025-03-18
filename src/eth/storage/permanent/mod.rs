@@ -67,6 +67,9 @@ pub trait PermanentStorage: Send + Sync + 'static {
     /// Applies a replication log to the storage.
     fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> anyhow::Result<(), StorageError>;
 
+    /// Returns whether RocksDB replication is enabled
+    fn rocksdb_replication_enabled(&self) -> bool;
+
     // -------------------------------------------------------------------------
     // Account and slots
     // -------------------------------------------------------------------------
@@ -115,6 +118,10 @@ pub struct PermanentStorageConfig {
     /// Augments or decreases the size of Column Family caches based on a multiplier.
     #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
     pub rocks_disable_sync_write: bool,
+
+    /// Use RocksDB replication logs for importing data without re-executing transactions.
+    #[arg(long = "use-rocksdb-replication", env = "USE_ROCKSDB_REPLICATION")]
+    pub use_rocksdb_replication: bool,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
@@ -139,6 +146,7 @@ impl PermanentStorageConfig {
                 self.rocks_shutdown_timeout,
                 self.rocks_cache_size_multiplier,
                 !self.rocks_disable_sync_write,
+                self.use_rocksdb_replication,
             )?),
         };
         Ok(perm)

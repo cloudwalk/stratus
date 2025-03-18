@@ -34,6 +34,7 @@ impl RocksPermanentStorage {
         shutdown_timeout: Duration,
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
+        use_rocksdb_replication: bool,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
@@ -55,7 +56,7 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write)?;
+        let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write, use_rocksdb_replication)?;
         let block_number = state.preload_block_number()?;
 
         Ok(Self { state, block_number })
@@ -169,6 +170,10 @@ impl PermanentStorage for RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to save accounts in RocksPermanent");
             })
+    }
+
+    fn rocksdb_replication_enabled(&self) -> bool {
+        self.state.use_rocksdb_replication
     }
 
     #[cfg(feature = "dev")]

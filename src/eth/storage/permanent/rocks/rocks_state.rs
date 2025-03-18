@@ -131,10 +131,17 @@ pub struct RocksStorageState {
     db_options: Options,
     shutdown_timeout: Duration,
     enable_sync_write: bool,
+    pub use_rocksdb_replication: bool,
 }
 
 impl RocksStorageState {
-    pub fn new(path: String, shutdown_timeout: Duration, cache_multiplier: Option<f32>, enable_sync_write: bool) -> Result<Self> {
+    pub fn new(
+        path: String,
+        shutdown_timeout: Duration,
+        cache_multiplier: Option<f32>,
+        enable_sync_write: bool,
+        use_rocksdb_replication: bool,
+    ) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
 
         let cf_options_map = generate_cf_options_map(cache_multiplier);
@@ -166,6 +173,7 @@ impl RocksStorageState {
             db,
             shutdown_timeout,
             enable_sync_write,
+            use_rocksdb_replication,
         };
 
         tracing::debug!("opened database successfully");
@@ -177,7 +185,7 @@ impl RocksStorageState {
     pub fn new_in_testdir() -> anyhow::Result<(Self, tempfile::TempDir)> {
         let test_dir = tempfile::tempdir()?;
         let path = test_dir.as_ref().display().to_string();
-        let state = Self::new(path, Duration::ZERO, None, true)?;
+        let state = Self::new(path, Duration::ZERO, None, true, false)?;
         Ok((state, test_dir))
     }
 

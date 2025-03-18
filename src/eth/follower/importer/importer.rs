@@ -50,6 +50,8 @@ pub enum ImporterMode {
     NormalFollower,
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     FakeLeader,
+    /// Import blocks using RocksDB replication logs.
+    RocksDbReplication,
 }
 
 // -----------------------------------------------------------------------------
@@ -137,42 +139,70 @@ impl Importer {
         let storage = &self.storage;
         let number = storage.read_block_number_to_resume_import()?;
 
-        let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
+        match self.importer_mode {
+            ImporterMode::RocksDbReplication => {
+                // Use RocksDB replication approach
+                let (log_tx, log_rx) = mpsc::unbounded_channel();
 
-        // spawn block executor:
-        // it executes and mines blocks and expects to receive them via channel in the correct order.
-        let task_executor = spawn_named(
-            "importer::executor",
-            Importer::start_block_executor(
-                Arc::clone(&self.executor),
-                Arc::clone(&self.miner),
-                backlog_rx,
-                self.kafka_connector.clone(),
-                self.importer_mode,
-            ),
-        );
+                // Spawn log applier
+                let task_applier = spawn_named(
+                    "importer::log-applier",
+                    Importer::start_log_applier(Arc::clone(storage), log_rx, self.kafka_connector.clone(), Arc::clone(&self.miner)),
+                );
 
-        // spawn block number:
-        // it keeps track of the blockchain current block number.
-        let number_fetcher_chain = Arc::clone(&self.chain);
-        let task_number_fetcher = spawn_named(
-            "importer::number-fetcher",
-            Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
-        );
+                // Spawn block number fetcher
+                let number_fetcher_chain = Arc::clone(&self.chain);
+                let task_number_fetcher = spawn_named(
+                    "importer::number-fetcher",
+                    Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
+                );
 
-        // spawn block fetcher:
-        // it fetches blocks and receipts in parallel and sends them to the executor in the correct order.
-        // it uses the number fetcher current block to determine if should keep downloading more blocks or not.
-        let block_fetcher_chain = Arc::clone(&self.chain);
-        let task_block_fetcher = spawn_named(
-            "importer::block-fetcher",
-            Importer::start_block_fetcher(block_fetcher_chain, backlog_tx, number),
-        );
+                // Spawn log fetcher
+                let log_fetcher_chain = Arc::clone(&self.chain);
+                let task_log_fetcher = spawn_named("importer::log-fetcher", Importer::start_log_fetcher(log_fetcher_chain, log_tx, number));
 
-        // await all tasks
-        if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
-            tracing::error!(reason = ?e, "importer-online failed");
+                // Await all tasks
+                if let Err(e) = try_join!(task_applier, task_log_fetcher, task_number_fetcher) {
+                    tracing::error!(reason = ?e, "importer-online failed");
+                }
+            }
+            _ => {
+                // Use existing block fetcher and executor approach
+                let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
+
+                // Spawn block executor
+                let task_executor = spawn_named(
+                    "importer::executor",
+                    Importer::start_block_executor(
+                        Arc::clone(&self.executor),
+                        Arc::clone(&self.miner),
+                        backlog_rx,
+                        self.kafka_connector.clone(),
+                        self.importer_mode,
+                    ),
+                );
+
+                // Spawn block number fetcher
+                let number_fetcher_chain = Arc::clone(&self.chain);
+                let task_number_fetcher = spawn_named(
+                    "importer::number-fetcher",
+                    Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
+                );
+
+                // Spawn block fetcher
+                let block_fetcher_chain = Arc::clone(&self.chain);
+                let task_block_fetcher = spawn_named(
+                    "importer::block-fetcher",
+                    Importer::start_block_fetcher(block_fetcher_chain, backlog_tx, number),
+                );
+
+                // Await all tasks
+                if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
+                    tracing::error!(reason = ?e, "importer-online failed");
+                }
+            }
         }
+
         Ok(())
     }
 

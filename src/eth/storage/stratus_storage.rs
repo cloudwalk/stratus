@@ -59,6 +59,11 @@ impl StratusStorage {
         Ok(this)
     }
 
+    /// Returns whether RocksDB replication is enabled
+    pub fn rocksdb_replication_enabled(&self) -> bool {
+        self.perm.rocksdb_replication_enabled()
+    }
+
     #[cfg(test)]
     pub fn new_test() -> Result<Self, StorageError> {
         use super::cache::CacheConfig;

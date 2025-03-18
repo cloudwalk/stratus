@@ -174,6 +174,10 @@ impl PermanentStorage for InMemoryPermanentStorage {
         Ok(())
     }
 
+    fn rocksdb_replication_enabled(&self) -> bool {
+        false
+    }
+
     fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write();
 
