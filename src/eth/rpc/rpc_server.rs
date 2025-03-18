@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use alloy_primitives::hex;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
@@ -714,7 +715,7 @@ fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     match replication_log {
         Some(log) => {
             let log_data = log.data();
-            let encoded = hex_data(log_data);
+            let encoded = hex::encode(log_data);
 
             tracing::info!(%block_number, log_size = log_data.len(), "replication log found");
 

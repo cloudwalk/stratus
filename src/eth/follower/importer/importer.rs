@@ -18,10 +18,12 @@ use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::miner::interval_miner::mine_and_commit;
 use crate::eth::miner::Miner;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
+use crate::eth::storage::permanent::rocks::types::WriteBatchRocksdb;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -467,6 +469,215 @@ impl Importer {
             }
         }
     }
+
+    // -----------------------------------------------------------------------------
+    // Log Applier (New)
+    // -----------------------------------------------------------------------------
+
+    // Applies replication logs to storage
+    async fn start_log_applier(
+        storage: Arc<StratusStorage>,
+        mut log_rx: mpsc::UnboundedReceiver<(BlockNumber, rocksdb::WriteBatch)>,
+        kafka_connector: Option<Arc<KafkaConnector>>,
+        miner: Arc<Miner>,
+    ) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "log-applier";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
+
+        loop {
+            if Self::should_shutdown(TASK_NAME) {
+                return Ok(());
+            }
+
+            let (block_number, write_batch) = match timeout(Duration::from_secs(2), log_rx.recv()).await {
+                Ok(Some(inner)) => inner,
+                Ok(None) => break, // channel closed
+                Err(_timed_out) => {
+                    tracing::warn!(timeout = "2s", "timeout reading log applier channel");
+                    continue;
+                }
+            };
+
+            #[cfg(feature = "metrics")]
+            let start = metrics::now();
+
+            // get the current block number
+            match storage.read_mined_block_number() {
+                Ok(current_block_number) => {
+                    // read the current block for notifications and optional Kafka events
+                    match storage.read_block(BlockFilter::Number(current_block_number)) {
+                        Ok(Some(current_block)) => {
+                            // send Kafka events if enabled
+                            if let Some(ref kafka_conn) = kafka_connector {
+                                tracing::info!(%current_block_number, "sending events for current block before applying replication log");
+
+                                let events = current_block
+                                    .transactions
+                                    .iter()
+                                    .flat_map(|tx| transaction_to_events(current_block.header.timestamp, Cow::Borrowed(tx)));
+
+                                if let Err(e) = kafka_conn.send_buffered(events, 50).await {
+                                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events for current block");
+                                    return log_and_err!(reason = e, message);
+                                } else {
+                                    tracing::info!(%current_block_number, "successfully sent Kafka events for current block");
+                                }
+                            }
+
+                            // Check if we have any subscribers
+                            let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
+                            let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
+                            let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
+
+                            // Notify about the block header for newHeads
+                            if has_block_subscribers {
+                                tracing::debug!(
+                                    block_number = %current_block_number,
+                                    "sending block notification"
+                                );
+                                let _ = miner.notifier_blocks.send(current_block.header.clone());
+                            }
+
+                            // Notify about transaction hashes for newPendingTransactions
+                            if has_pending_tx_subscribers && !current_block.transactions.is_empty() {
+                                let tx_count = current_block.transactions.len();
+                                tracing::debug!(
+                                    block_number = %current_block_number,
+                                    tx_count = %tx_count,
+                                    "sending pending transaction notifications"
+                                );
+
+                                for tx in &current_block.transactions {
+                                    let _ = miner.notifier_pending_txs.send(tx.input.hash);
+                                }
+                            }
+
+                            // Notify about transaction logs
+                            if has_log_subscribers {
+                                let logs_count = current_block.transactions.iter().map(|tx| tx.logs.len()).sum::<usize>();
+
+                                if logs_count > 0 {
+                                    tracing::debug!(
+                                        block_number = %current_block_number,
+                                        logs_count = %logs_count,
+                                        "sending log notifications"
+                                    );
+
+                                    for tx in &current_block.transactions {
+                                        for log in &tx.logs {
+                                            let _ = miner.notifier_logs.send(log.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Ok(None) => {
+                            let message = GlobalState::shutdown_from(TASK_NAME, "failed to read current block number");
+                            return log_and_err!(message);
+                        }
+                        Err(e) => {
+                            let message = GlobalState::shutdown_from(TASK_NAME, "failed to read current block number");
+                            return log_and_err!(reason = e, message);
+                        }
+                    }
+                }
+                Err(e) => {
+                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to read current block number");
+                    return log_and_err!(reason = e, message);
+                }
+            }
+
+            tracing::info!(
+                %block_number,
+                "applying replication log"
+            );
+
+            match storage.apply_replication_log(block_number, write_batch) {
+                Ok(_) => {
+                    tracing::info!(%block_number, "successfully applied replication log");
+
+                    if let Err(e) = storage.set_mined_block_number(block_number) {
+                        let message = GlobalState::shutdown_from(TASK_NAME, "failed to update mined block number after applying replication log");
+                        return log_and_err!(reason = e, message);
+                    }
+
+                    #[cfg(feature = "metrics")]
+                    {
+                        let duration = start.elapsed();
+                        tracing::info!(
+                            %block_number,
+                            duration = %duration.to_string_ext(),
+                            "applied replication log",
+                        );
+                    }
+                }
+                Err(e) => {
+                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to apply replication log");
+                    return log_and_err!(reason = e, message);
+                }
+            }
+        }
+
+        warn_task_tx_closed(TASK_NAME);
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------------
+    // Log fetcher (New)
+    // -----------------------------------------------------------------------------
+
+    /// Retrieves replication logs.
+    async fn start_log_fetcher(
+        chain: Arc<BlockchainClient>,
+        log_tx: mpsc::UnboundedSender<(BlockNumber, rocksdb::WriteBatch)>,
+        mut importer_block_number: BlockNumber,
+    ) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "log-fetcher";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
+
+        loop {
+            if Self::should_shutdown(TASK_NAME) {
+                return Ok(());
+            }
+
+            // if we are ahead of current block number, await until we are behind again
+            let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
+            if importer_block_number.as_u64() > external_rpc_current_block {
+                yield_now().await;
+                continue;
+            }
+
+            // we are behind current, so we will fetch multiple logs in parallel to catch up
+            let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1;
+            let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks
+            tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with replication logs");
+
+            // Create a vector of tasks for parallel fetching
+            let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
+            while blocks_to_fetch > 0 {
+                blocks_to_fetch -= 1;
+                tasks.push(fetch_replication_log(Arc::clone(&chain), importer_block_number));
+                importer_block_number = importer_block_number.next_block_number();
+            }
+
+            // Execute tasks in parallel with a limit on concurrency
+            let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
+
+            // Process results in order as they complete
+            while let Some((log_block_number, write_batch)) = tasks.next().await {
+                tracing::info!(
+                    %log_block_number,
+                    "fetched replication log"
+                );
+
+                // Send the log to the applier
+                if log_tx.send((log_block_number, write_batch)).is_err() {
+                    warn_task_rx_closed(TASK_NAME);
+                    return Ok(());
+                }
+            }
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -489,6 +700,37 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
             }
             Err(e) => {
                 tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch block and receipts, retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+            }
+        };
+    }
+}
+
+async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (BlockNumber, rocksdb::WriteBatch) {
+    const RETRY_DELAY: Duration = Duration::from_millis(10);
+    Span::with(|s| {
+        s.rec_str("block_number", &block_number);
+    });
+
+    loop {
+        tracing::info!(%block_number, "fetching replication log");
+
+        match chain.fetch_replication_log(block_number).await {
+            Ok(Some((log_block_number, log_data))) => {
+                // Convert Vec<u8> to WriteBatchRocksdb
+                let write_batch_rocksdb = WriteBatchRocksdb { data: log_data };
+
+                // Then convert to WriteBatch immediately
+                let write_batch = write_batch_rocksdb.to_write_batch();
+
+                return (log_block_number, write_batch);
+            }
+            Ok(None) => {
+                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "replication log not available yet, retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+            }
+            Err(e) => {
+                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch replication log, retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
             }
         };
