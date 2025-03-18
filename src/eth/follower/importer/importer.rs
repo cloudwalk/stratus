@@ -471,7 +471,7 @@ impl Importer {
     }
 
     // -----------------------------------------------------------------------------
-    // Log Applier (New)
+    // Replication Log Applier
     // -----------------------------------------------------------------------------
 
     // Applies replication logs to storage
@@ -524,12 +524,12 @@ impl Importer {
                                 }
                             }
 
-                            // Check if we have any subscribers
+                            // check if we have any subscribers
                             let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
                             let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
                             let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
 
-                            // Notify about the block header for newHeads
+                            // notify about the block header for newHeads
                             if has_block_subscribers {
                                 tracing::debug!(
                                     block_number = %current_block_number,
@@ -538,7 +538,7 @@ impl Importer {
                                 let _ = miner.notifier_blocks.send(current_block.header.clone());
                             }
 
-                            // Notify about transaction hashes for newPendingTransactions
+                            // notify about transaction hashes for newPendingTransactions
                             if has_pending_tx_subscribers && !current_block.transactions.is_empty() {
                                 let tx_count = current_block.transactions.len();
                                 tracing::debug!(
@@ -552,7 +552,7 @@ impl Importer {
                                 }
                             }
 
-                            // Notify about transaction logs
+                            // notify about transaction logs
                             if has_log_subscribers {
                                 let logs_count = current_block.transactions.iter().map(|tx| tx.logs.len()).sum::<usize>();
 
@@ -623,7 +623,7 @@ impl Importer {
     }
 
     // -----------------------------------------------------------------------------
-    // Log fetcher (New)
+    // Replication Log Fetcher
     // -----------------------------------------------------------------------------
 
     /// Retrieves replication logs.
@@ -652,7 +652,6 @@ impl Importer {
             let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks
             tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with replication logs");
 
-            // Create a vector of tasks for parallel fetching
             let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
             while blocks_to_fetch > 0 {
                 blocks_to_fetch -= 1;
@@ -660,17 +659,15 @@ impl Importer {
                 importer_block_number = importer_block_number.next_block_number();
             }
 
-            // Execute tasks in parallel with a limit on concurrency
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
 
-            // Process results in order as they complete
             while let Some((log_block_number, write_batch)) = tasks.next().await {
                 tracing::info!(
                     %log_block_number,
                     "fetched replication log"
                 );
 
-                // Send the log to the applier
+                // send the log to the applier
                 if log_tx.send((log_block_number, write_batch)).is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
