@@ -573,7 +573,7 @@ impl Importer {
                             }
                         }
                         Ok(None) => {
-                            tracing::debug!(
+                            tracing::info!(
                                 %current_block_number,
                                 external_rpc_current_block = %EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed),
                                 "no block found for current block number"
