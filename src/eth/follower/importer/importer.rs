@@ -9,6 +9,7 @@ use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::try_join;
 use futures::StreamExt;
+use rocksdb::WriteBatch;
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::timeout;
@@ -733,7 +734,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     }
 }
 
-async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (BlockNumber, rocksdb::WriteBatch) {
+async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (BlockNumber, WriteBatch) {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("block_number", &block_number);

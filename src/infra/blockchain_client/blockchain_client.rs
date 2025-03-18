@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::time::Duration;
 
 use alloy_primitives::hex;
@@ -235,9 +236,11 @@ impl BlockchainClient {
 
         match result {
             Ok(Some(json_value)) => {
-                let block_number = json_value["block_number"]
-                    .as_u64()
+                let block_number_str = json_value["block_number"]
+                    .as_str()
                     .ok_or_else(|| anyhow::anyhow!("invalid block_number in response"))?;
+
+                let block_number = BlockNumber::from_str(block_number_str).map_err(|_| anyhow::anyhow!("invalid block_number format in response"))?;
 
                 let hex_string = json_value["replication_log"]
                     .as_str()
@@ -246,7 +249,7 @@ impl BlockchainClient {
                 match hex::decode(hex_string) {
                     Ok(decoded) => {
                         tracing::debug!(block_number = %block_number, decoded_size = decoded.len(), "decoded replication log");
-                        Ok(Some((BlockNumber::from(block_number), decoded)))
+                        Ok(Some((block_number, decoded)))
                     }
                     Err(e) => log_and_err!(reason = e, "failed to decode replication log hex"),
                 }
