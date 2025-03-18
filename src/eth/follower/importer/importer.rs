@@ -714,10 +714,10 @@ async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: Block
 
         match chain.fetch_replication_log(block_number).await {
             Ok(Some((log_block_number, log_data))) => {
-                // Convert Vec<u8> to WriteBatchRocksdb
+                // convert Vec<u8> to WriteBatchRocksdb
                 let write_batch_rocksdb = WriteBatchRocksdb { data: log_data };
 
-                // Then convert to WriteBatch immediately
+                // then convert to WriteBatch
                 let write_batch = write_batch_rocksdb.to_write_batch();
 
                 return (log_block_number, write_batch);
