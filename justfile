@@ -455,13 +455,20 @@ e2e-flamegraph:
 
 e2e-leader use_rocksdb_replication="false":
     #!/bin/bash
-    REPLICATION_FLAG=$([ "{{use_rocksdb_replication}}" = "true" ] && echo "--use-rocksdb-replication" || echo "")
+    REPLICATION_FLAG=""
+    if [ "{{use_rocksdb_replication}}" = "true" ]; then
+        REPLICATION_FLAG="--use-rocksdb-replication"
+    
+    fi
     RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 ${REPLICATION_FLAG} > e2e_logs/stratus.log &
     just _wait_for_stratus 3000
 
 e2e-follower test="brlc" use_rocksdb_replication="false":
     #!/bin/bash
-    REPLICATION_FLAG=$([ "{{use_rocksdb_replication}}" = "true" ] && echo "--use-rocksdb-replication" || echo "")
+    REPLICATION_FLAG=""
+    if [ "{{use_rocksdb_replication}}" = "true" ]; then
+        REPLICATION_FLAG="--use-rocksdb-replication"
+    fi
     if [ "{{test}}" = "kafka" ]; then
     # Start Kafka using Docker Compose
         just _log "Starting Kafka"
@@ -476,18 +483,17 @@ e2e-follower test="brlc" use_rocksdb_replication="false":
     # Wait for Stratus with follower flag to start
     just _wait_for_stratus 3001
 
-
 _e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false" release_flag="--release":
     #!/bin/bash
     just build
 
-    mkdir e2e_logs
+    mkdir -p e2e_logs
 
     # Start Stratus with leader flag
-    just e2e-leader use_rocksdb_replication="{{use_rocksdb_replication}}"
+    just e2e-leader {{use_rocksdb_replication}}
 
     # Start Stratus with follower flag
-    just e2e-follower {{test}} use_rocksdb_replication="{{use_rocksdb_replication}}"
+    just e2e-follower {{test}} {{use_rocksdb_replication}}
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
@@ -532,7 +538,7 @@ _e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false" release
 
 # E2E: Leader & Follower Up
 e2e-leader-follower-up test="brlc" use_rocksdb_replication="false" release_flag="--release":
-    just _e2e-leader-follower-up-impl {{test}} use_rocksdb_replication="{{use_rocksdb_replication}}" {{release_flag}}
+    just _e2e-leader-follower-up-impl {{test}} {{use_rocksdb_replication}} {{release_flag}}
     killport 3000 -s sigterm
     killport 3001 -s sigterm
 
