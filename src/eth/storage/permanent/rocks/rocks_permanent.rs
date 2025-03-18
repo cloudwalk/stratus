@@ -136,10 +136,11 @@ impl PermanentStorage for RocksPermanentStorage {
     fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> anyhow::Result<(), StorageError> {
         self.state
             .apply_replication_log(block_number, replication_log)
-            .map_err(|err| StorageError::RocksError { err })
-            .inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to apply replication log in RocksPermanent");
-            })
+            .map_err(|err| StorageError::RocksError { err })?;
+
+        self.block_number.store(block_number.as_u32(), Ordering::SeqCst);
+
+        Ok(())
     }
 
     fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {

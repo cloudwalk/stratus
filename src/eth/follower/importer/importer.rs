@@ -522,7 +522,7 @@ impl Importer {
 
             let (block_number, write_batch) = match timeout(Duration::from_secs(2), log_rx.recv()).await {
                 Ok(Some(inner)) => inner,
-                Ok(None) => break, // channel closed
+                Ok(None) => break,
                 Err(_timed_out) => {
                     tracing::warn!(timeout = "2s", "timeout reading log applier channel");
                     continue;
@@ -532,103 +532,72 @@ impl Importer {
             #[cfg(feature = "metrics")]
             let start = metrics::now();
 
-            // get the current block number
-            match storage.read_mined_block_number() {
-                Ok(current_block_number) => {
-                    // read the current block for notifications and optional Kafka events
+            if let Ok(current_block_number) = storage.read_mined_block_number() {
+                if current_block_number > BlockNumber::ZERO {
                     match storage.read_block(BlockFilter::Number(current_block_number)) {
                         Ok(Some(current_block)) => {
                             // send Kafka events if enabled
                             if let Some(ref kafka_conn) = kafka_connector {
-                                tracing::info!(%current_block_number, "sending events for current block before applying replication log");
-
                                 let events = current_block
                                     .transactions
                                     .iter()
                                     .flat_map(|tx| transaction_to_events(current_block.header.timestamp, Cow::Borrowed(tx)));
 
                                 if let Err(e) = kafka_conn.send_buffered(events, 50).await {
-                                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events for current block");
+                                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events");
                                     return log_and_err!(reason = e, message);
-                                } else {
-                                    tracing::info!(%current_block_number, "successfully sent Kafka events for current block");
                                 }
                             }
 
-                            // check if we have any subscribers
+                            // Handle notifications
                             let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
                             let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
                             let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
 
-                            // notify about the block header for newHeads
                             if has_block_subscribers {
-                                tracing::debug!(
-                                    block_number = %current_block_number,
-                                    "sending block notification"
-                                );
                                 let _ = miner.notifier_blocks.send(current_block.header.clone());
                             }
 
-                            // notify about transaction hashes for newPendingTransactions
                             if has_pending_tx_subscribers && !current_block.transactions.is_empty() {
-                                let tx_count = current_block.transactions.len();
-                                tracing::debug!(
-                                    block_number = %current_block_number,
-                                    tx_count = %tx_count,
-                                    "sending pending transaction notifications"
-                                );
-
                                 for tx in &current_block.transactions {
                                     let _ = miner.notifier_pending_txs.send(tx.input.hash);
                                 }
                             }
 
-                            // notify about transaction logs
                             if has_log_subscribers {
-                                let logs_count = current_block.transactions.iter().map(|tx| tx.logs.len()).sum::<usize>();
-
-                                if logs_count > 0 {
-                                    tracing::debug!(
-                                        block_number = %current_block_number,
-                                        logs_count = %logs_count,
-                                        "sending log notifications"
-                                    );
-
-                                    for tx in &current_block.transactions {
-                                        for log in &tx.logs {
-                                            let _ = miner.notifier_logs.send(log.clone());
-                                        }
+                                for tx in &current_block.transactions {
+                                    for log in &tx.logs {
+                                        let _ = miner.notifier_logs.send(log.clone());
                                     }
                                 }
                             }
                         }
                         Ok(None) => {
-                            let message = GlobalState::shutdown_from(TASK_NAME, "failed to read current block number");
-                            return log_and_err!(message);
+                            tracing::debug!(
+                                %current_block_number,
+                                external_rpc_current_block = %EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed),
+                                "no block found for current block number"
+                            );
                         }
                         Err(e) => {
-                            let message = GlobalState::shutdown_from(TASK_NAME, "failed to read current block number");
-                            return log_and_err!(reason = e, message);
+                            tracing::error!(
+                                %current_block_number,
+                                error = ?e,
+                                "failed to read current block"
+                            );
                         }
                     }
                 }
-                Err(e) => {
-                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to read current block number");
-                    return log_and_err!(reason = e, message);
-                }
             }
 
-            tracing::info!(
-                %block_number,
-                "applying replication log"
-            );
-
+            tracing::info!(%block_number, "applying replication log");
             match storage.apply_replication_log(block_number, write_batch) {
                 Ok(_) => {
                     tracing::info!(%block_number, "successfully applied replication log");
+                    set_external_rpc_current_block(block_number);
 
                     if let Err(e) = storage.finish_pending_block() {
-                        let message = GlobalState::shutdown_from(TASK_NAME, "failed to finish pending block after log replication");
+                        let message = GlobalState::shutdown_from(TASK_NAME, "failed to finish pending block");
                         return log_and_err!(reason = e, message);
                     }
 
@@ -745,6 +714,12 @@ async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: Block
 
         match chain.fetch_replication_log(block_number).await {
             Ok(Some((log_block_number, log_data))) => {
+                tracing::info!(
+                    %block_number,
+                    %log_block_number,
+                    log_data_size = %log_data.len(),
+                    "successfully fetched replication log"
+                );
                 // convert Vec<u8> to WriteBatchRocksdb
                 let write_batch_rocksdb = WriteBatchRocksdb { data: log_data };
 
