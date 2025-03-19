@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::atomic::AtomicU32;
@@ -93,7 +92,7 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
 }
 
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
-fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str, cf_options_map: &HashMap<&str, Options>) -> Result<RocksCfRef<K, V>>
+fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, Options>) -> Result<RocksCfRef<K, V>>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
@@ -146,12 +145,10 @@ impl RocksStorageState {
     ) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
 
-        let cf_options_btree_map = generate_cf_options_map(cache_multiplier);
+        let cf_options_map = generate_cf_options_map(cache_multiplier);
 
         #[cfg_attr(not(feature = "rocks_metrics"), allow(unused_variables))]
-        let (db, db_options) = create_or_open_db(&path, &cf_options_btree_map).context("when trying to create (or open) rocksdb")?;
-
-        let cf_options_hash_map: HashMap<&str, Options> = cf_options_btree_map.into_iter().collect();
+        let (db, db_options) = create_or_open_db(&path, &cf_options_map).context("when trying to create (or open) rocksdb")?;
 
         if db.path().to_str().is_none() {
             bail!("db path doesn't isn't valid UTF-8: {:?}", db.path());
@@ -162,14 +159,14 @@ impl RocksStorageState {
 
         let state = Self {
             db_path: path,
-            accounts: new_cf_ref(&db, "accounts", &cf_options_hash_map)?,
-            accounts_history: new_cf_ref(&db, "accounts_history", &cf_options_hash_map)?,
-            account_slots: new_cf_ref(&db, "account_slots", &cf_options_hash_map)?,
-            account_slots_history: new_cf_ref(&db, "account_slots_history", &cf_options_hash_map)?,
-            transactions: new_cf_ref(&db, "transactions", &cf_options_hash_map)?,
-            blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_hash_map)?,
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_hash_map)?,
-            replication_logs: new_cf_ref(&db, "replication_logs", &cf_options_hash_map)?,
+            accounts: new_cf_ref(&db, "accounts", &cf_options_map)?,
+            accounts_history: new_cf_ref(&db, "accounts_history", &cf_options_map)?,
+            account_slots: new_cf_ref(&db, "account_slots", &cf_options_map)?,
+            account_slots_history: new_cf_ref(&db, "account_slots_history", &cf_options_map)?,
+            transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
+            blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
+            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
+            replication_logs: new_cf_ref(&db, "replication_logs", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "rocks_metrics")]
