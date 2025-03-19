@@ -17,7 +17,7 @@ use crate::infra::metrics;
 ///
 /// The returned `Options` **need** to be stored to refer to the DB metrics!
 #[tracing::instrument(skip_all, fields(path = ?path.as_ref()))]
-pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &[(&str, Options)]) -> anyhow::Result<(Arc<DB>, Options)> {
+pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &Vec<(&str, Options)>) -> anyhow::Result<(Arc<DB>, Options)> {
     let path = path.as_ref();
 
     tracing::debug!("creating settings for each column family");
