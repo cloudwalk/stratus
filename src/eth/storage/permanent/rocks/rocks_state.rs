@@ -63,6 +63,8 @@ cfg_if::cfg_if! {
 
         use rocksdb::statistics::Histogram;
         use rocksdb::statistics::Ticker;
+        use std::collections::HashMap;
+
 
         use crate::infra::metrics::{Count, HistogramInt, Sum};
     }
