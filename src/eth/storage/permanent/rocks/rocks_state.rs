@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::atomic::AtomicU32;
@@ -17,7 +17,7 @@ use rocksdb::WriteOptions;
 use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
-use sugars::hmap;
+use sugars::btmap;
 
 use super::cf_versions::CfAccountSlotsHistoryValue;
 use super::cf_versions::CfAccountSlotsValue;
@@ -66,7 +66,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'static str, Options> {
+pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'static str, Options> {
     let cache_multiplier = cache_multiplier.unwrap_or(1.0);
 
     // multiplies the given size in GBs by the cache multiplier
@@ -76,7 +76,7 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'stati
         CacheSetting::Enabled(size)
     };
 
-    hmap! {
+    btmap! {
         "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15), None),
         "accounts_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(20)),
         "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45), Some(20)),
@@ -88,7 +88,7 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'stati
 }
 
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
-fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str, cf_options_map: &HashMap<&str, Options>) -> Result<RocksCfRef<K, V>>
+fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, Options>) -> Result<RocksCfRef<K, V>>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
@@ -641,6 +641,8 @@ impl fmt::Debug for RocksStorageState {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use fake::Fake;
     use fake::Faker;
 
