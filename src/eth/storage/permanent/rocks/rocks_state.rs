@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::atomic::AtomicU32;
@@ -139,10 +138,8 @@ impl RocksStorageState {
 
         let cf_options_vec = generate_cf_options_vec(cache_multiplier);
 
-        let cf_options_map: BTreeMap<&str, Options> = cf_options_vec.iter().map(|(name, opts)| (*name, opts.clone())).collect();
-
         #[cfg_attr(not(feature = "rocks_metrics"), allow(unused_variables))]
-        let (db, db_options) = create_or_open_db(&path, &cf_options_map).context("when trying to create (or open) rocksdb")?;
+        let (db, db_options) = create_or_open_db(&path, &cf_options_vec).context("when trying to create (or open) rocksdb")?;
 
         if db.path().to_str().is_none() {
             bail!("db path doesn't isn't valid UTF-8: {:?}", db.path());
