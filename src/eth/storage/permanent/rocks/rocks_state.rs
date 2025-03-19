@@ -17,7 +17,6 @@ use rocksdb::WriteOptions;
 use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
-use sugars::btmap;
 
 use super::cf_versions::CfAccountSlotsHistoryValue;
 use super::cf_versions::CfAccountSlotsValue;
@@ -66,7 +65,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'static str, Options> {
+pub fn generate_cf_options_vec(cache_multiplier: Option<f32>) -> Vec<(&'static str, Options)> {
     let cache_multiplier = cache_multiplier.unwrap_or(1.0);
 
     // multiplies the given size in GBs by the cache multiplier
@@ -76,28 +75,33 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
         CacheSetting::Enabled(size)
     };
 
-    btmap! {
-        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15), None),
-        "accounts_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(20)),
-        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45), Some(20)),
-        "account_slots_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(52)),
-        "transactions" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "blocks_by_number" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled, None)
-    }
+    vec![
+        ("accounts", DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15), None)),
+        ("accounts_history", DbConfig::Default.to_options(CacheSetting::Disabled, Some(20))),
+        (
+            "account_slots",
+            DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45), Some(20)),
+        ),
+        ("account_slots_history", DbConfig::Default.to_options(CacheSetting::Disabled, Some(52))),
+        ("transactions", DbConfig::Default.to_options(CacheSetting::Disabled, None)),
+        ("blocks_by_number", DbConfig::Default.to_options(CacheSetting::Disabled, None)),
+        ("blocks_by_hash", DbConfig::Default.to_options(CacheSetting::Disabled, None)),
+    ]
 }
 
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
-fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, Options>) -> Result<RocksCfRef<K, V>>
+fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str, cf_options_vec: &[(&str, Options)]) -> Result<RocksCfRef<K, V>>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
-    cf_options_map
-        .get(column_family)
-        .with_context(|| format!("matching column_family `{column_family}` given to `new_cf_ref` wasn't found in configuration map"))?;
+    let found = cf_options_vec.iter().any(|(name, _)| *name == column_family);
+
+    if !found {
+        anyhow::bail!("matching column_family `{column_family}` given to `new_cf_ref` wasn't found in configuration vec");
+    }
 
     // NOTE: this doesn't create the CFs in the database, read `RocksCfRef` docs for details
     RocksCfRef::new(Arc::clone(db), column_family)
@@ -133,7 +137,9 @@ impl RocksStorageState {
     pub fn new(path: String, shutdown_timeout: Duration, cache_multiplier: Option<f32>, enable_sync_write: bool) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
 
-        let cf_options_map = generate_cf_options_map(cache_multiplier);
+        let cf_options_vec = generate_cf_options_vec(cache_multiplier);
+
+        let cf_options_map: BTreeMap<&str, Options> = cf_options_vec.iter().map(|(name, opts)| (*name, opts.clone())).collect();
 
         #[cfg_attr(not(feature = "rocks_metrics"), allow(unused_variables))]
         let (db, db_options) = create_or_open_db(&path, &cf_options_map).context("when trying to create (or open) rocksdb")?;
@@ -147,13 +153,13 @@ impl RocksStorageState {
 
         let state = Self {
             db_path: path,
-            accounts: new_cf_ref(&db, "accounts", &cf_options_map)?,
-            accounts_history: new_cf_ref(&db, "accounts_history", &cf_options_map)?,
-            account_slots: new_cf_ref(&db, "account_slots", &cf_options_map)?,
-            account_slots_history: new_cf_ref(&db, "account_slots_history", &cf_options_map)?,
-            transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
-            blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
+            accounts: new_cf_ref(&db, "accounts", &cf_options_vec)?,
+            accounts_history: new_cf_ref(&db, "accounts_history", &cf_options_vec)?,
+            account_slots: new_cf_ref(&db, "account_slots", &cf_options_vec)?,
+            account_slots_history: new_cf_ref(&db, "account_slots_history", &cf_options_vec)?,
+            transactions: new_cf_ref(&db, "transactions", &cf_options_vec)?,
+            blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_vec)?,
+            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_vec)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "rocks_metrics")]
