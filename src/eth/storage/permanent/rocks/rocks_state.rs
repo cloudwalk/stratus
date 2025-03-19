@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
@@ -17,7 +18,7 @@ use rocksdb::WriteOptions;
 use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
-use sugars::hmap;
+use sugars::btmap;
 
 use super::cf_versions::CfAccountSlotsHistoryValue;
 use super::cf_versions::CfAccountSlotsValue;
@@ -68,7 +69,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'static str, Options> {
+pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'static str, Options> {
     let cache_multiplier = cache_multiplier.unwrap_or(1.0);
 
     // multiplies the given size in GBs by the cache multiplier
@@ -78,7 +79,8 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'stati
         CacheSetting::Enabled(size)
     };
 
-    hmap! {
+    // BTreeMap is used to ensure the order of the column families creation is deterministic
+    btmap! {
         "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15), None),
         "accounts_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(20)),
         "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45), Some(20)),
@@ -144,10 +146,12 @@ impl RocksStorageState {
     ) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
 
-        let cf_options_map = generate_cf_options_map(cache_multiplier);
+        let cf_options_btree_map = generate_cf_options_map(cache_multiplier);
 
         #[cfg_attr(not(feature = "rocks_metrics"), allow(unused_variables))]
-        let (db, db_options) = create_or_open_db(&path, &cf_options_map).context("when trying to create (or open) rocksdb")?;
+        let (db, db_options) = create_or_open_db(&path, &cf_options_btree_map).context("when trying to create (or open) rocksdb")?;
+
+        let cf_options_hash_map: HashMap<&str, Options> = cf_options_btree_map.into_iter().collect();
 
         if db.path().to_str().is_none() {
             bail!("db path doesn't isn't valid UTF-8: {:?}", db.path());
@@ -158,14 +162,14 @@ impl RocksStorageState {
 
         let state = Self {
             db_path: path,
-            accounts: new_cf_ref(&db, "accounts", &cf_options_map)?,
-            accounts_history: new_cf_ref(&db, "accounts_history", &cf_options_map)?,
-            account_slots: new_cf_ref(&db, "account_slots", &cf_options_map)?,
-            account_slots_history: new_cf_ref(&db, "account_slots_history", &cf_options_map)?,
-            transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
-            blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
-            replication_logs: new_cf_ref(&db, "replication_logs", &cf_options_map)?,
+            accounts: new_cf_ref(&db, "accounts", &cf_options_hash_map)?,
+            accounts_history: new_cf_ref(&db, "accounts_history", &cf_options_hash_map)?,
+            account_slots: new_cf_ref(&db, "account_slots", &cf_options_hash_map)?,
+            account_slots_history: new_cf_ref(&db, "account_slots_history", &cf_options_hash_map)?,
+            transactions: new_cf_ref(&db, "transactions", &cf_options_hash_map)?,
+            blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_hash_map)?,
+            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_hash_map)?,
+            replication_logs: new_cf_ref(&db, "replication_logs", &cf_options_hash_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "rocks_metrics")]
@@ -681,6 +685,8 @@ impl fmt::Debug for RocksStorageState {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use fake::Fake;
     use fake::Faker;
 

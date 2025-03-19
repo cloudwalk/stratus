@@ -134,46 +134,15 @@ impl PermanentStorage for RocksPermanentStorage {
     }
 
     fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> anyhow::Result<(), StorageError> {
-        // Before applying - check both methods
-        let current_block_number = self.read_mined_block_number()?;
-        let current_block = self.read_block(BlockFilter::Latest)?;
-        
-        tracing::info!(
-            mined_block_number = %current_block_number,
-            latest_block_number = %current_block.as_ref().map_or(0.into(), |b| b.number()),
-            received_block_number = %block_number,
-            "Before applying replication log"
-        );
-    
-        // Apply the replication log
         self.state
             .apply_replication_log(block_number, replication_log)
-            .map_err(|err| StorageError::RocksError { err })?;
-    
-        // After applying - check both methods again
-        let after_mined_number = self.read_mined_block_number()?;
-        let after_block = self.read_block(BlockFilter::Latest)?;
-        
-        tracing::info!(
-            mined_block_number = %after_mined_number,
-            latest_block_number = %after_block.as_ref().map_or(0.into(), |b| b.number()),
-            "After applying replication log"
-        );
-    
-        // Update the block number
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to apply replication log in RocksPermanent");
+            })?;
+
         self.block_number.store(block_number.as_u32(), Ordering::SeqCst);
-    
-        // Final check after updating
-        let final_mined_number = self.read_mined_block_number()?;
-        let final_block = self.read_block(BlockFilter::Latest)?;
-        
-        tracing::info!(
-            mined_block_number = %final_mined_number,
-            latest_block_number = %final_block.as_ref().map_or(0.into(), |b| b.number()),
-            stored_block_number = %block_number,
-            "After updating block number"
-        );
-    
+
         Ok(())
     }
 
