@@ -878,7 +878,6 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<EvmExecution, St
     // parse params
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
-    let current_block = ctx.storage.read_block(BlockFilter::Latest)?.unwrap().number();
 
     // track
     Span::with(|s| {
