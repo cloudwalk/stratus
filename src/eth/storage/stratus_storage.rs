@@ -137,14 +137,19 @@ impl StratusStorage {
     pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> Result<(), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::apply_replication_log", %block_number).entered();
-        tracing::debug!(storage = %label::PERM, %block_number, "applying replication log");
 
+        tracing::debug!(storage = %label::TEMP, "finishing pending block");
+        self.finish_pending_block()?;
+
+        tracing::debug!(storage = %label::PERM, %block_number, "applying replication log");
         timed(|| self.perm.apply_replication_log(block_number, replication_log)).with(|m| {
             metrics::inc_storage_apply_replication_log(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to apply replication log");
             }
-        })
+        })?;
+
+        Ok(())
     }
 
     // -------------------------------------------------------------------------

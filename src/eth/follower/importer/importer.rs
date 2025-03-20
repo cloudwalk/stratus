@@ -595,11 +595,6 @@ impl Importer {
                 Ok(_) => {
                     tracing::info!(%block_number, "successfully applied replication log");
 
-                    if let Err(e) = storage.finish_pending_block() {
-                        let message = GlobalState::shutdown_from(TASK_NAME, "failed to finish pending block");
-                        return log_and_err!(reason = e, message);
-                    }
-
                     #[cfg(feature = "metrics")]
                     {
                         let duration = start.elapsed();
