@@ -242,3 +242,7 @@ wildcard_imports = "warn"
 unwrap_used = "allow"
 expect_used = "warn"
 panic = "warn"
+
+
+[profile.release]
+lto = "fat"
