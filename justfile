@@ -776,7 +776,9 @@ e2e-genesis:
     just _wait_for_stratus
 
     just _log "Running Genesis tests"
-    cd e2e && npx hardhat test test/genesis/genesis.test.ts --network stratus
+    cd e2e
+    npm install 
+    npx hardhat test test/genesis/genesis.test.ts --network stratus
     result_code=$?
     
     # Clean up
