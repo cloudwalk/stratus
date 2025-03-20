@@ -143,7 +143,7 @@ impl Importer {
         match self.importer_mode {
             ImporterMode::RocksDbReplication => {
                 // Use RocksDB replication approach
-                let (log_tx, log_rx) = mpsc::unbounded_channel();
+                let (log_tx, log_rx) = mpsc::channel(10_000);
 
                 // Spawn log applier
                 let task_applier = spawn_named(
@@ -169,7 +169,7 @@ impl Importer {
             }
             _ => {
                 // Use existing block fetcher and executor approach
-                let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
+                let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
 
                 // Spawn block executor
                 let task_executor = spawn_named(
@@ -217,7 +217,7 @@ impl Importer {
     async fn start_block_executor(
         executor: Arc<Executor>,
         miner: Arc<Miner>,
-        mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
+        mut backlog_rx: mpsc::Receiver<(ExternalBlock, Vec<ExternalReceipt>)>,
         kafka_connector: Option<Arc<KafkaConnector>>,
         importer_mode: ImporterMode,
     ) -> anyhow::Result<()> {
@@ -426,7 +426,7 @@ impl Importer {
     /// Retrieves blocks and receipts.
     async fn start_block_fetcher(
         chain: Arc<BlockchainClient>,
-        backlog_tx: mpsc::UnboundedSender<(ExternalBlock, Vec<ExternalReceipt>)>,
+        backlog_tx: mpsc::Sender<(ExternalBlock, Vec<ExternalReceipt>)>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "external-block-fetcher";
@@ -493,7 +493,7 @@ impl Importer {
                     }
                 }
 
-                if backlog_tx.send((block, receipts)).is_err() {
+                if backlog_tx.send((block, receipts)).await.is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
                 }
@@ -508,7 +508,7 @@ impl Importer {
     // Applies replication logs to storage
     async fn start_log_applier(
         storage: Arc<StratusStorage>,
-        mut log_rx: mpsc::UnboundedReceiver<(BlockNumber, rocksdb::WriteBatch)>,
+        mut log_rx: mpsc::Receiver<(BlockNumber, rocksdb::WriteBatch)>,
         kafka_connector: Option<Arc<KafkaConnector>>,
         miner: Arc<Miner>,
     ) -> anyhow::Result<()> {
@@ -629,7 +629,7 @@ impl Importer {
     /// Retrieves replication logs.
     async fn start_log_fetcher(
         chain: Arc<BlockchainClient>,
-        log_tx: mpsc::UnboundedSender<(BlockNumber, rocksdb::WriteBatch)>,
+        log_tx: mpsc::Sender<(BlockNumber, rocksdb::WriteBatch)>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "log-fetcher";
@@ -668,7 +668,7 @@ impl Importer {
                 );
 
                 // send the log to the applier
-                if log_tx.send((log_block_number, write_batch)).is_err() {
+                if log_tx.send((log_block_number, write_batch)).await.is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
                 }
