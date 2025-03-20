@@ -141,7 +141,7 @@ impl PermanentStorage for RocksPermanentStorage {
                 tracing::error!(reason = ?e, "failed to apply replication log in RocksPermanent");
             })?;
 
-        self.block_number.store(block_number.as_u32(), Ordering::SeqCst);
+        self.set_mined_block_number(block_number)?;
 
         Ok(())
     }
