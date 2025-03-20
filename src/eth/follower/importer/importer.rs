@@ -135,7 +135,7 @@ impl Importer {
         let storage = &self.storage;
         let number = storage.read_block_number_to_resume_import()?;
 
-        let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
+        let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
 
         // spawn block executor:
         // it executes and mines blocks and expects to receive them via channel in the correct order.
@@ -184,7 +184,7 @@ impl Importer {
     async fn start_block_executor(
         executor: Arc<Executor>,
         miner: Arc<Miner>,
-        mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
+        mut backlog_rx: mpsc::Receiver<(ExternalBlock, Vec<ExternalReceipt>)>,
         kafka_connector: Option<Arc<KafkaConnector>>,
         importer_mode: ImporterMode,
     ) -> anyhow::Result<()> {
@@ -393,7 +393,7 @@ impl Importer {
     /// Retrieves blocks and receipts.
     async fn start_block_fetcher(
         chain: Arc<BlockchainClient>,
-        backlog_tx: mpsc::UnboundedSender<(ExternalBlock, Vec<ExternalReceipt>)>,
+        backlog_tx: mpsc::Sender<(ExternalBlock, Vec<ExternalReceipt>)>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "external-block-fetcher";
@@ -460,7 +460,7 @@ impl Importer {
                     }
                 }
 
-                if backlog_tx.send((block, receipts)).is_err() {
+                if backlog_tx.send((block, receipts)).await.is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
                 }
