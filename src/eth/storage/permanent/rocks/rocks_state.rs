@@ -811,4 +811,35 @@ mod tests {
         let history = state.read_all_historical_accounts().unwrap();
         assert_eq!(history.len(), 3);
     }
+
+    #[test]
+    fn test_column_families_creation_order_is_deterministic() {
+        let mut previous_order: Option<Vec<String>> = None;
+
+        // Run the test multiple times to ensure RocksDB CF creation order is deterministic
+        for i in 0..10 {
+            let test_dir = tempfile::tempdir().unwrap();
+            let path = test_dir.as_ref().display().to_string();
+
+            // Create the database with the column families
+            let cf_options_map = generate_cf_options_map(None);
+            let (_db, _) = create_or_open_db(&path, &cf_options_map).unwrap();
+
+            // Get the actual CF order from RocksDB
+            let actual_cf_order = DB::list_cf(&Options::default(), &path).unwrap();
+
+            // Compare with previous iteration
+            if let Some(prev_order) = &previous_order {
+                assert_eq!(
+                    &actual_cf_order,
+                    prev_order,
+                    "RocksDB column family order changed between iterations {} and {}",
+                    i - 1,
+                    i
+                );
+            } else {
+                previous_order = Some(actual_cf_order);
+            }
+        }
+    }
 }
