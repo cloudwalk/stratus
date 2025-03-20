@@ -20,7 +20,7 @@ fn run(config: RocksRevertToBlockConfig) -> anyhow::Result<()> {
 
     let rocks = RocksPermanentStorage::new(config.rocks_path_prefix, Duration::from_secs(10), Some(0.1), true)?;
 
-    if let Err(err) = rocks.revert_state_to_block(config.block_number.into()) {
+    if let Err(err) = rocks.revert_state_to_block_batched(config.block_number.into()) {
         tracing::error!(target_block = config.block_number, reason = ?err, "failed to revert block state to target block");
     }
 

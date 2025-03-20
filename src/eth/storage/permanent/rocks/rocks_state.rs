@@ -15,8 +15,7 @@ use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
 use rocksdb::DB;
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sugars::hmap;
 
 use super::cf_versions::CfAccountSlotsHistoryValue;
@@ -620,6 +619,151 @@ impl RocksStorageState {
             } else {
                 break; // blocks are ordered by key, so we can stop early here
             }
+        }
+
+        Ok(())
+    }
+    
+    pub fn revert_state_to_block_batched(&self, target_number: BlockNumberRocksdb) -> Result<()> {
+        tracing::info!("starting batched state reversion to block {}", target_number);
+        
+        // Create temporary CFs for storing intermediate state
+        let temp_accounts_cf = "temp_revert_accounts";
+        let temp_slots_cf = "temp_revert_slots";
+        
+        self.db.create_cf(temp_accounts_cf, &Options::default())?;
+        self.db.create_cf(temp_slots_cf, &Options::default())?;
+        
+        let temp_accounts = RocksCfRef::<AddressRocksdb, CfAccountsValue>::new(
+            Arc::clone(&self.db),
+            temp_accounts_cf,
+        )?;
+        
+        let temp_slots = RocksCfRef::<(AddressRocksdb, SlotIndexRocksdb), CfAccountSlotsValue>::new(
+            Arc::clone(&self.db),
+            temp_slots_cf,
+        )?;
+
+        // Clear current state
+        self.accounts.clear()?;
+        self.account_slots.clear()?;
+
+        // Process accounts history
+        let mut batch = WriteBatch::default();
+        let mut batch_size = 0;
+        const MAX_BATCH_SIZE: usize = 10_000;
+        let mut processed_count = 0;
+
+        // Process historical accounts up to target block
+        for result in self.accounts_history.iter_start() {
+            let ((address, block_number), account) = result?;
+            
+            if block_number > target_number {
+                continue;
+            }
+            
+            // // Only keep the most recent state for each account up to target block
+            // if let Some(existing) = temp_accounts.get(&address)? {
+            //     // Skip if we already have a more recent state for this account
+            //     continue;
+            // }
+
+            temp_accounts.prepare_batch_insertion(
+                [(address, CfAccountsValue::from(account))],
+                &mut batch
+            )?;
+            
+            batch_size += 1;
+            processed_count += 1;
+
+            if batch_size >= MAX_BATCH_SIZE {
+                self.db.write(batch)?;
+                batch = WriteBatch::default();
+                batch_size = 0;
+                tracing::info!("processed {} accounts", processed_count);
+            }
+        }
+
+        // Write final accounts batch
+        if batch_size > 0 {
+            self.db.write(batch)?;
+        }
+
+        // Process slots history
+        batch = WriteBatch::default();
+        batch_size = 0;
+        processed_count = 0;
+
+        // Process historical slots up to target block
+        for result in self.account_slots_history.iter_start() {
+            let ((address, slot, block_number), slot_value) = result?;
+            
+            if block_number > target_number {
+                continue;
+            }
+
+            // // Only keep the most recent state for each slot up to target block
+            // if let Some(existing) = temp_slots.get(&(address, slot))? {
+            //     // Skip if we already have a more recent state for this slot
+            //     continue;
+            // }
+
+            temp_slots.prepare_batch_insertion(
+                [((address, slot), CfAccountSlotsValue::from(slot_value))],
+                &mut batch
+            )?;
+            
+            batch_size += 1;
+            processed_count += 1;
+
+            if batch_size >= MAX_BATCH_SIZE {
+                self.db.write(batch)?;
+                batch = WriteBatch::default();
+                batch_size = 0;
+                tracing::info!("processed {} slots", processed_count);
+            }
+        }
+
+        // Write final slots batch
+        if batch_size > 0 {
+            self.db.write(batch)?;
+        }
+
+        // Copy from temporary CFs to main CFs
+        self.copy_cf_contents(temp_accounts_cf, &self.accounts)?;
+        self.copy_cf_contents(temp_slots_cf, &self.account_slots)?;
+
+        // Clean up temporary CFs
+        self.db.drop_cf(temp_accounts_cf)?;
+        self.db.drop_cf(temp_slots_cf)?;
+
+        tracing::info!("finished state reversion");
+        Ok(())
+    }
+
+    fn copy_cf_contents<K, V>(&self, temp_cf: &str, target_cf: &RocksCfRef<K, V>) -> Result<()> 
+    where
+        K: Serialize + DeserializeOwned + Debug + std::hash::Hash + Eq,
+        V: Serialize + DeserializeOwned + Debug + Clone,
+    {
+        let temp = RocksCfRef::<K, V>::new(Arc::clone(&self.db), temp_cf)?;
+        let mut batch = WriteBatch::default();
+        let mut batch_size = 0;
+        
+        for result in temp.iter_start() {
+            let (key, value) = result?;
+            target_cf.prepare_batch_insertion([(key, value)], &mut batch)?;
+            batch_size += 1;
+
+            if batch_size >= 10_000 {
+                self.db.write(batch)?;
+                batch = WriteBatch::default();
+                batch_size = 0;
+            }
+        }
+
+        if batch_size > 0 {
+            self.db.write(batch)?;
         }
 
         Ok(())

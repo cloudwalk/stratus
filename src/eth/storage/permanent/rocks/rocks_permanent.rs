@@ -75,6 +75,10 @@ impl RocksPermanentStorage {
     pub fn revert_state_to_block(&self, block_number: BlockNumber) -> anyhow::Result<()> {
         self.state.revert_state_to_block(block_number.into())
     }
+
+    pub fn revert_state_to_block_batched(&self, block_number: BlockNumber) -> anyhow::Result<()> {
+        self.state.revert_state_to_block_batched(block_number.into())
+    }
 }
 
 impl PermanentStorage for RocksPermanentStorage {
