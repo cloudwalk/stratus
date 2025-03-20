@@ -756,3 +756,32 @@ stratus-test-coverage *args="":
     for group in unit inmemory rocksdb leader-follower admin-password rpc-downloader importer-offline; do
         just stratus-test-coverage-group $group {{args}}
     done
+
+# E2E: Starts and execute Genesis tests in Stratus
+e2e-genesis:
+    #!/bin/bash
+    just build
+
+    mkdir -p e2e_logs
+    
+    # Create config directory in e2e if it doesn't exist
+    mkdir -p e2e/config
+    
+    # Copy genesis file to e2e/config directory
+    cp config/genesis.local.json e2e/config/
+
+    just _log "Starting Stratus with genesis.local.json"
+    RUST_BACKTRACE=1 RUST_LOG=debug just run -a 0.0.0.0:3000 --genesis-path config/genesis.local.json > e2e_logs/stratus-genesis.log &
+
+    just _wait_for_stratus
+
+    just _log "Running Genesis tests"
+    cd e2e && npx hardhat test test/genesis/genesis.test.ts --network stratus
+    result_code=$?
+    
+    # Clean up
+    rm -f e2e/config/genesis.local.json
+
+    just _log "Killing Stratus"
+    killport 3000 -s sigterm
+    exit $result_code
