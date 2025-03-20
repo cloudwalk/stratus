@@ -25,7 +25,6 @@ use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::ext::OptionExt;
 use crate::if_else;
-use crate::log_and_err;
 
 /// EVM input data. Usually derived from a transaction or call.
 #[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, fake::Dummy, PartialEq)]
@@ -105,13 +104,9 @@ impl EvmInput {
         }
     }
 
-    /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas`.
-    ///
-    /// # Errors:
-    ///
-    /// If `point_in_time` is `MinedPast` it's required that `mined_block` is `Some`, otherwise, this function returns an error.
-    pub fn from_eth_call(input: CallInput, point_in_time: PointInTime, pending_header: PendingBlockHeader, mined_block: Option<Block>) -> anyhow::Result<Self> {
-        Ok(Self {
+    /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas` for a pending block.
+    pub fn from_pending_block(input: CallInput, pending_header: PendingBlockHeader) -> Self {
+        Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
             value: input.value,
@@ -119,20 +114,28 @@ impl EvmInput {
             gas_limit: Gas::MAX,
             gas_price: Wei::ZERO,
             nonce: None,
-            block_number: match point_in_time {
-                PointInTime::Mined | PointInTime::Pending => pending_header.number,
-                PointInTime::MinedPast(number) => number,
-            },
-            block_timestamp: match point_in_time {
-                PointInTime::Mined | PointInTime::Pending => *pending_header.timestamp,
-                PointInTime::MinedPast(_) => match mined_block {
-                    Some(block) => block.header.timestamp,
-                    None => return log_and_err!("failed to create EvmInput: couldn't determine mined block timestamp"),
-                },
-            },
-            point_in_time,
+            block_number: pending_header.number,
+            block_timestamp: *pending_header.timestamp,
+            point_in_time: PointInTime::Pending,
             chain_id: None,
-        })
+        }
+    }
+
+    /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas` for a mined block.
+    pub fn from_mined_block(input: CallInput, block: Block) -> Self {
+        Self {
+            from: input.from.unwrap_or(Address::ZERO),
+            to: input.to.map_into(),
+            value: input.value,
+            data: input.data,
+            gas_limit: Gas::MAX,
+            gas_price: Wei::ZERO,
+            nonce: None,
+            block_number: block.number(),
+            block_timestamp: block.header.timestamp,
+            point_in_time: PointInTime::MinedPast(block.number()),
+            chain_id: None,
+        }
     }
 
     /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
