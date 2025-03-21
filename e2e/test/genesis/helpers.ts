@@ -41,11 +41,11 @@ export function loadGenesisFile(path: string = "../config/genesis.local.json") {
 export function getGenesisAccountBalances(path: string = "../config/genesis.local.json"): Map<string, string> {
     const genesis = loadGenesisFile(path);
     const accountBalances = new Map<string, string>();
-    
+
     for (const [address, details] of Object.entries(genesis.alloc)) {
         accountBalances.set(address, (details as any).balance);
     }
-    
+
     return accountBalances;
 }
 
@@ -57,27 +57,27 @@ export function getGenesisAccountBalances(path: string = "../config/genesis.loca
 export function getGenesisAccounts(path: string = "../config/genesis.local.json"): Map<string, GenesisAccount> {
     const genesis = loadGenesisFile(path);
     const accounts = new Map<string, GenesisAccount>();
-    
+
     for (const [address, details] of Object.entries(genesis.alloc)) {
-        const account: GenesisAccount = { 
-            balance: (details as any).balance 
+        const account: GenesisAccount = {
+            balance: (details as any).balance,
         };
-        
+
         if ((details as any).code) {
             account.code = (details as any).code;
         }
-        
+
         if ((details as any).nonce) {
             account.nonce = (details as any).nonce;
         }
-        
+
         if ((details as any).storage) {
             account.storage = (details as any).storage;
         }
-        
+
         accounts.set(address, account);
     }
-    
+
     return accounts;
 }
 
@@ -86,7 +86,9 @@ export function getGenesisAccounts(path: string = "../config/genesis.local.json"
  * @param path Path to the genesis file
  * @returns Array of [address, balance] tuples
  */
-export function getGenesisAccountTuples(path: string = "../config/genesis.local.json"): Array<[string, ethers.BigNumberish]> {
+export function getGenesisAccountTuples(
+    path: string = "../config/genesis.local.json",
+): Array<[string, ethers.BigNumberish]> {
     const genesis = loadGenesisFile(path);
 
     return Object.entries(genesis.alloc).map(([address, account]: [string, any]) => {

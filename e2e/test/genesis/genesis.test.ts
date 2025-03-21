@@ -1,23 +1,22 @@
 import { expect } from "chai";
 import { existsSync, readFileSync } from "fs";
 import { ethers } from "hardhat";
-import { getGenesisAccounts, GenesisAccount } from "./helpers";
 import { join } from "path";
+
+import { GenesisAccount, getGenesisAccounts } from "./helpers";
 
 describe("Genesis configuration", () => {
     // Dynamically load accounts and balances from genesis file
     const genesisFilePath = process.env.GENESIS_PATH || "../config/genesis.local.json";
-    const fullGenesisPath = genesisFilePath.startsWith("/") 
-        ? genesisFilePath 
-        : join(process.cwd(), genesisFilePath);
-    
+    const fullGenesisPath = genesisFilePath.startsWith("/") ? genesisFilePath : join(process.cwd(), genesisFilePath);
+
     // Load genesis config directly
     let genesisContent: any;
     let genesisAccounts: string[] = [];
-    
+
     // Map for storing account data
     let accountsData: Map<string, GenesisAccount> = new Map();
-    
+
     before(async function () {
         try {
             // Read and parse the genesis file
@@ -26,14 +25,14 @@ describe("Genesis configuration", () => {
                 this.skip();
                 return;
             }
-            
+
             const content = readFileSync(fullGenesisPath, "utf8");
             genesisContent = JSON.parse(content);
-            
+
             // Get accounts data using our helper
             accountsData = getGenesisAccounts(genesisFilePath);
             genesisAccounts = Array.from(accountsData.keys());
-            
+
             if (genesisAccounts.length === 0) {
                 console.error("No accounts found in genesis file");
                 this.skip();
@@ -97,29 +96,37 @@ describe("Genesis configuration", () => {
                         const genesisAccount = genesisContent.alloc[address];
 
                         // Verify all fields
-                        expect(genesisAccount.balance).to.equal(accountData.balance, 
-                            `Balance mismatch for account ${account}`);
-                            
+                        expect(genesisAccount.balance).to.equal(
+                            accountData.balance,
+                            `Balance mismatch for account ${account}`,
+                        );
+
                         // Check code if it exists
                         if (accountData.code) {
-                            expect(genesisAccount.code).to.equal(accountData.code, 
-                                `Code mismatch for account ${account}`);
+                            expect(genesisAccount.code).to.equal(
+                                accountData.code,
+                                `Code mismatch for account ${account}`,
+                            );
                         }
-                        
+
                         // Check nonce if it exists
                         if (accountData.nonce) {
-                            expect(genesisAccount.nonce).to.equal(accountData.nonce, 
-                                `Nonce mismatch for account ${account}`);
+                            expect(genesisAccount.nonce).to.equal(
+                                accountData.nonce,
+                                `Nonce mismatch for account ${account}`,
+                            );
                         }
-                        
+
                         // Check storage if it exists
                         if (accountData.storage) {
                             for (const [slot, value] of Object.entries(accountData.storage)) {
-                                expect(genesisAccount.storage![slot]).to.equal(value, 
-                                    `Storage mismatch for account ${account} at slot ${slot}`);
+                                expect(genesisAccount.storage![slot]).to.equal(
+                                    value,
+                                    `Storage mismatch for account ${account} at slot ${slot}`,
+                                );
                             }
                         }
-                        
+
                         break;
                     }
                 }
@@ -186,10 +193,10 @@ describe("Genesis configuration", () => {
             if (accountData?.nonce) {
                 // Get the current nonce from the blockchain
                 const nonce = await ethers.provider.getTransactionCount(account);
-                
+
                 // Convert the expected nonce from hex to decimal
                 const expectedNonce = parseInt(accountData.nonce, 16);
-                
+
                 console.log(`Account ${account} nonce: ${nonce}, expected: ${expectedNonce}`);
                 expect(nonce).to.equal(expectedNonce, `Nonce mismatch for account ${account}`);
             }
@@ -203,10 +210,10 @@ describe("Genesis configuration", () => {
             if (accountData?.code) {
                 // Get the code from the blockchain
                 const code = await ethers.provider.getCode(account);
-                
+
                 // The code in the genesis file includes 0x prefix
                 const expectedCode = accountData.code;
-                
+
                 // In some cases, the actual code might differ due to deployment optimization
                 // So we'll first check if the length matches
                 if (code === "0x") {
