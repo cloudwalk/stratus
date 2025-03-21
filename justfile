@@ -41,6 +41,11 @@ alias run-importer := stratus-follower
 
 # Stratus: Compile with debug options
 build binary="stratus" features="dev":
+    #!/bin/bash
+    echo "building binary. coverage_run = {{coverage_run}}"
+    if [[ {{coverage_run}} = "true" ]]; then
+        source <(cargo llvm-cov show-env --export-prefix)
+    fi
     cargo {{nightly_flag}} build {{release_flag}} --bin {{binary}} --features {{features}}
 
 # Stratus: Check, or compile without generating code
@@ -93,11 +98,14 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service as leader
 stratus *args="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
+    echo "Running Stratus. coverage_run = {{coverage_run}}"
+
     if [[ {{coverage_run}} = "true" ]]; then
-        source <(cargo llvm-cov show-env --export-prefix)
+        cargo llvm-cov run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
+    else
+        cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
     fi
-    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
 # To produce a flamegraph of the memory usage use jeprof:
@@ -142,9 +150,8 @@ test-int name="'*'":
 
 # Test: Execute coverage for a specific group
 stratus-test-coverage-group group="unit" *args="":
-    #!/bin/bash
+    #!/opt/homebrew/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
-
     cargo llvm-cov clean --workspace
 
     rm -rf temp_*
@@ -314,6 +321,7 @@ e2e-eof perm-storage="inmemory":
     # Run tests using alice pk
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "deploy()" --slow
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "run()" --slow
+    killport 3000 -s sigterm
 
 # E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat block-mode="automine" test="":
@@ -614,7 +622,7 @@ e2e-importer-offline:
     just importer-offline --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
 
     just _log "Stratus for importer-offline"
-    cargo run --release --bin stratus -- --leader -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002 > e2e_logs/e2e-importer-offline-stratus-3001.log &
+    just run --bin stratus -- --leader -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002 > e2e_logs/e2e-importer-offline-stratus-3001.log &
     just _wait_for_stratus 3001
 
     just _log "Compare blocks of stratus and importer-offline"
