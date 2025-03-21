@@ -41,7 +41,7 @@ jobs:
     name: E2E Automine Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "run-test e2e-stratus-rocks automine"
+      justfile_recipe: "run-test e2e-stratus automine \"\" rocks"
 
     concurrency:
       group: ${{ github.workflow }}-automine-rocks-${{ github.ref || github.run_id }}
@@ -61,7 +61,7 @@ jobs:
     name: E2E External Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "run-test e2e-stratus-rocks external"
+      justfile_recipe: "run-test e2e-stratus external \"\" rocks"
 
     concurrency:
       group: ${{ github.workflow }}-external-rocks-${{ github.ref || github.run_id }}
@@ -91,7 +91,7 @@ jobs:
     name: E2E Clock Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "run-test e2e-clock-stratus-rocks"
+      justfile_recipe: "run-test e2e-clock-stratus rocks"
 
     concurrency:
       group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
