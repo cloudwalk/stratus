@@ -118,6 +118,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         self.pending_block.read().block.header.clone()
     }
 
+    fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
+        self.pending_block.write().block.header.number = block_number;
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // Block and executions
     // -------------------------------------------------------------------------

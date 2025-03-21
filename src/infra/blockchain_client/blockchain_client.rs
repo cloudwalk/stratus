@@ -1,5 +1,7 @@
+use std::str::FromStr;
 use std::time::Duration;
 
+use alloy_primitives::hex;
 use anyhow::Context;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::client::Subscription;
@@ -222,6 +224,38 @@ impl BlockchainClient {
         match result {
             Ok(receipt) => Ok(receipt),
             Err(e) => log_and_err!(reason = e, "failed to fetch account balance"),
+        }
+    }
+
+    /// Returns the block number and the decoded replication log data if found.
+    pub async fn fetch_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockNumber, Vec<u8>)>> {
+        tracing::debug!(%block_number, "fetching replication log");
+
+        let number = to_json_value(block_number);
+        let result = self.http.request::<Option<serde_json::Value>, _>("stratus_getReplicationLog", [number]).await;
+
+        match result {
+            Ok(Some(json_value)) => {
+                let block_number_str = json_value["block_number"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("invalid block_number in response"))?;
+
+                let block_number = BlockNumber::from_str(block_number_str).map_err(|_| anyhow::anyhow!("invalid block_number format in response"))?;
+
+                let hex_string = json_value["replication_log"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("invalid replication_log in response"))?;
+
+                match hex::decode(hex_string) {
+                    Ok(decoded) => {
+                        tracing::debug!(block_number = %block_number, decoded_size = decoded.len(), "decoded replication log");
+                        Ok(Some((block_number, decoded)))
+                    }
+                    Err(e) => log_and_err!(reason = e, "failed to decode replication log hex"),
+                }
+            }
+            Ok(None) => Ok(None),
+            Err(e) => log_and_err!(reason = e, "failed to fetch replication log"),
         }
     }
 

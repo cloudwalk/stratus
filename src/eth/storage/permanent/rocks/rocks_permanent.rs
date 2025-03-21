@@ -4,6 +4,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
+use rocksdb::WriteBatch;
 
 use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
@@ -33,6 +34,7 @@ impl RocksPermanentStorage {
         shutdown_timeout: Duration,
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
+        use_rocksdb_replication: bool,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
@@ -54,7 +56,7 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write)?;
+        let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write, use_rocksdb_replication)?;
         let block_number = state.preload_block_number()?;
 
         Ok(Self { state, block_number })
@@ -122,6 +124,45 @@ impl PermanentStorage for RocksPermanentStorage {
         })
     }
 
+    fn read_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<WriteBatch>, StorageError> {
+        self.state
+            .read_replication_log(block_number)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to read replication log in RocksPermanent");
+            })
+    }
+
+    fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> anyhow::Result<(), StorageError> {
+        self.state
+            .apply_replication_log(block_number, replication_log)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to apply replication log in RocksPermanent");
+            })?;
+
+        self.set_mined_block_number(block_number)?;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
+        #[cfg(feature = "rocks_metrics")]
+        {
+            self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to export metrics in RocksPermanent");
+            })?;
+        }
+
+        self.state
+            .save_genesis_block(block, accounts)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to save genesis block in RocksPermanent");
+            })
+    }
+
     fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
@@ -150,6 +191,10 @@ impl PermanentStorage for RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to save accounts in RocksPermanent");
             })
+    }
+
+    fn rocksdb_replication_enabled(&self) -> bool {
+        self.state.use_rocksdb_replication
     }
 
     #[cfg(feature = "dev")]
