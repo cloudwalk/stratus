@@ -226,9 +226,6 @@ e2e-admin-password:
 # E2E: Execute EOF (EVM Object Format) tests
 e2e-eof perm-storage="inmemory":
     #!/bin/bash
-
-
-
     # Start Stratus
     just build
     just run -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}} > stratus.log &
