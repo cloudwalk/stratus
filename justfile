@@ -159,7 +159,7 @@ run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
     just {{recipe}} {{args}}
-    result_code=$1
+    result_code=$?
     echo "Killing stratus"
     killport 3000 -s sigterm
     killport 3001 -s sigterm
