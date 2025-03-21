@@ -221,6 +221,7 @@ e2e-admin-password:
         if [ $exit_code -ne 0 ]; then
             exit $exit_code
         fi
+        killport 3000 -s sigterm
     done
 
 # E2E: Execute EOF (EVM Object Format) tests
