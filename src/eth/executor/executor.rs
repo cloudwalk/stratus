@@ -23,7 +23,6 @@ use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::miner::Miner;
-use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
@@ -621,24 +620,23 @@ impl Executor {
             "executing read-only local transaction"
         );
 
-        // retrieve block info
-        let pending_header = self.storage.read_pending_block_header();
-        let mined_block = match point_in_time {
-            PointInTime::MinedPast(number) => {
-                let Some(block) = self.storage.read_block(BlockFilter::Number(number))? else {
-                    let filter = BlockFilter::Number(number);
-                    return Err(RpcError::BlockFilterInvalid { filter }.into());
-                };
-                Some(block)
+        // execute
+        let evm_input = match point_in_time {
+            PointInTime::Pending => {
+                let pending_header = self.storage.read_pending_block_header();
+                EvmInput::from_pending_block(call_input.clone(), pending_header)
             }
-            _ => None,
+            point_in_time => {
+                let Some(block) = self.storage.read_block(point_in_time.into())? else {
+                    return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
+                };
+                EvmInput::from_mined_block(call_input.clone(), block)
+            }
         };
 
-        // execute
-        let evm_input = EvmInput::from_eth_call(call_input.clone(), point_in_time, pending_header, mined_block)?;
         let evm_route = match point_in_time {
-            PointInTime::Mined | PointInTime::Pending => EvmRoute::CallPresent,
-            PointInTime::MinedPast(_) => EvmRoute::CallPast,
+            PointInTime::Pending => EvmRoute::CallPresent,
+            PointInTime::Mined | PointInTime::MinedPast(_) => EvmRoute::CallPast,
         };
         let evm_result = self.evms.execute(evm_input, evm_route);
 
