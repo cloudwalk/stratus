@@ -118,7 +118,7 @@ stratus-follower *args="":
 stratus-follower-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
-    cargo build --bin stratus  --features dev
+    cargo build --bin stratus --features dev
     LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus {{release_flag}} --features dev -- --follower {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
@@ -317,7 +317,7 @@ e2e-follower test="brlc":
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
         RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --perm-storage=rocks --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info stratus-follower-test --perm-storage=rocks --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --perm-storage=rocks --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
     fi
 
 
