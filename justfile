@@ -118,8 +118,8 @@ stratus-follower *args="":
 stratus-follower-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
-    cargo build --bin stratus --features dev
-    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus {{release_flag}} --features dev -- --follower {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
+    cargo build --features dev
+    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features dev -- --follower {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
 # Bin: Download external RPC blocks and receipts to temporary storage
@@ -129,7 +129,7 @@ rpc-downloader *args="":
 rpc-downloader-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
-    cargo build --bin rpc-downloader
+    cargo build
     cargo run --bin rpc-downloader -- {{args}}
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 importer-offline *args="":
@@ -138,7 +138,7 @@ importer-offline *args="":
 importer-offline-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
-    cargo build --bin importer-offline
+    cargo build
     cargo run --bin importer-offline -- {{args}}
 
 # ------------------------------------------------------------------------------
