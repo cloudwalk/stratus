@@ -67,3 +67,11 @@ jobs:
 
       - name: Rust tests
         run: just test
+
+      - name: Upload coverage report to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          directory: target/llvm-cov/codecov/
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: rust-tests-${{ matrix.group }}
+          name: rust-tests-${{ matrix.group }}

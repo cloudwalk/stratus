@@ -92,13 +92,6 @@ jobs:
           RELEASE: 1
           RUST_BACKTRACE: 1
 
-      - name: Upload coverage report artifact
-        uses: actions/upload-artifact@v4
-        with:
-            name: coverage-contracts-rocks-${{ matrix.group }}
-            path: target/llvm-cov/codecov/
-            retention-days: 90
-
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
         with:
