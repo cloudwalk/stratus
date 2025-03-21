@@ -93,7 +93,7 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service as leader
 stratus *args="":
-    #!/bin/bash
+    #!/opt/homebrew/bin/bash
     if [[ {{coverage_run}} = "true" ]]; then
         source <(cargo llvm-cov show-env --export-prefix)
     fi
@@ -302,7 +302,6 @@ e2e-admin-password:
 # E2E: Execute EOF (EVM Object Format) tests
 e2e-eof perm-storage="inmemory":
     #!/bin/bash
-    cd e2e/eof
 
     forge install
 
@@ -311,6 +310,7 @@ e2e-eof perm-storage="inmemory":
     just run -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}} > stratus.log &
     just _wait_for_stratus
 
+    cd e2e/eof
     # Run tests using alice pk
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "deploy()" --slow
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "run()" --slow
