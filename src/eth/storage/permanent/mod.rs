@@ -71,6 +71,7 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn rocksdb_replication_enabled(&self) -> bool;
 
     #[cfg(feature = "dev")]
+    /// Persists the genesis block and accounts.
     fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError>;
 
     // -------------------------------------------------------------------------
