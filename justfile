@@ -227,7 +227,7 @@ e2e-admin-password:
 e2e-eof perm-storage="inmemory":
     #!/bin/bash
 
-    forge install
+
 
     # Start Stratus
     just build
@@ -235,6 +235,7 @@ e2e-eof perm-storage="inmemory":
     just _wait_for_stratus
 
     cd e2e/eof
+    forge install
     # Run tests using alice pk
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "deploy()" --slow
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "run()" --slow
