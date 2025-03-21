@@ -12,6 +12,7 @@ use display_json::DebugAsJson;
 use super::PermanentStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
@@ -28,6 +29,8 @@ pub trait TemporaryStorage: Send + Sync + 'static {
 
     // Retrieves the block number being mined.
     fn read_pending_block_header(&self) -> PendingBlockHeader;
+
+    fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError>;
 
     // -------------------------------------------------------------------------
     // Block and executions

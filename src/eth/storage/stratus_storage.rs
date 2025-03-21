@@ -91,9 +91,11 @@ impl StratusStorage {
 
         let number = self.read_pending_block_header().number;
 
+        // TODO: improve
         if number == BlockNumber::ONE {
             tracing::info!("starting importer from genesis block");
             self.set_mined_block_number(BlockNumber::ZERO)?;
+            self.temp.set_pending_block_header(BlockNumber::ZERO)?;
             return Ok(BlockNumber::ZERO);
         }
 
@@ -152,6 +154,15 @@ impl StratusStorage {
     pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> Result<(), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::apply_replication_log", %block_number).entered();
+
+        let pending_header = self.read_pending_block_header();
+        let mined_block_number = self.read_mined_block_number()?;
+        tracing::info!(
+            pending_block_number = %pending_header.number,
+            mined_block_number = %mined_block_number,
+            incoming_block_number = %block_number,
+            "DEBUG - Block numbers in apply_replication_log"
+        );
 
         tracing::debug!(storage = %label::TEMP, "finishing pending block");
         self.finish_pending_block()?;
