@@ -15,10 +15,9 @@ compile_contract() {
     contract=$2
     version=$3
 
-
     log "Compiling: $contract ($repo)"
 
-    asdf set solidity $3
+    asdf set solidity $version
     # compile
     solc --base-path repos/"$repo"/contracts --include-path repos/"$repo"/node_modules --hashes --optimize -o repos/"$repo"/target --overwrite repos/"$repo"/contracts/"$contract".sol
 
@@ -30,7 +29,6 @@ compile_contract() {
 # Execution
 # ------------------------------------------------------------------------------
 
-
 # execute
 compile_contract brlc-token BRLCToken 0.8.24
 
@@ -39,8 +37,8 @@ compile_contract brlc-cashier Cashier 0.8.24
 compile_contract brlc-cashier CashierShard 0.8.24
 
 # Periphery Transition: compile both Periphery and PeripheryShard regardless if the repository was renamed or not
-compile_contract brlc-card-payment-processor CashbackDistributor  0.8.24
-compile_contract brlc-card-payment-processor CardPaymentProcessor  0.8.24
+compile_contract brlc-card-payment-processor CashbackDistributor 0.8.24
+compile_contract brlc-card-payment-processor CardPaymentProcessor 0.8.24
 
 compile_contract compound-periphery CompoundAgent 0.8.16
 
