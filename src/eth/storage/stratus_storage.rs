@@ -88,7 +88,16 @@ impl StratusStorage {
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
-        Ok(self.read_pending_block_header().number)
+
+        let number = self.read_pending_block_header().number;
+
+        if number == BlockNumber::ONE {
+            tracing::info!("starting importer from genesis block");
+            self.set_mined_block_number(BlockNumber::ZERO)?;
+            return Ok(BlockNumber::ZERO);
+        }
+
+        Ok(number)
     }
 
     pub fn read_pending_block_header(&self) -> PendingBlockHeader {
