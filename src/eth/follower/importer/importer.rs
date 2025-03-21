@@ -143,6 +143,7 @@ impl Importer {
         if BlockNumber::ONE == number {
             tracing::info!("starting importer from genesis block");
             number = BlockNumber::ZERO;
+            storage.set_mined_block_number(number)?;
         }
 
         match self.importer_mode {
