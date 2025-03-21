@@ -31,7 +31,7 @@ jobs:
     name: E2E Automine Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "e2e-stratus automine"
+      justfile_recipe: "run-test e2e-stratus automine"
 
     concurrency:
       group: ${{ github.workflow }}-automine-inmemory-${{ github.ref || github.run_id }}
@@ -41,7 +41,7 @@ jobs:
     name: E2E Automine Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "e2e-stratus-rocks automine"
+      justfile_recipe: "run-test e2e-stratus-rocks automine"
 
     concurrency:
       group: ${{ github.workflow }}-automine-rocks-${{ github.ref || github.run_id }}
@@ -51,7 +51,7 @@ jobs:
     name: E2E External Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "e2e-stratus external"
+      justfile_recipe: "run-test e2e-stratus external"
 
     concurrency:
       group: ${{ github.workflow }}-external-inmemory-${{ github.ref || github.run_id }}
@@ -61,7 +61,7 @@ jobs:
     name: E2E External Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "e2e-stratus-rocks external"
+      justfile_recipe: "run-test e2e-stratus-rocks external"
 
     concurrency:
       group: ${{ github.workflow }}-external-rocks-${{ github.ref || github.run_id }}
@@ -71,7 +71,7 @@ jobs:
     name: E2E Interval Stratus
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "e2e-stratus 10ms"
+      justfile_recipe: "run-test e2e-stratus 10ms"
 
     concurrency:
       group: ${{ github.workflow }}-interval-${{ github.ref || github.run_id }}
@@ -81,7 +81,7 @@ jobs:
     name: E2E Clock Stratus in-memory
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "e2e-clock-stratus"
+      justfile_recipe: "run-test e2e-clock-stratus"
 
     concurrency:
       group: ${{ github.workflow }}-clock-inmemory-${{ github.ref || github.run_id }}
@@ -91,7 +91,7 @@ jobs:
     name: E2E Clock Stratus Rocks
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "e2e-clock-stratus-rocks"
+      justfile_recipe: "run-test e2e-clock-stratus-rocks"
 
     concurrency:
       group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
@@ -101,7 +101,7 @@ jobs:
     name: E2E Admin Password
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "e2e-admin-password"
+      justfile_recipe: "run-test e2e-admin-password"
 
     concurrency:
       group: ${{ github.workflow }}-admin-password-${{ github.ref || github.run_id }}
@@ -111,18 +111,18 @@ jobs:
     name: E2E RPC Downloader
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "e2e-rpc-downloader"
+      justfile_recipe: "run-test e2e-rpc-downloader"
 
     concurrency:
       group: ${{ github.workflow }}-rpc-downloader-${{ github.ref || github.run_id }}
       cancel-in-progress: true
-  
+
   e2e-importer-offline:
     name: E2E Importer Offline
     uses: ./.github/workflows/_setup-e2e.yml
     with:
-      justfile_recipe: "e2e-importer-offline"
-    
+      justfile_recipe: "run-test e2e-importer-offline"
+
     concurrency:
       group: ${{ github.workflow }}-importer-offline-${{ github.ref || github.run_id }}
       cancel-in-progress: true

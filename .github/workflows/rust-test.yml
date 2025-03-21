@@ -1,4 +1,4 @@
-name: Unit Tests
+name: Rust tests
 
 on:
   pull_request:
@@ -27,7 +27,7 @@ on:
 
 jobs:
   unit_tests:
-    name: Unit Tests
+    name: Rust Tests
     runs-on: ubuntu-22.04
     timeout-minutes: 25
 
@@ -61,5 +61,5 @@ jobs:
       - name: Set up Just
         uses: extractions/setup-just@v2
 
-      - name: Unit tests
-        run: just test-unit
+      - name: Rust tests
+        run: just test

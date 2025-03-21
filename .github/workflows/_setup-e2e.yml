@@ -53,7 +53,7 @@ jobs:
 
       - name: Install docker-compose
         run: sudo apt-get install docker-compose -y
-        
+
       - name: Install jq
         run: sudo apt-get install jq -y
 
@@ -73,3 +73,18 @@ jobs:
           RUST_LOG: error
           RELEASE: 1
           RUST_BACKTRACE: 1
+
+      - name: Upload coverage report artifact
+        uses: actions/upload-artifact@v4
+        with:
+            name: e2e-${{ inputs.justfile_recipe }}
+            path: target/llvm-cov/codecov/
+            retention-days: 90
+
+      - name: Upload coverage report to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          directory: target/llvm-cov/codecov/
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: ${{ inputs.justfile_recipe }}
+          name: ${{ inputs.justfile_recipe }}

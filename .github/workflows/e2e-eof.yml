@@ -75,9 +75,24 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Run e2e tests
-        run: just e2e-eof ${{ matrix.test }}
+        run: just run-test e2e-eof ${{ matrix.test }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error
           RELEASE: 1
           RUST_BACKTRACE: 1
+
+      - name: Upload coverage report artifact
+        uses: actions/upload-artifact@v4
+        with:
+            name: coverage-eof-${{ matrix.group }}
+            path: target/llvm-cov/codecov/
+            retention-days: 90
+
+      - name: Upload coverage report to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          directory: target/llvm-cov/codecov/
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: eof-${{ matrix.group }}
+          name: eof-${{ matrix.group }}
