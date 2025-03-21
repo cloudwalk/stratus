@@ -140,9 +140,9 @@ impl Importer {
         let storage = &self.storage;
         let mut number = storage.read_block_number_to_resume_import()?;
 
-        if number.as_u64() == 1 {
+        if BlockNumber::ONE == number {
             tracing::info!("starting importer from genesis block");
-            number = BlockNumber::from(0);
+            number = BlockNumber::ZERO;
         }
 
         match self.importer_mode {
