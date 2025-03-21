@@ -181,7 +181,11 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
     #[cfg(feature = "dev")]
     fn save_genesis_block(&self, _block: Block, _accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
-        // In-memory storage doesn't save genesis block
+        // genesis block
+        self.save_block(Block::genesis())?;
+
+        // test accounts
+        self.save_accounts(test_accounts())?;
         Ok(())
     }
 
