@@ -9,6 +9,8 @@ export CARGO_COMMAND := env("CARGO_COMMAND", "")
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
+coverage_run := env("coverage_run", "false")
+
 
 # Project: Show available tasks
 default:
@@ -91,6 +93,10 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service as leader
 stratus *args="":
+    #!/opt/homebrew/bin/bash
+    if [[ {{coverage_run}} = "true" ]]; then
+        source <(cargo llvm-cov show-env --export-prefix)
+    fi
     cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
@@ -139,16 +145,16 @@ stratus-test-coverage-group group="unit" *args="":
     #!/bin/bash
 
     cargo llvm-cov clean --workspace
-    
+
     rm -rf temp_*
     rm -rf data/rocksdb
     rm -rf data/importer-offline-database-rocksdb
     rm -rf e2e_logs
-    
+
     source <(cargo llvm-cov show-env --export-prefix)
     export RUST_LOG=error
     export TRACING_LOG_FORMAT=json
-    
+
     case "{{group}}" in
         "unit")
             cargo llvm-cov --no-report
@@ -156,21 +162,21 @@ stratus-test-coverage-group group="unit" *args="":
         "inmemory")
             just contracts-clone
             just contracts-flatten
-            
+
             for test in "automine" "external"; do
                 just _coverage-run-stratus-recipe e2e-stratus $test
                 rm -rf e2e_logs
                 rm -rf temp_*
             done
-            
+
             just _coverage-run-stratus-recipe e2e-clock-stratus
             rm -rf e2e_logs
             rm -rf temp_*
-            
+
             just _coverage-run-stratus-recipe contracts-test-stratus
             rm -rf e2e_logs
             rm -rf temp_*
-            
+
             just _coverage-run-stratus-recipe e2e-eof
             rm -rf e2e_logs
             rm -rf temp_*
@@ -178,37 +184,35 @@ stratus-test-coverage-group group="unit" *args="":
         "rocksdb")
             just contracts-clone
             just contracts-flatten
-            
+
             for test in "automine" "external"; do
                 rm -rf data/rocksdb
                 just _coverage-run-stratus-recipe e2e-stratus-rocks $test
                 rm -rf e2e_logs
                 rm -rf temp_*
-                rm -rf data/rocksdb
             done
-            
+
             rm -rf data/rocksdb
             just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
             rm -rf e2e_logs
             rm -rf temp_*
-            rm -rf data/rocksdb
-            
+
             rm -rf data/rocksdb
             just _coverage-run-stratus-recipe contracts-test-stratus-rocks
             rm -rf e2e_logs
             rm -rf temp_*
-            rm -rf data/rocksdb
 
             rm -rf data/rocksdb
             just _coverage-run-stratus-recipe e2e-eof rocks
             rm -rf e2e_logs
             rm -rf temp_*
+
             rm -rf data/rocksdb
             ;;
         "leader-follower")
             just contracts-clone
             just contracts-flatten
-            
+
             for test in kafka deploy brlc change miner importer health; do
                 just _e2e-leader-follower-up-coverage $test
                 rm -rf e2e_logs
@@ -237,10 +241,10 @@ stratus-test-coverage-group group="unit" *args="":
             exit 1
             ;;
     esac
-    
+
     # Ensure the output directory exists
     mkdir -p target/llvm-cov/codecov
-    
+    cargo llvm-cov report --html
     # Generate the report with the specified arguments
     # If --output-path is provided in args, use it, otherwise use the default path
     if [[ "{{args}}" == *"--output-path"* ]]; then
@@ -281,7 +285,7 @@ e2e-admin-password:
 
     mkdir -p e2e_logs
     cd e2e
-    
+
     npm install
 
     for test in "enabled|test123" "disabled|"; do
@@ -289,9 +293,9 @@ e2e-admin-password:
         just _log "Running admin password tests with password $type"
         ADMIN_PASSWORD=$pass just run -a 0.0.0.0:3000 > /dev/null &
         just _wait_for_stratus
-        
+
         npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
-        
+
         killport 3000 -s sigterm
     done
 
@@ -569,14 +573,14 @@ e2e-rpc-downloader:
 
     just _log "Running TestContractBalances tests"
     just e2e stratus automine
-    
+
     just _log "Running RPC Downloader test"
     just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
 
     just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
 
     just _log "Checking content of postgres"
-    pip install -r utils/check_rpc_downloader/requirements.txt
+    pip install -r utils/check_rpc_downloader/requirements.txt --break-system-packages
     POSTGRES_DB=stratus POSTGRES_PASSWORD=123 ETH_RPC_URL=http://localhost:3000/ python utils/check_rpc_downloader/main.py --start 0
 
     just _log "Killing Stratus"
@@ -602,7 +606,7 @@ e2e-importer-offline:
 
     just _log "Starting PostgreSQL"
     docker-compose up -d postgres
-    
+
     just _log "Running rpc downloader"
     just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001 --initial-accounts 0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
 
@@ -614,15 +618,15 @@ e2e-importer-offline:
     just _wait_for_stratus 3001
 
     just _log "Compare blocks of stratus and importer-offline"
-    pip install -r utils/compare_block/requirements.txt
+    pip install -r utils/compare_block/requirements.txt --break-system-packages
     python utils/compare_block/main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp
-    
+
     just _log "Killing Stratus"
     killport 3000 -s sigterm
 
     just _log "Killing importer-offline"
     killport 3001 -s sigterm
-    
+
     just _log "Killing PostgreSQL"
     docker-compose down postgres
 
@@ -739,14 +743,14 @@ _coverage-run-stratus-recipe *recipe="":
     #!/bin/bash
     # Create logs directory if it doesn't exist
     mkdir -p e2e_logs
-    
+
     # Run the recipe and capture the exit code
     just {{recipe}}
     result=$?
-    
+
     # Wait for processes to finish
     sleep 10
-    
+
     # Return the original exit code
     exit $result
 

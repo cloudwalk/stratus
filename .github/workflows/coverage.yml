@@ -79,7 +79,7 @@ jobs:
       - name: Generate coverage for ${{ matrix.group }}
         run: |
           mkdir -p target/llvm-cov/codecov
-          just stratus-test-coverage-group ${{ matrix.group }} "--codecov --output-path target/llvm-cov/codecov/${{ matrix.group }}.json"
+          COVERAGE_RUN=true just stratus-test-coverage-group ${{ matrix.group }} "--codecov --output-path target/llvm-cov/codecov/${{ matrix.group }}.json"
           echo "Listing coverage directory contents:"
           ls -la target/llvm-cov/codecov/
 
