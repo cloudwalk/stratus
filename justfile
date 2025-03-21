@@ -99,7 +99,6 @@ stratus *args="":
 stratus-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
-    cargo llvm-cov clean --workspace
     cargo build --features dev
     cargo run --bin stratus --features dev -- --leader {{args}} > stratus.log &
     just _wait_for_stratus
