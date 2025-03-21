@@ -66,6 +66,10 @@ jobs:
           cargo install killport || true
           cargo install wait-service || true
 
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.6.14
+
       - name: Run e2e tests
         run: ${{ inputs.justfile_env }} just ${{ inputs.justfile_recipe }}
         env:
