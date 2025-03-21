@@ -138,7 +138,7 @@ impl Importer {
         let _timer = DropTimer::start("importer-online::run_importer_online");
 
         let storage = &self.storage;
-        let number = storage.read_block_number_to_resume_import()?;
+        let number: BlockNumber = storage.read_block_number_to_resume_import()?;
 
         match self.importer_mode {
             ImporterMode::RocksDbReplication => {
