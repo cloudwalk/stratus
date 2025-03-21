@@ -30,6 +30,7 @@ pub trait TemporaryStorage: Send + Sync + 'static {
     // Retrieves the block number being mined.
     fn read_pending_block_header(&self) -> PendingBlockHeader;
 
+    // Sets the block number being mined.
     fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError>;
 
     // -------------------------------------------------------------------------
