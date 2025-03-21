@@ -126,3 +126,13 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-importer-offline-${{ github.ref || github.run_id }}
       cancel-in-progress: true
+
+  e2e-genesis:
+    name: E2E Genesis
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-genesis"
+    
+    concurrency:
+      group: ${{ github.workflow }}-genesis-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
