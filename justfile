@@ -150,7 +150,7 @@ test-int name="'*'":
 
 # Test: Execute coverage for a specific group
 stratus-test-coverage-group group="unit" *args="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo llvm-cov clean --workspace
 
