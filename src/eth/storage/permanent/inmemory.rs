@@ -175,12 +175,13 @@ impl PermanentStorage for InMemoryPermanentStorage {
     }
 
     fn rocksdb_replication_enabled(&self) -> bool {
+        // In-memory storage doesn't support RocksDB replication
         false
     }
 
     #[cfg(feature = "dev")]
-    fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
-        // ignore for now
+    fn save_genesis_block(&self, _block: Block, _accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
+        // In-memory storage doesn't save genesis block
         Ok(())
     }
 
