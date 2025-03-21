@@ -178,6 +178,12 @@ impl PermanentStorage for InMemoryPermanentStorage {
         false
     }
 
+    #[cfg(feature = "dev")]
+    fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
+        // ignore for now
+        Ok(())
+    }
+
     fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write();
 

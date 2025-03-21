@@ -442,6 +442,61 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
+    // TODO: improve, refactor
+    #[cfg(feature = "dev")]
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> Result<()> {
+        let mut batch = WriteBatch::default();
+
+        let account_changes = block.compact_account_changes();
+        let mut txs_batch = vec![];
+        for transaction in block.transactions.iter().cloned() {
+            txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
+        }
+        self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
+
+        let number = block.number();
+        let block_hash = block.hash();
+
+        let block_without_changes = {
+            let mut block_mut = block;
+            block_mut.transactions.iter_mut().for_each(|transaction| {
+                transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
+            });
+            block_mut
+        };
+
+        let block_by_number = (number.into(), block_without_changes.into());
+        self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
+
+        let block_by_hash = (block_hash.into(), number.into());
+        self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
+
+        self.prepare_batch_with_execution_changes(account_changes, number, &mut batch)?;
+
+        self.accounts.prepare_batch_insertion(
+            accounts.iter().cloned().map(|acc| {
+                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
+                (tup.0, tup.1.into())
+            }),
+            &mut batch,
+        )?;
+
+        self.accounts_history.prepare_batch_insertion(
+            accounts.iter().cloned().map(|acc| {
+                let tup = <(AddressRocksdb, AccountRocksdb)>::from(acc);
+                ((tup.0, 0u32.into()), tup.1.into())
+            }),
+            &mut batch,
+        )?;
+
+        let batch_clone = WriteBatch::from_data(batch.data());
+        let batch_rocksdb: WriteBatchRocksdb = batch_clone.into();
+        self.replication_logs
+            .prepare_batch_insertion([(number.into(), batch_rocksdb.into())], &mut batch)?;
+
+        self.write_in_batch_for_multiple_cfs(batch)
+    }
+
     pub fn save_block(&self, block: Block) -> Result<()> {
         let mut batch = WriteBatch::default();
         self.prepare_block_insertion(block, &mut batch)?;

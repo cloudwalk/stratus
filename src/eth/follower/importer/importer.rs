@@ -138,7 +138,13 @@ impl Importer {
         let _timer = DropTimer::start("importer-online::run_importer_online");
 
         let storage = &self.storage;
-        let number = storage.read_block_number_to_resume_import()?;
+        let mut number = storage.read_block_number_to_resume_import()?; // TODO: improve
+        
+        #[cfg(feature = "dev")] // TODO: improve
+        if number.as_u64() == 1 {
+            tracing::info!("starting importer from genesis block");
+            number = BlockNumber::from(0);
+        }
 
         match self.importer_mode {
             ImporterMode::RocksDbReplication => {
@@ -533,59 +539,57 @@ impl Importer {
             let start = metrics::now();
 
             if let Ok(current_block_number) = storage.read_mined_block_number() {
-                if current_block_number > BlockNumber::ZERO {
-                    match storage.read_block(BlockFilter::Number(current_block_number)) {
-                        Ok(Some(current_block)) => {
-                            // send Kafka events if enabled
-                            if let Some(ref kafka_conn) = kafka_connector {
-                                let events = current_block
-                                    .transactions
-                                    .iter()
-                                    .flat_map(|tx| transaction_to_events(current_block.header.timestamp, Cow::Borrowed(tx)));
+                match storage.read_block(BlockFilter::Number(current_block_number)) {
+                    Ok(Some(current_block)) => {
+                        // send Kafka events if enabled
+                        if let Some(ref kafka_conn) = kafka_connector {
+                            let events = current_block
+                                .transactions
+                                .iter()
+                                .flat_map(|tx| transaction_to_events(current_block.header.timestamp, Cow::Borrowed(tx)));
 
-                                if let Err(e) = kafka_conn.send_buffered(events, 50).await {
-                                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events");
-                                    return log_and_err!(reason = e, message);
-                                }
+                            if let Err(e) = kafka_conn.send_buffered(events, 50).await {
+                                let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events");
+                                return log_and_err!(reason = e, message);
                             }
+                        }
 
-                            // Handle notifications
-                            let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
-                            let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
-                            let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
+                        // Handle notifications
+                        let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
+                        let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
+                        let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
 
-                            if has_block_subscribers {
-                                let _ = miner.notifier_blocks.send(current_block.header.clone());
+                        if has_block_subscribers {
+                            let _ = miner.notifier_blocks.send(current_block.header.clone());
+                        }
+
+                        if has_pending_tx_subscribers && !current_block.transactions.is_empty() {
+                            for tx in &current_block.transactions {
+                                let _ = miner.notifier_pending_txs.send(tx.input.hash);
                             }
+                        }
 
-                            if has_pending_tx_subscribers && !current_block.transactions.is_empty() {
-                                for tx in &current_block.transactions {
-                                    let _ = miner.notifier_pending_txs.send(tx.input.hash);
-                                }
-                            }
-
-                            if has_log_subscribers {
-                                for tx in &current_block.transactions {
-                                    for log in &tx.logs {
-                                        let _ = miner.notifier_logs.send(log.clone());
-                                    }
+                        if has_log_subscribers {
+                            for tx in &current_block.transactions {
+                                for log in &tx.logs {
+                                    let _ = miner.notifier_logs.send(log.clone());
                                 }
                             }
                         }
-                        Ok(None) => {
-                            tracing::info!(
-                                %current_block_number,
-                                external_rpc_current_block = %EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed),
-                                "no block found for current block number"
-                            );
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                %current_block_number,
-                                error = ?e,
-                                "failed to read current block"
-                            );
-                        }
+                    }
+                    Ok(None) => {
+                        tracing::info!(
+                            %current_block_number,
+                            external_rpc_current_block = %EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed),
+                            "no block found for current block number"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            %current_block_number,
+                            error = ?e,
+                            "failed to read current block"
+                        );
                     }
                 }
             }

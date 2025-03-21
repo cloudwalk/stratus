@@ -26,6 +26,10 @@ use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
+#[cfg(feature = "dev")]
+use crate::GlobalState;
+#[cfg(feature = "dev")]
+use crate::NodeMode;
 
 mod label {
     pub(super) const TEMP: &str = "temporary";
@@ -50,9 +54,11 @@ impl StratusStorage {
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            let genesis = this.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
-            if genesis.is_none() {
-                this.reset_to_genesis()?;
+            if GlobalState::get_node_mode() != NodeMode::Follower {
+                let genesis = this.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
+                if genesis.is_none() {
+                    this.reset_to_genesis()?;
+                }
             }
         }
 
@@ -517,11 +523,7 @@ impl StratusStorage {
             }
         })?;
 
-        // genesis block
-        self.save_block(Block::genesis())?;
-
-        // test accounts
-        self.save_accounts(test_accounts())?;
+        self.perm.save_genesis_block(Block::genesis(), test_accounts())?;
 
         // block number
         self.set_mined_block_number(BlockNumber::ZERO)?;

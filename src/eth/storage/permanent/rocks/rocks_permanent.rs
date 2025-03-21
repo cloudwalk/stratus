@@ -146,6 +146,23 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(())
     }
 
+    #[cfg(feature = "dev")]
+    fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
+        #[cfg(feature = "rocks_metrics")]
+        {
+            self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to export metrics in RocksPermanent");
+            })?;
+        }
+
+        self.state
+            .save_genesis_block(block, accounts)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to save genesis block in RocksPermanent");
+            })
+    }
+
     fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
