@@ -143,6 +143,7 @@ test-int name="'*'":
 # Test: Execute coverage for a specific group
 stratus-test-coverage-group group="unit" *args="":
     #!/bin/bash
+    source <(cargo llvm-cov show-env --export-prefix)
 
     cargo llvm-cov clean --workspace
 
@@ -151,7 +152,6 @@ stratus-test-coverage-group group="unit" *args="":
     rm -rf data/importer-offline-database-rocksdb
     rm -rf e2e_logs
 
-    source <(cargo llvm-cov show-env --export-prefix)
     export RUST_LOG=error
     export TRACING_LOG_FORMAT=json
 
