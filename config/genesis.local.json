@@ -26,22 +26,22 @@
       "balance": "0xffffffffffffffff"
     },
     "0x70997970c51812dc3a010c7d01b50e0d17dc79c8": {
-      "balance": "0xffffffffffffffff"
+      "balance": "0xdeadbeef00000000"
     },
     "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc": {
-      "balance": "0xffffffffffffffff"
+      "balance": "0x1000000000000000"
     },
     "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65": {
-      "balance": "0xffffffffffffffff"
+      "balance": "0x2000000000000000"
     },
     "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc": {
-      "balance": "0xffffffffffffffff"
+      "balance": "0x3000000000000000"
     },
     "0x976ea74026e726554db657fa54763abd0c3a0aa9": {
-      "balance": "0xffffffffffffffff"
+      "balance": "0xcafebabe00000000"
     },
     "0xe45b176cad7090a5cf70b69a73b6def9296ba6a2": {
-      "balance": "0xffffffffffffffff"
+      "balance": "0xbaddcafe00000000"
     }
   },
   "number": "0x0",

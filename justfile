@@ -767,9 +767,6 @@ e2e-genesis:
     # Create config directory in e2e if it doesn't exist
     mkdir -p e2e/config
     
-    # Copy genesis file to e2e/config directory
-    cp config/genesis.local.json e2e/config/
-
     just _log "Starting Stratus with genesis.local.json"
     RUST_BACKTRACE=1 RUST_LOG=debug just run -a 0.0.0.0:3000 --genesis-path config/genesis.local.json > e2e_logs/stratus-genesis.log &
 
@@ -781,9 +778,6 @@ e2e-genesis:
     npx hardhat test test/genesis/genesis.test.ts --network stratus
     result_code=$?
     
-    # Clean up
-    rm -f e2e/config/genesis.local.json
-
     just _log "Killing Stratus"
     killport 3000 -s sigterm
     exit $result_code
