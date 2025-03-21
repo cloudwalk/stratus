@@ -93,7 +93,7 @@ alias sqlx := db-compile
 
 # Bin: Stratus main service as leader
 stratus *args="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     if [[ {{coverage_run}} = "true" ]]; then
         source <(cargo llvm-cov show-env --export-prefix)
     fi
