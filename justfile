@@ -9,7 +9,7 @@ export CARGO_COMMAND := env("CARGO_COMMAND", "")
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
-coverage_run := env("coverage_run", "false")
+coverage_run := env("COVERAGE_RUN", "false")
 
 
 # Project: Show available tasks
