@@ -447,7 +447,9 @@ e2e-importer-offline:
     just importer-offline-test --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
 
     just _log "Stratus for importer-offline"
-    just stratus-test -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
+    mkdir importer_target
+    CARGO_TARGET_DIR=importer_target just build
+    CARGO_TARGET_DIR=importer_target just run --bin stratus -- --leader -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002 > e2e_logs/e2e-importer-offline-stratus-3001.log &
     just _wait_for_stratus 3001
 
     just _log "Compare blocks of stratus and importer-offline"
