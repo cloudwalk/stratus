@@ -413,7 +413,7 @@ e2e-rpc-downloader:
     result_code_1=$?
 
     just _log "Checking content of postgres"
-    pip install -r utils/check_rpc_downloader/requirements.txt --break-system-packages
+    pip install -r utils/check_rpc_downloader/requirements.txt
     POSTGRES_DB=stratus POSTGRES_PASSWORD=123 ETH_RPC_URL=http://localhost:3000/ python utils/check_rpc_downloader/main.py --start 0
     result_code_2=$?
 
@@ -448,7 +448,7 @@ e2e-importer-offline:
     just _wait_for_stratus 3001
 
     just _log "Compare blocks of stratus and importer-offline"
-    pip install -r utils/compare_block/requirements.txt --break-system-packages
+    pip install -r utils/compare_block/requirements.txt
     python utils/compare_block/main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp
     result_code=$?
 
