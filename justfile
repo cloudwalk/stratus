@@ -420,7 +420,10 @@ e2e-rpc-downloader:
     just _log "Killing PostgreSQL"
     docker-compose down postgres
 
-    exit $result_code_1 + $result_code_2
+    just _log "Check result codes"
+    if [ $result_code_1 -ne 0 ] || [ $result_code_2 -ne 0 ]; then
+        exit 1
+    fi
 
 # E2E Importer Offline
 e2e-importer-offline:
@@ -444,7 +447,7 @@ e2e-importer-offline:
     just importer-offline-test --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
 
     just _log "Stratus for importer-offline"
-    just run --bin stratus -- --leader -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002 > e2e_logs/e2e-importer-offline-stratus-3001.log &
+    just stratus-test -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
     just _wait_for_stratus 3001
 
     just _log "Compare blocks of stratus and importer-offline"
