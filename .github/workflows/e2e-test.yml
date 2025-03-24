@@ -91,7 +91,7 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-clock-stratus"
-      jusftile_args: "rocks"
+      justfile_args: "rocks"
     concurrency:
       group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
