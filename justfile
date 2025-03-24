@@ -157,6 +157,8 @@ test-doc name="":
 run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
+    source <(cargo llvm-cov show-env --export-prefix)
+    cargo llvm-cov clean --workspace
     just {{recipe}} {{args}}
     result_code=$?
     echo "Killing stratus"
@@ -166,7 +168,6 @@ run-test recipe="" *args="":
     sleep 10
     echo "Generating reports"
     mkdir -p target/llvm-cov/codecov
-    source <(cargo llvm-cov show-env --export-prefix)
     cargo llvm-cov report --html
     cargo llvm-cov report --codecov --output-path target/llvm-cov/codecov/{{recipe}}.json
     exit $result_code
