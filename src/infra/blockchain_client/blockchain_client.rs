@@ -19,9 +19,11 @@ use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalBlockWithReceipts;
 use crate::eth::primitives::ExternalReceipt;
+use crate::eth::primitives::ExternalReplicationLog;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
@@ -227,8 +229,8 @@ impl BlockchainClient {
         }
     }
 
-    /// Returns the block number and the decoded replication log data if found.
-    pub async fn fetch_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockNumber, Vec<u8>)>> {
+    /// Returns the external replication log if found.
+    pub async fn fetch_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalReplicationLog>> {
         tracing::debug!(%block_number, "fetching replication log");
 
         let number = to_json_value(block_number);
@@ -248,8 +250,9 @@ impl BlockchainClient {
 
                 match hex::decode(hex_string) {
                     Ok(decoded) => {
-                        tracing::debug!(block_number = %block_number, decoded_size = decoded.len(), "decoded replication log");
-                        Ok(Some((block_number, decoded)))
+                        let log_data = Bytes(decoded);
+                        tracing::debug!(block_number = %block_number, decoded_size = log_data.len(), "decoded replication log");
+                        Ok(Some(ExternalReplicationLog::new(block_number, log_data)))
                     }
                     Err(e) => log_and_err!(reason = e, "failed to decode replication log hex"),
                 }

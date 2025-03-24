@@ -9,7 +9,6 @@ use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::try_join;
 use futures::StreamExt;
-use rocksdb::WriteBatch;
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::timeout;
@@ -24,7 +23,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
-use crate::eth::storage::permanent::rocks::types::BytesRocksdb;
+use crate::eth::primitives::ExternalReplicationLog;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -508,7 +507,7 @@ impl Importer {
     // Applies replication logs to storage
     async fn start_log_applier(
         storage: Arc<StratusStorage>,
-        mut log_rx: mpsc::Receiver<(BlockNumber, rocksdb::WriteBatch)>,
+        mut log_rx: mpsc::Receiver<ExternalReplicationLog>,
         kafka_connector: Option<Arc<KafkaConnector>>,
         miner: Arc<Miner>,
     ) -> anyhow::Result<()> {
@@ -520,7 +519,7 @@ impl Importer {
                 return Ok(());
             }
 
-            let (block_number, write_batch) = match timeout(Duration::from_secs(2), log_rx.recv()).await {
+            let replication_log = match timeout(Duration::from_secs(2), log_rx.recv()).await {
                 Ok(Some(inner)) => inner,
                 Ok(None) => break,
                 Err(_timed_out) => {
@@ -588,16 +587,17 @@ impl Importer {
                 }
             }
 
-            tracing::info!(%block_number, "applying replication log");
-            match storage.apply_replication_log(block_number, write_batch) {
+            tracing::info!(block_number = %replication_log.block_number, "applying replication log");
+            let write_batch = replication_log.to_write_batch();
+            match storage.apply_replication_log(replication_log.block_number, write_batch) {
                 Ok(_) => {
-                    tracing::info!(%block_number, "successfully applied replication log");
+                    tracing::info!(block_number = %replication_log.block_number, "successfully applied replication log");
 
                     #[cfg(feature = "metrics")]
                     {
                         let duration = start.elapsed();
                         tracing::info!(
-                            %block_number,
+                            block_number = %replication_log.block_number,
                             duration = %duration.to_string_ext(),
                             "applied replication log",
                         );
@@ -621,7 +621,7 @@ impl Importer {
     /// Retrieves replication logs.
     async fn start_log_fetcher(
         chain: Arc<BlockchainClient>,
-        log_tx: mpsc::Sender<(BlockNumber, rocksdb::WriteBatch)>,
+        log_tx: mpsc::Sender<ExternalReplicationLog>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "log-fetcher";
@@ -653,14 +653,14 @@ impl Importer {
 
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
 
-            while let Some((log_block_number, write_batch)) = tasks.next().await {
+            while let Some(replication_log) = tasks.next().await {
                 tracing::info!(
-                    %log_block_number,
+                    block_number = %replication_log.block_number,
                     "fetched replication log"
                 );
 
                 // send the log to the applier
-                if log_tx.send((log_block_number, write_batch)).await.is_err() {
+                if log_tx.send(replication_log).await.is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
                 }
@@ -695,7 +695,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     }
 }
 
-async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (BlockNumber, WriteBatch) {
+async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ExternalReplicationLog {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
@@ -705,20 +705,14 @@ async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: Block
         tracing::info!(%block_number, "fetching replication log");
 
         match chain.fetch_replication_log(block_number).await {
-            Ok(Some((log_block_number, log_data))) => {
+            Ok(Some(replication_log)) => {
                 tracing::info!(
                     %block_number,
-                    %log_block_number,
-                    log_data_size = %log_data.len(),
+                    log_block_number = %replication_log.block_number,
+                    log_data_size = %replication_log.log_data.len(),
                     "successfully fetched replication log"
                 );
-                // convert Vec<u8> to BytesRocksdb
-                let bytes_rocksdb = BytesRocksdb::from(log_data);
-
-                // then convert to WriteBatch
-                let write_batch = bytes_rocksdb.to_write_batch();
-
-                return (log_block_number, write_batch);
+                return replication_log;
             }
             Ok(None) => {
                 tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "replication log not available yet, retrying with delay.");
