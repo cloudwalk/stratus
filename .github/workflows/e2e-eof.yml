@@ -87,7 +87,9 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: ls
-        run: ls
+        run: |
+          ls
+          ls target/llvm-cov/codecov
 
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
