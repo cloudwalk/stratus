@@ -18,6 +18,9 @@ on:
         required: false
         type: string
         default: "stable-release"
+    secrets:
+      CODECOV_TOKEN:
+        required: true
 
 jobs:
   setup_and_test:
