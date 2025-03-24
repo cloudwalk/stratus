@@ -228,9 +228,7 @@ e2e-admin-password:
 e2e-eof perm-storage="inmemory":
     #!/bin/bash
     # Start Stratus
-    just build
-    just run -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}} > stratus.log &
-    just _wait_for_stratus
+    just stratus-test -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}}
 
     cd e2e/eof
     forge install
