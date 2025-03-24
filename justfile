@@ -131,9 +131,10 @@ rpc-downloader-test *args="":
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build
     cargo run --bin rpc-downloader -- {{args}}
+
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 importer-offline *args="":
-    cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} -- {{args}}
+    cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} --features dev -- {{args}}
 
 importer-offline-test *args="":
     #!/bin/bash
@@ -425,6 +426,7 @@ e2e-rpc-downloader:
 
 # E2E Importer Offline
 e2e-importer-offline:
+    #!/bin/bash
     mkdir -p e2e_logs
 
     rm -rf data/importer-offline-database-rocksdb
@@ -449,8 +451,9 @@ e2e-importer-offline:
     just _wait_for_stratus 3001
 
     just _log "Compare blocks of stratus and importer-offline"
-    pip install -r utils/compare_block/requirements.txt
-    python utils/compare_block/main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp
+    cd utils/compare_block/
+    poetry install --no-root
+    poetry run python3 ./main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp
     result_code=$?
 
     just _log "Killing PostgreSQL"
