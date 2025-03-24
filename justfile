@@ -39,7 +39,7 @@ alias run-importer      := stratus-follower
 
 # Stratus: Compile with debug options
 build binary="stratus" features="dev":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     cargo {{nightly_flag}} build {{release_flag}} --bin {{binary}} --features {{features}}
 
 # Stratus: Check, or compile without generating code
@@ -69,7 +69,7 @@ lint-check nightly-version="" clippy-flags="-D warnings -A clippy::unwrap_used -
 
 # Stratus: Check for dependencies major updates
 outdated:
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     command -v cargo-outdated >/dev/null 2>&1 || { cargo install cargo-outdated; }
     cargo outdated --root-deps-only --ignore-external-rel
 
@@ -97,7 +97,7 @@ stratus *args="":
 
 # Bin: Stratus main service as leader
 stratus-test *args="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build --features dev
     cargo run --bin stratus --features dev -- --leader {{args}} > stratus.log &
@@ -116,7 +116,7 @@ stratus-follower *args="":
 
 # Bin: Stratus main service as follower
 stratus-follower-test *args="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build --features dev
     LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features dev -- --follower {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
@@ -127,7 +127,7 @@ rpc-downloader *args="":
     cargo {{nightly_flag}} run --bin rpc-downloader {{release_flag}} -- {{args}}
 
 rpc-downloader-test *args="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build
     cargo run --bin rpc-downloader -- {{args}}
@@ -136,7 +136,7 @@ importer-offline *args="":
     cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} -- {{args}}
 
 importer-offline-test *args="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build
     cargo run --bin importer-offline -- {{args}}
@@ -155,7 +155,7 @@ test-doc name="":
 
 # Runs tests with coverage and kills stratus after
 run-test recipe="" *args="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     echo "Running test {{recipe}}"
     source <(cargo llvm-cov show-env --export-prefix)
     cargo llvm-cov clean --workspace
@@ -178,7 +178,7 @@ run-test recipe="" *args="":
 
 # E2E: Execute Hardhat tests in the specified network
 e2e network="stratus" block_modes="automine" test="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
@@ -203,7 +203,7 @@ e2e network="stratus" block_modes="automine" test="":
 
 # E2E: Execute admin password tests
 e2e-admin-password:
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
 
     mkdir -p e2e_logs
     cd e2e
@@ -226,7 +226,7 @@ e2e-admin-password:
 
 # E2E: Execute EOF (EVM Object Format) tests
 e2e-eof perm-storage="inmemory":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     # Start Stratus
     just stratus-test -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}}
 
@@ -239,7 +239,7 @@ e2e-eof perm-storage="inmemory":
 
 # E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat block-mode="automine" test="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
@@ -258,7 +258,7 @@ e2e-hardhat block-mode="automine" test="":
 
 # E2E: Starts and execute Hardhat tests in Stratus
 e2e-stratus block-mode="automine" storage="inmemory" test="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
@@ -276,7 +276,7 @@ e2e-stratus block-mode="automine" storage="inmemory" test="":
 
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus storage="inmemory":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     just _log "Starting Stratus"
     just stratus-test --block-mode 1s -a 0.0.0.0:3000 --perm-storage={{storage}} > stratus.log &
 
@@ -287,7 +287,7 @@ e2e-clock-stratus storage="inmemory":
 
 # E2E: Lint and format code
 e2e-lint mode="--write":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
@@ -303,7 +303,7 @@ e2e-leader:
     RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000
 
 e2e-follower test="brlc":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     if [ "{{test}}" = "kafka" ]; then
     # Start Kafka using Docker Compose
         just _log "Starting Kafka"
@@ -318,7 +318,7 @@ e2e-follower test="brlc":
 
 
 _e2e-leader-follower-up-impl test="brlc":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     mkdir e2e_logs
 
     # Start Stratus with leader flag
@@ -375,7 +375,7 @@ e2e-leader-follower-up test="brlc":
 
 # E2E: Leader & Follower Down
 e2e-leader-follower-down:
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
 
     # Kill Stratus
     killport 3001 -s sigterm
@@ -394,7 +394,7 @@ e2e-leader-follower-down:
 
 # E2E: RPC Downloader test
 e2e-rpc-downloader:
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     mkdir e2e_logs
 
     just _log "Starting Stratus"
@@ -511,7 +511,7 @@ contracts-remove *args="":
 
 # Contracts: Start Stratus and run contracts tests with InMemory storage
 contracts-test-stratus storage="inmemory" *args="":
-    #!/opt/homebrew/bin/bash
+    #!/bin/bash
     just _log "Starting Stratus"
     just stratus-test -a 0.0.0.0:3000 --perm-storage={{storage}}
 
