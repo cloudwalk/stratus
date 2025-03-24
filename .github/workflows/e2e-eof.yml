@@ -88,13 +88,12 @@ jobs:
 
       - name: ls
         run: |
-          ls
           ls target/llvm-cov/codecov
 
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
         with:
-          directory: target/llvm-cov/codecov/
+          files: target/llvm-cov/codecov/e2e-eof.info
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: eof
           name: eof
