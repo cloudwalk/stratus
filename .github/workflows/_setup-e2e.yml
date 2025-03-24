@@ -82,7 +82,6 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           directory: target/llvm-cov/codecov/
-          files: *.info
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: ${{ inputs.justfile_recipe }}
           name: ${{ inputs.justfile_recipe }}

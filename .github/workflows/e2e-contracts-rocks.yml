@@ -96,7 +96,6 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           directory: target/llvm-cov/codecov/
-          files: *.info
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: contracts-rocks-${{ matrix.group }}
           name: contracts-rocks-${{ matrix.group }}
