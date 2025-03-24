@@ -534,7 +534,7 @@ impl Importer {
             if let Ok(current_block_number) = storage.read_mined_block_number() {
                 match storage.read_block(BlockFilter::Number(current_block_number)) {
                     Ok(Some(current_block)) => {
-                        // send Kafka events if enabled
+                        // Send Kafka events if enabled
                         if let Some(ref kafka_conn) = kafka_connector {
                             let events = current_block
                                 .transactions
@@ -547,7 +547,7 @@ impl Importer {
                             }
                         }
 
-                        // Handle notifications
+                        // Handle notifications if has subscribers
                         let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
                         let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
                         let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
