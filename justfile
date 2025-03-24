@@ -147,7 +147,7 @@ importer-offline-test *args="":
 # Test: run rust tests
 test:
     mkdir -p target/llvm-cov/codecov
-    cargo llvm-cov --codecov --output-path target/llvm-cov/codecov/rust_tests.json
+    cargo llvm-cov --lcov --output-path target/llvm-cov/codecov/rust_tests.info
 
 # Test: Execute Rust doc tests
 test-doc name="":

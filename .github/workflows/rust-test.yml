@@ -72,6 +72,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           directory: target/llvm-cov/codecov/
+          files: *.info
           token: ${{ secrets.CODECOV_TOKEN }}
-          flags: rust-tests-${{ matrix.group }}
-          name: rust-tests-${{ matrix.group }}
+          flags: rust-tests
+          name: rust-tests
