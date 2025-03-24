@@ -432,7 +432,7 @@ e2e-importer-offline:
     rm -rf data/importer-offline-database-rocksdb
 
     just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000
+    just stratus -a 0.0.0.0:3000
 
     just _log "Running TestContractBalances tests"
     just e2e stratus automine
@@ -441,7 +441,7 @@ e2e-importer-offline:
     docker-compose up -d postgres
 
     just _log "Running rpc downloader"
-    just rpc-downloader-test --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001 --initial-accounts 0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
+    just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001 --initial-accounts 0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
 
     just _log "Run importer-offline"
     just importer-offline-test --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
