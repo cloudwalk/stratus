@@ -140,7 +140,7 @@ importer-offline-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build
-    cargo run --bin importer-offline -- {{args}}
+    cargo run --bin importer-offline --features dev -- {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
