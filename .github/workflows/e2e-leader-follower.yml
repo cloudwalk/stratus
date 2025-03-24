@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [brlc, importer, miner, change, deploy, kafka, health]
+        test: [brlc, importer, miner, change, deploy, kafka, health, replication]
         use_rocksdb_replication: [false, true]
     name: "E2E Leader & Follower on ${{ matrix.test }} (RocksDB Replication: ${{ matrix.use_rocksdb_replication }})"
     runs-on: ubuntu-22.04
