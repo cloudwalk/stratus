@@ -33,6 +33,8 @@ jobs:
     with:
       justfile_recipe: "e2e-stratus"
       justfile_args: "automine"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-automine-inmemory-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -43,6 +45,8 @@ jobs:
     with:
       justfile_recipe: "e2e-stratus"
       justfile_args: "automine rocks"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-automine-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -53,6 +57,8 @@ jobs:
     with:
       justfile_recipe: "e2e-stratus"
       justfile_args: "external"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-external-inmemory-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -63,6 +69,8 @@ jobs:
     with:
       justfile_recipe: "e2e-stratus"
       justfile_args: "external rocks"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-external-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -73,6 +81,8 @@ jobs:
     with:
       justfile_recipe: "e2e-stratus"
       justfile_args: "10ms"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-interval-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -82,6 +92,8 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-clock-stratus"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-clock-inmemory-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -92,6 +104,8 @@ jobs:
     with:
       justfile_recipe: "e2e-clock-stratus"
       justfile_args: "rocks"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -101,6 +115,8 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-admin-password"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-admin-password-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -110,6 +126,8 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-rpc-downloader"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-rpc-downloader-${{ github.ref || github.run_id }}
       cancel-in-progress: true
@@ -119,6 +137,8 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-importer-offline"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-importer-offline-${{ github.ref || github.run_id }}
       cancel-in-progress: true
