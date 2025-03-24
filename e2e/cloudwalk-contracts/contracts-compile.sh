@@ -13,8 +13,11 @@ source "$(dirname "$0")/_functions.sh"
 compile_contract() {
     repo=$1
     contract=$2
+    version=$3
+
     log "Compiling: $contract ($repo)"
 
+    asdf set solidity $version
     # compile
     solc --base-path repos/"$repo"/contracts --include-path repos/"$repo"/node_modules --hashes --optimize -o repos/"$repo"/target --overwrite repos/"$repo"/contracts/"$contract".sol
 
@@ -26,25 +29,22 @@ compile_contract() {
 # Execution
 # ------------------------------------------------------------------------------
 
-# configure tools
-asdf local solidity 0.8.24 || echo "asdf, solidity plugin or solidity version not found"
-
 # execute
-compile_contract brlc-token BRLCToken
+compile_contract brlc-token BRLCToken 0.8.24
 
 # Cashier Transition: compile both Cashier and CashierShard regardless if the repository was renamed or not
-compile_contract brlc-cashier Cashier || compile_contract brlc-pix-cashier Cashier
-compile_contract brlc-cashier CashierShard || compile_contract brlc-pix-cashier CashierShard
+compile_contract brlc-cashier Cashier 0.8.24
+compile_contract brlc-cashier CashierShard 0.8.24
 
 # Periphery Transition: compile both Periphery and PeripheryShard regardless if the repository was renamed or not
-compile_contract brlc-card-payment-processor CashbackDistributor || compile_contract brlc-periphery CashbackDistributor
-compile_contract brlc-card-payment-processor CardPaymentProcessor || compile_contract brlc-periphery CardPaymentProcessor
+compile_contract brlc-card-payment-processor CashbackDistributor 0.8.24
+compile_contract brlc-card-payment-processor CardPaymentProcessor 0.8.24
 
-compile_contract compound-periphery CompoundAgent
+compile_contract compound-periphery CompoundAgent 0.8.16
 
-compile_contract brlc-multisig MultiSigWallet
+compile_contract brlc-multisig MultiSigWallet 0.8.24
 
 # BalanceTracker Transition: compile BalanceTracker regardless of the repository it is in.
-compile_contract brlc-balance-tracker BalanceTracker || compile_contract brlc-yield-streamer BalanceTracker
+compile_contract brlc-balance-tracker BalanceTracker 0.8.16
 
-compile_contract brlc-yield-streamer YieldStreamer
+compile_contract brlc-yield-streamer YieldStreamer 0.8.16
