@@ -442,7 +442,6 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    // TODO: improve, refactor
     #[cfg(feature = "dev")]
     pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> Result<()> {
         let mut batch = WriteBatch::default();

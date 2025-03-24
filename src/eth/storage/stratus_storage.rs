@@ -54,7 +54,6 @@ impl StratusStorage {
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            // TODO: double check this
             if GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled() {
                 let genesis = this.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
                 if genesis.is_none() {
@@ -92,7 +91,7 @@ impl StratusStorage {
 
         let number = self.read_pending_block_header().number;
 
-        // TODO: double check this
+        #[cfg(feature = "dev")]
         if number == BlockNumber::ONE && self.rocksdb_replication_enabled() {
             tracing::info!("starting importer from genesis block");
             self.set_mined_block_number(BlockNumber::ZERO)?;
