@@ -169,7 +169,7 @@ run-test recipe="" *args="":
     echo "Generating reports"
     mkdir -p target/llvm-cov/codecov
     cargo llvm-cov report --html
-    cargo llvm-cov report --codecov --output-path target/llvm-cov/codecov/{{recipe}}.json
+    cargo llvm-cov report --lcov --output-path target/llvm-cov/codecov/{{recipe}}.info
     exit $result_code
 
 # ------------------------------------------------------------------------------
@@ -213,7 +213,7 @@ e2e-admin-password:
     for test in "enabled|test123" "disabled|"; do
         IFS="|" read -r type pass <<< "$test"
         just _log "Running admin password tests with password $type"
-        ADMIN_PASSWORD=$pass just run -a 0.0.0.0:3000 > /dev/null &
+        ADMIN_PASSWORD=$pass just stratus-test -a 0.0.0.0:3000 > /dev/null &
         just _wait_for_stratus
 
         npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
@@ -277,7 +277,6 @@ e2e-stratus block-mode="automine" test="" storage="inmemory":
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus storage="inmemory":
     #!/bin/bash
-    just build
     just _log "Starting Stratus"
     just stratus-test --block-mode 1s -a 0.0.0.0:3000 --perm-storage={{storage}} > stratus.log &
 
@@ -399,7 +398,7 @@ e2e-rpc-downloader:
     mkdir e2e_logs
 
     just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000
+    just stratus -a 0.0.0.0:3000
 
     just _log "Starting PostgreSQL"
     docker-compose up -d postgres
