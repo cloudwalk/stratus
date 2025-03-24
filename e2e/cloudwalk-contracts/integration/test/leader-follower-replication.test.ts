@@ -123,11 +123,11 @@ describe("Leader & Follower replication integration test", function () {
 
                 // Get the earliest block number
                 updateProviderUrl("stratus");
-                const earliestBlockHex = await sendWithRetry("eth_blockNumber", ["earliest"]);
+                const earliestBlockHex = await sendWithRetry("eth_getBlockByNumber", ["earliest", false]);
                 const earliestBlockNumber = parseInt(earliestBlockHex, 16);
 
                 // Get the latest block number
-                const latestBlockHex = await sendWithRetry("eth_blockNumber", ["latest"]);
+                const latestBlockHex = await sendWithRetry("eth_getBlockByNumber", ["latest", false]);
                 const latestBlockNumber = parseInt(latestBlockHex, 16);
 
                 console.log(`Comparing replication logs from block ${earliestBlockNumber} to ${latestBlockNumber}`);
