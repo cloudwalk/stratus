@@ -34,10 +34,10 @@ use super::rocks_db::create_or_open_db;
 use super::types::AccountRocksdb;
 use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
+use super::types::BytesRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
-use super::types::WriteBatchRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -490,7 +490,7 @@ impl RocksStorageState {
         )?;
 
         let batch_clone = WriteBatch::from_data(batch.data());
-        let batch_rocksdb: WriteBatchRocksdb = batch_clone.into();
+        let batch_rocksdb = BytesRocksdb::from(batch_clone);
         self.replication_logs
             .prepare_batch_insertion([(number.into(), batch_rocksdb.into())], &mut batch)?;
 
@@ -538,7 +538,7 @@ impl RocksStorageState {
 
         let batch_clone = WriteBatch::from_data(batch.data());
 
-        let batch_rocksdb: WriteBatchRocksdb = batch_clone.into();
+        let batch_rocksdb = BytesRocksdb::from(batch_clone);
         self.replication_logs.prepare_batch_insertion([(number.into(), batch_rocksdb.into())], batch)?;
 
         Ok(())
@@ -549,7 +549,7 @@ impl RocksStorageState {
 
         let batch_clone = WriteBatch::from_data(write_batch.data());
 
-        let batch_rocksdb: WriteBatchRocksdb = batch_clone.into();
+        let batch_rocksdb = BytesRocksdb::from(batch_clone);
 
         self.replication_logs
             .prepare_batch_insertion([(block_number.into(), batch_rocksdb.into())], &mut write_batch)?;

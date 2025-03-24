@@ -24,7 +24,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
-use crate::eth::storage::permanent::rocks::types::WriteBatchRocksdb;
+use crate::eth::storage::permanent::rocks::types::BytesRocksdb;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -712,11 +712,11 @@ async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: Block
                     log_data_size = %log_data.len(),
                     "successfully fetched replication log"
                 );
-                // convert Vec<u8> to WriteBatchRocksdb
-                let write_batch_rocksdb = WriteBatchRocksdb { data: log_data };
+                // convert Vec<u8> to BytesRocksdb
+                let bytes_rocksdb = BytesRocksdb::from(log_data);
 
                 // then convert to WriteBatch
-                let write_batch = write_batch_rocksdb.to_write_batch();
+                let write_batch = bytes_rocksdb.to_write_batch();
 
                 return (log_block_number, write_batch);
             }

@@ -17,8 +17,8 @@ use strum::VariantNames;
 use super::types::AccountRocksdb;
 use super::types::BlockNumberRocksdb;
 use super::types::BlockRocksdb;
+use super::types::BytesRocksdb;
 use super::types::SlotValueRocksdb;
-use super::types::WriteBatchRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
@@ -84,7 +84,7 @@ impl_single_version_cf_value!(CfTransactionsValue, BlockNumberRocksdb, BlockNumb
 impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
 impl_single_version_cf_value!(CfLogsValue, BlockNumberRocksdb, BlockNumber);
-impl_single_version_cf_value!(CfReplicationLogsValue, WriteBatchRocksdb, WriteBatch);
+impl_single_version_cf_value!(CfReplicationLogsValue, BytesRocksdb, WriteBatch);
 
 #[cfg_attr(not(test), allow(dead_code))]
 trait ToCfName {
