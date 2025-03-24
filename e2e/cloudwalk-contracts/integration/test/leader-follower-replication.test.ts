@@ -116,52 +116,48 @@ describe("Leader & Follower replication integration test", function () {
                 }
             });
 
-            it("Validate replication logs are identical between leader and follower", async function() {
+            it("Validate replication logs are identical between leader and follower", async function () {
                 this.timeout(60000);
-                
+
                 await waitForFollowerToSyncWithLeader();
-                
+
                 // Get the earliest block number
                 updateProviderUrl("stratus");
                 const earliestBlockHex = await sendWithRetry("eth_blockNumber", ["earliest"]);
                 const earliestBlockNumber = parseInt(earliestBlockHex, 16);
-                
+
                 // Get the latest block number
                 const latestBlockHex = await sendWithRetry("eth_blockNumber", ["latest"]);
                 const latestBlockNumber = parseInt(latestBlockHex, 16);
-                
+
                 console.log(`Comparing replication logs from block ${earliestBlockNumber} to ${latestBlockNumber}`);
-                
+
                 // Iterate through each block
                 for (let blockNumber = earliestBlockNumber; blockNumber <= latestBlockNumber; blockNumber++) {
                     updateProviderUrl("stratus");
                     const leaderReplicationLog = await sendWithRetry("stratus_getReplicationLog", [blockNumber]);
-                    
+
                     updateProviderUrl("stratus-follower");
                     const followerReplicationLog = await sendWithRetry("stratus_getReplicationLog", [blockNumber]);
 
-                    expect(
-                        leaderReplicationLog,
-                        `Leader replication log for block ${blockNumber} is null`,
-                    ).to.not.be.null;
-                    expect(
-                        followerReplicationLog,
-                        `Follower replication log for block ${blockNumber} is null`,
-                    ).to.not.be.null;
+                    expect(leaderReplicationLog, `Leader replication log for block ${blockNumber} is null`).to.not.be
+                        .null;
+                    expect(followerReplicationLog, `Follower replication log for block ${blockNumber} is null`).to.not
+                        .be.null;
 
                     expect(
                         leaderReplicationLog.block_number,
                         `Leader replication log block number (${leaderReplicationLog.block_number}) doesn't match requested block number (${blockNumber})`,
                     ).to.equal(blockNumber);
-                    
+
                     expect(
-                        followerReplicationLog.block_number, 
-                        `Follower replication log block number (${followerReplicationLog.block_number}) doesn't match requested block number (${blockNumber})`
+                        followerReplicationLog.block_number,
+                        `Follower replication log block number (${followerReplicationLog.block_number}) doesn't match requested block number (${blockNumber})`,
                     ).to.equal(blockNumber);
-                    
+
                     expect(
-                        leaderReplicationLog.replication_log, 
-                        `Leader replication log content for block ${blockNumber} is null or empty`
+                        leaderReplicationLog.replication_log,
+                        `Leader replication log content for block ${blockNumber} is null or empty`,
                     ).to.not.be.null.and.to.not.be.empty;
 
                     expect(
@@ -176,16 +172,16 @@ describe("Leader & Follower replication integration test", function () {
                 }
             });
 
-            it("Validate account balances are identical between leader and follower", async function() {
+            it("Validate account balances are identical between leader and follower", async function () {
                 this.timeout(60000);
-                
+
                 await waitForFollowerToSyncWithLeader();
-                
+
                 // Get the earliest block number
                 updateProviderUrl("stratus");
                 const earliestBlockHex = await sendWithRetry("eth_blockNumber", ["earliest"]);
                 const earliestBlockNumber = parseInt(earliestBlockHex, 16);
-                
+
                 // Get the latest block number
                 const latestBlockHex = await sendWithRetry("eth_blockNumber", ["latest"]);
                 const latestBlockNumber = parseInt(latestBlockHex, 16);
@@ -208,14 +204,16 @@ describe("Leader & Follower replication integration test", function () {
 
                     for (const address of walletAddresses) {
                         leaderBalances[address] = await sendWithRetry("eth_getBalance", [address, blockNumberHex]);
-                                                
+
                         try {
-                            leaderBRLCBalances[address] = (await brlcToken.balanceOf(address, { blockTag: blockNumber })).toString();
+                            leaderBRLCBalances[address] = (
+                                await brlcToken.balanceOf(address, { blockTag: blockNumber })
+                            ).toString();
                         } catch (error) {
                             leaderBRLCBalances[address] = null;
                         }
                     }
-                    
+
                     // Get all follower balances
                     updateProviderUrl("stratus-follower");
                     const followerBalances: any = {};
@@ -225,24 +223,26 @@ describe("Leader & Follower replication integration test", function () {
                         followerBalances[address] = await sendWithRetry("eth_getBalance", [address, blockNumberHex]);
 
                         try {
-                            followerBRLCBalances[address] = (await brlcToken.balanceOf(address, { blockTag: blockNumber })).toString();
+                            followerBRLCBalances[address] = (
+                                await brlcToken.balanceOf(address, { blockTag: blockNumber })
+                            ).toString();
                         } catch (error) {
                             followerBRLCBalances[address] = null;
                         }
                     }
-                    
+
                     // Compare all account balances
                     for (const address of walletAddresses) {
                         expect(
                             leaderBalances[address],
-                            `Native balance for address ${address} at block ${blockNumber} does not match between leader and follower`
+                            `Native balance for address ${address} at block ${blockNumber} does not match between leader and follower`,
                         ).to.equal(followerBalances[address]);
-                        
+
                         // Compare BRLC balances if available
                         if (leaderBRLCBalances[address] !== null && followerBRLCBalances[address] !== null) {
                             expect(
                                 leaderBRLCBalances[address],
-                                `BRLC balance for address ${address} at block ${blockNumber} does not match between leader and follower`
+                                `BRLC balance for address ${address} at block ${blockNumber} does not match between leader and follower`,
                             ).to.equal(followerBRLCBalances[address]);
                         }
                     }
