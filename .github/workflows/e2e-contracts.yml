@@ -95,7 +95,8 @@ jobs:
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
         with:
-          directory: target/llvm-cov/codecov/
+          fail_ci_if_error: true
+          files: target/llvm-cov/codecov/contracts-test-stratus.info
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: contracts-${{ matrix.group }}
           name: contracts-${{ matrix.group }}

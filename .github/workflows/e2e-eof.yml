@@ -85,11 +85,6 @@ jobs:
           RUST_LOG: error
           RELEASE: 1
           RUST_BACKTRACE: 1
-
-      - name: ls
-        run: |
-          ls target/llvm-cov/codecov
-
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
         with:

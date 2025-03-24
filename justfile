@@ -257,7 +257,7 @@ e2e-hardhat block-mode="automine" test="":
     killport 8545
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus block-mode="automine" test="" storage="inmemory":
+e2e-stratus block-mode="automine" storage="inmemory" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
