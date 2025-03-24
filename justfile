@@ -398,7 +398,9 @@ e2e-rpc-downloader:
     mkdir e2e_logs
 
     just _log "Starting Stratus"
-    just stratus -a 0.0.0.0:3000
+    just build
+    just stratus -a 0.0.0.0:3000 > stratus.log &
+    just _wait_for_stratus
 
     just _log "Starting PostgreSQL"
     docker-compose up -d postgres
@@ -430,7 +432,9 @@ e2e-importer-offline:
     rm -rf data/importer-offline-database-rocksdb
 
     just _log "Starting Stratus"
-    just stratus -a 0.0.0.0:3000
+    just build
+    just stratus -a 0.0.0.0:3000 > stratus.log &
+    just _wait_for_stratus
 
     just _log "Running TestContractBalances tests"
     just e2e stratus automine
@@ -446,8 +450,8 @@ e2e-importer-offline:
 
     just _log "Stratus for importer-offline"
     mkdir importer_target
-    CARGO_TARGET_DIR=importer_target just build
-    CARGO_TARGET_DIR=importer_target just run --bin stratus -- --leader -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002 > e2e_logs/e2e-importer-offline-stratus-3001.log &
+    just build
+    just run --bin stratus -- --leader -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002 > e2e_logs/e2e-importer-offline-stratus-3001.log &
     just _wait_for_stratus 3001
 
     just _log "Compare blocks of stratus and importer-offline"

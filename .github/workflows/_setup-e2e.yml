@@ -82,7 +82,7 @@ jobs:
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error
-          RELEASE: 1
+          RELEASE: 0
           RUST_BACKTRACE: 1
 
       - name: Upload coverage report to Codecov
