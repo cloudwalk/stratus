@@ -125,7 +125,7 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value.0, true)
+        try_from_alloy_transaction(value.0)
     }
 }
 
@@ -133,21 +133,18 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value, true)
+        try_from_alloy_transaction(value)
     }
 }
 
-fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_signer: bool) -> anyhow::Result<TransactionInput> {
+fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow::Result<TransactionInput> {
     // extract signer
-    let signer: Address = match compute_signer {
-        true => match value.inner.recover_signer() {
+    let signer: Address = match value.inner.recover_signer() {
             Ok(signer) => Address::from(signer),
             Err(e) => {
                 tracing::warn!(reason = ?e, "failed to recover transaction signer");
                 return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
-            }
-        },
-        false => Address::from(value.from),
+        }
     };
 
     // Get signature components from the envelope
@@ -279,7 +276,7 @@ impl From<TransactionInput> for AlloyTransaction {
             block_hash: None,
             block_number: None,
             transaction_index: None,
-            from: value.signer.into(),
+            from: value.from.into(),
             effective_gas_price: Some(value.gas_price.into()),
         }
     }
