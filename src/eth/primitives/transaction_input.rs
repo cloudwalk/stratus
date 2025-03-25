@@ -276,7 +276,7 @@ impl From<TransactionInput> for AlloyTransaction {
             block_hash: None,
             block_number: None,
             transaction_index: None,
-            from: value.from.into(),
+            from: value.signer.into(),
             effective_gas_price: Some(value.gas_price.into()),
         }
     }
