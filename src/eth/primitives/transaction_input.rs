@@ -140,10 +140,10 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
 fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow::Result<TransactionInput> {
     // extract signer
     let signer: Address = match value.inner.recover_signer() {
-            Ok(signer) => Address::from(signer),
-            Err(e) => {
-                tracing::warn!(reason = ?e, "failed to recover transaction signer");
-                return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
+        Ok(signer) => Address::from(signer),
+        Err(e) => {
+            tracing::warn!(reason = ?e, "failed to recover transaction signer");
+            return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
         }
     };
 
@@ -159,7 +159,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         hash: Hash::from(*value.inner.tx_hash()),
         nonce: Nonce::from(value.inner.nonce()),
         signer,
-        from: Address::from(value.from),
+        from: signer,
         to: match value.inner.kind() {
             TxKind::Call(addr) => Some(Address::from(addr)),
             TxKind::Create => None,
