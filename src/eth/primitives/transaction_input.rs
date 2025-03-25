@@ -125,7 +125,7 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value.0, false)
+        try_from_alloy_transaction(value.0, true)
     }
 }
 
@@ -162,7 +162,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
         hash: Hash::from(*value.inner.tx_hash()),
         nonce: Nonce::from(value.inner.nonce()),
         signer,
-        from: signer, // Validate
+        from: Address::from(value.from),
         to: match value.inner.kind() {
             TxKind::Call(addr) => Some(Address::from(addr)),
             TxKind::Create => None,
