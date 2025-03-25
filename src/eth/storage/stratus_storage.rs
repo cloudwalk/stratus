@@ -55,8 +55,7 @@ impl StratusStorage {
         #[cfg(feature = "dev")]
         {
             if GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled() {
-                let genesis = this.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
-                if genesis.is_none() {
+                if !this.has_genesis()? {
                     this.reset_to_genesis()?;
                 }
             }
@@ -68,6 +67,12 @@ impl StratusStorage {
     /// Returns whether RocksDB replication is enabled
     pub fn rocksdb_replication_enabled(&self) -> bool {
         self.perm.rocksdb_replication_enabled()
+    }
+
+    /// Returns whether the genesis block exists
+    pub fn has_genesis(&self) -> Result<bool, StorageError> {
+        let genesis = self.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
+        Ok(genesis.is_some())
     }
 
     #[cfg(test)]
