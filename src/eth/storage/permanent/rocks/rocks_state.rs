@@ -738,7 +738,6 @@ impl fmt::Debug for RocksStorageState {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
 
     use fake::Fake;
     use fake::Faker;
@@ -831,7 +830,7 @@ mod tests {
             balance: ExecutionValueChange::from_original(Faker.fake()),
             bytecode: ExecutionValueChange::from_original(Some(revm::primitives::Bytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
             code_hash: Faker.fake(),
-            slots: HashMap::new(),
+            slots: BTreeMap::new(),
         };
 
         // 4 changes for the same address, the first isn't modified, the other three are

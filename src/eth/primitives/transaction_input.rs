@@ -162,7 +162,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
         hash: Hash::from(*value.inner.tx_hash()),
         nonce: Nonce::from(value.inner.nonce()),
         signer,
-        from: Address::from(value.from),
+        from: signer, // Validate
         to: match value.inner.kind() {
             TxKind::Call(addr) => Some(Address::from(addr)),
             TxKind::Create => None,
