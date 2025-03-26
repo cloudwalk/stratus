@@ -517,6 +517,7 @@ impl RocksStorageState {
         Ok(())
     }
 
+    #[cfg(feature = "dev")]
     pub fn revert_state_to_block(&self, target_number: BlockNumberRocksdb) -> Result<()> {
         // clear current state, it will be reconstructed
         tracing::info!("clearing current account state");
@@ -613,6 +614,7 @@ impl RocksStorageState {
         Ok(())
     }
 
+    #[cfg(feature = "dev")]
     pub fn revert_state_to_block_batched(&self, target_number: BlockNumberRocksdb) -> Result<()> {
         tracing::info!("starting batched state reversion to block {}", target_number);
 

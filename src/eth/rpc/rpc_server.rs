@@ -44,6 +44,7 @@ use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
+#[cfg(feature = "dev")]
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
