@@ -148,7 +148,8 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-genesis"
-    
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
       group: ${{ github.workflow }}-genesis-${{ github.ref || github.run_id }}
       cancel-in-progress: true
