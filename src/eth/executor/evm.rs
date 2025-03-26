@@ -526,7 +526,7 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
 
     Ok(EvmExecution {
         block_timestamp: input.block_timestamp,
-        receipt_applied: false,
+        receipt_applied: true,
         result,
         output: tx_output,
         logs,
