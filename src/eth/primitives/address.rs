@@ -4,17 +4,11 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 use display_json::DebugAsJson;
-use ethabi::Token;
 use ethereum_types::H160;
 use ethereum_types::H256;
-use ethers_core::types::NameOrAddress;
 use fake::Dummy;
 use fake::Faker;
 use hex_literal::hex;
-use sqlx::encode::IsNull;
-use sqlx::error::BoxDynError;
-use sqlx::postgres::PgHasArrayType;
-use sqlx::Decode;
 
 use crate::alias::RevmAddress;
 use crate::eth::primitives::LogTopic;
@@ -35,10 +29,6 @@ impl Address {
     /// Creates a new address from the given bytes.
     pub const fn new(bytes: [u8; 20]) -> Self {
         Self(H160(bytes))
-    }
-
-    pub fn new_from_h160(h160: H160) -> Self {
-        Self(h160)
     }
 
     /// Checks if current address is the zero address.
@@ -67,7 +57,7 @@ impl Display for Address {
 }
 
 impl Dummy<Faker> for Address {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         H160::random_using(rng).into()
     }
 }
@@ -96,15 +86,6 @@ impl From<LogTopic> for Address {
     }
 }
 
-impl From<NameOrAddress> for Address {
-    fn from(value: NameOrAddress) -> Self {
-        match value {
-            NameOrAddress::Name(_) => todo!(),
-            NameOrAddress::Address(value) => Self(value),
-        }
-    }
-}
-
 impl TryFrom<Vec<u8>> for Address {
     type Error = anyhow::Error;
 
@@ -113,40 +94,6 @@ impl TryFrom<Vec<u8>> for Address {
             return Err(anyhow!("array of bytes to be converted to address must have exactly 20 bytes"));
         }
         Ok(Self(H160::from_slice(&value)))
-    }
-}
-
-// -----------------------------------------------------------------------------
-// sqlx traits
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for Address {
-    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let value = <[u8; 20] as Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.into())
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for Address {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("BYTEA")
-    }
-}
-
-impl PgHasArrayType for Address {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <[u8; 20] as PgHasArrayType>::array_type_info()
-    }
-}
-
-impl AsRef<[u8]> for Address {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for Address {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
-        self.0 .0.encode(buf)
     }
 }
 
@@ -170,18 +117,6 @@ impl From<Address> for H160 {
 impl From<Address> for RevmAddress {
     fn from(value: Address) -> Self {
         revm::primitives::Address(value.0 .0.into())
-    }
-}
-
-impl From<Address> for Token {
-    fn from(value: Address) -> Self {
-        Token::Address(value.0)
-    }
-}
-
-impl From<Address> for [u8; 20] {
-    fn from(value: Address) -> Self {
-        H160::from(value).0
     }
 }
 

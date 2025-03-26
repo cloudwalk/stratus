@@ -111,6 +111,9 @@ metrics! {
     "Time executing a local transaction."
     histogram_duration executor_local_transaction{success, contract, function},
 
+    "Time executing a local transaction."
+    counter executor_local_transaction_reverts{contract, function, reason},
+
     "Number of account reads when executing a local transaction."
     histogram_counter executor_local_transaction_account_reads{contract, function},
 
@@ -143,7 +146,10 @@ metrics! {
     histogram_counter evm_execution_account_reads{},
 
     "Number of slots read in a single EVM execution."
-    histogram_counter evm_execution_slot_reads{}
+    histogram_counter evm_execution_slot_reads{},
+
+    "Time executing trace_transaction"
+    histogram_duration evm_inspect{trace_type}
 }
 
 metrics! {

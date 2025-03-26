@@ -97,10 +97,6 @@ pub struct PermanentStorageConfig {
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
     pub perm_storage_kind: PermanentStorageKind,
 
-    /// Storage connection URL.
-    #[arg(long = "perm-storage-url", env = "PERM_STORAGE_URL", required_if_eq_any([("perm_storage_kind", "redis")]))]
-    pub perm_storage_url: Option<String>,
-
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
     pub rocks_path_prefix: Option<String>,

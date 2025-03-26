@@ -26,6 +26,7 @@ class Config:
     auto_approve: bool
     external_rpc_timeout: str = "2s"
     sync_interval: str = "100ms"
+    external_rpc_max_request_size_bytes: str = "10485760"
     total_check_attempts: int = 10
     required_consecutive_checks: int = 3
     sleep_interval: float = 0.5
@@ -265,7 +266,7 @@ def main() -> None:
                         return
 
                 # Change Leader to Follower
-                change_to_follower_params = [f"http://{config.follower_address}/", f"ws://{config.follower_address}/", config.external_rpc_timeout, config.sync_interval]
+                change_to_follower_params = [f"http://{config.follower_address}/", f"ws://{config.follower_address}/", config.external_rpc_timeout, config.sync_interval, config.external_rpc_max_request_size_bytes]
                 change_role(address=config.leader_address, method="stratus_changeToFollower", params=change_to_follower_params, role=NodeRole.FOLLOWER)
 
                 # Validate new Follower state
@@ -297,6 +298,7 @@ def main() -> None:
                 log(message=f"Process completed in {elapsed_time:.2f} seconds.")
             except DeploymentError as e:
                 log(message=f"Process failed: {str(e)}", error=True)
+                raise DeploymentError(f"Process failed: {str(e)}", error_type="DeploymentError")
 
     except IOError as e:
         log(message=f"Error opening log file: {e}")

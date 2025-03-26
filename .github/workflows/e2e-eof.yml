@@ -1,0 +1,83 @@
+name: E2E EOF
+
+on:
+  pull_request:
+    branches:
+      - "*"
+    paths-ignore:
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/docs-release.yml"
+      - ".github/workflows/outdated.yml"
+      - ".github/workflows/comment-tag-report.yml"
+      - ".github/workflows/pr-agent.yml"
+      - ".github/workflows/build-binary.yml"
+      - ".github/CODEOWNERS"
+      - "config/**"
+      - "README.md"
+      - "LICENSE"
+      - "CONTRIBUTING.md"
+      - "utils/slack-notifiers/**"
+
+  push: # Rebuild cache policy
+    branches:
+      - "main"
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+
+  workflow_dispatch:
+
+jobs:
+  eof_test:
+    strategy:
+      fail-fast: false
+      matrix:
+          test: [inmemory, rocks]
+    name: E2E EOF on ${{ matrix.test }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.test }}-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.84
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: ${{ runner.os }}-v3-cargo
+          shared-key: stable-release
+          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          cache-provider: "github"
+          cache-directories: "~/.cargo/bin/"
+
+      - name: Install libsasl2-dev libssl-dev
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+
+      - name: Set up Just
+        uses: extractions/setup-just@v2
+
+      - name: Set up dependencies
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        run: |
+          cargo install killport || true
+          cargo install wait-service || true
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run e2e tests
+        run: just e2e-eof ${{ matrix.test }}
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 0
+          RUST_LOG: error
+          RELEASE: 1
+          RUST_BACKTRACE: 1

@@ -1,73 +1,104 @@
+use alloy_eips::eip4895::Withdrawals;
+use alloy_primitives::Bloom;
+use alloy_primitives::Bytes;
+use alloy_primitives::B256;
+use alloy_primitives::B64;
+use alloy_primitives::U256;
+use fake::Dummy;
+use fake::Fake;
+use fake::Faker;
 use serde::Deserialize;
 
-use crate::alias::EthersBlockEthersTransaction;
-use crate::alias::EthersBlockExternalTransaction;
+use crate::alias::AlloyBlockExternalTransaction;
 use crate::alias::JsonValue;
+use crate::eth::primitives::external_transaction::ExternalTransaction;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, derive_more::Deref, derive_more::DerefMut, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, derive_more::Deref, derive_more::DerefMut, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
-pub struct ExternalBlock(#[deref] pub EthersBlockExternalTransaction);
+pub struct ExternalBlock(#[deref] pub AlloyBlockExternalTransaction);
 
 impl ExternalBlock {
     /// Returns the block hash.
     #[allow(clippy::expect_used)]
     pub fn hash(&self) -> Hash {
-        self.0.hash.expect("external block must have hash").into()
+        Hash::from(self.0.header.hash)
     }
 
     /// Returns the block number.
     #[allow(clippy::expect_used)]
     pub fn number(&self) -> BlockNumber {
-        self.0.number.expect("external block must have number").into()
+        BlockNumber::from(self.0.header.inner.number)
     }
 
     /// Returns the block timestamp.
     pub fn timestamp(&self) -> UnixTime {
-        self.0.timestamp.into()
+        self.0.header.inner.timestamp.into()
     }
 
-    /// Returns the block timestamp.
+    /// Returns the block author.
     pub fn author(&self) -> Address {
-        self.0.author.unwrap_or_default().into()
-    }
-
-    /// Returns the block timestamp.
-    pub fn extra_data(&mut self) -> Bytes {
-        std::mem::take(&mut self.0.extra_data).into()
+        self.0.header.inner.beneficiary.into()
     }
 }
 
-// -----------------------------------------------------------------------------
-// Conversions: Self -> Other
-// -----------------------------------------------------------------------------
+impl Dummy<Faker> for ExternalBlock {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+        let mut addr_bytes = [0u8; 20];
+        let mut hash_bytes = [0u8; 32];
+        let mut nonce_bytes = [0u8; 8];
+        rng.fill_bytes(&mut addr_bytes);
+        rng.fill_bytes(&mut hash_bytes);
+        rng.fill_bytes(&mut nonce_bytes);
 
-impl From<ExternalBlock> for EthersBlockExternalTransaction {
-    fn from(value: ExternalBlock) -> Self {
-        value.0
-    }
-}
+        let transaction: ExternalTransaction = faker.fake_with_rng(rng);
 
-impl TryFrom<&ExternalBlock> for Block {
-    type Error = anyhow::Error;
-    fn try_from(value: &ExternalBlock) -> Result<Self, Self::Error> {
-        Ok(Block {
-            header: value.try_into()?,
-            transactions: vec![],
-        })
+        let block = alloy_rpc_types_eth::Block {
+            header: alloy_rpc_types_eth::Header {
+                hash: B256::from_slice(&hash_bytes),
+                inner: alloy_consensus::Header {
+                    parent_hash: B256::from_slice(&hash_bytes),
+                    ommers_hash: B256::from_slice(&hash_bytes),
+                    beneficiary: alloy_primitives::Address::from_slice(&addr_bytes),
+                    state_root: B256::from_slice(&hash_bytes),
+                    transactions_root: B256::from_slice(&hash_bytes),
+                    receipts_root: B256::from_slice(&hash_bytes),
+                    withdrawals_root: Some(B256::from_slice(&hash_bytes)),
+                    number: rng.next_u64(),
+                    gas_used: rng.next_u64(),
+                    gas_limit: rng.next_u64(),
+                    extra_data: Bytes::default(),
+                    logs_bloom: Bloom::default(),
+                    timestamp: rng.next_u64(),
+                    difficulty: U256::from(rng.next_u64()),
+                    mix_hash: B256::from_slice(&hash_bytes),
+                    nonce: B64::from_slice(&nonce_bytes),
+                    base_fee_per_gas: Some(rng.next_u64()),
+                    blob_gas_used: None,
+                    excess_blob_gas: None,
+                    parent_beacon_block_root: None,
+                    requests_hash: None,
+                },
+                total_difficulty: Some(U256::from(rng.next_u64())),
+                size: Some(U256::from(rng.next_u64())),
+            },
+            uncles: vec![B256::from_slice(&hash_bytes)],
+            transactions: alloy_rpc_types_eth::BlockTransactions::Full(vec![transaction]),
+            withdrawals: Some(Withdrawals::default()),
+        };
+
+        ExternalBlock(block)
     }
 }
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
+
 impl TryFrom<JsonValue> for ExternalBlock {
     type Error = anyhow::Error;
 
@@ -76,44 +107,5 @@ impl TryFrom<JsonValue> for ExternalBlock {
             Ok(v) => Ok(v),
             Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to ExternalBlock"),
         }
-    }
-}
-
-impl From<EthersBlockEthersTransaction> for ExternalBlock {
-    fn from(value: EthersBlockEthersTransaction) -> Self {
-        let txs: Vec<ExternalTransaction> = value.transactions.into_iter().map(ExternalTransaction::from).collect();
-
-        // Is there a better way to do this?
-        let block = EthersBlockExternalTransaction {
-            transactions: txs,
-            hash: value.hash,
-            parent_hash: value.parent_hash,
-            uncles_hash: value.uncles_hash,
-            author: value.author,
-            state_root: value.state_root,
-            transactions_root: value.transactions_root,
-            receipts_root: value.receipts_root,
-            number: value.number,
-            gas_used: value.gas_used,
-            gas_limit: value.gas_limit,
-            extra_data: value.extra_data,
-            logs_bloom: value.logs_bloom,
-            timestamp: value.timestamp,
-            difficulty: value.difficulty,
-            total_difficulty: value.total_difficulty,
-            seal_fields: value.seal_fields,
-            uncles: value.uncles,
-            size: value.size,
-            mix_hash: value.mix_hash,
-            nonce: value.nonce,
-            base_fee_per_gas: value.base_fee_per_gas,
-            blob_gas_used: value.blob_gas_used,
-            excess_blob_gas: value.excess_blob_gas,
-            withdrawals: value.withdrawals,
-            withdrawals_root: value.withdrawals_root,
-            parent_beacon_block_root: value.parent_beacon_block_root,
-            other: value.other,
-        };
-        ExternalBlock(block)
     }
 }

@@ -1,10 +1,10 @@
 use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::sync::LazyLock;
 
 use chrono::DateTime;
 use chrono::Utc;
-use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use sentry::ClientInitGuard;
 use serde::Deserialize;
@@ -109,13 +109,13 @@ pub enum NodeMode {
 // Global state
 // -----------------------------------------------------------------------------
 
-pub static STRATUS_SHUTDOWN_SIGNAL: Lazy<CancellationToken> = Lazy::new(CancellationToken::new);
+pub static STRATUS_SHUTDOWN_SIGNAL: LazyLock<CancellationToken> = LazyLock::new(CancellationToken::new);
 
 /// Importer is running or being shut-down?
 static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(true);
 
 /// A guard that is taken when importer is running.
-pub static IMPORTER_ONLINE_TASKS_SEMAPHORE: Lazy<Semaphore> = Lazy::new(|| Semaphore::new(Importer::TASKS_COUNT));
+pub static IMPORTER_ONLINE_TASKS_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(Importer::TASKS_COUNT));
 
 /// Transaction should be accepted?
 static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -126,7 +126,7 @@ static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 /// Current node mode.
 static NODE_MODE: Mutex<NodeMode> = Mutex::new(NodeMode::Follower);
 
-static START_TIME: Lazy<DateTime<Utc>> = Lazy::new(Utc::now);
+static START_TIME: LazyLock<DateTime<Utc>> = LazyLock::new(Utc::now);
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalState;
@@ -302,6 +302,6 @@ impl GlobalState {
     }
 
     pub fn setup_start_time() {
-        Lazy::force(&START_TIME);
+        LazyLock::force(&START_TIME);
     }
 }

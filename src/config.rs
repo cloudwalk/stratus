@@ -245,6 +245,14 @@ pub struct RpcDownloaderConfig {
     #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s")]
     pub external_rpc_timeout: Duration,
 
+    /// Maximum response size in bytes for external RPC requests
+    #[arg(
+        long = "external-rpc-max-response-size-bytes",
+        env = "EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES",
+        default_value = "10485760"
+    )]
+    pub external_rpc_max_response_size_bytes: u32,
+
     /// Number of parallel downloads.
     #[arg(short = 'p', long = "paralellism", env = "PARALELLISM", default_value = "1")]
     pub paralellism: usize,
@@ -291,6 +299,14 @@ pub struct ImporterOfflineConfig {
     #[arg(short = 'b', long = "blocks-by-fetch", env = "BLOCKS_BY_FETCH", default_value = "10000")]
     pub blocks_by_fetch: usize,
 
+    /// Number of blocks to be accumulated before sending to the block saver. (cache needs to be sufficiently big)
+    #[arg(long = "block-saver-batch-size", env = "BLOCK_SAVER_BATCH_SIZE", default_value = "100")]
+    pub block_saver_batch_size: usize,
+
+    /// Number of blocks batches that can be queued to the saver before blocking. (cache needs to be sufficiently big)
+    #[arg(long = "block-saver-queue-size", env = "BLOCK_SAVER_QUEUE_SIZE", default_value = "10")]
+    pub block_saver_queue_size: usize,
+
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 
@@ -309,59 +325,6 @@ pub struct ImporterOfflineConfig {
 }
 
 impl WithCommonConfig for ImporterOfflineConfig {
-    fn common(&self) -> &CommonConfig {
-        &self.common
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config: RocksRevertToBlockConfig
-// -----------------------------------------------------------------------------
-
-#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
-pub struct RocksRevertToBlockConfig {
-    /// Block number to revert to.
-    #[arg(long = "block", env = "BLOCK")]
-    pub block_number: u64,
-
-    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
-    pub rocks_path_prefix: Option<String>,
-
-    #[clap(flatten)]
-    pub common: CommonConfig,
-}
-
-impl WithCommonConfig for RocksRevertToBlockConfig {
-    fn common(&self) -> &CommonConfig {
-        &self.common
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Config: Test
-// -----------------------------------------------------------------------------
-
-/// Configuration for integration tests.
-#[derive(DebugAsJson, Clone, Parser, derive_more::Deref, serde::Serialize)]
-pub struct IntegrationTestConfig {
-    #[deref]
-    #[clap(flatten)]
-    pub common: CommonConfig,
-
-    #[clap(flatten)]
-    pub executor: ExecutorConfig,
-
-    #[clap(flatten)]
-    pub miner: MinerConfig,
-
-    #[clap(flatten)]
-    pub storage: StorageConfig,
-
-    #[clap(flatten)]
-    pub rpc_storage: ExternalRpcConfig,
-}
-
-impl WithCommonConfig for IntegrationTestConfig {
     fn common(&self) -> &CommonConfig {
         &self.common
     }
@@ -400,27 +363,6 @@ impl FromStr for Environment {
             "production" | "prod" => Ok(Self::Production),
             "canary" => Ok(Self::Canary),
             s => Err(anyhow!("unknown environment: \"{}\" - valid values are {:?}", s, Self::VARIANTS)),
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enum: ValidatorMethodConfig
-// -----------------------------------------------------------------------------
-
-#[derive(DebugAsJson, Clone, strum::Display, serde::Serialize)]
-pub enum ValidatorMethodConfig {
-    Rpc { url: String },
-    CompareTables,
-}
-
-impl FromStr for ValidatorMethodConfig {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s {
-            "compare_tables" => Ok(Self::CompareTables),
-            s => Ok(Self::Rpc { url: s.to_string() }),
         }
     }
 }

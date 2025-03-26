@@ -1,3 +1,5 @@
+use alloy_consensus::Transaction;
+use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use display_json::DebugAsJson;
 
 use crate::eth::primitives::Address;
@@ -8,11 +10,16 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
+use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Gas;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
@@ -133,20 +140,17 @@ impl EvmInput {
     /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
     pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block_number: BlockNumber, block_timestamp: UnixTime) -> anyhow::Result<Self> {
         Ok(Self {
-            from: tx.0.from.into(),
-            to: tx.0.to.map_into(),
-            value: tx.0.value.into(),
-            data: tx.0.input.clone().into(),
-            nonce: Some(tx.0.nonce.try_into()?),
-            gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.0.gas.try_into()?),
-            gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.0.gas_price.map_into().unwrap_or(Wei::ZERO)),
+            from: tx.from.into(),
+            to: tx.inner.to().map_into(),
+            value: tx.inner.value().into(),
+            data: tx.inner.input().clone().into(),
+            nonce: Some(tx.inner.nonce().into()),
+            gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.inner.gas_limit().into()),
+            gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.inner.gas_price().map_into().unwrap_or(Wei::ZERO)),
             point_in_time: PointInTime::Pending,
             block_number,
             block_timestamp,
-            chain_id: match tx.0.chain_id {
-                Some(chain_id) => Some(chain_id.try_into()?),
-                None => None,
-            },
+            chain_id: tx.inner.chain_id().map(Into::into),
         })
     }
 
@@ -169,4 +173,52 @@ impl PartialEq<(&TransactionInput, &PendingBlockHeader)> for EvmInput {
             && self.value == other.0.value
             && self.to == other.0.to
     }
+}
+
+impl TryFrom<ExternalTransactionExecution> for EvmInput {
+    type Error = anyhow::Error;
+    fn try_from(value: ExternalTransactionExecution) -> Result<Self, Self::Error> {
+        EvmInput::from_external(
+            &value.tx,
+            &value.receipt,
+            value.receipt.block_number(),
+            value.evm_execution.execution.block_timestamp,
+        )
+    }
+}
+
+impl From<TransactionMined> for EvmInput {
+    fn from(value: TransactionMined) -> Self {
+        Self {
+            from: value.input.signer,
+            to: value.input.to,
+            value: value.input.value,
+            data: value.input.input,
+            nonce: Some(value.input.nonce),
+            gas_limit: value.input.gas_limit,
+            gas_price: value.input.gas_price,
+            block_number: value.block_number,
+            block_timestamp: value.execution.block_timestamp,
+            point_in_time: PointInTime::MinedPast(value.block_number),
+            chain_id: value.input.chain_id,
+        }
+    }
+}
+
+impl TryFrom<TransactionStage> for EvmInput {
+    type Error = anyhow::Error;
+
+    fn try_from(value: TransactionStage) -> Result<Self, Self::Error> {
+        match value {
+            TransactionStage::Executed(TransactionExecution::External(tx)) => tx.try_into(),
+            TransactionStage::Executed(TransactionExecution::Local(tx)) => Ok(tx.evm_input),
+            TransactionStage::Mined(tx) => Ok(tx.into()),
+        }
+    }
+}
+
+pub struct InspectorInput {
+    pub tx_hash: Hash,
+    pub opts: GethDebugTracingOptions,
+    pub trace_unsuccessful_only: bool,
 }

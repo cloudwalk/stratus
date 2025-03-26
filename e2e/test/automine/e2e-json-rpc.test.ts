@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { keccak256 } from "ethers";
+import { TransactionReceipt, keccak256 } from "ethers";
 import { JsonRpcProvider } from "ethers";
 import { Block, Bytes } from "web3-types";
 
@@ -14,8 +14,14 @@ import {
     ONE,
     TEST_BALANCE,
     ZERO,
+    createEIP1559Transaction,
+    createEIP2930Transaction,
+    createEIP4844Transaction,
+    createLegacyTransaction,
     deployTestContractBalances,
     deployTestContractBlockTimestamp,
+    deployTestRevertReason,
+    pollReceipt,
     prepareSignedTx,
     send,
     sendAndGetError,
@@ -247,6 +253,118 @@ describe("JSON-RPC", () => {
                 expect(actualTxHash).eq(expectedTxHash);
             });
         });
+        describe("stratus_getTransactionResult", () => {
+            it("Returns decoded error message when transaction is reverted", async function () {
+                if (!isStratus) {
+                    this.skip();
+                    return;
+                }
+
+                // Deploy test contract
+                const contract = await deployTestRevertReason();
+
+                // Execute transaction that will revert with known error
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await ETHERJS.getTransactionReceipt(txHash);
+
+                // Get transaction result
+                const result = await send("stratus_getTransactionResult", [txHash]);
+                expect(result.reverted.reason).to.equal("KnownError()");
+            });
+
+            it("Returns success when transaction succeeds", async function () {
+                if (!isStratus) {
+                    this.skip();
+                    return;
+                }
+
+                // Deploy test contract
+                const contract = await deployTestContractBalances();
+
+                // Execute transaction that will succeed
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "add",
+                    methodParameters: [ALICE.address, 10],
+                });
+                const txHash = await sendRawTransaction(signedTx);
+                await ETHERJS.getTransactionReceipt(txHash);
+
+                // Get transaction result
+                const result = await send("stratus_getTransactionResult", [txHash]);
+                expect(result).to.equal("success");
+            });
+        });
+
+        describe("Transaction Types", () => {
+            beforeEach(async () => {
+                await sendReset();
+            });
+
+            it("handles legacy transaction with type 0", async () => {
+                const signedTx = await createLegacyTransaction(ALICE, 0);
+                const txHash = await sendRawTransaction(signedTx);
+
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x0");
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x0");
+            });
+
+            it("handles EIP-2930 (type 1) transaction", async () => {
+                const signedTx = await createEIP2930Transaction(ALICE);
+                const txHash = await sendRawTransaction(signedTx);
+
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x1");
+                expect(tx.accessList).to.be.an("array");
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x1");
+            });
+
+            it("handles EIP-1559 (type 2) transaction", async () => {
+                const signedTx = await createEIP1559Transaction(ALICE);
+                const txHash = await sendRawTransaction(signedTx);
+
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x2");
+                expect(tx.maxFeePerGas).to.match(HEX_PATTERN);
+                expect(tx.maxPriorityFeePerGas).to.match(HEX_PATTERN);
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x2");
+            });
+
+            it("handles EIP-4844 (type 3) transaction", async function () {
+                const signedTx = await createEIP4844Transaction(ALICE);
+                const txHash = await sendRawTransaction(signedTx);
+
+                // Validate via eth_getTransactionByHash
+                const tx = await send("eth_getTransactionByHash", [txHash]);
+                expect(tx.type).to.equal("0x3");
+                expect(tx.maxFeePerBlobGas).to.match(HEX_PATTERN);
+                expect(tx.blobVersionedHashes).to.be.an("array");
+
+                // Validate via eth_getTransactionReceipt
+                const receipt = await send("eth_getTransactionReceipt", [txHash]);
+                expect(receipt.type).to.equal("0x3");
+            });
+        });
     });
 
     describe("Call", () => {
@@ -281,6 +399,33 @@ describe("JSON-RPC", () => {
                 // validate
                 const expectedAliceBalance = toPaddedHex(0, 32);
                 expect(currentAliceBalance).eq(expectedAliceBalance);
+            });
+        });
+
+        describe("stratus_call", () => {
+            it("Returns decoded error through stratus_call", async () => {
+                if (!isStratus) return;
+
+                // deploy
+                const contract = await deployTestRevertReason();
+                // Test revert with known error
+                const knownErrorData = contract.interface.encodeFunctionData("revertWithKnownError");
+
+                const knownErrorTx = { to: contract.target, data: knownErrorData };
+                const knownErrorResult = await sendAndGetError("stratus_call", [knownErrorTx, "latest"]);
+                expect(knownErrorResult.data).to.equal("KnownError()");
+
+                // Test revert with unknown error
+                const unknownErrorData = contract.interface.encodeFunctionData("revertWithUnknownError");
+                const unknownErrorTx = { to: contract.target, data: unknownErrorData };
+                const unknownErrorResult = await sendAndGetError("stratus_call", [unknownErrorTx, "latest"]);
+                expect(unknownErrorResult.data).to.equal("0xc39a0557");
+
+                // Test revert with string
+                const stringErrorData = contract.interface.encodeFunctionData("revertWithString");
+                const stringErrorTx = { to: contract.target, data: stringErrorData };
+                const stringErrorResult = await sendAndGetError("stratus_call", [stringErrorTx, "latest"]);
+                expect(stringErrorResult.data).to.equal("Custom error message");
             });
         });
     });
@@ -356,7 +501,7 @@ describe("JSON-RPC", () => {
 
                 // Record timestamp in contract
                 const tx = await contract.recordTimestamp();
-                const receipt: TransactionReceipt = await tx.wait();
+                const receipt = (await tx.wait()) as TransactionReceipt;
 
                 // Get the timestamp from contract event
                 const event = receipt.logs[0];

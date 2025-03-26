@@ -1,39 +1,19 @@
-use std::num::TryFromIntError;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::str::FromStr;
 
+use alloy_primitives::keccak256;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use ethereum_types::U64;
-use ethers_core::utils::keccak256;
 use fake::Dummy;
 use fake::Faker;
-use sqlx::encode::IsNull;
-use sqlx::error::BoxDynError;
-use sqlx::postgres::PgHasArrayType;
-use sqlx::types::BigDecimal;
 
 use crate::alias::RevmU256;
 use crate::eth::primitives::Hash;
 use crate::gen_newtype_from;
 
-#[derive(
-    DebugAsJson,
-    derive_more::Display,
-    Clone,
-    Copy,
-    Default,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    derive_more::Add,
-    derive_more::Sub,
-    serde::Serialize,
-    serde::Deserialize,
-)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct BlockNumber(pub U64);
 
@@ -44,7 +24,7 @@ impl BlockNumber {
 
     /// Calculates the keccak256 hash of the block number.
     pub fn hash(&self) -> Hash {
-        Hash::new(keccak256(<[u8; 8]>::from(*self)))
+        Hash::new(*keccak256(<[u8; 8]>::from(*self)))
     }
 
     /// Returns the previous block number.
@@ -77,19 +57,21 @@ impl BlockNumber {
         }
     }
 
-    /// Converts itself to i64.
     pub fn as_i64(&self) -> i64 {
         self.0.as_u64() as i64
     }
 
-    /// Converts itself to u64.
     pub fn as_u64(&self) -> u64 {
         self.0.as_u64()
+    }
+
+    pub fn as_u32(&self) -> u32 {
+        self.0.as_u64() as u32
     }
 }
 
 impl Dummy<Faker> for BlockNumber {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
     }
 }
@@ -132,15 +114,6 @@ impl FromStr for BlockNumber {
     }
 }
 
-impl TryFrom<BigDecimal> for BlockNumber {
-    type Error = anyhow::Error;
-
-    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
-        let value_str = value.to_string();
-        Ok(BlockNumber(U64::from_str_radix(&value_str, 10)?))
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
@@ -150,56 +123,14 @@ impl From<BlockNumber> for U64 {
     }
 }
 
-impl From<BlockNumber> for u64 {
-    fn from(block_number: BlockNumber) -> Self {
-        block_number.0.as_u64()
-    }
-}
-
 impl From<BlockNumber> for RevmU256 {
     fn from(block_number: BlockNumber) -> Self {
         Self::from_limbs([block_number.0.as_u64(), 0, 0, 0])
     }
 }
 
-impl TryFrom<BlockNumber> for i64 {
-    type Error = TryFromIntError;
-
-    fn try_from(block_number: BlockNumber) -> Result<i64, TryFromIntError> {
-        i64::try_from(block_number.0.as_u64())
-    }
-}
-
 impl From<BlockNumber> for [u8; 8] {
     fn from(block_number: BlockNumber) -> Self {
         block_number.0.as_u64().to_be_bytes()
-    }
-}
-
-// -----------------------------------------------------------------------------
-// sqlx traits
-// -----------------------------------------------------------------------------
-impl<'r> sqlx::Decode<'r, sqlx::Postgres> for BlockNumber {
-    fn decode(value: <sqlx::Postgres as sqlx::Database>::ValueRef<'r>) -> Result<Self, BoxDynError> {
-        let value = <BigDecimal as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        Ok(value.try_into()?)
-    }
-}
-
-impl sqlx::Type<sqlx::Postgres> for BlockNumber {
-    fn type_info() -> <sqlx::Postgres as sqlx::Database>::TypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("NUMERIC")
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::Postgres> for BlockNumber {
-    fn encode_by_ref(&self, buf: &mut <sqlx::Postgres as sqlx::Database>::ArgumentBuffer<'q>) -> Result<IsNull, sqlx::error::BoxDynError> {
-        BigDecimal::from(u64::from(*self)).encode(buf)
-    }
-}
-
-impl PgHasArrayType for BlockNumber {
-    fn array_type_info() -> sqlx::postgres::PgTypeInfo {
-        <BigDecimal as PgHasArrayType>::array_type_info()
     }
 }

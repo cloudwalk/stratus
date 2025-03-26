@@ -3,6 +3,7 @@ mod address;
 mod block;
 mod block_header;
 mod block_number;
+mod bytecode;
 mod bytes;
 mod chain_id;
 mod difficulty;
@@ -42,7 +43,7 @@ mod tests {
     use execution::ExecutionRocksdb;
     use execution_result::ExecutionResultRocksdb;
     use gas::GasRocksdb;
-    use log_mined::LogMinedRockdb;
+    use log_mined::LogMinedRocksdb;
     use logs_bloom::LogsBloomRocksdb;
     use miner_nonce::MinerNonceRocksdb;
     use nonce::NonceRocksdb;
@@ -70,7 +71,7 @@ mod tests {
     gen_test_bincode!(GasRocksdb);
     gen_test_bincode!(HashRocksdb);
     gen_test_bincode!(IndexRocksdb);
-    gen_test_bincode!(LogMinedRockdb);
+    gen_test_bincode!(LogMinedRocksdb);
     gen_test_bincode!(LogRocksdb);
     gen_test_bincode!(LogsBloomRocksdb);
     gen_test_bincode!(MinerNonceRocksdb);

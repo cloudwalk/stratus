@@ -9,7 +9,7 @@ use display_json::DebugAsJson;
 use crate::ext::to_json_string;
 
 /// Changes that happened to an account value during a transaction.
-#[derive(Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
 pub struct ExecutionValueChange<T>
 where
     T: PartialEq + serde::Serialize,
@@ -52,11 +52,6 @@ where
         self.modified = ValueState::Set(value);
     }
 
-    /// Takes the original value if it is set.
-    pub fn take_original(self) -> Option<T> {
-        self.original.take()
-    }
-
     /// Takes the original value as reference if it is set.
     pub fn take_original_ref(&self) -> Option<&T> {
         self.original.take_ref()
@@ -70,11 +65,6 @@ where
     /// Takes the modified value as reference if it is set.
     pub fn take_modified_ref(&self) -> Option<&T> {
         self.modified.take_ref()
-    }
-
-    /// Takes the original and the modified value if they are set.
-    pub fn take_both(self) -> (Option<T>, Option<T>) {
-        (self.original.take(), self.modified.take())
     }
 
     /// Takes any value that is set, giving preference to the modified value, but using the original value as fallback.
@@ -97,10 +87,11 @@ where
 // Value State
 // -----------------------------------------------------------------------------
 
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ValueState<T> {
     Set(T),
+    #[default]
     NotSet,
 }
 

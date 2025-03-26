@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 
 use anyhow::anyhow;
+use fake::Dummy;
+use fake::Faker;
 
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 
 /// A collection of [`ExternalReceipt`].
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ExternalReceipts(HashMap<Hash, ExternalReceipt>);
 
 impl ExternalReceipts {
@@ -20,17 +22,20 @@ impl ExternalReceipts {
             }
         }
     }
+}
 
-    /// Returns the number of receipts.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
+impl Dummy<Faker> for ExternalReceipts {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+        let count = (rng.next_u32() % 5 + 1) as usize;
+        let receipts = (0..count).map(|_| ExternalReceipt::dummy_with_rng(faker, rng)).collect::<Vec<_>>();
 
-    /// Returns `true` if not contains any receipts.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        Self::from(receipts)
     }
 }
+
+// -----------------------------------------------------------------------------
+// Conversions: Other -> Self
+// -----------------------------------------------------------------------------
 
 impl From<Vec<ExternalReceipt>> for ExternalReceipts {
     fn from(receipts: Vec<ExternalReceipt>) -> Self {

@@ -5,6 +5,9 @@ use crate::alias::JsonValue;
 // -----------------------------------------------------------------------------
 // Build constants
 // -----------------------------------------------------------------------------
+pub const BUILD_HOSTNAME: &str = env!("BUILD_HOSTNAME");
+pub const BUILD_OPENSSL_VERSION: &str = env!("BUILD_OPENSSL_VERSION");
+pub const BUILD_GLIBC_VERSION: &str = env!("BUILD_GLIBC_VERSION");
 pub const BUILD_TIMESTAMP: &str = env!("VERGEN_BUILD_TIMESTAMP");
 
 pub const CARGO_DEBUG: &str = env!("VERGEN_CARGO_DEBUG");
@@ -67,6 +70,9 @@ pub fn as_json() -> JsonValue {
                 "version": version(),
                 "service_name_with_version": service_name_with_version(),
                 "timestamp": BUILD_TIMESTAMP,
+                "hostname": BUILD_HOSTNAME,
+                "openssl_version": BUILD_OPENSSL_VERSION,
+                "glibc_version": BUILD_GLIBC_VERSION,
             },
             "cargo": {
                 "debug": CARGO_DEBUG,

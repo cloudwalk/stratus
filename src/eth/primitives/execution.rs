@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
+use alloy_primitives::B256;
 use anyhow::anyhow;
 use anyhow::Ok;
 use display_json::DebugAsJson;
 use hex_literal::hex;
+use revm::primitives::alloy_primitives;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -34,7 +36,7 @@ pub struct EvmExecution {
     /// Status of the execution.
     pub result: ExecutionResult,
 
-    /// Output returned by the function execution (can be the function output or an exeception).
+    /// Output returned by the function execution (can be the function output or an exception).
     pub output: Bytes,
 
     /// Logs emitted by the function execution.
@@ -57,7 +59,7 @@ impl EvmExecution {
         if receipt.is_success() {
             return log_and_err!("cannot create failed execution for successful transaction");
         }
-        if not(receipt.logs.is_empty()) {
+        if not(receipt.inner.logs().is_empty()) {
             return log_and_err!("failed receipt should not have produced logs");
         }
 
@@ -74,10 +76,10 @@ impl EvmExecution {
         let mut execution = Self {
             block_timestamp,
             receipt_applied: false,
-            result: ExecutionResult::new_reverted(), // assume it reverted
-            output: Bytes::default(),                // we cannot really know without performing an eth_call to the external system
+            result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
+            output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
-            gas: receipt.gas_used.unwrap_or_default().try_into()?,
+            gas: Gas::from(receipt.gas_used),
             changes: HashMap::from([(sender_changes.address, sender_changes)]),
             deployed_contract_address: None,
         };
@@ -112,38 +114,41 @@ impl EvmExecution {
                 "transaction status mismatch | hash={} execution={:?} receipt={:?}",
                 receipt.hash(),
                 self.result,
-                receipt.status
+                receipt.status()
             ));
         }
 
+        let receipt_logs = receipt.inner.logs();
+
         // compare logs length
-        if self.logs.len() != receipt.logs.len() {
+        if self.logs.len() != receipt_logs.len() {
             tracing::trace!(logs = ?self.logs, "execution logs");
-            tracing::trace!(logs = ?receipt.logs, "receipt logs");
+            tracing::trace!(logs = ?receipt_logs, "receipt logs");
             return log_and_err!(format!(
                 "logs length mismatch | hash={} execution={} receipt={}",
                 receipt.hash(),
                 self.logs.len(),
-                receipt.logs.len()
+                receipt_logs.len()
             ));
         }
 
         // compare logs pairs
-        for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(&receipt.logs).enumerate() {
+        for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(receipt_logs).enumerate() {
             // compare log topics length
-            if execution_log.topics_non_empty().len() != receipt_log.topics.len() {
+            if execution_log.topics_non_empty().len() != receipt_log.topics().len() {
                 return log_and_err!(format!(
                     "log topics length mismatch | hash={} log_index={} execution={} receipt={}",
                     receipt.hash(),
                     log_index,
                     execution_log.topics_non_empty().len(),
-                    receipt_log.topics.len(),
+                    receipt_log.topics().len(),
                 ));
             }
 
             // compare log topics content
-            for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics_non_empty().iter().zip(&receipt_log.topics).enumerate() {
-                if execution_log_topic.as_ref() != receipt_log_topic.as_ref() {
+            for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics_non_empty().iter().zip(receipt_log.topics().iter()).enumerate()
+            {
+                if B256::from(*execution_log_topic) != *receipt_log_topic {
                     return log_and_err!(format!(
                         "log topic content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
                         receipt.hash(),
@@ -156,13 +161,13 @@ impl EvmExecution {
             }
 
             // compare log data content
-            if execution_log.data.as_ref() != receipt_log.data.as_ref() {
+            if execution_log.data.as_ref() != receipt_log.data().data.as_ref() {
                 return log_and_err!(format!(
                     "log data content mismatch | hash={} log_index={} execution={} receipt={:#x}",
                     receipt.hash(),
                     log_index,
                     execution_log.data,
-                    receipt_log.data,
+                    receipt_log.data().data,
                 ));
             }
         }
@@ -182,13 +187,14 @@ impl EvmExecution {
         self.receipt_applied = true;
 
         // fix gas
-        self.gas = receipt.gas_used.unwrap_or_default().try_into()?;
+        self.gas = Gas::from(receipt.gas_used);
 
         // fix logs
         self.fix_logs_gas_left(receipt);
 
         // fix sender balance
         let execution_cost = receipt.execution_cost();
+
         if execution_cost > Wei::ZERO {
             // find sender changes
             let sender_address: Address = receipt.0.from.into();
@@ -198,6 +204,7 @@ impl EvmExecution {
 
             // subtract execution cost from sender balance
             let sender_balance = *sender_changes.balance.take_ref().ok_or(anyhow!("sender balance was None"))?;
+
             let sender_new_balance = if sender_balance > execution_cost {
                 sender_balance - execution_cost
             } else {
@@ -227,9 +234,11 @@ impl EvmExecution {
 
         const EVENT_HASHES: [&[u8]; 2] = [&ERC20_TRACE_EVENT_HASH, &BALANCE_TRACKER_TRACE_EVENT_HASH];
 
-        for (execution_log, receipt_log) in self.logs.iter_mut().zip(&receipt.logs) {
+        let receipt_logs = receipt.inner.logs();
+
+        for (execution_log, receipt_log) in self.logs.iter_mut().zip(receipt_logs) {
             let execution_log_matches = || execution_log.topic0.is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
-            let receipt_log_matches = || receipt_log.topics.first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
+            let receipt_log_matches = || receipt_log.topics().first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
 
             // only try overwriting if both logs refer to the target event
             let should_overwrite = execution_log_matches() && receipt_log_matches();
@@ -237,10 +246,341 @@ impl EvmExecution {
                 continue;
             }
 
-            let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data.get(0..32)) else {
+            let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data().data.get(0..32)) else {
                 continue;
             };
             destination.copy_from_slice(source);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fake::Fake;
+    use fake::Faker;
+
+    use super::*;
+    use crate::eth::primitives::CodeHash;
+    use crate::eth::primitives::Nonce;
+
+    #[test]
+    fn test_from_failed_external_transaction() {
+        // Create a mock sender account
+        let sender_address: Address = Faker.fake();
+        let sender = Account {
+            address: sender_address,
+            nonce: Nonce::from(1u16),
+            balance: Wei::from(1000u64),
+            bytecode: None,
+            code_hash: CodeHash::default(),
+        };
+
+        // Create a mock failed receipt
+        let mut receipt: ExternalReceipt = Faker.fake();
+        let mut inner_receipt = receipt.0.clone();
+
+        // Clear logs for failed transaction
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = inner_receipt.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(false);
+            r.receipt.logs.clear();
+        } else {
+            panic!("expected be legacy!")
+        }
+
+        // Update from address
+        inner_receipt.from = sender_address.into();
+        receipt.0 = inner_receipt;
+
+        // Set timestamp
+        let timestamp = UnixTime::now();
+
+        // Test the method
+        let execution = EvmExecution::from_failed_external_transaction(sender.clone(), &receipt, timestamp).unwrap();
+
+        // Verify execution state
+        assert_eq!(execution.block_timestamp, timestamp);
+        assert!(execution.receipt_applied);
+        assert!(execution.is_failure());
+        assert_eq!(execution.output, Bytes::default());
+        assert!(execution.logs.is_empty());
+        assert_eq!(execution.gas, Gas::from(receipt.gas_used));
+
+        // Verify sender changes
+        let sender_changes = execution.changes.get(&sender_address).unwrap();
+        assert_eq!(sender_changes.address, sender_address);
+
+        // Nonce should be incremented
+        let modified_nonce = sender_changes.nonce.take_modified_ref().unwrap();
+        assert_eq!(*modified_nonce, Nonce::from(2u8));
+
+        // Balance should be reduced by execution cost
+        if receipt.execution_cost() > Wei::ZERO {
+            let modified_balance = sender_changes.balance.take_modified_ref().unwrap();
+            assert!(sender.balance >= *modified_balance);
+        }
+    }
+
+    #[test]
+    fn test_compare_with_receipt_success_status_mismatch() {
+        // Create a mock execution (success)
+        let mut execution: EvmExecution = Faker.fake();
+        execution.result = ExecutionResult::Success;
+
+        // Create a mock receipt (failed)
+        let mut receipt: ExternalReceipt = Faker.fake();
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(false);
+        } else {
+            panic!("expected be legacy!")
+        }
+
+        // Verify comparison fails
+        assert!(execution.compare_with_receipt(&receipt).is_err());
+    }
+
+    #[test]
+    fn test_compare_with_receipt_logs_length_mismatch() {
+        // Create a mock execution with logs
+        let mut execution: EvmExecution = Faker.fake();
+        execution.result = ExecutionResult::Success;
+        execution.logs = vec![Faker.fake(), Faker.fake()]; // Two logs
+
+        // Create a mock receipt with different number of logs
+        let mut receipt: ExternalReceipt = Faker.fake();
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
+            r.receipt.logs = vec![alloy_rpc_types_eth::Log::default()]; // Only one log
+        } else {
+            panic!("expected be legacy!")
+        }
+
+        // Verify comparison fails
+        assert!(execution.compare_with_receipt(&receipt).is_err());
+    }
+
+    #[test]
+    fn test_compare_with_receipt_log_topics_length_mismatch() {
+        // Create a mock log with topics
+        let mut log1: Log = Faker.fake();
+        log1.topic0 = Some(Faker.fake());
+        log1.topic1 = Some(Faker.fake());
+        log1.topic2 = None;
+        log1.topic3 = None;
+
+        // Create a mock execution with that log
+        let mut execution: EvmExecution = Faker.fake();
+        execution.result = ExecutionResult::Success;
+        execution.logs = vec![log1];
+
+        // Create receipt log with different number of topics
+        let mut receipt_log = alloy_rpc_types_eth::Log::<alloy_primitives::LogData>::default();
+        let topics = vec![B256::default()];
+        receipt_log.inner.data = alloy_primitives::LogData::new_unchecked(topics, alloy_primitives::Bytes::default());
+        // Only one topic instead of two
+
+        // Create a receipt with this log
+        let mut receipt: ExternalReceipt = Faker.fake();
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
+            r.receipt.logs = vec![receipt_log.clone()];
+        } else {
+            panic!("expected be legacy!")
+        }
+
+        // Verify comparison fails
+        assert!(execution.compare_with_receipt(&receipt).is_err());
+    }
+
+    #[test]
+    fn test_compare_with_receipt_topic_content_mismatch() {
+        // Create a topic
+        let topic_value = B256::default();
+        let different_topic = B256::default();
+
+        // Create a mock log with the topic
+        let mut log1: Log = Faker.fake();
+        log1.topic0 = Some(topic_value.into());
+
+        // Create execution with that log
+        let mut execution: EvmExecution = Faker.fake();
+        execution.result = ExecutionResult::Success;
+        execution.logs = vec![log1];
+
+        // Create receipt log with different topic content
+        let mut receipt_log = alloy_rpc_types_eth::Log::<alloy_primitives::LogData>::default();
+        let topics = vec![different_topic];
+        receipt_log.inner.data = alloy_primitives::LogData::new_unchecked(topics, alloy_primitives::Bytes::default());
+
+        // Create receipt with this log
+        let mut receipt: ExternalReceipt = Faker.fake();
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
+            r.receipt.logs = vec![receipt_log.clone()];
+        } else {
+            panic!("expected be legacy!")
+        }
+
+        // Verify comparison fails
+        assert!(execution.compare_with_receipt(&receipt).is_err());
+    }
+
+    #[test]
+    fn test_compare_with_receipt_data_content_mismatch() {
+        // Create a mock log with data
+        let mut log1: Log = Faker.fake();
+        log1.topic0 = Some(Faker.fake());
+        log1.data = vec![1, 2, 3, 4].into();
+
+        // Create execution with that log
+        let mut execution: EvmExecution = Faker.fake();
+        execution.result = ExecutionResult::Success;
+        execution.logs = vec![log1];
+
+        // Create receipt log with different data
+        let mut receipt_log = alloy_rpc_types_eth::Log::<alloy_primitives::LogData>::default();
+        let topics = vec![B256::default()];
+        receipt_log.inner.data = alloy_primitives::LogData::new_unchecked(topics, alloy_primitives::Bytes::default());
+        receipt_log.inner.data = alloy_primitives::LogData::new(vec![B256::default()], alloy_primitives::Bytes::from(vec![5, 6, 7, 8])).unwrap();
+
+        // Create receipt with this log
+        let mut receipt: ExternalReceipt = Faker.fake();
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
+            r.receipt.logs = vec![receipt_log.clone()];
+        } else {
+            panic!("expected be legacy!")
+        }
+
+        // Verify comparison fails
+        assert!(execution.compare_with_receipt(&receipt).is_err());
+    }
+
+    #[test]
+    fn test_fix_logs_gas_left() {
+        // Set up test constants
+        const ERC20_TRACE_HASH: [u8; 32] = hex!("31738ac4a7c9a10ecbbfd3fed5037971ba81b8f6aa4f72a23f5364e9bc76d671");
+        const BALANCE_TRACKER_TRACE_HASH: [u8; 32] = hex!("63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9");
+
+        // Create a mock execution with logs that have gasLeft value we want to override
+        let mut execution: EvmExecution = Faker.fake();
+        execution.result = ExecutionResult::Success;
+
+        // Create an ERC20 Trace log with mock gasLeft value
+        let mut erc20_log: Log = Faker.fake();
+        erc20_log.topic0 = Some(ERC20_TRACE_HASH.into());
+        let execution_gas_left = vec![0u8; 32]; // Initial value all zeros
+        let mut log_data = Vec::with_capacity(execution_gas_left.len() + 32);
+        log_data.extend_from_slice(&execution_gas_left);
+        log_data.extend_from_slice(&[99u8; 32]); // Add some additional data
+        erc20_log.data = log_data.into();
+
+        // Create a Balance Tracker Trace log
+        let mut balance_log: Log = Faker.fake();
+        balance_log.topic0 = Some(BALANCE_TRACKER_TRACE_HASH.into());
+        let balance_gas_left = vec![0u8; 32]; // Initial value all zeros
+        balance_log.data = balance_gas_left.into();
+
+        // Create a regular log (not one we're targeting)
+        let regular_log: Log = Faker.fake();
+
+        execution.logs = vec![erc20_log, balance_log, regular_log.clone()];
+
+        // Create receipt logs with different gasLeft values
+        let receipt_erc20_gas_left = vec![42u8; 32]; // Different value for comparison
+        let mut erc20_receipt_log = alloy_rpc_types_eth::Log::<alloy_primitives::LogData>::default();
+        let erc20_topics = vec![B256::from_slice(&ERC20_TRACE_HASH)];
+
+        let mut erc20_receipt_data = Vec::with_capacity(receipt_erc20_gas_left.len() + 32);
+        erc20_receipt_data.extend_from_slice(&receipt_erc20_gas_left);
+        erc20_receipt_data.extend_from_slice(&[99u8; 32]); // Match additional data
+
+        erc20_receipt_log.inner.data = alloy_primitives::LogData::new_unchecked(erc20_topics, alloy_primitives::Bytes::from(erc20_receipt_data));
+
+        // Balance tracker receipt log
+        let receipt_balance_gas_left = vec![24u8; 32];
+        let mut balance_receipt_log = alloy_rpc_types_eth::Log::<alloy_primitives::LogData>::default();
+        let balance_topics = vec![B256::from_slice(&BALANCE_TRACKER_TRACE_HASH)];
+        balance_receipt_log.inner.data =
+            alloy_primitives::LogData::new_unchecked(balance_topics, alloy_primitives::Bytes::from(receipt_balance_gas_left.clone()));
+
+        // Regular log for receipt
+        let mut regular_receipt_log = alloy_rpc_types_eth::Log::<alloy_primitives::LogData>::default();
+        let regular_topics = Vec::new();
+        regular_receipt_log.inner.data = alloy_primitives::LogData::new_unchecked(regular_topics, alloy_primitives::Bytes::default());
+
+        // Create receipt with these logs
+        let mut receipt: ExternalReceipt = Faker.fake();
+        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+            r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
+            r.receipt.logs = vec![erc20_receipt_log.clone(), balance_receipt_log.clone(), regular_receipt_log.clone()];
+        } else {
+            panic!("expected be legacy!")
+        }
+
+        // Apply the fix
+        execution.fix_logs_gas_left(&receipt);
+
+        // Verify the first 32 bytes of ERC20 log data was overwritten
+        let updated_erc20_data = execution.logs[0].data.as_ref();
+        assert_eq!(&updated_erc20_data[0..32], &receipt_erc20_gas_left[..]);
+        // Rest of the data should remain unchanged
+        assert_eq!(&updated_erc20_data[32..], &[99u8; 32]);
+
+        // Verify the first 32 bytes of Balance Tracker log data was overwritten
+        assert_eq!(execution.logs[1].data.as_ref(), &receipt_balance_gas_left[..]);
+
+        // Verify regular log data wasn't modified
+        assert_eq!(execution.logs[2].data, regular_log.data);
+    }
+
+    #[test]
+    fn test_apply_receipt() {
+        // Create a mock sender account with balance
+        let sender_address: Address = Faker.fake();
+        let sender = Account {
+            address: sender_address,
+            nonce: Nonce::from(1u16),
+            balance: Wei::from(1000u64),
+            bytecode: None,
+            code_hash: CodeHash::default(),
+        };
+
+        // Create a mock execution
+        let mut execution: EvmExecution = Faker.fake();
+
+        // Set up execution with sender account
+        let sender_changes = ExecutionAccountChanges::from_original_values(sender);
+        execution.changes = HashMap::from([(sender_address, sender_changes)]);
+        execution.receipt_applied = false;
+        execution.gas = Gas::from(100u64);
+
+        // Create a receipt with higher gas used and execution cost
+        let mut receipt: ExternalReceipt = Faker.fake();
+        receipt.0.from = sender_address.into();
+        receipt.0.gas_used = 100u64; // Higher gas
+
+        // Make sure transaction has a cost
+        let gas_price = Wei::from(1u64);
+        receipt.0.effective_gas_price = gas_price.into();
+
+        // Apply receipt
+        execution.apply_receipt(&receipt).unwrap();
+
+        // Verify receipt_applied flag
+        assert!(execution.receipt_applied);
+
+        // Verify sender balance was reduced by execution cost
+        let sender_changes = execution.changes.get(&sender_address).unwrap();
+        let modified_balance = sender_changes.balance.take_modified_ref().unwrap();
+        assert_eq!(*modified_balance, Wei::from(900u64)); // 1000 - 100
+
+        // Verify applying receipt twice has no effect
+        execution.apply_receipt(&receipt).unwrap();
+
+        // Gas and balance should remain unchanged
+        assert_eq!(execution.gas, Gas::from(100u64));
+        let sender_changes = execution.changes.get(&sender_address).unwrap();
+        let modified_balance = sender_changes.balance.take_modified_ref().unwrap();
+        assert_eq!(*modified_balance, Wei::from(900u64));
     }
 }

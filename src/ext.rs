@@ -8,7 +8,6 @@ use anyhow::anyhow;
 use chrono::DateTime;
 use chrono::Utc;
 use jsonrpsee::types::SubscriptionId;
-use rust_decimal::Decimal;
 use serde::Serialize;
 use serde::Serializer;
 use tokio::select;
@@ -143,16 +142,6 @@ where
     }
 }
 
-impl InfallibleExt<Decimal, ()> for Option<Decimal> {
-    #[allow(clippy::expect_used)]
-    fn expect_infallible(self) -> Decimal {
-        if self.is_none() {
-            tracing::error!("expected infallible decimal conversion");
-        }
-        self.expect("infallible decimal conversion")
-    }
-}
-
 impl InfallibleExt<DateTime<Utc>, ()> for Option<DateTime<Utc>> {
     #[allow(clippy::expect_used)]
     fn expect_infallible(self) -> DateTime<Utc> {
@@ -240,21 +229,6 @@ where
         .expect("spawning named async task should not fail")
 }
 
-/// Spawns a blocking Tokio task with a name to be displayed in tokio-console.
-#[track_caller]
-#[allow(clippy::expect_used)]
-pub fn spawn_blocking_named<T>(name: &str, task: impl FnOnce() -> T + Send + 'static) -> tokio::task::JoinHandle<T>
-where
-    T: Send + 'static,
-{
-    info_task_spawn(name);
-
-    tokio::task::Builder::new()
-        .name(name)
-        .spawn_blocking(task)
-        .expect("spawning named blocking task should not fail")
-}
-
 /// Spawns a thread with the given name. Thread has access to Tokio current runtime.
 #[allow(clippy::expect_used)]
 #[track_caller]
@@ -320,17 +294,6 @@ pub fn to_json_value<V: serde::Serialize>(value: V) -> serde_json::Value {
     serde_json::to_value(value).expect_infallible()
 }
 
-/// Serializes any serializable value to [`serde_json::Map`] without having to check for errors.
-pub fn to_json_object<V: serde::Serialize>(value: V) -> serde_json::Map<String, serde_json::Value> {
-    match serde_json::to_value(value).expect_infallible() {
-        serde_json::Value::Object(map) => map,
-        _ => unreachable!(
-            "to_json_object called with type {} which didn't serialize to a JSON object",
-            type_basename::<V>(),
-        ),
-    }
-}
-
 /// Deserializes any deserializable value from [`&str`] without having to check for errors.
 pub fn from_json_str<T: serde::de::DeserializeOwned>(s: &str) -> T {
     serde_json::from_str::<T>(s).expect_infallible()
@@ -378,6 +341,58 @@ macro_rules! gen_test_serde {
                 // re-decode
                 let redecoded = serde_json::from_str::<$type>(&reencoded).unwrap();
                 assert_eq!(redecoded, original);
+            }
+        }
+    };
+}
+
+/// Generates a unit test that verifies JSON serialization/deserialization compatibility using snapshots.
+#[macro_export]
+macro_rules! gen_test_json {
+    ($type:ty) => {
+        paste::paste! {
+            #[test]
+            fn [<test_ $type:snake _json_snapshot>]() -> anyhow::Result<()> {
+                use anyhow::bail;
+                use std::path::Path;
+                use std::{env, fs};
+
+                let expected: $type = $crate::utils::test_utils::fake_first::<$type>();
+                let expected_json = serde_json::to_string_pretty(&expected)?;
+                let snapshot_parent_path = "tests/fixtures/primitives";
+                let snapshot_name = format!("{}.json", stringify!($type));
+                let snapshot_path = format!("{}/{}", snapshot_parent_path, snapshot_name);
+
+                // WARNING: If you need to update snapshots (DANGEROUS_UPDATE_SNAPSHOTS=1), you have likely
+                // broken backwards compatibility! Make sure this is intentional.
+                if !Path::new(&snapshot_path).exists() {
+                    if env::var("DANGEROUS_UPDATE_SNAPSHOTS").is_ok() {
+                        fs::create_dir_all(snapshot_parent_path)?;
+                        fs::write(&snapshot_path, &expected_json)?;
+                    } else {
+                        bail!("snapshot file at '{snapshot_path}' doesn't exist and DANGEROUS_UPDATE_SNAPSHOTS is not set");
+                    }
+                }
+
+                // Read and attempt to deserialize the snapshot
+                let snapshot_content = fs::read_to_string(&snapshot_path)?;
+                let deserialized = match serde_json::from_str::<$type>(&snapshot_content) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        bail!("Failed to deserialize snapshot:\nError: {}\n\nExpected JSON:\n{}\n\nActual JSON from snapshot:\n{}",
+                            e, expected_json, snapshot_content);
+                    }
+                };
+
+                // Compare the values
+                assert_eq!(
+                    expected, deserialized,
+                    "\nDeserialized value doesn't match expected:\n\nExpected JSON:\n{}\n\nDeserialized JSON:\n{}",
+                    expected_json,
+                    serde_json::to_string_pretty(&deserialized)?
+                );
+
+                Ok(())
             }
         }
     };

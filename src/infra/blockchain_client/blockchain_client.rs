@@ -12,12 +12,13 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
-use crate::alias::EthersBytes;
-use crate::alias::EthersTransaction;
+use crate::alias::AlloyBytes;
+use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
+use crate::eth::primitives::ExternalBlockWithReceipts;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::StratusError;
@@ -37,20 +38,22 @@ pub struct BlockchainClient {
     ws: Option<RwLock<WsClient>>,
     ws_url: Option<String>,
     timeout: Duration,
+    #[allow(dead_code)]
+    max_response_size_bytes: u32,
 }
 
 impl BlockchainClient {
     /// Creates a new RPC client connected only to HTTP.
-    pub async fn new_http(http_url: &str, timeout: Duration) -> anyhow::Result<Self> {
-        Self::new_http_ws(http_url, None, timeout).await
+    pub async fn new_http(http_url: &str, timeout: Duration, max_response_size_bytes: u32) -> anyhow::Result<Self> {
+        Self::new_http_ws(http_url, None, timeout, max_response_size_bytes).await
     }
 
     /// Creates a new RPC client connected to HTTP and optionally to WS.
-    pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>, timeout: Duration) -> anyhow::Result<Self> {
+    pub async fn new_http_ws(http_url: &str, ws_url: Option<&str>, timeout: Duration, max_response_size_bytes: u32) -> anyhow::Result<Self> {
         tracing::info!(%http_url, "creating blockchain client");
 
         // build http provider
-        let http = Self::build_http_client(http_url, timeout)?;
+        let http = Self::build_http_client(http_url, timeout, max_response_size_bytes)?;
 
         // build ws provider
         let ws = if let Some(ws_url) = ws_url {
@@ -65,6 +68,7 @@ impl BlockchainClient {
             ws,
             ws_url: ws_url.map(|x| x.to_owned()),
             timeout,
+            max_response_size_bytes,
         };
 
         // check health before assuming it is ok
@@ -73,9 +77,13 @@ impl BlockchainClient {
         Ok(client)
     }
 
-    fn build_http_client(url: &str, timeout: Duration) -> anyhow::Result<HttpClient> {
+    fn build_http_client(url: &str, timeout: Duration, max_response_size_bytes: u32) -> anyhow::Result<HttpClient> {
         tracing::info!(%url, timeout = %timeout.to_string_ext(), "creating blockchain http client");
-        match HttpClientBuilder::default().request_timeout(timeout).build(url) {
+        match HttpClientBuilder::default()
+            .request_timeout(timeout)
+            .max_response_size(max_response_size_bytes)
+            .build(url)
+        {
             Ok(http) => {
                 tracing::info!(%url, timeout = %timeout.to_string_ext(), "created blockchain http client");
                 Ok(http)
@@ -145,23 +153,31 @@ impl BlockchainClient {
         }
     }
 
-    /// Fetches a block by number.
-    pub async fn fetch_block_and_receipts_with_temporary_endpoint(&self, block_number: BlockNumber) -> anyhow::Result<JsonValue> {
+    /// Fetches a block by number with receipts.
+    pub async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalBlockWithReceipts>> {
         tracing::debug!(%block_number, "fetching block");
 
         let number = to_json_value(block_number);
-        match self.http.request::<JsonValue, _>("stratus_getBlockAndReceipts", [number]).await {
-            Ok(json) => Ok(json),
-            Err(e) => log_and_err!(reason = e, "failed to fetch block by number"),
+        let result = self
+            .http
+            .request::<Option<ExternalBlockWithReceipts>, _>("stratus_getBlockAndReceipts", [number])
+            .await;
+
+        match result {
+            Ok(block) => Ok(block),
+            Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
         }
     }
 
     /// Fetches a block by number.
-    pub async fn fetch_block(&self, block_number: BlockNumber) -> anyhow::Result<JsonValue> {
+    pub async fn fetch_block(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalBlock>> {
         tracing::debug!(%block_number, "fetching block");
 
         let number = to_json_value(block_number);
-        let result = self.http.request::<JsonValue, _>("eth_getBlockByNumber", [number, JsonValue::Bool(true)]).await;
+        let result = self
+            .http
+            .request::<Option<ExternalBlock>, _>("eth_getBlockByNumber", [number, JsonValue::Bool(true)])
+            .await;
 
         match result {
             Ok(block) => Ok(block),
@@ -170,12 +186,11 @@ impl BlockchainClient {
     }
 
     /// Fetches a transaction by hash.
-    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<EthersTransaction>> {
+    pub async fn fetch_transaction(&self, tx_hash: Hash) -> anyhow::Result<Option<AlloyTransaction>> {
         tracing::debug!(%tx_hash, "fetching transaction");
 
         let hash = to_json_value(tx_hash);
-
-        let result = self.http.request::<Option<EthersTransaction>, _>("eth_getTransactionByHash", [hash]).await;
+        let result = self.http.request::<Option<AlloyTransaction>, _>("eth_getTransactionByHash", [hash]).await;
 
         match result {
             Ok(tx) => Ok(tx),
@@ -215,7 +230,7 @@ impl BlockchainClient {
     // -------------------------------------------------------------------------
 
     /// Forwards a transaction to leader.
-    pub async fn send_raw_transaction_to_leader(&self, tx: EthersBytes, rpc_client: &RpcClientApp) -> Result<Hash, StratusError> {
+    pub async fn send_raw_transaction_to_leader(&self, tx: AlloyBytes, rpc_client: &RpcClientApp) -> Result<Hash, StratusError> {
         tracing::debug!("sending raw transaction to leader");
 
         let tx = to_json_value(tx);

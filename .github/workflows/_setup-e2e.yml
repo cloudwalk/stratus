@@ -18,14 +18,14 @@ on:
 jobs:
   setup_and_test:
     name: Setup and Run E2E
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 35
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Rust
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.81
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.84
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -51,8 +51,14 @@ jobs:
         with:
           node-version-file: .tool-versions
 
+      - name: Install docker-compose
+        run: sudo apt-get install docker-compose -y
+        
       - name: Install jq
         run: sudo apt-get install jq -y
+
+      - name: Install docker docker-compose
+        run: sudo apt-get install docker-compose -y
 
       - name: Set up Test Dependencies
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}

@@ -3,6 +3,7 @@ use std::ops::DerefMut;
 
 use ethereum_types::Bloom;
 
+use crate::alias::AlloyBloom;
 use crate::eth::primitives::Log;
 use crate::gen_newtype_from;
 
@@ -11,14 +12,6 @@ use crate::gen_newtype_from;
 pub struct LogsBloom(pub Bloom);
 
 impl LogsBloom {
-    pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        Self(Bloom::from_slice(bytes))
-    }
-
     pub fn accrue_log(&mut self, log: &Log) {
         self.accrue(ethereum_types::BloomInput::Raw(log.address.as_ref()));
         for topic in log.topics_non_empty() {
@@ -46,6 +39,13 @@ impl DerefMut for LogsBloom {
 // -----------------------------------------------------------------------------
 gen_newtype_from!(self = LogsBloom, other = [u8; 256], Bloom);
 
+impl From<AlloyBloom> for LogsBloom {
+    fn from(value: AlloyBloom) -> Self {
+        let bytes: [u8; 256] = *value.0;
+        Self(Bloom::from(bytes))
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
@@ -59,6 +59,12 @@ impl From<LogsBloom> for Bloom {
 impl From<LogsBloom> for [u8; 256] {
     fn from(value: LogsBloom) -> Self {
         value.0 .0
+    }
+}
+
+impl From<LogsBloom> for AlloyBloom {
+    fn from(value: LogsBloom) -> Self {
+        AlloyBloom::from(value.0 .0)
     }
 }
 

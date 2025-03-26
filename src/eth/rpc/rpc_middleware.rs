@@ -27,6 +27,7 @@ use crate::eth::codegen::SoliditySignature;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
+#[cfg(feature = "metrics")]
 use crate::eth::primitives::ErrorCode;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
@@ -85,18 +86,35 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 
         // extract request data
         let method = request.method_name().to_owned();
-        let tx = match method.as_str() {
-            "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(request.params()).ok(),
-            "eth_sendRawTransaction" => TransactionTracingIdentifiers::from_transaction(request.params()).ok(),
-            "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(request.params()).ok(),
-            _ => None,
-        };
+        let mut tx = None;
+
+        let params_clone = request.params().clone();
+
+        if method == "eth_sendRawTransaction" {
+            let tx_data_result = next_rpc_param::<Bytes>(params_clone.sequence());
+
+            if let Ok((_, tx_data)) = tx_data_result {
+                let decoded_tx_result = parse_rpc_rlp::<TransactionInput>(&tx_data);
+
+                if let Ok(decoded_tx) = decoded_tx_result {
+                    tx = TransactionTracingIdentifiers::from_raw_transaction(&decoded_tx).ok();
+
+                    request.extensions_mut().insert(tx_data);
+                    request.extensions_mut().insert(decoded_tx);
+                }
+            }
+        } else {
+            tx = match method.as_str() {
+                "eth_call" | "eth_estimateGas" => TransactionTracingIdentifiers::from_call(params_clone.clone()).ok(),
+                "eth_getTransactionByHash" | "eth_getTransactionReceipt" => TransactionTracingIdentifiers::from_transaction_query(params_clone.clone()).ok(),
+                _ => None,
+            };
+        }
 
         let is_admin = request.extensions.is_admin();
 
         let client = if let Some(tx_client) = tx.as_ref().and_then(|tx| tx.client.as_ref()) {
-            let val = tx_client.clone();
-            request.extensions_mut().insert(val);
+            request.extensions_mut().insert(tx_client.clone());
             tx_client
         } else {
             request.extensions.rpc_client()
@@ -184,7 +202,7 @@ pub struct RpcResponse<'a> {
     future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
 }
 
-impl<'a> Future for RpcResponse<'a> {
+impl Future for RpcResponse<'_> {
     type Output = MethodResponse;
 
     fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
@@ -287,20 +305,16 @@ struct TransactionTracingIdentifiers {
 }
 
 impl TransactionTracingIdentifiers {
-    // eth_sendRawTransaction
-    fn from_transaction(params: Params) -> anyhow::Result<Self> {
-        let (params, tx_data) = next_rpc_param::<Bytes>(params.sequence())?;
-        let tx = parse_rpc_rlp::<TransactionInput>(&tx_data)?;
-        let client = next_rpc_param::<RpcClientApp>(params);
-
+    /// eth_sendRawTransaction
+    fn from_raw_transaction(decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
         Ok(Self {
-            client: client.map(|(_, client)| client).ok(),
-            hash: Some(tx.hash),
-            contract: codegen::contract_name_for_o11y(&tx.to),
-            function: codegen::function_sig_for_o11y(&tx.input),
-            from: Some(tx.signer),
-            to: tx.to,
-            nonce: Some(tx.nonce),
+            client: None,
+            hash: Some(decoded_tx.hash),
+            contract: codegen::contract_name(&decoded_tx.to),
+            function: codegen::function_sig(&decoded_tx.input),
+            from: Some(decoded_tx.signer),
+            to: decoded_tx.to,
+            nonce: Some(decoded_tx.nonce),
         })
     }
 
@@ -310,8 +324,8 @@ impl TransactionTracingIdentifiers {
         Ok(Self {
             client: None,
             hash: None,
-            contract: codegen::contract_name_for_o11y(&call.to),
-            function: codegen::function_sig_for_o11y(&call.data),
+            contract: codegen::contract_name(&call.to),
+            function: codegen::function_sig(&call.data),
             from: call.from,
             to: call.to,
             nonce: None,

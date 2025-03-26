@@ -3,6 +3,7 @@ use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 
+use crate::alias::AlloyUint256;
 use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -10,7 +11,7 @@ use crate::gen_newtype_from;
 pub struct Difficulty(pub U256);
 
 impl Dummy<Faker> for Difficulty {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
     }
 }
@@ -26,17 +27,8 @@ impl From<[u64; 4]> for Difficulty {
     }
 }
 
-// -----------------------------------------------------------------------------
-// Conversions: Self -> Other
-// ----------------------------------------------------------------------------
-impl From<Difficulty> for U256 {
-    fn from(value: Difficulty) -> Self {
-        value.0
-    }
-}
-
-impl From<Difficulty> for u64 {
-    fn from(value: Difficulty) -> Self {
-        value.0.low_u64()
+impl From<AlloyUint256> for Difficulty {
+    fn from(value: AlloyUint256) -> Self {
+        Self(U256::from_big_endian(&value.to_be_bytes::<32>()))
     }
 }

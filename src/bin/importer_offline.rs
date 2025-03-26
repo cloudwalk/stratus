@@ -12,6 +12,7 @@ use std::cmp::min;
 use std::sync::mpsc;
 use std::sync::Arc;
 
+use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -19,13 +20,12 @@ use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
 use stratus::eth::external_rpc::ExternalBlockWithReceipts;
 use stratus::eth::external_rpc::ExternalRpc;
+use stratus::eth::external_rpc::PostgresExternalRpc;
 use stratus::eth::miner::Miner;
 use stratus::eth::miner::MinerMode;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalReceipts;
-use stratus::eth::primitives::ExternalTransaction;
-use stratus::eth::storage::Storage;
 use stratus::ext::spawn_named;
 use stratus::ext::spawn_thread;
 use stratus::log_and_err;
@@ -44,24 +44,6 @@ static GLOBAL: Jemalloc = Jemalloc;
 
 /// Number of fetcher tasks buffered. Each task contains `--blocks-by-fetch` blocks and all receipts for them
 const RPC_FETCHER_CHANNEL_CAPACITY: usize = 10;
-
-/// Size of the executed block batches to be save.
-///
-/// We want to persist to the storage in batches, this means we don't save a
-/// block right away, but the information from that block still needs to be
-/// found in the cache.
-///
-/// NOTE: The size below will only work if the cache is big enough to hold
-/// slots and accounts for this number of blocks.
-const CACHE_SIZE: usize = 10_000;
-const MAX_BLOCKS_NOT_SAVED: usize = CACHE_SIZE - 1;
-
-const BATCH_COUNT: usize = 10;
-const SAVER_BATCH_SIZE: usize = MAX_BLOCKS_NOT_SAVED / BATCH_COUNT;
-// The fetcher and saver tasks hold each, at most, SAVER_BATCH_SIZE blocks,
-// so we need to subtract 2 from the buffer capacity to ensure we only have
-// `CACHE_SIZE` executed blocks at a time.
-const SAVER_CHANNEL_CAPACITY: usize = BATCH_COUNT - 2;
 
 type BlocksToExecute = Vec<ExternalBlockWithReceipts>;
 type BlocksToSave = Vec<Block>;
@@ -94,7 +76,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let (fetch_to_execute_tx, fetch_to_execute_rx) = async_mpsc::channel::<BlocksToExecute>(RPC_FETCHER_CHANNEL_CAPACITY);
 
     // send blocks from executor task to saver task
-    let (execute_to_save_tx, execute_to_save_rx) = mpsc::sync_channel::<BlocksToSave>(SAVER_CHANNEL_CAPACITY);
+    let (execute_to_save_tx, execute_to_save_rx) = mpsc::sync_channel::<BlocksToSave>(config.block_saver_queue_size);
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
@@ -115,8 +97,9 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     });
 
     let miner_clone = Arc::clone(&miner);
-    spawn_thread("block-executor", || {
-        if let Err(e) = run_external_block_executor(executor, miner_clone, fetch_to_execute_rx, execute_to_save_tx) {
+    let batch_size = config.block_saver_batch_size;
+    spawn_thread("block-executor", move || {
+        if let Err(e) = run_external_block_executor(executor, miner_clone, fetch_to_execute_rx, execute_to_save_tx, batch_size) {
             tracing::error!(reason = ?e, "'block-executor' task failed");
         }
     });
@@ -138,7 +121,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 }
 
 async fn run_rpc_block_fetcher(
-    rpc_storage: Arc<dyn ExternalRpc>,
+    rpc_storage: Arc<PostgresExternalRpc>,
     blocks_by_fetch: usize,
     paralellism: usize,
     mut start: BlockNumber,
@@ -195,6 +178,7 @@ fn run_external_block_executor(
     miner: Arc<Miner>,
     mut from_fetcher_rx: async_mpsc::Receiver<BlocksToExecute>,
     to_saver_tx: mpsc::SyncSender<BlocksToSave>,
+    batch_size: usize,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "run_external_block_executor";
     let _timer = DropTimer::start("importer-offline::run_external_block_executor");
@@ -231,18 +215,14 @@ fn run_external_block_executor(
 
         let instant_before_execution = Instant::now();
 
-        for blocks in Itertools::chunks(blocks.into_iter(), SAVER_BATCH_SIZE).into_iter() {
-            let mut executed_batch = Vec::with_capacity(SAVER_BATCH_SIZE);
+        for blocks in Itertools::chunks(blocks.into_iter(), batch_size).into_iter() {
+            let mut executed_batch = Vec::with_capacity(batch_size);
 
-            for (mut block, receipts) in blocks {
+            for (block, receipts) in blocks {
                 if GlobalState::is_shutdown_warn(TASK_NAME) {
                     return Ok(());
                 }
 
-                // fill missing transaction_type with `v`
-                block.transactions.iter_mut().for_each(ExternalTransaction::fill_missing_transaction_type);
-
-                // TODO: remove clone
                 executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
                 let mined_block = miner.mine_external(block)?;
                 executed_batch.push(mined_block);
@@ -289,18 +269,33 @@ fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToS
     }
 }
 
-async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BlocksToExecute> {
+async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BlocksToExecute> {
     tracing::info!(parent: None, %block_start, %block_end, "fetching blocks and receipts");
     let mut blocks = rpc_storage.read_block_and_receipts_in_range(block_start, block_end).await?;
     for (block, receipts) in blocks.iter_mut() {
+        let BlockTransactions::Full(transactions) = &mut block.transactions else {
+            tracing::error!(
+                block_number = ?block.number(),
+                block_hash = ?block.hash(),
+                transactions = ?block.transactions,
+                "expected full transactions but got {:?}", block.transactions
+            );
+            return Err(anyhow!(
+                "expected full transactions, got {:?} for block number {} hash {:?}",
+                block.transactions,
+                block.number(),
+                block.hash()
+            ));
+        };
+
         // Stably sort transactions and receipts by transaction_index
-        block.transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+        transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
         receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
 
         // perform additional checks on the transaction index
-        for window in block.transactions.windows(2) {
-            let tx_index = window[0].transaction_index.map_or(u32::MAX, |index| index.as_u32());
-            let next_tx_index = window[1].transaction_index.map_or(u32::MAX, |index| index.as_u32());
+        for window in transactions.windows(2) {
+            let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+            let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
             assert!(
                 tx_index + 1 == next_tx_index,
                 "two consecutive transactions must have consecutive indices: {} and {}",
@@ -309,8 +304,8 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
             );
         }
         for window in receipts.windows(2) {
-            let tx_index = window[0].transaction_index.as_u32();
-            let next_tx_index = window[1].transaction_index.as_u32();
+            let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+            let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
             assert!(
                 tx_index + 1 == next_tx_index,
                 "two consecutive receipts must have consecutive indices: {} and {}",
@@ -322,7 +317,7 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<dyn ExternalRpc>, block_star
     Ok(blocks)
 }
 
-async fn block_number_to_stop(rpc_storage: &Arc<dyn ExternalRpc>) -> anyhow::Result<BlockNumber> {
+async fn block_number_to_stop(rpc_storage: &Arc<PostgresExternalRpc>) -> anyhow::Result<BlockNumber> {
     match rpc_storage.read_max_block_number_in_range(BlockNumber::ZERO, BlockNumber::MAX).await {
         Ok(Some(number)) => Ok(number),
         Ok(None) => Ok(BlockNumber::ZERO),

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use display_json::DebugAsJson;
+use revm::primitives::SpecId;
 
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorStrategy;
@@ -16,10 +17,17 @@ pub struct ExecutorConfig {
     pub executor_chain_id: u64,
 
     /// Number of EVM instances to run.
-    ///
-    /// TODO: should be configured for each kind of EvmRoute instead of being a single value.
     #[arg(long = "executor-evms", alias = "evms", env = "EXECUTOR_EVMS", default_value = "30")]
     pub executor_evms: usize,
+
+    #[arg(long = "executor-call-present-evms", env = "EXECUTOR_CALL_PRESENT_EVMS")]
+    pub executor_call_present_evms: Option<usize>,
+
+    #[arg(long = "executor-call-past-evms", env = "EXECUTOR_CALL_PAST_EVMS")]
+    pub executor_call_past_evms: Option<usize>,
+
+    #[arg(long = "executor-inspector-evms", env = "EXECUTOR_INSPECTOR_EVMS")]
+    pub executor_inspector_evms: Option<usize>,
 
     /// EVM execution strategy.
     #[arg(long = "executor-strategy", alias = "strategy", env = "EXECUTOR_STRATEGY", default_value = "serial")]
@@ -33,6 +41,13 @@ pub struct ExecutorConfig {
         default_value = "true"
     )]
     pub executor_reject_not_contract: bool,
+
+    #[arg(long = "executor-evm-spec", env = "EXECUTOR_EVM_SPEC", default_value = "Cancun", value_parser = parse_evm_spec)]
+    pub executor_evm_spec: SpecId,
+}
+
+fn parse_evm_spec(input: &str) -> anyhow::Result<SpecId> {
+    Ok(SpecId::from(input))
 }
 
 impl ExecutorConfig {

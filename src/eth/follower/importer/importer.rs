@@ -1,16 +1,14 @@
 use std::borrow::Cow;
 use std::cmp::min;
-use std::mem;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
+use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
-use async_trait::async_trait;
 use futures::try_join;
 use futures::StreamExt;
-use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::timeout;
@@ -24,15 +22,12 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
-use crate::eth::primitives::Hash;
-use crate::eth::storage::Storage;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
-use crate::if_else;
 use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -67,10 +62,9 @@ static LATEST_FETCHED_BLOCK_TIME: AtomicU64 = AtomicU64::new(0);
 
 /// Only sets the external RPC current block number if it is equals or greater than the current one.
 fn set_external_rpc_current_block(new_number: BlockNumber) {
-    let new_number_u64 = new_number.as_u64();
     LATEST_FETCHED_BLOCK_TIME.store(chrono::Utc::now().timestamp() as u64, Ordering::Relaxed);
     let _ = EXTERNAL_RPC_CURRENT_BLOCK.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_number| {
-        if_else!(new_number_u64 >= current_number, Some(new_number_u64), None)
+        Some(current_number.max(new_number.as_u64()))
     });
 }
 
@@ -80,14 +74,8 @@ fn set_external_rpc_current_block(new_number: BlockNumber) {
 /// Number of blocks that are downloaded in parallel.
 const PARALLEL_BLOCKS: usize = 3;
 
-/// Number of receipts that are downloaded in parallel.
-const PARALLEL_RECEIPTS: usize = 100;
-
 /// Timeout awaiting for newHeads event before fallback to polling.
 const TIMEOUT_NEW_HEADS: Duration = Duration::from_millis(2000);
-
-/// Interval before we starting retrieving receipts because they are not immediately available after the block is retrieved.
-const INTERVAL_FETCH_RECEIPTS: Duration = Duration::from_millis(50);
 
 pub struct Importer {
     executor: Arc<Executor>,
@@ -147,7 +135,7 @@ impl Importer {
         let storage = &self.storage;
         let number = storage.read_block_number_to_resume_import()?;
 
-        let (backlog_tx, backlog_rx) = mpsc::unbounded_channel();
+        let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
 
         // spawn block executor:
         // it executes and mines blocks and expects to receive them via channel in the correct order.
@@ -196,7 +184,7 @@ impl Importer {
     async fn start_block_executor(
         executor: Arc<Executor>,
         miner: Arc<Miner>,
-        mut backlog_rx: mpsc::UnboundedReceiver<(ExternalBlock, Vec<ExternalReceipt>)>,
+        mut backlog_rx: mpsc::Receiver<(ExternalBlock, Vec<ExternalReceipt>)>,
         kafka_connector: Option<Arc<KafkaConnector>>,
         importer_mode: ImporterMode,
     ) -> anyhow::Result<()> {
@@ -221,7 +209,7 @@ impl Importer {
             let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
 
             if let ImporterMode::FakeLeader = importer_mode {
-                for tx in block.0.transactions {
+                for tx in block.0.transactions.into_transactions() {
                     tracing::info!(?tx, "executing tx as fake miner");
                     if let Err(e) = executor.execute_local_transaction(tx.try_into()?) {
                         tracing::error!(reason = ?e, "transaction failed");
@@ -405,7 +393,7 @@ impl Importer {
     /// Retrieves blocks and receipts.
     async fn start_block_fetcher(
         chain: Arc<BlockchainClient>,
-        backlog_tx: mpsc::UnboundedSender<(ExternalBlock, Vec<ExternalReceipt>)>,
+        backlog_tx: mpsc::Sender<(ExternalBlock, Vec<ExternalReceipt>)>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "external-block-fetcher";
@@ -438,27 +426,41 @@ impl Importer {
             // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
             while let Some((mut block, mut receipts)) = tasks.next().await {
+                let block_number = block.number();
+                let BlockTransactions::Full(transactions) = &mut block.transactions else {
+                    return Err(anyhow!("expected full transactions, got hashes or uncle"));
+                };
+
+                if transactions.len() != receipts.len() {
+                    return Err(anyhow!(
+                        "block {} has mismatched transaction and receipt length: {} transactions but {} receipts",
+                        block_number,
+                        transactions.len(),
+                        receipts.len()
+                    ));
+                }
+
                 // Stably sort transactions and receipts by transaction_index
-                block.transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+                transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
                 receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
 
                 // perform additional checks on the transaction index
-                for window in block.transactions.windows(2) {
-                    let tx_index = window[0].transaction_index.map_or(u32::MAX, |index| index.as_u32());
-                    let next_tx_index = window[1].transaction_index.map_or(u32::MAX, |index| index.as_u32());
+                for window in transactions.windows(2) {
+                    let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+                    let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
                     if tx_index + 1 != next_tx_index {
                         tracing::error!(tx_index, next_tx_index, "two consecutive transactions must have consecutive indices");
                     }
                 }
                 for window in receipts.windows(2) {
-                    let tx_index = window[0].transaction_index.as_u32();
-                    let next_tx_index = window[1].transaction_index.as_u32();
+                    let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+                    let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
                     if tx_index + 1 != next_tx_index {
                         tracing::error!(tx_index, next_tx_index, "two consecutive receipts must have consecutive indices");
                     }
                 }
 
-                if backlog_tx.send((block, receipts)).is_err() {
+                if backlog_tx.send((block, receipts)).await.is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
                 }
@@ -470,104 +472,29 @@ impl Importer {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
-#[tracing::instrument(name = "importer::fetch_block_and_receipts", skip_all, fields(block_number))]
 async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
-    Span::with(|s| {
-        s.rec_str("block_number", &block_number);
-    });
-
-    async fn try_reading_block_and_receipts_with_temporary_endpoint(
-        chain: Arc<BlockchainClient>,
-        block_number: BlockNumber,
-    ) -> Option<(ExternalBlock, Vec<ExternalReceipt>)> {
-        let mut json = chain.fetch_block_and_receipts_with_temporary_endpoint(block_number).await.ok()?;
-
-        let block = mem::take(json.get_mut("block")?);
-        let block: ExternalBlock = serde_json::from_value(block).ok()?;
-
-        let receipts = mem::take(json.get_mut("receipts")?);
-        let receipts: Vec<ExternalReceipt> = serde_json::from_value(receipts).ok()?;
-
-        Some((block, receipts))
-    }
-
-    if let Some(res) = try_reading_block_and_receipts_with_temporary_endpoint(Arc::clone(&chain), block_number).await {
-        tracing::info!("successfully imported block and receipts using endpoint stratus_getBlockAndReceipts");
-        return res;
-    } else {
-        tracing::warn!("failed to import block and receipts with endpoint stratus_getBlockAndReceipts, falling back to get block + get each receipt");
-    }
-
-    // fetch block
-    let block = fetch_block(Arc::clone(&chain), block_number).await;
-
-    // wait some time until receipts are available
-    let _ = traced_sleep(INTERVAL_FETCH_RECEIPTS, SleepReason::SyncData).await;
-
-    // fetch receipts in parallel
-    let mut receipts_tasks = Vec::with_capacity(block.transactions.len());
-    for hash in block.transactions.iter().map(|tx| tx.hash()) {
-        receipts_tasks.push(fetch_receipt(Arc::clone(&chain), block_number, hash));
-    }
-    let receipts = futures::stream::iter(receipts_tasks).buffer_unordered(PARALLEL_RECEIPTS).collect().await;
-
-    (block, receipts)
-}
-
-#[allow(clippy::expect_used)]
-#[tracing::instrument(name = "importer::fetch_block", skip_all, fields(block_number))]
-async fn fetch_block(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ExternalBlock {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
     });
 
     loop {
-        tracing::info!(%block_number, "fetching block");
-        let block = match chain.fetch_block(block_number).await {
-            Ok(json) => json,
-            Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, delay_ms=%RETRY_DELAY.as_millis(), "failed to retrieve block. retrying with delay.");
+        tracing::info!(%block_number, "fetching block and receipts");
+
+        match chain.fetch_block_and_receipts(block_number).await {
+            Ok(Some(response)) => return (response.block, response.receipts),
+            Ok(None) => {
+                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block and receipts not available yet, retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
-                continue;
+            }
+            Err(e) => {
+                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch block and receipts, retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
             }
         };
-
-        if block.is_null() {
-            tracing::warn!(%block_number, delay_ms=%RETRY_DELAY.as_millis(), "block not mined yet. retrying with delay.");
-            traced_sleep(RETRY_DELAY, SleepReason::SyncData).await;
-            continue;
-        }
-
-        return ExternalBlock::deserialize(&block).expect("cannot fail to deserialize external block");
     }
 }
 
-#[tracing::instrument(name = "importer::fetch_receipt", skip_all, fields(block_number, tx_hash))]
-async fn fetch_receipt(chain: Arc<BlockchainClient>, block_number: BlockNumber, tx_hash: Hash) -> ExternalReceipt {
-    Span::with(|s| {
-        s.rec_str("block_number", &block_number);
-        s.rec_str("tx_hash", &tx_hash);
-    });
-
-    loop {
-        tracing::info!(%block_number, %tx_hash, "fetching receipt");
-
-        match chain.fetch_receipt(tx_hash).await {
-            Ok(Some(receipt)) => return receipt,
-            Ok(None) => {
-                tracing::warn!(%block_number, %tx_hash, "receipt not available yet because block is not mined. retrying now.");
-                continue;
-            }
-            Err(e) => {
-                tracing::error!(reason = ?e, %block_number, %tx_hash, "failed to fetch receipt. retrying now.");
-            }
-        }
-    }
-}
-
-#[async_trait]
 impl Consensus for Importer {
     async fn lag(&self) -> anyhow::Result<u64> {
         let elapsed = chrono::Utc::now().timestamp() as u64 - LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);

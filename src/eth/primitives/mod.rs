@@ -18,6 +18,7 @@ mod execution_metrics;
 mod execution_result;
 mod execution_value_change;
 mod external_block;
+mod external_block_with_receipts;
 mod external_receipt;
 mod external_receipts;
 mod external_transaction;
@@ -35,6 +36,7 @@ mod nonce;
 mod pending_block;
 mod pending_block_header;
 mod point_in_time;
+mod signature_component;
 mod size;
 mod slot;
 mod slot_index;
@@ -72,6 +74,7 @@ pub use execution_metrics::EvmExecutionMetrics;
 pub use execution_result::ExecutionResult;
 pub use execution_value_change::ExecutionValueChange;
 pub use external_block::ExternalBlock;
+pub use external_block_with_receipts::ExternalBlockWithReceipts;
 pub use external_receipt::ExternalReceipt;
 pub use external_receipts::ExternalReceipts;
 pub use external_transaction::ExternalTransaction;
@@ -89,6 +92,7 @@ pub use nonce::Nonce;
 pub use pending_block::PendingBlock;
 pub use pending_block_header::PendingBlockHeader;
 pub use point_in_time::PointInTime;
+pub use signature_component::SignatureComponent;
 pub use size::Size;
 pub use slot::Slot;
 pub use slot_index::SlotIndex;
@@ -118,6 +122,7 @@ pub use wei::Wei;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gen_test_json;
     use crate::gen_test_serde;
 
     type TransactionExecutionValueChangeBytes = ExecutionValueChange<Bytes>;
@@ -137,6 +142,12 @@ mod tests {
     // gen_test_serde!(PendingBlock);
     // gen_test_serde!(TransactionExecution);
     // gen_test_serde!(TransactionStage);
+
+    gen_test_json!(ExternalBlock);
+    gen_test_json!(ExternalBlockWithReceipts);
+    gen_test_json!(ExternalReceipt);
+    gen_test_json!(ExternalReceipts);
+    gen_test_json!(ExternalTransaction);
 
     gen_test_serde!(Account);
     gen_test_serde!(Address);
@@ -168,6 +179,7 @@ mod tests {
     gen_test_serde!(LogTopic);
     gen_test_serde!(MinerNonce);
     gen_test_serde!(Nonce);
+    gen_test_serde!(SignatureComponent);
     gen_test_serde!(Size);
     gen_test_serde!(Slot);
     gen_test_serde!(SlotIndex);

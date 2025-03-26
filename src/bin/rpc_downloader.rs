@@ -5,17 +5,17 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use anyhow::Context;
 use futures::stream;
 use futures::StreamExt;
 use itertools::Itertools;
-use serde::Deserialize;
 use stratus::config::RpcDownloaderConfig;
 use stratus::eth::external_rpc::ExternalRpc;
+use stratus::eth::external_rpc::PostgresExternalRpc;
 use stratus::eth::primitives::Address;
 use stratus::eth::primitives::BlockNumber;
-use stratus::eth::primitives::Hash;
 use stratus::ext::not;
 use stratus::infra::BlockchainClient;
 use stratus::utils::DropTimer;
@@ -46,7 +46,7 @@ async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     }
 
     let rpc_storage = config.rpc_storage.init().await?;
-    let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc, config.external_rpc_timeout).await?);
+    let chain = Arc::new(BlockchainClient::new_http(&config.external_rpc, config.external_rpc_timeout, config.external_rpc_max_response_size_bytes).await?);
 
     let block_end = match config.block_end {
         Some(end) => BlockNumber::from(end),
@@ -60,7 +60,7 @@ async fn run(config: RpcDownloaderConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn download_balances(rpc_storage: Arc<dyn ExternalRpc>, chain: &BlockchainClient, accounts: Vec<Address>) -> anyhow::Result<()> {
+async fn download_balances(rpc_storage: Arc<PostgresExternalRpc>, chain: &BlockchainClient, accounts: Vec<Address>) -> anyhow::Result<()> {
     let _timer = DropTimer::start("rpc-downloader::download_balances");
 
     if accounts.is_empty() {
@@ -89,7 +89,7 @@ async fn download_balances(rpc_storage: Arc<dyn ExternalRpc>, chain: &Blockchain
     Ok(())
 }
 
-async fn download_blocks(rpc_storage: Arc<dyn ExternalRpc>, chain: Arc<BlockchainClient>, paralellism: usize, end: BlockNumber) -> anyhow::Result<()> {
+async fn download_blocks(rpc_storage: Arc<PostgresExternalRpc>, chain: Arc<BlockchainClient>, paralellism: usize, end: BlockNumber) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-downloader::download_blocks";
     let _timer = DropTimer::start(TASK_NAME);
 
@@ -125,7 +125,7 @@ async fn download_blocks(rpc_storage: Arc<dyn ExternalRpc>, chain: Arc<Blockchai
     Ok(())
 }
 
-async fn download(rpc_storage: Arc<dyn ExternalRpc>, chain: Arc<BlockchainClient>, start: BlockNumber, end_inclusive: BlockNumber) -> anyhow::Result<()> {
+async fn download(rpc_storage: Arc<PostgresExternalRpc>, chain: Arc<BlockchainClient>, start: BlockNumber, end_inclusive: BlockNumber) -> anyhow::Result<()> {
     const TASK_NAME: &str = "rpc-downloader::download";
 
     // calculate current block
@@ -143,8 +143,12 @@ async fn download(rpc_storage: Arc<dyn ExternalRpc>, chain: Arc<BlockchainClient
             }
 
             // retrieve block
-            let block_json = match chain.fetch_block(current).await {
-                Ok(json) => json,
+            let block = match chain.fetch_block(current).await {
+                Ok(Some(block)) => block,
+                Ok(None) => {
+                    tracing::warn!(%current, "block not available yet, retrying");
+                    continue;
+                }
                 Err(e) => {
                     tracing::warn!(reason = ?e, "failed to fetch, retrying block download");
                     continue;
@@ -152,18 +156,19 @@ async fn download(rpc_storage: Arc<dyn ExternalRpc>, chain: Arc<BlockchainClient
             };
 
             // extract transaction hashes
-            let block: ImporterBlock = match ImporterBlock::deserialize(&block_json) {
-                Ok(block) => block,
-                Err(e) => {
-                    tracing::error!(reason = ?e, block_number = %current, payload = ?block_json, "block does not match expected format");
-                    return Err(e).context(format!("block does not match expected format for block {}", current));
+            let tx_hashes = match &block.transactions {
+                BlockTransactions::Full(txs) => txs.iter().map(|tx| tx.hash()).collect_vec(),
+                other => {
+                    tracing::error!(%current, ?other, "unsupported transaction format");
+                    return Err(anyhow!("unsupported transaction format in block {}", current));
                 }
             };
-            let hashes = block.transactions.into_iter().map(|tx| tx.hash).collect_vec();
+
+            let block_json = serde_json::to_value(&block).context("failed to serialize block to JSON")?;
 
             // retrieve receipts
-            let mut receipts_json = Vec::with_capacity(hashes.len());
-            for tx_hash in hashes {
+            let mut receipts_json = Vec::with_capacity(tx_hashes.len());
+            for tx_hash in tx_hashes {
                 loop {
                     let receipt = match chain.fetch_receipt(tx_hash).await {
                         Ok(receipt) => receipt,
@@ -227,18 +232,4 @@ fn blocks_per_minute_reporter() {
             "speed report",
         );
     }
-}
-
-// -----------------------------------------------------------------------------
-// Blockchain RPC structs
-// -----------------------------------------------------------------------------
-
-#[derive(serde::Deserialize)]
-struct ImporterBlock {
-    transactions: Vec<ImporterTransaction>,
-}
-
-#[derive(serde::Deserialize)]
-struct ImporterTransaction {
-    hash: Hash,
 }

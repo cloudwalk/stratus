@@ -12,13 +12,13 @@ use nonempty::NonEmpty;
 use parking_lot::RwLock;
 use parking_lot::RwLockReadGuard;
 use parking_lot::RwLockWriteGuard;
+use revm::primitives::Bytecode;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
@@ -59,19 +59,6 @@ impl InMemoryPermanentStorage {
     /// Locks inner state for writing.
     fn lock_write(&self) -> RwLockWriteGuard<'_, InMemoryPermanentStorageState> {
         self.state.write()
-    }
-
-    // -------------------------------------------------------------------------
-    // State methods
-    // -------------------------------------------------------------------------
-
-    /// Clears in-memory state.
-    pub fn clear(&self) {
-        let mut state = self.lock_write();
-        state.accounts.clear();
-        state.transactions.clear();
-        state.blocks_by_hash.clear();
-        state.blocks_by_number.clear();
     }
 }
 
@@ -262,7 +249,7 @@ struct InMemoryPermanentAccount {
     pub address: Address,
     pub balance: InMemoryHistory<Wei>,
     pub nonce: InMemoryHistory<Nonce>,
-    pub bytecode: InMemoryHistory<Option<Bytes>>,
+    pub bytecode: InMemoryHistory<Option<Bytecode>>,
     pub code_hash: InMemoryHistory<CodeHash>,
     pub slots: HashMap<SlotIndex, InMemoryHistory<Slot>, hash_hasher::HashBuildHasher>,
 }
@@ -345,11 +332,5 @@ where
     /// Returns the most recent value.
     pub fn get_current(&self) -> T {
         self.0.last().value.clone()
-    }
-}
-
-impl<T: Clone + Debug + serde::Serialize + for<'a> serde::Deserialize<'a>> From<InMemoryHistory<T>> for Vec<InMemoryHistoryValue<T>> {
-    fn from(value: InMemoryHistory<T>) -> Self {
-        value.0.into()
     }
 }

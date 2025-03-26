@@ -4,8 +4,10 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Id;
 use jsonrpsee::MethodResponse;
 use jsonrpsee::ResponsePayload;
+use revm::primitives::EVMError;
 use stratus_macros::ErrorCode;
 
+use super::execution_result::RevertReason;
 use crate::alias::JsonValue;
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Address;
@@ -72,7 +74,7 @@ pub enum TransactionError {
     #[error_code = 2]
     Nonce { transaction: Nonce, account: Nonce },
 
-    #[error("Failed to executed transaction in EVM: {0:?}.")]
+    #[error("Failed to execute transaction in EVM: {0:?}.")]
     #[error_code = 3]
     EvmFailed(String), // TODO: split this in multiple errors
 
@@ -86,11 +88,15 @@ pub enum TransactionError {
 
     #[error("Transaction reverted during execution.")]
     #[error_code = 6]
-    Reverted { output: Bytes },
+    RevertedCall { output: Bytes },
 
     #[error("Transaction from zero address is not allowed.")]
     #[error_code = 7]
     FromZeroAddress,
+
+    #[error("Transaction reverted during execution.")]
+    #[error_code = 8]
+    RevertedCallWithReason { reason: RevertReason },
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
@@ -281,7 +287,8 @@ impl StratusError {
             // Transaction
             Self::RPC(RpcError::TransactionInvalid { decode_error }) => to_json_value(decode_error),
             Self::Transaction(TransactionError::EvmFailed(e)) => JsonValue::String(e.to_string()),
-            Self::Transaction(TransactionError::Reverted { output }) => to_json_value(output),
+            Self::Transaction(TransactionError::RevertedCall { output }) => to_json_value(output),
+            Self::Transaction(TransactionError::RevertedCallWithReason { reason }) => to_json_value(reason),
 
             // Unexpected
             Self::Unexpected(UnexpectedError::Unexpected(e)) => JsonValue::String(e.to_string()),
@@ -304,6 +311,23 @@ impl StratusError {
 impl From<anyhow::Error> for StratusError {
     fn from(value: anyhow::Error) -> Self {
         Self::Unexpected(UnexpectedError::Unexpected(value))
+    }
+}
+
+impl From<serde_json::Error> for StratusError {
+    fn from(value: serde_json::Error) -> Self {
+        Self::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(value)))
+    }
+}
+
+impl From<EVMError<StratusError>> for StratusError {
+    fn from(value: EVMError<StratusError>) -> Self {
+        match value {
+            EVMError::Transaction(err) => StratusError::Transaction(TransactionError::EvmFailed(err.to_string())),
+            EVMError::Header(err) => StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(err.to_string()))),
+            EVMError::Custom(err) | EVMError::Precompile(err) => StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(err.to_string()))),
+            EVMError::Database(err) => err,
+        }
     }
 }
 

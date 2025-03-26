@@ -134,6 +134,122 @@ test-unit name="":
 test-int name="'*'":
     cargo test --test {{name}} {{release_flag}} -- --nocapture
 
+# Test: Execute coverage for a specific group
+stratus-test-coverage-group group="unit" *args="":
+    #!/bin/bash
+
+    cargo llvm-cov clean --workspace
+    
+    rm -rf temp_*
+    rm -rf data/rocksdb
+    rm -rf data/importer-offline-database-rocksdb
+    rm -rf e2e_logs
+    
+    source <(cargo llvm-cov show-env --export-prefix)
+    export RUST_LOG=error
+    export TRACING_LOG_FORMAT=json
+    
+    case "{{group}}" in
+        "unit")
+            cargo llvm-cov --no-report
+            ;;
+        "inmemory")
+            just contracts-clone
+            just contracts-flatten
+            
+            for test in "automine" "external"; do
+                just _coverage-run-stratus-recipe e2e-stratus $test
+                rm -rf e2e_logs
+                rm -rf temp_*
+            done
+            
+            just _coverage-run-stratus-recipe e2e-clock-stratus
+            rm -rf e2e_logs
+            rm -rf temp_*
+            
+            just _coverage-run-stratus-recipe contracts-test-stratus
+            rm -rf e2e_logs
+            rm -rf temp_*
+            
+            just _coverage-run-stratus-recipe e2e-eof
+            rm -rf e2e_logs
+            rm -rf temp_*
+            ;;
+        "rocksdb")
+            just contracts-clone
+            just contracts-flatten
+            
+            for test in "automine" "external"; do
+                rm -rf data/rocksdb
+                just _coverage-run-stratus-recipe e2e-stratus-rocks $test
+                rm -rf e2e_logs
+                rm -rf temp_*
+                rm -rf data/rocksdb
+            done
+            
+            rm -rf data/rocksdb
+            just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
+            rm -rf e2e_logs
+            rm -rf temp_*
+            rm -rf data/rocksdb
+            
+            rm -rf data/rocksdb
+            just _coverage-run-stratus-recipe contracts-test-stratus-rocks
+            rm -rf e2e_logs
+            rm -rf temp_*
+            rm -rf data/rocksdb
+
+            rm -rf data/rocksdb
+            just _coverage-run-stratus-recipe e2e-eof rocks
+            rm -rf e2e_logs
+            rm -rf temp_*
+            rm -rf data/rocksdb
+            ;;
+        "leader-follower")
+            just contracts-clone
+            just contracts-flatten
+            
+            for test in kafka deploy brlc change miner importer health; do
+                just _e2e-leader-follower-up-coverage $test
+                rm -rf e2e_logs
+                rm -rf temp_*
+                rm -rf utils/deploy/deploy_*.log
+            done
+            ;;
+        "admin-password")
+            just _coverage-run-stratus-recipe e2e-admin-password
+            rm -rf e2e_logs
+            rm -rf temp_*
+            ;;
+        "rpc-downloader")
+            just _coverage-run-stratus-recipe e2e-rpc-downloader
+            rm -rf e2e_logs
+            rm -rf temp_*
+            ;;
+        "importer-offline")
+            just _coverage-run-stratus-recipe e2e-importer-offline
+            rm -rf e2e_logs
+            rm -rf temp_*
+            rm -rf data/importer-offline-database-rocksdb
+            ;;
+        *)
+            echo "Unknown group: {{group}}"
+            exit 1
+            ;;
+    esac
+    
+    # Ensure the output directory exists
+    mkdir -p target/llvm-cov/codecov
+    
+    # Generate the report with the specified arguments
+    # If --output-path is provided in args, use it, otherwise use the default path
+    if [[ "{{args}}" == *"--output-path"* ]]; then
+        cargo llvm-cov report {{args}}
+    else
+        # Default output path for codecov
+        cargo llvm-cov report --codecov --output-path target/llvm-cov/codecov/{{group}}.json {{args}}
+    fi
+
 # ------------------------------------------------------------------------------
 # E2E tasks
 # ------------------------------------------------------------------------------
@@ -162,16 +278,38 @@ e2e network="stratus" block_modes="automine" test="":
 # E2E: Execute admin password tests
 e2e-admin-password:
     #!/bin/bash
+
+    mkdir -p e2e_logs
     cd e2e
+    
+    npm install
 
     for test in "enabled|test123" "disabled|"; do
         IFS="|" read -r type pass <<< "$test"
         just _log "Running admin password tests with password $type"
         ADMIN_PASSWORD=$pass just run -a 0.0.0.0:3000 > /dev/null &
         just _wait_for_stratus
+        
         npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
+        
         killport 3000 -s sigterm
     done
+
+# E2E: Execute EOF (EVM Object Format) tests
+e2e-eof perm-storage="inmemory":
+    #!/bin/bash
+    cd e2e/eof
+
+    forge install
+
+    # Start Stratus
+    just build
+    just run -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}} > stratus.log &
+    just _wait_for_stratus
+
+    # Run tests using alice pk
+    forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "deploy()" --slow
+    forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "run()" --slow
 
 # E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat block-mode="automine" test="":
@@ -436,6 +574,79 @@ e2e-leader-follower-down:
     # Delete zeppelin directory
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
 
+# E2E: RPC Downloader test
+e2e-rpc-downloader:
+    #!/bin/bash
+    mkdir e2e_logs
+
+    just build
+
+    just _log "Starting Stratus"
+    just run -a 0.0.0.0:3000 > e2e_logs/e2e-rpc-downloader-stratus.log &
+    just _wait_for_stratus
+
+    just _log "Starting PostgreSQL"
+    docker-compose up -d postgres
+
+    just _log "Running TestContractBalances tests"
+    just e2e stratus automine
+    
+    just _log "Running RPC Downloader test"
+    just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
+
+    just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
+
+    just _log "Checking content of postgres"
+    pip install -r utils/check_rpc_downloader/requirements.txt
+    POSTGRES_DB=stratus POSTGRES_PASSWORD=123 ETH_RPC_URL=http://localhost:3000/ python utils/check_rpc_downloader/main.py --start 0
+
+    just _log "Killing Stratus"
+    killport 3000 -s sigterm
+
+    just _log "Killing PostgreSQL"
+    docker-compose down postgres
+
+# E2E Importer Offline
+e2e-importer-offline:
+    mkdir -p e2e_logs
+
+    rm -rf data/importer-offline-database-rocksdb
+
+    just build
+
+    just _log "Starting Stratus"
+    just stratus -a 0.0.0.0:3000 > e2e_logs/e2e-importer-offline-stratus.log &
+    just _wait_for_stratus
+
+    just _log "Running TestContractBalances tests"
+    just e2e stratus automine
+
+    just _log "Starting PostgreSQL"
+    docker-compose up -d postgres
+    
+    just _log "Running rpc downloader"
+    just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001 --initial-accounts 0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
+
+    just _log "Run importer-offline"
+    just importer-offline --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
+
+    just _log "Stratus for importer-offline"
+    cargo run --release --bin stratus -- --leader -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002 > e2e_logs/e2e-importer-offline-stratus-3001.log &
+    just _wait_for_stratus 3001
+
+    just _log "Compare blocks of stratus and importer-offline"
+    pip install -r utils/compare_block/requirements.txt
+    python utils/compare_block/main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp
+    
+    just _log "Killing Stratus"
+    killport 3000 -s sigterm
+
+    just _log "Killing importer-offline"
+    killport 3001 -s sigterm
+    
+    just _log "Killing PostgreSQL"
+    docker-compose down postgres
+
 # ------------------------------------------------------------------------------
 # Hive tests
 # ------------------------------------------------------------------------------
@@ -546,50 +757,23 @@ _e2e-leader-follower-up-coverage test="":
     -rm utils/deploy/deploy_02.log
 
 _coverage-run-stratus-recipe *recipe="":
+    #!/bin/bash
+    # Create logs directory if it doesn't exist
+    mkdir -p e2e_logs
+    
+    # Run the recipe and capture the exit code
     just {{recipe}}
+    result=$?
+    
+    # Wait for processes to finish
     sleep 10
-    -rm -r e2e_logs
+    
+    # Return the original exit code
+    exit $result
 
 stratus-test-coverage *args="":
     #!/bin/bash
-    # setup
-    cargo llvm-cov clean --workspace
-    just build
-    source <(cargo llvm-cov show-env --export-prefix)
-    export RUST_LOG=error
-    just contracts-clone
-    just contracts-flatten
 
-    # cargo test
-    cargo llvm-cov --no-report
-    sleep 10
-
-    # inmemory
-    for test in "automine" "external"; do
-        just _coverage-run-stratus-recipe e2e-stratus $test
+    for group in unit inmemory rocksdb leader-follower admin-password rpc-downloader importer-offline; do
+        just stratus-test-coverage-group $group {{args}}
     done
-
-    just _coverage-run-stratus-recipe e2e-clock-stratus
-
-    just _coverage-run-stratus-recipe contracts-test-stratus
-
-    # rocksdb
-    for test in "automine" "external"; do
-        -rm -r data/rocksdb
-        just _coverage-run-stratus-recipe e2e-stratus-rocks $test
-    done
-
-    -rm -r data/rocksdb
-    just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
-
-    -rm -r data/rocksdb
-    just _coverage-run-stratus-recipe contracts-test-stratus-rocks
-
-    # other
-    for test in kafka deploy brlc change miner importer health; do
-        just _e2e-leader-follower-up-coverage $test
-    done
-
-    just e2e-admin-password
-
-    cargo llvm-cov report {{args}}

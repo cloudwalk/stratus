@@ -1,3 +1,4 @@
+use alloy_primitives::B64;
 use display_json::DebugAsJson;
 use ethereum_types::H64;
 use fake::Dummy;
@@ -9,15 +10,8 @@ use crate::gen_newtype_from;
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MinerNonce(H64);
 
-impl MinerNonce {
-    /// Creates a new BlockNonce from the given bytes.
-    pub const fn new(bytes: [u8; 8]) -> Self {
-        Self(H64(bytes))
-    }
-}
-
 impl Dummy<Faker> for MinerNonce {
-    fn dummy_with_rng<R: ethers_core::rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         H64::random_using(rng).into()
     }
 }
@@ -39,5 +33,11 @@ impl From<MinerNonce> for H64 {
 impl From<MinerNonce> for [u8; 8] {
     fn from(value: MinerNonce) -> Self {
         H64::from(value).0
+    }
+}
+
+impl From<MinerNonce> for B64 {
+    fn from(value: MinerNonce) -> Self {
+        B64::new(<[u8; 8]>::from(value))
     }
 }

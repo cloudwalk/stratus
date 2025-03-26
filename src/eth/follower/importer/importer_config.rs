@@ -7,7 +7,6 @@ use serde_json::json;
 
 use super::importer::ImporterMode;
 use crate::eth::executor::Executor;
-use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::Importer;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::ConsensusError;
@@ -39,6 +38,14 @@ pub struct ImporterConfig {
     #[arg(long = "external-rpc-timeout", value_parser=parse_duration, env = "EXTERNAL_RPC_TIMEOUT", default_value = "2s", required = false)]
     pub external_rpc_timeout: Duration,
 
+    /// Maximum response size in bytes for external RPC requests
+    #[arg(
+        long = "external-rpc-max-response-size-bytes",
+        env = "EXTERNAL_RPC_MAX_RESPONSE_SIZE_BYTES",
+        default_value = "10485760"
+    )]
+    pub external_rpc_max_response_size_bytes: u32,
+
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms", required = false)]
     pub sync_interval: Duration,
 }
@@ -50,7 +57,7 @@ impl ImporterConfig {
         miner: Arc<Miner>,
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
-    ) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
+    ) -> anyhow::Result<Option<Arc<Importer>>> {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
             NodeMode::Follower =>
@@ -67,11 +74,19 @@ impl ImporterConfig {
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
         importer_mode: ImporterMode,
-    ) -> anyhow::Result<Option<Arc<dyn Consensus>>> {
+    ) -> anyhow::Result<Option<Arc<Importer>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
 
-        let chain = Arc::new(BlockchainClient::new_http_ws(&self.external_rpc, self.external_rpc_ws.as_deref(), self.external_rpc_timeout).await?);
+        let chain = Arc::new(
+            BlockchainClient::new_http_ws(
+                &self.external_rpc,
+                self.external_rpc_ws.as_deref(),
+                self.external_rpc_timeout,
+                self.external_rpc_max_response_size_bytes,
+            )
+            .await?,
+        );
 
         let importer = Importer::new(
             executor,

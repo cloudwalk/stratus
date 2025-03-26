@@ -259,7 +259,7 @@ mod tests {
                     fs::create_dir_all(&snapshot_parent_path)?;
                     fs::write(snapshot_path, serialized)?;
                 } else {
-                    bail!("snapshot file at '{snapshot_path:?}' doesn't exist and GEN_NEW_VARIANT_SNAPSHOT is not set");
+                    bail!("snapshot file at '{snapshot_path:?}' doesn't exist and DANGEROUS_UPDATE_SNAPSHOTS is not set");
                 }
             }
 

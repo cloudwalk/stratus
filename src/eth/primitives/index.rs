@@ -1,5 +1,3 @@
-use std::num::TryFromIntError;
-
 use display_json::DebugAsJson;
 use ethereum_types::U256;
 use ethereum_types::U64;
@@ -37,6 +35,13 @@ impl From<U64> for Index {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+
+impl From<Index> for u64 {
+    fn from(value: Index) -> u64 {
+        value.0
+    }
+}
+
 impl From<Index> for U64 {
     fn from(value: Index) -> U64 {
         value.0.into()
@@ -46,13 +51,5 @@ impl From<Index> for U64 {
 impl From<Index> for U256 {
     fn from(value: Index) -> U256 {
         value.0.into()
-    }
-}
-
-impl TryFrom<Index> for i32 {
-    type Error = TryFromIntError;
-
-    fn try_from(value: Index) -> Result<Self, Self::Error> {
-        value.0.try_into()
     }
 }
