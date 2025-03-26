@@ -73,6 +73,11 @@ impl StratusStorage {
 
         Self::new(temp, perm, cache)
     }
+
+    #[cfg(feature = "dev")]
+    pub fn revert_state_to_block_batched(&self, block_number: BlockNumber) -> Result<(), StorageError> {
+        self.perm.revert_state_to_block_batched(block_number)
+    }
 }
 
 impl Storage for StratusStorage {
@@ -508,6 +513,11 @@ impl Storage for StratusStorage {
         self.set_mined_block_number(BlockNumber::ZERO)?;
 
         Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn revert_state_to_block_batched(&self, block_number: BlockNumber) -> Result<(), StorageError> {
+        self.perm.revert_state_to_block_batched(block_number)
     }
 
     // -------------------------------------------------------------------------

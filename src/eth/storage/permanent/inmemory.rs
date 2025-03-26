@@ -247,6 +247,12 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
         Ok(())
     }
+
+    #[cfg(feature = "dev")]
+    fn revert_state_to_block_batched(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
+        self.block_number.store(block_number.as_u64(), Ordering::SeqCst);
+        Ok(())
+    }
 }
 
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.

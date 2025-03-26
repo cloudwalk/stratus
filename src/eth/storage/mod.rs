@@ -93,6 +93,9 @@ pub trait Storage: Send + Sync + 'static {
     /// TODO: For now it uses the dev genesis block and test accounts, but it should be refactored to support genesis.json files.
     fn reset_to_genesis(&self) -> Result<(), StorageError>;
 
+    #[cfg(feature = "dev")]
+    fn revert_state_to_block_batched(&self, block_number: BlockNumber) -> Result<(), StorageError>;
+
     /// Translates a block filter to a specific storage point-in-time indicator.
     fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError>;
 }

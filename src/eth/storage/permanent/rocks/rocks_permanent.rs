@@ -179,4 +179,11 @@ impl PermanentStorage for RocksPermanentStorage {
             tracing::error!(reason = ?e, "failed to reset in RocksPermanent");
         })
     }
+
+    #[cfg(feature = "dev")]
+    fn revert_state_to_block_batched(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
+        self.state.revert_state_to_block_batched(block_number.into()).map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to revert state to block in RocksPermanent");
+        })
+    }
 }

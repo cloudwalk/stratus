@@ -628,21 +628,24 @@ impl RocksStorageState {
         tracing::info!("starting batched state reversion to block {}", target_number);
         
         // Create temporary CFs for storing intermediate state
-        let temp_accounts_cf = "temp_revert_accounts";
-        let temp_slots_cf = "temp_revert_slots";
+        let temp_accounts_cf_name = "temp_revert_accounts";
+        let temp_slots_cf_name = "temp_revert_slots";
+
+        // whether or not a block should be kept
+        let should_keep_block = |block_number| block_number <= target_number;
         
-        self.db.create_cf(temp_accounts_cf, &Options::default())?;
-        self.db.create_cf(temp_slots_cf, &Options::default())?;
+        if let Some(cf_handle) = self.db.cf_handle(temp_accounts_cf_name) {
+            self.db.drop_cf(temp_accounts_cf_name)?;
+        }
+        if let Some(cf_handle) = self.db.cf_handle(temp_slots_cf_name) {
+            self.db.drop_cf(temp_slots_cf_name)?;
+        }
         
-        let temp_accounts = RocksCfRef::<AddressRocksdb, CfAccountsValue>::new(
-            Arc::clone(&self.db),
-            temp_accounts_cf,
-        )?;
-        
-        let temp_slots = RocksCfRef::<(AddressRocksdb, SlotIndexRocksdb), CfAccountSlotsValue>::new(
-            Arc::clone(&self.db),
-            temp_slots_cf,
-        )?;
+        // Agora cria as CFs temporárias
+        self.db.create_cf(temp_accounts_cf_name, &Options::default())?;
+        let temp_accounts_cf = RocksCfRef::new(Arc::clone(&self.db), temp_accounts_cf_name)?;
+        self.db.create_cf(temp_slots_cf_name, &Options::default())?;
+        let temp_slots_cf = RocksCfRef::new(Arc::clone(&self.db), temp_slots_cf_name)?;
 
         // Clear current state
         self.accounts.clear()?;
@@ -661,18 +664,12 @@ impl RocksStorageState {
             if block_number > target_number {
                 continue;
             }
-            
-            // // Only keep the most recent state for each account up to target block
-            // if let Some(existing) = temp_accounts.get(&address)? {
-            //     // Skip if we already have a more recent state for this account
-            //     continue;
-            // }
 
-            temp_accounts.prepare_batch_insertion(
+            temp_accounts_cf.prepare_batch_insertion(
                 [(address, CfAccountsValue::from(account))],
                 &mut batch
             )?;
-            
+
             batch_size += 1;
             processed_count += 1;
 
@@ -702,13 +699,7 @@ impl RocksStorageState {
                 continue;
             }
 
-            // // Only keep the most recent state for each slot up to target block
-            // if let Some(existing) = temp_slots.get(&(address, slot))? {
-            //     // Skip if we already have a more recent state for this slot
-            //     continue;
-            // }
-
-            temp_slots.prepare_batch_insertion(
+            temp_slots_cf.prepare_batch_insertion(
                 [((address, slot), CfAccountSlotsValue::from(slot_value))],
                 &mut batch
             )?;
@@ -730,12 +721,51 @@ impl RocksStorageState {
         }
 
         // Copy from temporary CFs to main CFs
-        self.copy_cf_contents(temp_accounts_cf, &self.accounts)?;
-        self.copy_cf_contents(temp_slots_cf, &self.account_slots)?;
+        self.copy_cf_contents(temp_accounts_cf_name, &self.accounts)?;
+        self.copy_cf_contents(temp_slots_cf_name, &self.account_slots)?;
 
         // Clean up temporary CFs
-        self.db.drop_cf(temp_accounts_cf)?;
-        self.db.drop_cf(temp_slots_cf)?;
+        self.db.drop_cf(temp_accounts_cf_name)?;
+        self.db.drop_cf(temp_slots_cf_name)?;
+
+        // truncate the rest of column families
+        tracing::info!("cleaning values in transactions CF");
+        for next in self.transactions.iter_start() {
+            let (hash, block) = next?;
+            let block_number = BlockNumberRocksdb::from(block);
+            if not(should_keep_block(block_number)) {
+                self.transactions.delete(&hash)?;
+            }
+        }
+
+        // TODO: review Logs, it's not clear if it's needed
+        // tracing::info!("cleaning values in logs CF");
+        // for next in self.logs.iter_start() {
+        //     let (key, block) = next?;
+        //     if block > target_number {
+        //         self.logs.delete(&key)?;
+        //     }
+        // }
+        tracing::info!("cleaning values in blocks_by_hash CF");
+        for next in self.blocks_by_hash.iter_start() {
+            let (hash, block) = next?;
+            let block_number = BlockNumberRocksdb::from(block);
+            if not(should_keep_block(block_number)) {
+                self.blocks_by_hash.delete(&hash)?;
+            }
+        }
+        tracing::info!("last block number: {:?}", self.blocks_by_hash.last_key()?.unwrap_or_default());
+
+        tracing::info!("cleaning values in blocks_by_number CF");
+        for next in self.blocks_by_number.iter_end() {
+            let (block, _) = next?;
+            if not(should_keep_block(block)) {
+                self.blocks_by_number.delete(&block)?;
+            } else {
+                break; // blocks are ordered by key, so we can stop early here
+            }
+        }
+        tracing::info!("last block number: {:?}", self.blocks_by_number.last_key()?.unwrap_or_default());
 
         tracing::info!("finished state reversion");
         Ok(())

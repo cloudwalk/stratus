@@ -231,6 +231,32 @@ e2e-stratus-rocks block-mode="automine" test="":
     just _wait_for_stratus
 
     just _log "Running E2E tests"
+    if [[ {{block-mode}} =~ ^[0-9]+(ms|s)$ ]]; then
+        just e2e stratus interval "{{test}}"
+    else
+        just e2e stratus {{block-mode}} "{{test}}"
+    fi
+    result_code=$?
+
+    just _log "Killing Stratus"
+    killport 3000 -s sigterm
+    exit $result_code
+
+# E2E: Starts and execute revert-to-block tests in Stratus
+e2e-stratus-rocks-revert-to-block:
+    #!/bin/bash
+    if [ -d e2e ]; then
+        cd e2e
+    fi
+    just build
+
+    just _log "Starting Stratus"
+    just run -a 0.0.0.0:3000 --block-mode automine --perm-storage=rocks > stratus.log &
+
+    just _wait_for_stratus
+
+    just _log "Running E2E tests"
+    npx hardhat test test/automine/e2e-tx-serial-revert-to-block.ts --network stratus
     result_code=$?
 
     just _log "Killing Stratus"
