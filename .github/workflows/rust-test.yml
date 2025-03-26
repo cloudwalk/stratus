@@ -1,4 +1,4 @@
-name: Unit Tests
+name: Rust tests
 
 on:
   pull_request:
@@ -27,7 +27,7 @@ on:
 
 jobs:
   unit_tests:
-    name: Unit Tests
+    name: Rust Tests
     runs-on: ubuntu-22.04
     timeout-minutes: 25
 
@@ -61,5 +61,18 @@ jobs:
       - name: Set up Just
         uses: extractions/setup-just@v2
 
-      - name: Unit tests
-        run: just test-unit
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.6.14
+
+      - name: Rust tests
+        run: just test
+
+      - name: Upload coverage report to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          fail_ci_if_error: true
+          files: target/llvm-cov/codecov/rust_tests.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: rust-tests
+          name: rust-tests

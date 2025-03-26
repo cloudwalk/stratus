@@ -657,7 +657,7 @@ describe("JSON-RPC", () => {
                 await new Promise((resolve) => setTimeout(resolve, 2000));
 
                 // Get pending block timestamp
-                const pendingTimestamp = await contract.getCurrentTimestamp();
+                const pendingTimestamp = await contract.getCurrentTimestamp({ blockTag: "pending" });
                 expect(pendingTimestamp).to.be.gt(0);
 
                 // Wait 2 seconds
@@ -716,8 +716,21 @@ describe("JSON-RPC", () => {
                 expect(recordedTimestamp2).to.equal(blockTimestamp);
 
                 // Verify that time is advancing
-                const finalTimestamp = await contract.getCurrentTimestamp();
+                const finalTimestamp = await contract.getCurrentTimestamp({ blockTag: "pending" });
                 expect(finalTimestamp).to.be.gt(pendingTimestamp);
+            });
+
+            it("eth_call on latest executes with latest mined block timestamp", async () => {
+                await sendReset();
+                const contract = await deployTestContractBlockTimestamp();
+                await sendEvmMine();
+
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+
+                // Get pending block timestamp
+                const latest_timestamp = await contract.getCurrentTimestamp();
+                const block = await ETHERJS.getBlock("latest");
+                expect(latest_timestamp).to.be.eq(block?.timestamp);
             });
         });
     });

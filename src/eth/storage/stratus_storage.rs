@@ -49,13 +49,17 @@ impl StratusStorage {
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            let genesis = this.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
-            if genesis.is_none() {
+            if !this.has_genesis()? {
                 this.reset_to_genesis()?;
             }
         }
 
         Ok(this)
+    }
+
+    pub fn has_genesis(&self) -> Result<bool, StorageError> {
+        let genesis = self.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
+        Ok(genesis.is_some())
     }
 
     #[cfg(test)]

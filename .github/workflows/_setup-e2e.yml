@@ -6,6 +6,10 @@ on:
       justfile_recipe:
         required: true
         type: string
+      justfile_args:
+        required: false
+        type: string
+        default: ""
       justfile_env:
         required: false
         type: string
@@ -14,6 +18,9 @@ on:
         required: false
         type: string
         default: "stable-release"
+    secrets:
+      CODECOV_TOKEN:
+        required: true
 
 jobs:
   setup_and_test:
@@ -53,7 +60,7 @@ jobs:
 
       - name: Install docker-compose
         run: sudo apt-get install docker-compose -y
-        
+
       - name: Install jq
         run: sudo apt-get install jq -y
 
@@ -66,10 +73,31 @@ jobs:
           cargo install killport || true
           cargo install wait-service || true
 
+      - name: Install Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: curl -sSL https://install.python-poetry.org | python3 -
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.6.14
+
       - name: Run e2e tests
-        run: ${{ inputs.justfile_env }} just ${{ inputs.justfile_recipe }}
+        run: ${{ inputs.justfile_env }} just run-test ${{ inputs.justfile_recipe }} ${{ inputs.justfile_args }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error
-          RELEASE: 1
+          RELEASE: 0
           RUST_BACKTRACE: 1
+
+      - name: Upload coverage report to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          fail_ci_if_error: true
+          files: target/llvm-cov/codecov/${{ inputs.justfile_recipe }}.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: ${{ inputs.justfile_recipe }}
+          name: ${{ inputs.justfile_recipe }}
