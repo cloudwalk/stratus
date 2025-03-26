@@ -509,7 +509,7 @@ alias e2e-contracts := contracts-test
 contracts-remove *args="":
     cd e2e/cloudwalk-contracts && ./contracts-remove.sh {{args}}
 
-# Contracts: Start Stratus and run contracts tests with various storage options
+# Contracts: Start Stratus and run contracts tests with InMemory storage
 contracts-test-stratus storage="inmemory" *args="":
     #!/bin/bash
     just _log "Starting Stratus"
