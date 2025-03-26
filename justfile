@@ -274,7 +274,6 @@ e2e-stratus block-mode="automine" storage="inmemory" test="":
         just e2e stratus {{block-mode}} "{{test}}"
     fi
 
-
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus storage="inmemory":
     #!/bin/bash

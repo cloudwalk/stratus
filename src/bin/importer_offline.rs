@@ -65,12 +65,18 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     // init block range
     let block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),
-        None => storage.read_block_number_to_resume_import()?,
+        None =>
+            if storage.has_genesis()? {
+                storage.read_block_number_to_resume_import()?
+            } else {
+                BlockNumber::ZERO
+            },
     };
     let block_end = match config.block_end {
         Some(end) => BlockNumber::from(end),
         None => block_number_to_stop(&rpc_storage).await?,
     };
+    tracing::debug!(?block_start, ?block_end);
 
     // send blocks from fetcher task to executor task
     let (fetch_to_execute_tx, fetch_to_execute_rx) = async_mpsc::channel::<BlocksToExecute>(RPC_FETCHER_CHANNEL_CAPACITY);
