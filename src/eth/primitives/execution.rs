@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use alloy_primitives::B256;
 use anyhow::anyhow;
@@ -18,11 +18,9 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
-#[cfg(test)]
-use crate::ext::ordered_map;
 use crate::log_and_err;
 
-pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
+pub type ExecutionChanges = BTreeMap<Address, ExecutionAccountChanges>;
 
 /// Output of a transaction executed in the EVM.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -46,7 +44,6 @@ pub struct EvmExecution {
     pub gas: Gas,
 
     /// Storage changes that happened during the transaction execution.
-    #[cfg_attr(test, serde(serialize_with = "ordered_map"))]
     pub changes: ExecutionChanges,
 
     /// The contract address if the executed transaction deploys a contract.
@@ -80,7 +77,7 @@ impl EvmExecution {
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
             gas: Gas::from(receipt.gas_used),
-            changes: HashMap::from([(sender_changes.address, sender_changes)]),
+            changes: BTreeMap::from([(sender_changes.address, sender_changes)]),
             deployed_contract_address: None,
         };
         execution.apply_receipt(receipt)?;
@@ -550,7 +547,7 @@ mod tests {
 
         // Set up execution with sender account
         let sender_changes = ExecutionAccountChanges::from_original_values(sender);
-        execution.changes = HashMap::from([(sender_address, sender_changes)]);
+        execution.changes = BTreeMap::from([(sender_address, sender_changes)]);
         execution.receipt_applied = false;
         execution.gas = Gas::from(100u64);
 
