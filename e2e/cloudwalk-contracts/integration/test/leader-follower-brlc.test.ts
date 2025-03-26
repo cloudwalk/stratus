@@ -10,6 +10,7 @@ import {
     sendWithRetry,
     setDeployer,
     updateProviderUrl,
+    waitForFollowerToSyncWithLeader,
 } from "./helpers/rpc";
 
 describe("Leader & Follower BRLC integration test", function () {
@@ -222,6 +223,71 @@ describe("Leader & Follower BRLC integration test", function () {
                     );
                 }
                 updateProviderUrl("stratus");
+            });
+
+            it("Validate replication logs are identical between leader and follower", async function () {
+                this.timeout(60000);
+
+                // Wait for follower to sync with leader
+                await waitForFollowerToSyncWithLeader();
+
+                // Get the earliest block
+                updateProviderUrl("stratus");
+                const earliestBlock = await sendWithRetry("eth_getBlockByNumber", ["earliest", false]);
+                const earliestBlockNumber = parseInt(earliestBlock.number, 16);
+
+                // Get the latest block
+                const latestBlock = await sendWithRetry("eth_getBlockByNumber", ["latest", false]);
+                const latestBlockNumber = parseInt(latestBlock.number, 16);
+
+                // Iterate through each block
+                for (let blockNumber = earliestBlockNumber; blockNumber <= latestBlockNumber; blockNumber++) {
+                    // Get replication log from leader
+                    updateProviderUrl("stratus");
+                    const leaderReplicationLog = await sendWithRetry("stratus_getReplicationLog", [blockNumber]);
+
+                    // Get replication log from follower
+                    updateProviderUrl("stratus-follower");
+                    const followerReplicationLog = await sendWithRetry("stratus_getReplicationLog", [blockNumber]);
+
+                    // Validate that both replication logs exist
+                    expect(leaderReplicationLog, `Leader replication log for block ${blockNumber} is null`).to.not.be
+                        .null;
+                    expect(followerReplicationLog, `Follower replication log for block ${blockNumber} is null`).to.not
+                        .be.null;
+
+                    // Parse the block numbers from the response (they are hex strings)
+                    const leaderBlockNumber = parseInt(leaderReplicationLog.block_number, 16);
+                    const followerBlockNumber = parseInt(followerReplicationLog.block_number, 16);
+
+                    // Validate that the block numbers in the response match the requested block number
+                    expect(
+                        leaderBlockNumber,
+                        `Leader replication log block number (${leaderReplicationLog.block_number}) doesn't match requested block number (${blockNumber})`,
+                    ).to.equal(blockNumber);
+
+                    expect(
+                        followerBlockNumber,
+                        `Follower replication log block number (${followerReplicationLog.block_number}) doesn't match requested block number (${blockNumber})`,
+                    ).to.equal(blockNumber);
+
+                    // Validate that the replication logs are not null
+                    expect(
+                        leaderReplicationLog.replication_log,
+                        `Leader replication log content for block ${blockNumber} is null or empty`,
+                    ).to.not.be.null.and.to.not.be.empty;
+
+                    expect(
+                        followerReplicationLog.replication_log,
+                        `Follower replication log content for block ${blockNumber} is null or empty`,
+                    ).to.not.be.null.and.to.not.be.empty;
+
+                    // Compare the replication logs
+                    expect(
+                        leaderReplicationLog.replication_log,
+                        `Replication logs for block ${blockNumber} do not match`,
+                    ).to.equal(followerReplicationLog.replication_log);
+                }
             });
         });
     });
