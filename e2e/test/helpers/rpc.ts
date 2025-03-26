@@ -21,6 +21,7 @@ import {
     TestContractCounter,
     TestContractDenseStorage,
     TestEvmInput,
+    TestContractRevert,
 } from "../../typechain-types";
 import { Account, CHARLIE } from "./account";
 import { currentMiningIntervalInMs, currentNetwork, isStratus } from "./network";
@@ -169,6 +170,12 @@ export async function sendAndGetError(
 // Sends an RPC request to the blockchain and applies the expect function to the result.
 export async function sendExpect(method: string, params: any[] = []): Promise<Chai.Assertion> {
     return expect(await send(method, params));
+}
+
+// Deploys the "TestContractRevert" contract.
+export async function deployTestContractRevert(): Promise<TestContractRevert> {
+    const testContractFactory = await ethers.getContractFactory("TestContractRevert");
+    return await testContractFactory.connect(CHARLIE.signer()).deploy();
 }
 
 // Deploys the "TestContractBalances" contract.
@@ -525,4 +532,8 @@ function normalizePollingOptions(
         timeoutInMs,
         pollingIntervalInMs,
     };
+}
+
+export async function sendGetStorageAt(address: string, slot: string, block: string = "latest"): Promise<string> {
+    return send("eth_getStorageAt", [address, slot, block]);
 }
