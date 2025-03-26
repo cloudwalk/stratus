@@ -519,3 +519,19 @@ contracts-test-stratus storage="inmemory" *args="":
 
     just _log "Running E2E Contracts tests"
     just e2e-contracts {{args}}
+
+# E2E: Starts and execute Genesis tests in Stratus
+e2e-genesis:
+    #!/bin/bash
+    mkdir -p e2e_logs
+
+    # Create config directory in e2e if it doesn't exist
+    mkdir -p e2e/config
+
+    just _log "Starting Stratus with genesis.local.json"
+    just stratus-test -a 0.0.0.0:3000 --genesis-path config/genesis.local.json
+
+    just _log "Running Genesis tests"
+    cd e2e
+    npm install 
+    npx hardhat test test/genesis/genesis.test.ts --network stratus
