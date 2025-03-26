@@ -32,13 +32,14 @@ setup:
 # Stratus tasks
 # ------------------------------------------------------------------------------
 
-alias run          := stratus
-alias run-leader   := stratus
-alias run-follower := stratus-follower
-alias run-importer := stratus-follower
+alias run               := stratus
+alias run-leader        := stratus
+alias run-follower      := stratus-follower
+alias run-importer      := stratus-follower
 
 # Stratus: Compile with debug options
 build binary="stratus" features="dev":
+    #!/bin/bash
     cargo {{nightly_flag}} build {{release_flag}} --bin {{binary}} --features {{features}}
 
 # Stratus: Check, or compile without generating code
@@ -93,6 +94,15 @@ alias sqlx := db-compile
 stratus *args="":
     cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --leader {{args}}
 
+
+# Bin: Stratus main service as leader
+stratus-test *args="":
+    #!/bin/bash
+    source <(cargo llvm-cov show-env --export-prefix)
+    cargo build --features dev
+    cargo run --bin stratus --features dev -- --leader {{args}} > stratus.log &
+    just _wait_for_stratus
+
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
 # To produce a flamegraph of the memory usage use jeprof:
 #   * Diferential flamegraph: jeprof <binary> --base=./jeprof.<...>.i0.heap ./jeprof.<...>.i<n>.heap --collapsed | flamegraph.pl > mem_prof.svg
@@ -104,151 +114,64 @@ stratus-memory-profiling *args="":
 stratus-follower *args="":
     LOCAL_ENV_PATH=config/stratus-follower.env.local cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- --follower {{args}}
 
+# Bin: Stratus main service as follower
+stratus-follower-test *args="":
+    #!/bin/bash
+    source <(cargo llvm-cov show-env --export-prefix)
+    cargo build --features dev
+    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features dev -- --follower {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
+    just _wait_for_stratus 3001
+
 # Bin: Download external RPC blocks and receipts to temporary storage
 rpc-downloader *args="":
     cargo {{nightly_flag}} run --bin rpc-downloader {{release_flag}} -- {{args}}
 
+rpc-downloader-test *args="":
+    #!/bin/bash
+    source <(cargo llvm-cov show-env --export-prefix)
+    cargo build
+    cargo run --bin rpc-downloader -- {{args}}
+
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 importer-offline *args="":
-    cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} -- {{args}}
+    cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} --features dev -- {{args}}
+
+importer-offline-test *args="":
+    #!/bin/bash
+    source <(cargo llvm-cov show-env --export-prefix)
+    cargo build
+    cargo run --bin importer-offline --features dev -- {{args}}
 
 # ------------------------------------------------------------------------------
 # Test tasks
 # ------------------------------------------------------------------------------
-
-# Test: Execute all Rust tests
-test name="":
-    @just test-doc {{name}}
-    @just test-unit {{name}}
-    @just test-int {{name}}
+# Test: run rust tests
+test:
+    mkdir -p target/llvm-cov/codecov
+    cargo llvm-cov --lcov --output-path target/llvm-cov/codecov/rust_tests.info
 
 # Test: Execute Rust doc tests
 test-doc name="":
     cargo test {{name}} --doc
 
-# Test: Execute Rust unit tests
-test-unit name="":
-    cargo test --lib {{name}} -- --nocapture --test-threads=1
-
-# Test: Execute Rust integration tests
-test-int name="'*'":
-    cargo test --test {{name}} {{release_flag}} -- --nocapture
-
-# Test: Execute coverage for a specific group
-stratus-test-coverage-group group="unit" *args="":
+# Runs tests with coverage and kills stratus after
+run-test recipe="" *args="":
     #!/bin/bash
-
-    cargo llvm-cov clean --workspace
-    
-    rm -rf temp_*
-    rm -rf data/rocksdb
-    rm -rf data/importer-offline-database-rocksdb
-    rm -rf e2e_logs
-    
+    echo "Running test {{recipe}}"
     source <(cargo llvm-cov show-env --export-prefix)
-    export RUST_LOG=error
-    export TRACING_LOG_FORMAT=json
-    
-    case "{{group}}" in
-        "unit")
-            cargo llvm-cov --no-report
-            ;;
-        "inmemory")
-            just contracts-clone
-            just contracts-flatten
-            
-            for test in "automine" "external"; do
-                just _coverage-run-stratus-recipe e2e-stratus $test
-                rm -rf e2e_logs
-                rm -rf temp_*
-            done
-            
-            just _coverage-run-stratus-recipe e2e-clock-stratus
-            rm -rf e2e_logs
-            rm -rf temp_*
-            
-            just _coverage-run-stratus-recipe contracts-test-stratus
-            rm -rf e2e_logs
-            rm -rf temp_*
-            
-            just _coverage-run-stratus-recipe e2e-eof
-            rm -rf e2e_logs
-            rm -rf temp_*
-            ;;
-        "rocksdb")
-            just contracts-clone
-            just contracts-flatten
-            
-            for test in "automine" "external"; do
-                rm -rf data/rocksdb
-                just _coverage-run-stratus-recipe e2e-stratus-rocks $test
-                rm -rf e2e_logs
-                rm -rf temp_*
-                rm -rf data/rocksdb
-            done
-            
-            rm -rf data/rocksdb
-            just _coverage-run-stratus-recipe e2e-clock-stratus-rocks
-            rm -rf e2e_logs
-            rm -rf temp_*
-            rm -rf data/rocksdb
-            
-            rm -rf data/rocksdb
-            just _coverage-run-stratus-recipe contracts-test-stratus-rocks
-            rm -rf e2e_logs
-            rm -rf temp_*
-            rm -rf data/rocksdb
-
-            rm -rf data/rocksdb
-            just _coverage-run-stratus-recipe e2e-eof rocks
-            rm -rf e2e_logs
-            rm -rf temp_*
-            rm -rf data/rocksdb
-            ;;
-        "leader-follower")
-            just contracts-clone
-            just contracts-flatten
-            
-            for test in kafka deploy brlc change miner importer health; do
-                just _e2e-leader-follower-up-coverage $test
-                rm -rf e2e_logs
-                rm -rf temp_*
-                rm -rf utils/deploy/deploy_*.log
-            done
-            ;;
-        "admin-password")
-            just _coverage-run-stratus-recipe e2e-admin-password
-            rm -rf e2e_logs
-            rm -rf temp_*
-            ;;
-        "rpc-downloader")
-            just _coverage-run-stratus-recipe e2e-rpc-downloader
-            rm -rf e2e_logs
-            rm -rf temp_*
-            ;;
-        "importer-offline")
-            just _coverage-run-stratus-recipe e2e-importer-offline
-            rm -rf e2e_logs
-            rm -rf temp_*
-            rm -rf data/importer-offline-database-rocksdb
-            ;;
-        *)
-            echo "Unknown group: {{group}}"
-            exit 1
-            ;;
-    esac
-    
-    # Ensure the output directory exists
+    cargo llvm-cov clean --workspace
+    just {{recipe}} {{args}}
+    result_code=$?
+    echo "Killing stratus"
+    killport 3000 -s sigterm
+    killport 3001 -s sigterm
+    echo "Sleeping for 10 seconds"
+    sleep 10
+    echo "Generating reports"
     mkdir -p target/llvm-cov/codecov
-    
-    # Generate the report with the specified arguments
-    # If --output-path is provided in args, use it, otherwise use the default path
-    if [[ "{{args}}" == *"--output-path"* ]]; then
-        cargo llvm-cov report {{args}}
-    else
-        # Default output path for codecov
-        cargo llvm-cov report --codecov --output-path target/llvm-cov/codecov/{{group}}.json {{args}}
-    fi
+    cargo llvm-cov report --html
+    cargo llvm-cov report --lcov --output-path target/llvm-cov/codecov/{{recipe}}.info
+    exit $result_code
 
 # ------------------------------------------------------------------------------
 # E2E tasks
@@ -273,6 +196,10 @@ e2e network="stratus" block_modes="automine" test="":
         else
             BLOCK_MODE=$block_mode npx hardhat test test/$block_mode/*.test.ts --network {{network}} --grep "{{test}}"
         fi
+        exit_code=$?
+        if [ $exit_code -ne 0 ]; then
+            exit $exit_code
+        fi
     done
 
 # E2E: Execute admin password tests
@@ -281,35 +208,35 @@ e2e-admin-password:
 
     mkdir -p e2e_logs
     cd e2e
-    
+
     npm install
 
     for test in "enabled|test123" "disabled|"; do
         IFS="|" read -r type pass <<< "$test"
         just _log "Running admin password tests with password $type"
-        ADMIN_PASSWORD=$pass just run -a 0.0.0.0:3000 > /dev/null &
+        ADMIN_PASSWORD=$pass just stratus-test -a 0.0.0.0:3000 > /dev/null &
         just _wait_for_stratus
-        
+
         npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
-        
+        exit_code=$?
+        if [ $exit_code -ne 0 ]; then
+            exit $exit_code
+        fi
         killport 3000 -s sigterm
     done
 
 # E2E: Execute EOF (EVM Object Format) tests
 e2e-eof perm-storage="inmemory":
     #!/bin/bash
-    cd e2e/eof
-
-    forge install
-
     # Start Stratus
-    just build
-    just run -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}} > stratus.log &
-    just _wait_for_stratus
+    just stratus-test -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}}
 
+    cd e2e/eof
+    forge install
     # Run tests using alice pk
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "deploy()" --slow
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "run()" --slow
+
 
 # E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat block-mode="automine" test="":
@@ -331,17 +258,14 @@ e2e-hardhat block-mode="automine" test="":
     killport 8545
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus block-mode="automine" test="":
+e2e-stratus block-mode="automine" storage="inmemory" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
-    just build
 
     just _log "Starting Stratus"
-    RUST_LOG=debug just run -a 0.0.0.0:3000 --block-mode {{block-mode}} > stratus.log &
-
-    just _wait_for_stratus
+    just stratus-test -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage={{storage}}
 
     just _log "Running E2E tests"
     if [[ {{block-mode}} =~ ^[0-9]+(ms|s)$ ]]; then
@@ -349,36 +273,7 @@ e2e-stratus block-mode="automine" test="":
     else
         just e2e stratus {{block-mode}} "{{test}}"
     fi
-    result_code=$?
 
-    just _log "Killing Stratus"
-    killport 3000 -s sigterm
-    exit $result_code
-
-# E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus-rocks block-mode="automine" test="":
-    #!/bin/bash
-    if [ -d e2e ]; then
-        cd e2e
-    fi
-    just build
-
-    just _log "Starting Stratus"
-    just run -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage=rocks > stratus.log &
-
-    just _wait_for_stratus
-
-    just _log "Running E2E tests"
-    if [[ {{block-mode}} =~ ^[0-9]+(ms|s)$ ]]; then
-        just e2e stratus interval "{{test}}"
-    else
-        just e2e stratus {{block-mode}} "{{test}}"
-    fi
-    result_code=$?
-
-    just _log "Killing Stratus"
-    killport 3000 -s sigterm
-    exit $result_code
 
 # E2E: Starts and execute revert-to-block tests in Stratus
 e2e-stratus-rocks-revert-to-block storage="rocks":
@@ -402,39 +297,15 @@ e2e-stratus-rocks-revert-to-block storage="rocks":
     exit $result_code
 
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
-e2e-clock-stratus:
+e2e-clock-stratus storage="inmemory":
     #!/bin/bash
-    just build
     just _log "Starting Stratus"
-    just run --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
+    just stratus-test --block-mode 1s -a 0.0.0.0:3000 --perm-storage={{storage}} > stratus.log &
 
     just _wait_for_stratus
 
     just _log "Validating block time"
     ./utils/block-time-check.sh
-    result_code=$?
-
-    just _log "Killing Stratus"
-    killport 3000 -s sigterm
-    exit $result_code
-
-# E2E Clock: Builds and runs Stratus Rocks with block-time flag, then validates average block generation time
-e2e-clock-stratus-rocks:
-    #!/bin/bash
-    just build
-
-    just _log "Starting Stratus"
-    just run --block-mode 1s --perm-storage=rocks -a 0.0.0.0:3000 > stratus.log &
-
-    just _wait_for_stratus
-
-    just _log "Validating block time"
-    ./utils/block-time-check.sh
-    result_code=$?
-
-    just _log "Killing Stratus"
-    killport 3000 -s sigterm
-    exit $result_code
 
 # E2E: Lint and format code
 e2e-lint mode="--write":
@@ -450,34 +321,8 @@ shell-lint mode="--write":
     @shfmt {{ mode }} --indent 4 e2e/cloudwalk-contracts/*.sh
     @shellcheck e2e/cloudwalk-contracts/*.sh --severity=warning --shell=bash
 
-# E2E: profiles RPC sync and generates a flamegraph
-e2e-flamegraph:
-    #!/bin/bash
-
-    # Start RPC mock server
-    just _log "Starting RPC mock server"
-    killport 3003 -s sigterm
-
-    cd e2e/rpc-mock-server
-    if [ ! -d node_modules ]; then
-        npm install
-    fi
-    cd ../..
-    node ./e2e/rpc-mock-server/index.js &
-    sleep 1
-
-    # Wait for RPC mock server
-    just _log "Waiting for RPC mock server to start for 60 seconds"
-    wait-service --tcp 0.0.0.0:3003 -t 60 -- echo "RPC mock server started"
-
-    # Run cargo flamegraph with necessary environment variables
-    just _log "Running cargo flamegraph"
-    cargo flamegraph --bin importer-online --deterministic --features dev -- --external-rpc=http://localhost:3003/rpc --chain-id=2009
-
 e2e-leader:
-    #!/bin/bash
-    RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --leader --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000 -a 0.0.0.0:3000 > e2e_logs/stratus.log &
-    just _wait_for_stratus 3000
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000
 
 e2e-follower test="brlc":
     #!/bin/bash
@@ -488,18 +333,14 @@ e2e-follower test="brlc":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none > e2e_logs/importer.log &
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --perm-storage=rocks --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info cargo ${CARGO_COMMAND} run {{release_flag}} --bin stratus --features dev -- --follower --perm-storage=rocks --rocks-path-prefix=temp_3001 -a 0.0.0.0:3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ > e2e_logs/importer.log &
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --perm-storage=rocks --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
     fi
-    # Wait for Stratus with follower flag to start
-    just _wait_for_stratus 3001
 
 
-_e2e-leader-follower-up-impl test="brlc" release_flag="--release":
+_e2e-leader-follower-up-impl test="brlc":
     #!/bin/bash
-    just build
-
     mkdir e2e_logs
 
     # Start Stratus with leader flag
@@ -550,10 +391,9 @@ _e2e-leader-follower-up-impl test="brlc" release_flag="--release":
     fi
 
 # E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc" release_flag="--release":
-    just _e2e-leader-follower-up-impl {{test}} {{release_flag}}
-    killport 3000 -s sigterm
-    killport 3001 -s sigterm
+e2e-leader-follower-up test="brlc":
+    just _e2e-leader-follower-up-impl {{test}}
+    just e2e-leader-follower-down
 
 # E2E: Leader & Follower Down
 e2e-leader-follower-down:
@@ -579,73 +419,68 @@ e2e-rpc-downloader:
     #!/bin/bash
     mkdir e2e_logs
 
-    just build
-
     just _log "Starting Stratus"
-    just run -a 0.0.0.0:3000 > e2e_logs/e2e-rpc-downloader-stratus.log &
-    just _wait_for_stratus
+    just stratus-test -a 0.0.0.0:3000
 
     just _log "Starting PostgreSQL"
     docker-compose up -d postgres
 
     just _log "Running TestContractBalances tests"
     just e2e stratus automine
-    
-    just _log "Running RPC Downloader test"
-    just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
 
-    just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
+    just _log "Running RPC Downloader test"
+    just rpc-downloader-test --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
+    result_code_1=$?
 
     just _log "Checking content of postgres"
     pip install -r utils/check_rpc_downloader/requirements.txt
     POSTGRES_DB=stratus POSTGRES_PASSWORD=123 ETH_RPC_URL=http://localhost:3000/ python utils/check_rpc_downloader/main.py --start 0
-
-    just _log "Killing Stratus"
-    killport 3000 -s sigterm
+    result_code_2=$?
 
     just _log "Killing PostgreSQL"
     docker-compose down postgres
 
+    just _log "Check result codes"
+    if [ $result_code_1 -ne 0 ] || [ $result_code_2 -ne 0 ]; then
+        exit 1
+    fi
+
 # E2E Importer Offline
 e2e-importer-offline:
+    #!/bin/bash
     mkdir -p e2e_logs
 
     rm -rf data/importer-offline-database-rocksdb
 
-    just build
-
     just _log "Starting Stratus"
-    just stratus -a 0.0.0.0:3000 > e2e_logs/e2e-importer-offline-stratus.log &
-    just _wait_for_stratus
+    just stratus-test -a 0.0.0.0:3000
 
     just _log "Running TestContractBalances tests"
     just e2e stratus automine
 
     just _log "Starting PostgreSQL"
     docker-compose up -d postgres
-    
+
     just _log "Running rpc downloader"
-    just rpc-downloader --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001 --initial-accounts 0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
+    just rpc-downloader-test --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001 --initial-accounts 0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
 
     just _log "Run importer-offline"
-    just importer-offline --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
+    just importer-offline-test --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
 
     just _log "Stratus for importer-offline"
-    cargo run --release --bin stratus -- --leader -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002 > e2e_logs/e2e-importer-offline-stratus-3001.log &
+    just stratus-test -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
     just _wait_for_stratus 3001
 
     just _log "Compare blocks of stratus and importer-offline"
-    pip install -r utils/compare_block/requirements.txt
-    python utils/compare_block/main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp
-    
-    just _log "Killing Stratus"
-    killport 3000 -s sigterm
+    cd utils/compare_block/
+    poetry install --no-root
+    poetry run python3 ./main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp
+    result_code=$?
 
-    just _log "Killing importer-offline"
-    killport 3001 -s sigterm
-    
     just _log "Killing PostgreSQL"
     docker-compose down postgres
+
+    exit $result_code
 
 # ------------------------------------------------------------------------------
 # Hive tests
@@ -699,81 +534,10 @@ contracts-remove *args="":
     cd e2e/cloudwalk-contracts && ./contracts-remove.sh {{args}}
 
 # Contracts: Start Stratus and run contracts tests with InMemory storage
-contracts-test-stratus *args="":
+contracts-test-stratus storage="inmemory" *args="":
     #!/bin/bash
-    just build
-
     just _log "Starting Stratus"
-    just run -a 0.0.0.0:3000 &
-
-    just _wait_for_stratus
+    just stratus-test -a 0.0.0.0:3000 --perm-storage={{storage}}
 
     just _log "Running E2E Contracts tests"
     just e2e-contracts {{args}}
-    result_code=$?
-
-    just _log "Killing Stratus"
-    killport 3000 -s sigterm
-    exit $result_code
-
-# Contracts: Start Stratus and run contracts tests with RocksDB storage
-contracts-test-stratus-rocks *args="":
-    #!/bin/bash
-    just build
-
-    just _log "Starting Stratus"
-    just run -a 0.0.0.0:3000 --perm-storage=rocks > stratus.log &
-
-    just _wait_for_stratus
-
-    just _log "Running E2E tests"
-    just e2e-contracts {{args}}
-    result_code=$?
-
-    just _log "Killing Stratus"
-    killport 3000 -s sigterm
-
-    exit $result_code
-
-# Contracts: Run tests and generate coverage info. Use --html to open in browser.
-contracts-coverage *args="":
-    cd e2e/cloudwalk-contracts && ./contracts-coverage.sh {{args}}
-
-# Contracts: Erase coverage info
-contracts-coverage-erase:
-    #!/bin/bash
-    cd e2e/cloudwalk-contracts/repos || exit 1
-    just _log "Erasing coverage info..."
-    rm -rf ./*/coverage && echo "Coverage info erased."
-
-
-_e2e-leader-follower-up-coverage test="":
-    -rm -r temp_3000-rocksdb
-    -rm -r temp_3001-rocksdb
-    just _coverage-run-stratus-recipe e2e-leader-follower-up {{test}} " "
-    sleep 10
-    -rm -r e2e_logs
-    -rm utils/deploy/deploy_01.log
-    -rm utils/deploy/deploy_02.log
-
-_coverage-run-stratus-recipe *recipe="":
-    #!/bin/bash
-    # Create logs directory if it doesn't exist
-    mkdir -p e2e_logs
-    
-    # Run the recipe and capture the exit code
-    just {{recipe}}
-    result=$?
-    
-    # Wait for processes to finish
-    sleep 10
-    
-    # Return the original exit code
-    exit $result
-
-stratus-test-coverage *args="":
-    #!/bin/bash
-
-    for group in unit inmemory rocksdb leader-follower admin-password rpc-downloader importer-offline; do
-        just stratus-test-coverage-group $group {{args}}
-    done

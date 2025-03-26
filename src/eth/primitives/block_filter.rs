@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use display_json::DebugAsJson;
 
+use super::PointInTime;
 use crate::alias::JsonValue;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
@@ -34,6 +35,16 @@ impl Display for BlockFilter {
             BlockFilter::Earliest => write!(f, "earliest"),
             BlockFilter::Hash(block_hash) => write!(f, "{}", block_hash),
             BlockFilter::Number(block_number) => write!(f, "{}", block_number),
+        }
+    }
+}
+
+impl From<PointInTime> for BlockFilter {
+    fn from(point_in_time: PointInTime) -> Self {
+        match point_in_time {
+            PointInTime::Mined => Self::Latest,
+            PointInTime::Pending => Self::Pending,
+            PointInTime::MinedPast(number) => Self::Number(number),
         }
     }
 }
