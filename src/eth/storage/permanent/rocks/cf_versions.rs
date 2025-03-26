@@ -87,7 +87,7 @@ impl_single_version_cf_value!(CfLogsValue, BlockNumberRocksdb, BlockNumber);
 impl From<CfAccountsHistoryValue> for CfAccountsValue {
     fn from(value: CfAccountsHistoryValue) -> Self {
         match value {
-            CfAccountsHistoryValue::V1(account) => CfAccountsValue::V1(account)
+            CfAccountsHistoryValue::V1(account) => CfAccountsValue::V1(account),
         }
     }
 }
@@ -95,7 +95,7 @@ impl From<CfAccountsHistoryValue> for CfAccountsValue {
 impl From<CfAccountSlotsHistoryValue> for CfAccountSlotsValue {
     fn from(value: CfAccountSlotsHistoryValue) -> Self {
         match value {
-            CfAccountSlotsHistoryValue::V1(slot_value) => CfAccountSlotsValue::V1(slot_value)
+            CfAccountSlotsHistoryValue::V1(slot_value) => CfAccountSlotsValue::V1(slot_value),
         }
     }
 }

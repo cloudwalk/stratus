@@ -15,7 +15,9 @@ use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
 use rocksdb::DB;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
+use serde::Serialize;
 use sugars::hmap;
 
 use super::cf_versions::CfAccountSlotsHistoryValue;
@@ -48,8 +50,8 @@ use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
-use crate::ext::OptionExt;
 use crate::ext::not;
+use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::log_and_err;
@@ -547,9 +549,8 @@ impl RocksStorageState {
         let accounts_len = accounts.len();
         let accounts_without_number = accounts.into_iter().map(|(address, (_, account))| (address, account));
         tracing::info!(%accounts_len, "saving reprocessed accounts");
-        self.accounts.prepare_and_apply_insertion_batch_with_context(
-            accounts_without_number.into_iter().map(|(addr, acc)| (addr, CfAccountsValue::from(acc)))
-        )?;
+        self.accounts
+            .prepare_and_apply_insertion_batch_with_context(accounts_without_number.into_iter().map(|(addr, acc)| (addr, CfAccountsValue::from(acc))))?;
 
         tracing::info!("starting iteration through historical slots to clean values after target_block and reconstruct current slots state");
         let mut slots = HashMap::<(AddressRocksdb, SlotIndexRocksdb), (BlockNumberRocksdb, CfAccountSlotsHistoryValue)>::new();
@@ -571,9 +572,8 @@ impl RocksStorageState {
         let slots_without_number = slots.into_iter().map(|((address, idx), (_, value))| ((address, idx), value));
 
         tracing::info!(%slots_len, "saving reprocessed slots");
-        self.account_slots.prepare_and_apply_insertion_batch_with_context(
-            slots_without_number.into_iter().map(|(key, val)| (key, CfAccountSlotsValue::from(val)))
-        )?;
+        self.account_slots
+            .prepare_and_apply_insertion_batch_with_context(slots_without_number.into_iter().map(|(key, val)| (key, CfAccountSlotsValue::from(val))))?;
 
         // truncate the rest of column families
         tracing::info!("cleaning values in transactions CF");
@@ -612,24 +612,24 @@ impl RocksStorageState {
 
         Ok(())
     }
-    
+
     pub fn revert_state_to_block_batched(&self, target_number: BlockNumberRocksdb) -> Result<()> {
         tracing::info!("starting batched state reversion to block {}", target_number);
-        
+
         // Create temporary CFs for storing intermediate state
         let temp_accounts_cf_name = "temp_revert_accounts";
         let temp_slots_cf_name = "temp_revert_slots";
 
         // whether or not a block should be kept
         let should_keep_block = |block_number| block_number <= target_number;
-        
+
         if let Some(cf_handle) = self.db.cf_handle(temp_accounts_cf_name) {
             self.db.drop_cf(temp_accounts_cf_name)?;
         }
         if let Some(cf_handle) = self.db.cf_handle(temp_slots_cf_name) {
             self.db.drop_cf(temp_slots_cf_name)?;
         }
-        
+
         // Agora cria as CFs temporárias
         self.db.create_cf(temp_accounts_cf_name, &Options::default())?;
         let temp_accounts_cf = RocksCfRef::new(Arc::clone(&self.db), temp_accounts_cf_name)?;
@@ -649,15 +649,12 @@ impl RocksStorageState {
         // Process historical accounts up to target block
         for result in self.accounts_history.iter_start() {
             let ((address, block_number), account) = result?;
-            
+
             if block_number > target_number {
                 continue;
             }
 
-            temp_accounts_cf.prepare_batch_insertion(
-                [(address, CfAccountsValue::from(account))],
-                &mut batch
-            )?;
+            temp_accounts_cf.prepare_batch_insertion([(address, CfAccountsValue::from(account))], &mut batch)?;
 
             batch_size += 1;
             processed_count += 1;
@@ -683,16 +680,13 @@ impl RocksStorageState {
         // Process historical slots up to target block
         for result in self.account_slots_history.iter_start() {
             let ((address, slot, block_number), slot_value) = result?;
-            
+
             if block_number > target_number {
                 continue;
             }
 
-            temp_slots_cf.prepare_batch_insertion(
-                [((address, slot), CfAccountSlotsValue::from(slot_value))],
-                &mut batch
-            )?;
-            
+            temp_slots_cf.prepare_batch_insertion([((address, slot), CfAccountSlotsValue::from(slot_value))], &mut batch)?;
+
             batch_size += 1;
             processed_count += 1;
 
@@ -760,7 +754,7 @@ impl RocksStorageState {
         Ok(())
     }
 
-    fn copy_cf_contents<K, V>(&self, temp_cf: &str, target_cf: &RocksCfRef<K, V>) -> Result<()> 
+    fn copy_cf_contents<K, V>(&self, temp_cf: &str, target_cf: &RocksCfRef<K, V>) -> Result<()>
     where
         K: Serialize + DeserializeOwned + Debug + std::hash::Hash + Eq,
         V: Serialize + DeserializeOwned + Debug + Clone,
@@ -768,7 +762,7 @@ impl RocksStorageState {
         let temp = RocksCfRef::<K, V>::new(Arc::clone(&self.db), temp_cf)?;
         let mut batch = WriteBatch::default();
         let mut batch_size = 0;
-        
+
         for result in temp.iter_start() {
             let (key, value) = result?;
             target_cf.prepare_batch_insertion([(key, value)], &mut batch)?;
