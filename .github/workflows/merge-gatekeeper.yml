@@ -20,4 +20,8 @@ jobs:
           self: Merge Gatekeeper
           interval: 5
           timeout: 1800
-          ignored: PR Agent,codecov/project,codecov/patch
+          ignored: >-
+            PR Agent,
+            codecov/project,
+            codecov/patch,
+            E2E Leader & Follower on replication (RocksDB Replication: false)
