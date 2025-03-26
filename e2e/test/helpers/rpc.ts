@@ -25,8 +25,8 @@ import {
     TestContractBlockTimestamp,
     TestContractCounter,
     TestContractDenseStorage,
-    TestEvmInput,
     TestContractRevert,
+    TestEvmInput,
 } from "../../typechain-types";
 import { Account, BOB, CHARLIE } from "./account";
 import { currentMiningIntervalInMs, currentNetwork, isStratus } from "./network";

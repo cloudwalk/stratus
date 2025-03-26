@@ -1,13 +1,14 @@
 import { expect } from "chai";
+
 import { ALICE, BOB, CHARLIE } from "../helpers/account";
-import { 
+import {
     ETHERJS,
-    send, 
+    deployTestContractRevert,
+    send,
+    sendGetBalance,
+    sendGetStorageAt,
     sendRawTransaction,
     sendReset,
-    sendGetBalance,
-    deployTestContractRevert,
-    sendGetStorageAt,
 } from "../helpers/rpc";
 
 describe("Revert to block", () => {
@@ -52,7 +53,7 @@ describe("Revert to block", () => {
         expect(aliceBalanceAfterTx3).to.equal(Number(aliceBalanceAfterTx1));
 
         // Revert to block after second transfer
-        await send("stratus_revertToBlock", ["0x"+ (await send("eth_blockNumber")) - 1]);
+        await send("stratus_revertToBlock", ["0x" + (await send("eth_blockNumber")) - 1]);
 
         // Verify balances are back to state after second transfer
         expect(await sendGetBalance(BOB)).to.equal(bobBalanceAfterTx2);
@@ -60,7 +61,7 @@ describe("Revert to block", () => {
         expect(await sendGetBalance(ALICE)).to.equal(aliceBalanceAfterTx1);
 
         // Revert to block after first transfer
-        await send("stratus_revertToBlock", ["0x"+ (await send("eth_blockNumber")) - 2]);
+        await send("stratus_revertToBlock", ["0x" + (await send("eth_blockNumber")) - 2]);
 
         // Verify balances are back to state after first transfer
         expect(await sendGetBalance(ALICE)).to.equal(aliceBalanceAfterTx1);
@@ -86,7 +87,7 @@ describe("Revert slots to block", () => {
         const deployedCode = await send("eth_getCode", [_contract.target, "latest"]);
 
         expect(deployedCode).not.eq("0x");
-        
+
         // Set initial value in slot 0
         let txResponse = await _contract.connect(CHARLIE.signer()).set(42);
         let deployReceipt = await ETHERJS.getTransactionReceipt(txResponse.hash);
@@ -119,14 +120,14 @@ describe("Revert slots to block", () => {
         expect(slot0AfterBlock3).to.equal("0x000000000000000000000000000000000000000000000000000000000000007e");
 
         // Revert to block 2
-        await send("stratus_revertToBlock", ["0x"+ (await send("eth_blockNumber") - 1)]);
+        await send("stratus_revertToBlock", ["0x" + ((await send("eth_blockNumber")) - 1)]);
 
         // Verify slot value is back to 84
         const slot0AfterRevert = await sendGetStorageAt(_contract.target, "0x0");
         expect(slot0AfterRevert).to.equal("0x0000000000000000000000000000000000000000000000000000000000000054");
 
         // Revert to block 1
-        await send("stratus_revertToBlock", ["0x"+ (await send("eth_blockNumber") - 2)]);
+        await send("stratus_revertToBlock", ["0x" + ((await send("eth_blockNumber")) - 2)]);
 
         // Verify slot value is back to 42
         const slot0AfterFinalRevert = await sendGetStorageAt(_contract.target, "0x0");
