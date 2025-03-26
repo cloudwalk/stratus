@@ -237,6 +237,7 @@ e2e-eof perm-storage="inmemory":
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "deploy()" --slow
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "run()" --slow
 
+
 # E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat block-mode="automine" test="":
     #!/bin/bash
@@ -272,6 +273,7 @@ e2e-stratus block-mode="automine" storage="inmemory" test="":
     else
         just e2e stratus {{block-mode}} "{{test}}"
     fi
+
 
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus storage="inmemory":
@@ -314,6 +316,7 @@ e2e-follower test="brlc":
     else
         RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --perm-storage=rocks --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
     fi
+
 
 _e2e-leader-follower-up-impl test="brlc":
     #!/bin/bash
@@ -517,14 +520,3 @@ contracts-test-stratus storage="inmemory" *args="":
 
     just _log "Running E2E Contracts tests"
     just e2e-contracts {{args}}
-
-# Contracts: Run tests and generate coverage info. Use --html to open in browser.
-contracts-coverage *args="":
-    cd e2e/cloudwalk-contracts && ./contracts-coverage.sh {{args}}
-
-# Contracts: Erase coverage info
-contracts-coverage-erase:
-    #!/bin/bash
-    cd e2e/cloudwalk-contracts/repos || exit 1
-    just _log "Erasing coverage info..."
-    rm -rf ./*/coverage && echo "Coverage info erased."
