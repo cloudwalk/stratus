@@ -29,6 +29,7 @@ pub struct EvmExecution {
     pub block_timestamp: UnixTime,
 
     /// Flag to indicate if  external receipt fixes have been applied.
+    #[serde(skip)]
     pub receipt_applied: bool,
 
     /// Status of the execution.
