@@ -43,9 +43,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionAccountChanges;
-use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -525,16 +523,6 @@ impl RocksStorageState {
             block_mut.transactions.iter_mut().for_each(|transaction| {
                 // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
                 transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
-
-                // set default empty output(we don't use it from storage, we get it from eth_call and eth_sendRawTransaction)
-                transaction.execution.output = Bytes::default();
-
-                // Preserve result type but remove detailed reason(we don't use it from storage, we get it from eth_call and eth_sendRawTransaction)
-                transaction.execution.result = match &transaction.execution.result {
-                    ExecutionResult::Success => ExecutionResult::Success,
-                    ExecutionResult::Reverted { .. } => ExecutionResult::new_reverted("reverted".into()),
-                    ExecutionResult::Halted { .. } => ExecutionResult::new_halted("halted".to_string()),
-                };
             });
             block_mut
         };
