@@ -243,7 +243,7 @@ e2e-stratus-rocks block-mode="automine" test="":
     exit $result_code
 
 # E2E: Starts and execute revert-to-block tests in Stratus
-e2e-stratus-rocks-revert-to-block:
+e2e-stratus-rocks-revert-to-block storage="rocks":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
@@ -251,7 +251,7 @@ e2e-stratus-rocks-revert-to-block:
     just build
 
     just _log "Starting Stratus"
-    just run -a 0.0.0.0:3000 --block-mode automine --perm-storage=rocks > stratus.log &
+    just run -a 0.0.0.0:3000 --block-mode automine --perm-storage={{storage}} > stratus.log &
 
     just _wait_for_stratus
 

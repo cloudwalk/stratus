@@ -1,0 +1,38 @@
+name: E2E Revert Blocks Tests
+
+on:
+  pull_request:
+    branches:
+      - "*"
+    paths-ignore:
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/docs-release.yml"
+      - ".github/workflows/outdated.yml"
+      - ".github/workflows/comment-tag-report.yml"
+      - ".github/workflows/pr-agent.yml"
+      - ".github/workflows/build-binary.yml"
+      - ".github/CODEOWNERS"
+      - "config/**"
+      - "README.md"
+      - "LICENSE"
+      - "CONTRIBUTING.md"
+      - "utils/slack-notifiers/**"
+  workflow_dispatch:
+  push: # Rebuild cache policy
+    branches:
+      - "main"
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+
+jobs:
+  e2e-revert-blocks:
+    name: E2E Revert Blocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-stratus-rocks-revert-to-block"
+
+    concurrency:
+      group: ${{ github.workflow }}-automine-inmemory-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
