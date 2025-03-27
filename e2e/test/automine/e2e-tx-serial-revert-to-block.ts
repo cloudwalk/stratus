@@ -75,13 +75,6 @@ describe("Revert slots to block", () => {
         await sendReset();
     });
 
-    it("Contract is deployed", async () => {
-        const _contract = await deployTestContractRevert();
-        const deployedCode = await send("eth_getCode", [_contract.target, "latest"]);
-
-        expect(deployedCode).not.eq("0x");
-    });
-
     it("should correctly revert storage slots when reverting to previous blocks", async () => {
         const _contract = await deployTestContractRevert();
         const deployedCode = await send("eth_getCode", [_contract.target, "latest"]);
