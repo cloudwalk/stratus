@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
@@ -46,7 +46,7 @@ impl From<ExecutionRocksdb> for EvmExecution {
             output,
             logs: item.logs.into_iter().map(Log::from).collect(),
             gas: item.gas.into(),
-            changes: HashMap::default(),
+            changes: BTreeMap::default(),
             deployed_contract_address: item.deployed_contract_address.map_into(),
         }
     }

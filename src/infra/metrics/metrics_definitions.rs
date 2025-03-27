@@ -40,7 +40,10 @@ metrics! {
     histogram_duration storage_read_slot{storage, point_in_time, success},
 
     "Time executing storage read_transaction operation."
-    histogram_duration storage_read_transaction{storage, success}
+    histogram_duration storage_read_transaction{storage, success},
+
+    "Time executing storage read_replication_log operation."
+    histogram_duration storage_read_replication_log{storage, success}
 }
 
 // Storage writes.
@@ -69,7 +72,10 @@ metrics! {
     histogram_duration storage_save_block{storage, size_by_tx, size_by_gas, success},
 
     "Time executing storage reset operation."
-    histogram_duration storage_reset{storage, success}
+    histogram_duration storage_reset{storage, success},
+
+    "Time executing storage apply_replication_log operation."
+    histogram_duration storage_apply_replication_log{storage, success}
 }
 
 // Importer online metrics.
