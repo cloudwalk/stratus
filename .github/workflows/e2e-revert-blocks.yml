@@ -1,5 +1,7 @@
 name: E2E Revert Blocks Tests
 
+permissions: read-all
+
 on:
   pull_request:
     branches:
