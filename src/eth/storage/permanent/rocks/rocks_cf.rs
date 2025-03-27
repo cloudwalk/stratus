@@ -314,6 +314,7 @@ where
         self.db.delete_cf(&cf, serialized_key).map_err(Into::into)
     }
 
+    #[cfg(feature = "dev")]
     pub fn prepare_and_apply_insertion_batch_with_context<I>(&self, changes: I) -> Result<()>
     where
         I: IntoIterator<Item = (K, V)>,
