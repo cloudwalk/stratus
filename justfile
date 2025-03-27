@@ -529,9 +529,10 @@ e2e-genesis:
     mkdir -p e2e/config
 
     just _log "Starting Stratus with genesis.local.json"
-    just stratus-test -a 0.0.0.0:3000 --genesis-path config/genesis.local.json
+    just stratus-test -a 0.0.0.0:3000 --genesis-path config/genesis.local.json --block-mode automine
 
     just _log "Running Genesis tests"
     cd e2e
     npm install 
-    npx hardhat test test/genesis/genesis.test.ts --network stratus
+    npx hardhat test test/genesis/genesis.test.ts --network stratus 
+    killport 3000 -s sigterm

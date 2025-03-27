@@ -542,7 +542,6 @@ impl StratusStorage {
             tracing::info!("Using default genesis block");
             Block::genesis()
         };
-
         // Try to load genesis.json from the path specified in GenesisFileConfig
         // or use default genesis configuration
         let (genesis_accounts, genesis_slots) = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
@@ -588,7 +587,6 @@ impl StratusStorage {
                 }
             }
         };
-
         // Save the genesis block
         self.save_block(genesis_block)?;
 

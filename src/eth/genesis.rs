@@ -219,7 +219,6 @@ impl GenesisConfig {
 
             accounts.push(account);
         }
-
         Ok((accounts, slots))
     }
 

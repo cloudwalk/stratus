@@ -218,9 +218,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write();
         for account in accounts {
-            state
-                .accounts
-                .insert(account.address, InMemoryPermanentAccount::new_with_balance(account.address, account.balance));
+            state.accounts.insert(account.address, InMemoryPermanentAccount::new(account));
         }
         Ok(())
     }
@@ -251,17 +249,17 @@ struct InMemoryPermanentAccount {
 impl InMemoryPermanentAccount {
     /// Creates a new empty permanent account.
     fn new_empty(address: Address) -> Self {
-        Self::new_with_balance(address, Wei::ZERO)
+        Self::new(Account::new_empty(address))
     }
 
     /// Creates a new permanent account with initial balance.
-    pub fn new_with_balance(address: Address, balance: Wei) -> Self {
+    pub fn new(account: Account) -> Self {
         Self {
-            address,
-            balance: InMemoryHistory::new_at_zero(balance),
-            nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
-            bytecode: InMemoryHistory::new_at_zero(None),
-            code_hash: InMemoryHistory::new_at_zero(CodeHash::default()),
+            address: account.address,
+            balance: InMemoryHistory::new_at_zero(account.balance),
+            nonce: InMemoryHistory::new_at_zero(account.nonce),
+            bytecode: InMemoryHistory::new_at_zero(account.bytecode),
+            code_hash: InMemoryHistory::new_at_zero(account.code_hash),
             slots: HashMap::default(),
         }
     }
