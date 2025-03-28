@@ -104,4 +104,20 @@ describe("Genesis configuration", () => {
             }
         }
     });
+
+    it("should allocate correct genesis fields", async () => {
+        const genesisBlock = await ethers.provider.getBlock(0);
+
+        // Verify genesis block fields
+        expect(genesisBlock?.number).to.equal(0);
+        expect(genesisBlock?.parentHash).to.equal(genesisContent.parentHash);
+        expect(genesisBlock?.nonce).to.equal(genesisContent.nonce);
+        expect(genesisBlock?.timestamp).to.equal(BigInt(genesisContent.timestamp));
+        expect(genesisBlock?.extraData).to.equal(genesisContent.extraData);
+        expect(genesisBlock?.gasLimit).to.equal(BigInt(genesisContent.gasLimit));
+        expect(genesisBlock?.gasUsed).to.equal(BigInt(genesisContent.gasUsed));
+        expect(genesisBlock?.baseFeePerGas).to.equal(BigInt(genesisContent.baseFeePerGas));
+        expect(genesisBlock?.difficulty).to.equal(BigInt(genesisContent.difficulty));
+        expect(genesisBlock?.miner).to.equal(genesisContent.coinbase);
+    });
 });

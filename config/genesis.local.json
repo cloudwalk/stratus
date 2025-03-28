@@ -14,13 +14,13 @@
     "shanghaiTime": 0,
     "cancunTime": 0
   },
-  "nonce": "0x0000000000000042",
+  "nonce": "0x0000000000000000",
   "timestamp": "0x0",
-  "extraData": "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "gasLimit": "0xffffffff",
-  "difficulty": "0x1",
+  "extraData": "0x",
+  "gasLimit": "0x5f5e100",
+  "difficulty": "0x0",
   "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "coinbase": "0x0000000000000000000000000000000000000000",
+  "coinbase": "0x00000000000000000000000000000000000000ff",
   "alloc": {
     "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266": {
       "balance": "0xffffffffffffffff",

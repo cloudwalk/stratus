@@ -190,7 +190,6 @@ impl GenesisConfig {
         use crate::eth::primitives::Gas;
         use crate::eth::primitives::Hash;
         use crate::eth::primitives::UnixTime;
-
         // Parse timestamp
         let timestamp_str = self.timestamp.trim_start_matches("0x");
         let timestamp = if self.timestamp.starts_with("0x") {
@@ -270,6 +269,13 @@ impl GenesisConfig {
             Hash::default()
         };
 
+        // Parse difficulty
+        let difficulty = if self.difficulty.starts_with("0x") {
+            u64::from_str_radix(self.difficulty.trim_start_matches("0x"), 16).unwrap_or(0)
+        } else {
+            self.difficulty.parse::<u64>().unwrap_or(0)
+        };
+
         // Create a basic header
         let mut header = BlockHeader::new(BlockNumber::ZERO, UnixTime::from(timestamp));
 
@@ -280,6 +286,7 @@ impl GenesisConfig {
         header.author = miner;
         header.extra_data = extra_data;
         header.parent_hash = parent_hash;
+        header.difficulty = difficulty.into();
 
         // For nonce, we need to convert to H64 first
         let nonce_h64 = ethereum_types::H64::from_slice(&nonce_bytes);
