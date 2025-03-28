@@ -521,7 +521,7 @@ contracts-test-stratus storage="inmemory" *args="":
     just e2e-contracts {{args}}
 
 # E2E: Starts and execute Genesis tests in Stratus
-e2e-genesis:
+e2e-genesis perm-storage="inmemory":
     #!/bin/bash
     mkdir -p e2e_logs
 
@@ -529,7 +529,7 @@ e2e-genesis:
     mkdir -p e2e/config
 
     just _log "Starting Stratus with genesis.local.json"
-    just stratus-test -a 0.0.0.0:3000 --genesis-path config/genesis.local.json --block-mode automine
+    just stratus-test -a 0.0.0.0:3000 --genesis-path config/genesis.local.json --block-mode automine --perm-storage={{perm-storage}}
 
     just _log "Running Genesis tests"
     cd e2e
