@@ -57,3 +57,9 @@ impl From<[u64; 4]> for SlotValue {
         Self(U256(value))
     }
 }
+
+impl From<alloy_primitives::FixedBytes<32>> for SlotValue {
+    fn from(value: alloy_primitives::FixedBytes<32>) -> Self {
+        Self::from(value.0)
+    }
+}

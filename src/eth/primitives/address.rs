@@ -100,6 +100,25 @@ impl TryFrom<Vec<u8>> for Address {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+/// Converts a hexadecimal string representation to an Address.
+///
+/// The input string can be with or without the "0x" prefix.
+/// If the string has an odd number of digits, a leading zero will be added.
+///
+/// # Examples
+///
+/// ```
+/// use std::str::FromStr;
+/// use stratus::eth::primitives::Address;
+///
+/// // With 0x prefix
+/// let addr1 = Address::from_str("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266").unwrap();
+///
+/// // Without 0x prefix
+/// let addr2 = Address::from_str("f39fd6e51aad88f6f4ce6ab8827279cfffb92266").unwrap();
+///
+/// assert_eq!(addr1, addr2);
+/// ```
 impl FromStr for Address {
     type Err = anyhow::Error;
 

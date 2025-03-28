@@ -142,3 +142,27 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-importer-offline-${{ github.ref || github.run_id }}
       cancel-in-progress: true
+
+  e2e-genesis-rocks:
+    name: E2E Genesis Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-genesis"
+      justfile_args: "rocks"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-genesis-rocks-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-genesis-inmemory:
+    name: E2E Genesis Inmemory
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-genesis"
+      justfile_args: "inmemory"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-genesis-inmemory-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
