@@ -119,7 +119,7 @@ pub struct PermanentStorageConfig {
     /// Genesis file configuration
     #[clap(flatten)]
     #[cfg(feature = "dev")]
-    pub genesis_file: crate::config::GenesisFileConfig,
+    pub genesis_file: GenesisFileConfig,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]
