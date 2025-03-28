@@ -100,59 +100,6 @@ impl GenesisConfig {
         Ok(genesis)
     }
 
-    /// Converts the genesis configuration to Stratus accounts.
-    pub fn to_stratus_accounts(&self) -> Result<Vec<Account>> {
-        let mut accounts = Vec::new();
-
-        for (addr_str, genesis_account) in &self.alloc {
-            // Remove 0x prefix if present
-            let addr_str = addr_str.trim_start_matches("0x");
-
-            // Use FromStr to convert the address
-            let address = Address::from_str(addr_str)?;
-
-            // Create the account
-            let mut account = Account::new_empty(address);
-
-            // Convert balance
-            let balance = if genesis_account.balance.starts_with("0x") {
-                // For hex strings
-                Wei::from_hex_str(&genesis_account.balance)?
-            } else {
-                // For decimal strings
-                let value = genesis_account.balance.parse::<u64>().unwrap_or(0);
-                Wei::from(EthereumU256::from(value))
-            };
-
-            account.balance = balance;
-
-            // Add nonce if it exists
-            if let Some(nonce) = &genesis_account.nonce {
-                let nonce_str = nonce.trim_start_matches("0x");
-                let nonce_value = if nonce.starts_with("0x") {
-                    u64::from_str_radix(nonce_str, 16).unwrap_or(0)
-                } else {
-                    nonce_str.parse::<u64>().unwrap_or(0)
-                };
-                account.nonce = Nonce::from(nonce_value);
-            }
-
-            // Add code if it exists
-            if let Some(code) = &genesis_account.code {
-                let code_str = code.trim_start_matches("0x");
-                if let Ok(code_bytes) = hex::decode(code_str) {
-                    if !code_bytes.is_empty() {
-                        account.bytecode = Some(revm::primitives::Bytecode::new_raw(code_bytes.into()));
-                    }
-                }
-            }
-
-            accounts.push(account);
-        }
-
-        Ok(accounts)
-    }
-
     /// Converts the genesis configuration to Stratus accounts and storage slots.
     ///
     /// Returns a tuple containing:
@@ -220,6 +167,14 @@ impl GenesisConfig {
             accounts.push(account);
         }
         Ok((accounts, slots))
+    }
+
+    /// Converts the genesis configuration to Stratus accounts.
+    ///
+    /// This is a convenience wrapper around to_stratus_accounts_and_slots that only returns the accounts.
+    pub fn to_stratus_accounts(&self) -> Result<Vec<Account>> {
+        let (accounts, _) = self.to_stratus_accounts_and_slots()?;
+        Ok(accounts)
     }
 
     /// Creates a genesis block from the genesis configuration.
