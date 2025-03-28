@@ -118,6 +118,22 @@ impl PermanentStorage for InMemoryPermanentStorage {
         }
     }
 
+    #[cfg(feature = "dev")]
+    fn save_slots(&self, slots: Vec<(Address, Slot)>) -> anyhow::Result<(), StorageError> {
+        let mut state = self.lock_write();
+
+        for (address, slot) in slots {
+            let account = state.accounts.entry(address).or_insert_with(|| InMemoryPermanentAccount::new_empty(address));
+
+            account
+                .slots
+                .entry(slot.index)
+                .or_insert_with(|| InMemoryHistory::new(BlockNumber::ZERO, slot.clone()))
+                .push(BlockNumber::ZERO, slot);
+        }
+
+        Ok(())
+    }
     fn read_block(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>, StorageError> {
         let state_lock = self.lock_read();
         let block = match selection {

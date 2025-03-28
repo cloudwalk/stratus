@@ -280,7 +280,20 @@ impl StratusStorage {
         }
         Ok(slot)
     }
+    #[cfg(feature = "dev")]
+    pub fn save_slots(&self, slots: Vec<(Address, Slot)>) -> Result<(), StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::save_slots").entered();
 
+        tracing::debug!(storage = %label::PERM, slots_len = %slots.len(), "saving slots");
+
+        timed(|| self.perm.save_slots(slots)).with(|m| {
+            metrics::inc_storage_save_slots(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to save slots");
+            }
+        })
+    }
     // -------------------------------------------------------------------------
     // Blocks
     // -------------------------------------------------------------------------
@@ -596,27 +609,7 @@ impl StratusStorage {
         // Save slots if any
         if !genesis_slots.is_empty() {
             tracing::info!("Saving {} storage slots from genesis", genesis_slots.len());
-
-            // We need to save slots through the block mechanism since there's no direct save_slot method
-            // First, we need to create a temporary account with the slots
-            for (address, slot) in genesis_slots {
-                // Read the account to make sure it exists
-                let account = match self.perm.read_account(address, PointInTime::MinedPast(BlockNumber::ZERO))? {
-                    Some(account) => account,
-                    None => {
-                        tracing::warn!("Account {} not found for slot {:?}, creating empty account", address, slot);
-                        Account::new_empty(address)
-                    }
-                };
-
-                // Save the account if it was newly created
-                if account.balance.0.is_zero() && account.nonce == crate::eth::primitives::Nonce::ZERO && account.bytecode.is_none() {
-                    self.save_accounts(vec![account.clone()])?;
-                }
-
-                // For now, we'll just log the slots since we don't have a direct way to save them
-                tracing::info!("Slot for account {}: index={:?}, value={:?}", address, slot.index, slot.value);
-            }
+            self.perm.save_slots(genesis_slots)?;
         }
 
         // block number

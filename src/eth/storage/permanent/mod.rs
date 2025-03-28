@@ -76,6 +76,10 @@ pub trait PermanentStorage: Send + Sync + 'static {
     /// Retrieves an slot from the storage. Returns Option when not found.
     fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError>;
 
+    /// Persists slots to the storage.  
+    #[cfg(feature = "dev")]
+    fn save_slots(&self, slots: Vec<(Address, Slot)>) -> anyhow::Result<(), StorageError>;
+
     // -------------------------------------------------------------------------
     // Global state
     // -------------------------------------------------------------------------
