@@ -44,6 +44,8 @@ use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
@@ -180,6 +182,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("hardhat_reset", stratus_reset)?;
         module.register_blocking_method("stratus_reset", stratus_reset)?;
+        module.register_blocking_method("stratus_revertToBlock", stratus_revert_to_block)?;
     }
 
     // stratus status
@@ -312,6 +315,21 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
 fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     ctx.storage.reset_to_genesis()?;
     Ok(to_json_value(true))
+}
+
+#[cfg(feature = "dev")]
+fn stratus_revert_to_block(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    let (_, block_number) = next_rpc_param::<BlockNumber>(params.sequence())?;
+
+    let block_number2: u64 = block_number.as_u64();
+    tracing::info!(target_block = block_number2, "reverting to block");
+
+    if let Err(err) = ctx.storage.revert_state_to_block_batched(block_number.into()) {
+        tracing::error!(target_block = block_number2, reason = ?err, "failed to revert block state to target block");
+        return Err(err.into());
+    }
+
+    Ok(json!(true))
 }
 
 static MODE_CHANGE_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));

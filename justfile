@@ -148,7 +148,7 @@ importer-offline-test *args="":
 # Test: run rust tests
 test:
     mkdir -p target/llvm-cov/codecov
-    cargo llvm-cov --lcov --output-path target/llvm-cov/codecov/rust_tests.info
+    cargo llvm-cov --lcov --features dev --output-path target/llvm-cov/codecov/rust_tests.info
 
 # Test: Execute Rust doc tests
 test-doc name="":
@@ -274,6 +274,27 @@ e2e-stratus block-mode="automine" storage="inmemory" test="":
         just e2e stratus {{block-mode}} "{{test}}"
     fi
 
+
+# E2E: Starts and execute revert-to-block tests in Stratus
+e2e-stratus-rocks-revert-to-block:
+    #!/bin/bash
+    if [ -d e2e ]; then
+        cd e2e
+    fi
+    just build
+
+    just _log "Starting Stratus"
+    just run -a 0.0.0.0:3000 --block-mode automine --perm-storage=rocks > stratus.log &
+
+    just _wait_for_stratus
+
+    just _log "Running E2E tests"
+    npx hardhat test test/automine/e2e-tx-serial-revert-to-block.ts --network stratus
+    result_code=$?
+
+    just _log "Killing Stratus"
+    killport 3000 -s sigterm
+    exit $result_code
 
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus storage="inmemory":

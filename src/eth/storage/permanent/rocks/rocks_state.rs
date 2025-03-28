@@ -15,6 +15,8 @@ use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
 use rocksdb::DB;
+#[cfg(feature = "dev")]
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
 use sugars::hmap;
@@ -49,6 +51,8 @@ use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
+#[cfg(feature = "dev")]
+use crate::ext::not;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -512,6 +516,177 @@ impl RocksStorageState {
         self.transactions.clear().context("when clearing transactions")?;
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    pub fn revert_state_to_block_batched(&self, target_number: BlockNumberRocksdb) -> Result<()> {
+        tracing::info!("starting batched state reversion to block {}", target_number);
+
+        // Create temporary CFs for storing intermediate state
+        let temp_accounts_cf_name = "temp_revert_accounts";
+        let temp_slots_cf_name = "temp_revert_slots";
+
+        // whether or not a block should be kept
+        let should_keep_block = |block_number| block_number <= target_number;
+
+        if let Some(_) = self.db.cf_handle(temp_accounts_cf_name) {
+            self.db.drop_cf(temp_accounts_cf_name)?;
+        }
+        if let Some(_) = self.db.cf_handle(temp_slots_cf_name) {
+            self.db.drop_cf(temp_slots_cf_name)?;
+        }
+
+        // Agora cria as CFs temporárias
+        self.db.create_cf(temp_accounts_cf_name, &Options::default())?;
+        let temp_accounts_cf = RocksCfRef::new(Arc::clone(&self.db), temp_accounts_cf_name)?;
+        self.db.create_cf(temp_slots_cf_name, &Options::default())?;
+        let temp_slots_cf = RocksCfRef::new(Arc::clone(&self.db), temp_slots_cf_name)?;
+
+        // Clear current state
+        self.accounts.clear()?;
+        self.account_slots.clear()?;
+
+        // Process accounts history
+        let mut batch = WriteBatch::default();
+        let mut batch_size = 0;
+        const MAX_BATCH_SIZE: usize = 10_000;
+        let mut processed_count = 0;
+
+        // Process historical accounts up to target block
+        for result in self.accounts_history.iter_start() {
+            let ((address, block_number), account) = result?;
+
+            if block_number > target_number {
+                continue;
+            }
+
+            temp_accounts_cf.prepare_batch_insertion([(address, CfAccountsValue::from(account))], &mut batch)?;
+
+            batch_size += 1;
+            processed_count += 1;
+
+            if batch_size >= MAX_BATCH_SIZE {
+                self.db.write(batch)?;
+                batch = WriteBatch::default();
+                batch_size = 0;
+                tracing::info!("processed {} accounts", processed_count);
+            }
+        }
+
+        // Write final accounts batch
+        if batch_size > 0 {
+            self.db.write(batch)?;
+        }
+
+        // Process slots history
+        batch = WriteBatch::default();
+        batch_size = 0;
+        processed_count = 0;
+
+        // Process historical slots up to target block
+        for result in self.account_slots_history.iter_start() {
+            let ((address, slot, block_number), slot_value) = result?;
+
+            if block_number > target_number {
+                continue;
+            }
+
+            temp_slots_cf.prepare_batch_insertion([((address, slot), CfAccountSlotsValue::from(slot_value))], &mut batch)?;
+
+            batch_size += 1;
+            processed_count += 1;
+
+            if batch_size >= MAX_BATCH_SIZE {
+                self.db.write(batch)?;
+                batch = WriteBatch::default();
+                batch_size = 0;
+                tracing::info!("processed {} slots", processed_count);
+            }
+        }
+
+        // Write final slots batch
+        if batch_size > 0 {
+            self.db.write(batch)?;
+        }
+
+        // Copy from temporary CFs to main CFs
+        self.copy_cf_contents(temp_accounts_cf_name, &self.accounts)?;
+        self.copy_cf_contents(temp_slots_cf_name, &self.account_slots)?;
+
+        // Clean up temporary CFs
+        self.db.drop_cf(temp_accounts_cf_name)?;
+        self.db.drop_cf(temp_slots_cf_name)?;
+
+        // truncate the rest of column families
+        tracing::info!("cleaning values in transactions CF");
+        for next in self.transactions.iter_start() {
+            let (hash, block) = next?;
+            let block_number = BlockNumberRocksdb::from(block);
+            if not(should_keep_block(block_number)) {
+                self.transactions.delete(&hash)?;
+            }
+        }
+
+        // TODO: review Logs, it's not clear if it's needed
+        // tracing::info!("cleaning values in logs CF");
+        // for next in self.logs.iter_start() {
+        //     let (key, block) = next?;
+        //     if block > target_number {
+        //         self.logs.delete(&key)?;
+        //     }
+        // }
+        tracing::info!("cleaning values in blocks_by_hash CF");
+        for next in self.blocks_by_hash.iter_start() {
+            let (hash, block) = next?;
+            let block_number = BlockNumberRocksdb::from(block);
+            if not(should_keep_block(block_number)) {
+                self.blocks_by_hash.delete(&hash)?;
+            }
+        }
+        tracing::info!("last block number: {:?}", self.blocks_by_hash.last_key()?.unwrap_or_default());
+
+        tracing::info!("cleaning values in blocks_by_number CF");
+        for next in self.blocks_by_number.iter_end() {
+            let (block, _) = next?;
+            if not(should_keep_block(block)) {
+                self.blocks_by_number.delete(&block)?;
+            } else {
+                break; // blocks are ordered by key, so we can stop early here
+            }
+        }
+        tracing::info!("last block number: {:?}", self.blocks_by_number.last_key()?.unwrap_or_default());
+
+        tracing::info!("finished state reversion");
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn copy_cf_contents<K, V>(&self, temp_cf: &str, target_cf: &RocksCfRef<K, V>) -> Result<()>
+    where
+        K: Serialize + DeserializeOwned + Debug + std::hash::Hash + Eq,
+        V: Serialize + DeserializeOwned + Debug + Clone,
+    {
+        let temp = RocksCfRef::<K, V>::new(Arc::clone(&self.db), temp_cf)?;
+        let mut batch = WriteBatch::default();
+        let mut batch_size = 0;
+
+        for result in temp.iter_start() {
+            let (key, value) = result?;
+            target_cf.prepare_batch_insertion([(key, value)], &mut batch)?;
+            batch_size += 1;
+
+            if batch_size >= 10_000 {
+                self.db.write(batch)?;
+                batch = WriteBatch::default();
+                batch_size = 0;
+            }
+        }
+
+        if batch_size > 0 {
+            self.db.write(batch)?;
+        }
+
         Ok(())
     }
 }
