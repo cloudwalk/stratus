@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use rocksdb::WriteBatch;
 use tracing::Span;
 
 use super::StorageCache;
@@ -25,6 +26,10 @@ use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
+#[cfg(feature = "dev")]
+use crate::GlobalState;
+#[cfg(feature = "dev")]
+use crate::NodeMode;
 
 mod label {
     pub(super) const TEMP: &str = "temporary";
@@ -49,14 +54,22 @@ impl StratusStorage {
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            if !this.has_genesis()? {
-                this.reset_to_genesis()?;
+            if GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled() {
+                if !this.has_genesis()? {
+                    this.reset_to_genesis()?;
+                }
             }
         }
 
         Ok(this)
     }
 
+    /// Returns whether RocksDB replication is enabled
+    pub fn rocksdb_replication_enabled(&self) -> bool {
+        self.perm.rocksdb_replication_enabled()
+    }
+
+    /// Returns whether the genesis block exists
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
         let genesis = self.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
         Ok(genesis.is_some())
@@ -80,7 +93,18 @@ impl StratusStorage {
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
-        Ok(self.read_pending_block_header().number)
+
+        let number = self.read_pending_block_header().number;
+
+        #[cfg(feature = "dev")]
+        if number == BlockNumber::ONE && self.rocksdb_replication_enabled() {
+            tracing::info!("starting importer from genesis block");
+            self.set_mined_block_number(BlockNumber::ZERO)?;
+            self.temp.set_pending_block_header(BlockNumber::ZERO)?;
+            return Ok(BlockNumber::ZERO);
+        }
+
+        Ok(number)
     }
 
     pub fn read_pending_block_header(&self) -> PendingBlockHeader {
@@ -117,6 +141,37 @@ impl StratusStorage {
                 tracing::error!(reason = ?e, "failed to set miner block number");
             }
         })
+    }
+
+    pub fn read_replication_log(&self, block_number: BlockNumber) -> Result<Option<WriteBatch>, StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_replication_log", %block_number).entered();
+        tracing::debug!(storage = %label::PERM, %block_number, "reading replication log");
+
+        timed(|| self.perm.read_replication_log(block_number)).with(|m| {
+            metrics::inc_storage_read_replication_log(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read replication log");
+            }
+        })
+    }
+
+    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> Result<(), StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::apply_replication_log", %block_number).entered();
+
+        tracing::debug!(storage = %label::TEMP, "finishing pending block");
+        self.finish_pending_block()?;
+
+        tracing::debug!(storage = %label::PERM, %block_number, "applying replication log");
+        timed(|| self.perm.apply_replication_log(block_number, replication_log)).with(|m| {
+            metrics::inc_storage_apply_replication_log(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to apply replication log");
+            }
+        })?;
+
+        Ok(())
     }
 
     // -------------------------------------------------------------------------
@@ -297,6 +352,21 @@ impl StratusStorage {
         }
 
         result
+    }
+
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> Result<(), StorageError> {
+        let block_number = block.number();
+
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::save_genesis_block", block_number = %block_number).entered();
+        tracing::debug!(storage = %label::PERM, "saving genesis block");
+
+        timed(|| self.perm.save_genesis_block(block, accounts)).with(|m| {
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, "genesis", "genesis", m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to save genesis block");
+            }
+        })
     }
 
     pub fn save_block(&self, block: Block) -> Result<(), StorageError> {
@@ -484,11 +554,7 @@ impl StratusStorage {
             }
         })?;
 
-        // genesis block
-        self.save_block(Block::genesis())?;
-
-        // test accounts
-        self.save_accounts(test_accounts())?;
+        self.perm.save_genesis_block(Block::genesis(), test_accounts())?;
 
         // block number
         self.set_mined_block_number(BlockNumber::ZERO)?;
