@@ -354,6 +354,21 @@ impl StratusStorage {
         result
     }
 
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> Result<(), StorageError> {
+        let block_number = block.number();
+
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::save_genesis_block", block_number = %block_number).entered();
+        tracing::debug!(storage = %label::PERM, "saving genesis block");
+
+        timed(|| self.perm.save_genesis_block(block, accounts)).with(|m| {
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, "genesis", "genesis", m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to save genesis block");
+            }
+        })
+    }
+
     pub fn save_block(&self, block: Block) -> Result<(), StorageError> {
         let block_number = block.number();
 

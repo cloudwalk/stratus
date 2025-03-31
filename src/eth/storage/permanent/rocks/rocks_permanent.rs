@@ -146,7 +146,6 @@ impl PermanentStorage for RocksPermanentStorage {
         Ok(())
     }
 
-    #[cfg(feature = "dev")]
     fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {

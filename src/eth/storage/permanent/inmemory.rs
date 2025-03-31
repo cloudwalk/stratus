@@ -179,7 +179,6 @@ impl PermanentStorage for InMemoryPermanentStorage {
         false
     }
 
-    #[cfg(feature = "dev")]
     fn save_genesis_block(&self, _block: Block, _accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
         use crate::eth::primitives::test_accounts;
 
