@@ -19,6 +19,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
@@ -222,6 +224,69 @@ impl PermanentStorage for InMemoryPermanentStorage {
                 .accounts
                 .insert(account.address, InMemoryPermanentAccount::new_with_balance(account.address, account.balance));
         }
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
+        let mut state = self.lock_write();
+
+        // Get or create the account
+        let account_entry = state.accounts.entry(address).or_insert_with(|| InMemoryPermanentAccount::new_empty(address));
+
+        // Insert the slot
+        account_entry.slots.insert(slot.index, InMemoryHistory::new_at_zero(slot));
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
+        let mut state = self.lock_write();
+
+        // Get or create the account
+        let account_entry = state.accounts.entry(address).or_insert_with(|| InMemoryPermanentAccount::new_empty(address));
+
+        // Update the nonce
+        account_entry.nonce = InMemoryHistory::new_at_zero(nonce);
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
+        let mut state = self.lock_write();
+
+        // Get or create the account
+        let account_entry = state.accounts.entry(address).or_insert_with(|| InMemoryPermanentAccount::new_empty(address));
+
+        // Update the balance
+        account_entry.balance = InMemoryHistory::new_at_zero(balance);
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
+        let mut state = self.lock_write();
+
+        // Get or create the account
+        let account_entry = state.accounts.entry(address).or_insert_with(|| InMemoryPermanentAccount::new_empty(address));
+
+        // Convert Bytes to Bytecode
+        let bytecode = if code.0.is_empty() { None } else { Some(Bytecode::new_raw(code.0.into())) };
+
+        // Update the bytecode and code hash
+        account_entry.bytecode = InMemoryHistory::new_at_zero(bytecode.clone());
+        account_entry.code_hash = InMemoryHistory::new_at_zero(match &bytecode {
+            Some(_) => {
+                // For non-empty bytecode, we use the default implementation
+                // In a real implementation, this would calculate the keccak256 hash of the bytecode
+                CodeHash::default()
+            }
+            None => CodeHash::default(),
+        });
+
         Ok(())
     }
 

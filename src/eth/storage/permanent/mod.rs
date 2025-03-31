@@ -17,14 +17,20 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Wei;
 use crate::ext::parse_duration;
 
 /// Permanent (committed) storage operations.
@@ -72,6 +78,26 @@ pub trait PermanentStorage: Send + Sync + 'static {
 
     /// Retrieves an slot from the storage. Returns Option when not found.
     fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError>;
+
+    // -------------------------------------------------------------------------
+    // Direct state manipulation (for testing)
+    // -------------------------------------------------------------------------
+
+    #[cfg(feature = "dev")]
+    /// Saves a single slot directly to storage.
+    fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Updates an account's nonce.
+    fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Updates an account's balance.
+    fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Updates an account's code.
+    fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError>;
 
     // -------------------------------------------------------------------------
     // Global state
