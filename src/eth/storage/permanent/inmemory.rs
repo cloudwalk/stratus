@@ -278,14 +278,7 @@ impl PermanentStorage for InMemoryPermanentStorage {
 
         // Update the bytecode and code hash
         account_entry.bytecode = InMemoryHistory::new_at_zero(bytecode.clone());
-        account_entry.code_hash = InMemoryHistory::new_at_zero(match &bytecode {
-            Some(_) => {
-                // For non-empty bytecode, we use the default implementation
-                // In a real implementation, this would calculate the keccak256 hash of the bytecode
-                CodeHash::default()
-            }
-            None => CodeHash::default(),
-        });
+        account_entry.code_hash = InMemoryHistory::new_at_zero(CodeHash::default());
 
         Ok(())
     }
