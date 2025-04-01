@@ -69,7 +69,7 @@ metrics! {
     histogram_duration storage_save_block{storage, size_by_tx, size_by_gas, success},
 
     "Time executing storage reset operation."
-    histogram_duration storage_reset{storage, success},
+    histogram_duration storage_reset{storage, success}
 }
 
 // Importer online metrics.
