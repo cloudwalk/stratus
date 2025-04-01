@@ -147,7 +147,7 @@ describe("Development Endpoints", () => {
             // Bob should receive exactly the transfer amount
             expect(BigInt(actualBobFinal)).to.equal(BigInt(transferAmount));
 
-            // Alice's balance should be reduced by transfer amount plus gas costs
+            // Alice's balance should be reduced by transfer amount
             expect(BigInt(actualAliceFinal)).to.be.equal(BigInt(aliceInitialBalance - transferAmount));
         });
 
