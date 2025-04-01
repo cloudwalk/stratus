@@ -487,7 +487,6 @@ impl RocksStorageState {
             })
     }
 
-    /// Writes slots to state
     #[cfg(feature = "dev")]
     pub fn save_slot(&self, address: Address, slot: Slot) -> Result<()> {
         let mut batch = WriteBatch::default();
