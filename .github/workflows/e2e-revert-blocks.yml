@@ -36,6 +36,3 @@ jobs:
       justfile_recipe: "e2e-stratus-rocks-revert-to-block"
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-    concurrency:
-      group: ${{ github.workflow }}-automine-inmemory-${{ github.ref || github.run_id }}
-      cancel-in-progress: true
