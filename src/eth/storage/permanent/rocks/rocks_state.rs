@@ -487,7 +487,7 @@ impl RocksStorageState {
 
     /// Writes slots to state (does not write to slot history)
     #[cfg(feature = "dev")]
-    pub fn write_slots(&self, slots: Vec<(Address, Slot)>) -> Result<()> {
+    pub fn save_slots(&self, slots: Vec<(Address, Slot)>) -> Result<()> {
         let slots = slots
             .into_iter()
             .map(|(address, slot)| ((address.into(), slot.index.into()), slot.value.into()));

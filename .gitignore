@@ -4,8 +4,7 @@
 .idea
 
 # Data
-data/log-entries-rocksdb/
-data/rocksdb/
+data/
 
 # E2E (Stratus)
 e2e/artifacts
@@ -43,3 +42,6 @@ stratus.log
 # OS specific
 .DS_Store
 .aider*
+
+# logs
+*.log

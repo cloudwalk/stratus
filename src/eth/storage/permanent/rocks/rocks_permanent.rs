@@ -185,5 +185,11 @@ impl PermanentStorage for RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to revert state to block in RocksPermanent");
             })
+
+    #[cfg(feature = "dev")]
+    fn save_slots(&self, slots: Vec<(Address, Slot)>) -> anyhow::Result<(), StorageError> {
+        self.state.save_slots(slots).map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to save slots in RocksPermanent");
+        })
     }
 }
