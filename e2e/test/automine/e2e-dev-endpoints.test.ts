@@ -20,7 +20,7 @@ describe("Development Endpoints", () => {
     describe("setStorageAt", () => {
         it("should set storage value for an address", async () => {
             const slot = 0;
-            const value = "0x0000000000000000000000000000000000000000000000000000000000000042"; // 66 in hex
+            const value = "0x0000000000000000000000000000000000000000000000000000000000000042";
 
             // Set storage value
             await send("hardhat_setStorageAt", [ALICE.address, toHex(slot), value]);
