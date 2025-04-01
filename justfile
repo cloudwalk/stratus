@@ -280,7 +280,6 @@ e2e-stratus block-mode="automine" storage="inmemory" test="":
         just e2e stratus {{block-mode}} "{{test}}"
     fi
 
-
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus storage="inmemory":
     #!/bin/bash
@@ -526,3 +525,20 @@ contracts-test-stratus storage="inmemory" *args="":
 
     just _log "Running E2E Contracts tests"
     just e2e-contracts {{args}}
+
+# E2E: Starts and execute Genesis tests in Stratus
+e2e-genesis perm-storage="inmemory":
+    #!/bin/bash
+    mkdir -p e2e_logs
+
+    # Create config directory in e2e if it doesn't exist
+    mkdir -p e2e/config
+
+    just _log "Starting Stratus with genesis.local.json"
+    just stratus-test -a 0.0.0.0:3000 --genesis-path config/genesis.local.json --block-mode automine --perm-storage={{perm-storage}}
+
+    just _log "Running Genesis tests"
+    cd e2e
+    npm install 
+    npx hardhat test test/genesis/genesis.test.ts --network stratus 
+    killport 3000 -s sigterm

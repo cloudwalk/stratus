@@ -2,6 +2,10 @@ use anyhow::anyhow;
 use tracing::Span;
 
 use super::StorageCache;
+#[cfg(feature = "dev")]
+use crate::eth::genesis::GenesisConfig;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::test_accounts;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -47,12 +51,25 @@ pub struct StratusStorage {
     temp: Box<dyn TemporaryStorage>,
     cache: StorageCache,
     perm: Box<dyn PermanentStorage>,
+    #[cfg(feature = "dev")]
+    perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
 }
 
 impl StratusStorage {
     /// Creates a new storage with the specified temporary and permanent implementations.
-    pub fn new(temp: Box<dyn TemporaryStorage>, perm: Box<dyn PermanentStorage>, cache: StorageCache) -> Result<Self, StorageError> {
-        let this = Self { temp, cache, perm };
+    pub fn new(
+        temp: Box<dyn TemporaryStorage>,
+        perm: Box<dyn PermanentStorage>,
+        cache: StorageCache,
+        #[cfg(feature = "dev")] perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
+    ) -> Result<Self, StorageError> {
+        let this = Self {
+            temp,
+            cache,
+            perm,
+            #[cfg(feature = "dev")]
+            perm_config,
+        };
 
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
@@ -74,15 +91,29 @@ impl StratusStorage {
     pub fn new_test() -> Result<Self, StorageError> {
         use super::cache::CacheConfig;
 
-        let perm = Box::new(super::InMemoryPermanentStorage::default());
         let temp = Box::new(super::InMemoryTemporaryStorage::new(0.into()));
+        let perm = Box::new(super::InMemoryPermanentStorage::default());
         let cache = CacheConfig {
             slot_cache_capacity: 100000,
             account_cache_capacity: 20000,
         }
         .init();
 
-        Self::new(temp, perm, cache)
+        return Self::new(
+            temp,
+            perm,
+            cache,
+            #[cfg(feature = "dev")]
+            super::permanent::PermanentStorageConfig {
+                perm_storage_kind: super::permanent::PermanentStorageKind::InMemory,
+                perm_storage_url: None,
+                rocks_path_prefix: None,
+                rocks_shutdown_timeout: std::time::Duration::from_secs(240),
+                rocks_cache_size_multiplier: None,
+                rocks_disable_sync_write: false,
+                genesis_file: crate::config::GenesisFileConfig::default(),
+            },
+        );
     }
 
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
@@ -257,7 +288,20 @@ impl StratusStorage {
         }
         Ok(slot)
     }
+    #[cfg(feature = "dev")]
+    pub fn save_slots(&self, slots: Vec<(Address, Slot)>) -> Result<(), StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::save_slots").entered();
 
+        tracing::debug!(storage = %label::PERM, slots_len = %slots.len(), "saving slots");
+
+        timed(|| self.perm.save_slots(slots)).with(|m| {
+            metrics::inc_storage_save_slots(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to save slots");
+            }
+        })
+    }
     // -------------------------------------------------------------------------
     // Blocks
     // -------------------------------------------------------------------------
@@ -533,11 +577,11 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     #[cfg(feature = "dev")]
-    /// Resets the storage to the genesis state used in dev-mode.
-    ///
-    /// TODO: For now it uses the dev genesis block and test accounts, but it should be refactored to support genesis.json files.
+    /// Resets the storage to the genesis state.
+    /// If a genesis.json file is available, it will be used.
+    /// Otherwise, it will use the default genesis configuration.
     pub fn reset_to_genesis(&self) -> Result<(), StorageError> {
-        use crate::eth::primitives::test_accounts;
+        tracing::info!("Resetting storage to genesis state");
 
         self.cache.clear();
 
@@ -564,11 +608,89 @@ impl StratusStorage {
             }
         })?;
 
-        // genesis block
-        self.save_block(Block::genesis())?;
+        // Try to load genesis block from the genesis file or use default
+        let genesis_block = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
+            if std::path::Path::new(genesis_path).exists() {
+                match GenesisConfig::load_from_file(genesis_path) {
+                    Ok(genesis_config) => match genesis_config.to_genesis_block() {
+                        Ok(block) => {
+                            tracing::info!("Using genesis block from file: {:?}", genesis_path);
+                            block
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to create genesis block from file: {:?}", e);
+                            Block::genesis()
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!("Failed to load genesis file: {:?}", e);
+                        Block::genesis()
+                    }
+                }
+            } else {
+                tracing::error!("Genesis file not found at: {:?}", genesis_path);
+                Block::genesis()
+            }
+        } else {
+            tracing::info!("Using default genesis block");
+            Block::genesis()
+        };
+        // Try to load genesis.json from the path specified in GenesisFileConfig
+        // or use default genesis configuration
+        let (genesis_accounts, genesis_slots) = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
+            if std::path::Path::new(genesis_path).exists() {
+                tracing::info!("Found genesis file at: {:?}", genesis_path);
+                match GenesisConfig::load_from_file(genesis_path) {
+                    Ok(genesis) => match genesis.to_stratus_accounts_and_slots() {
+                        Ok((accounts, slots)) => {
+                            tracing::info!("Loaded {} accounts from genesis.json", accounts.len());
+                            if !slots.is_empty() {
+                                tracing::info!("Loaded {} storage slots from genesis.json", slots.len());
+                            }
+                            (accounts, slots)
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to convert genesis accounts: {:?}", e);
+                            // Fallback to test accounts
+                            (test_accounts(), vec![])
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!("Failed to load genesis file: {:?}", e);
+                        // Fallback to test accounts
+                        (test_accounts(), vec![])
+                    }
+                }
+            } else {
+                tracing::error!("Genesis file not found at: {:?}", genesis_path);
+                // Fallback to test accounts
+                (test_accounts(), vec![])
+            }
+        } else {
+            // No genesis path specified, use default genesis configuration
+            match GenesisConfig::default().to_stratus_accounts_and_slots() {
+                Ok((accounts, slots)) => {
+                    tracing::info!("Using default genesis configuration with {} accounts", accounts.len());
+                    (accounts, slots)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to convert default genesis accounts: {:?}", e);
+                    // Fallback to test accounts
+                    (test_accounts(), vec![])
+                }
+            }
+        };
+        // Save the genesis block
+        self.save_block(genesis_block)?;
 
-        // test accounts
-        self.save_accounts(test_accounts())?;
+        // accounts
+        self.save_accounts(genesis_accounts)?;
+
+        // Save slots if any
+        if !genesis_slots.is_empty() {
+            tracing::info!("Saving {} storage slots from genesis", genesis_slots.len());
+            self.perm.save_slots(genesis_slots)?;
+        }
 
         // block number
         self.set_mined_block_number(BlockNumber::ZERO)?;

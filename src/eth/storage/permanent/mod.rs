@@ -12,6 +12,9 @@ use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
 
+/// Genesis file configuration
+#[cfg(feature = "dev")]
+use crate::config::GenesisFileConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -79,6 +82,10 @@ pub trait PermanentStorage: Send + Sync + 'static {
     /// Retrieves an slot from the storage. Returns Option when not found.
     fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError>;
 
+    /// Persists slots to the storage.  
+    #[cfg(feature = "dev")]
+    fn save_slots(&self, slots: Vec<(Address, Slot)>) -> anyhow::Result<(), StorageError>;
+
     // -------------------------------------------------------------------------
     // Direct state manipulation (for testing)
     // -------------------------------------------------------------------------
@@ -119,6 +126,10 @@ pub struct PermanentStorageConfig {
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
     pub perm_storage_kind: PermanentStorageKind,
 
+    /// Storage connection URL.
+    #[arg(long = "perm-storage-url", env = "PERM_STORAGE_URL", required_if_eq_any([("perm_storage_kind", "redis")]))]
+    pub perm_storage_url: Option<String>,
+
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
     pub rocks_path_prefix: Option<String>,
@@ -134,6 +145,11 @@ pub struct PermanentStorageConfig {
     /// Augments or decreases the size of Column Family caches based on a multiplier.
     #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
     pub rocks_disable_sync_write: bool,
+
+    /// Genesis file configuration
+    #[clap(flatten)]
+    #[cfg(feature = "dev")]
+    pub genesis_file: GenesisFileConfig,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]

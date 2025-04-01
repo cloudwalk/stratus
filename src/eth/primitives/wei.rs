@@ -21,6 +21,39 @@ impl Wei {
     pub fn as_u128(&self) -> u128 {
         self.0.as_u128()
     }
+
+    /// Converts a hexadecimal string to Wei
+    ///
+    /// # Arguments
+    ///
+    /// * `hex` - A hexadecimal string, with or without the "0x" prefix
+    ///
+    /// # Returns
+    ///
+    /// A Result containing the Wei value or an error
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use stratus::eth::primitives::Wei;
+    ///
+    /// let wei = Wei::from_hex_str("1a").unwrap();
+    /// assert_eq!(wei, Wei::from(26u64));
+    ///
+    /// let wei = Wei::from_hex_str("0x1a").unwrap();
+    /// assert_eq!(wei, Wei::from(26u64));
+    /// ```
+    pub fn from_hex_str(hex: &str) -> Result<Self, anyhow::Error> {
+        let hex = hex.trim_start_matches("0x");
+        let revm_u256 = RevmU256::from_str_radix(hex, 16)?;
+        Ok(Self(U256::from(revm_u256.to_be_bytes())))
+    }
+
+    /// Alias for from_hex_str for backward compatibility
+    #[deprecated(since = "0.20.1", note = "Use from_hex_str instead")]
+    pub fn from_str_hex(hex: &str) -> Result<Self, anyhow::Error> {
+        Self::from_hex_str(hex)
+    }
 }
 
 impl Dummy<Faker> for Wei {
@@ -96,5 +129,20 @@ mod tests {
         let nonce: Wei = big_decimal.clone().try_into().unwrap();
         let expected = nonce.0.as_u64();
         assert_eq!(10000, expected);
+    }
+
+    #[test]
+    fn test_from_hex_str() {
+        // Test with a simple value without 0x prefix
+        let wei = Wei::from_hex_str("1a").unwrap();
+        assert_eq!(wei, Wei::from(26u64));
+
+        // Test with 0x prefix
+        let wei = Wei::from_hex_str("0x1a").unwrap();
+        assert_eq!(wei, Wei::from(26u64));
+
+        // Test with a larger value
+        let wei = Wei::from_hex_str("0xffff").unwrap();
+        assert_eq!(wei, Wei::from(65535u64));
     }
 }
