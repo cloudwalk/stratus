@@ -546,17 +546,6 @@ impl RocksStorageState {
         self.accounts.apply_batch_with_context(batch)
     }
 
-    #[cfg(feature = "dev")]
-    pub fn write_slots(&self, slots: Vec<(Address, Slot)>) -> Result<()> {
-        let slots = slots
-            .into_iter()
-            .map(|(address, slot)| ((address.into(), slot.index.into()), slot.value.into()));
-
-        let mut batch = WriteBatch::default();
-        self.account_slots.prepare_batch_insertion(slots, &mut batch)?;
-        self.account_slots.apply_batch_with_context(batch)
-    }
-
     #[cfg(test)]
     pub fn read_all_accounts(&self) -> Result<Vec<AccountRocksdb>> {
         self.accounts.iter_start().map(|result| Ok(result?.1.into_inner())).collect()

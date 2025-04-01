@@ -230,5 +230,26 @@ describe("Development Endpoints", () => {
             const result = await send("eth_getCode", [balancesAddress, "latest"]);
             expect(result).to.equal(counterBytecode);
         });
+
+        it("should set empty code for an address", async () => {
+            // Set some non-empty code
+            const contract = await deployTestContractBalances();
+            const contractAddress = await contract.getAddress();
+            const bytecode = await ethers.provider.getCode(contractAddress);
+
+            await send("hardhat_setCode", [BOB.address, bytecode]);
+
+            // Verify code was set
+            const initialCode = await send("eth_getCode", [BOB.address, "latest"]);
+            expect(initialCode).to.equal(bytecode);
+
+            // Now set empty code
+            const emptyBytecode = "0x";
+            await send("hardhat_setCode", [BOB.address, emptyBytecode]);
+
+            // Verify code was set to empty
+            const result = await send("eth_getCode", [BOB.address, "latest"]);
+            expect(result).to.equal(emptyBytecode);
+        });
     });
 });
