@@ -288,6 +288,8 @@ e2e-stratus-rocks-revert-to-block:
     just _wait_for_stratus
 
     just _log "Running E2E tests"
+    cd e2e
+    npm install
     npx hardhat test test/automine/e2e-tx-serial-revert-to-block.ts --network stratus
     result_code=$?
 
