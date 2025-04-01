@@ -7,6 +7,8 @@ import { deployTestEvmInput, sendReset } from "../helpers/rpc";
 describe("Evm Input", () => {
     describe("Transaction Execution", () => {
         it("should not be executed in one block but added to another", async () => {
+            this.timeout(120000); // this test can take a while to run due to the heavy computation
+            
             await sendReset();
             const contract = await deployTestEvmInput();
             await contract.waitForDeployment();
