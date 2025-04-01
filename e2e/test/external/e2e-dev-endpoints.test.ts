@@ -6,6 +6,7 @@ import {
     ZERO,
     deployTestContractBalances,
     send,
+    sendAndGetError,
     sendEvmMine,
     sendGetNonce,
     sendRawTransaction,
@@ -101,13 +102,8 @@ describe("Development Endpoints", () => {
             const signedTx = await ALICE.signWeiTransfer(BOB.address, 1, incorrectNonce);
 
             // Expect transaction to be rejected
-            try {
-                await sendRawTransaction(signedTx);
-                expect.fail("Transaction should have been rejected");
-            } catch (error) {
-                // Transaction was rejected as expected
-                expect(error).to.exist;
-            }
+            const error = await sendAndGetError("eth_sendRawTransaction", [signedTx]);
+            expect(error.code).to.equal(2002);
         });
     });
 
@@ -171,13 +167,8 @@ describe("Development Endpoints", () => {
             const signedTx = await ALICE.signWeiTransfer(BOB.address, transferAmount, nonce);
 
             // Expect transaction to be rejected
-            try {
-                await sendRawTransaction(signedTx);
-                expect.fail("Transaction should have been rejected");
-            } catch (error) {
-                // Transaction was rejected as expected
-                expect(error).to.exist;
-            }
+            const error = await sendAndGetError("eth_sendRawTransaction", [signedTx]);
+            expect(error.code).to.equal(2003);
         });
 
         it("should set zero balance", async () => {
@@ -194,13 +185,8 @@ describe("Development Endpoints", () => {
             const signedTx = await ALICE.signWeiTransfer(BOB.address, 1, nonce);
 
             // Expect transaction to be rejected
-            try {
-                await sendRawTransaction(signedTx);
-                expect.fail("Transaction should have been rejected");
-            } catch (error) {
-                // Transaction was rejected as expected
-                expect(error).to.exist;
-            }
+            const error = await sendAndGetError("eth_sendRawTransaction", [signedTx]);
+            expect(error.code).to.equal(2003);
         });
     });
 
