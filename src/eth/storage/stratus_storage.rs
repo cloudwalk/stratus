@@ -288,20 +288,7 @@ impl StratusStorage {
         }
         Ok(slot)
     }
-    #[cfg(feature = "dev")]
-    pub fn save_slots(&self, slots: Vec<(Address, Slot)>) -> Result<(), StorageError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::save_slots").entered();
 
-        tracing::debug!(storage = %label::PERM, slots_len = %slots.len(), "saving slots");
-
-        timed(|| self.perm.save_slots(slots)).with(|m| {
-            metrics::inc_storage_save_slots(m.elapsed, label::PERM, m.result.is_ok());
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to save slots");
-            }
-        })
-    }
     // -------------------------------------------------------------------------
     // Blocks
     // -------------------------------------------------------------------------
@@ -689,7 +676,9 @@ impl StratusStorage {
         // Save slots if any
         if !genesis_slots.is_empty() {
             tracing::info!("Saving {} storage slots from genesis", genesis_slots.len());
-            self.perm.save_slots(genesis_slots)?;
+            for (address, slot) in genesis_slots {
+                self.perm.save_slot(address, slot)?;
+            }
         }
 
         // block number

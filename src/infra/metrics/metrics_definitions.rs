@@ -70,9 +70,6 @@ metrics! {
 
     "Time executing storage reset operation."
     histogram_duration storage_reset{storage, success},
-
-    "Time executing storage save_slots operation."
-    histogram_duration storage_save_slots{storage, success}
 }
 
 // Importer online metrics.
