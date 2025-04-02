@@ -11,10 +11,14 @@ use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::Slot;
@@ -25,6 +29,8 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTimeNow;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Wei;
 use crate::eth::storage::AccountWithSlots;
 use crate::eth::storage::TemporaryStorage;
 
@@ -252,6 +258,66 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
                     .copied(),
             },
         )
+    }
+
+    // -------------------------------------------------------------------------
+    // Direct state manipulation (for testing)
+    // -------------------------------------------------------------------------
+
+    #[cfg(feature = "dev")]
+    fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
+        let mut pending_block = self.pending_block.write();
+
+        // Get or create the account
+        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
+
+        // Insert the slot
+        account.slots.insert(slot.index, slot);
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
+        let mut pending_block = self.pending_block.write();
+
+        // Get or create the account
+        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
+
+        // Update the nonce
+        account.info.nonce = nonce;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
+        let mut pending_block = self.pending_block.write();
+
+        // Get or create the account
+        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
+
+        // Update the balance
+        account.info.balance = balance;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
+        let mut pending_block = self.pending_block.write();
+
+        // Get or create the account
+        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
+
+        // Update the bytecode
+        account.info.bytecode = if code.0.is_empty() {
+            None
+        } else {
+            Some(revm::primitives::Bytecode::new_raw(code.0.into()))
+        };
+
+        Ok(())
     }
 
     // -------------------------------------------------------------------------
