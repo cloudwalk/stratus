@@ -32,7 +32,7 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-stratus"
-      justfile_args: "automine rocks"
+      justfile_args: "automine"
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
@@ -44,7 +44,7 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-stratus"
-      justfile_args: "external rocks"
+      justfile_args: "external"
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
@@ -68,7 +68,6 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-clock-stratus"
-      justfile_args: "rocks"
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
@@ -113,7 +112,6 @@ jobs:
     uses: ./.github/workflows/_setup-e2e.yml
     with:
       justfile_recipe: "e2e-genesis"
-      justfile_args: "rocks"
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:
