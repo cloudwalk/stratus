@@ -549,18 +549,14 @@ impl StratusStorage {
     /// This is useful for reading accounts and slots at a specific block.
     pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
         match block_filter {
-            BlockFilter::Latest | BlockFilter::Pending => Ok(PointInTime::Pending),
+            BlockFilter::Pending => Ok(PointInTime::Pending),
+            BlockFilter::Latest => Ok(PointInTime::Mined),
             BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
             BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),
-            BlockFilter::Hash(hash) => {
-                let block = self.read_block(BlockFilter::Hash(hash))?;
-                match block {
-                    Some(block) => Ok(PointInTime::MinedPast(block.number())),
-                    None => Err(StorageError::BlockNotFound {
-                        filter: BlockFilter::Hash(hash),
-                    }),
-                }
-            }
+            BlockFilter::Hash(_) => match self.read_block(block_filter)? {
+                Some(block) => Ok(PointInTime::MinedPast(block.header.number)),
+                None => Err(StorageError::BlockNotFound { filter: block_filter }),
+            },
         }
     }
 }
