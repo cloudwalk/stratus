@@ -26,7 +26,6 @@ use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTimeNow;
 use crate::eth::storage::AccountWithSlots;
-use crate::eth::storage::TemporaryStorage;
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {
@@ -79,42 +78,13 @@ impl InMemoryTemporaryStorage {
         }
         Ok(conflicts.build())
     }
-}
 
-// -----------------------------------------------------------------------------
-// Inner State
-// -----------------------------------------------------------------------------
-
-#[derive(Debug)]
-pub struct InMemoryTemporaryStorageState {
-    /// Block that is being mined.
-    pub block: PendingBlock,
-
-    /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
-    pub accounts: HashMap<Address, AccountWithSlots, hash_hasher::HashBuildHasher>,
-}
-
-impl InMemoryTemporaryStorageState {
-    pub fn new(block_number: BlockNumber) -> Self {
-        Self {
-            block: PendingBlock::new_at_now(block_number),
-            accounts: HashMap::default(),
-        }
-    }
-
-    pub fn reset(&mut self) {
-        self.block = PendingBlock::new_at_now(1.into());
-        self.accounts.clear();
-    }
-}
-
-impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------
 
     // Uneeded clone here, return Cow
-    fn read_pending_block_header(&self) -> PendingBlockHeader {
+    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
         self.pending_block.read().block.header.clone()
     }
 
@@ -122,7 +92,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Block and executions
     // -------------------------------------------------------------------------
 
-    fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StorageError> {
+    pub fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
         if let TransactionExecution::Local(tx) = &tx {
@@ -178,11 +148,11 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(())
     }
 
-    fn read_pending_executions(&self) -> Vec<TransactionExecution> {
+    pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {
         self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
-    fn finish_pending_block(&self) -> anyhow::Result<PendingBlock, StorageError> {
+    pub fn finish_pending_block(&self) -> anyhow::Result<PendingBlock, StorageError> {
         let pending_block = self.pending_block.upgradable_read();
 
         // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
@@ -216,7 +186,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         Ok(finished_block)
     }
 
-    fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
+    pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
         let pending_block = self.pending_block.read();
         match pending_block.block.transactions.get(&hash) {
             Some(tx) => Ok(Some(tx.clone())),
@@ -228,7 +198,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // Accounts and Slots
     // -------------------------------------------------------------------------
 
-    fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>, StorageError> {
+    pub fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>, StorageError> {
         Ok(match self.pending_block.read().accounts.get(&address) {
             Some(pending_account) => Some(pending_account.info.clone()),
             None => self
@@ -240,7 +210,7 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
         })
     }
 
-    fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError> {
         Ok(
             match self.pending_block.read().accounts.get(&address).and_then(|account| account.slots.get(&index)) {
                 Some(pending_slot) => Some(*pending_slot),
@@ -257,9 +227,36 @@ impl TemporaryStorage for InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
     // Global state
     // -------------------------------------------------------------------------
-    fn reset(&self) -> anyhow::Result<(), StorageError> {
+    pub fn reset(&self) -> anyhow::Result<(), StorageError> {
         self.pending_block.write().reset();
         *self.latest_block.write() = None;
         Ok(())
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Inner State
+// -----------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub struct InMemoryTemporaryStorageState {
+    /// Block that is being mined.
+    pub block: PendingBlock,
+
+    /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
+    pub accounts: HashMap<Address, AccountWithSlots, hash_hasher::HashBuildHasher>,
+}
+
+impl InMemoryTemporaryStorageState {
+    pub fn new(block_number: BlockNumber) -> Self {
+        Self {
+            block: PendingBlock::new_at_now(block_number),
+            accounts: HashMap::default(),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.block = PendingBlock::new_at_now(1.into());
+        self.accounts.clear();
     }
 }
