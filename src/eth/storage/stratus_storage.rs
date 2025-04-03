@@ -699,9 +699,11 @@ impl StratusStorage {
         Ok(())
     }
 
-    /// Translates a block filter to a point in time.
-    ///
-    /// This is useful for reading accounts and slots at a specific block.
+    // -------------------------------------------------------------------------
+    // Utils
+    // -------------------------------------------------------------------------
+
+    /// Translates a block filter to a specific storage point-in-time indicator.
     pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
         match block_filter {
             BlockFilter::Pending => Ok(PointInTime::Pending),
