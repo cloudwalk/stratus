@@ -25,7 +25,6 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
-use crate::eth::storage::PermanentStorage;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
@@ -157,7 +156,7 @@ impl RocksPermanentStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
+    pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
         self.state
             .save_slot(address, slot)
             .map_err(|err| StorageError::RocksError { err })
@@ -167,7 +166,7 @@ impl RocksPermanentStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
+    pub fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
         self.state
             .save_account_nonce(address, nonce)
             .map_err(|err| StorageError::RocksError { err })
@@ -177,7 +176,7 @@ impl RocksPermanentStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
+    pub fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
         self.state
             .save_account_balance(address, balance)
             .map_err(|err| StorageError::RocksError { err })
@@ -187,7 +186,7 @@ impl RocksPermanentStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
+    pub fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
         self.state
             .save_account_code(address, code)
             .map_err(|err| StorageError::RocksError { err })
@@ -197,7 +196,7 @@ impl RocksPermanentStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn reset(&self) -> anyhow::Result<(), StorageError> {
+    pub fn reset(&self) -> anyhow::Result<(), StorageError> {
         self.block_number.store(0u32, Ordering::SeqCst);
         self.state.reset().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to reset in RocksPermanent");

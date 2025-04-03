@@ -33,8 +33,6 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
-use crate::eth::storage::PermanentStorage;
-use crate::eth::storage::TemporaryStorage;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;

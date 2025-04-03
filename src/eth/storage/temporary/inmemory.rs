@@ -235,7 +235,7 @@ impl InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
 
     #[cfg(feature = "dev")]
-    fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
+    pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
 
         // Get or create the account
@@ -248,7 +248,7 @@ impl InMemoryTemporaryStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
+    pub fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
 
         // Get or create the account
@@ -261,7 +261,7 @@ impl InMemoryTemporaryStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
+    pub fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
 
         // Get or create the account
@@ -274,7 +274,7 @@ impl InMemoryTemporaryStorage {
     }
 
     #[cfg(feature = "dev")]
-    fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
+    pub fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
 
         // Get or create the account
