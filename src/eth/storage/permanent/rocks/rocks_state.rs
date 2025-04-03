@@ -36,6 +36,7 @@ use super::types::BlockNumberRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -47,8 +48,6 @@ use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::logs_bloom::LogsBloom;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
@@ -295,15 +294,12 @@ impl RocksStorageState {
             }
 
             let block = block.into_inner();
-            
+
             // Skip processing this block if the bloom filter indicates it definitely doesn't contain matching logs
-            #[cfg(feature = "dev")]
-            {
-                let logs_bloom: LogsBloom = block.header.bloom.into();
-                if !filter.may_contain_matching_logs(&logs_bloom) {
-                    tracing::trace!("Skipping block {} based on bloom filter", number);
-                    continue;
-                }
+            let logs_bloom: LogsBloom = block.header.bloom.into();
+            if !filter.may_contain_matching_logs(&logs_bloom) {
+                tracing::trace!("Skipping block {} based on bloom filter", number);
+                continue;
             }
 
             let logs = block.transactions.into_iter().enumerate().flat_map(|(tx_index, transaction)| {
@@ -711,26 +707,25 @@ mod tests {
 
     use super::*;
     use crate::eth::primitives::BlockHeader;
+    use crate::eth::primitives::Bytes;
     use crate::eth::primitives::ExecutionValueChange;
+    use crate::eth::primitives::Index;
     use crate::eth::primitives::Log;
-    use crate::eth::primitives::LogTopic;
     use crate::eth::primitives::LogFilterInput;
     use crate::eth::primitives::LogFilterInputTopic;
-    use crate::eth::primitives::Index;
-    use crate::eth::primitives::Bytes;
+    use crate::eth::primitives::LogTopic;
     use crate::eth::primitives::UnixTime;
     use crate::utils::test_utils::fake_first;
 
     #[test]
-    #[cfg(feature = "dev")]
     fn test_read_logs_bloom_optimization() {
         let (state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
-        
+
         // Create a block with logs for a specific address
         let log1_address: Address = fake_first();
-        
+
         let log1_topic: LogTopic = fake_first();
-        
+
         let log1 = Log {
             address: log1_address,
             topic0: Some(log1_topic),
@@ -739,7 +734,7 @@ mod tests {
             topic3: None,
             data: Bytes::default(),
         };
-        
+
         // Create a transaction with the log
         let mut tx1 = TransactionMined {
             input: fake_first(),
@@ -749,7 +744,7 @@ mod tests {
             block_number: 1.into(),
             block_hash: Hash::default(),
         };
-        
+
         // Create the LogMined instance correctly
         let log_mined1 = LogMined {
             log: log1,
@@ -759,18 +754,18 @@ mod tests {
             block_number: tx1.block_number,
             block_hash: tx1.block_hash,
         };
-        
+
         tx1.logs = vec![log_mined1];
-        
+
         // Create a block with the transaction
         let mut block1 = Block::new(1.into(), UnixTime::default());
         block1.transactions = vec![tx1];
-        
+
         // Create another log for a different address
         let log2_address: Address = fake_first();
-        
+
         let log2_topic: LogTopic = fake_first();
-        
+
         let log2 = Log {
             address: log2_address,
             topic0: Some(log2_topic),
@@ -779,7 +774,7 @@ mod tests {
             topic3: None,
             data: Bytes::default(),
         };
-        
+
         // Create another transaction with the different log
         let mut tx2 = TransactionMined {
             input: fake_first(),
@@ -789,7 +784,7 @@ mod tests {
             block_number: 2.into(),
             block_hash: Hash::default(),
         };
-        
+
         // Create the LogMined instance correctly
         let log_mined2 = LogMined {
             log: log2,
@@ -799,30 +794,30 @@ mod tests {
             block_number: tx2.block_number,
             block_hash: tx2.block_hash,
         };
-        
+
         tx2.logs = vec![log_mined2];
-        
+
         // Create another block with the second transaction
         let mut block2 = Block::new(2.into(), UnixTime::default());
         block2.transactions = vec![tx2];
-        
+
         // Update the bloom filter for each block based on its logs
         for transaction in &block1.transactions {
             for log in &transaction.logs {
                 block1.header.bloom.accrue_log(&log.log);
             }
         }
-        
+
         for transaction in &block2.transactions {
             for log in &transaction.logs {
                 block2.header.bloom.accrue_log(&log.log);
             }
         }
-        
+
         // Save both blocks
         state.save_block(block1.clone()).unwrap();
         state.save_block(block2.clone()).unwrap();
-        
+
         // Create a filter that matches only log1_address
         let log_filter1 = LogFilter {
             from_block: 1.into(),
@@ -830,12 +825,12 @@ mod tests {
             addresses: vec![log1_address],
             original_input: LogFilterInput::default(),
         };
-        
+
         // There should be 1 matching log
         let logs1 = state.read_logs(&log_filter1).unwrap();
         assert_eq!(logs1.len(), 1);
         assert_eq!(logs1[0].address(), log1_address);
-        
+
         // Create a filter that matches only log2_address
         let log_filter2 = LogFilter {
             from_block: 1.into(),
@@ -843,39 +838,40 @@ mod tests {
             addresses: vec![log2_address],
             original_input: LogFilterInput::default(),
         };
-        
+
         // There should be 1 matching log
         let logs2 = state.read_logs(&log_filter2).unwrap();
         assert_eq!(logs2.len(), 1);
         assert_eq!(logs2[0].address(), log2_address);
-        
+
         // Create a filter that matches log1's topic
         let log_filter3 = LogFilter {
             from_block: 1.into(),
             to_block: Some(2.into()),
             addresses: vec![],
             original_input: {
-                let mut input = LogFilterInput::default();
-                input.topics = vec![LogFilterInputTopic(vec![Some(log1_topic)])];
-                input
+                LogFilterInput {
+                    topics: vec![LogFilterInputTopic(vec![Some(log1_topic)])],
+                    ..LogFilterInput::default()
+                }
             },
         };
-        
+
         // There should be 1 matching log
         let logs3 = state.read_logs(&log_filter3).unwrap();
         assert_eq!(logs3.len(), 1);
         assert_eq!(logs3[0].log.topics()[0].unwrap(), log1_topic);
-        
+
         // Create a filter that matches no logs (non-existent address)
         let non_existent_address: Address = fake_first();
-        
+
         let log_filter4 = LogFilter {
             from_block: 1.into(),
             to_block: Some(2.into()),
             addresses: vec![non_existent_address],
             original_input: LogFilterInput::default(),
         };
-        
+
         // There should be 0 matching logs
         let logs4 = state.read_logs(&log_filter4).unwrap();
         assert_eq!(logs4.len(), 0);
