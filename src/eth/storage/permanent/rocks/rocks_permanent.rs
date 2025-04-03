@@ -137,15 +137,6 @@ impl RocksPermanentStorage {
         })
     }
 
-    pub fn save_block_batch(&self, block_batch: Vec<Block>) -> anyhow::Result<(), StorageError> {
-        self.state
-            .save_block_batch(block_batch)
-            .map_err(|err| StorageError::RocksError { err })
-            .inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to save block_batch in RocksPermanent");
-            })
-    }
-
     pub fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
         self.state
             .save_accounts(accounts)

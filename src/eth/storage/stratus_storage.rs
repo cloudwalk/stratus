@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use tracing::Span;
 
 use super::InMemoryTemporaryStorage;
@@ -28,7 +27,6 @@ use crate::eth::primitives::SlotIndex;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StorageError;
-use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
@@ -392,55 +390,6 @@ impl StratusStorage {
                 tracing::error!(reason = ?e, %block_number, "failed to save block");
             }
         })
-    }
-
-    pub fn save_block_batch(&self, blocks: Vec<Block>) -> Result<(), StratusError> {
-        let Some(first) = blocks.first() else {
-            tracing::error!("save_block_batch called with no blocks, ignoring");
-            return Ok(());
-        };
-
-        let first_number = first.number();
-
-        // check mined number
-        let mined_number = self.read_mined_block_number()?;
-        if not(first_number.is_zero()) && first_number != mined_number.next_block_number() {
-            tracing::error!(%first_number, %mined_number, "failed to save block because mismatch with mined block number");
-            return Err(StorageError::MinedNumberConflict {
-                new: first_number,
-                mined: mined_number,
-            }
-            .into());
-        }
-
-        // check pending number
-        let pending_header = self.read_pending_block_header();
-        if first_number >= pending_header.number {
-            tracing::error!(%first_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
-            return Err(StorageError::PendingNumberConflict {
-                new: first_number,
-                pending: pending_header.number,
-            }
-            .into());
-        }
-
-        // check number of rest of blocks
-        for window in blocks.windows(2) {
-            let (previous, next) = (window[0].number(), window[1].number());
-            if previous.next_block_number() != next {
-                tracing::error!(%previous, %next, "previous block number doesn't match next one");
-                return Err(anyhow!("consecutive blocks in batch aren't adjacent").into());
-            }
-        }
-
-        // check mined block
-        let existing_block = self.read_block(BlockFilter::Number(first_number))?;
-        if existing_block.is_some() {
-            tracing::error!(%first_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
-            return Err(StorageError::BlockConflict { number: first_number }.into());
-        }
-
-        self.perm.save_block_batch(blocks).map_err(Into::into)
     }
 
     pub fn read_block(&self, filter: BlockFilter) -> Result<Option<Block>, StorageError> {
