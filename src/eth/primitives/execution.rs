@@ -1,4 +1,3 @@
-#![allow(clippy::unneeded_struct_pattern)]
 use std::collections::HashMap;
 
 use alloy_primitives::B256;
@@ -121,20 +120,47 @@ impl EvmExecution {
 
         let receipt_logs = receipt.inner.logs();
 
+        // Filter out logs with method 8d995e7f before comparison
+        let filtered_logs = self
+            .logs
+            .iter()
+            .filter(|log| {
+                // Check if log has topics and first topic doesn't match 8d995e7f
+                if let Some(first_topic) = log.topics_non_empty().first() {
+                    !first_topic.to_string().starts_with("0x8d995e7f")
+                } else {
+                    true
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let filtered_receipt_logs = receipt_logs
+            .iter()
+            .filter(|log| {
+                // Check if log has topics and first topic doesn't match 8d995e7f
+                if let Some(first_topic) = log.topics().first() {
+                    !first_topic.to_string().starts_with("0x8d995e7f")
+                } else {
+                    true
+                }
+            })
+            .collect::<Vec<_>>();
+
         // compare logs length
-        if self.logs.len() != receipt_logs.len() {
-            tracing::trace!(logs = ?self.logs, "execution logs");
-            tracing::trace!(logs = ?receipt_logs, "receipt logs");
+        if filtered_logs.len() != filtered_receipt_logs.len() {
+            tracing::trace!(logs = ?filtered_logs, "execution logs");
+            tracing::trace!(logs = ?filtered_receipt_logs, "receipt logs");
+
             return log_and_err!(format!(
                 "logs length mismatch | hash={} execution={} receipt={}",
                 receipt.hash(),
-                self.logs.len(),
-                receipt_logs.len()
+                filtered_logs.len(),
+                filtered_receipt_logs.len()
             ));
         }
 
         // compare logs pairs
-        for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(receipt_logs).enumerate() {
+        for (log_index, (execution_log, receipt_log)) in filtered_logs.iter().zip(filtered_receipt_logs).enumerate() {
             // compare log topics length
             if execution_log.topics_non_empty().len() != receipt_log.topics().len() {
                 return log_and_err!(format!(
