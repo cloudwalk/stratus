@@ -19,7 +19,7 @@ describe("Evm Input", function () {
         let receipt = (await tx.wait()) as ContractTransactionReceipt;
         console.log("Heavy computation receipt");
 
-        const event = receipt.logs[0];        
+        const event = receipt.logs[0];
         const logs = contract.interface.parseLog({
             topics: event.topics,
             data: event.data,
