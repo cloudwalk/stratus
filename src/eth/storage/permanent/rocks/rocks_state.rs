@@ -54,9 +54,9 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
-use crate::ext::not;
-#[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+#[cfg(feature = "dev")]
+use crate::ext::not;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
