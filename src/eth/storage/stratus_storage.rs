@@ -13,18 +13,28 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Wei;
+use crate::eth::storage::PermanentStorage;
+use crate::eth::storage::TemporaryStorage;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
@@ -292,20 +302,7 @@ impl StratusStorage {
         }
         Ok(slot)
     }
-    #[cfg(feature = "dev")]
-    pub fn save_slots(&self, slots: Vec<(Address, Slot)>) -> Result<(), StorageError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::save_slots").entered();
 
-        tracing::debug!(storage = %label::PERM, slots_len = %slots.len(), "saving slots");
-
-        timed(|| self.perm.save_slots(slots)).with(|m| {
-            metrics::inc_storage_save_slots(m.elapsed, label::PERM, m.result.is_ok());
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to save slots");
-            }
-        })
-    }
     // -------------------------------------------------------------------------
     // Blocks
     // -------------------------------------------------------------------------
@@ -505,6 +502,78 @@ impl StratusStorage {
     }
 
     // -------------------------------------------------------------------------
+    // Direct state manipulation (for testing)
+    // -------------------------------------------------------------------------
+
+    #[cfg(feature = "dev")]
+    pub fn set_storage_at(&self, address: Address, index: SlotIndex, value: SlotValue) -> Result<(), StorageError> {
+        // Create a slot with the given index and value
+        let slot = Slot::new(index, value);
+
+        // Update permanent storage
+        self.perm.save_slot(address, slot)?;
+
+        // Update temporary storage
+        self.temp.save_slot(address, slot)?;
+
+        // Update cache
+        self.cache.cache_slot(address, slot);
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    pub fn set_nonce(&self, address: Address, nonce: Nonce) -> Result<(), StorageError> {
+        // Update permanent storage
+        self.perm.save_account_nonce(address, nonce)?;
+
+        // Update temporary storage
+        self.temp.save_account_nonce(address, nonce)?;
+
+        // Update cache
+        let point_in_time = PointInTime::Mined;
+        if let Some(account) = self.perm.read_account(address, point_in_time)? {
+            self.cache.cache_account(account);
+        }
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    pub fn set_balance(&self, address: Address, balance: Wei) -> Result<(), StorageError> {
+        // Update permanent storage
+        self.perm.save_account_balance(address, balance)?;
+
+        // Update temporary storage
+        self.temp.save_account_balance(address, balance)?;
+
+        // Update cache
+        let point_in_time = PointInTime::Mined;
+        if let Some(account) = self.perm.read_account(address, point_in_time)? {
+            self.cache.cache_account(account);
+        }
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    pub fn set_code(&self, address: Address, code: Bytes) -> Result<(), StorageError> {
+        // Update permanent storage
+        self.perm.save_account_code(address, code.clone())?;
+
+        // Update temporary storage
+        self.temp.save_account_code(address, code)?;
+
+        // Update cache
+        let point_in_time = PointInTime::Mined;
+        if let Some(account) = self.perm.read_account(address, point_in_time)? {
+            self.cache.cache_account(account);
+        }
+
+        Ok(())
+    }
+
+    // -------------------------------------------------------------------------
     // General state
     // -------------------------------------------------------------------------
 
@@ -621,7 +690,9 @@ impl StratusStorage {
         // Save slots if any
         if !genesis_slots.is_empty() {
             tracing::info!("Saving {} storage slots from genesis", genesis_slots.len());
-            self.perm.save_slots(genesis_slots)?;
+            for (address, slot) in genesis_slots {
+                self.perm.save_slot(address, slot)?;
+            }
         }
 
         // block number

@@ -252,7 +252,13 @@ e2e-hardhat block-mode="automine" test="":
     wait-service --tcp localhost:8545 -- echo
 
     echo "-> Running E2E tests"
-    just e2e hardhat {{block-mode}} {{test}}
+    if [ -z "{{test}}" ]; then
+        just e2e hardhat {{block-mode}} ""
+    elif [ -f "test/{{block-mode}}/{{test}}.test.ts" ]; then
+        BLOCK_MODE={{block-mode}} npx hardhat test test/{{block-mode}}/{{test}}.test.ts --network hardhat
+    else
+        just e2e hardhat {{block-mode}} "{{test}}"
+    fi
 
     echo "-> Killing Hardhat"
     killport 8545
