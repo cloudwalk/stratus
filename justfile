@@ -252,7 +252,13 @@ e2e-hardhat block-mode="automine" test="":
     wait-service --tcp localhost:8545 -- echo
 
     echo "-> Running E2E tests"
-    just e2e hardhat {{block-mode}} {{test}}
+    if [ -z "{{test}}" ]; then
+        just e2e hardhat {{block-mode}} ""
+    elif [ -f "test/{{block-mode}}/{{test}}.test.ts" ]; then
+        BLOCK_MODE={{block-mode}} npx hardhat test test/{{block-mode}}/{{test}}.test.ts --network hardhat
+    else
+        just e2e hardhat {{block-mode}} "{{test}}"
+    fi
 
     echo "-> Killing Hardhat"
     killport 8545
@@ -273,7 +279,6 @@ e2e-stratus block-mode="automine" storage="inmemory" test="":
     else
         just e2e stratus {{block-mode}} "{{test}}"
     fi
-
 
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
 e2e-clock-stratus storage="inmemory":
@@ -520,3 +525,20 @@ contracts-test-stratus storage="inmemory" *args="":
 
     just _log "Running E2E Contracts tests"
     just e2e-contracts {{args}}
+
+# E2E: Starts and execute Genesis tests in Stratus
+e2e-genesis perm-storage="inmemory":
+    #!/bin/bash
+    mkdir -p e2e_logs
+
+    # Create config directory in e2e if it doesn't exist
+    mkdir -p e2e/config
+
+    just _log "Starting Stratus with genesis.local.json"
+    just stratus-test -a 0.0.0.0:3000 --genesis-path config/genesis.local.json --block-mode automine --perm-storage={{perm-storage}}
+
+    just _log "Running Genesis tests"
+    cd e2e
+    npm install 
+    npx hardhat test test/genesis/genesis.test.ts --network stratus 
+    killport 3000 -s sigterm

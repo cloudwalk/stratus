@@ -11,14 +11,20 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Wei;
 use crate::eth::storage::PermanentStorage;
 
 #[derive(Debug)]
@@ -149,6 +155,46 @@ impl PermanentStorage for RocksPermanentStorage {
             .map_err(|err| StorageError::RocksError { err })
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to save accounts in RocksPermanent");
+            })
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
+        self.state
+            .save_slot(address, slot)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to save slot in RocksPermanent");
+            })
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
+        self.state
+            .save_account_nonce(address, nonce)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to save account nonce in RocksPermanent");
+            })
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
+        self.state
+            .save_account_balance(address, balance)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to save account balance in RocksPermanent");
+            })
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
+        self.state
+            .save_account_code(address, code)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to save account code in RocksPermanent");
             })
     }
 

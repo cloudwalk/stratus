@@ -12,13 +12,19 @@ use display_json::DebugAsJson;
 use super::PermanentStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlock;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Wei;
 
 /// Temporary storage (in-between blocks) operations.
 pub trait TemporaryStorage: Send + Sync + 'static {
@@ -54,6 +60,26 @@ pub trait TemporaryStorage: Send + Sync + 'static {
 
     /// Retrieves an slot from the storage. Returns Option when not found.
     fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError>;
+
+    // -------------------------------------------------------------------------
+    // Direct state manipulation (for testing)
+    // -------------------------------------------------------------------------
+
+    #[cfg(feature = "dev")]
+    /// Saves a single slot directly to temporary storage.
+    fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Updates an account's nonce in temporary storage.
+    fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Updates an account's balance in temporary storage.
+    fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Updates an account's code in temporary storage.
+    fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError>;
 
     // -------------------------------------------------------------------------
     // Global state
