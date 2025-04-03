@@ -61,7 +61,7 @@ describe("Revert to block", () => {
         expect(await sendGetBalance(ALICE)).to.equal(aliceBalanceAfterTx1);
 
         // Revert to block after first transfer
-        await send("stratus_revertToBlock", ["0x" + (await send("eth_blockNumber")) - 2]);
+        await send("stratus_revertToBlock", ["0x" + (await send("eth_blockNumber")) - 1]);
 
         // Verify balances are back to state after first transfer
         expect(await sendGetBalance(ALICE)).to.equal(aliceBalanceAfterTx1);
@@ -120,7 +120,7 @@ describe("Revert slots to block", () => {
         expect(slot0AfterRevert).to.equal("0x0000000000000000000000000000000000000000000000000000000000000054");
 
         // Revert to block 1
-        await send("stratus_revertToBlock", ["0x" + ((await send("eth_blockNumber")) - 2)]);
+        await send("stratus_revertToBlock", ["0x" + ((await send("eth_blockNumber")) - 1)]);
 
         // Verify slot value is back to 42
         const slot0AfterFinalRevert = await sendGetStorageAt(_contract.target, "0x0");

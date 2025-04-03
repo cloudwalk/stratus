@@ -1,3 +1,4 @@
+#![allow(clippy::unneeded_struct_pattern)]
 use std::collections::HashMap;
 
 use alloy_primitives::B256;
