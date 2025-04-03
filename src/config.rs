@@ -331,6 +331,29 @@ impl WithCommonConfig for ImporterOfflineConfig {
 }
 
 // -----------------------------------------------------------------------------
+// Config: RocksRevertToBlockConfig
+// -----------------------------------------------------------------------------
+
+#[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
+pub struct RocksRevertToBlockConfig {
+    /// Block number to revert to.
+    #[arg(long = "block", env = "BLOCK")]
+    pub block_number: u64,
+
+    #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
+    pub rocks_path_prefix: Option<String>,
+
+    #[clap(flatten)]
+    pub common: CommonConfig,
+}
+
+impl WithCommonConfig for RocksRevertToBlockConfig {
+    fn common(&self) -> &CommonConfig {
+        &self.common
+    }
+}
+
+// -----------------------------------------------------------------------------
 // Enum: Env
 // -----------------------------------------------------------------------------
 #[derive(DebugAsJson, strum::Display, strum::VariantNames, Clone, Copy, Parser, serde::Serialize)]

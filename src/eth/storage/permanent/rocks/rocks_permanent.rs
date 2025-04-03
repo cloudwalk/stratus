@@ -65,6 +65,18 @@ impl RocksPermanentStorage {
 
         Ok(Self { state, block_number })
     }
+
+    // -------------------------------------------------------------------------
+    // State methods
+    // -------------------------------------------------------------------------
+    #[cfg(feature = "dev")]
+    pub fn clear(&self) -> anyhow::Result<()> {
+        self.state.clear().inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to clear RocksPermanent DB");
+        })?;
+        self.block_number.store(0, Ordering::SeqCst);
+        Ok(())
+    }
 }
 
 impl PermanentStorage for RocksPermanentStorage {
@@ -204,5 +216,21 @@ impl PermanentStorage for RocksPermanentStorage {
         self.state.reset().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to reset in RocksPermanent");
         })
+    }
+
+    #[cfg(feature = "dev")]
+    fn revert_state_to_block_batched(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
+        let result = self
+            .state
+            .revert_state_to_block_batched(block_number.into())
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to revert state to block in RocksPermanent");
+            });
+        if let Ok(()) = result {
+            self.set_mined_block_number(block_number)?;
+            assert_eq!(self.read_mined_block_number()?, block_number);
+        }
+        result
     }
 }

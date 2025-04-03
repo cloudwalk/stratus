@@ -109,6 +109,10 @@ pub trait PermanentStorage: Send + Sync + 'static {
     #[cfg(feature = "dev")]
     /// Resets all state to a specific block number.
     fn reset(&self) -> anyhow::Result<(), StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Resets all state to a specific block number.
+    fn revert_state_to_block_batched(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError>;
 }
 
 // -----------------------------------------------------------------------------
