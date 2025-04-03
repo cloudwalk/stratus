@@ -12,19 +12,28 @@ use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
 
+/// Genesis file configuration
+#[cfg(feature = "dev")]
+use crate::config::GenesisFileConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Wei;
 use crate::ext::parse_duration;
 
 /// Permanent (committed) storage operations.
@@ -74,6 +83,26 @@ pub trait PermanentStorage: Send + Sync + 'static {
     fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError>;
 
     // -------------------------------------------------------------------------
+    // Direct state manipulation (for testing)
+    // -------------------------------------------------------------------------
+
+    #[cfg(feature = "dev")]
+    /// Saves a single slot directly to storage.
+    fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Updates an account's nonce.
+    fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Updates an account's balance.
+    fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError>;
+
+    #[cfg(feature = "dev")]
+    /// Updates an account's code.
+    fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError>;
+
+    // -------------------------------------------------------------------------
     // Global state
     // -------------------------------------------------------------------------
 
@@ -93,6 +122,10 @@ pub struct PermanentStorageConfig {
     #[arg(long = "perm-storage", env = "PERM_STORAGE")]
     pub perm_storage_kind: PermanentStorageKind,
 
+    /// Storage connection URL.
+    #[arg(long = "perm-storage-url", env = "PERM_STORAGE_URL", required_if_eq_any([("perm_storage_kind", "redis")]))]
+    pub perm_storage_url: Option<String>,
+
     /// RocksDB storage path prefix to execute multiple local Stratus instances.
     #[arg(long = "rocks-path-prefix", env = "ROCKS_PATH_PREFIX")]
     pub rocks_path_prefix: Option<String>,
@@ -108,6 +141,11 @@ pub struct PermanentStorageConfig {
     /// Augments or decreases the size of Column Family caches based on a multiplier.
     #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
     pub rocks_disable_sync_write: bool,
+
+    /// Genesis file configuration
+    #[clap(flatten)]
+    #[cfg(feature = "dev")]
+    pub genesis_file: GenesisFileConfig,
 }
 
 #[derive(DebugAsJson, Clone, serde::Serialize)]

@@ -41,14 +41,20 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Wei;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -481,16 +487,62 @@ impl RocksStorageState {
             })
     }
 
-    /// Writes slots to state (does not write to slot history)
     #[cfg(feature = "dev")]
-    pub fn write_slots(&self, slots: Vec<(Address, Slot)>) -> Result<()> {
-        let slots = slots
-            .into_iter()
-            .map(|(address, slot)| ((address.into(), slot.index.into()), slot.value.into()));
-
+    pub fn save_slot(&self, address: Address, slot: Slot) -> Result<()> {
         let mut batch = WriteBatch::default();
-        self.account_slots.prepare_batch_insertion(slots, &mut batch)?;
+        self.account_slots
+            .prepare_batch_insertion([((address.into(), slot.index.into()), slot.value.into())], &mut batch)?;
         self.account_slots.apply_batch_with_context(batch)
+    }
+
+    #[cfg(feature = "dev")]
+    pub fn save_account_nonce(&self, address: Address, nonce: Nonce) -> Result<()> {
+        let mut batch = WriteBatch::default();
+
+        // Get the current account or create a new one
+        let mut account_info_entry = self.accounts.get(&address.into())?.unwrap_or(AccountRocksdb::default().into());
+
+        // Update the nonce
+        account_info_entry.nonce = nonce.into();
+
+        // Save the account
+        self.accounts.prepare_batch_insertion([(address.into(), account_info_entry)], &mut batch)?;
+        self.accounts.apply_batch_with_context(batch)
+    }
+
+    #[cfg(feature = "dev")]
+    pub fn save_account_balance(&self, address: Address, balance: Wei) -> Result<()> {
+        let mut batch = WriteBatch::default();
+
+        // Get the current account or create a new one
+        let mut account_info_entry = self.accounts.get(&address.into())?.unwrap_or(AccountRocksdb::default().into());
+
+        // Update the balance
+        account_info_entry.balance = balance.into();
+
+        // Save the account
+        self.accounts.prepare_batch_insertion([(address.into(), account_info_entry)], &mut batch)?;
+        self.accounts.apply_batch_with_context(batch)
+    }
+
+    #[cfg(feature = "dev")]
+    pub fn save_account_code(&self, address: Address, code: Bytes) -> Result<()> {
+        let mut batch = WriteBatch::default();
+
+        // Get the current account or create a new one
+        let mut account_info_entry = self.accounts.get(&address.into())?.unwrap_or(AccountRocksdb::default().into());
+
+        // Update the bytecode
+        account_info_entry.bytecode = if code.0.is_empty() {
+            None
+        } else {
+            Some(revm::primitives::Bytecode::new_raw(code.0.into()))
+        }
+        .map_into();
+
+        // Save the account
+        self.accounts.prepare_batch_insertion([(address.into(), account_info_entry)], &mut batch)?;
+        self.accounts.apply_batch_with_context(batch)
     }
 
     #[cfg(test)]

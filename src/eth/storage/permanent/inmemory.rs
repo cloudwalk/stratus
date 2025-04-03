@@ -19,6 +19,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
@@ -218,10 +220,64 @@ impl PermanentStorage for InMemoryPermanentStorage {
     fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
         let mut state = self.lock_write();
         for account in accounts {
-            state
-                .accounts
-                .insert(account.address, InMemoryPermanentAccount::new_with_balance(account.address, account.balance));
+            state.accounts.insert(account.address, InMemoryPermanentAccount::new(account));
         }
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
+        let mut state = self.lock_write();
+
+        // Get or create the account
+        let account_entry = state.accounts.entry(address).or_insert_with(|| InMemoryPermanentAccount::new_empty(address));
+
+        // Insert the slot
+        account_entry.slots.insert(slot.index, InMemoryHistory::new_at_zero(slot));
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
+        let mut state = self.lock_write();
+
+        // Get or create the account
+        let account_entry = state.accounts.entry(address).or_insert_with(|| InMemoryPermanentAccount::new_empty(address));
+
+        // Update the nonce
+        account_entry.nonce = InMemoryHistory::new_at_zero(nonce);
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
+        let mut state = self.lock_write();
+
+        // Get or create the account
+        let account_entry = state.accounts.entry(address).or_insert_with(|| InMemoryPermanentAccount::new_empty(address));
+
+        // Update the balance
+        account_entry.balance = InMemoryHistory::new_at_zero(balance);
+
+        Ok(())
+    }
+
+    #[cfg(feature = "dev")]
+    fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
+        let mut state = self.lock_write();
+
+        // Get or create the account
+        let account_entry = state.accounts.entry(address).or_insert_with(|| InMemoryPermanentAccount::new_empty(address));
+
+        // Convert Bytes to Bytecode
+        let bytecode = if code.0.is_empty() { None } else { Some(Bytecode::new_raw(code.0.into())) };
+
+        // Update the bytecode and code hash
+        account_entry.bytecode = InMemoryHistory::new_at_zero(bytecode.clone());
+        account_entry.code_hash = InMemoryHistory::new_at_zero(CodeHash::default());
+
         Ok(())
     }
 
@@ -251,17 +307,17 @@ struct InMemoryPermanentAccount {
 impl InMemoryPermanentAccount {
     /// Creates a new empty permanent account.
     fn new_empty(address: Address) -> Self {
-        Self::new_with_balance(address, Wei::ZERO)
+        Self::new(Account::new_empty(address))
     }
 
     /// Creates a new permanent account with initial balance.
-    pub fn new_with_balance(address: Address, balance: Wei) -> Self {
+    pub fn new(account: Account) -> Self {
         Self {
-            address,
-            balance: InMemoryHistory::new_at_zero(balance),
-            nonce: InMemoryHistory::new_at_zero(Nonce::ZERO),
-            bytecode: InMemoryHistory::new_at_zero(None),
-            code_hash: InMemoryHistory::new_at_zero(CodeHash::default()),
+            address: account.address,
+            balance: InMemoryHistory::new_at_zero(account.balance),
+            nonce: InMemoryHistory::new_at_zero(account.nonce),
+            bytecode: InMemoryHistory::new_at_zero(account.bytecode),
+            code_hash: InMemoryHistory::new_at_zero(account.code_hash),
             slots: HashMap::default(),
         }
     }
