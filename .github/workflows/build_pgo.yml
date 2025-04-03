@@ -1,4 +1,4 @@
-name: Build Binary
+name: Build PGO
 
 on:
   workflow_dispatch:
