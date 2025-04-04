@@ -416,14 +416,6 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
-    pub fn save_block_batch(&self, block_batch: Vec<Block>) -> Result<()> {
-        let mut batch = WriteBatch::default();
-        for block in block_batch {
-            self.prepare_block_insertion(block, &mut batch)?;
-        }
-        self.write_in_batch_for_multiple_cfs(batch)
-    }
-
     pub fn save_block(&self, block: Block) -> Result<()> {
         let mut batch = WriteBatch::default();
         self.prepare_block_insertion(block, &mut batch)?;
