@@ -58,7 +58,7 @@ jobs:
         run: cargo install cargo-pgo
 
       - name: Build instrumented binary
-        run: cargo pgo build -- --bin stratus --features "$FEATURES"
+        run: RUSTFLAGS="--cfg tokio_unstable" cargo pgo build -- --bin stratus --features "$FEATURES" --cfg tokio_unstable
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
           TRACING_LOG_FORMAT: json
