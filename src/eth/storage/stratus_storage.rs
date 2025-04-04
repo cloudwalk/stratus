@@ -196,7 +196,9 @@ impl StratusStorage {
         let account = 'query: {
             if point_in_time.is_pending() {
                 if let Some(account) = timed(|| self.cache.get_account(address)).with(|m| {
-                    metrics::inc_storage_read_account(m.elapsed, label::CACHE, point_in_time, true);
+                    if m.result.is_some() {
+                        metrics::inc_storage_read_account(m.elapsed, label::CACHE, point_in_time);
+                    }
                 }) {
                     tracing::debug!(storage = %label::CACHE, %address, ?account, "account found in cache");
                     return Ok(account);
@@ -204,7 +206,9 @@ impl StratusStorage {
 
                 tracing::debug!(storage = %label::TEMP, %address, "reading account");
                 let temp_account = timed(|| self.temp.read_account(address)).with(|m| {
-                    metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
+                    if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
+                        metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time);
+                    }
                     if let Err(ref e) = m.result {
                         tracing::error!(reason = ?e, "failed to read account from temporary storage");
                     }
@@ -218,7 +222,9 @@ impl StratusStorage {
             // always read from perm if necessary
             tracing::debug!(storage = %label::PERM, %address, "reading account");
             let perm_account = timed(|| self.perm.read_account(address, point_in_time)).with(|m| {
-                metrics::inc_storage_read_account(m.elapsed, label::PERM, point_in_time, m.result.is_ok());
+                if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
+                    metrics::inc_storage_read_account(m.elapsed, label::PERM, point_in_time);
+                }
                 if let Err(ref e) = m.result {
                     tracing::error!(reason = ?e, "failed to read account from permanent storage");
                 }
@@ -248,7 +254,9 @@ impl StratusStorage {
         let slot = 'query: {
             if point_in_time.is_pending() {
                 if let Some(slot) = timed(|| self.cache.get_slot(address, index)).with(|m| {
-                    metrics::inc_storage_read_slot(m.elapsed, label::CACHE, point_in_time, true);
+                    if m.result.is_some() {
+                        metrics::inc_storage_read_slot(m.elapsed, label::CACHE, point_in_time);
+                    }
                 }) {
                     tracing::debug!(storage = %label::CACHE, %address, %index, value = %slot.value, "slot found in cache");
                     return Ok(slot);
@@ -256,7 +264,9 @@ impl StratusStorage {
 
                 tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
                 let temp_slot = timed(|| self.temp.read_slot(address, index)).with(|m| {
-                    metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time, m.result.is_ok());
+                    if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
+                        metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time);
+                    }
                     if let Err(ref e) = m.result {
                         tracing::error!(reason = ?e, "failed to read slot from temporary storage");
                     }
@@ -270,7 +280,9 @@ impl StratusStorage {
             // always read from perm if necessary
             tracing::debug!(storage = %label::PERM, %address, %index, %point_in_time, "reading slot");
             let perm_slot = timed(|| self.perm.read_slot(address, index, point_in_time)).with(|m| {
-                metrics::inc_storage_read_slot(m.elapsed, label::PERM, point_in_time, m.result.is_ok());
+                if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
+                    metrics::inc_storage_read_slot(m.elapsed, label::PERM, point_in_time);
+                }
                 if let Err(ref e) = m.result {
                     tracing::error!(reason = ?e, "failed to read slot from permanent storage");
                 }
