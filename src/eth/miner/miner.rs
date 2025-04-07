@@ -350,18 +350,10 @@ fn mine_external_transactions(block_number: BlockNumber, txs: Vec<ExternalTransa
 }
 
 fn block_from_external(external_block: ExternalBlock, mined_txs: Vec<TransactionMined>) -> anyhow::Result<Block> {
-    let mut block = Block {
+    let block = Block {
         header: BlockHeader::try_from(&external_block)?,
         transactions: mined_txs,
     };
-
-    let mut log_index = Index::ZERO;
-    for tx in &mut block.transactions {
-        for log in &mut tx.logs {
-            log.log_index = log_index;
-            log_index = log_index + Index::ONE;
-        }
-    }
 
     Ok(block)
 }
