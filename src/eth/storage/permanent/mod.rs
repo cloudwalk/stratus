@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use clap::Parser;
 use display_json::DebugAsJson;
-use rocksdb::WriteBatch;
 
 /// Genesis file configuration
 #[cfg(feature = "dev")]

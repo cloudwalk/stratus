@@ -1,3 +1,4 @@
+use rocksdb::WriteBatch;
 use tracing::Span;
 
 use super::InMemoryTemporaryStorage;
