@@ -23,7 +23,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
-use crate::eth::primitives::ExternalReplicationLog;
+use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
@@ -507,7 +507,7 @@ impl Importer {
     // Applies replication logs to storage
     async fn start_log_applier(
         storage: Arc<StratusStorage>,
-        mut log_rx: mpsc::Receiver<ExternalReplicationLog>,
+        mut log_rx: mpsc::Receiver<ReplicationLogRocksdb>,
         kafka_connector: Option<Arc<KafkaConnector>>,
         miner: Arc<Miner>,
     ) -> anyhow::Result<()> {
@@ -587,9 +587,10 @@ impl Importer {
                 }
             }
 
-            tracing::info!(block_number = %replication_log.block_number, "applying replication log");
+            let block_number: BlockNumber = replication_log.block_number.into();
+            tracing::info!(block_number = %block_number, "applying replication log");
             let write_batch = replication_log.to_write_batch();
-            match storage.apply_replication_log(replication_log.block_number, write_batch) {
+            match storage.apply_replication_log(block_number, write_batch) {
                 Ok(_) => {
                     tracing::info!(block_number = %replication_log.block_number, "successfully applied replication log");
 
@@ -621,7 +622,7 @@ impl Importer {
     /// Retrieves replication logs.
     async fn start_log_fetcher(
         chain: Arc<BlockchainClient>,
-        log_tx: mpsc::Sender<ExternalReplicationLog>,
+        log_tx: mpsc::Sender<ReplicationLogRocksdb>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "log-fetcher";
@@ -694,9 +695,8 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
         };
     }
 }
-
-async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ExternalReplicationLog {
-    const RETRY_DELAY: Duration = Duration::from_millis(10);
+async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ReplicationLogRocksdb {
+    const REPLICATION_RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
     });
@@ -709,18 +709,17 @@ async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: Block
                 tracing::info!(
                     %block_number,
                     log_block_number = %replication_log.block_number,
-                    log_data_size = %replication_log.log_data.len(),
                     "successfully fetched replication log"
                 );
                 return replication_log;
             }
             Ok(None) => {
-                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "replication log not available yet, retrying with delay.");
-                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+                tracing::warn!(%block_number, delay_ms = %REPLICATION_RETRY_DELAY.as_millis(), "replication log not available yet, retrying with delay.");
+                traced_sleep(REPLICATION_RETRY_DELAY, SleepReason::RetryBackoff).await;
             }
             Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch replication log, retrying with delay.");
-                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+                tracing::warn!(reason = ?e, %block_number, delay_ms = %REPLICATION_RETRY_DELAY.as_millis(), "failed to fetch replication log, retrying with delay.");
+                traced_sleep(REPLICATION_RETRY_DELAY, SleepReason::RetryBackoff).await;
             }
         };
     }
