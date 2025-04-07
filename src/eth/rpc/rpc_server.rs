@@ -53,15 +53,21 @@ use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::ImporterError;
 use crate::eth::primitives::LogFilterInput;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::RpcError;
 use crate::eth::primitives::SlotIndex;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StateError;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionStage;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::Wei;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::proxy_get_request::ProxyGetRequestTempLayer;
@@ -181,6 +187,14 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("evm_mine", evm_mine)?;
         module.register_blocking_method("hardhat_reset", stratus_reset)?;
         module.register_blocking_method("stratus_reset", stratus_reset)?;
+        module.register_blocking_method("hardhat_setStorageAt", stratus_set_storage_at)?;
+        module.register_blocking_method("stratus_setStorageAt", stratus_set_storage_at)?;
+        module.register_blocking_method("hardhat_setNonce", stratus_set_nonce)?;
+        module.register_blocking_method("stratus_setNonce", stratus_set_nonce)?;
+        module.register_blocking_method("hardhat_setBalance", stratus_set_balance)?;
+        module.register_blocking_method("stratus_setBalance", stratus_set_balance)?;
+        module.register_blocking_method("hardhat_setCode", stratus_set_code)?;
+        module.register_blocking_method("stratus_setCode", stratus_set_code)?;
     }
 
     // stratus status
@@ -313,6 +327,55 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
 #[cfg(feature = "dev")]
 fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     ctx.storage.reset_to_genesis()?;
+    Ok(to_json_value(true))
+}
+
+#[cfg(feature = "dev")]
+fn stratus_set_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    let (params, address) = next_rpc_param::<Address>(params.sequence())?;
+    let (params, index) = next_rpc_param::<SlotIndex>(params)?;
+    let (_, value) = next_rpc_param::<SlotValue>(params)?;
+
+    tracing::info!(%address, %index, %value, "setting storage at address and index");
+
+    ctx.storage.set_storage_at(address, index, value)?;
+
+    Ok(to_json_value(true))
+}
+
+#[cfg(feature = "dev")]
+fn stratus_set_nonce(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    let (params, address) = next_rpc_param::<Address>(params.sequence())?;
+    let (_, nonce) = next_rpc_param::<Nonce>(params)?;
+
+    tracing::info!(%address, %nonce, "setting nonce for address");
+
+    ctx.storage.set_nonce(address, nonce)?;
+
+    Ok(to_json_value(true))
+}
+
+#[cfg(feature = "dev")]
+fn stratus_set_balance(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    let (params, address) = next_rpc_param::<Address>(params.sequence())?;
+    let (_, balance) = next_rpc_param::<Wei>(params)?;
+
+    tracing::info!(%address, %balance, "setting balance for address");
+
+    ctx.storage.set_balance(address, balance)?;
+
+    Ok(to_json_value(true))
+}
+
+#[cfg(feature = "dev")]
+fn stratus_set_code(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    let (params, address) = next_rpc_param::<Address>(params.sequence())?;
+    let (_, code) = next_rpc_param::<Bytes>(params)?;
+
+    tracing::info!(%address, code_size = %code.0.len(), "setting code for address");
+
+    ctx.storage.set_code(address, code)?;
+
     Ok(to_json_value(true))
 }
 

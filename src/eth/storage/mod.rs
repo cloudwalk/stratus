@@ -2,15 +2,11 @@
 
 use cache::CacheConfig;
 pub use cache::StorageCache;
-pub use permanent::InMemoryPermanentStorage;
-pub use permanent::PermanentStorage;
 pub use permanent::PermanentStorageConfig;
-pub use permanent::PermanentStorageKind;
+pub use permanent::RocksPermanentStorage;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
-pub use temporary::TemporaryStorage;
 pub use temporary::TemporaryStorageConfig;
-pub use temporary::TemporaryStorageKind;
 
 mod cache;
 pub mod permanent;
@@ -66,10 +62,16 @@ impl StorageConfig {
     /// Initializes Stratus storage.
     pub fn init(&self) -> Result<Arc<StratusStorage>, StratusError> {
         let perm_storage = self.perm_storage.init()?;
-        let temp_storage = self.temp_storage.init(&*perm_storage)?;
+        let temp_storage = self.temp_storage.init(&perm_storage)?;
         let cache = self.cache.init();
 
-        let storage = StratusStorage::new(temp_storage, perm_storage, cache)?;
+        let storage = StratusStorage::new(
+            temp_storage,
+            perm_storage,
+            cache,
+            #[cfg(feature = "dev")]
+            self.perm_storage.clone(),
+        )?;
 
         Ok(Arc::new(storage))
     }
