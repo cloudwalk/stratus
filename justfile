@@ -130,7 +130,7 @@ rpc-downloader-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build
-    cargo run --bin rpc-downloader -- {{args}}
+    cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 importer-offline *args="":
@@ -140,7 +140,7 @@ importer-offline-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build
-    cargo run --bin importer-offline --features dev -- {{args}}
+    cargo run --bin importer-offline -- {{args}} > importer-offline.log
 
 # ------------------------------------------------------------------------------
 # Test tasks
