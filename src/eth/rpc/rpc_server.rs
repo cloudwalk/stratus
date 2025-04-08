@@ -763,14 +763,13 @@ fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     tracing::info!(%filter, "reading replication log");
 
     // Resolve the block filter to a specific block number
-    let block = ctx.storage.read_block(filter)?;
-
-    let Some(block) = block else {
-        tracing::info!(%filter, "block not found");
-        return Ok(JsonValue::Null);
+    let block_number = match ctx.storage.read_block(filter)? {
+        Some(block) => block.number(),
+        None => {
+            tracing::info!(%filter, "block not found");
+            return Ok(JsonValue::Null);
+        }
     };
-
-    let block_number = block.number();
 
     // execute
     let replication_log = ctx.storage.read_replication_log(block_number)?;
