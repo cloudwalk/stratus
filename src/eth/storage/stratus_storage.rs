@@ -141,7 +141,7 @@ impl StratusStorage {
         let number = self.read_pending_block_header().number;
 
         #[cfg(feature = "dev")]
-        if number == BlockNumber::ONE {
+        if number == BlockNumber::ONE && self.rocksdb_replication_enabled() {
             tracing::info!("starting importer from genesis block");
             self.set_mined_block_number(BlockNumber::ZERO)?;
             self.temp.set_pending_block_header(BlockNumber::ZERO)?;

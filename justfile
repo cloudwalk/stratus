@@ -458,7 +458,7 @@ e2e-importer-offline:
     just rpc-downloader-test --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001 --initial-accounts 0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
 
     just _log "Run importer-offline"
-    just importer-offline-test --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
+    just importer-offline-test --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002 --block-start 0
 
     just _log "Stratus for importer-offline"
     just stratus-test -a 0.0.0.0:3001 --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
