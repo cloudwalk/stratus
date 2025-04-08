@@ -233,9 +233,13 @@ impl Miner {
         match external_block == block {
             true => Ok(block),
             false => Err(anyhow!(
-                "mismatching block info:\n\tlocal: {:?}\n\texternal: {:?}",
-                block.header,
-                external_block.header
+                "mismatching block info:\n\tlocal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}\n\texternal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}",
+                block.number(),
+                block.header.timestamp,
+                block.hash(),
+                external_block.number(),
+                external_block.timestamp(),
+                external_block.hash()
             )),
         }
     }
