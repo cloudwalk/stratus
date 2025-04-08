@@ -226,8 +226,9 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let block: Block = self.storage.finish_pending_block()?.into();
+        let mut block: Block = self.storage.finish_pending_block()?.into();
         Span::with(|s| s.rec_str("block_number", &block.header.number));
+        block.apply_external(&external_block);
 
         match external_block == block {
             true => Ok(block),

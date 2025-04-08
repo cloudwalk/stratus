@@ -6,6 +6,7 @@ use display_json::DebugAsJson;
 use itertools::Itertools;
 use keccak_hasher::KeccakHasher;
 
+use super::ExternalBlock;
 use super::Index;
 use super::LogMined;
 use super::PendingBlock;
@@ -168,6 +169,16 @@ impl Block {
             transaction.block_hash = self.header.hash;
             for log in transaction.logs.iter_mut() {
                 log.block_hash = self.header.hash;
+            }
+        }
+    }
+
+    pub fn apply_external(&mut self, external_block: &ExternalBlock) {
+        self.header.hash = external_block.hash();
+        for transaction in self.transactions.iter_mut() {
+            transaction.block_hash = external_block.hash();
+            for log in transaction.logs.iter_mut() {
+                log.block_hash = external_block.hash();
             }
         }
     }

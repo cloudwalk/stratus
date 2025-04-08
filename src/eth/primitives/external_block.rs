@@ -49,7 +49,7 @@ impl ExternalBlock {
 
 impl PartialEq<Block> for ExternalBlock {
     fn eq(&self, other: &Block) -> bool {
-        self.hash() == other.hash() && self.number() == other.number()
+        self.number() == other.number() && self.timestamp() == other.header.timestamp && self.hash() == other.header.hash
     }
 }
 
