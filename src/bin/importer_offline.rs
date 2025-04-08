@@ -21,6 +21,7 @@ use stratus::eth::executor::Executor;
 use stratus::eth::external_rpc::ExternalBlockWithReceipts;
 use stratus::eth::external_rpc::ExternalRpc;
 use stratus::eth::external_rpc::PostgresExternalRpc;
+use stratus::eth::miner::miner::CommitItem;
 use stratus::eth::miner::Miner;
 use stratus::eth::miner::MinerMode;
 use stratus::eth::primitives::Block;
@@ -275,7 +276,7 @@ fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToS
         };
 
         for block in blocks_batch {
-            miner.commit(block)?;
+            miner.commit(CommitItem::Block(block))?;
         }
     }
 }

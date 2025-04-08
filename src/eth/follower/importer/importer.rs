@@ -17,6 +17,7 @@ use tracing::Span;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::miner::interval_miner::mine_and_commit;
+use crate::eth::miner::miner::CommitItem;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
@@ -293,7 +294,7 @@ impl Importer {
                 kafka_conn.send_buffered(events, 50).await?;
             }
 
-            match miner.commit(mined_block) {
+            match miner.commit(CommitItem::Block(mined_block)) {
                 Ok(_) => {
                     tracing::info!("committed external block");
                 }
@@ -531,10 +532,10 @@ impl Importer {
             #[cfg(feature = "metrics")]
             let start = metrics::now();
 
+            // Send Kafka events if enabled
             if let Ok(current_block_number) = storage.read_mined_block_number() {
                 match storage.read_block(BlockFilter::Number(current_block_number)) {
-                    Ok(Some(current_block)) => {
-                        // Send Kafka events if enabled
+                    Ok(Some(current_block)) =>
                         if let Some(ref kafka_conn) = kafka_connector {
                             let events = current_block
                                 .transactions
@@ -545,31 +546,7 @@ impl Importer {
                                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events");
                                 return log_and_err!(reason = e, message);
                             }
-                        }
-
-                        // Handle notifications if has subscribers
-                        let has_block_subscribers = miner.notifier_blocks.receiver_count() > 0;
-                        let has_log_subscribers = miner.notifier_logs.receiver_count() > 0;
-                        let has_pending_tx_subscribers = miner.notifier_pending_txs.receiver_count() > 0;
-
-                        if has_block_subscribers {
-                            let _ = miner.notifier_blocks.send(current_block.header.clone());
-                        }
-
-                        if has_pending_tx_subscribers && !current_block.transactions.is_empty() {
-                            for tx in &current_block.transactions {
-                                let _ = miner.notifier_pending_txs.send(tx.input.hash);
-                            }
-                        }
-
-                        if has_log_subscribers {
-                            for tx in &current_block.transactions {
-                                for log in &tx.logs {
-                                    let _ = miner.notifier_logs.send(log.clone());
-                                }
-                            }
-                        }
-                    }
+                        },
                     Ok(None) => {
                         tracing::info!(
                             %current_block_number,
@@ -587,27 +564,19 @@ impl Importer {
                 }
             }
 
-            let block_number: BlockNumber = replication_log.block_number.into();
-            tracing::info!(block_number = %block_number, "applying replication log");
-            let write_batch = replication_log.to_write_batch();
-            match storage.apply_replication_log(block_number, write_batch) {
-                Ok(_) => {
-                    tracing::info!(block_number = %replication_log.block_number, "successfully applied replication log");
+            // Commit the replication log to the miner
+            if let Err(e) = miner.commit(CommitItem::ReplicationLog(replication_log)) {
+                let message = GlobalState::shutdown_from(TASK_NAME, "failed to commit replication log");
+                return log_and_err!(reason = e, message);
+            }
 
-                    #[cfg(feature = "metrics")]
-                    {
-                        let duration = start.elapsed();
-                        tracing::info!(
-                            block_number = %replication_log.block_number,
-                            duration = %duration.to_string_ext(),
-                            "applied replication log",
-                        );
-                    }
-                }
-                Err(e) => {
-                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to apply replication log");
-                    return log_and_err!(reason = e, message);
-                }
+            #[cfg(feature = "metrics")]
+            {
+                let duration = start.elapsed();
+                tracing::info!(
+                    duration = %duration.to_string_ext(),
+                    "processed replication log",
+                );
             }
         }
 
