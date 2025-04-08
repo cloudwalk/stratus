@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
-use itertools::Itertools;
 use keccak_hasher::KeccakHasher;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
@@ -224,7 +223,7 @@ impl Miner {
         self.storage.save_execution(tx_execution, check_conflicts)?;
 
         // notify
-        let _ = self.notifier_pending_txs.send(tx_hash);
+        self.send_pending_tx_notification(&tx_hash);
 
         // if automine is enabled, automatically mines a block
         if is_automine {
@@ -322,31 +321,12 @@ impl Miner {
 
         tracing::info!(%block_number, "miner acquired commit lock");
 
-        // extract fields to use in notifications if have subscribers
-        let block_header = if self.notifier_blocks.receiver_count() > 0 {
-            Some(block.header.clone())
-        } else {
-            None
-        };
-        let block_logs = if self.notifier_logs.receiver_count() > 0 {
-            Some(block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec())
-        } else {
-            None
-        };
-
         // save storage
-        self.storage.save_block(block)?;
+        self.storage.save_block(block.clone())?;
         self.storage.set_mined_block_number(block_number)?;
 
-        // notify
-        if let Some(block_logs) = block_logs {
-            for log in block_logs {
-                let _ = self.notifier_logs.send(log);
-            }
-        }
-        if let Some(block_header) = block_header {
-            let _ = self.notifier_blocks.send(block_header);
-        }
+        // Send notifications after saving the block
+        self.send_block_notifications(&block, false);
 
         Ok(())
     }
@@ -366,28 +346,8 @@ impl Miner {
         if let Ok(current_block_number) = self.storage.read_mined_block_number() {
             match self.storage.read_block(BlockFilter::Number(current_block_number)) {
                 Ok(Some(current_block)) => {
-                    // Handle notifications if has subscribers
-                    let has_block_subscribers = self.notifier_blocks.receiver_count() > 0;
-                    let has_log_subscribers = self.notifier_logs.receiver_count() > 0;
-                    let has_pending_tx_subscribers = self.notifier_pending_txs.receiver_count() > 0;
-
-                    if has_block_subscribers {
-                        let _ = self.notifier_blocks.send(current_block.header.clone());
-                    }
-
-                    if has_pending_tx_subscribers && !current_block.transactions.is_empty() {
-                        for tx in &current_block.transactions {
-                            let _ = self.notifier_pending_txs.send(tx.input.hash);
-                        }
-                    }
-
-                    if has_log_subscribers {
-                        for tx in &current_block.transactions {
-                            for log in &tx.logs {
-                                let _ = self.notifier_logs.send(log.clone());
-                            }
-                        }
-                    }
+                    // Send notifications for the current block
+                    self.send_block_notifications(&current_block, true);
                 }
                 Ok(None) => {
                     tracing::info!(
@@ -416,6 +376,51 @@ impl Miner {
             Err(e) => {
                 tracing::error!(reason = ?e, "failed to apply replication log");
                 Err(e)
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------------
+    // Notification methods
+    // -----------------------------------------------------------------------------
+
+    /// Sends a notification for a block header if there are subscribers
+    fn send_block_header_notification(&self, block_header: &BlockHeader) {
+        if self.notifier_blocks.receiver_count() > 0 {
+            let _ = self.notifier_blocks.send(block_header.clone());
+        }
+    }
+
+    /// Sends notifications for logs if there are subscribers
+    fn send_log_notifications(&self, log: &LogMined) {
+        if self.notifier_logs.receiver_count() > 0 {
+            let _ = self.notifier_logs.send(log.clone());
+        }
+    }
+
+    /// Sends notifications for pending transactions if there are subscribers
+    fn send_pending_tx_notification(&self, tx_hash: &Hash) {
+        if self.notifier_pending_txs.receiver_count() > 0 {
+            let _ = self.notifier_pending_txs.send(*tx_hash);
+        }
+    }
+
+    /// Sends all notifications for a block
+    fn send_block_notifications(&self, block: &Block, send_pending_tx: bool) {
+        // Send block header notification
+        self.send_block_header_notification(&block.header);
+
+        // Send log notifications
+        for tx in &block.transactions {
+            for log in &tx.logs {
+                self.send_log_notifications(log);
+            }
+        }
+
+        // Send pending tx notifications
+        if send_pending_tx {
+            for tx in &block.transactions {
+                self.send_pending_tx_notification(&tx.input.hash);
             }
         }
     }
