@@ -9,6 +9,7 @@ use jsonrpsee::core::client::SubscriptionClientT;
 use jsonrpsee::core::ClientError;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
+use jsonrpsee::types::error::METHOD_NOT_FOUND_CODE;
 use jsonrpsee::ws_client::WsClient;
 use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
@@ -258,6 +259,13 @@ impl BlockchainClient {
                 }
             }
             Ok(None) => Ok(None),
+            Err(ClientError::Call(err)) if err.code() == METHOD_NOT_FOUND_CODE => {
+                let message = GlobalState::shutdown_from(
+                    "Importer (RocksDB Replication)",
+                    "stratus_getReplicationLog is required for RocksDB replication",
+                );
+                log_and_err!(reason = err, message)
+            }
             Err(e) => log_and_err!(reason = e, "failed to fetch replication log"),
         }
     }
