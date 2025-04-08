@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use itertools::Itertools;
-use keccak_hasher::KeccakHasher;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
 use tokio::sync::broadcast;
@@ -18,25 +17,17 @@ use tracing::Span;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::Index;
-use crate::eth::primitives::LocalTransactionExecution;
 use crate::eth::primitives::LogMined;
-use crate::eth::primitives::PendingBlockHeader;
-use crate::eth::primitives::Size;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::DisplayExt;
 use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
 use crate::infra::tracing::SpanExt;
-use crate::log_and_err;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "tracing")] {
@@ -196,8 +187,8 @@ impl Miner {
     }
 
     /// Persists a transaction execution.
-    pub fn save_execution(&self, tx_execution: TransactionExecution, check_conflicts: bool) -> Result<(), StratusError> {
-        let tx_hash = tx_execution.hash();
+    pub fn save_execution(&self, tx_execution: TransactionExecution, check_conflicts: bool, is_local: bool) -> Result<(), StratusError> {
+        let tx_hash = tx_execution.input.hash;
 
         // track
         #[cfg(feature = "tracing")]
@@ -210,7 +201,7 @@ impl Miner {
         let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         // save execution to temporary storage
-        self.storage.save_execution(tx_execution, check_conflicts)?;
+        self.storage.save_execution(tx_execution, check_conflicts, is_local)?;
 
         // notify
         let _ = self.notifier_pending_txs.send(tx_hash);
@@ -235,21 +226,17 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let block = self.storage.finish_pending_block()?;
+        let block: Block = self.storage.finish_pending_block()?.into();
         Span::with(|s| s.rec_str("block_number", &block.header.number));
 
-        // mine transactions
-        let mut external_txs = Vec::with_capacity(block.transactions.len());
-        for tx in block.transactions.into_values() {
-            if let TransactionExecution::External(tx) = tx {
-                external_txs.push(tx);
-            } else {
-                return log_and_err!("failed to mine external block because one of the transactions is not an external transaction");
-            }
+        match external_block == block {
+            true => Ok(block),
+            false => Err(anyhow!(
+                "mismatching block info:\n\tlocal: {:?}\n\texternal: {:?}",
+                block.header,
+                external_block.header
+            )),
         }
-        let mined_external_txs = mine_external_transactions(block.header.number, external_txs)?;
-
-        block_from_external(external_block, mined_external_txs)
     }
 
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
@@ -275,19 +262,7 @@ impl Miner {
         let block = self.storage.finish_pending_block()?;
         Span::with(|s| s.rec_str("block_number", &block.header.number));
 
-        // mine transactions
-        let mut local_txs = Vec::with_capacity(block.transactions.len());
-        for tx in block.transactions.into_values() {
-            if let TransactionExecution::Local(tx) = tx {
-                local_txs.push(tx);
-            } else {
-                return Err(StorageError::Unexpected {
-                    msg: "failed to mine local block because one of the transactions is not a local transaction".to_owned(),
-                });
-            }
-        }
-
-        Ok(block_from_local(block.header, local_txs))
+        Ok(block.into())
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
@@ -332,92 +307,6 @@ impl Miner {
 
         Ok(())
     }
-}
-
-// -----------------------------------------------------------------------------
-// Helpers
-// -----------------------------------------------------------------------------
-
-fn mine_external_transactions(block_number: BlockNumber, txs: Vec<ExternalTransactionExecution>) -> anyhow::Result<Vec<TransactionMined>> {
-    let mut mined_txs = Vec::with_capacity(txs.len());
-    for tx in txs {
-        if tx.tx.block_number()? != block_number {
-            return log_and_err!("failed to mine external block because one of the transactions does not belong to the external block");
-        }
-        mined_txs.push(TransactionMined::from_external(tx.tx, tx.receipt, tx.evm_execution.execution)?);
-    }
-    Ok(mined_txs)
-}
-
-fn block_from_external(external_block: ExternalBlock, mined_txs: Vec<TransactionMined>) -> anyhow::Result<Block> {
-    Ok(Block {
-        header: BlockHeader::try_from(&external_block)?,
-        transactions: mined_txs,
-    })
-}
-
-pub fn block_from_local(pending_header: PendingBlockHeader, txs: Vec<LocalTransactionExecution>) -> Block {
-    let mut block = Block::new(pending_header.number, *pending_header.timestamp);
-    block.transactions.reserve(txs.len());
-    block.header.size = Size::from(txs.len() as u64);
-
-    // mine transactions and logs
-    let mut log_index = Index::ZERO;
-    for (tx_idx, tx) in txs.into_iter().enumerate() {
-        let transaction_index = Index::new(tx_idx as u64);
-        // mine logs
-        let mut mined_logs: Vec<LogMined> = Vec::with_capacity(tx.result.execution.logs.len());
-        for mined_log in tx.result.execution.logs.clone() {
-            // calculate bloom
-            block.header.bloom.accrue_log(&mined_log);
-
-            // mine log
-            let mined_log = LogMined {
-                log: mined_log,
-                transaction_hash: tx.input.hash,
-                transaction_index,
-                log_index,
-                block_number: block.header.number,
-                block_hash: block.header.hash,
-            };
-            mined_logs.push(mined_log);
-
-            // increment log index
-            log_index = log_index + Index::ONE;
-        }
-
-        // mine transaction
-        let mined_transaction = TransactionMined {
-            input: tx.input,
-            execution: tx.result.execution,
-            transaction_index,
-            block_number: block.header.number,
-            block_hash: block.header.hash,
-            logs: mined_logs,
-        };
-
-        // add transaction to block
-        block.transactions.push(mined_transaction);
-    }
-
-    // calculate transactions hash
-    if not(block.transactions.is_empty()) {
-        let transactions_hashes: Vec<Hash> = block.transactions.iter().map(|x| x.input.hash).collect();
-        block.header.transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
-    }
-
-    // calculate final block hash
-
-    // replicate calculated block hash from header to transactions and logs
-    for transaction in block.transactions.iter_mut() {
-        transaction.block_hash = block.header.hash;
-        for log in transaction.logs.iter_mut() {
-            log.block_hash = block.header.hash;
-        }
-    }
-
-    // TODO: calculate state_root, receipts_root and parent_hash
-    block
 }
 
 // -----------------------------------------------------------------------------
