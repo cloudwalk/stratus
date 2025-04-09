@@ -18,6 +18,61 @@ impl LogsBloom {
             self.accrue(ethereum_types::BloomInput::Raw(topic.as_ref()));
         }
     }
+
+    /// Checks if this bloom filter might contain logs that match the given filter.
+    ///
+    /// This is a quick check that can be used to skip blocks that definitely don't contain matching logs.
+    /// Returns true if the bloom filter might contain matching logs, false if it definitely doesn't.
+    pub fn matches_filter(&self, filter: &crate::eth::primitives::LogFilter) -> bool {
+        // If no addresses in filter, any block with logs might match
+        if filter.addresses.is_empty() {
+            // If there are topics, we still need to check them against the bloom
+            let topics_empty = filter.original_input.topics.is_empty();
+            if topics_empty {
+                // No addresses and no topics means any block with logs could match
+                return true;
+            }
+        } else {
+            // Check if any of the addresses in the filter are in the bloom
+            let mut any_address_matches = false;
+            for address in &filter.addresses {
+                if self.contains_input(ethereum_types::BloomInput::Raw(address.as_ref())) {
+                    any_address_matches = true;
+                    break;
+                }
+            }
+
+            // If none of the addresses match, the block definitely doesn't contain matching logs
+            if !any_address_matches {
+                return false;
+            }
+        }
+
+        // Check topics
+        for filter_topic in &filter.original_input.topics {
+            // If the topic filter is empty or contains None, it matches anything
+            if filter_topic.is_empty() || filter_topic.contains(&None) {
+                continue;
+            }
+
+            // Check if any of the topics in this position are in the bloom
+            let mut any_topic_matches = false;
+            for topic in filter_topic.iter().flatten() {
+                if self.contains_input(ethereum_types::BloomInput::Raw(topic.as_ref())) {
+                    any_topic_matches = true;
+                    break;
+                }
+            }
+
+            // If none of the topics in this position match, the block definitely doesn't contain matching logs
+            if !any_topic_matches {
+                return false;
+            }
+        }
+
+        // If we get here, the block might contain matching logs
+        true
+    }
 }
 
 impl Deref for LogsBloom {

@@ -309,14 +309,14 @@ impl RocksStorageState {
                     bloom
                 }
                 _ => {
-                    // Fall back to the bloom from the block header
+                    // Fallback to the bloom from the block header
                     let block_inner = block.clone().into_inner();
                     block_inner.header.bloom.into()
                 }
             };
 
             // Skip processing this block if the bloom filter indicates it definitely doesn't contain matching logs
-            if !filter.may_contain_matching_logs(&logs_bloom) {
+            if !logs_bloom.matches_filter(filter) {
                 tracing::trace!("Skipping block {} based on bloom filter", number);
                 continue;
             }
@@ -995,5 +995,34 @@ mod tests {
 
         let history = state.read_all_historical_accounts().unwrap();
         assert_eq!(history.len(), 3);
+    }
+
+    #[cfg(feature = "dev")]
+    #[test]
+    fn test_rocks_multi_get() {
+        let (state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
+
+        // Create some test accounts
+        let accounts: Vec<Account> = (0..10).map(|_| fake_first::<Account>()).collect();
+
+        // Save the accounts
+        state.save_accounts(accounts.clone()).unwrap();
+
+        // Now let's get them with multi_get
+        let addresses: Vec<AddressRocksdb> = accounts.iter().map(|acc| acc.address.into()).collect();
+        let results = state.accounts.multi_get(addresses).unwrap();
+
+        // We should get all accounts back
+        assert_eq!(results.len(), accounts.len());
+
+        // Verify the accounts match
+        for (i, (addr_db, val)) in results.iter().enumerate() {
+            let addr: Address = (*addr_db).into();
+            assert_eq!(addr, accounts[i].address);
+
+            let account = (**val).to_account(addr);
+            assert_eq!(account.nonce, accounts[i].nonce);
+            assert_eq!(account.balance, accounts[i].balance);
+        }
     }
 }

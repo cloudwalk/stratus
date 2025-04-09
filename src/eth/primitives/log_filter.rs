@@ -1,6 +1,5 @@
 use display_json::DebugAsJson;
 
-use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::LogFilterInput;
@@ -21,61 +20,6 @@ pub struct LogFilter {
 }
 
 impl LogFilter {
-    /// Checks if a bloom filter might contain logs that match this filter.
-    ///
-    /// This is a quick check that can be used to skip blocks that definitely don't contain matching logs.
-    /// Returns true if the bloom filter might contain matching logs, false if it definitely doesn't.
-    pub fn may_contain_matching_logs(&self, bloom: &LogsBloom) -> bool {
-        // If no addresses in filter, any block with logs might match
-        if self.addresses.is_empty() {
-            // If there are topics, we still need to check them against the bloom
-            let topics_empty = self.original_input.topics.is_empty();
-            if topics_empty {
-                // No addresses and no topics means any block with logs could match
-                return true;
-            }
-        } else {
-            // Check if any of the addresses in the filter are in the bloom
-            let mut any_address_matches = false;
-            for address in &self.addresses {
-                if bloom.contains_input(ethereum_types::BloomInput::Raw(address.as_ref())) {
-                    any_address_matches = true;
-                    break;
-                }
-            }
-
-            // If none of the addresses match, the block definitely doesn't contain matching logs
-            if !any_address_matches {
-                return false;
-            }
-        }
-
-        // Check topics
-        for filter_topic in &self.original_input.topics {
-            // If the topic filter is empty or contains None, it matches anything
-            if filter_topic.is_empty() || filter_topic.contains(&None) {
-                continue;
-            }
-
-            // Check if any of the topics in this position are in the bloom
-            let mut any_topic_matches = false;
-            for topic in filter_topic.iter().flatten() {
-                if bloom.contains_input(ethereum_types::BloomInput::Raw(topic.as_ref())) {
-                    any_topic_matches = true;
-                    break;
-                }
-            }
-
-            // If none of the topics in this position match, the block definitely doesn't contain matching logs
-            if !any_topic_matches {
-                return false;
-            }
-        }
-
-        // If we get here, the block might contain matching logs
-        true
-    }
-
     /// Checks if a log matches the filter.
     pub fn matches(&self, log: &LogMined) -> bool {
         // filter block range
@@ -149,6 +93,7 @@ mod tests {
     use itertools::Itertools;
 
     use super::*;
+    use crate::eth::primitives::logs_bloom::LogsBloom;
     use crate::eth::primitives::Log;
     use crate::eth::primitives::LogFilterInputTopic;
     use crate::eth::primitives::LogTopic;
@@ -290,34 +235,34 @@ mod tests {
 
         // Test filter that should match
         let filter1 = build_filter(vec![addresses[1]], vec![vec![topics[1]], vec![topics[2]]]);
-        assert!(filter1.may_contain_matching_logs(&bloom));
+        assert!(bloom.matches_filter(&filter1));
 
         // Test filter with address that should match
         let filter2 = build_filter(vec![addresses[2]], vec![]);
-        assert!(filter2.may_contain_matching_logs(&bloom));
+        assert!(bloom.matches_filter(&filter2));
 
         // Test filter with address that should not match
         let filter3 = build_filter(vec![addresses[0]], vec![]);
-        assert!(!filter3.may_contain_matching_logs(&bloom));
+        assert!(!bloom.matches_filter(&filter3));
 
         // Test filter with topics that should match
         let filter4 = build_filter(vec![], vec![vec![topics[4]], vec![topics[5]]]);
-        assert!(filter4.may_contain_matching_logs(&bloom));
+        assert!(bloom.matches_filter(&filter4));
 
         // Test filter with topic that should not match
         let filter5 = build_filter(vec![], vec![vec![topics[0]]]);
-        assert!(!filter5.may_contain_matching_logs(&bloom));
+        assert!(!bloom.matches_filter(&filter5));
 
         // Test filter with matching address but non-matching topic
         let filter6 = build_filter(vec![addresses[1]], vec![vec![topics[0]]]);
-        assert!(!filter6.may_contain_matching_logs(&bloom));
+        assert!(!bloom.matches_filter(&filter6));
 
         // Test filter with empty criteria (should match any bloom)
         let filter7 = build_filter(vec![], vec![]);
-        assert!(filter7.may_contain_matching_logs(&bloom));
+        assert!(bloom.matches_filter(&filter7));
 
         // Test filter with None topic (should match any bloom in that position)
         let filter8 = build_filter(vec![addresses[1]], vec![vec![None], vec![topics[2]]]);
-        assert!(filter8.may_contain_matching_logs(&bloom));
+        assert!(bloom.matches_filter(&filter8));
     }
 }
