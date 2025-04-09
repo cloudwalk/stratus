@@ -213,7 +213,6 @@ describe("Leader & Follower BRLC integration test", function () {
                     const block = await sendWithRetry("eth_getBlockByNumber", [receipt.blockNumber, true], 20);
                     expect(block).to.exist;
 
-
                     const transaction = block.transactions.find((tx: TransactionResponse) => tx.hash === txHash);
                     expect(transaction).to.exist;
                     expect(transaction!.blockNumber).to.equal(receipt.blockNumber);
