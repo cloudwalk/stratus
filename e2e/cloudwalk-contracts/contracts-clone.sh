@@ -37,7 +37,7 @@ clone() {
     fi
 
     log "Installing dependencies: $repo"
-    if ! npm --prefix "$target" --silent install; then
+    if ! npm --prefix "$target" install; then
         log "Dependencies install failed. Removing folder and exiting."
         rm -rf "$target"
         return 1
@@ -73,7 +73,7 @@ clone_alternative() {
     fi
 
     log "Installing dependencies: $folder"
-    npm --prefix "$target" --silent install
+    npm --prefix "$target" install
 }
 
 # ------------------------------------------------------------------------------

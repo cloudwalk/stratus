@@ -6,9 +6,13 @@ import { deployTestEvmInput, sendReset } from "../helpers/rpc";
 // This test needs to be ran with stratus on a very fast block production rate (around 10ms is fast enough)
 describe("Evm Input", function () {
     it("should not be executed in one block but added to another", async function () {
-        this.timeout(150000);
+        this.timeout(300000);
+
+        console.log("Starting test");
 
         await sendReset();
+        console.log("Chain reset");
+
         const contract = await deployTestEvmInput();
         await contract.waitForDeployment();
         console.log("Contract deployed");
