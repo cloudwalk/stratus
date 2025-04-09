@@ -37,7 +37,7 @@ clone() {
     fi
 
     log "Installing dependencies: $repo"
-    if ! npm --prefix "$target" install; then
+    if ! npm --prefix "$target" install --loglevel verbose; then
         log "Dependencies install failed. Removing folder and exiting."
         rm -rf "$target"
         return 1
