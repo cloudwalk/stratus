@@ -25,6 +25,7 @@ use super::cf_versions::CfAccountsHistoryValue;
 use super::cf_versions::CfAccountsValue;
 use super::cf_versions::CfBlocksByHashValue;
 use super::cf_versions::CfBlocksByNumberValue;
+use super::cf_versions::CfLogsBloomValue;
 use super::cf_versions::CfTransactionsValue;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_config::CacheSetting;
@@ -34,6 +35,7 @@ use super::types::AccountRocksdb;
 use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
 use super::types::HashRocksdb;
+use super::types::LogsBloomRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
 use crate::eth::primitives::logs_bloom::LogsBloom;
@@ -123,6 +125,7 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<HashRocksdb, CfBlocksByHashValue>,
+    logs_bloom: RocksCfRef<BlockNumberRocksdb, CfLogsBloomValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "rocks_metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -161,6 +164,7 @@ impl RocksStorageState {
             transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
+            logs_bloom: new_cf_ref(&db, "logs_bloom", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "rocks_metrics")]
@@ -204,6 +208,7 @@ impl RocksStorageState {
         self.transactions.clear()?;
         self.blocks_by_number.clear()?;
         self.blocks_by_hash.clear()?;
+        self.logs_bloom.clear()?;
         Ok(())
     }
 
@@ -288,20 +293,35 @@ impl RocksStorageState {
 
         for next in iter {
             let (number, block) = next?;
+            let block_number: BlockNumber = number.into();
 
-            if !is_block_number_in_end_range(number.into()) {
+            if !is_block_number_in_end_range(block_number) {
                 break;
             }
 
-            let block = block.into_inner();
+            // Time the processing of each block
+            let start = std::time::Instant::now();
+
+            // Try to get logsBloom from the dedicated column family first
+            let logs_bloom = match self.read_logs_bloom(block_number) {
+                Ok(Some(bloom)) => {
+                    tracing::trace!("Using logs bloom from dedicated column family for block {}", block_number);
+                    bloom
+                }
+                _ => {
+                    // Fall back to the bloom from the block header
+                    let block_inner = block.clone().into_inner();
+                    block_inner.header.bloom.into()
+                }
+            };
 
             // Skip processing this block if the bloom filter indicates it definitely doesn't contain matching logs
-            let logs_bloom: LogsBloom = block.header.bloom.into();
             if !filter.may_contain_matching_logs(&logs_bloom) {
                 tracing::trace!("Skipping block {} based on bloom filter", number);
                 continue;
             }
 
+            let block = block.into_inner();
             let logs = block.transactions.into_iter().enumerate().flat_map(|(tx_index, transaction)| {
                 transaction.logs.into_iter().enumerate().map(move |(log_index, log)| {
                     LogMined::from_rocks_primitives(log, block.header.number, block.header.hash, tx_index, transaction.input.hash, log_index)
@@ -310,6 +330,14 @@ impl RocksStorageState {
 
             let filtered_logs = logs.filter(|log| filter.matches(log));
             logs_result.extend(filtered_logs);
+
+            // Record the time it took to process this block
+            #[cfg(feature = "metrics")]
+            {
+                let elapsed = start.elapsed();
+                crate::infra::metrics::inc_storage_read_logs_per_block(elapsed, "permanent", true);
+                tracing::trace!(block_number = %number, ?elapsed, "Block processing time in read_logs");
+            }
         }
         Ok(logs_result)
     }
@@ -401,6 +429,15 @@ impl RocksStorageState {
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
+    pub fn read_logs_bloom(&self, block_number: BlockNumber) -> Result<Option<LogsBloom>> {
+        tracing::debug!(?block_number, "reading logs bloom");
+
+        match self.logs_bloom.get(&block_number.into())? {
+            Some(logs_bloom) => Ok(Some(logs_bloom.into_inner().into())),
+            None => Ok(None),
+        }
+    }
+
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         let mut write_batch = WriteBatch::default();
 
@@ -451,6 +488,10 @@ impl RocksStorageState {
 
         let number = block.number();
         let block_hash = block.hash();
+
+        // Store the logsBloom for this block
+        let logs_bloom_entry = (number.into(), LogsBloomRocksdb::from(block.header.bloom).into());
+        self.logs_bloom.prepare_batch_insertion([logs_bloom_entry], batch)?;
 
         // this is an optimization, instead of saving the entire block into the database,
         // remove all discardable account changes
@@ -573,6 +614,7 @@ impl RocksStorageState {
         self.transactions.clear().context("when clearing transactions")?;
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
+        self.logs_bloom.clear()?;
         Ok(())
     }
 }
@@ -639,6 +681,7 @@ impl RocksStorageState {
         self.blocks_by_hash.export_metrics();
         self.blocks_by_number.export_metrics();
         self.transactions.export_metrics();
+        self.logs_bloom.export_metrics();
         Ok(())
     }
 

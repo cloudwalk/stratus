@@ -30,10 +30,16 @@ pub use block::BlockRocksdb;
 pub use block_number::BlockNumberRocksdb;
 pub use hash::HashRocksdb;
 pub use index::IndexRocksdb;
+pub use log::LogRocksdb;
+pub use logs_bloom::LogsBloomRocksdb;
+pub use miner_nonce::MinerNonceRocksdb;
+pub use nonce::NonceRocksdb;
+pub use size::SizeRocksdb;
 pub use slot::SlotIndexRocksdb;
 pub use slot::SlotValueRocksdb;
 pub use transaction_mined::TransactionMinedRocksdb;
 pub use unix_time::UnixTimeRocksdb;
+pub use wei::WeiRocksdb;
 
 #[cfg(test)]
 mod tests {
@@ -44,17 +50,11 @@ mod tests {
     use execution_result::ExecutionResultRocksdb;
     use gas::GasRocksdb;
     use log_mined::LogMinedRocksdb;
-    use logs_bloom::LogsBloomRocksdb;
     use miner_nonce::MinerNonceRocksdb;
     use nonce::NonceRocksdb;
-    use size::SizeRocksdb;
     use transaction_input::TransactionInputRocksdb;
-    use transaction_mined::TransactionMinedRocksdb;
-    use unix_time::UnixTimeRocksdb;
-    use wei::WeiRocksdb;
 
     use self::bytes::BytesRocksdb;
-    use super::log::LogRocksdb;
     use super::*;
     use crate::gen_test_bincode;
 
