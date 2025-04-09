@@ -23,10 +23,8 @@ describe("Evm Input", function () {
     it("should not be executed in one block but added to another", async function () {
         // Run the heavy computation
         let tx = await contract.heavyComputation();
-        console.log("Heavy computation sent");
 
         let receipt = (await tx.wait()) as ContractTransactionReceipt;
-        console.log("Heavy computation receipt");
 
         const event = receipt.logs[0];
         const logs = contract.interface.parseLog({
