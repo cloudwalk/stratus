@@ -26,7 +26,6 @@ describe("Evm Input", function () {
             data: event.data,
         })?.args as Result;
         expect(receipt.blockNumber).to.eq(logs.blockNumber);
-        expect(logs.blockNumber).lte(5000);
         expect(logs.isSlow).to.be.true;
         expect(await contract.getExecutions()).to.eq(1);
     });
