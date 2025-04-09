@@ -98,7 +98,14 @@ stratus *args="":
 # Bin: Stratus main service as leader
 stratus-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    
+    # Skip coverage if SKIP_COVERAGE is set to any non-empty value
+    if [ -n "${SKIP_COVERAGE}" ]; then
+        echo "Skipping coverage collection as SKIP_COVERAGE is set"
+    else
+        echo "Collecting coverage information"
+        source <(cargo llvm-cov show-env --export-prefix)
+    fi
     cargo build --features dev
     cargo run --bin stratus --features dev -- --leader {{args}} > stratus.log &
     just _wait_for_stratus
