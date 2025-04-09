@@ -15,10 +15,7 @@ describe("Evm Input", function () {
         contract = await deployTestEvmInput();
         await sendEvmMine();
         await contract.waitForDeployment();
-        console.log("Contract deployed");
-    });
 
-    beforeEach(async function () {
         // Change to interval mode with 10ms interval mining
         await changeMinerMode("10ms");
     });
