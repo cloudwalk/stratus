@@ -1,6 +1,7 @@
 use display_json::DebugAsJson;
 use jsonrpsee::SubscriptionMessage;
 
+use super::TransactionExecution;
 use crate::alias::AlloyLog;
 use crate::alias::AlloyLogData;
 use crate::alias::AlloyLogPrimitive;
@@ -50,6 +51,24 @@ impl LogMined {
     pub fn to_json_rpc_log(self) -> JsonValue {
         let alloy_log: AlloyLog = self.into();
         to_json_value(alloy_log)
+    }
+
+    pub fn mine_log(
+        mined_log: Log,
+        block_number: BlockNumber,
+        block_hash: Hash,
+        tx: &TransactionExecution,
+        log_index: Index,
+        transaction_index: Index,
+    ) -> Self {
+        LogMined {
+            log: mined_log,
+            transaction_hash: tx.input.hash,
+            transaction_index,
+            log_index,
+            block_number,
+            block_hash,
+        }
     }
 }
 

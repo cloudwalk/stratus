@@ -9,6 +9,7 @@ use fake::Fake;
 use fake::Faker;
 use serde::Deserialize;
 
+use super::Block;
 use crate::alias::AlloyBlockExternalTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::external_transaction::ExternalTransaction;
@@ -43,6 +44,12 @@ impl ExternalBlock {
     /// Returns the block author.
     pub fn author(&self) -> Address {
         self.0.header.inner.beneficiary.into()
+    }
+}
+
+impl PartialEq<Block> for ExternalBlock {
+    fn eq(&self, other: &Block) -> bool {
+        self.number() == other.number() && self.timestamp() == other.header.timestamp && self.hash() == other.header.hash
     }
 }
 
