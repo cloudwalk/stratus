@@ -611,25 +611,20 @@ export async function changeMinerMode(mode: string): Promise<void> {
     // Disable transactions to allow miner mode change
     const disableTransactionsResponse = await sendAndGetFullResponse("stratus_disableTransactions", []);
     expect(disableTransactionsResponse.data.result).to.equal(false);
-    console.log("Transactions disabled");
 
     // Disable miner to allow mode change
     const disableMinerResponse = await sendAndGetFullResponse("stratus_disableMiner", []);
     expect(disableMinerResponse.data.result).to.equal(false);
-    console.log("Miner disabled");
 
     // Change mode
     const changeModeResponse = await sendAndGetFullResponse("stratus_changeMinerMode", [mode]);
     expect(changeModeResponse.data.result).to.equal(true);
-    console.log(`Changed to ${mode} mode`);
 
-    // Enable transactions
+    // Re-enable transactions
     const enableTransactionsResponse = await sendAndGetFullResponse("stratus_enableTransactions", []);
     expect(enableTransactionsResponse.data.result).to.equal(true);
-    console.log("Transactions enabled");
 
-    // Enable miner
+    // Re-enable miner
     const enableMinerResponse = await sendAndGetFullResponse("stratus_enableMiner", []);
     expect(enableMinerResponse.data.result).to.equal(true);
-    console.log("Miner enabled");
 }
