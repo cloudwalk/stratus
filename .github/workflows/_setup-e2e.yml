@@ -58,6 +58,9 @@ jobs:
         with:
           node-version-file: .tool-versions
 
+      - name: Install npm 11.3.0
+        run: npm install -g npm@11.3.0
+
       - name: Install docker-compose
         run: sudo apt-get install docker-compose -y
 
