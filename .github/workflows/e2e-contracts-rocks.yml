@@ -71,8 +71,8 @@ jobs:
         with:
           node-version-file: .tool-versions
 
-      - name: Install npm 10.2.3
-        run: npm install -g npm@10.2.3
+      - name: Install npm
+        run: npm install -g npm@latest
 
       - name: Set up dependencies
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
