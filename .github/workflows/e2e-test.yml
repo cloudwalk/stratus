@@ -57,6 +57,7 @@ jobs:
     with:
       justfile_recipe: "e2e-stratus"
       justfile_args: "10ms"
+      justfile_env: "SKIP_COVERAGE=1"
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     concurrency:

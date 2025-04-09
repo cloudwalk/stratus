@@ -158,8 +158,16 @@ test-doc name="":
 run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
-    source <(cargo llvm-cov show-env --export-prefix)
-    cargo llvm-cov clean --workspace
+
+    # Skip coverage if SKIP_COVERAGE is set to any non-empty value
+    if [ -n "${SKIP_COVERAGE}" ]; then
+        echo "Skipping coverage collection as SKIP_COVERAGE is set"
+    else
+        echo "Collecting coverage information"
+        source <(cargo llvm-cov show-env --export-prefix)
+        cargo llvm-cov clean --workspace
+    fi
+
     just {{recipe}} {{args}}
     result_code=$?
     echo "Killing stratus"
@@ -167,10 +175,15 @@ run-test recipe="" *args="":
     killport 3001 -s sigterm
     echo "Sleeping for 10 seconds"
     sleep 10
-    echo "Generating reports"
-    mkdir -p target/llvm-cov/codecov
-    cargo llvm-cov report --html
-    cargo llvm-cov report --lcov --output-path target/llvm-cov/codecov/{{recipe}}.info
+    
+    if [ -n "${SKIP_COVERAGE}" ]; then
+        echo "Skipping coverage report generation as SKIP_COVERAGE is set"
+    else
+        echo "Generating coverage reports"
+        mkdir -p target/llvm-cov/codecov
+        cargo llvm-cov report --html
+        cargo llvm-cov report --lcov --output-path target/llvm-cov/codecov/{{recipe}}.info
+    fi
     exit $result_code
 
 # ------------------------------------------------------------------------------
