@@ -5,8 +5,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
-use itertools::Itertools;
-use keccak_hasher::KeccakHasher;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
 use tokio::sync::broadcast;
@@ -25,7 +23,6 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
