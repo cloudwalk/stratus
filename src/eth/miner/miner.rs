@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
-use keccak_hasher::KeccakHasher;
 use itertools::Itertools;
+use keccak_hasher::KeccakHasher;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
 use tokio::sync::broadcast;
