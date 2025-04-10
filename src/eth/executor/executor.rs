@@ -32,7 +32,6 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
-use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::RpcError;
@@ -371,13 +370,14 @@ impl Executor {
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
+        let evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
+
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
-                let evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
-                let evm_execution = self.evms.execute(evm_input, EvmRoute::External);
+                let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
 
                 // handle re-execution result
                 let mut evm_execution = match evm_execution {
@@ -402,7 +402,7 @@ impl Executor {
                     return Err(e);
                 };
 
-                ExternalTransactionExecution::new(tx, receipt, evm_execution)
+                TransactionExecution::new(tx.try_into()?, evm_input, evm_execution)
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -413,21 +413,20 @@ impl Executor {
                     execution,
                     metrics: EvmExecutionMetrics::default(),
                 };
-                ExternalTransactionExecution::new(tx, receipt, evm_result)
+                TransactionExecution::new(tx.try_into()?, evm_input, evm_result)
             }
         };
 
         // keep metrics info to avoid cloning when saving
         cfg_if! {
             if #[cfg(feature = "metrics")] {
-                let tx_metrics = tx_execution.evm_execution.metrics;
-                let tx_gas = tx_execution.evm_execution.execution.gas;
+                let tx_metrics = tx_execution.metrics();
+                let tx_gas = tx_execution.result.execution.gas;
             }
         }
 
         // persist state
-        let tx_execution = TransactionExecution::External(tx_execution);
-        self.miner.save_execution(tx_execution, false)?;
+        self.miner.save_execution(tx_execution, false, false)?;
 
         // track metrics
         #[cfg(feature = "metrics")]
@@ -553,23 +552,23 @@ impl Executor {
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new_local(tx_input.clone(), evm_input, evm_result);
+            let tx_execution = TransactionExecution::new(tx_input.clone(), evm_input, evm_result);
             #[cfg(feature = "metrics")]
             let tx_metrics = tx_execution.metrics();
             #[cfg(feature = "metrics")]
-            let gas_used = tx_execution.execution().gas;
+            let gas_used = tx_execution.result.execution.gas;
             #[cfg(feature = "metrics")]
             let function = codegen::function_sig(&tx_input.input);
             #[cfg(feature = "metrics")]
             let contract = codegen::contract_name(&tx_input.to);
 
-            if let ExecutionResult::Reverted { reason } = &tx_execution.result().execution.result {
+            if let ExecutionResult::Reverted { reason } = &tx_execution.result.execution.result {
                 tracing::info!(?reason, "Local transaction execution reverted");
                 #[cfg(feature = "metrics")]
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
             }
 
-            match self.miner.save_execution(tx_execution, matches!(evm_route, EvmRoute::Parallel)) {
+            match self.miner.save_execution(tx_execution, matches!(evm_route, EvmRoute::Parallel), true) {
                 Ok(_) => {
                     // track metrics
                     #[cfg(feature = "metrics")]
