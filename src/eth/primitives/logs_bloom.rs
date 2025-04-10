@@ -24,19 +24,33 @@ impl LogsBloom {
     /// This is a quick check that can be used to skip blocks that definitely don't contain matching logs.
     /// Returns true if the bloom filter might contain matching logs, false if it definitely doesn't.
     pub fn matches_filter(&self, filter: &crate::eth::primitives::LogFilter) -> bool {
+        tracing::trace!(
+            addresses_len = filter.addresses.len(),
+            topics_len = filter.original_input.topics.len(),
+            "Checking if bloom filter matches log filter"
+        );
+
         // If no addresses in filter, any block with logs might match
         if filter.addresses.is_empty() {
             // If there are topics, we still need to check them against the bloom
             let topics_empty = filter.original_input.topics.is_empty();
             if topics_empty {
                 // No addresses and no topics means any block with logs could match
+                tracing::trace!("No addresses and no topics in filter, bloom may match");
                 return true;
             }
         } else {
             // Check if any of the addresses in the filter are in the bloom
             let mut any_address_matches = false;
-            for address in &filter.addresses {
-                if self.contains_input(ethereum_types::BloomInput::Raw(address.as_ref())) {
+            for (i, address) in filter.addresses.iter().enumerate() {
+                let matches = self.contains_input(ethereum_types::BloomInput::Raw(address.as_ref()));
+                tracing::trace!(
+                    address_idx = i,
+                    address = ?address,
+                    matches,
+                    "Checking address against bloom"
+                );
+                if matches {
                     any_address_matches = true;
                     break;
                 }
@@ -44,33 +58,57 @@ impl LogsBloom {
 
             // If none of the addresses match, the block definitely doesn't contain matching logs
             if !any_address_matches {
+                tracing::trace!("No addresses in filter match bloom, definitely doesn't match");
                 return false;
             }
+            tracing::trace!("At least one address in filter matches bloom");
         }
 
         // Check topics
-        for filter_topic in &filter.original_input.topics {
+        for (i, filter_topic) in filter.original_input.topics.iter().enumerate() {
             // If the topic filter is empty or contains None, it matches anything
             if filter_topic.is_empty() || filter_topic.contains(&None) {
+                tracing::trace!(
+                    topic_idx = i,
+                    is_empty = filter_topic.is_empty(),
+                    contains_none = filter_topic.contains(&None),
+                    "Topic position matches anything (empty or contains None)"
+                );
                 continue;
             }
 
             // Check if any of the topics in this position are in the bloom
             let mut any_topic_matches = false;
-            for topic in filter_topic.iter().flatten() {
-                if self.contains_input(ethereum_types::BloomInput::Raw(topic.as_ref())) {
-                    any_topic_matches = true;
-                    break;
+            for (j, topic_opt) in filter_topic.iter().enumerate() {
+                if let Some(topic) = topic_opt {
+                    let matches = self.contains_input(ethereum_types::BloomInput::Raw(topic.as_ref()));
+                    tracing::trace!(
+                        topic_idx = i,
+                        topic_option_idx = j,
+                        topic = ?topic,
+                        matches,
+                        "Checking topic against bloom"
+                    );
+                    if matches {
+                        any_topic_matches = true;
+                        break;
+                    }
+                } else {
+                    tracing::trace!(topic_idx = i, topic_option_idx = j, "Topic is None, matches anything");
+                    // None matches anything, already handled by the check above
                 }
             }
 
             // If none of the topics in this position match, the block definitely doesn't contain matching logs
             if !any_topic_matches {
+                tracing::trace!(topic_idx = i, "No topics in this position match bloom, definitely doesn't match");
                 return false;
             }
+            tracing::trace!(topic_idx = i, "At least one topic in this position matches bloom");
         }
 
         // If we get here, the block might contain matching logs
+        tracing::trace!("Bloom filter might contain matching logs");
         true
     }
 }

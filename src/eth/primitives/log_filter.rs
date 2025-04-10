@@ -22,22 +22,46 @@ pub struct LogFilter {
 impl LogFilter {
     /// Checks if a log matches the filter.
     pub fn matches(&self, log: &LogMined) -> bool {
+        tracing::trace!(
+            log_block_number = %log.block_number,
+            filter_from_block = %self.from_block,
+            filter_to_block = ?self.to_block,
+            log_address = %log.address(),
+            filter_addresses_count = self.addresses.len(),
+            "Evaluating if log matches filter"
+        );
+
         // filter block range
         if log.block_number < self.from_block {
+            tracing::trace!("Log rejected: block number too low");
             return false;
         }
         if self.to_block.as_ref().is_some_and(|to_block| log.block_number > *to_block) {
+            tracing::trace!("Log rejected: block number too high");
             return false;
         }
 
         // filter address
         let has_addresses = not(self.addresses.is_empty());
-        if has_addresses && not(self.addresses.contains(&log.address())) {
-            return false;
+        if has_addresses {
+            let address_matches = self.addresses.contains(&log.address());
+            tracing::trace!(address_matches, "Checking if log address is in filter addresses");
+            if !address_matches {
+                tracing::trace!("Log rejected: address not in filter");
+                return false;
+            }
+        } else {
+            tracing::trace!("No addresses in filter, log address passes");
         }
 
         let filter_topics = &self.original_input.topics;
         let log_topics = log.log.topics();
+
+        tracing::trace!(
+            filter_topics_count = filter_topics.len(),
+            log_topics = ?log_topics,
+            "Checking log topics against filter topics"
+        );
 
         // (https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs)
         // Matching rules for filtering topics in `eth_getLogs`:
@@ -64,24 +88,40 @@ impl LogFilter {
 
         // filter field missing, set to `null` or equal to `[]`
         if filter_topics.is_empty() {
+            tracing::trace!("No topics in filter, log topics pass");
             return true;
         }
 
-        for (log_topic, filter_topic) in log_topics.into_iter().zip(filter_topics) {
+        for (i, (log_topic, filter_topic)) in log_topics.into_iter().zip(filter_topics).enumerate() {
+            tracing::trace!(
+                topic_idx = i,
+                log_topic = ?log_topic,
+                filter_topic_is_empty = filter_topic.is_empty(),
+                filter_topic_contains_none = filter_topic.contains(&None),
+                filter_topic_len = filter_topic.len(),
+                "Checking log topic against filter topic"
+            );
+
             // the unspecified nested `[[]]`
             if filter_topic.is_empty() {
+                tracing::trace!(topic_idx = i, "Filter topic is empty, matches anything");
                 continue; // match anything
             }
             // `[null]` and `[[null]]` (due to how this is deserialized)
             if filter_topic.contains(&None) {
+                tracing::trace!(topic_idx = i, "Filter topic contains None, matches anything");
                 continue; // match anything
             }
             // `[A, ..]` ,`[[A], ..]` and `[[A, B, C, ..], ..]` (due to how this is deserialized)
-            if !filter_topic.contains(&log_topic) {
+            let contains = filter_topic.contains(&log_topic);
+            tracing::trace!(topic_idx = i, contains, "Checking if log topic is contained in filter topic");
+            if !contains {
+                tracing::trace!(topic_idx = i, "Log rejected: topic not in filter topics");
                 return false; // not included in OR filter, filtered out
             }
         }
 
+        tracing::trace!("Log matches filter");
         true
     }
 }
