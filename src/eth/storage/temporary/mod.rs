@@ -5,9 +5,8 @@ mod inmemory;
 use clap::Parser;
 use display_json::DebugAsJson;
 
-use crate::eth::primitives::BlockNumber;
-
 use super::RocksPermanentStorage;
+use crate::eth::primitives::BlockNumber;
 
 // -----------------------------------------------------------------------------
 // Config
