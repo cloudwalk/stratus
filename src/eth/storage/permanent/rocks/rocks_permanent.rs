@@ -80,6 +80,11 @@ impl RocksPermanentStorage {
         Ok(())
     }
 
+    pub fn has_genesis(&self) -> Result<bool, StorageError> {
+        let genesis = self.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
+        Ok(genesis.is_some())
+    }
+
     // -------------------------------------------------------------------------
     // State operations
     // -------------------------------------------------------------------------
