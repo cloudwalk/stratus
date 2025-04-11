@@ -36,6 +36,10 @@ pub struct PermanentStorageConfig {
     #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
     pub rocks_disable_sync_write: bool,
 
+    /// Use RocksDB replication logs for importing data without re-executing transactions.
+    #[arg(long = "use-rocksdb-replication", env = "USE_ROCKSDB_REPLICATION")]
+    pub use_rocksdb_replication: bool,
+
     /// Genesis file configuration
     #[clap(flatten)]
     #[cfg(feature = "dev")]
@@ -52,6 +56,7 @@ impl PermanentStorageConfig {
             self.rocks_shutdown_timeout,
             self.rocks_cache_size_multiplier,
             !self.rocks_disable_sync_write,
+            self.use_rocksdb_replication,
         )
     }
 }
