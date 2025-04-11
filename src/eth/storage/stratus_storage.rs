@@ -81,8 +81,7 @@ impl StratusStorage {
     }
 
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
-        let genesis = self.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
-        Ok(genesis.is_some())
+        self.perm.has_genesis()
     }
 
     #[cfg(test)]
