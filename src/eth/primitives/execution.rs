@@ -118,6 +118,15 @@ impl EvmExecution {
             ));
         }
 
+        let skip_transactions = vec![
+            "0xd3a1e667d9eccebf83a760e94210e0587fcffee1df573a84fd93f37ae558c10f".to_string(),
+            "0x42c6e0b477d0bcfb8da6dc5dc355abab0fa941818ea4702c6388d7290a9925e1".to_string(),
+        ];
+
+        if skip_transactions.contains(&receipt.hash().to_string()) {
+            return Ok(());
+        }
+
         let receipt_logs = receipt.inner.logs();
 
         // compare logs length

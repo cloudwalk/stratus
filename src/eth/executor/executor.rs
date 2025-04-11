@@ -313,7 +313,7 @@ impl Executor {
 
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
-        tracing::info!(block_number = %block.number(), "reexecuting external block");
+        tracing::debug!(block_number = %block.number(), "reexecuting external block");
 
         // track pending block
         let block_number = block.number();
@@ -366,7 +366,7 @@ impl Executor {
 
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
-        tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
+        tracing::debug!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         let evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
 
