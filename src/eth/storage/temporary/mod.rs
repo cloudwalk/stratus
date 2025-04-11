@@ -22,9 +22,11 @@ impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
     pub fn init(&self, perm_storage: &RocksPermanentStorage) -> anyhow::Result<InMemoryTemporaryStorage> {
         tracing::info!(config = ?self, "creating temporary storage");
-        let pending_block_number = match perm_storage.has_genesis()? {
-            true => perm_storage.read_mined_block_number()? + 1,
-            false => BlockNumber::ZERO,
+        let perm_block_number = perm_storage.read_mined_block_number()?;
+        let pending_block_number = if perm_block_number == BlockNumber::ZERO && perm_storage.has_genesis()? {
+            perm_block_number + 1
+        } else {
+            BlockNumber::ZERO
         };
         Ok(InMemoryTemporaryStorage::new(pending_block_number))
     }
