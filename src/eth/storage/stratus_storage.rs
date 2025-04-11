@@ -240,7 +240,7 @@ impl StratusStorage {
             }
         }
 
-        tracing::debug!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
+        tracing::info!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
         timed(|| self.perm.save_accounts(missing_accounts)).with(|m| {
             metrics::inc_storage_save_accounts(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
