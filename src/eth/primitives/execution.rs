@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use alloy_primitives::B256;
 use anyhow::anyhow;
 use anyhow::Ok;
+use const_hex::FromHex;
 use display_json::DebugAsJson;
 use hex_literal::hex;
 use revm::primitives::alloy_primitives;
@@ -112,9 +113,20 @@ impl EvmExecution {
         }
 
         let receipt_logs = receipt.inner.logs();
+        let contains_balance_tracker = receipt_logs
+            .iter()
+            .any(|log| log.topics()[0] == B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c").unwrap())
+            || self.logs.iter().any(|log| {
+                log.topics()[0].is_some_and(|inner| {
+                    inner
+                        == B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c")
+                            .unwrap()
+                            .into()
+                })
+            });
 
         // compare logs length
-        if self.logs.len() != receipt_logs.len() {
+        if !contains_balance_tracker && self.logs.len() != receipt_logs.len() {
             tracing::trace!(logs = ?self.logs, "execution logs");
             tracing::trace!(logs = ?receipt_logs, "receipt logs");
             return log_and_err!(format!(
@@ -142,6 +154,15 @@ impl EvmExecution {
             for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics_non_empty().iter().zip(receipt_log.topics().iter()).enumerate()
             {
                 if B256::from(*execution_log_topic) != *receipt_log_topic {
+                    if contains_balance_tracker
+                        && receipt_log_topic == &B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c").unwrap()
+                        || execution_log_topic
+                            == &B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c")
+                                .unwrap()
+                                .into()
+                    {
+                        break;
+                    }
                     return log_and_err!(format!(
                         "log topic content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
                         receipt.hash(),

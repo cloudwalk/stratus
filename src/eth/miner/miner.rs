@@ -298,12 +298,12 @@ impl Miner {
         // track
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::commit", %block_number).entered();
-        tracing::info!(%block_number, transactions_len = %block.transactions.len(), "commiting block");
+        tracing::debug!(%block_number, transactions_len = %block.transactions.len(), "commiting block");
 
         // lock
         let _commit_lock = self.locks.commit.lock();
 
-        tracing::info!(%block_number, "miner acquired commit lock");
+        tracing::debug!(%block_number, "miner acquired commit lock");
 
         // extract fields to use in notifications if have subscribers
         let block_header = if self.has_block_header_subscribers() {
