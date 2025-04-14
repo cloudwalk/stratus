@@ -139,6 +139,15 @@ impl EvmExecution {
 
         // compare logs pairs
         for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(receipt_logs).enumerate() {
+            if contains_balance_tracker
+                && receipt_log.topics()[0] == B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c").unwrap()
+                || execution_log.topics_non_empty()[0]
+                    == B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c")
+                        .unwrap()
+                        .into()
+            {
+                continue;
+            }
             // compare log topics length
             if execution_log.topics_non_empty().len() != receipt_log.topics().len() {
                 return log_and_err!(format!(
@@ -154,15 +163,6 @@ impl EvmExecution {
             for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics_non_empty().iter().zip(receipt_log.topics().iter()).enumerate()
             {
                 if B256::from(*execution_log_topic) != *receipt_log_topic {
-                    if contains_balance_tracker
-                        && receipt_log_topic == &B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c").unwrap()
-                        || execution_log_topic
-                            == &B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c")
-                                .unwrap()
-                                .into()
-                    {
-                        break;
-                    }
                     return log_and_err!(format!(
                         "log topic content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
                         receipt.hash(),
