@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::bail;
@@ -28,7 +29,7 @@ use crate::eth::primitives::Wei;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
-    pub state: RocksStorageState,
+    pub state: Arc<RocksStorageState>,
     block_number: AtomicU32,
 }
 
@@ -38,6 +39,7 @@ impl RocksPermanentStorage {
         shutdown_timeout: Duration,
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
+        cf_metrics_interval: Duration,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
@@ -59,8 +61,15 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write)?;
+        let state = Arc::new(RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write)?);
         let block_number = state.preload_block_number()?;
+
+        // background task for collecting column family size metrics
+        #[cfg(feature = "metrics")]
+        {
+            tracing::info!("starting column family size metrics collector with interval {:?}", cf_metrics_interval);
+            let _metrics_handle = state.spawn_column_family_size_metrics_collector(cf_metrics_interval);
+        }
 
         Ok(Self { state, block_number })
     }

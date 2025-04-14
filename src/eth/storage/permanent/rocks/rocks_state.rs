@@ -18,6 +18,7 @@ use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 use sugars::hmap;
+use tokio::task::JoinHandle;
 
 use super::cf_versions::CfAccountSlotsHistoryValue;
 use super::cf_versions::CfAccountSlotsValue;
@@ -55,11 +56,15 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::ext::spawn_named;
+use crate::ext::traced_sleep;
 use crate::ext::OptionExt;
+use crate::ext::SleepReason;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::log_and_err;
 use crate::utils::GIGABYTE;
+use crate::GlobalState;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "rocks_metrics")] {
@@ -642,6 +647,51 @@ impl RocksStorageState {
 
         prev_values.insert(hist as u32, (data_sum, data_count));
         Ok(avg)
+    }
+}
+
+#[cfg(feature = "metrics")]
+impl RocksStorageState {
+    pub fn export_column_family_size_metrics(&self) -> Result<()> {
+        let db_name = self.db_path_filename();
+
+        let column_families = vec![
+            ("accounts", self.accounts.handle()),
+            ("accounts_history", self.accounts_history.handle()),
+            ("account_slots", self.account_slots.handle()),
+            ("account_slots_history", self.account_slots_history.handle()),
+            ("transactions", self.transactions.handle()),
+            ("blocks_by_number", self.blocks_by_number.handle()),
+            ("blocks_by_hash", self.blocks_by_hash.handle()),
+        ];
+
+        for (cf_name, cf_handle) in column_families {
+            let cf_metadata = self.db.get_column_family_metadata_cf(&cf_handle);
+            metrics::set_rocks_cf_size(cf_metadata.size, cf_name, db_name);
+        }
+
+        Ok(())
+    }
+
+    #[cfg(feature = "metrics")]
+    pub fn spawn_column_family_size_metrics_collector(self: &Arc<Self>, interval: Duration) -> JoinHandle<anyhow::Result<()>> {
+        const TASK_NAME: &str = "rocks::cf_size_metrics";
+
+        let state = Arc::clone(self);
+
+        spawn_named(TASK_NAME, async move {
+            loop {
+                if GlobalState::is_shutdown_warn(TASK_NAME) {
+                    return Ok(());
+                }
+
+                if let Err(e) = state.export_column_family_size_metrics() {
+                    tracing::warn!("Failed to export column family metrics: {:?}", e);
+                }
+
+                traced_sleep(interval, SleepReason::Interval).await;
+            }
+        })
     }
 }
 
