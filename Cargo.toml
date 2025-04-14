@@ -66,7 +66,7 @@ serde_urlencoded = "=0.7.1"
 serde_with = "=3.8.1"
 
 # parallelism
-crossbeam-channel = "=0.5.13"
+crossbeam-channel = "=0.5.15"
 futures = "=0.3.30"
 futures-timer = "=3.0.3"
 futures-util = "=0.3.31"
