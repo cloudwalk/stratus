@@ -226,10 +226,10 @@ e2e-admin-password:
     done
 
 # E2E: Execute EOF (EVM Object Format) tests
-e2e-eof perm-storage="inmemory":
+e2e-eof:
     #!/bin/bash
     # Start Stratus
-    just stratus-test -a 0.0.0.0:3000 --executor-evm-spec Osaka --perm-storage={{perm-storage}}
+    just stratus-test -a 0.0.0.0:3000 --executor-evm-spec Osaka
 
     cd e2e/eof
     forge install
@@ -252,20 +252,26 @@ e2e-hardhat block-mode="automine" test="":
     wait-service --tcp localhost:8545 -- echo
 
     echo "-> Running E2E tests"
-    just e2e hardhat {{block-mode}} {{test}}
+    if [ -z "{{test}}" ]; then
+        just e2e hardhat {{block-mode}} ""
+    elif [ -f "test/{{block-mode}}/{{test}}.test.ts" ]; then
+        BLOCK_MODE={{block-mode}} npx hardhat test test/{{block-mode}}/{{test}}.test.ts --network hardhat
+    else
+        just e2e hardhat {{block-mode}} "{{test}}"
+    fi
 
     echo "-> Killing Hardhat"
     killport 8545
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus block-mode="automine" storage="inmemory" test="":
+e2e-stratus block-mode="automine" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
 
     just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000 --block-mode {{block-mode}} --perm-storage={{storage}}
+    just stratus-test -a 0.0.0.0:3000 --block-mode {{block-mode}}
 
     just _log "Running E2E tests"
     if [[ {{block-mode}} =~ ^[0-9]+(ms|s)$ ]]; then
@@ -274,12 +280,11 @@ e2e-stratus block-mode="automine" storage="inmemory" test="":
         just e2e stratus {{block-mode}} "{{test}}"
     fi
 
-
 # E2E Clock: Builds and runs Stratus with block-time flag, then validates average block generation time
-e2e-clock-stratus storage="inmemory":
+e2e-clock-stratus:
     #!/bin/bash
     just _log "Starting Stratus"
-    just stratus-test --block-mode 1s -a 0.0.0.0:3000 --perm-storage={{storage}} > stratus.log &
+    just stratus-test --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
 
     just _wait_for_stratus
 
@@ -301,7 +306,7 @@ shell-lint mode="--write":
     @shellcheck e2e/cloudwalk-contracts/*.sh --severity=warning --shell=bash
 
 e2e-leader:
-    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --perm-storage=rocks --rocks-path-prefix=temp_3000
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000
 
 e2e-follower test="brlc":
     #!/bin/bash
@@ -312,9 +317,9 @@ e2e-follower test="brlc":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --perm-storage=rocks --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --perm-storage=rocks --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
     fi
 
 
@@ -447,7 +452,7 @@ e2e-importer-offline:
     just importer-offline-test --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
 
     just _log "Stratus for importer-offline"
-    just stratus-test -a 0.0.0.0:3001 --perm-storage=rocks --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
+    just stratus-test -a 0.0.0.0:3001 --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
     just _wait_for_stratus 3001
 
     just _log "Compare blocks of stratus and importer-offline"
@@ -512,11 +517,28 @@ alias e2e-contracts := contracts-test
 contracts-remove *args="":
     cd e2e/cloudwalk-contracts && ./contracts-remove.sh {{args}}
 
-# Contracts: Start Stratus and run contracts tests with InMemory storage
-contracts-test-stratus storage="inmemory" *args="":
+# Contracts: Start Stratus and run contracts tests
+contracts-test-stratus *args="":
     #!/bin/bash
     just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000 --perm-storage={{storage}}
+    just stratus-test -a 0.0.0.0:3000
 
     just _log "Running E2E Contracts tests"
     just e2e-contracts {{args}}
+
+# E2E: Starts and execute Genesis tests in Stratus
+e2e-genesis:
+    #!/bin/bash
+    mkdir -p e2e_logs
+
+    # Create config directory in e2e if it doesn't exist
+    mkdir -p e2e/config
+
+    just _log "Starting Stratus with genesis.local.json"
+    just stratus-test -a 0.0.0.0:3000 --genesis-path config/genesis.local.json --block-mode automine
+
+    just _log "Running Genesis tests"
+    cd e2e
+    npm install 
+    npx hardhat test test/genesis/genesis.test.ts --network stratus 
+    killport 3000 -s sigterm
