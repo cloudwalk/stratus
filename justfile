@@ -100,7 +100,7 @@ stratus-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build --features dev
-    cargo run --bin stratus --features dev -- --leader {{args}} > stratus.log &
+    cargo run --bin stratus --features dev -- --leader --rocks-cf-metrics-interval 15s {{args}} > stratus.log &
     just _wait_for_stratus
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
@@ -119,7 +119,7 @@ stratus-follower-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build --features dev
-    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features dev -- --follower {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
+    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features dev -- --follower --rocks-cf-metrics-interval 15s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
 # Bin: Download external RPC blocks and receipts to temporary storage
