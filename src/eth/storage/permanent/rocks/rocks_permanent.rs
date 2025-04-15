@@ -43,7 +43,7 @@ impl RocksPermanentStorage {
         shutdown_timeout: Duration,
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
-        cf_metrics_interval: Option<Duration>,
+        cf_size_metrics_interval: Option<Duration>,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
@@ -70,7 +70,7 @@ impl RocksPermanentStorage {
 
         // spawn background task for collecting column family size metrics
         #[cfg(feature = "metrics")]
-        if let Some(interval) = cf_metrics_interval {
+        if let Some(interval) = cf_size_metrics_interval {
             tracing::info!("starting column family size metrics collector with interval {:?}", interval);
             spawn_named(
                 "rocks::cf_size_metrics_collector",

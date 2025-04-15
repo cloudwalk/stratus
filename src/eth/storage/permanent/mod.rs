@@ -37,8 +37,8 @@ pub struct PermanentStorageConfig {
     pub rocks_disable_sync_write: bool,
 
     /// Interval for collecting RocksDB column family size metrics.
-    #[arg(long = "rocks-cf-metrics-interval", env = "ROCKS_CF_METRICS_INTERVAL", value_parser=parse_duration)]
-    pub rocks_cf_metrics_interval: Option<Duration>,
+    #[arg(long = "rocks-cf-size-metrics-interval", env = "ROCKS_CF_SIZE_METRICS_INTERVAL", value_parser=parse_duration)]
+    pub rocks_cf_size_metrics_interval: Option<Duration>,
 
     /// Genesis file configuration
     #[clap(flatten)]
@@ -56,7 +56,7 @@ impl PermanentStorageConfig {
             self.rocks_shutdown_timeout,
             self.rocks_cache_size_multiplier,
             !self.rocks_disable_sync_write,
-            self.rocks_cf_metrics_interval,
+            self.rocks_cf_size_metrics_interval,
         )
     }
 }
