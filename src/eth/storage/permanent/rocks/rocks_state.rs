@@ -674,7 +674,6 @@ impl RocksStorageState {
         Ok(())
     }
 
-    #[cfg(feature = "metrics")]
     pub fn spawn_column_family_size_metrics_collector(self: &Arc<Self>, interval: Duration) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rocks::cf_size_metrics";
 
