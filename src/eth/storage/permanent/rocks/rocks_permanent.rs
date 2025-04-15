@@ -26,6 +26,10 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::ext::spawn_named;
+use crate::ext::traced_sleep;
+use crate::ext::SleepReason;
+use crate::GlobalState;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
@@ -39,7 +43,7 @@ impl RocksPermanentStorage {
         shutdown_timeout: Duration,
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
-        cf_metrics_interval: Duration,
+        cf_metrics_interval: Option<Duration>,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
@@ -64,12 +68,18 @@ impl RocksPermanentStorage {
         let state = Arc::new(RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write)?);
         let block_number = state.preload_block_number()?;
 
-        // background task for collecting column family size metrics
+        // spawn background task for collecting column family size metrics
         #[cfg(feature = "metrics")]
-        {
-            tracing::info!("starting column family size metrics collector with interval {:?}", cf_metrics_interval);
-            let _metrics_handle = state.spawn_column_family_size_metrics_collector(cf_metrics_interval);
-        }
+        let _metrics_collector_task = if let Some(interval) = cf_metrics_interval {
+            tracing::info!("starting column family size metrics collector with interval {:?}", interval);
+            let state_clone = Arc::clone(&state);
+            Some(spawn_named(
+                "rocks::cf_size_metrics_collector",
+                Self::start_cf_size_metrics_collector(state_clone, interval),
+            ))
+        } else {
+            None
+        };
 
         Ok(Self { state, block_number })
     }
@@ -188,6 +198,24 @@ impl RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to save account balance in RocksPermanent");
             })
+    }
+
+    #[cfg(feature = "metrics")]
+    /// Starts a background task that collects column family size metrics at regular intervals.
+    async fn start_cf_size_metrics_collector(state: Arc<RocksStorageState>, interval: Duration) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "rocks::cf_size_metrics";
+
+        loop {
+            if GlobalState::is_shutdown_warn(TASK_NAME) {
+                return Ok(());
+            }
+
+            if let Err(e) = state.export_column_family_size_metrics() {
+                tracing::warn!("Failed to export column family metrics: {:?}", e);
+            }
+
+            traced_sleep(interval, SleepReason::Interval).await;
+        }
     }
 
     #[cfg(feature = "dev")]
