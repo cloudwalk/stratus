@@ -289,114 +289,133 @@ impl RocksStorageState {
         );
 
         let mut logs_result = Vec::new();
-
-        // Get the first block (if any) that matches the filter.
-        let mut iter = self.blocks_by_number.iter_from(filter.from_block.into(), Direction::Forward)?;
+        let start_time = std::time::Instant::now();
 
         let mut processed_blocks = 0;
-        let mut skipped_by_bloom = 0;
+        let mut skipped_blocks = 0;
         let mut total_logs_processed = 0;
         let mut total_logs_matched = 0;
 
-        let start_time = std::time::Instant::now();
+        // First, get all block numbers in the range that pass the bloom filter test
+        let mut matching_block_numbers = Vec::new();
 
-        while let Some(value) = iter.next().transpose()? {
-            let (block_number, block) = value;
-            let number = BlockNumber::from(block_number.0);
+        // Iterate over the logs_bloom column family to quickly find matching blocks
+        let mut bloom_iter = self.logs_bloom.iter_from(filter.from_block.into(), Direction::Forward)?;
 
-            // If we've reached a block beyond the filter's end, stop.
+        tracing::debug!("Filtering blocks using bloom filters");
+        while let Some(value) = bloom_iter.next().transpose()? {
+            let (block_number_key, bloom_value) = value;
+            let block_number = BlockNumber::from(block_number_key.0);
+
+            // Check if we've exceeded the upper bound
             if let Some(to_block) = filter.to_block {
-                if number > to_block {
-                    tracing::trace!(%number, to_block = %to_block, "Reached block beyond filter end, stopping");
+                if block_number > to_block {
                     break;
                 }
             }
 
-            // Time the processing of each block
-            let start = std::time::Instant::now();
-            processed_blocks += 1;
+            // Convert the bloom to the format we can use
+            let bloom: crate::eth::primitives::logs_bloom::LogsBloom = bloom_value.into_inner().into();
 
-            // Try to get logsBloom from the dedicated column family first
-            let logs_bloom = match self.read_logs_bloom(number) {
-                Ok(Some(bloom)) => {
-                    tracing::trace!(%number, "Using logs bloom from dedicated column family");
-                    bloom
-                }
-                result => {
-                    tracing::trace!(%number, ?result, "Fallback to bloom from block header");
-                    // Fallback to the bloom from the block header
-                    let block_inner = block.clone().into_inner();
-                    block_inner.header.bloom.into()
-                }
-            };
-
-            // Skip processing this block if the bloom filter indicates it definitely doesn't contain matching logs
-            if !logs_bloom.matches_filter(filter) {
-                tracing::trace!(%number, "Skipping block based on bloom filter");
-                skipped_by_bloom += 1;
-                continue;
-            }
-
-            tracing::trace!(%number, "Processing block for logs (passed bloom filter)");
-
-            let block = block.into_inner();
-            let logs: Vec<_> = block
-                .transactions
-                .into_iter()
-                .enumerate()
-                .flat_map(|(tx_index, transaction)| {
-                    transaction.logs.into_iter().enumerate().map(move |(log_index, log)| {
-                        LogMined::from_rocks_primitives(log, block.header.number, block.header.hash, tx_index, transaction.input.hash, log_index)
-                    })
-                })
-                .collect();
-
-            let total_logs_in_block = logs.len();
-            let mut matches_in_block = 0;
-
-            let filtered_logs: Vec<_> = logs
-                .into_iter()
-                .filter(|log| {
-                    let matches = filter.matches(log);
-                    if matches {
-                        matches_in_block += 1;
-                    }
-                    matches
-                })
-                .collect();
-
-            total_logs_processed += total_logs_in_block;
-            total_logs_matched += matches_in_block;
-
-            tracing::trace!(
-                %number,
-                total_logs_in_block,
-                matches_in_block,
-                "Block log filtering completed"
-            );
-
-            logs_result.extend(filtered_logs);
-
-            // Record the time it took to process this block
-            #[cfg(feature = "metrics")]
-            {
-                let elapsed = start.elapsed();
-                crate::infra::metrics::inc_storage_read_logs_per_block(elapsed, "permanent", true);
-                tracing::trace!(block_number = %number, ?elapsed, "Block processing time in read_logs");
+            // Check if this bloom potentially matches our filter
+            if bloom.matches_filter(filter) {
+                tracing::trace!(%block_number, "Bloom filter indicates potential match");
+                matching_block_numbers.push(block_number);
+            } else {
+                skipped_blocks += 1;
+                tracing::trace!(%block_number, "Bloom filter indicates no match, skipping block");
             }
         }
 
+        tracing::debug!(
+            matching_block_count = matching_block_numbers.len(),
+            skipped_blocks,
+            "Completed bloom filter pre-filtering"
+        );
+        
+        // Now process only the blocks that have passed the bloom filter
+        if !matching_block_numbers.is_empty() {
+            // Convert block numbers to rocksdb keys for multi_get
+            let block_number_keys: Vec<BlockNumberRocksdb> = matching_block_numbers
+                .iter()
+                .map(|&block_number| block_number.into())
+                .collect();
+            
+            // Use multi_get to fetch all blocks in a single database operation
+            tracing::debug!(
+                count = block_number_keys.len(),
+                "Fetching candidate blocks with multi_get"
+            );
+            
+            let block_results = self.blocks_by_number.multi_get(block_number_keys)?;
+            
+            // Process each block that was found
+            for (block_number_key, block) in block_results {
+                processed_blocks += 1;
+                let block_number = BlockNumber::from(block_number_key.0);
+                let start = std::time::Instant::now();
+                
+                tracing::trace!(%block_number, "Processing block for logs (passed bloom filter)");
+                
+                let block = block.into_inner();
+                let logs: Vec<_> = block
+                    .transactions
+                    .into_iter()
+                    .enumerate()
+                    .flat_map(|(tx_index, transaction)| {
+                        transaction.logs.into_iter().enumerate().map(move |(log_index, log)| {
+                            LogMined::from_rocks_primitives(log, block.header.number, block.header.hash, tx_index, transaction.input.hash, log_index)
+                        })
+                    })
+                    .collect();
+                
+                let total_logs_in_block = logs.len();
+                let mut matches_in_block = 0;
+                
+                let filtered_logs: Vec<_> = logs
+                    .into_iter()
+                    .filter(|log| {
+                        let matches = filter.matches(log);
+                        if matches {
+                            matches_in_block += 1;
+                        }
+                        matches
+                    })
+                    .collect();
+                
+                total_logs_processed += total_logs_in_block;
+                total_logs_matched += matches_in_block;
+                
+                tracing::trace!(
+                    %block_number,
+                    total_logs_in_block,
+                    matches_in_block,
+                    "Block log filtering completed"
+                );
+                
+                logs_result.extend(filtered_logs);
+                
+                // Record the time it took to process this block
+                #[cfg(feature = "metrics")]
+                {
+                    let elapsed = start.elapsed();
+                    crate::infra::metrics::inc_storage_read_logs_per_block(elapsed, "permanent", true);
+                    tracing::trace!(block_number = %block_number, ?elapsed, "Block processing time in read_logs");
+                }
+            }
+        }
+        
         let total_time = start_time.elapsed();
         tracing::debug!(
             processed_blocks,
-            skipped_by_bloom,
+            skipped_blocks,
             total_logs_processed,
             total_logs_matched,
             ?total_time,
             total_results = logs_result.len(),
             "Read logs operation completed"
         );
-
+        
         Ok(logs_result)
     }
 
