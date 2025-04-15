@@ -73,12 +73,10 @@ impl RocksPermanentStorage {
         let _metrics_collector_task = if let Some(interval) = cf_metrics_interval {
             tracing::info!("starting column family size metrics collector with interval {:?}", interval);
             let state_clone = Arc::clone(&state);
-            Some(spawn_named(
+            spawn_named(
                 "rocks::cf_size_metrics_collector",
                 Self::start_cf_size_metrics_collector(state_clone, interval),
-            ))
-        } else {
-            None
+            );
         };
 
         Ok(Self { state, block_number })
