@@ -45,9 +45,6 @@ jobs:
           cache-provider: "github"
           cache-directories: "~/.cargo/bin/"
 
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
-
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
