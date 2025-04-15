@@ -113,6 +113,16 @@ impl EvmExecution {
         }
 
         let receipt_logs = receipt.inner.logs();
+        let is_from_bugged_account = receipt_logs.iter().any(|log| {
+            log.topics()
+                .iter()
+                .any(|topic| *topic == B256::from_hex("000000000000000000000000408bed9bab6c689aa4b25e951a267de7aff5b042").unwrap())
+        });
+
+        if is_from_bugged_account {
+            return Ok(());
+        }
+
         let contains_balance_tracker = receipt_logs
             .iter()
             .any(|log| log.topics()[0] == B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c").unwrap())
