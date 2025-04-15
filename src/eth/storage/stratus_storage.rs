@@ -115,7 +115,7 @@ impl StratusStorage {
                 rocks_shutdown_timeout: std::time::Duration::from_secs(240),
                 rocks_cache_size_multiplier: None,
                 rocks_disable_sync_write: false,
-                rocks_cf_metrics_interval: std::time::Duration::from_secs(60),
+                rocks_cf_metrics_interval: None,
                 genesis_file: crate::config::GenesisFileConfig::default(),
             },
         );
