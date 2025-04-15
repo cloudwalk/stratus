@@ -332,31 +332,25 @@ impl RocksStorageState {
             skipped_blocks,
             "Completed bloom filter pre-filtering"
         );
-        
+
         // Now process only the blocks that have passed the bloom filter
         if !matching_block_numbers.is_empty() {
             // Convert block numbers to rocksdb keys for multi_get
-            let block_number_keys: Vec<BlockNumberRocksdb> = matching_block_numbers
-                .iter()
-                .map(|&block_number| block_number.into())
-                .collect();
-            
+            let block_number_keys: Vec<BlockNumberRocksdb> = matching_block_numbers.iter().map(|&block_number| block_number.into()).collect();
+
             // Use multi_get to fetch all blocks in a single database operation
-            tracing::debug!(
-                count = block_number_keys.len(),
-                "Fetching candidate blocks with multi_get"
-            );
-            
+            tracing::debug!(count = block_number_keys.len(), "Fetching candidate blocks with multi_get");
+
             let block_results = self.blocks_by_number.multi_get(block_number_keys)?;
-            
+
             // Process each block that was found
             for (block_number_key, block) in block_results {
                 processed_blocks += 1;
                 let block_number = BlockNumber::from(block_number_key.0);
                 let start = std::time::Instant::now();
-                
+
                 tracing::trace!(%block_number, "Processing block for logs (passed bloom filter)");
-                
+
                 let block = block.into_inner();
                 let logs: Vec<_> = block
                     .transactions
@@ -368,10 +362,10 @@ impl RocksStorageState {
                         })
                     })
                     .collect();
-                
+
                 let total_logs_in_block = logs.len();
                 let mut matches_in_block = 0;
-                
+
                 let filtered_logs: Vec<_> = logs
                     .into_iter()
                     .filter(|log| {
@@ -382,19 +376,19 @@ impl RocksStorageState {
                         matches
                     })
                     .collect();
-                
+
                 total_logs_processed += total_logs_in_block;
                 total_logs_matched += matches_in_block;
-                
+
                 tracing::trace!(
                     %block_number,
                     total_logs_in_block,
                     matches_in_block,
                     "Block log filtering completed"
                 );
-                
+
                 logs_result.extend(filtered_logs);
-                
+
                 // Record the time it took to process this block
                 #[cfg(feature = "metrics")]
                 {
@@ -404,7 +398,7 @@ impl RocksStorageState {
                 }
             }
         }
-        
+
         let total_time = start_time.elapsed();
         tracing::debug!(
             processed_blocks,
@@ -415,7 +409,7 @@ impl RocksStorageState {
             total_results = logs_result.len(),
             "Read logs operation completed"
         );
-        
+
         Ok(logs_result)
     }
 
