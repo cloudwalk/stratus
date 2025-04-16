@@ -45,7 +45,7 @@ uuid = { version = "=1.10.0", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
 
 # async
-tokio = { version = "=1.38.0", features = [
+tokio = { version = "=1.38.2", features = [
     "rt-multi-thread",
     "macros",
     "signal",
@@ -66,7 +66,7 @@ serde_urlencoded = "=0.7.1"
 serde_with = "=3.8.1"
 
 # parallelism
-crossbeam-channel = "=0.5.13"
+crossbeam-channel = "=0.5.15"
 futures = "=0.3.30"
 futures-timer = "=3.0.3"
 futures-util = "=0.3.31"
@@ -95,6 +95,7 @@ http = "=1.1.0"
 http-body = "=1.0.1"
 http-body-util = "=0.1.2"
 bytes = "=1.9.0"
+openssl = "=0.10.72"
 
 # observability
 console-subscriber = "=0.2.0"
