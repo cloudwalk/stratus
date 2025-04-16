@@ -291,41 +291,52 @@ impl RocksStorageState {
         let mut logs_result = Vec::new();
         let start_time = std::time::Instant::now();
 
-        let mut processed_blocks = 0;
         let mut skipped_blocks = 0;
         let mut total_logs_processed = 0;
         let mut total_logs_matched = 0;
 
-        // First, get all block numbers in the range that pass the bloom filter test
-        let mut matching_block_numbers = Vec::new();
+        // Define block limit for safety (5k blocks max when no upper limit is set)
+        const MAX_BLOCKS_WITHOUT_LIMIT: u32 = 5000;
 
-        // Iterate over the logs_bloom column family to quickly find matching blocks
-        let mut bloom_iter = self.logs_bloom.iter_from(filter.from_block.into(), Direction::Forward)?;
-
+        // Get matching block numbers using a functional approach
         tracing::debug!("Filtering blocks using bloom filters");
-        while let Some(value) = bloom_iter.next().transpose()? {
-            let (block_number_key, bloom_value) = value;
-            let block_number = BlockNumber::from(block_number_key.0);
 
-            // Check if we've exceeded the upper bound
-            if let Some(to_block) = filter.to_block {
-                if block_number > to_block {
-                    break;
+        let matching_block_numbers = self
+            .logs_bloom
+            .iter_from(filter.from_block.into(), Direction::Forward)?
+            .take_while(|item| {
+                // Continue until we hit an error or exceed to_block
+                match item {
+                    Ok((block_number_key, _)) => {
+                        let number = BlockNumber::from(block_number_key.0);
+                        match filter.to_block {
+                            Some(to_block) => number <= to_block,
+                            None => {
+                                // When no to_block is specified, apply safety limit
+                                let from_block_value = filter.from_block.as_u32();
+                                (block_number_key.0 - from_block_value) < MAX_BLOCKS_WITHOUT_LIMIT
+                            }
+                        }
+                    }
+                    Err(_) => false, // Stop on error
                 }
-            }
+            })
+            .filter_map(|result| {
+                result.ok().and_then(|(block_number_key, bloom_value)| {
+                    let number = BlockNumber::from(block_number_key.0);
+                    let bloom: LogsBloom = bloom_value.into_inner().into();
 
-            // Convert the bloom to the format we can use
-            let bloom: crate::eth::primitives::logs_bloom::LogsBloom = bloom_value.into_inner().into();
-
-            // Check if this bloom potentially matches our filter
-            if bloom.matches_filter(filter) {
-                tracing::trace!(%block_number, "Bloom filter indicates potential match");
-                matching_block_numbers.push(block_number);
-            } else {
-                skipped_blocks += 1;
-                tracing::trace!(%block_number, "Bloom filter indicates no match, skipping block");
-            }
-        }
+                    if bloom.matches_filter(filter) {
+                        tracing::trace!(%number, "Bloom filter indicates potential match");
+                        Some(number)
+                    } else {
+                        skipped_blocks += 1;
+                        tracing::trace!(%number, "Bloom filter indicates no match, skipping block");
+                        None
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
 
         tracing::debug!(
             matching_block_count = matching_block_numbers.len(),
@@ -342,10 +353,10 @@ impl RocksStorageState {
             tracing::debug!(count = block_number_keys.len(), "Fetching candidate blocks with multi_get");
 
             let block_results = self.blocks_by_number.multi_get(block_number_keys)?;
+            let processed_blocks = block_results.len();
 
             // Process each block that was found
             for (block_number_key, block) in block_results {
-                processed_blocks += 1;
                 let block_number = BlockNumber::from(block_number_key.0);
                 let start = std::time::Instant::now();
 
@@ -364,18 +375,10 @@ impl RocksStorageState {
                     .collect();
 
                 let total_logs_in_block = logs.len();
-                let mut matches_in_block = 0;
 
-                let filtered_logs: Vec<_> = logs
-                    .into_iter()
-                    .filter(|log| {
-                        let matches = filter.matches(log);
-                        if matches {
-                            matches_in_block += 1;
-                        }
-                        matches
-                    })
-                    .collect();
+                let filtered_logs: Vec<_> = logs.into_iter().filter(|log| filter.matches(log)).collect();
+
+                let matches_in_block = filtered_logs.len();
 
                 total_logs_processed += total_logs_in_block;
                 total_logs_matched += matches_in_block;
@@ -397,18 +400,18 @@ impl RocksStorageState {
                     tracing::trace!(block_number = %block_number, ?elapsed, "Block processing time in read_logs");
                 }
             }
-        }
 
-        let total_time = start_time.elapsed();
-        tracing::debug!(
-            processed_blocks,
-            skipped_blocks,
-            total_logs_processed,
-            total_logs_matched,
-            ?total_time,
-            total_results = logs_result.len(),
-            "Read logs operation completed"
-        );
+            let total_time = start_time.elapsed();
+            tracing::debug!(
+                processed_blocks,
+                skipped_blocks,
+                total_logs_processed,
+                total_logs_matched,
+                ?total_time,
+                total_results = logs_result.len(),
+                "Read logs operation completed"
+            );
+        }
 
         Ok(logs_result)
     }
