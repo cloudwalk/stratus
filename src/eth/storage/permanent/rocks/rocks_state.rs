@@ -762,6 +762,7 @@ impl RocksStorageState {
             ("transactions", self.transactions.handle()),
             ("blocks_by_number", self.blocks_by_number.handle()),
             ("blocks_by_hash", self.blocks_by_hash.handle()),
+            ("replication_logs", self.replication_logs.handle()),
         ];
 
         for (cf_name, cf_handle) in column_families {

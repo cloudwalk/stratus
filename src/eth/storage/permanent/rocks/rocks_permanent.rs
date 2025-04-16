@@ -67,7 +67,13 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = Arc::new(RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write, use_rocksdb_replication)?);
+        let state = Arc::new(RocksStorageState::new(
+            path,
+            shutdown_timeout,
+            cache_size_multiplier,
+            enable_sync_write,
+            use_rocksdb_replication,
+        )?);
 
         let block_number = state.preload_block_number()?;
 

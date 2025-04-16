@@ -43,7 +43,7 @@ pub struct PermanentStorageConfig {
     /// Interval for collecting RocksDB column family size metrics.
     #[arg(long = "rocks-cf-size-metrics-interval", env = "ROCKS_CF_SIZE_METRICS_INTERVAL", value_parser=parse_duration)]
     pub rocks_cf_size_metrics_interval: Option<Duration>,
-  
+
     /// Genesis file configuration
     #[clap(flatten)]
     #[cfg(feature = "dev")]
