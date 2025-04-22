@@ -9,9 +9,6 @@ use std::time::Instant;
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
-use futures::future::TryFutureExt;
-use futures::stream::TryStreamExt;
-use itertools::Itertools;
 use rocksdb::Direction;
 use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
@@ -372,13 +369,20 @@ impl RocksStorageState {
                         total_logs_processed += logs_count;
 
                         transaction.logs.into_iter().enumerate().map(move |(log_index, log)| {
-                            LogMined::from_rocks_primitives(log, block.header.number, block.header.hash, tx_index, transaction.input.hash, log_index)
+                            LogMined::from_rocks_primitives(
+                                log.log,
+                                block.header.number,
+                                block.header.hash,
+                                tx_index,
+                                transaction.input.hash,
+                                log_index as u64,
+                            )
                         })
                     })
                     .filter(|log| filter.matches(log))
                     .collect::<Vec<_>>();
 
-                total_logs_matched += logs.len();
+                total_logs_matched += logs.len() as u64;
 
                 tracing::trace!(
                     %block_number,
