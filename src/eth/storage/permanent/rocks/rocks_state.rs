@@ -305,21 +305,11 @@ impl RocksStorageState {
             .logs_bloom
             .iter_from(filter.from_block.into(), Direction::Forward)?
             .take_while(|item| {
-                // Continue until we hit an error or exceed to_block
-                match item {
-                    Ok((block_number_key, _)) => {
-                        let number = BlockNumber::from(block_number_key.0);
-                        match filter.to_block {
-                            Some(to_block) => number <= to_block,
-                            None => {
-                                // When no to_block is specified, apply safety limit
-                                let from_block_value = filter.from_block.as_u32();
-                                (block_number_key.0 - from_block_value) < MAX_BLOCKS_WITHOUT_LIMIT
-                            }
-                        }
-                    }
-                    Err(_) => false, // Stop on error
-                }
+                let from_block_value = filter.from_block.as_u32();
+                item.as_ref().is_ok_and(|(block_number_key, _)| {
+                    let number = BlockNumber::from(block_number_key.0);
+                    (block_number_key.0 - from_block_value) < MAX_BLOCKS_WITHOUT_LIMIT && filter.to_block.is_none_or(|to_block| number <= to_block)
+                })
             })
             .filter_map(|result| {
                 result.ok().and_then(|(block_number_key, bloom_value)| {
