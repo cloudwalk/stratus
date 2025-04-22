@@ -207,7 +207,10 @@ metrics! {
     gauge rocks_block_cache_capacity{dbname},
 
     "Accumulated number of background errors."
-    gauge rocks_background_errors{dbname}
+    gauge rocks_background_errors{dbname},
+
+    "Size of column family on disk (bytes)."
+    gauge rocks_cf_size{dbname, cfname}
 }
 
 metrics! {
