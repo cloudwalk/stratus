@@ -788,7 +788,7 @@ impl RocksStorageState {
 
         for (cf_name, cf_handle) in column_families {
             if let Ok(Some(size)) = self.db.property_int_value_cf(&cf_handle, "rocksdb.total-sst-files-size") {
-                metrics::set_rocks_cf_size(size, cf_name, db_name);
+                metrics::set_rocks_cf_size(size, db_name, cf_name);
             }
         }
 
