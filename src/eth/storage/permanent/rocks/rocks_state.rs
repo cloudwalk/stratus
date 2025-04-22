@@ -761,6 +761,31 @@ impl RocksStorageState {
     }
 }
 
+#[cfg(feature = "metrics")]
+impl RocksStorageState {
+    pub fn export_column_family_size_metrics(&self) -> Result<()> {
+        let db_name = self.db_path_filename();
+
+        let column_families = vec![
+            ("accounts", self.accounts.handle()),
+            ("accounts_history", self.accounts_history.handle()),
+            ("account_slots", self.account_slots.handle()),
+            ("account_slots_history", self.account_slots_history.handle()),
+            ("transactions", self.transactions.handle()),
+            ("blocks_by_number", self.blocks_by_number.handle()),
+            ("blocks_by_hash", self.blocks_by_hash.handle()),
+        ];
+
+        for (cf_name, cf_handle) in column_families {
+            if let Ok(Some(size)) = self.db.property_int_value_cf(&cf_handle, "rocksdb.total-sst-files-size") {
+                metrics::set_rocks_cf_size(size, db_name, cf_name);
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl Drop for RocksStorageState {
     fn drop(&mut self) {
         let mut options = WaitForCompactOptions::default();
