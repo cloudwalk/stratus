@@ -290,51 +290,42 @@ impl RocksStorageState {
 
         let start_time = std::time::Instant::now();
 
-        let mut skipped_blocks = 0;
-        let mut total_logs_processed = 0;
-        let mut total_logs_matched = 0;
-
         // Define block limit for safety (5k blocks max when no upper limit is set)
         const MAX_BLOCKS_WITHOUT_LIMIT: u32 = 5000;
 
         // Get matching block numbers using a functional approach
         tracing::debug!("Filtering blocks using bloom filters");
 
-        let matching_block_numbers: Result<Vec<BlockNumber>> = self
+        let matching_block_numbers = self
             .logs_bloom
             .iter_from(filter.from_block.into(), Direction::Forward)?
             .take_while(|item| {
                 let from_block_value = filter.from_block.as_u32();
                 item.as_ref().is_ok_and(|(block_number_key, _)| {
-                    let number = BlockNumber::from(block_number_key.0);
-                    (block_number_key.0 - from_block_value) < MAX_BLOCKS_WITHOUT_LIMIT && filter.to_block.is_none_or(|to_block| number <= to_block)
+                    let number = block_number_key.0;
+                    (number - from_block_value) < MAX_BLOCKS_WITHOUT_LIMIT && filter.to_block.is_none_or(|to_block| BlockNumber::from(number) <= to_block)
                 })
             })
-            .filter_map(|result| match result {
-                Ok((block_number_key, bloom_value)) => {
+            .filter_map(|result| {
+                result.ok().and_then(|(block_number_key, bloom_value)| {
                     let number = BlockNumber::from(block_number_key.0);
                     let bloom: LogsBloom = bloom_value.into_inner().into();
 
-                    if bloom.matches_filter(filter) {
-                        tracing::trace!(%number, "Bloom filter indicates potential match");
-                        Some(Ok(number))
-                    } else {
-                        skipped_blocks += 1;
-                        tracing::trace!(%number, "Bloom filter indicates no match, skipping block");
-                        None
-                    }
-                }
-                Err(e) => Some(Err(e)),
+                    bloom
+                        .matches_filter(filter)
+                        .then_some(number)
+                        .inspect(|&n| {
+                            tracing::trace!(%n, "Bloom filter indicates potential match");
+                        })
+                        .or_else(|| {
+                            tracing::trace!(%number, "Bloom filter indicates no match, skipping block");
+                            None
+                        })
+                })
             })
-            .collect();
+            .collect::<Vec<_>>();
 
-        let matching_block_numbers = matching_block_numbers?;
-
-        tracing::debug!(
-            matching_block_count = matching_block_numbers.len(),
-            skipped_blocks,
-            "Completed bloom filter pre-filtering"
-        );
+        tracing::debug!(matching_block_count = matching_block_numbers.len(), "Completed bloom filter pre-filtering");
 
         // Now process only the blocks that have passed the bloom filter
         if matching_block_numbers.is_empty() {
@@ -348,7 +339,6 @@ impl RocksStorageState {
         tracing::debug!(count = block_number_keys.len(), "Fetching candidate blocks with multi_get");
 
         let block_results = self.blocks_by_number.multi_get(block_number_keys)?;
-        let processed_blocks = block_results.len();
 
         // Process each block that was found and collect results
         let logs_result: Vec<LogMined> = block_results
@@ -365,9 +355,6 @@ impl RocksStorageState {
                     .into_iter()
                     .enumerate()
                     .flat_map(|(tx_index, transaction)| {
-                        let logs_count = transaction.logs.len();
-                        total_logs_processed += logs_count;
-
                         transaction.logs.into_iter().enumerate().map(move |(log_index, log)| {
                             LogMined::from_rocks_primitives(
                                 log.log,
@@ -381,8 +368,6 @@ impl RocksStorageState {
                     })
                     .filter(|log| filter.matches(log))
                     .collect::<Vec<_>>();
-
-                total_logs_matched += logs.len() as u64;
 
                 tracing::trace!(
                     %block_number,
@@ -404,15 +389,7 @@ impl RocksStorageState {
             .collect();
 
         let total_time = start_time.elapsed();
-        tracing::debug!(
-            processed_blocks,
-            skipped_blocks,
-            total_logs_processed,
-            total_logs_matched,
-            ?total_time,
-            total_results = logs_result.len(),
-            "Read logs operation completed"
-        );
+        tracing::debug!(total_results = logs_result.len(), ?total_time, "Read logs operation completed");
 
         Ok(logs_result)
     }
@@ -785,6 +762,7 @@ impl RocksStorageState {
             ("transactions", self.transactions.handle()),
             ("blocks_by_number", self.blocks_by_number.handle()),
             ("blocks_by_hash", self.blocks_by_hash.handle()),
+            ("logs_bloom", self.logs_bloom.handle()),
         ];
 
         for (cf_name, cf_handle) in column_families {
