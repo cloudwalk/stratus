@@ -173,7 +173,6 @@ impl EvmExecution {
     ///
     /// This method updates the attributes that can diverge based on the receipt of the external transaction.
     pub fn apply_receipt(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
-        tracing::info!("applying receipt to execution");
         // fix gas
         self.gas = Gas::from(receipt.gas_used);
 
@@ -224,51 +223,21 @@ impl EvmExecution {
 
         let receipt_logs = receipt.inner.logs();
 
-        tracing::info!(
-            "Starting fix_logs_gas_left with {} execution logs and {} receipt logs",
-            self.logs.len(),
-            receipt_logs.len()
-        );
-
-        for (index, (execution_log, receipt_log)) in self.logs.iter_mut().zip(receipt_logs).enumerate() {
-            tracing::info!("Processing log pair at index {}", index);
-
+        for (execution_log, receipt_log) in self.logs.iter_mut().zip(receipt_logs) {
             let execution_log_matches = || execution_log.topic0.is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
             let receipt_log_matches = || receipt_log.topics().first().is_some_and(|topic| EVENT_HASHES.contains(&topic.as_ref()));
 
             // only try overwriting if both logs refer to the target event
             let should_overwrite = execution_log_matches() && receipt_log_matches();
-            tracing::info!(
-                "Log pair at index {}: execution_log_matches={} receipt_log_matches={} should_overwrite={}",
-                index,
-                execution_log_matches(),
-                receipt_log_matches(),
-                should_overwrite
-            );
-
             if !should_overwrite {
-                tracing::info!("Skipping log pair at index {}", index);
                 continue;
             }
 
             let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data().data.get(0..32)) else {
-                tracing::warn!("Failed to get data slices for log pair at index {}", index);
                 continue;
             };
-
-            tracing::info!(
-                "Overwriting log data at index {}: destination before={:?}, source={:?}",
-                index,
-                destination,
-                source
-            );
-
             destination.copy_from_slice(source);
-
-            tracing::info!("Overwriting log data at index {}: destination after={:?}", index, destination);
         }
-
-        tracing::info!("Completed fix_logs_gas_left");
     }
 }
 
