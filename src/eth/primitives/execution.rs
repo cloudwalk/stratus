@@ -28,10 +28,6 @@ pub struct EvmExecution {
     /// Assumed block timestamp during the execution.
     pub block_timestamp: UnixTime,
 
-    /// Flag to indicate if  external receipt fixes have been applied.
-    #[serde(skip)]
-    pub receipt_applied: bool,
-
     /// Status of the execution.
     pub result: ExecutionResult,
 
@@ -73,7 +69,6 @@ impl EvmExecution {
         // crete execution and apply costs
         let mut execution = Self {
             block_timestamp,
-            receipt_applied: false,
             result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
@@ -178,13 +173,7 @@ impl EvmExecution {
     ///
     /// This method updates the attributes that can diverge based on the receipt of the external transaction.
     pub fn apply_receipt(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
-        // do nothing if receipt is already applied
-        if self.receipt_applied {
-            tracing::warn!("receipt already applied, skipping");
-            return Ok(());
-        }
-        self.receipt_applied = true;
-
+        tracing::info!("applying receipt to execution");
         // fix gas
         self.gas = Gas::from(receipt.gas_used);
 
@@ -328,7 +317,6 @@ mod tests {
 
         // Verify execution state
         assert_eq!(execution.block_timestamp, timestamp);
-        assert!(execution.receipt_applied);
         assert!(execution.is_failure());
         assert_eq!(execution.output, Bytes::default());
         assert!(execution.logs.is_empty());
@@ -580,7 +568,6 @@ mod tests {
         // Set up execution with sender account
         let sender_changes = ExecutionAccountChanges::from_original_values(sender);
         execution.changes = BTreeMap::from([(sender_address, sender_changes)]);
-        execution.receipt_applied = false;
         execution.gas = Gas::from(100u64);
 
         // Create a receipt with higher gas used and execution cost
@@ -594,9 +581,6 @@ mod tests {
 
         // Apply receipt
         execution.apply_receipt(&receipt).unwrap();
-
-        // Verify receipt_applied flag
-        assert!(execution.receipt_applied);
 
         // Verify sender balance was reduced by execution cost
         let sender_changes = execution.changes.get(&sender_address).unwrap();

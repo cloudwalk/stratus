@@ -14,7 +14,6 @@ use crate::ext::OptionExt;
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct ExecutionRocksdb {
     pub block_timestamp: UnixTimeRocksdb,
-    pub execution_costs_applied: bool,
     pub result: ExecutionResultRocksdb,
     pub output: BytesRocksdb,
     pub logs: Vec<LogRocksdb>,
@@ -26,7 +25,6 @@ impl From<EvmExecution> for ExecutionRocksdb {
     fn from(item: EvmExecution) -> Self {
         Self {
             block_timestamp: UnixTimeRocksdb::from(item.block_timestamp),
-            execution_costs_applied: item.receipt_applied,
             result: item.result.into(),
             output: BytesRocksdb::from(item.output),
             logs: item.logs.into_iter().map(LogRocksdb::from).collect(),
@@ -41,7 +39,6 @@ impl From<ExecutionRocksdb> for EvmExecution {
         let (result, output) = ExecutionResultBuilder((item.result, item.output)).build();
         Self {
             block_timestamp: item.block_timestamp.into(),
-            receipt_applied: item.execution_costs_applied,
             result,
             output,
             logs: item.logs.into_iter().map(Log::from).collect(),
