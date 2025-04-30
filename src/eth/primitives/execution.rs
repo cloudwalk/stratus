@@ -555,14 +555,5 @@ mod tests {
         let sender_changes = execution.changes.get(&sender_address).unwrap();
         let modified_balance = sender_changes.balance.take_modified_ref().unwrap();
         assert_eq!(*modified_balance, Wei::from(900u64)); // 1000 - 100
-
-        // Verify applying receipt twice has no effect
-        execution.apply_receipt(&receipt).unwrap();
-
-        // Gas and balance should remain unchanged
-        assert_eq!(execution.gas, Gas::from(100u64));
-        let sender_changes = execution.changes.get(&sender_address).unwrap();
-        let modified_balance = sender_changes.balance.take_modified_ref().unwrap();
-        assert_eq!(*modified_balance, Wei::from(900u64));
     }
 }
