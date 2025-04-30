@@ -179,6 +179,7 @@ impl EvmExecution {
     pub fn apply_receipt(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
         // do nothing if receipt is already applied
         if self.receipt_applied {
+            tracing::warn!("receipt already applied, skipping");
             return Ok(());
         }
         self.receipt_applied = true;
