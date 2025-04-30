@@ -76,16 +76,20 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'stati
     let cache_multiplier = cache_multiplier.unwrap_or(1.0);
 
     // multiplies the given size in GBs by the cache multiplier
-    let cached_in_gigs_and_multiplied = |size_in_gbs: u64| -> CacheSetting {
+    let cached_in_gigs_and_multiplied = |size_in_gbs: u64, use_block_cache_only: bool| -> CacheSetting {
         let size = (size_in_gbs as f32) * cache_multiplier;
         let size = GIGABYTE * size as usize;
-        CacheSetting::Enabled(size)
+        if use_block_cache_only {
+            CacheSetting::BlockCacheOnly(size)
+        } else {
+            CacheSetting::Enabled(size)
+        }
     };
 
     hmap! {
-        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15), None),
+        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15, false), None),
         "accounts_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(20)),
-        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45), Some(20)),
+        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45, true), Some(20)),
         "account_slots_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(52)),
         "transactions" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
         "blocks_by_number" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
