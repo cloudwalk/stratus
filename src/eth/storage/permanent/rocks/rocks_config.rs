@@ -43,7 +43,7 @@ impl DbConfig {
         if let Some(prefix_len) = prefix_len {
             let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
             block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
-            opts.set_memtable_prefix_bloom_ratio(0.02);
+            opts.set_memtable_prefix_bloom_ratio(0.08);
             opts.set_prefix_extractor(transform);
         }
 
