@@ -31,7 +31,7 @@ impl DbConfig {
 
         block_based_options.set_pin_l0_filter_and_index_blocks_in_cache(true);
         block_based_options.set_cache_index_and_filter_blocks(true);
-        block_based_options.set_bloom_filter(15.5, false);
+        block_based_options.set_bloom_filter(10.0, false);
 
         // due to the nature of our application enabling rocks metrics decreases point lookup performance by 5x.
         #[cfg(feature = "rocks_metrics")]
