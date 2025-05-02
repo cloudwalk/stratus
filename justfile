@@ -232,6 +232,11 @@ e2e-eof:
     just stratus-test -a 0.0.0.0:3000 --executor-evm-spec Osaka
 
     cd e2e/eof
+    # Make the eof-solc script executable
+    chmod +x eof-solc
+    # Build the Docker image for eof-solc
+    docker build -t eof-solc:latest -f Dockerfile.eof-solc .
+    
     forge install
     # Run tests using alice pk
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "deploy()" --slow
