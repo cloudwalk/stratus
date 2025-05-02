@@ -130,7 +130,7 @@ rpc-downloader-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build
-    cargo run --bin rpc-downloader -- {{args}}
+    cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
 importer-offline *args="":
@@ -140,7 +140,7 @@ importer-offline-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build
-    cargo run --bin importer-offline --features dev -- {{args}}
+    cargo run --bin importer-offline -- {{args}} > importer-offline.log
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -308,11 +308,20 @@ shell-lint mode="--write":
     @shfmt {{ mode }} --indent 4 e2e/cloudwalk-contracts/*.sh
     @shellcheck e2e/cloudwalk-contracts/*.sh --severity=warning --shell=bash
 
-e2e-leader:
-    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000
-
-e2e-follower test="brlc":
+e2e-leader use_rocksdb_replication="false":
     #!/bin/bash
+    REPLICATION_FLAG=""
+    if [ "{{use_rocksdb_replication}}" = "true" ]; then
+        REPLICATION_FLAG="--use-rocksdb-replication"
+    fi
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000 ${REPLICATION_FLAG}
+
+e2e-follower test="brlc" use_rocksdb_replication="false":
+    #!/bin/bash
+    REPLICATION_FLAG=""
+    if [ "{{use_rocksdb_replication}}" = "true" ]; then
+        REPLICATION_FLAG="--use-rocksdb-replication"
+    fi
     if [ "{{test}}" = "kafka" ]; then
     # Start Kafka using Docker Compose
         just _log "Starting Kafka"
@@ -320,21 +329,21 @@ e2e-follower test="brlc":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 ${REPLICATION_FLAG} -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 ${REPLICATION_FLAG} -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
     fi
 
 
-_e2e-leader-follower-up-impl test="brlc":
+_e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false":
     #!/bin/bash
     mkdir e2e_logs
 
     # Start Stratus with leader flag
-    just e2e-leader
+    just e2e-leader {{use_rocksdb_replication}}
 
     # Start Stratus with follower flag
-    just e2e-follower {{test}}
+    just e2e-follower {{test}} {{use_rocksdb_replication}}
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
@@ -378,8 +387,8 @@ _e2e-leader-follower-up-impl test="brlc":
     fi
 
 # E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc":
-    just _e2e-leader-follower-up-impl {{test}}
+e2e-leader-follower-up test="brlc" use_rocksdb_replication="false":
+    just _e2e-leader-follower-up-impl {{test}} {{use_rocksdb_replication}}
     just e2e-leader-follower-down
 
 # E2E: Leader & Follower Down

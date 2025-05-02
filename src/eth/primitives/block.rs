@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use alloy_primitives::B256;
 use alloy_rpc_types_eth::BlockTransactions;
@@ -99,7 +99,7 @@ impl Block {
 
     /// Compact accounts changes removing intermediate values, keeping only the last modified nonce, balance, bytecode and slots.
     pub fn compact_account_changes(&self) -> Vec<ExecutionAccountChanges> {
-        let mut block_compacted_changes: HashMap<Address, ExecutionAccountChanges> = HashMap::new();
+        let mut block_compacted_changes: BTreeMap<Address, ExecutionAccountChanges> = BTreeMap::new();
         for transaction in &self.transactions {
             for transaction_changes in transaction.execution.changes.values() {
                 let account_compacted_changes = block_compacted_changes

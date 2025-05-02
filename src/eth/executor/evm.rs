@@ -1,5 +1,5 @@
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
@@ -395,7 +395,7 @@ impl RevmSession {
             config,
             storage,
             input: EvmInput::default(),
-            storage_changes: HashMap::default(),
+            storage_changes: BTreeMap::default(),
             metrics: EvmExecutionMetrics::default(),
         }
     }
@@ -403,7 +403,7 @@ impl RevmSession {
     /// Resets the session to be used with a new transaction.
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
-        self.storage_changes = HashMap::default();
+        self.storage_changes = BTreeMap::default();
         self.metrics = EvmExecutionMetrics::default();
     }
 }
@@ -526,7 +526,6 @@ fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execut
 
     Ok(EvmExecution {
         block_timestamp: input.block_timestamp,
-        receipt_applied: false,
         result,
         output: tx_output,
         logs,

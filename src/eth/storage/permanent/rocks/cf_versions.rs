@@ -7,6 +7,7 @@
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+use rocksdb::WriteBatch;
 use serde::Deserialize;
 use serde::Serialize;
 use strum::EnumCount;
@@ -16,12 +17,12 @@ use strum::VariantNames;
 use super::types::AccountRocksdb;
 use super::types::BlockNumberRocksdb;
 use super::types::BlockRocksdb;
+use super::types::BytesRocksdb;
 use super::types::SlotValueRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::SlotValue;
-
 macro_rules! impl_single_version_cf_value {
     ($name:ident, $inner_type:ty, $non_rocks_equivalent: ty) => {
         #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount, VariantNames, IntoStaticStr, fake::Dummy)]
@@ -83,6 +84,7 @@ impl_single_version_cf_value!(CfTransactionsValue, BlockNumberRocksdb, BlockNumb
 impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
 impl_single_version_cf_value!(CfLogsValue, BlockNumberRocksdb, BlockNumber);
+impl_single_version_cf_value!(CfReplicationLogsValue, BytesRocksdb, WriteBatch);
 
 #[cfg_attr(not(test), allow(dead_code))]
 trait ToCfName {
@@ -105,7 +107,7 @@ impl_to_cf_name!(CfTransactionsValue, "transactions");
 impl_to_cf_name!(CfBlocksByNumberValue, "blocks_by_number");
 impl_to_cf_name!(CfBlocksByHashValue, "blocks_by_hash");
 impl_to_cf_name!(CfLogsValue, "logs");
-
+impl_to_cf_name!(CfReplicationLogsValue, "replication_logs");
 /// Test that deserialization works for each variant of the enum.
 ///
 /// This is intended to give an error when the following happens:
@@ -275,6 +277,7 @@ mod tests {
         let mut blocks_by_number_checker = EnumCoverageDropBombChecker::<CfBlocksByNumberValue>::new();
         let mut blocks_by_hash_checker = EnumCoverageDropBombChecker::<CfBlocksByHashValue>::new();
         let mut logs_checker = EnumCoverageDropBombChecker::<CfLogsValue>::new();
+        let mut replication_logs_checker = EnumCoverageDropBombChecker::<CfReplicationLogsValue>::new();
 
         accounts_checker.add(test_deserialization::<_, AccountRocksdb, _>(CfAccountsValue::V1).unwrap());
         accounts_history_checker.add(test_deserialization::<_, AccountRocksdb, _>(CfAccountsHistoryValue::V1).unwrap());
@@ -284,5 +287,6 @@ mod tests {
         blocks_by_number_checker.add(test_deserialization::<_, BlockRocksdb, _>(CfBlocksByNumberValue::V1).unwrap());
         blocks_by_hash_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfBlocksByHashValue::V1).unwrap());
         logs_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfLogsValue::V1).unwrap());
+        replication_logs_checker.add(test_deserialization::<_, BytesRocksdb, _>(CfReplicationLogsValue::V1).unwrap());
     }
 }
