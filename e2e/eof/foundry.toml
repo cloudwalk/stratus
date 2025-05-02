@@ -3,6 +3,8 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
+solc = "0.8.27"
+
 via_ir = true
 eof_version = 1
 eof = true
