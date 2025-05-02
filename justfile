@@ -232,9 +232,7 @@ e2e-eof:
     just stratus-test -a 0.0.0.0:3000 --executor-evm-spec Osaka
 
     cd e2e/eof
-    # Make the eof-solc script executable
-    chmod +x eof-solc
-    # Build the Docker image for eof-solc
+    
     docker build -t eof-solc:latest -f Dockerfile.eof-solc .
     
     forge install

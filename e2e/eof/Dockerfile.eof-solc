@@ -1,4 +1,4 @@
-FROM ubuntu:jammy-20240212 as solc-builder
+FROM ubuntu:jammy-20240212 AS solc-builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
