@@ -83,13 +83,18 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'stati
     };
 
     hmap! {
+        // Point lookup optimized CFs
         "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(2), None),
-        "accounts_history" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2), Some(20)),
         "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15), Some(20)),
-        "account_slots_history" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(25), Some(52)),
-        "transactions" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(5), None),
-        "blocks_by_number" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(10), None),
-        "blocks_by_hash" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(1), None)
+        "blocks_by_hash" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(1), None),
+        
+        // Range scan optimized CFs
+        "account_slots_history" => DbConfig::OptimizedRangeScan.to_options(cached_in_gigs_and_multiplied(25), Some(52)),
+        "accounts_history" => DbConfig::OptimizedRangeScan.to_options(cached_in_gigs_and_multiplied(2), Some(20)),
+        "blocks_by_number" => DbConfig::OptimizedRangeScan.to_options(cached_in_gigs_and_multiplied(10), None),
+        
+        // Mixed workload CFs
+        "transactions" => DbConfig::MixedWorkload.to_options(cached_in_gigs_and_multiplied(5), None)
     }
 }
 

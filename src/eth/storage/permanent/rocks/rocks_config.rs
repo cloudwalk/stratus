@@ -11,12 +11,13 @@ pub enum CacheSetting {
 #[derive(Debug, Clone, Copy)]
 pub enum DbConfig {
     OptimizedPointLookUp,
-    Default,
+    OptimizedRangeScan,
+    MixedWorkload,
 }
 
 impl Default for DbConfig {
     fn default() -> Self {
-        Self::Default
+        Self::MixedWorkload
     }
 }
 
@@ -59,16 +60,39 @@ impl DbConfig {
             DbConfig::OptimizedPointLookUp => {
                 block_based_options.set_data_block_hash_ratio(0.3);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
-
                 opts.set_use_direct_reads(true);
                 opts.set_memtable_whole_key_filtering(true);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
+                
+                block_based_options.set_block_size(16 * 1024); // 16KB blocks
+                opts.set_target_file_size_base(128 * 1024 * 1024); // 128MB SST files
+                opts.set_max_bytes_for_level_base(256 * 1024 * 1024); // 256MB for L1
+                opts.set_level_compaction_dynamic_level_bytes(false);
             }
-            DbConfig::Default => {
+            
+            DbConfig::OptimizedRangeScan => {
+                block_based_options.set_block_size(64 * 1024); // 64KB blocks
+                opts.set_target_file_size_base(512 * 1024 * 1024); // 512MB SST files
+                opts.set_max_bytes_for_level_base(1024 * 1024 * 1024); // 1GB for L1
+                
                 opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
                 opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
-                opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true); // mostly defaults except max_dict_bytes
+                opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true);
                 opts.set_bottommost_zstd_max_train_bytes(1600 * 1024, true);
+                
+                opts.set_level_compaction_dynamic_level_bytes(true);
+            }
+            
+            DbConfig::MixedWorkload => {
+                opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+                opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
+                opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true);
+                opts.set_bottommost_zstd_max_train_bytes(1600 * 1024, true);
+                
+                block_based_options.set_block_size(32 * 1024); // 32KB blocks
+                opts.set_target_file_size_base(256 * 1024 * 1024); // 256MB SST files
+                opts.set_max_bytes_for_level_base(512 * 1024 * 1024); // 512MB for L1
+                opts.set_level_compaction_dynamic_level_bytes(true);
             }
         }
 
