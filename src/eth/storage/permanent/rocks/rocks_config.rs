@@ -66,14 +66,12 @@ impl DbConfig {
                 
                 block_based_options.set_block_size(16 * 1024); // 16KB blocks
                 opts.set_target_file_size_base(128 * 1024 * 1024); // 128MB SST files
-                opts.set_max_bytes_for_level_base(256 * 1024 * 1024); // 256MB for L1
                 opts.set_level_compaction_dynamic_level_bytes(false);
             }
             
             DbConfig::OptimizedRangeScan => {
                 block_based_options.set_block_size(64 * 1024); // 64KB blocks
                 opts.set_target_file_size_base(512 * 1024 * 1024); // 512MB SST files
-                opts.set_max_bytes_for_level_base(1024 * 1024 * 1024); // 1GB for L1
                 
                 opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
                 opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
@@ -91,7 +89,6 @@ impl DbConfig {
                 
                 block_based_options.set_block_size(32 * 1024); // 32KB blocks
                 opts.set_target_file_size_base(256 * 1024 * 1024); // 256MB SST files
-                opts.set_max_bytes_for_level_base(512 * 1024 * 1024); // 512MB for L1
                 opts.set_level_compaction_dynamic_level_bytes(true);
             }
         }
