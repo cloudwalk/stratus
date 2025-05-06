@@ -309,7 +309,8 @@ run_test() {
   
   echo "moving rocks database..."
   sudo mkdir -p /usr/local/stratus/data/rocksdb_old-rocksdb
-  sudo mv /usr/local/stratus/data/rocksdb /usr/local/stratus/data/rocksdb_old-rocksdb
+  sudo cp -r /usr/local/stratus/data/backupzin /usr/local/stratus/data/rocksdb_old-rocksdb
+  sudo rm -rf /usr/local/stratus/data/rocksdb
 
   echo "migrating rocks configuration..."
   sudo systemctl start rocks_migrator
