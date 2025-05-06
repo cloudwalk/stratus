@@ -221,10 +221,19 @@ download_artifacts() {
       fi
       
       if [ -n "$binary_name" ]; then
-        # Copy the binary to the destination directory
-        cp "$temp_dir/$binary_name" "$DESTINATION_DIR/$binary_name-$branch"
-        chmod +x "$DESTINATION_DIR/$binary_name-$branch"
-        echo "Installed $binary_name from branch $branch to $DESTINATION_DIR/$binary_name-$branch"
+        # Find the binary file which might have a commit hash appended
+        local binary_file=$(find "$temp_dir" -type f -name "${binary_name}*" | head -n 1)
+        
+        if [ -n "$binary_file" ]; then
+          # Copy the binary to the destination directory with just the base name
+          cp "$binary_file" "$DESTINATION_DIR/$binary_name"
+          chmod +x "$DESTINATION_DIR/$binary_name"
+          echo "Installed $binary_name from branch $branch to $DESTINATION_DIR/$binary_name"
+        else
+          echo "Error: Could not find binary file for $binary_name in the extracted artifact"
+          ls -la "$temp_dir"  # List files for debugging
+          return 1
+        fi
       fi
       
       # Clean up
