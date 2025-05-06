@@ -16,7 +16,6 @@ POLL_INTERVAL=30    # Time between checks for workflow completion (in seconds)
 
 # Routine test configuration
 SERVER_ENDPOINT=${SERVER_ENDPOINT:-"http://10.52.184.7:3232"}
-STATUS_ENDPOINT="${SERVER_ENDPOINT}/status"
 CASHIER_CONTRACT=${CASHIER_CONTRACT:-"0x6ac607aBA84f672C092838a5c32c22907765F666"}
 PRIVATE_KEYS_FILE=${PRIVATE_KEYS_FILE:-"./keys_new.txt"}
 LEADER_HTTP_ADDRESS=${LEADER_HTTP_ADDRESS:-"http://10.52.184.6:3000/?app=bench"}
@@ -244,7 +243,6 @@ download_artifacts() {
           
           # Copy the binary to the destination directory with just the base name
           cp "$binary_file" "$DESTINATION_DIR/$binary_name"
-          chmod +x "$DESTINATION_DIR/$binary_name"
           echo "Installed $binary_name from branch $branch to $DESTINATION_DIR/$binary_name"
         else
           echo "Error: Could not find binary file for $binary_name in the extracted artifact"
@@ -261,23 +259,74 @@ download_artifacts() {
   return 0
 }
 
+wait_for_service_to_complete() {
+  local service_name=$1
+  local check_interval=${2:-30}  # Default to checking every 5 seconds
+  
+  echo "Waiting for $service_name service to complete..."
+  
+  while true; do
+    # Check if the service is still active
+    if sudo systemctl is-active "$service_name" &>/dev/null; then
+      echo "Service $service_name is still running. Waiting..."
+      sleep $check_interval
+    else
+      echo "Service $service_name has completed."
+      return 0
+    fi
+  done
+}
+
+# Function to wait for stratus health endpoint to respond
+wait_for_stratus_health() {
+  local health_url=${1:-"http://localhost:3000/health"}
+  local check_interval=${2:-5}  # Default to checking every 5 seconds
+  local max_attempts=${3:-60}   # Default to 5 minutes (60 * 5 seconds)
+  
+  echo "Waiting for stratus health check to pass at $health_url..."
+  
+  local attempt=0
+  while [ $attempt -lt $max_attempts ]; do
+    # Try to curl the health endpoint
+    if curl -s -f "$health_url" &>/dev/null; then
+      echo "Stratus health check passed!"
+      return 0
+    else
+      echo "Stratus health check not passing yet. Attempt $((attempt+1))/$max_attempts. Waiting..."
+      sleep $check_interval
+      ((attempt++))
+    fi
+  done
+  
+  echo "Stratus health check failed after $max_attempts attempts."
+  return 1
+}
+
+
 # Function to run tests
 run_test() {
   local branch=$1
   
   echo "moving rocks database..."
+  sudo mkdir -p /usr/local/stratus/data/rocksdb_old-rocksdb
   sudo mv /usr/local/stratus/data/rocksdb /usr/local/stratus/data/rocksdb_old-rocksdb
 
   echo "migrating rocks configuration..."
-  sudo ./usr/local/stratus/bin/rocks_migrator --source /usr/local/stratus/data/rocksdb_old-rocksdb --destination /usr/local/stratus/data/rocksdb --batch-size 1000000
+  sudo systemctl start rocks_migrator
+
+  wait_for_service_to_complete rocks_migrator
+
+  sudo rm -rf /usr/local/stratus/data/rocksdb_old-rocksdb
 
   echo "starting stratus service..."
   sudo systemctl start stratus
 
+  wait_for_stratus_health "http://localhost:3000/health"
+
   echo "Running tests for branch: $branch"
   
   echo "Sending routine request to server..."
-  curl -X POST "${SERVER_ENDPOINT}" \
+  curl -X POST "${SERVER_ENDPOINT}/start" \
        -H "Content-Type: application/json" \
        -d "{
            \"routine_type\": \"Cashier\",
@@ -301,7 +350,7 @@ run_test() {
     echo "Checking routine status..."
     
     # Get the status from the endpoint
-    local status_response=$(curl -s "${STATUS_ENDPOINT}")
+    local status_response=$(curl -s "${SERVER_ENDPOINT}/status")
     
     # Parse the JSON response using jq
     if ! command -v jq &> /dev/null; then
