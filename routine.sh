@@ -14,6 +14,13 @@ GITHUB_TOKEN=${GITHUB_TOKEN:-""}  # Set your GitHub token as an environment vari
 MAX_WAIT_TIME=1800  # Maximum time to wait for workflow to complete (in seconds)
 POLL_INTERVAL=30    # Time between checks for workflow completion (in seconds)
 
+# Routine test configuration
+SERVER_ENDPOINT=${SERVER_ENDPOINT:-"http://10.52.184.7:3232"}
+CASHIER_CONTRACT=${CASHIER_CONTRACT:-"0x6ac607aBA84f672C092838a5c32c22907765F666"}
+PRIVATE_KEYS_FILE=${PRIVATE_KEYS_FILE:-"./keys_new.txt"}
+LEADER_HTTP_ADDRESS=${LEADER_HTTP_ADDRESS:-"http://10.52.184.6:3000/?app=bench"}
+RUN_DURATION=${RUN_DURATION:-300}  # Duration in seconds
+
 # Check if GitHub token is provided
 if [ -z "$GITHUB_TOKEN" ]; then
   echo "Warning: GITHUB_TOKEN environment variable not set. API rate limits may apply."
@@ -266,6 +273,22 @@ run_test() {
   sudo systemctl start stratus
 
   echo "Running tests for branch: $branch"
+  
+  echo "Sending routine request to server..."
+  curl -X POST "${SERVER_ENDPOINT}" \
+       -H "Content-Type: application/json" \
+       -d "{
+           \"routine_type\": \"Cashier\",
+           \"routine_config\": {
+               \"cashier_target_account_strategy\": \"Random\",
+               \"cashier_contract_address\": \"${CASHIER_CONTRACT}\",
+               \"cashier_private_keys_file\": \"${PRIVATE_KEYS_FILE}\"
+           },
+           \"leader_http_address\": \"${LEADER_HTTP_ADDRESS}\",
+           \"run_duration\": ${RUN_DURATION}
+       }"
+  
+  echo "Routine request sent."
 
   return 0
 }
