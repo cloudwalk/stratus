@@ -21,6 +21,7 @@ PRIVATE_KEYS_FILE=${PRIVATE_KEYS_FILE:-"./keys_new.txt"}
 LEADER_HTTP_ADDRESS=${LEADER_HTTP_ADDRESS:-"http://10.52.184.6:3000/?app=bench"}
 RUN_DURATION=${RUN_DURATION:-300}  # Duration in seconds
 STATUS_CHECK_INTERVAL=60  # Time between status checks (in seconds)
+RESULTS_DIR=${RESULTS_DIR:-"./benchmark_results"}  # Directory to store benchmark results
 
 # Check if GitHub token is provided
 if [ -z "$GITHUB_TOKEN" ]; then
@@ -314,7 +315,7 @@ run_test() {
   
   echo "moving rocks database..."
   sudo mkdir -p /usr/local/stratus/data/rocksdb_old-rocksdb
-  sudo cp -r /usr/local/stratus/data/backupzinho/* /usr/local/stratus/data/rocksdb_old-rocksdb/
+  sudo cp -r /usr/local/stratus/data/backup/* /usr/local/stratus/data/rocksdb_old-rocksdb/
   sudo rm -rf /usr/local/stratus/data/rocksdb
 
   echo "migrating rocks configuration..."
@@ -383,10 +384,42 @@ run_test() {
       # Print the latest results
       echo "Results:"
       echo "$status_response" | jq '.latest_results'
+      
+      # Save results to file
+      save_benchmark_results "$branch" "$status_response"
     fi
   done
   
   return 0
+}
+
+# Function to save benchmark results to a file
+save_benchmark_results() {
+  local branch=$1
+  local status_response=$2
+  local timestamp=$(date +"%Y%m%d_%H%M%S")
+  
+  # Create results directory if it doesn't exist
+  mkdir -p "$RESULTS_DIR"
+  
+  # Create a sanitized branch name for the filename (replace slashes with underscores)
+  local sanitized_branch=$(echo "$branch" | tr '/' '_')
+  
+  # Create the filename with branch name and timestamp
+  local filename="${RESULTS_DIR}/${sanitized_branch}_${timestamp}.json"
+  
+  echo "Saving benchmark results to $filename"
+  
+  # Extract and format the results
+  {
+    echo "{"
+    echo "  \"branch\": \"$branch\","
+    echo "  \"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"," # ISO 8601 format
+    echo "  \"results\": $(echo "$status_response" | jq '.latest_results')"
+    echo "}"
+  } | jq '.' > "$filename"
+  
+  echo "Benchmark results saved successfully to $filename"
 }
 
 # Main function to process a list of branches
