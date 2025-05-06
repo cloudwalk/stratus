@@ -21,11 +21,11 @@ pub struct StorageCache {
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct CacheConfig {
     /// Capacity of slot cache
-    #[arg(long = "slot-cache-capacity", env = "SLOT_CACHE_CAPACITY", default_value = "100000")]
+    #[arg(long = "slot-cache-capacity", env = "SLOT_CACHE_CAPACITY", default_value = "0")]
     pub slot_cache_capacity: usize,
 
     /// Capacity of account cache
-    #[arg(long = "account-cache-capacity", env = "ACCOUNT_CACHE_CAPACITY", default_value = "20000")]
+    #[arg(long = "account-cache-capacity", env = "ACCOUNT_CACHE_CAPACITY", default_value = "0")]
     pub account_cache_capacity: usize,
 }
 
