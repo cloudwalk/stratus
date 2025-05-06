@@ -256,11 +256,17 @@ download_artifacts() {
 run_test() {
   local branch=$1
   
+  echo "moving rocks database..."
+  sudo mv /usr/local/stratus/data/rocksdb /usr/local/stratus/data/rocksdb_old-rocksdb
+
+  echo "migrating rocks configuration..."
+  sudo ./usr/local/stratus/bin/rocks_migrator --source /usr/local/stratus/data/rocksdb_old-rocksdb --destination /usr/local/stratus/data/rocksdb --batch-size 1000000
+
+  echo "starting stratus service..."
+  sudo systemctl start stratus
+
   echo "Running tests for branch: $branch"
-  
-  # More test steps will be added later
-  # Note: stratus service is already stopped before binary replacement
-  
+
   return 0
 }
 
