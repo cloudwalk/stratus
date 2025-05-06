@@ -55,6 +55,7 @@ jobs:
         run: |
           cargo build --release \
             --bin stratus \
+            --bin rocks_migrator \
             --features "$FEATURES"
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
@@ -65,7 +66,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd target/release
-          sha256sum stratus > ../../checksums.txt
+          sha256sum stratus rocks_migrator > ../../checksums.txt
 
       - name: Upload stratus
         uses: actions/upload-artifact@v4
@@ -84,7 +85,18 @@ jobs:
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
 
+      - name: Upload rocks_migrator
+        uses: actions/upload-artifact@v4
+        id: upload-migrator
+        with:
+          name: rocks_migrator-${{ github.sha }}
+          path: target/release/rocks_migrator
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+
       - name: Print outputs
         run: |
           echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
           echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
+          echo "Artifact ID: ${{ steps.upload-migrator.outputs.artifact-id }} (rocks_migrator)"
+          echo "Artifact URL: ${{ steps.upload-migrator.outputs.artifact-url }} (rocks_migrator)"
