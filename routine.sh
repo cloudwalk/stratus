@@ -261,18 +261,23 @@ download_artifacts() {
 
 wait_for_service_to_complete() {
   local service_name=$1
-  local check_interval=${2:-30}  # Default to checking every 5 seconds
+  local check_interval=${2:-30}  # Default to checking every 30 seconds
   
   echo "Waiting for $service_name service to complete..."
   
   while true; do
-    # Check if the service is still active
-    if sudo systemctl is-active "$service_name" &>/dev/null; then
+    # Get the service status
+    local status=$(sudo systemctl is-active "$service_name")
+    
+    if [ "$status" = "active" ]; then
       echo "Service $service_name is still running. Waiting..."
       sleep $check_interval
-    else
+    elif [ "$status" = "inactive" ]; then
       echo "Service $service_name has completed."
       return 0
+    else
+      echo "Service $service_name is in an unexpected state: $status. Retrying..."
+      sleep $check_interval
     fi
   done
 }
