@@ -16,10 +16,12 @@ POLL_INTERVAL=30    # Time between checks for workflow completion (in seconds)
 
 # Routine test configuration
 SERVER_ENDPOINT=${SERVER_ENDPOINT:-"http://10.52.184.7:3232"}
+STATUS_ENDPOINT="${SERVER_ENDPOINT}/status"
 CASHIER_CONTRACT=${CASHIER_CONTRACT:-"0x6ac607aBA84f672C092838a5c32c22907765F666"}
 PRIVATE_KEYS_FILE=${PRIVATE_KEYS_FILE:-"./keys_new.txt"}
 LEADER_HTTP_ADDRESS=${LEADER_HTTP_ADDRESS:-"http://10.52.184.6:3000/?app=bench"}
 RUN_DURATION=${RUN_DURATION:-300}  # Duration in seconds
+STATUS_CHECK_INTERVAL=60  # Time between status checks (in seconds)
 
 # Check if GitHub token is provided
 if [ -z "$GITHUB_TOKEN" ]; then
@@ -288,8 +290,46 @@ run_test() {
            \"run_duration\": ${RUN_DURATION}
        }"
   
-  echo "Routine request sent."
-
+  echo "Routine request sent. Monitoring status..."
+  
+  # Monitor the status of the routine
+  local is_running=true
+  local has_error=false
+  local error_message=""
+  
+  while [ "$is_running" = true ]; do
+    echo "Checking routine status..."
+    
+    # Get the status from the endpoint
+    local status_response=$(curl -s "${STATUS_ENDPOINT}")
+    
+    # Parse the JSON response using jq
+    if ! command -v jq &> /dev/null; then
+      echo "Error: jq is required for JSON parsing but it's not installed."
+      return 1
+    fi
+    
+    # Extract values from the JSON response
+    is_running=$(echo "$status_response" | jq -r '.is_running')
+    has_error=$(echo "$status_response" | jq -r '.error != null')
+    
+    if [ "$has_error" = "true" ]; then
+      error_message=$(echo "$status_response" | jq -r '.error')
+      echo "Error detected: $error_message"
+      return 1
+    fi
+    
+    if [ "$is_running" = "true" ]; then
+      echo "Routine is still running. Waiting ${STATUS_CHECK_INTERVAL} seconds before checking again..."
+      sleep $STATUS_CHECK_INTERVAL
+    else
+      echo "Routine has completed successfully."
+      # Print the latest results
+      echo "Results:"
+      echo "$status_response" | jq '.latest_results'
+    fi
+  done
+  
   return 0
 }
 
