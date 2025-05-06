@@ -225,6 +225,14 @@ download_artifacts() {
         local binary_file=$(find "$temp_dir" -type f -name "${binary_name}*" | head -n 1)
         
         if [ -n "$binary_file" ]; then
+          # Stop stratus service before copying if this is the stratus binary
+          if [[ "$binary_name" == "stratus" ]]; then
+            echo "Stopping stratus service before replacing binary..."
+            sudo systemctl stop stratus
+            # Give it a moment to fully stop
+            sleep 2
+          fi
+          
           # Copy the binary to the destination directory with just the base name
           cp "$binary_file" "$DESTINATION_DIR/$binary_name"
           chmod +x "$DESTINATION_DIR/$binary_name"
@@ -240,6 +248,20 @@ download_artifacts() {
       rm -rf "$temp_dir"
     fi
   done
+  
+  return 0
+}
+
+# Function to run tests
+run_test() {
+  local branch=$1
+  
+  echo "Running tests for branch: $branch"
+  
+  # More test steps will be added later
+  # Note: stratus service is already stopped before binary replacement
+  
+  return 0
 }
 
 # Main function to process a list of branches
@@ -259,6 +281,7 @@ process_branches() {
       echo "Found existing successful workflow run. Downloading artifacts..."
       if download_artifacts "$branch"; then
         echo "✅ Successfully processed branch: $branch"
+        run_test "$branch"
         ((success_count++))
       else
         echo "❌ Failed to download artifacts for branch: $branch"
@@ -282,6 +305,7 @@ process_branches() {
           echo "Workflow run completed successfully. Downloading artifacts..."
           if download_artifacts "$branch"; then
             echo "✅ Successfully processed branch: $branch"
+            run_test "$branch"
             ((success_count++))
           else
             echo "❌ Failed to download artifacts for branch: $branch"
