@@ -49,6 +49,7 @@ tokio = { version = "=1.38.2", features = [
     "rt-multi-thread",
     "macros",
     "signal",
+    "tracing"
 ] }
 tokio-util = "=0.7.11"
 

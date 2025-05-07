@@ -48,6 +48,9 @@ jobs:
           cache-provider: "github"
           save-if: ${{ github.ref_name == 'main' && github.event_name == 'push' }}
 
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
@@ -55,7 +58,7 @@ jobs:
         run: cargo install cargo-pgo
 
       - name: Build instrumented binary
-        run: cargo pgo build -- --bin stratus --features "$FEATURES"
+        run: RUSTFLAGS="--cfg tokio_unstable" cargo pgo build -- --bin stratus --features "$FEATURES" --cfg tokio_unstable
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
           TRACING_LOG_FORMAT: json
