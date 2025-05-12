@@ -5407,6 +5407,7 @@ dependencies = [
  "reqwest 0.12.4",
  "revm",
  "revm-inspectors",
+ "ring",
  "rlp",
  "rocksdb",
  "rust_decimal",
