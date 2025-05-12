@@ -342,7 +342,7 @@ pub fn info_task_spawn(name: &str) {
 /// Returns the formatted tracing message.
 #[track_caller]
 pub fn warn_task_cancellation(task: &str) -> String {
-    let message = format!("exiting {} because it received a cancellation signal", task);
+    let message = format!("exiting {task} because it received a cancellation signal");
     tracing::warn!(%message);
     message
 }
@@ -352,7 +352,7 @@ pub fn warn_task_cancellation(task: &str) -> String {
 /// Returns the formatted tracing message.
 #[track_caller]
 pub fn warn_task_tx_closed(task: &str) -> String {
-    let message = format!("exiting {} because the tx channel on the receiver side was closed", task);
+    let message = format!("exiting {task} because the tx channel on the receiver side was closed");
     tracing::warn!(%message);
     message
 }
@@ -362,7 +362,7 @@ pub fn warn_task_tx_closed(task: &str) -> String {
 /// Returns the formatted tracing message.
 #[track_caller]
 pub fn warn_task_rx_closed(task: &str) -> String {
-    let message = format!("exiting {} because the rx channel on the sender side was closed", task);
+    let message = format!("exiting {task} because the rx channel on the sender side was closed");
     tracing::warn!(%message);
     message
 }

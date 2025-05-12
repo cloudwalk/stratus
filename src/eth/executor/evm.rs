@@ -552,7 +552,7 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
             (result, output, Vec::new(), gas)
         }
         RevmExecutionResult::Halt { reason, gas_used } => {
-            let result = ExecutionResult::new_halted(format!("{:?}", reason));
+            let result = ExecutionResult::new_halted(format!("{reason:?}"));
             let output = Bytes::default();
             let gas = Gas::from(gas_used);
             (result, output, Vec::new(), gas)

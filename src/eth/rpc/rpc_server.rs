@@ -14,11 +14,14 @@ use ethereum_types::U256;
 use futures::join;
 use http::Method;
 use itertools::Itertools;
+use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
+use jsonrpsee::server::BatchRequestConfig;
 use jsonrpsee::server::RandomStringIdProvider;
 use jsonrpsee::server::RpcModule;
-use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
+use jsonrpsee::server::ServerConfig;
 use jsonrpsee::types::Params;
+use jsonrpsee::ws_client::RpcServiceBuilder;
 use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
@@ -69,7 +72,6 @@ use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
-use crate::eth::rpc::proxy_get_request::ProxyGetRequestTempLayer;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcHttpMiddleware;
@@ -141,21 +143,28 @@ pub async fn serve_rpc(
     // configure middleware
     let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
-    let http_middleware = tower::ServiceBuilder::new()
-        .layer(cors)
-        .layer_fn(RpcHttpMiddleware::new)
-        .layer(ProxyGetRequestTempLayer::new("/health", "stratus_health").unwrap())
-        .layer(ProxyGetRequestTempLayer::new("/version", "stratus_version").unwrap())
-        .layer(ProxyGetRequestTempLayer::new("/config", "stratus_config").unwrap())
-        .layer(ProxyGetRequestTempLayer::new("/state", "stratus_state").unwrap());
+    let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
+        ProxyGetRequestLayer::new([
+            ("/health", "stratus_health"),
+            ("/version", "stratus_version"),
+            ("/config", "stratus_config"),
+            ("/state", "stratus_state"),
+        ])
+        .unwrap(),
+    );
+
+    let server_config = ServerConfig::builder()
+        .set_id_provider(RandomStringIdProvider::new(8))
+        .max_connections(rpc_config.rpc_max_connections)
+        .max_response_body_size(rpc_config.rpc_max_response_size_bytes)
+        .set_batch_request_config(BatchRequestConfig::Limit(500))
+        .build();
 
     // serve module
     let server = Server::builder()
         .set_rpc_middleware(rpc_middleware)
         .set_http_middleware(http_middleware)
-        .set_id_provider(RandomStringIdProvider::new(8))
-        .max_connections(rpc_config.rpc_max_connections)
-        .max_response_body_size(rpc_config.rpc_max_response_size_bytes)
+        .set_config(server_config)
         .build(rpc_config.rpc_address)
         .await?;
 

@@ -126,7 +126,7 @@ impl<'de> serde::Deserialize<'de> for ExternalReceipt {
             return Err(serde::de::Error::custom("ExternalReceipt must be a JSON object, received invalid type"));
         }
 
-        let receipt = serde_json::from_value(value).map_err(|e| serde::de::Error::custom(format!("Failed to deserialize ExternalReceipt: {}", e)))?;
+        let receipt = serde_json::from_value(value).map_err(|e| serde::de::Error::custom(format!("Failed to deserialize ExternalReceipt: {e}")))?;
 
         Ok(ExternalReceipt(receipt))
     }

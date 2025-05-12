@@ -257,7 +257,7 @@ impl RocksStorageState {
 
         let Some(block) = self.blocks_by_number.get(&block_number)? else {
             return log_and_err!("the block that the transaction was supposed to be in was not found")
-                .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash));
+                .with_context(|| format!("block_number = {block_number:?} tx_hash = {tx_hash}"));
         };
         let block = block.into_inner();
 
@@ -269,7 +269,7 @@ impl RocksStorageState {
                 Ok(Some(TransactionMined::from_rocks_primitives(tx, block_number.into_inner(), block.header.hash)))
             }
             None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
-                .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
+                .with_context(|| format!("block_number = {block_number:?} tx_hash = {tx_hash}")),
         }
     }
 

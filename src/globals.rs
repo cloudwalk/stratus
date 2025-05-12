@@ -142,7 +142,7 @@ impl GlobalState {
     pub fn shutdown_from(caller: &str, reason: &str) -> String {
         tracing::warn!(%caller, %reason, "application is shutting down");
         STRATUS_SHUTDOWN_SIGNAL.cancel();
-        format!("{} {}", caller, reason)
+        format!("{caller} {reason}")
     }
 
     /// Checks if the application is being shutdown.
@@ -180,7 +180,7 @@ impl GlobalState {
     pub fn shutdown_importer_from(caller: &str, reason: &str) -> String {
         tracing::warn!(%caller, %reason, "importer is shutting down");
         Self::set_importer_shutdown(true);
-        format!("{} {}", caller, reason)
+        format!("{caller} {reason}")
     }
 
     /// Checks if the importer is shut down or being shut down.

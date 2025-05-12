@@ -140,7 +140,7 @@ impl Evms {
             let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
 
             for evm_index in 1..=num_evms {
-                let evm_task_name = format!("{}-{}", task_name, evm_index);
+                let evm_task_name = format!("{task_name}-{evm_index}");
                 let evm_storage = Arc::clone(&storage);
                 let evm_config = config.clone();
                 let evm_rx = evm_rx.clone();
@@ -176,7 +176,7 @@ impl Evms {
             let (tx, rx) = crossbeam_channel::unbounded::<InspectorTask>();
 
             for index in 1..=num_evms {
-                let task_name = format!("{}-{}", task_name, index);
+                let task_name = format!("{task_name}-{index}");
                 let storage = Arc::clone(&storage);
                 let config = config.clone();
                 let rx = rx.clone();
