@@ -1,5 +1,8 @@
 name: Tests in docs
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches:

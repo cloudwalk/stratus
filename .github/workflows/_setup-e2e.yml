@@ -1,5 +1,8 @@
 name: Setup E2E Environment
 
+permissions:
+  contents: read
+
 on:
   workflow_call:
     inputs:
