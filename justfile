@@ -100,7 +100,7 @@ stratus-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build --features dev
-    cargo run --bin stratus --features dev -- --leader --rocks-cf-size-metrics-interval 30s {{args}} &
+    cargo run --bin stratus --features dev -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
