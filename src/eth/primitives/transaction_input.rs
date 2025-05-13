@@ -1,3 +1,4 @@
+use alloy_consensus::transaction::Recovered;
 use alloy_consensus::Signed;
 use alloy_consensus::Transaction;
 use alloy_consensus::TxEip1559;
@@ -85,7 +86,7 @@ impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         fn convert_tx(envelope: TxEnvelope) -> Result<TransactionInput, rlp::DecoderError> {
             TransactionInput::try_from(alloy_rpc_types_eth::Transaction {
-                inner: envelope,
+                inner: envelope.try_into_recovered().map_err(|_| rlp::DecoderError::Custom("signature error"))?,
                 block_hash: None,
                 block_number: None,
                 transaction_index: None,
@@ -146,7 +147,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
                 return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
             }
         },
-        false => Address::from(value.from),
+        false => Address::from(value.inner.signer()),
     };
 
     // Get signature components from the envelope
@@ -161,7 +162,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
         hash: Hash::from(*value.inner.tx_hash()),
         nonce: Nonce::from(value.inner.nonce()),
         signer,
-        from: Address::from(value.from),
+        from: Address::from(value.inner.signer()),
         to: match value.inner.kind() {
             TxKind::Call(addr) => Some(Address::from(addr)),
             TxKind::Create => None,
@@ -274,7 +275,7 @@ impl From<TransactionInput> for AlloyTransaction {
         };
 
         Self {
-            inner,
+            inner: Recovered::new_unchecked(inner, value.signer.into()),
             block_hash: None,
             block_number: None,
             transaction_index: None,

@@ -72,9 +72,7 @@ impl TransactionMined {
 
 impl From<TransactionMined> for AlloyTransaction {
     fn from(value: TransactionMined) -> Self {
-        let signer = value.input.signer;
         let gas_price = value.input.gas_price;
-
         let tx = AlloyTransaction::from(value.input);
 
         Self {
@@ -82,7 +80,6 @@ impl From<TransactionMined> for AlloyTransaction {
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             transaction_index: Some(value.transaction_index.into()),
-            from: signer.into(),
             effective_gas_price: Some(gas_price.into()),
         }
     }
@@ -122,7 +119,6 @@ impl From<TransactionMined> for AlloyReceipt {
             from: value.input.signer.into(),
             to: value.input.to.map_into(),
             contract_address: value.execution.contract_address().map_into(),
-            authorization_list: None,
         }
     }
 }

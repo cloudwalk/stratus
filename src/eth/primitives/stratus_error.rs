@@ -328,8 +328,8 @@ impl From<EVMError<StratusError>> for StratusError {
         match value {
             EVMError::Database(err) => err,
             EVMError::Custom(err) => Self::Transaction(TransactionError::EvmFailed(err)),
-            EVMError::Header(err) => Self::Transaction(TransactionError::EvmFailed(err)),
-            EVMError::Transaction(err) => Self::Transaction(TransactionError::EvmFailed(err)),
+            EVMError::Header(err) => Self::Transaction(TransactionError::EvmFailed(err.to_string())),
+            EVMError::Transaction(err) => Self::Transaction(TransactionError::EvmFailed(err.to_string())),
         }
     }
 }

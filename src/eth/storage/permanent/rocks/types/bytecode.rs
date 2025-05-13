@@ -2,13 +2,17 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use revm::bytecode::eip7702::Eip7702Bytecode;
-use revm::bytecode::eof::{CodeInfo, EofBody, EofHeader};
-use revm::bytecode::{Eof, JumpTable, LegacyAnalyzedBytecode};
-
-use crate::alias::{RevmBytecode, RevmBytes};
+use revm::bytecode::eof::CodeInfo;
+use revm::bytecode::eof::EofBody;
+use revm::bytecode::eof::EofHeader;
+use revm::bytecode::Eof;
+use revm::bytecode::JumpTable;
+use revm::bytecode::LegacyAnalyzedBytecode;
+use revm::bytecode::LegacyRawBytecode;
 
 use super::bytes::BytesRocksdb;
 use super::AddressRocksdb;
+use crate::alias::RevmBytecode;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub enum BytecodeRocksdb {
@@ -29,7 +33,7 @@ pub struct LegacyAnalyzedBytecodeRocksdb {
 pub struct EofHeaderRocksdb {
     pub types_size: u16,
     pub code_sizes: Vec<u16>,
-    pub container_sizes: Vec<u16>,
+    pub container_sizes: Vec<u32>,
     pub data_size: u16,
     pub sum_code_sizes: usize,
     pub sum_container_sizes: usize,
@@ -38,9 +42,10 @@ pub struct EofHeaderRocksdb {
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct EofBodyRocksdb {
     pub types_section: Vec<TypesSectionRocksdb>,
-    pub code_section: Vec<BytesRocksdb>,
+    pub code_section: Vec<usize>,
     pub container_section: Vec<BytesRocksdb>,
     pub data_section: BytesRocksdb,
+    pub code: BytesRocksdb,
     pub is_data_filled: bool,
 }
 
@@ -78,7 +83,6 @@ impl From<CodeInfo> for TypesSectionRocksdb {
 impl From<RevmBytecode> for BytecodeRocksdb {
     fn from(value: RevmBytecode) -> Self {
         match value {
-            RevmBytecode::LegacyRaw(bytes) => BytecodeRocksdb::LegacyRaw(bytes.to_vec().into()),
             RevmBytecode::LegacyAnalyzed(analyzed) => BytecodeRocksdb::LegacyAnalyzed(LegacyAnalyzedBytecodeRocksdb {
                 bytecode: analyzed.bytecode().clone().into(),
                 original_len: analyzed.original_len(),
@@ -94,11 +98,12 @@ impl From<RevmBytecode> for BytecodeRocksdb {
                     sum_container_sizes: eof.header.sum_container_sizes,
                 },
                 body: EofBodyRocksdb {
-                    types_section: eof.body.types_section.iter().copied().map(Into::into).collect(),
-                    code_section: eof.body.code_section.iter().cloned().map(Into::into).collect(),
+                    types_section: eof.body.code_info.iter().copied().map(Into::into).collect(),
+                    code_section: eof.body.code_section.clone(),
                     container_section: eof.body.container_section.iter().cloned().map(Into::into).collect(),
                     data_section: eof.body.data_section.clone().into(),
                     is_data_filled: eof.body.is_data_filled,
+                    code: eof.body.code.clone().into(),
                 },
                 raw: eof.raw.clone().into(),
             }),
@@ -114,7 +119,7 @@ impl From<RevmBytecode> for BytecodeRocksdb {
 impl From<BytecodeRocksdb> for RevmBytecode {
     fn from(value: BytecodeRocksdb) -> Self {
         match value {
-            BytecodeRocksdb::LegacyRaw(bytes) => RevmBytecode::LegacyRaw(bytes.to_vec().into()),
+            BytecodeRocksdb::LegacyRaw(bytes) => RevmBytecode::LegacyAnalyzed(LegacyRawBytecode(bytes.to_vec().into()).into_analyzed()),
             BytecodeRocksdb::LegacyAnalyzed(analyzed) => RevmBytecode::LegacyAnalyzed(LegacyAnalyzedBytecode::new(
                 analyzed.bytecode.into(),
                 analyzed.original_len,
@@ -129,7 +134,6 @@ impl From<BytecodeRocksdb> for RevmBytecode {
                     sum_code_sizes: eof.header.sum_code_sizes,
                     sum_container_sizes: eof.header.sum_container_sizes,
                 };
-                let code_section = eof.body.code_section.into_iter().map(Into::into).collect();
                 let body = EofBody {
                     code_info: eof
                         .body
@@ -141,12 +145,12 @@ impl From<BytecodeRocksdb> for RevmBytecode {
                             max_stack_increase: t.max_stack_size,
                         })
                         .collect(),
-                    code_section: eof.body.code_section.into_iter().map(Into::into).collect(),
-                    code: RevmBytes::copy_from_slice(code_section),
+                    code_section: eof.body.code_section,
+                    code: eof.body.code.into(),
                     container_section: eof.body.container_section.into_iter().map(Into::into).collect(),
                     data_section: eof.body.data_section.into(),
                     is_data_filled: eof.body.is_data_filled,
-                    code_offset: 0 // XXX
+                    code_offset: 0, // XXX
                 };
                 RevmBytecode::Eof(Arc::new(Eof {
                     header,

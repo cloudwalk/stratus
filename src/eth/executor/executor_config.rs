@@ -6,7 +6,6 @@ use clap::Parser;
 use display_json::DebugAsJson;
 use revm::primitives::hardfork::SpecId;
 
-
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorStrategy;
 use crate::eth::miner::Miner;

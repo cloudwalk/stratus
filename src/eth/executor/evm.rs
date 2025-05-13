@@ -88,7 +88,9 @@ use crate::infra::metrics;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
 const GAS_MAX_LIMIT: u64 = 1_000_000_000;
-pub type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
+type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
+type GeneralRevm<DB> =
+    RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, (), EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles>;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm {
@@ -231,11 +233,7 @@ impl Evm {
         })
     }
 
-    fn create_evm<DB: Database>(
-        chain_id: u64,
-        spec: SpecId,
-        db: DB,
-    ) -> RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, (), EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles> {
+    fn create_evm<DB: Database>(chain_id: u64, spec: SpecId, db: DB) -> GeneralRevm<DB> {
         let ctx = Context::new(db, spec)
             .modify_cfg_chained(|cfg_env| {
                 cfg_env.chain_id = chain_id;
@@ -318,7 +316,7 @@ impl Evm {
                 let mut inspector = FourByteInspector::default();
                 let mut evm = evm.with_inspector(&mut inspector);
                 evm.fill_env(inspect_input);
-                evm.inspect_replay();
+                evm.inspect_replay()?;
                 FourByteFrame::from(&inspector).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
@@ -344,7 +342,7 @@ impl Evm {
                 let mut inspector = MuxInspector::try_from_config(mux_config).map_err(|e| anyhow!(e))?;
                 let mut evm = evm.with_inspector(&mut inspector);
                 evm.fill_env(inspect_input);
-                let res= evm.inspect_replay()?;
+                let res = evm.inspect_replay()?;
                 inspector.try_into_mux_frame(&res, &cache_db, tx_info)?.into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => {

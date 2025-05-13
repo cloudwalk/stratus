@@ -94,7 +94,6 @@ impl Dummy<Faker> for ExternalReceipt {
             effective_gas_price: rng.next_u64() as u128,
             blob_gas_used: None,
             blob_gas_price: None,
-            authorization_list: None,
         };
 
         ExternalReceipt(receipt)
