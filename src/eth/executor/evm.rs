@@ -95,7 +95,7 @@ type GeneralRevm<DB> =
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm {
     evm: RevmEvm<ContextWithDB, (), EthInstructions<EthInterpreter, ContextWithDB>, EthPrecompiles>,
-    kind: EvmKind
+    kind: EvmKind,
 }
 
 struct StratusHandler<EVM> {
@@ -152,7 +152,10 @@ impl Evm {
         // configure revm
         let chain_id = config.executor_chain_id;
 
-        Self { evm: Self::create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage, config.clone()), kind), kind }
+        Self {
+            evm: Self::create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage, config.clone()), kind),
+            kind,
+        }
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
