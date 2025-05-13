@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use display_json::DebugAsJson;
-use revm::primitives::Bytecode;
 
 use super::CodeHash;
+use crate::alias::RevmBytecode;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::ExecutionValueChange;
@@ -24,7 +24,7 @@ pub struct ExecutionAccountChanges {
 
     // TODO: bytecode related information should be grouped in a Bytecode struct
     #[dummy(default)]
-    pub bytecode: ExecutionValueChange<Option<Bytecode>>,
+    pub bytecode: ExecutionValueChange<Option<RevmBytecode>>,
     pub code_hash: CodeHash, // TODO: should be wrapped in a ExecutionValueChange
     #[cfg_attr(test, serde(serialize_with = "ordered_map"))]
     pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,

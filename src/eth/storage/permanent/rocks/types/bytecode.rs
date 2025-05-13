@@ -1,8 +1,11 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use revm::primitives::eof::TypesSection;
-use revm::primitives::Bytecode;
+use revm::bytecode::eip7702::Eip7702Bytecode;
+use revm::bytecode::eof::{CodeInfo, EofBody, EofHeader};
+use revm::bytecode::{Eof, JumpTable, LegacyAnalyzedBytecode};
+
+use crate::alias::{RevmBytecode, RevmBytes};
 
 use super::bytes::BytesRocksdb;
 use super::AddressRocksdb;
@@ -62,26 +65,26 @@ pub struct Eip7702BytecodeRocksdb {
     pub raw: BytesRocksdb,
 }
 
-impl From<TypesSection> for TypesSectionRocksdb {
-    fn from(value: TypesSection) -> Self {
+impl From<CodeInfo> for TypesSectionRocksdb {
+    fn from(value: CodeInfo) -> Self {
         Self {
             inputs: value.inputs,
             outputs: value.outputs,
-            max_stack_size: value.max_stack_size,
+            max_stack_size: value.max_stack_increase,
         }
     }
 }
 
-impl From<Bytecode> for BytecodeRocksdb {
-    fn from(value: Bytecode) -> Self {
+impl From<RevmBytecode> for BytecodeRocksdb {
+    fn from(value: RevmBytecode) -> Self {
         match value {
-            Bytecode::LegacyRaw(bytes) => BytecodeRocksdb::LegacyRaw(bytes.to_vec().into()),
-            Bytecode::LegacyAnalyzed(analyzed) => BytecodeRocksdb::LegacyAnalyzed(LegacyAnalyzedBytecodeRocksdb {
+            RevmBytecode::LegacyRaw(bytes) => BytecodeRocksdb::LegacyRaw(bytes.to_vec().into()),
+            RevmBytecode::LegacyAnalyzed(analyzed) => BytecodeRocksdb::LegacyAnalyzed(LegacyAnalyzedBytecodeRocksdb {
                 bytecode: analyzed.bytecode().clone().into(),
                 original_len: analyzed.original_len(),
                 jump_table: analyzed.jump_table().0.deref().clone().into_vec(),
             }),
-            Bytecode::Eof(eof) => BytecodeRocksdb::Eof(EofRocksdb {
+            RevmBytecode::Eof(eof) => BytecodeRocksdb::Eof(EofRocksdb {
                 header: EofHeaderRocksdb {
                     types_size: eof.header.types_size,
                     code_sizes: eof.header.code_sizes.clone(),
@@ -99,7 +102,7 @@ impl From<Bytecode> for BytecodeRocksdb {
                 },
                 raw: eof.raw.clone().into(),
             }),
-            Bytecode::Eip7702(bytecode) => BytecodeRocksdb::Eip7702(Eip7702BytecodeRocksdb {
+            RevmBytecode::Eip7702(bytecode) => BytecodeRocksdb::Eip7702(Eip7702BytecodeRocksdb {
                 delegated_address: AddressRocksdb(bytecode.delegated_address.0 .0),
                 version: bytecode.version,
                 raw: bytecode.raw.into(),
@@ -108,17 +111,17 @@ impl From<Bytecode> for BytecodeRocksdb {
     }
 }
 
-impl From<BytecodeRocksdb> for Bytecode {
+impl From<BytecodeRocksdb> for RevmBytecode {
     fn from(value: BytecodeRocksdb) -> Self {
         match value {
-            BytecodeRocksdb::LegacyRaw(bytes) => Bytecode::LegacyRaw(bytes.to_vec().into()),
-            BytecodeRocksdb::LegacyAnalyzed(analyzed) => Bytecode::LegacyAnalyzed(revm::primitives::LegacyAnalyzedBytecode::new(
+            BytecodeRocksdb::LegacyRaw(bytes) => RevmBytecode::LegacyRaw(bytes.to_vec().into()),
+            BytecodeRocksdb::LegacyAnalyzed(analyzed) => RevmBytecode::LegacyAnalyzed(LegacyAnalyzedBytecode::new(
                 analyzed.bytecode.into(),
                 analyzed.original_len,
-                revm::primitives::JumpTable::from_slice(&analyzed.jump_table),
+                JumpTable::from_slice(&analyzed.jump_table, &analyzed.jump_table.len() * 8),
             )),
             BytecodeRocksdb::Eof(eof) => {
-                let header = revm::primitives::eof::EofHeader {
+                let header = EofHeader {
                     types_size: eof.header.types_size,
                     code_sizes: eof.header.code_sizes,
                     container_sizes: eof.header.container_sizes,
@@ -126,29 +129,32 @@ impl From<BytecodeRocksdb> for Bytecode {
                     sum_code_sizes: eof.header.sum_code_sizes,
                     sum_container_sizes: eof.header.sum_container_sizes,
                 };
-                let body = revm::primitives::eof::EofBody {
-                    types_section: eof
+                let code_section = eof.body.code_section.into_iter().map(Into::into).collect();
+                let body = EofBody {
+                    code_info: eof
                         .body
                         .types_section
                         .into_iter()
-                        .map(|t| TypesSection {
+                        .map(|t| CodeInfo {
                             inputs: t.inputs,
                             outputs: t.outputs,
-                            max_stack_size: t.max_stack_size,
+                            max_stack_increase: t.max_stack_size,
                         })
                         .collect(),
                     code_section: eof.body.code_section.into_iter().map(Into::into).collect(),
+                    code: RevmBytes::copy_from_slice(code_section),
                     container_section: eof.body.container_section.into_iter().map(Into::into).collect(),
                     data_section: eof.body.data_section.into(),
                     is_data_filled: eof.body.is_data_filled,
+                    code_offset: 0 // XXX
                 };
-                Bytecode::Eof(Arc::new(revm::primitives::eof::Eof {
+                RevmBytecode::Eof(Arc::new(Eof {
                     header,
                     body,
                     raw: eof.raw.into(),
                 }))
             }
-            BytecodeRocksdb::Eip7702(bytecode) => Bytecode::Eip7702(revm::primitives::Eip7702Bytecode {
+            BytecodeRocksdb::Eip7702(bytecode) => RevmBytecode::Eip7702(Eip7702Bytecode {
                 delegated_address: bytecode.delegated_address.0.into(),
                 version: bytecode.version,
                 raw: bytecode.raw.into(),

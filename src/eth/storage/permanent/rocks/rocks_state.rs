@@ -714,6 +714,7 @@ mod tests {
     use fake::Faker;
 
     use super::*;
+    use crate::alias::RevmBytecode;
     use crate::eth::primitives::BlockHeader;
     use crate::eth::primitives::ExecutionValueChange;
 
@@ -799,7 +800,7 @@ mod tests {
             address: Faker.fake(),
             nonce: ExecutionValueChange::from_original(Faker.fake()),
             balance: ExecutionValueChange::from_original(Faker.fake()),
-            bytecode: ExecutionValueChange::from_original(Some(revm::primitives::Bytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
+            bytecode: ExecutionValueChange::from_original(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
             code_hash: Faker.fake(),
             slots: HashMap::new(),
         };
@@ -816,7 +817,7 @@ mod tests {
                 ..change_base.clone()
             },
             ExecutionAccountChanges {
-                bytecode: ExecutionValueChange::from_modified(Some(revm::primitives::Bytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
+                bytecode: ExecutionValueChange::from_modified(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
                 ..change_base
             },
         ];

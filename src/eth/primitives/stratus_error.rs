@@ -4,7 +4,8 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Id;
 use jsonrpsee::MethodResponse;
 use jsonrpsee::ResponsePayload;
-use revm::primitives::EVMError;
+use revm::context::result::EVMError;
+use revm::context::DBErrorMarker;
 use stratus_macros::ErrorCode;
 
 use super::execution_result::RevertReason;
@@ -271,6 +272,8 @@ impl ErrorCode for StratusError {
     }
 }
 
+impl DBErrorMarker for StratusError {}
+
 impl StratusError {
     /// Error message to be used in JSON-RPC response.
     pub fn rpc_message(&self) -> String {
@@ -323,10 +326,10 @@ impl From<serde_json::Error> for StratusError {
 impl From<EVMError<StratusError>> for StratusError {
     fn from(value: EVMError<StratusError>) -> Self {
         match value {
-            EVMError::Transaction(err) => StratusError::Transaction(TransactionError::EvmFailed(err.to_string())),
-            EVMError::Header(err) => StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(err.to_string()))),
-            EVMError::Custom(err) | EVMError::Precompile(err) => StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(err.to_string()))),
             EVMError::Database(err) => err,
+            EVMError::Custom(err) => Self::Transaction(TransactionError::EvmFailed(err)),
+            EVMError::Header(err) => Self::Transaction(TransactionError::EvmFailed(err)),
+            EVMError::Transaction(err) => Self::Transaction(TransactionError::EvmFailed(err)),
         }
     }
 }

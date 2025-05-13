@@ -1,6 +1,5 @@
 use display_json::DebugAsJson;
-use revm::interpreter::analysis::to_analysed;
-use revm::primitives::Bytecode;
+use revm::state::Bytecode;
 
 use crate::alias::RevmAccountInfo;
 use crate::alias::RevmAddress;
@@ -56,12 +55,11 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
     fn from(value: (RevmAddress, RevmAccountInfo)) -> Self {
         let (address, info) = value;
 
-        let code = info.code.map(to_analysed);
         Self {
             address: address.into(),
             nonce: info.nonce.into(),
             balance: info.balance.into(),
-            bytecode: code,
+            bytecode: info.code,
             code_hash: info.code_hash.into(),
         }
     }

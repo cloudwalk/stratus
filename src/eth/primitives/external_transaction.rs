@@ -2,7 +2,7 @@ use alloy_consensus::Signed;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_primitives::Bytes;
-use alloy_primitives::PrimitiveSignature;
+use alloy_primitives::Signature;
 use alloy_primitives::TxKind;
 use anyhow::Context;
 use anyhow::Result;
@@ -106,7 +106,7 @@ impl Dummy<Faker> for ExternalTransaction {
         let r = U256::from(rng.next_u64());
         let s = U256::from(rng.next_u64());
         let v = rng.next_u64() % 2 == 0;
-        let signature = PrimitiveSignature::new(SignatureComponent(r).into(), SignatureComponent(s).into(), v);
+        let signature = Signature::new(SignatureComponent(r).into(), SignatureComponent(s).into(), v);
 
         let hash: Hash = faker.fake_with_rng(rng);
         let inner_tx = TxEnvelope::Legacy(Signed::new_unchecked(tx, signature, hash.into()));
@@ -116,7 +116,6 @@ impl Dummy<Faker> for ExternalTransaction {
             block_hash: Some(block_hash.into()),
             block_number: Some(rng.next_u64()),
             transaction_index: Some(rng.next_u64()),
-            from: from.into(),
             effective_gas_price: Some(gas_price.as_u128()),
         };
 

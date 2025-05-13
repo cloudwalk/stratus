@@ -13,27 +13,42 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::NoopFrame;
 use anyhow::anyhow;
 use itertools::Itertools;
-use revm::db::CacheDB;
-use revm::inspector_handle_register;
-use revm::primitives::AccountInfo;
-use revm::primitives::AnalysisKind;
-use revm::primitives::BlockEnv;
-use revm::primitives::EVMError;
-use revm::primitives::EVMResult;
-use revm::primitives::EvmState;
-use revm::primitives::ExecutionResult as RevmExecutionResult;
-use revm::primitives::InvalidTransaction;
-use revm::primitives::ResultAndState as RevmResultAndState;
-use revm::primitives::SpecId;
-use revm::primitives::TransactTo;
-use revm::primitives::TxEnv;
+use log::log_enabled;
+use revm::context::result::EVMError;
+use revm::context::result::ExecutionResult as RevmExecutionResult;
+use revm::context::result::HaltReason;
+use revm::context::result::InvalidTransaction;
+use revm::context::result::ResultAndState;
+use revm::context::BlockEnv;
+use revm::context::CfgEnv;
+use revm::context::ContextTr;
+use revm::context::Evm as RevmEvm;
+use revm::context::JournalOutput;
+use revm::context::JournalTr;
+use revm::context::TransactTo;
+use revm::context::TxEnv;
+use revm::database::CacheDB;
+use revm::handler::instructions::EthInstructions;
+use revm::handler::instructions::InstructionProvider;
+use revm::handler::EthFrame;
+use revm::handler::EthPrecompiles;
+use revm::handler::EvmTr;
+use revm::handler::Handler;
+use revm::handler::PrecompileProvider;
+use revm::interpreter::interpreter::EthInterpreter;
+use revm::interpreter::InterpreterResult;
+use revm::primitives::hardfork::SpecId;
 use revm::primitives::B256;
 use revm::primitives::U256;
+use revm::state::AccountInfo;
+use revm::state::EvmState;
+use revm::Context;
 use revm::Database;
 use revm::DatabaseRef;
-use revm::Evm as RevmEvm;
-use revm::GetInspector;
-use revm::Handler;
+use revm::ExecuteCommitEvm;
+use revm::ExecuteEvm;
+use revm::InspectEvm;
+use revm::Journal;
 use revm_inspectors::tracing::FourByteInspector;
 use revm_inspectors::tracing::MuxInspector;
 use revm_inspectors::tracing::TracingInspector;
@@ -73,10 +88,50 @@ use crate::infra::metrics;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
 const GAS_MAX_LIMIT: u64 = 1_000_000_000;
+pub type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm {
-    evm: RevmEvm<'static, (), RevmSession>,
+    evm: RevmEvm<ContextWithDB, (), EthInstructions<EthInterpreter, ContextWithDB>, EthPrecompiles>,
+}
+
+struct StratusHandler<EVM> {
+    pub _phantom: core::marker::PhantomData<EVM>,
+}
+
+impl<EVM> Handler for StratusHandler<EVM>
+where
+    EVM: EvmTr<
+        Context: ContextTr<Journal: JournalTr<FinalOutput = JournalOutput>>,
+        Precompiles: PrecompileProvider<EVM::Context, Output = InterpreterResult>,
+        Instructions: InstructionProvider<Context = EVM::Context, InterpreterTypes = EthInterpreter>,
+    >,
+{
+    type Evm = EVM;
+    type Error = EVMError<<<EVM::Context as ContextTr>::Db as Database>::Error, InvalidTransaction>;
+    type Frame = EthFrame<
+        EVM,
+        EVMError<<<EVM::Context as ContextTr>::Db as Database>::Error, InvalidTransaction>,
+        <EVM::Instructions as InstructionProvider>::InterpreterTypes,
+    >;
+    type HaltReason = HaltReason;
+
+    fn validate(&self, evm: &mut Self::Evm) -> Result<revm::interpreter::InitialAndFloorGas, Self::Error> {
+        let env_result = self.validate_env(evm);
+        let gas_result = self.validate_initial_tx_gas(evm);
+        if env_result.is_err() || gas_result.is_err() {
+            evm.ctx().journal().finalize();
+        }
+        gas_result
+    }
+}
+
+impl<EVM> Default for StratusHandler<EVM> {
+    fn default() -> Self {
+        Self {
+            _phantom: core::marker::PhantomData,
+        }
+    }
 }
 
 impl Evm {
@@ -85,45 +140,23 @@ impl Evm {
     pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating revm");
 
-        // configure handler
-        let mut handler = Handler::mainnet_with_spec(config.executor_evm_spec);
-
-        // handler custom validators
-        let validate_tx_against_state = handler.validation.tx_against_state;
-        handler.validation.tx_against_state = Arc::new(move |ctx| {
-            let result = validate_tx_against_state(ctx);
-            if result.is_err() {
-                let _ = ctx.evm.inner.journaled_state.finalize(); // clear revm state on validation failure
-            }
-            result
-        });
-
-        // handler custom instructions
-        let instructions = handler.take_instruction_table();
-        handler.set_instruction_table(instructions);
-
         // configure revm
         let chain_id = config.executor_chain_id;
-        let mut evm = RevmEvm::builder()
-            .with_external_context(())
-            .with_db(RevmSession::new(storage, config))
-            .with_handler(handler)
-            .build();
 
-        // global general config
-        let cfg_env = evm.cfg_mut();
-        cfg_env.chain_id = chain_id;
-        cfg_env.limit_contract_code_size = Some(usize::MAX);
-        cfg_env.perf_analyse_created_bytecodes = AnalysisKind::Analyse;
+        let ctx = Context::new(RevmSession::new(storage, config.clone()), config.executor_evm_spec)
+            .modify_cfg_chained(|cfg_env| {
+                cfg_env.chain_id = chain_id;
+                cfg_env.limit_contract_code_size = Some(usize::MAX);
+                cfg_env.spec = config.executor_evm_spec;
+            })
+            .modify_block_chained(|block_env: &mut BlockEnv| {
+                block_env.beneficiary = Address::COINBASE.into();
+            })
+            .modify_tx_chained(|tx_env: &mut TxEnv| {
+                tx_env.gas_priority_fee = None;
+            });
 
-        // global block config
-        let block_env = evm.block_mut();
-        block_env.coinbase = Address::COINBASE.into();
-
-        // global tx config
-        let tx_env = evm.tx_mut();
-        tx_env.gas_priority_fee = None;
-
+        let evm = RevmEvm::new(ctx, EthInstructions::new_mainnet(), EthPrecompiles::default());
         Self { evm }
     }
 
@@ -133,20 +166,22 @@ impl Evm {
         let start = metrics::now();
 
         // configure session
-        let evm = &mut self.evm;
-        evm.db_mut().reset(input.clone());
+        self.evm.db().reset(input.clone());
 
-        evm.fill_env(input);
+        self.evm.fill_env(input);
 
-        let block_env_log = evm.block().clone();
-        let tx_env_log = evm.tx().clone();
+        if log_enabled!(log::Level::Debug) {
+            let block_env_log = self.evm.block().clone();
+            let tx_env_log = self.evm.tx().clone();
+            // execute transaction
+            tracing::debug!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
+        }
 
-        // execute transaction
-        tracing::debug!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
-        let evm_result = evm.transact();
+        let tx = std::mem::take(&mut self.evm.tx);
+        let evm_result = self.evm.transact(tx);
 
         // extract results
-        let session = evm.db_mut();
+        let session = self.evm.db();
         let session_input = std::mem::take(&mut session.input);
         let session_storage_changes = std::mem::take(&mut session.storage_changes);
         let session_metrics = std::mem::take(&mut session.metrics);
@@ -196,6 +231,27 @@ impl Evm {
         })
     }
 
+    fn create_evm<DB: Database>(
+        chain_id: u64,
+        spec: SpecId,
+        db: DB,
+    ) -> RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, (), EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles> {
+        let ctx = Context::new(db, spec)
+            .modify_cfg_chained(|cfg_env| {
+                cfg_env.chain_id = chain_id;
+                cfg_env.limit_contract_code_size = Some(usize::MAX);
+                cfg_env.spec = spec;
+            })
+            .modify_block_chained(|block_env: &mut BlockEnv| {
+                block_env.beneficiary = Address::COINBASE.into();
+            })
+            .modify_tx_chained(|tx_env: &mut TxEnv| {
+                tx_env.gas_priority_fee = None;
+            });
+
+        RevmEvm::new(ctx, EthInstructions::new_mainnet(), EthPrecompiles::default())
+    }
+
     /// Execute a transaction using a tracer.
     pub fn inspect(&mut self, input: InspectorInput) -> Result<GethTrace, StratusError> {
         let InspectorInput {
@@ -234,20 +290,15 @@ impl Evm {
             base_fee: None,
         };
         let inspect_input: EvmInput = tx.try_into()?;
-        self.evm.db_mut().reset(EvmInput {
+        self.evm.db().reset(EvmInput {
             point_in_time: PointInTime::MinedPast(inspect_input.block_number.prev().unwrap_or_default()),
             ..Default::default()
         });
+
+        let spec = self.evm.cfg.spec;
+
         let mut cache_db = CacheDB::new(self.evm.db());
-        let handler = Handler::mainnet_with_spec(self.evm.spec_id());
-
-        let mut evm = RevmEvm::builder()
-            .with_external_context(())
-            .with_db(&mut cache_db)
-            .with_handler(handler)
-            .build();
-
-        evm.cfg_mut().chain_id = inspect_input.chain_id.unwrap_or_default().into();
+        let mut evm = Self::create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db);
 
         // Execute all transactions before target tx_hash
         for tx in block.transactions.into_iter().sorted_by_key(|item| item.transaction_index) {
@@ -258,41 +309,50 @@ impl Evm {
 
             // Configure EVM state
             evm.fill_env(tx_input);
-
-            evm.transact_commit()?;
+            let tx = std::mem::take(&mut evm.tx);
+            evm.transact_commit(tx)?;
         }
-
-        drop(evm);
 
         let trace_result: GethTrace = match tracer_type {
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => {
                 let mut inspector = FourByteInspector::default();
-                RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector, self.evm.spec_id())?;
+                let mut evm = evm.with_inspector(&mut inspector);
+                evm.fill_env(inspect_input);
+                evm.inspect_replay();
                 FourByteFrame::from(&inspector).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
                 let call_config = opts.tracer_config.into_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_call_config(&call_config));
-                let res = RevmEvm::<(), _>::inspect(inspect_input, cache_db, &mut inspector, self.evm.spec_id())?;
+                let mut evm = evm.with_inspector(&mut inspector);
+                evm.fill_env(inspect_input);
+                let res = evm.inspect_replay()?;
                 inspector.geth_builder().geth_call_traces(call_config, res.result.gas_used()).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::PreStateTracer) => {
                 let prestate_config = opts.tracer_config.into_pre_state_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_prestate_config(&prestate_config));
-                let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector, self.evm.spec_id())?;
-                inspector.geth_builder().geth_prestate_traces(&res, &prestate_config, &cache_db)?.into()
+                let mut evm = evm.with_inspector(&mut inspector);
+                evm.fill_env(inspect_input);
+                let res = evm.inspect_replay()?;
+
+                inspector.geth_builder().geth_prestate_traces(&res, &prestate_config, cache_db)?.into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer) => NoopFrame::default().into(),
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => {
                 let mux_config = opts.tracer_config.into_mux_config()?;
                 let mut inspector = MuxInspector::try_from_config(mux_config).map_err(|e| anyhow!(e))?;
-                let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector, self.evm.spec_id())?;
+                let mut evm = evm.with_inspector(&mut inspector);
+                evm.fill_env(inspect_input);
+                let res= evm.inspect_replay()?;
                 inspector.try_into_mux_frame(&res, &cache_db, tx_info)?.into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => {
                 let flat_call_config = opts.tracer_config.into_flat_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_flat_call_config(&flat_call_config));
-                let res = RevmEvm::<(), _>::inspect(inspect_input, &mut cache_db, &mut inspector, self.evm.spec_id())?;
+                let mut evm = evm.with_inspector(&mut inspector);
+                evm.fill_env(inspect_input);
+                let res = evm.inspect_replay()?;
                 inspector
                     .with_transaction_gas_limit(res.result.gas_used())
                     .into_parity_builder()
@@ -312,45 +372,29 @@ trait TxEnvExt {
 
 trait EvmExt<DB: Database> {
     fn fill_env(&mut self, input: EvmInput);
-    fn inspect(input: EvmInput, db: DB, inspector: impl GetInspector<DB>, spec: SpecId) -> EVMResult<DB::Error>;
 }
 
-impl<EXT, DB: Database> EvmExt<DB> for RevmEvm<'_, EXT, DB> {
+impl<DB: Database, INSP, I, P> EvmExt<DB> for RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, INSP, I, P> {
     fn fill_env(&mut self, input: EvmInput) {
-        self.block_mut().fill_env(&input);
-        self.tx_mut().fill_env(input);
-    }
-
-    fn inspect(input: EvmInput, db: DB, inspector: impl GetInspector<DB>, spec: SpecId) -> EVMResult<DB::Error> {
-        let handler = Handler::mainnet_with_spec(spec);
-
-        let mut evm = RevmEvm::builder()
-            .with_external_context(inspector)
-            .with_db(db)
-            .with_handler(handler)
-            .append_handler_register(inspector_handle_register)
-            .build();
-
-        evm.cfg_mut().chain_id = input.chain_id.unwrap_or_default().into();
-        evm.fill_env(input);
-
-        evm.transact()
+        self.modify_block(|block_env| block_env.fill_env(&input));
+        self.modify_tx(|tx_env| tx_env.fill_env(input));
     }
 }
 
 impl TxEnvExt for TxEnv {
     fn fill_env(&mut self, input: EvmInput) {
         self.caller = input.from.into();
-        self.transact_to = match input.to {
+        self.kind = match input.to {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create,
         };
         self.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
         self.gas_price = input.gas_price.into();
         self.chain_id = input.chain_id.map_into();
-        self.nonce = input.nonce.map_into();
+        self.nonce = input.nonce.map_into().unwrap_or_default();
         self.data = input.data.into();
         self.value = input.value.into();
+        self.gas_priority_fee = None;
     }
 }
 
@@ -360,9 +404,9 @@ trait BlockEnvExt {
 
 impl BlockEnvExt for BlockEnv {
     fn fill_env(&mut self, input: &EvmInput) {
-        self.timestamp = input.block_timestamp.into();
-        self.number = input.block_number.into();
-        self.basefee = U256::ZERO;
+        self.timestamp = *input.block_timestamp;
+        self.number = input.block_number.as_u64();
+        self.basefee = 0;
     }
 }
 
@@ -503,8 +547,8 @@ impl DatabaseRef for RevmSession {
         todo!()
     }
 
-    fn code_by_hash_ref(&self, _: B256) -> Result<revm::primitives::Bytecode, Self::Error> {
-        todo!()
+    fn code_by_hash_ref(&self, _code_hash: B256) -> Result<revm::state::Bytecode, Self::Error> {
+        unimplemented!()
     }
 }
 
@@ -512,7 +556,7 @@ impl DatabaseRef for RevmSession {
 // Conversion
 // -----------------------------------------------------------------------------
 
-fn parse_revm_execution(revm_result: RevmResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> Result<EvmExecution, StratusError> {
+fn parse_revm_execution(revm_result: ResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> Result<EvmExecution, StratusError> {
     let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
     let changes = parse_revm_state(revm_result.state, execution_changes)?;
 
