@@ -95,6 +95,7 @@ type GeneralRevm<DB> =
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm {
     evm: RevmEvm<ContextWithDB, (), EthInstructions<EthInterpreter, ContextWithDB>, EthPrecompiles>,
+    kind: EvmKind
 }
 
 struct StratusHandler<EVM> {
@@ -151,22 +152,7 @@ impl Evm {
         // configure revm
         let chain_id = config.executor_chain_id;
 
-        let ctx = Context::new(RevmSession::new(storage, config.clone()), config.executor_evm_spec)
-            .modify_cfg_chained(|cfg_env| {
-                cfg_env.chain_id = chain_id;
-                cfg_env.limit_contract_code_size = Some(usize::MAX);
-                cfg_env.spec = config.executor_evm_spec;
-                cfg_env.disable_nonce_check = matches!(kind, EvmKind::Call);
-            })
-            .modify_block_chained(|block_env: &mut BlockEnv| {
-                block_env.beneficiary = Address::COINBASE.into();
-            })
-            .modify_tx_chained(|tx_env: &mut TxEnv| {
-                tx_env.gas_priority_fee = None;
-            });
-
-        let evm = RevmEvm::new(ctx, EthInstructions::new_mainnet(), EthPrecompiles::default());
-        Self { evm }
+        Self { evm: Self::create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage, config.clone()), kind), kind }
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
@@ -240,12 +226,12 @@ impl Evm {
         })
     }
 
-    fn create_evm<DB: Database>(chain_id: u64, spec: SpecId, db: DB) -> GeneralRevm<DB> {
+    fn create_evm<DB: Database>(chain_id: u64, spec: SpecId, db: DB, kind: EvmKind) -> GeneralRevm<DB> {
         let ctx = Context::new(db, spec)
             .modify_cfg_chained(|cfg_env| {
                 cfg_env.chain_id = chain_id;
+                cfg_env.disable_nonce_check = matches!(kind, EvmKind::Call);
                 cfg_env.limit_contract_code_size = Some(usize::MAX);
-                cfg_env.spec = spec;
             })
             .modify_block_chained(|block_env: &mut BlockEnv| {
                 block_env.beneficiary = Address::COINBASE.into();
@@ -303,7 +289,7 @@ impl Evm {
         let spec = self.evm.cfg.spec;
 
         let mut cache_db = CacheDB::new(self.evm.db());
-        let mut evm = Self::create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db);
+        let mut evm = Self::create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db, self.kind);
 
         // Execute all transactions before target tx_hash
         for tx in block.transactions.into_iter().sorted_by_key(|item| item.transaction_index) {
