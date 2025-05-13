@@ -136,10 +136,16 @@ impl<EVM> Default for StratusHandler<EVM> {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum EvmKind {
+    Transaction,
+    Call
+}
+
 impl Evm {
     /// Creates a new instance of the Evm.
     #[allow(clippy::arc_with_non_send_sync)]
-    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig, kind: EvmKind) -> Self {
         tracing::info!(?config, "creating revm");
 
         // configure revm
@@ -150,6 +156,7 @@ impl Evm {
                 cfg_env.chain_id = chain_id;
                 cfg_env.limit_contract_code_size = Some(usize::MAX);
                 cfg_env.spec = config.executor_evm_spec;
+                cfg_env.disable_nonce_check = matches!(kind, EvmKind::Call);
             })
             .modify_block_chained(|block_env: &mut BlockEnv| {
                 block_env.beneficiary = Address::COINBASE.into();
