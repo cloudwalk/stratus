@@ -1,5 +1,7 @@
+use std::str::FromStr;
 use std::time::Duration;
 
+use alloy_primitives::hex;
 use anyhow::Context;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::client::Subscription;
@@ -7,6 +9,7 @@ use jsonrpsee::core::client::SubscriptionClientT;
 use jsonrpsee::core::ClientError;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
+use jsonrpsee::types::error::METHOD_NOT_FOUND_CODE;
 use jsonrpsee::ws_client::WsClient;
 use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
@@ -17,6 +20,7 @@ use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalBlockWithReceipts;
 use crate::eth::primitives::ExternalReceipt;
@@ -25,6 +29,7 @@ use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::RpcClientApp;
+use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
 use crate::infra::tracing::TracingExt;
@@ -222,6 +227,46 @@ impl BlockchainClient {
         match result {
             Ok(receipt) => Ok(receipt),
             Err(e) => log_and_err!(reason = e, "failed to fetch account balance"),
+        }
+    }
+
+    /// Returns the external replication log if found.
+    pub async fn fetch_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<ReplicationLogRocksdb>> {
+        tracing::debug!(%block_number, "fetching replication log");
+
+        let number = to_json_value(block_number);
+        let result = self.http.request::<Option<serde_json::Value>, _>("stratus_getReplicationLog", [number]).await;
+
+        match result {
+            Ok(Some(json_value)) => {
+                let block_number_str = json_value["block_number"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("invalid block_number in response"))?;
+
+                let block_number = BlockNumber::from_str(block_number_str).map_err(|_| anyhow::anyhow!("invalid block_number format in response"))?;
+
+                let hex_string = json_value["replication_log"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("invalid replication_log in response"))?;
+
+                match hex::decode(hex_string) {
+                    Ok(decoded) => {
+                        let log_data = Bytes(decoded);
+                        tracing::debug!(block_number = %block_number, decoded_size = log_data.len(), "decoded replication log");
+                        Ok(Some(ReplicationLogRocksdb::new(block_number, log_data)))
+                    }
+                    Err(e) => log_and_err!(reason = e, "failed to decode replication log hex"),
+                }
+            }
+            Ok(None) => Ok(None),
+            Err(ClientError::Call(err)) if err.code() == METHOD_NOT_FOUND_CODE => {
+                let message = GlobalState::shutdown_from(
+                    "Importer (RocksDB Replication)",
+                    "stratus_getReplicationLog is required for RocksDB replication",
+                );
+                log_and_err!(reason = err, message)
+            }
+            Err(e) => log_and_err!(reason = e, "failed to fetch replication log"),
         }
     }
 

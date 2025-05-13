@@ -36,13 +36,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [brlc, importer, miner, change, deploy, kafka, health]
-    name: E2E Leader & Follower on ${{ matrix.test }}
+        test: [brlc, importer, miner, change, deploy, kafka, health, replication]
+        use_rocksdb_replication: [false, true]
+    name: "E2E Leader & Follower on ${{ matrix.test }} (RocksDB Replication: ${{ matrix.use_rocksdb_replication }})"
     runs-on: ubuntu-22.04
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.test }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.test }}-${{ matrix.use_rocksdb_replication }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -107,7 +108,7 @@ jobs:
         run: just contracts-flatten --token
 
       - name: Run e2e tests
-        run: just run-test e2e-leader-follower-up ${{ matrix.test }}
+        run: just run-test e2e-leader-follower-up ${{ matrix.test }} ${{ matrix.use_rocksdb_replication }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error

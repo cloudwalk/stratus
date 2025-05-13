@@ -16,13 +16,16 @@ use tracing::Span;
 
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockHeader;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::DisplayExt;
@@ -34,6 +37,15 @@ cfg_if::cfg_if! {
         use tracing::field;
         use tracing::info_span;
     }
+}
+
+/// Represents different types of items that can be committed to storage
+#[allow(clippy::large_enum_variant)]
+pub enum CommitItem {
+    /// A block
+    Block(Block),
+    /// A replication log from RocksDB
+    ReplicationLog(ReplicationLogRocksdb),
 }
 
 pub struct Miner {
@@ -204,7 +216,9 @@ impl Miner {
         self.storage.save_execution(tx_execution, check_conflicts, is_local)?;
 
         // notify
-        let _ = self.notifier_pending_txs.send(tx_hash);
+        if self.has_pending_tx_subscribers() {
+            self.send_pending_tx_notification(&Some(tx_hash));
+        }
 
         // if automine is enabled, automatically mines a block
         if is_automine {
@@ -250,7 +264,7 @@ impl Miner {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
 
         let block = self.mine_local()?;
-        self.commit(block)
+        self.commit(CommitItem::Block(block))
     }
 
     /// Mines local transactions.
@@ -270,8 +284,15 @@ impl Miner {
         Ok(block.into())
     }
 
+    pub fn commit(&self, item: CommitItem) -> anyhow::Result<(), StorageError> {
+        match item {
+            CommitItem::Block(block) => self.commit_block(block),
+            CommitItem::ReplicationLog(replication_log) => self.commit_log(replication_log),
+        }
+    }
+
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub fn commit_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -285,12 +306,12 @@ impl Miner {
         tracing::info!(%block_number, "miner acquired commit lock");
 
         // extract fields to use in notifications if have subscribers
-        let block_header = if self.notifier_blocks.receiver_count() > 0 {
+        let block_header = if self.has_block_header_subscribers() {
             Some(block.header.clone())
         } else {
             None
         };
-        let block_logs = if self.notifier_logs.receiver_count() > 0 {
+        let block_logs = if self.has_log_subscribers() {
             Some(block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec())
         } else {
             None
@@ -300,17 +321,114 @@ impl Miner {
         self.storage.save_block(block)?;
         self.storage.set_mined_block_number(block_number)?;
 
-        // notify
-        if let Some(block_logs) = block_logs {
-            for log in block_logs {
-                let _ = self.notifier_logs.send(log);
-            }
-        }
-        if let Some(block_header) = block_header {
-            let _ = self.notifier_blocks.send(block_header);
-        }
+        // Send notifications after saving the block
+        self.send_log_notifications(&block_logs);
+        self.send_block_header_notification(&block_header);
 
         Ok(())
+    }
+
+    fn commit_log(&self, replication_log: ReplicationLogRocksdb) -> anyhow::Result<(), StorageError> {
+        let block_number: BlockNumber = replication_log.block_number.into();
+
+        // track
+        #[cfg(feature = "tracing")]
+        let _span = info_span!("miner::commit_log", %block_number).entered();
+        tracing::info!(block_number = %block_number, "committing replication log");
+
+        // lock
+        let _commit_lock = self.locks.commit.lock();
+
+        // Read current block for notifications
+        if let Ok(current_block_number) = self.storage.read_mined_block_number() {
+            match self.storage.read_block(BlockFilter::Number(current_block_number)) {
+                Ok(Some(current_block)) => {
+                    // Send notifications for the current block
+                    if self.has_block_header_subscribers() {
+                        self.send_block_header_notification(&Some(current_block.header.clone()));
+                    }
+                    if self.has_log_subscribers() {
+                        let logs = current_block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec();
+                        self.send_log_notifications(&Some(logs));
+                    }
+                    if self.has_pending_tx_subscribers() {
+                        let tx_hashes = current_block.transactions.iter().map(|tx| tx.input.hash).collect_vec();
+                        for tx_hash in tx_hashes {
+                            self.send_pending_tx_notification(&Some(tx_hash));
+                        }
+                    }
+                }
+                Ok(None) => {
+                    tracing::info!(
+                        %current_block_number,
+                        "no block found for current block number"
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        %current_block_number,
+                        error = ?e,
+                        "failed to read current block"
+                    );
+                }
+            }
+        }
+
+        // Apply replication log
+        tracing::info!(block_number = %block_number, "applying replication log");
+        let write_batch = replication_log.to_write_batch();
+        match self.storage.apply_replication_log(block_number, write_batch) {
+            Ok(_) => {
+                tracing::info!(block_number = %replication_log.block_number, "successfully applied replication log");
+                Ok(())
+            }
+            Err(e) => {
+                tracing::error!(reason = ?e, "failed to apply replication log");
+                Err(e)
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------------
+    // Notification methods
+    // -----------------------------------------------------------------------------
+
+    /// Checks if there are any subscribers for block header notifications
+    fn has_block_header_subscribers(&self) -> bool {
+        self.notifier_blocks.receiver_count() > 0
+    }
+
+    /// Checks if there are any subscribers for log notifications
+    fn has_log_subscribers(&self) -> bool {
+        self.notifier_logs.receiver_count() > 0
+    }
+
+    /// Checks if there are any subscribers for pending transaction notifications
+    fn has_pending_tx_subscribers(&self) -> bool {
+        self.notifier_pending_txs.receiver_count() > 0
+    }
+
+    /// Sends a notification for a block header
+    fn send_block_header_notification(&self, block_header: &Option<BlockHeader>) {
+        if let Some(block_header) = block_header {
+            let _ = self.notifier_blocks.send(block_header.clone());
+        }
+    }
+
+    /// Sends notifications for logs
+    fn send_log_notifications(&self, logs: &Option<Vec<LogMined>>) {
+        if let Some(logs) = logs {
+            for log in logs {
+                let _ = self.notifier_logs.send(log.clone());
+            }
+        }
+    }
+
+    /// Sends notifications for pending transactions
+    fn send_pending_tx_notification(&self, tx_hash: &Option<Hash>) {
+        if let Some(tx_hash) = tx_hash {
+            let _ = self.notifier_pending_txs.send(*tx_hash);
+        }
     }
 }
 
@@ -326,6 +444,7 @@ pub mod interval_miner {
     use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
+    use crate::eth::miner::miner::CommitItem;
     use crate::eth::miner::Miner;
     use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
@@ -376,7 +495,7 @@ pub mod interval_miner {
 
         // commit
         loop {
-            match miner.commit(block.clone()) {
+            match miner.commit(CommitItem::Block(block.clone())) {
                 Ok(_) => break,
                 Err(e) => {
                     tracing::error!(reason = ?e, "failed to commit block");

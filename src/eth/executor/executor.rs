@@ -3,6 +3,7 @@ use std::mem;
 use std::str::FromStr;
 use std::sync::Arc;
 
+#[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
@@ -10,6 +11,7 @@ use anyhow::anyhow;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
 use tracing::debug_span;
+#[cfg(feature = "tracing")]
 use tracing::info_span;
 use tracing::Span;
 
