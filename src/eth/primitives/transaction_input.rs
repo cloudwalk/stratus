@@ -139,15 +139,12 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
 
 fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow::Result<TransactionInput> {
     // extract signer
-    let signer: Address = match compute_signer {
-        true => match value.inner.recover_signer() {
-            Ok(signer) => Address::from(signer),
-            Err(e) => {
-                tracing::warn!(reason = ?e, "failed to recover transaction signer");
-                return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
-            }
-        },
-        false => Address::from(value.inner.signer()),
+    let signer: Address = match value.inner.recover_signer() {
+        Ok(signer) => Address::from(signer),
+        Err(e) => {
+            tracing::warn!(reason = ?e, "failed to recover transaction signer");
+            return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
+        }
     };
 
     // Get signature components from the envelope
