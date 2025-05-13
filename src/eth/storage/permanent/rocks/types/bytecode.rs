@@ -47,6 +47,7 @@ pub struct EofBodyRocksdb {
     pub data_section: BytesRocksdb,
     pub code: BytesRocksdb,
     pub is_data_filled: bool,
+    pub code_offset: usize,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
@@ -104,6 +105,7 @@ impl From<RevmBytecode> for BytecodeRocksdb {
                     data_section: eof.body.data_section.clone().into(),
                     is_data_filled: eof.body.is_data_filled,
                     code: eof.body.code.clone().into(),
+                    code_offset: eof.body.code_offset
                 },
                 raw: eof.raw.clone().into(),
             }),
@@ -150,7 +152,7 @@ impl From<BytecodeRocksdb> for RevmBytecode {
                     container_section: eof.body.container_section.into_iter().map(Into::into).collect(),
                     data_section: eof.body.data_section.into(),
                     is_data_filled: eof.body.is_data_filled,
-                    code_offset: 0, // XXX
+                    code_offset: eof.body.code_offset,
                 };
                 RevmBytecode::Eof(Arc::new(Eof {
                     header,
