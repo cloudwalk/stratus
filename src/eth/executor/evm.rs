@@ -469,7 +469,6 @@ impl Database for RevmSession {
 
         // early convert response because account will be moved
         let revm_account: AccountInfo = (&account).into();
-
         // track original value, except if ignored address
         if not(account.address.is_ignored()) {
             self.storage_changes

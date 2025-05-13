@@ -105,7 +105,7 @@ impl From<RevmBytecode> for BytecodeRocksdb {
                     data_section: eof.body.data_section.clone().into(),
                     is_data_filled: eof.body.is_data_filled,
                     code: eof.body.code.clone().into(),
-                    code_offset: eof.body.code_offset
+                    code_offset: eof.body.code_offset,
                 },
                 raw: eof.raw.clone().into(),
             }),

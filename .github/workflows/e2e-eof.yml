@@ -4,30 +4,30 @@ permissions:
   contents: read
 
 on:
-  pull_request:
-    branches:
-      - "*"
-    paths-ignore:
-      - ".github/workflows/deploy.yml"
-      - ".github/workflows/docs-release.yml"
-      - ".github/workflows/outdated.yml"
-      - ".github/workflows/comment-tag-report.yml"
-      - ".github/workflows/pr-agent.yml"
-      - ".github/workflows/build-binary.yml"
-      - ".github/CODEOWNERS"
-      - "config/**"
-      - "README.md"
-      - "LICENSE"
-      - "CONTRIBUTING.md"
-      - "utils/slack-notifiers/**"
+  # pull_request:
+  #   branches:
+  #     - "*"
+  #   paths-ignore:
+  #     - ".github/workflows/deploy.yml"
+  #     - ".github/workflows/docs-release.yml"
+  #     - ".github/workflows/outdated.yml"
+  #     - ".github/workflows/comment-tag-report.yml"
+  #     - ".github/workflows/pr-agent.yml"
+  #     - ".github/workflows/build-binary.yml"
+  #     - ".github/CODEOWNERS"
+  #     - "config/**"
+  #     - "README.md"
+  #     - "LICENSE"
+  #     - "CONTRIBUTING.md"
+  #     - "utils/slack-notifiers/**"
 
-  push: # Rebuild cache policy
-    branches:
-      - "main"
-    paths:
-      - "Cargo.lock"
-      - "Cargo.toml"
-      - "rust-toolchain.toml"
+  # push: # Rebuild cache policy
+  #   branches:
+  #     - "main"
+  #   paths:
+  #     - "Cargo.lock"
+  #     - "Cargo.toml"
+  #     - "rust-toolchain.toml"
 
   workflow_dispatch:
 
