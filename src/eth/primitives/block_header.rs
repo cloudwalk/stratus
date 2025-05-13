@@ -129,14 +129,14 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
 
             // mining: identifiers
             timestamp: *header.timestamp,
-            beneficiary: AlloyAddress::from(Address::COINBASE),
+            beneficiary: AlloyAddress::from(header.author),
 
             // mining: difficulty
             difficulty: AlloyUint256::ZERO,
             nonce: AlloyB64::ZERO,
 
             // mining: gas
-            gas_limit: 100_000_000u64,
+            gas_limit: header.gas_limit.as_u64(),
             gas_used: header.gas_used.as_u64(),
             base_fee_per_gas: Some(0u64),
             blob_gas_used: None,

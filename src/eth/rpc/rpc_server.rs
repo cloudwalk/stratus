@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use alloy_primitives::hex;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
@@ -240,6 +241,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
+    module.register_blocking_method("stratus_getReplicationLog", stratus_get_replication_log)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -755,6 +757,49 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         "block": block.to_json_rpc_with_full_transactions(),
         "receipts": receipts,
     }))
+}
+
+fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!("rpc::stratus_getReplicationLog", filter = field::Empty).entered();
+
+    // parse params
+    let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+
+    // track
+    Span::with(|s| s.rec_str("filter", &filter));
+    tracing::info!(%filter, "reading replication log");
+
+    // Resolve the block filter to a specific block number
+    let block_number = match ctx.storage.read_block(filter)? {
+        Some(block) => block.number(),
+        None => {
+            tracing::info!(%filter, "block not found");
+            return Ok(JsonValue::Null);
+        }
+    };
+
+    // execute
+    let replication_log = ctx.storage.read_replication_log(block_number)?;
+
+    match replication_log {
+        Some(log) => {
+            let log_data = log.data();
+            let encoded = hex::encode(log_data);
+
+            tracing::info!(%block_number, log_size = log_data.len(), "replication log found");
+
+            Ok(json!({
+                "block_number": block_number,
+                "replication_log": encoded
+            }))
+        }
+        None => {
+            tracing::info!(%block_number, "replication log not found");
+            Ok(JsonValue::Null)
+        }
+    }
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
