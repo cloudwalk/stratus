@@ -519,6 +519,8 @@ impl RocksStorageState {
 
     #[cfg(feature = "dev")]
     pub fn save_account_code(&self, address: Address, code: Bytes) -> Result<()> {
+        use crate::alias::RevmBytecode;
+
         let mut batch = WriteBatch::default();
 
         // Get the current account or create a new one
@@ -528,7 +530,7 @@ impl RocksStorageState {
         account_info_entry.bytecode = if code.0.is_empty() {
             None
         } else {
-            Some(revm::primitives::Bytecode::new_raw(code.0.into()))
+            Some(RevmBytecode::new_raw(code.0.into()))
         }
         .map_into();
 
