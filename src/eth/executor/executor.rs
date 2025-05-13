@@ -494,13 +494,12 @@ impl Executor {
                 let parallel_attempt = self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Parallel, 1);
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
-                    Err(e) => {
+                    Err(e) =>
                         if let StratusError::Storage(StorageError::TransactionConflict(_)) = e {
                             self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
                         } else {
                             Err(e)
-                        }
-                    }
+                        },
                 }
             }
         };

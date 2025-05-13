@@ -139,7 +139,7 @@ impl<EVM> Default for StratusHandler<EVM> {
 #[derive(Clone, Copy)]
 pub enum EvmKind {
     Transaction,
-    Call
+    Call,
 }
 
 impl Evm {
