@@ -128,6 +128,8 @@ impl From<BytecodeRocksdb> for RevmBytecode {
                 JumpTable::from_slice(&analyzed.jump_table, &analyzed.jump_table.len() * 8),
             )),
             BytecodeRocksdb::Eof(eof) => {
+                // This is here to maintain parity with RevmBytecode variants, however currently (2025/05/14) neither Revm
+                // nor any of the defined evm specs support this.
                 let header = EofHeader {
                     types_size: eof.header.types_size,
                     code_sizes: eof.header.code_sizes,
@@ -165,6 +167,32 @@ impl From<BytecodeRocksdb> for RevmBytecode {
                 version: bytecode.version,
                 raw: bytecode.raw.into(),
             }),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use revm::bytecode::eof::Eof;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_eof_conversion() {
+        // Create a default Eof value
+        let original_eof = Arc::new(Eof::default());
+
+        // Convert Eof to BytecodeRocksdb
+        let bytecode_rocksdb = BytecodeRocksdb::from(RevmBytecode::Eof(original_eof.clone()));
+
+        // Convert BytecodeRocksdb back to RevmBytecode
+        let converted_back = RevmBytecode::from(bytecode_rocksdb);
+
+        // Check if the original and converted values are equal
+        if let RevmBytecode::Eof(eof) = converted_back {
+            assert_eq!(*eof, *original_eof);
+        } else {
+            panic!("Expected RevmBytecode::Eof variant after conversion");
         }
     }
 }
