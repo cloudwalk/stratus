@@ -173,9 +173,11 @@ impl From<BytecodeRocksdb> for RevmBytecode {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use revm::bytecode::eof::Eof;
     use std::sync::Arc;
+
+    use revm::bytecode::eof::Eof;
+
+    use super::*;
 
     #[test]
     fn test_eof_conversion() {
@@ -183,7 +185,7 @@ mod tests {
         let original_eof = Arc::new(Eof::default());
 
         // Convert Eof to BytecodeRocksdb
-        let bytecode_rocksdb = BytecodeRocksdb::from(RevmBytecode::Eof(original_eof.clone()));
+        let bytecode_rocksdb = BytecodeRocksdb::from(RevmBytecode::Eof(Arc::clone(&original_eof)));
 
         // Convert BytecodeRocksdb back to RevmBytecode
         let converted_back = RevmBytecode::from(bytecode_rocksdb);
