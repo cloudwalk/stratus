@@ -202,8 +202,9 @@ impl TryFrom<&ExternalBlock> for BlockHeader {
 
 impl From<BlockHeader> for SubscriptionMessage {
     fn from(value: BlockHeader) -> Self {
-        let alloy_block = AlloyBlockVoid::from(value);
-        Self::from_json(&alloy_block).expect_infallible()
+        serde_json::value::RawValue::from_string(serde_json::to_string(&AlloyBlockVoid::from(value)).expect_infallible())
+            .expect_infallible()
+            .into()
     }
 }
 

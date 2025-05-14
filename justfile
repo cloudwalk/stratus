@@ -232,9 +232,9 @@ e2e-eof:
     just stratus-test -a 0.0.0.0:3000 --executor-evm-spec Osaka
 
     cd e2e/eof
-    
+
     docker build -t eof-solc:latest -f Dockerfile.eof-solc .
-    
+
     forge install
     # Run tests using alice pk
     forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "deploy()" --slow
@@ -551,6 +551,6 @@ e2e-genesis:
 
     just _log "Running Genesis tests"
     cd e2e
-    npm install 
-    npx hardhat test test/genesis/genesis.test.ts --network stratus 
+    npm install
+    npx hardhat test test/genesis/genesis.test.ts --network stratus
     killport 3000 -s sigterm

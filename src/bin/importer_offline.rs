@@ -311,9 +311,7 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_
             let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
             assert!(
                 tx_index + 1 == next_tx_index,
-                "two consecutive transactions must have consecutive indices: {} and {}",
-                tx_index,
-                next_tx_index,
+                "two consecutive transactions must have consecutive indices: {tx_index} and {next_tx_index}"
             );
         }
         for window in receipts.windows(2) {
@@ -321,9 +319,7 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_
             let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
             assert!(
                 tx_index + 1 == next_tx_index,
-                "two consecutive receipts must have consecutive indices: {} and {}",
-                tx_index,
-                next_tx_index,
+                "two consecutive receipts must have consecutive indices: {tx_index} and {next_tx_index}"
             );
         }
     }

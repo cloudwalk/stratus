@@ -44,7 +44,7 @@ fn generate_build_info() {
     let build_hostname = hostname::get().unwrap_or_default().to_string_lossy().into_owned();
 
     // Export BUILD_HOSTNAME as a compile-time environment variable
-    println!("cargo:rustc-env=BUILD_HOSTNAME={}", build_hostname);
+    println!("cargo:rustc-env=BUILD_HOSTNAME={build_hostname}");
 
     // Capture OpenSSL version
     let openssl_version = Command::new("openssl")
@@ -146,7 +146,7 @@ fn parse_contract(input: &str) -> (ContractAddress, &ContractName) {
 
     let address = match const_hex::decode(address) {
         Ok(address) => address,
-        Err(e) => panic!("Failed to parse contract address as hexadecimal | value={} reason={:?}", address, e),
+        Err(e) => panic!("Failed to parse contract address as hexadecimal | value={address} reason={e:?}"),
     };
 
     let address: [u8; 20] = match address.try_into() {
@@ -224,7 +224,7 @@ fn populate_signature_maps(
 
         // track
         seen.insert(id);
-        let signature = format!("\"{}\"", signature);
+        let signature = format!("\"{signature}\"");
         match id {
             SolidityId::FunctionOrError(id) => {
                 signatures_4_bytes.entry(id, &signature);
@@ -243,7 +243,7 @@ fn parse_signature(input: &str) -> (SolidityId, &SoliditySignature) {
     let (_, (id, signature)) = parse(input).expect("Solidity signature line should match the expected pattern | pattern=[0x<hex_id>: <signature>]\n");
     let id = match const_hex::decode(id) {
         Ok(id) => id,
-        Err(e) => panic!("Failed to parse Solidity ID as hexadecimal | value={} reason={:?}", id, e),
+        Err(e) => panic!("Failed to parse Solidity ID as hexadecimal | value={id} reason={e:?}"),
     };
 
     // try to parse 32 bytes
@@ -285,7 +285,7 @@ fn list_files(pattern: &'static str) -> Vec<InputFile> {
 
     // ensure at least one exists
     if filenames.is_empty() {
-        panic!("No files found in \"{}\"", pattern);
+        panic!("No files found in \"{pattern}\"");
     }
 
     // read file contents

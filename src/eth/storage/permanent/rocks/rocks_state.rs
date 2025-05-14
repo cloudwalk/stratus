@@ -273,7 +273,7 @@ impl RocksStorageState {
 
         let Some(block) = self.blocks_by_number.get(&block_number)? else {
             return log_and_err!("the block that the transaction was supposed to be in was not found")
-                .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash));
+                .with_context(|| format!("block_number = {block_number:?} tx_hash = {tx_hash}"));
         };
         let block = block.into_inner();
 
@@ -285,7 +285,7 @@ impl RocksStorageState {
                 Ok(Some(TransactionMined::from_rocks_primitives(tx, block_number.into_inner(), block.header.hash)))
             }
             None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
-                .with_context(|| format!("block_number = {:?} tx_hash = {}", block_number, tx_hash)),
+                .with_context(|| format!("block_number = {block_number:?} tx_hash = {tx_hash}")),
         }
     }
 
@@ -623,6 +623,8 @@ impl RocksStorageState {
 
     #[cfg(feature = "dev")]
     pub fn save_account_code(&self, address: Address, code: Bytes) -> Result<()> {
+        use crate::alias::RevmBytecode;
+
         let mut batch = WriteBatch::default();
 
         // Get the current account or create a new one
@@ -632,7 +634,7 @@ impl RocksStorageState {
         account_info_entry.bytecode = if code.0.is_empty() {
             None
         } else {
-            Some(revm::primitives::Bytecode::new_raw(code.0.into()))
+            Some(RevmBytecode::new_raw(code.0.into()))
         }
         .map_into();
 
@@ -820,6 +822,7 @@ mod tests {
     use fake::Faker;
 
     use super::*;
+    use crate::alias::RevmBytecode;
     use crate::eth::primitives::BlockHeader;
     use crate::eth::primitives::ExecutionValueChange;
 
@@ -905,7 +908,7 @@ mod tests {
             address: Faker.fake(),
             nonce: ExecutionValueChange::from_original(Faker.fake()),
             balance: ExecutionValueChange::from_original(Faker.fake()),
-            bytecode: ExecutionValueChange::from_original(Some(revm::primitives::Bytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
+            bytecode: ExecutionValueChange::from_original(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
             code_hash: Faker.fake(),
             slots: BTreeMap::new(),
         };
@@ -922,7 +925,7 @@ mod tests {
                 ..change_base.clone()
             },
             ExecutionAccountChanges {
-                bytecode: ExecutionValueChange::from_modified(Some(revm::primitives::Bytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
+                bytecode: ExecutionValueChange::from_modified(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
                 ..change_base
             },
         ];

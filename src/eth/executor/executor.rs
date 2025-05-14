@@ -18,6 +18,7 @@ use tracing::Span;
 use super::evm_input::InspectorInput;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
+use crate::eth::executor::evm::EvmKind;
 use crate::eth::executor::Evm;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
@@ -118,8 +119,8 @@ impl Evms {
     /// Spawns EVM tasks in background.
     fn spawn(storage: Arc<StratusStorage>, config: &ExecutorConfig) -> Self {
         // function executed by evm threads
-        fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<EvmTask>) {
-            let mut evm = Evm::new(storage, config);
+        fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<EvmTask>, kind: EvmKind) {
+            let mut evm = Evm::new(storage, config, kind);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
@@ -138,24 +139,24 @@ impl Evms {
         }
 
         // function that spawn evm threads
-        let spawn_evms = |task_name: &str, num_evms: usize| {
+        let spawn_evms = |task_name: &str, num_evms: usize, kind: EvmKind| {
             let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
 
             for evm_index in 1..=num_evms {
-                let evm_task_name = format!("{}-{}", task_name, evm_index);
+                let evm_task_name = format!("{task_name}-{evm_index}");
                 let evm_storage = Arc::clone(&storage);
                 let evm_config = config.clone();
                 let evm_rx = evm_rx.clone();
                 let thread_name = evm_task_name.clone();
                 spawn_thread(&thread_name, move || {
-                    evm_loop(&evm_task_name, evm_storage, evm_config, evm_rx);
+                    evm_loop(&evm_task_name, evm_storage, evm_config, evm_rx, kind);
                 });
             }
             evm_tx
         };
 
         fn inspector_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<InspectorTask>) {
-            let mut evm = Evm::new(storage, config);
+            let mut evm = Evm::new(storage, config, EvmKind::Call);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
@@ -178,7 +179,7 @@ impl Evms {
             let (tx, rx) = crossbeam_channel::unbounded::<InspectorTask>();
 
             for index in 1..=num_evms {
-                let task_name = format!("{}-{}", task_name, index);
+                let task_name = format!("{task_name}-{index}");
                 let storage = Arc::clone(&storage);
                 let config = config.clone();
                 let rx = rx.clone();
@@ -191,16 +192,21 @@ impl Evms {
         };
 
         let tx_parallel = match config.executor_strategy {
-            ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1), // should not really be used if strategy is serial, but keep 1 for fallback
-            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.executor_evms),
+            ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1, EvmKind::Transaction), // should not really be used if strategy is serial, but keep 1 for fallback
+            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.executor_evms, EvmKind::Transaction),
         };
-        let tx_serial = spawn_evms("evm-tx-serial", 1);
-        let tx_external = spawn_evms("evm-tx-external", 1);
+        let tx_serial = spawn_evms("evm-tx-serial", 1, EvmKind::Transaction);
+        let tx_external = spawn_evms("evm-tx-external", 1, EvmKind::Transaction);
         let call_present = spawn_evms(
             "evm-call-present",
             max(config.executor_call_present_evms.unwrap_or(config.executor_evms / 2), 1),
+            EvmKind::Call,
         );
-        let call_past = spawn_evms("evm-call-past", max(config.executor_call_past_evms.unwrap_or(config.executor_evms / 4), 1));
+        let call_past = spawn_evms(
+            "evm-call-past",
+            max(config.executor_call_past_evms.unwrap_or(config.executor_evms / 4), 1),
+            EvmKind::Call,
+        );
         let inspector = spawn_inspectors("inspector", max(config.executor_inspector_evms.unwrap_or(config.executor_evms / 4), 1));
 
         Evms {

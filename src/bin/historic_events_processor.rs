@@ -145,10 +145,7 @@ fn main() -> Result<(), anyhow::Error> {
                 if !std::path::Path::new(&folder_path).exists() {
                     std::fs::create_dir_all(&folder_path)?;
                 }
-                std::fs::write(
-                    format!("{}/ledger_wallet_events+backfill+{:010}.json", folder_path, offset),
-                    event_batch.join("\n"),
-                )?;
+                std::fs::write(format!("{folder_path}/ledger_wallet_events+backfill+{offset:010}.json"), event_batch.join("\n"))?;
                 offset += event_batch.len();
             }
             std::fs::write("last_processed_block", number.to_string())?;

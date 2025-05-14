@@ -127,7 +127,6 @@ impl TryFrom<LogMined> for SubscriptionMessage {
     type Error = serde_json::Error;
 
     fn try_from(value: LogMined) -> Result<Self, Self::Error> {
-        let alloy_log = Into::<AlloyLog>::into(value);
-        Self::from_json(&alloy_log)
+        Ok(serde_json::value::RawValue::from_string(serde_json::to_string(&Into::<AlloyLog>::into(value))?)?.into())
     }
 }

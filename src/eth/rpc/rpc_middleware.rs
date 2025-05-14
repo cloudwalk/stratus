@@ -5,7 +5,6 @@ use std::task::Poll;
 use std::time::Instant;
 
 use futures::future::BoxFuture;
-use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
 use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
 #[cfg(feature = "metrics")]
@@ -64,10 +63,22 @@ impl RpcMiddleware {
     }
 }
 
-impl<'a> RpcServiceT<'a> for RpcMiddleware {
-    type Future = RpcResponse<'a>;
+impl RpcServiceT for RpcMiddleware {
+    type BatchResponse = MethodResponse;
+    type MethodResponse = MethodResponse;
+    type NotificationResponse = MethodResponse;
 
-    fn call(&self, mut request: jsonrpsee::types::Request<'a>) -> Self::Future {
+    // TODO
+    fn batch<'a>(&self, requests: jsonrpsee::core::middleware::Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
+        self.service.batch(requests)
+    }
+
+    // TODO
+    fn notification<'a>(&self, n: jsonrpsee::core::middleware::Notification<'a>) -> impl Future<Output = Self::NotificationResponse> + Send + 'a {
+        self.service.notification(n)
+    }
+
+    fn call<'a>(&self, mut request: jsonrpsee::types::Request<'a>) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
         let span = info_span!(
             parent: None,
             "rpc::request",
@@ -163,7 +174,8 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
         request.extensions_mut().insert(span);
 
         let id = request.id.to_string();
-        let future_response = reject_unknown_client(&client, request.id.clone()).unwrap_or(self.service.call(request));
+
+        let future_response = reject_unknown_client(&client, request.id.clone()).unwrap_or(Box::pin(self.service.call(request)));
         RpcResponse {
             client,
             id,
@@ -176,9 +188,9 @@ impl<'a> RpcServiceT<'a> for RpcMiddleware {
 }
 
 /// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
-fn reject_unknown_client<'a>(client: &RpcClientApp, id: Id<'_>) -> Option<ResponseFuture<BoxFuture<'a, MethodResponse>>> {
+fn reject_unknown_client<'a>(client: &RpcClientApp, id: Id<'_>) -> Option<BoxFuture<'a, MethodResponse>> {
     if client.is_unknown() && !GlobalState::is_unknown_client_enabled() {
-        return Some(StratusError::RPC(RpcError::ClientMissing).to_response_future(id));
+        return Some(Box::pin(StratusError::RPC(RpcError::ClientMissing).to_response_future(id)));
     }
     None
 }
@@ -199,7 +211,7 @@ pub struct RpcResponse<'a> {
     // data
     start: Instant,
     #[pin]
-    future_response: ResponseFuture<BoxFuture<'a, MethodResponse>>,
+    future_response: BoxFuture<'a, MethodResponse>,
 }
 
 impl Future for RpcResponse<'_> {
@@ -217,7 +229,7 @@ impl Future for RpcResponse<'_> {
 
             // extract response data
             let response_success = response.is_success();
-            let response_result: JsonValue = from_json_str(response.as_result());
+            let response_result: JsonValue = from_json_str(response.as_json().get());
 
             #[cfg_attr(not(feature = "metrics"), allow(unused_variables))]
             let (level, error_code) = match response_result

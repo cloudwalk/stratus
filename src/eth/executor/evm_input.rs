@@ -141,7 +141,7 @@ impl EvmInput {
     /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
     pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block_number: BlockNumber, block_timestamp: UnixTime) -> anyhow::Result<Self> {
         Ok(Self {
-            from: tx.from.into(),
+            from: tx.inner.signer().into(),
             to: tx.inner.to().map_into(),
             value: tx.inner.value().into(),
             data: tx.inner.input().clone().into(),

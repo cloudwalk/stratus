@@ -33,12 +33,12 @@ pub type AlloyUint256 = alloy_primitives::Uint<256, 4>;
 // -----------------------------------------------------------------------------
 // REVM
 // -----------------------------------------------------------------------------
-pub type RevmAccountInfo = revm::primitives::AccountInfo;
+pub type RevmAccountInfo = revm::state::AccountInfo;
 pub type RevmAddress = revm::primitives::Address;
 pub type RevmB256 = revm::primitives::B256;
-pub type RevmBytecode = revm::primitives::Bytecode;
+pub type RevmBytecode = revm::state::Bytecode;
 pub type RevmBytes = revm::primitives::Bytes;
 pub type RevmLog = revm::primitives::Log;
-pub type RevmOutput = revm::primitives::Output;
-pub type RevmState = revm::primitives::EvmState;
+pub type RevmOutput = revm::context::result::Output;
+pub type RevmState = revm::state::EvmState;
 pub type RevmU256 = revm::primitives::U256;
