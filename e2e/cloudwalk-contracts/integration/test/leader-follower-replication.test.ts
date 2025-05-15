@@ -85,7 +85,7 @@ describe("Leader & Follower replication integration test", function () {
                 updateProviderUrl("stratus-follower");
 
                 let nonces = await Promise.all(
-                    wallets.map((wallet) => sendWithRetry("eth_getTransactionCount", [wallet.address, "pending"])),
+                    wallets.map((wallet) => sendWithRetry("eth_getTransactionCount", [wallet.address, "latest"])),
                 );
 
                 const startTime = Date.now();
@@ -182,6 +182,59 @@ describe("Leader & Follower replication integration test", function () {
                     ).to.equal(followerReplicationLog.replication_log);
                 }
             });
+        });
+    });
+
+    describe("Transaction count with 'pending' parameter tests", function () {
+        it("Validate eth_getTransactionCount with 'pending' parameter updates correctly on follower nodes", async function () {
+            this.timeout(60000);
+
+            const testWallet = ethers.Wallet.createRandom().connect(ethers.provider);
+
+            updateProviderUrl("stratus");
+            await deployer.sendTransaction({
+                to: testWallet.address,
+                value: ethers.parseEther("1.0"),
+                gasLimit: GAS_LIMIT_OVERRIDE,
+            });
+
+            const leaderInitialCount = await sendWithRetry("eth_getTransactionCount", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus-follower");
+            const followerInitialCount = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+
+            updateProviderUrl("stratus");
+            const tx = await testWallet.sendTransaction({
+                to: ethers.Wallet.createRandom().address,
+                value: 1,
+                gasLimit: GAS_LIMIT_OVERRIDE,
+                gasPrice: 0,
+                type: 0,
+            });
+
+            await tx.wait();
+            await waitForFollowerToSyncWithLeader();
+
+            updateProviderUrl("stratus");
+            const leaderCountAfterTx = await sendWithRetry("eth_getTransactionCount", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus-follower");
+            const followerCountAfterTx = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+
+            // Verify leader incremented the nonce
+            expect(parseInt(leaderCountAfterTx, 16)).to.be.greaterThan(parseInt(leaderInitialCount, 16));
+
+            // Follower should also increment the nonce
+            expect(parseInt(followerCountAfterTx, 16)).to.be.greaterThan(parseInt(followerInitialCount, 16));
+
+            // Both nodes should return the same nonce
+            expect(followerCountAfterTx).to.equal(leaderCountAfterTx);
         });
     });
 });
