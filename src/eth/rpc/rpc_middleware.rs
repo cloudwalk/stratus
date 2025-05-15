@@ -126,7 +126,7 @@ impl RpcServiceT for RpcMiddleware {
             }
 
             let elapsed = start.elapsed();
-            let response = if batch_rp.is_empty() && got_notification {
+            if batch_rp.is_empty() && got_notification {
                 tracing::info!(
                     elapsed_ms = elapsed.as_millis(),
                     calls = call_count,
@@ -144,9 +144,7 @@ impl RpcServiceT for RpcMiddleware {
                     "completed batch request"
                 );
                 MethodResponse::from_batch(batch_rp.finish())
-            };
-
-            response
+            }
         }
     }
 
