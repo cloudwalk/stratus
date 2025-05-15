@@ -91,16 +91,11 @@ export async function deployBRLC() {
 }
 
 export async function configureBRLC() {
-    await waitReceipt(brlcToken.grantRole(
-      await brlcToken.GRANTOR_ROLE(),
-      await deployer.getAddress(),
-      { gasLimit: GAS_LIMIT_OVERRIDE }
-    ));
-    await waitReceipt(brlcToken.grantRole(
-      await brlcToken.MINTER_ROLE(),
-      await deployer.getAddress(),
-      { gasLimit: GAS_LIMIT_OVERRIDE })
-    );
+    const deployerAddress = await deployer.getAddress();
+    const grantorRole = await brlcToken.GRANTOR_ROLE();
+    const minterRole = await brlcToken.MINTER_ROLE();
+    await waitReceipt(brlcToken.grantRole(grantorRole, deployerAddress, { gasLimit: GAS_LIMIT_OVERRIDE }));
+    await waitReceipt(brlcToken.grantRole(minterRole, deployerAddress, { gasLimit: GAS_LIMIT_OVERRIDE }));
 }
 
 export async function deployCashier() {
