@@ -85,7 +85,7 @@ describe("Leader & Follower replication integration test", function () {
                 updateProviderUrl("stratus-follower");
 
                 let nonces = await Promise.all(
-                    wallets.map((wallet) => sendWithRetry("eth_getTransactionCount", [wallet.address, "latest"])),
+                    wallets.map((wallet) => sendWithRetry("eth_getTransactionCount", [wallet.address, "pending"])),
                 );
 
                 const startTime = Date.now();
