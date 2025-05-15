@@ -18,6 +18,7 @@ use jsonrpsee::types::Params;
 use jsonrpsee::BatchResponseBuilder;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
+use strum::Display;
 use tracing::field;
 use tracing::info_span;
 use tracing::Level;
@@ -67,6 +68,13 @@ impl RpcMiddleware {
     }
 }
 
+#[derive(Default, Clone, Copy, Display)]
+enum RequestType {
+    Batch,
+    #[default]
+    Single,
+}
+
 impl RpcServiceT for RpcMiddleware {
     type BatchResponse = MethodResponse;
     type MethodResponse = MethodResponse;
@@ -77,7 +85,7 @@ impl RpcServiceT for RpcMiddleware {
         let service = self.clone();
         let batch_size = batch.len();
 
-        tracing::info!(batch_size = batch_size, "Processing RPC batch request");
+        tracing::info!(batch_size = batch_size, "processing RPC batch request");
 
         async move {
             let mut got_notification = false;
@@ -88,28 +96,29 @@ impl RpcServiceT for RpcMiddleware {
 
             for batch_entry in batch.into_iter() {
                 match batch_entry {
-                    Ok(BatchEntry::Call(req)) => {
+                    Ok(BatchEntry::Call(mut req)) => {
                         call_count += 1;
-                        tracing::debug!(method = req.method_name(), "Processing batch call");
+                        tracing::debug!(method = req.method_name(), "processing batch call");
+                        req.extensions_mut().insert(RequestType::Batch);
                         let rp = service.call(req).await;
                         if let Err(err) = batch_rp.append(rp) {
-                            tracing::error!(error = ?err, "Failed to append batch call response");
+                            tracing::error!(error = ?err, "failed to append batch call response");
                             return err;
                         }
                     }
                     Ok(BatchEntry::Notification(n)) => {
                         notification_count += 1;
-                        tracing::debug!(method = n.method_name(), "Processing batch notification");
+                        tracing::debug!(method = n.method_name(), "processing batch notification");
                         got_notification = true;
                         service.notification(n).await;
                     }
                     Err(err) => {
                         error_count += 1;
-                        tracing::warn!(error = ?err, "Processing batch entry error");
+                        tracing::warn!(error = ?err, "processing batch entry error");
                         let (err, id) = err.into_parts();
                         let rp = MethodResponse::error(id, err);
                         if let Err(err) = batch_rp.append(rp) {
-                            tracing::error!(error = ?err, "Failed to append batch error response");
+                            tracing::error!(error = ?err, "failed to append batch error response");
                             return err;
                         }
                     }
@@ -123,7 +132,7 @@ impl RpcServiceT for RpcMiddleware {
                     calls = call_count,
                     notifications = notification_count,
                     errors = error_count,
-                    "Completed empty batch with notifications"
+                    "completed empty batch with notifications"
                 );
                 MethodResponse::notification()
             } else {
@@ -132,7 +141,7 @@ impl RpcServiceT for RpcMiddleware {
                     calls = call_count,
                     notifications = notification_count,
                     errors = error_count,
-                    "Completed batch request"
+                    "completed batch request"
                 );
                 MethodResponse::from_batch(batch_rp.finish())
             };
@@ -146,6 +155,7 @@ impl RpcServiceT for RpcMiddleware {
     }
 
     fn call<'a>(&self, mut request: jsonrpsee::types::Request<'a>) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
+        let request_type = request.extensions().get::<RequestType>().copied().unwrap_or_default();
         let span = info_span!(
             parent: None,
             "rpc::request",
@@ -158,7 +168,8 @@ impl RpcServiceT for RpcMiddleware {
             rpc_tx_to = field::Empty,
             rpc_tx_nonce = field::Empty,
             rpc_tx_contract = field::Empty,
-            rpc_tx_function = field::Empty
+            rpc_tx_function = field::Empty,
+            rpc_req_type = request_type.to_string()
         );
         let middleware_enter = span.enter();
 
@@ -226,7 +237,13 @@ impl RpcServiceT for RpcMiddleware {
         {
             // started requests
             let tx_ref = tx.as_ref();
-            metrics::inc_rpc_requests_started(&client, &method, tx_ref.map(|tx| tx.contract), tx_ref.map(|tx| tx.function));
+            metrics::inc_rpc_requests_started(
+                &client,
+                &method,
+                tx_ref.map(|tx| tx.contract),
+                tx_ref.map(|tx| tx.function),
+                request_type.to_string(),
+            );
 
             // active requests
             if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
