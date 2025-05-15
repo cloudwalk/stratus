@@ -1108,7 +1108,6 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             .into());
         }
     };
-
     let tx_hash = tx.hash;
 
     // track

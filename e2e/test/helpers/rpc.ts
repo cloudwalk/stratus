@@ -154,6 +154,50 @@ export async function sendAndGetFullResponse(
     return response;
 }
 
+export async function sendAndGetFullResponseBatch(
+    requests: { method: string; params: any[] }[],
+    headers: Record<string, string> = {},
+): Promise<any> {
+  const payloads = requests.map(request => {
+      const { method, params } = request;
+
+      // Process parameters, converting Account instances to addresses
+      const processedParams = params.map(param =>
+          param instanceof Account ? param.address : param
+      );
+
+      // Create JSON-RPC payload
+      return {
+          jsonrpc: "2.0",
+          id: requestId++,
+          method: method,
+          params: processedParams,
+      };
+  });
+
+  // Log requests if enabled
+  if (process.env.RPC_LOG) {
+      console.log("REQ  ->", JSON.stringify(payloads));
+  }
+
+  // Create the final payload (array of request objects for batch)
+  const payload = payloads;
+
+    // prepare headers
+    const requestHeaders = {
+        "Content-Type": "application/json",
+        ...headers,
+    };
+
+    // execute request and log response
+    const response = await axios.post(providerUrl, payload, { headers: requestHeaders });
+    if (process.env.RPC_LOG) {
+        console.log("RESP <-", JSON.stringify(response.data));
+    }
+
+    return response;
+}
+
 // Sends an RPC request to the blockchain, returning its result field.
 export async function send(method: string, params: any[] = [], headers: Record<string, string> = {}): Promise<any> {
     const response = await sendAndGetFullResponse(method, params, headers);
