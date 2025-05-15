@@ -82,6 +82,8 @@ describe("Leader & Follower replication integration test", function () {
 
                 const transactionInterval = 1000 / params.tps;
 
+                updateProviderUrl("stratus-follower");
+
                 let nonces = await Promise.all(
                     wallets.map((wallet) => sendWithRetry("eth_getTransactionCount", [wallet.address, "latest"])),
                 );
