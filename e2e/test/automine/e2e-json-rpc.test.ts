@@ -261,15 +261,15 @@ describe("JSON-RPC", () => {
                     { method: "eth_sendRawTransaction", params: [signedTx1] },
                     { method: "eth_sendRawTransaction", params: [signedTx2] },
                     { method: "eth_getTransactionByHash", params: [keccak256(signedTx1)] },
-                    { method: "eth_sendRawTransaction", params: [signedTx1] }
+                    { method: "eth_sendRawTransaction", params: [signedTx1] },
                 ]);
 
-              expect(results.data[0].result).to.eq(keccak256(signedTx1));
-              expect(results.data[1].result).to.eq(keccak256(signedTx2));
-              expect(results.data[2].result).to.exist;
-              expect(results.data[3].error).to.exist;
+                expect(results.data[0].result).to.eq(keccak256(signedTx1));
+                expect(results.data[1].result).to.eq(keccak256(signedTx2));
+                expect(results.data[2].result).to.exist;
+                expect(results.data[3].error).to.exist;
 
-              console.log(results);
+                console.log(results);
             });
         });
         describe("stratus_getTransactionResult", () => {

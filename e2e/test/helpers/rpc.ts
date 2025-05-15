@@ -158,30 +158,28 @@ export async function sendAndGetFullResponseBatch(
     requests: { method: string; params: any[] }[],
     headers: Record<string, string> = {},
 ): Promise<any> {
-  const payloads = requests.map(request => {
-      const { method, params } = request;
+    const payloads = requests.map((request) => {
+        const { method, params } = request;
 
-      // Process parameters, converting Account instances to addresses
-      const processedParams = params.map(param =>
-          param instanceof Account ? param.address : param
-      );
+        // Process parameters, converting Account instances to addresses
+        const processedParams = params.map((param) => (param instanceof Account ? param.address : param));
 
-      // Create JSON-RPC payload
-      return {
-          jsonrpc: "2.0",
-          id: requestId++,
-          method: method,
-          params: processedParams,
-      };
-  });
+        // Create JSON-RPC payload
+        return {
+            jsonrpc: "2.0",
+            id: requestId++,
+            method: method,
+            params: processedParams,
+        };
+    });
 
-  // Log requests if enabled
-  if (process.env.RPC_LOG) {
-      console.log("REQ  ->", JSON.stringify(payloads));
-  }
+    // Log requests if enabled
+    if (process.env.RPC_LOG) {
+        console.log("REQ  ->", JSON.stringify(payloads));
+    }
 
-  // Create the final payload (array of request objects for batch)
-  const payload = payloads;
+    // Create the final payload (array of request objects for batch)
+    const payload = payloads;
 
     // prepare headers
     const requestHeaders = {
