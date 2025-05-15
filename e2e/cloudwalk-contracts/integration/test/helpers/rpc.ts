@@ -91,9 +91,15 @@ export async function deployBRLC() {
 }
 
 export async function configureBRLC() {
-    await waitReceipt(brlcToken.updateMainMinter(await deployer.getAddress(), { gasLimit: GAS_LIMIT_OVERRIDE }));
-    await waitReceipt(
-        brlcToken.configureMinter(await deployer.getAddress(), 1000000000, { gasLimit: GAS_LIMIT_OVERRIDE }),
+    await waitReceipt(brlcToken.grantRole(
+      await brlcToken.GRANTOR_ROLE(),
+      await deployer.getAddress(),
+      { gasLimit: GAS_LIMIT_OVERRIDE }
+    ));
+    await waitReceipt(brlcToken.grantRole(
+      await brlcToken.MINTER_ROLE(),
+      await deployer.getAddress(),
+      { gasLimit: GAS_LIMIT_OVERRIDE })
     );
 }
 
@@ -105,7 +111,7 @@ export async function deployCashier() {
 }
 
 export async function configureCashier() {
-    brlcToken.connect(deployer).configureMinter(await cashier.getAddress(), 1000000000);
+    waitReceipt(brlcToken.connect(deployer).grantRole(await brlcToken.MINTER_ROLE(), await cashier.getAddress()));
     waitReceipt(cashier.grantRole(await cashier.CASHIER_ROLE(), await deployer.getAddress()));
 }
 
