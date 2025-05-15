@@ -141,7 +141,6 @@ impl RpcServiceT for RpcMiddleware {
 
         if method == "eth_sendRawTransaction" {
             let tx_data_result = next_rpc_param::<Bytes>(params_clone.sequence());
-            tracing::error!(?tx_data_result);
             if let Ok((_, tx_data)) = tx_data_result {
                 let decoded_tx_result = parse_rpc_rlp::<TransactionInput>(&tx_data);
 
