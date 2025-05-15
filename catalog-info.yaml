@@ -6,6 +6,7 @@ metadata:
   annotations:
     github.com/project-slug: cloudwalk/stratus
     backstage.io/techdocs-ref: dir:.
+    sentry/application-name: stratus
   labels:
     cloudwalk.io/regulation-scope: none
     cloudwalk.io/critical-level: high

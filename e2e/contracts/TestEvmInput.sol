@@ -11,7 +11,7 @@ contract TestEvmInput {
     function heavyComputation() public {
     // Emit event with current block number
         // Check if this is the first execution
-        if (block.number < 1000) {
+        if (block.number < 5000) {
             emit ComputationStarted(block.number, true);
 
             // Perform a time-consuming loop

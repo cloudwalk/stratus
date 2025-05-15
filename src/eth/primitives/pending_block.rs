@@ -11,6 +11,7 @@ use crate::eth::primitives::TransactionExecution;
 #[derive(DebugAsJson, Clone, Default, serde::Serialize)]
 pub struct PendingBlock {
     pub header: PendingBlockHeader,
+    // TODO: review why we use an indexmap here but not everywhere else
     pub transactions: IndexMap<Hash, TransactionExecution>,
     pub external_block: Option<ExternalBlock>,
 }
@@ -27,6 +28,6 @@ impl PendingBlock {
 
     /// Adds a transaction execution to the block.
     pub fn push_transaction(&mut self, tx: TransactionExecution) {
-        self.transactions.insert(tx.hash(), tx);
+        self.transactions.insert(tx.input.hash, tx);
     }
 }

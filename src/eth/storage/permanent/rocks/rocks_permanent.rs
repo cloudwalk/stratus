@@ -1,9 +1,11 @@
 use std::path::Path;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::bail;
+use rocksdb::WriteBatch;
 
 use super::rocks_state::RocksStorageState;
 use crate::eth::primitives::Account;
@@ -25,10 +27,14 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::ext::spawn_named;
+use crate::ext::traced_sleep;
+use crate::ext::SleepReason;
+use crate::GlobalState;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
-    pub state: RocksStorageState,
+    pub state: Arc<RocksStorageState>,
     block_number: AtomicU32,
 }
 
@@ -38,6 +44,8 @@ impl RocksPermanentStorage {
         shutdown_timeout: Duration,
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
+        use_rocksdb_replication: bool,
+        cf_size_metrics_interval: Option<Duration>,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
@@ -59,8 +67,25 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write)?;
+        let state = Arc::new(RocksStorageState::new(
+            path,
+            shutdown_timeout,
+            cache_size_multiplier,
+            enable_sync_write,
+            use_rocksdb_replication,
+        )?);
+
         let block_number = state.preload_block_number()?;
+
+        // spawn background task for collecting column family size metrics
+        #[cfg(feature = "metrics")]
+        if let Some(interval) = cf_size_metrics_interval {
+            tracing::info!("starting column family size metrics collector with interval {:?}", interval);
+            spawn_named(
+                "rocks::cf_size_metrics_collector",
+                Self::start_cf_size_metrics_collector(Arc::clone(&state), interval),
+            );
+        };
 
         Ok(Self { state, block_number })
     }
@@ -76,6 +101,11 @@ impl RocksPermanentStorage {
     pub fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<(), StorageError> {
         self.block_number.store(number.as_u32(), Ordering::SeqCst);
         Ok(())
+    }
+
+    pub fn has_genesis(&self) -> Result<bool, StorageError> {
+        let genesis = self.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
+        Ok(genesis.is_some())
     }
 
     // -------------------------------------------------------------------------
@@ -125,6 +155,44 @@ impl RocksPermanentStorage {
         })
     }
 
+    pub fn read_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<WriteBatch>, StorageError> {
+        self.state
+            .read_replication_log(block_number)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to read replication log in RocksPermanent");
+            })
+    }
+
+    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> anyhow::Result<(), StorageError> {
+        self.state
+            .apply_replication_log(block_number, replication_log)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to apply replication log in RocksPermanent");
+            })?;
+
+        self.set_mined_block_number(block_number)?;
+
+        Ok(())
+    }
+
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
+        #[cfg(feature = "rocks_metrics")]
+        {
+            self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to export metrics in RocksPermanent");
+            })?;
+        }
+
+        self.state
+            .save_genesis_block(block, accounts)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to save genesis block in RocksPermanent");
+            })
+    }
+
     pub fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
@@ -144,6 +212,10 @@ impl RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to save accounts in RocksPermanent");
             })
+    }
+
+    pub fn rocksdb_replication_enabled(&self) -> bool {
+        self.state.use_rocksdb_replication
     }
 
     #[cfg(feature = "dev")]
@@ -174,6 +246,24 @@ impl RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to save account balance in RocksPermanent");
             })
+    }
+
+    #[cfg(feature = "metrics")]
+    /// Starts a background task that collects column family size metrics at regular intervals.
+    async fn start_cf_size_metrics_collector(state: Arc<RocksStorageState>, interval: Duration) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "rocks::cf_size_metrics";
+
+        loop {
+            if GlobalState::is_shutdown_warn(TASK_NAME) {
+                return Ok(());
+            }
+
+            if let Err(e) = state.export_column_family_size_metrics() {
+                tracing::warn!("Failed to export column family metrics: {:?}", e);
+            }
+
+            traced_sleep(interval, SleepReason::Interval).await;
+        }
     }
 
     #[cfg(feature = "dev")]

@@ -68,7 +68,7 @@ impl TracingConfig {
         match self.create_subscriber(sentry_config).try_init() {
             Ok(()) => Ok(()),
             Err(e) => {
-                println!("failed to create tracing registry | reason={:?}", e);
+                println!("failed to create tracing registry | reason={e:?}");
                 Err(e.into())
             }
         }
@@ -141,7 +141,7 @@ impl TracingConfig {
         // configure tokio-console layer
         let tokio_console_layer = match self.tracing_tokio_console_address {
             Some(tokio_console_address) => {
-                println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
+                println!("tracing registry: enabling tokio console exporter | address={tokio_console_address}");
 
                 let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
                 spawn_named("console::grpc-server", async move {

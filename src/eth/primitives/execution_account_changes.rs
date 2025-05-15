@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use display_json::DebugAsJson;
-use revm::primitives::Bytecode;
 
 use super::CodeHash;
+use crate::alias::RevmBytecode;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::ExecutionValueChange;
@@ -11,8 +11,6 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
-#[cfg(test)]
-use crate::ext::ordered_map;
 
 /// Changes that happened to an account during a transaction.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -24,10 +22,9 @@ pub struct ExecutionAccountChanges {
 
     // TODO: bytecode related information should be grouped in a Bytecode struct
     #[dummy(default)]
-    pub bytecode: ExecutionValueChange<Option<Bytecode>>,
+    pub bytecode: ExecutionValueChange<Option<RevmBytecode>>,
     pub code_hash: CodeHash, // TODO: should be wrapped in a ExecutionValueChange
-    #[cfg_attr(test, serde(serialize_with = "ordered_map"))]
-    pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,
+    pub slots: BTreeMap<SlotIndex, ExecutionValueChange<Slot>>,
 }
 
 impl ExecutionAccountChanges {
@@ -40,7 +37,7 @@ impl ExecutionAccountChanges {
             nonce: ExecutionValueChange::from_original(account.nonce),
             balance: ExecutionValueChange::from_original(account.balance),
             bytecode: ExecutionValueChange::from_original(account.bytecode),
-            slots: HashMap::new(),
+            slots: BTreeMap::new(),
             code_hash: account.code_hash,
         }
     }
@@ -58,7 +55,7 @@ impl ExecutionAccountChanges {
             bytecode: ExecutionValueChange::from_modified(account.bytecode),
             code_hash: account.code_hash,
 
-            slots: HashMap::new(),
+            slots: BTreeMap::new(),
         };
 
         for slot in modified_slots {
