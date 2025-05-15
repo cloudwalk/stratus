@@ -73,43 +73,43 @@ impl RpcServiceT for RpcMiddleware {
     type NotificationResponse = MethodResponse;
 
     fn batch<'a>(&self, batch: Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
-		let mut batch_rp = BatchResponseBuilder::new_with_limit(1024 * 1024 * 100); // 100 MB
-		let service = self.clone();
-		async move {
-			let mut got_notification = false;
+        let mut batch_rp = BatchResponseBuilder::new_with_limit(1024 * 1024 * 100); // 100 MB
+        let service = self.clone();
+        async move {
+            let mut got_notification = false;
 
-			for batch_entry in batch.into_iter() {
-				match batch_entry {
-					Ok(BatchEntry::Call(req)) => {
-						let rp = service.call(req).await;
-						if let Err(err) = batch_rp.append(rp) {
-							return err;
-						}
-					}
-					Ok(BatchEntry::Notification(n)) => {
-						got_notification = true;
-						service.notification(n).await;
-					}
-					Err(err) => {
-						let (err, id) = err.into_parts();
-						let rp = MethodResponse::error(id, err);
-						if let Err(err) = batch_rp.append(rp) {
-							return err;
-						}
-					}
-				}
-			}
+            for batch_entry in batch.into_iter() {
+                match batch_entry {
+                    Ok(BatchEntry::Call(req)) => {
+                        let rp = service.call(req).await;
+                        if let Err(err) = batch_rp.append(rp) {
+                            return err;
+                        }
+                    }
+                    Ok(BatchEntry::Notification(n)) => {
+                        got_notification = true;
+                        service.notification(n).await;
+                    }
+                    Err(err) => {
+                        let (err, id) = err.into_parts();
+                        let rp = MethodResponse::error(id, err);
+                        if let Err(err) = batch_rp.append(rp) {
+                            return err;
+                        }
+                    }
+                }
+            }
 
-			// If the batch is empty and we got a notification, we return an empty response.
-			if batch_rp.is_empty() && got_notification {
-				MethodResponse::notification()
-			}
-			// An empty batch is regarded as an invalid request here.
-			else {
-				MethodResponse::from_batch(batch_rp.finish())
-			}
-		}
-	}
+            // If the batch is empty and we got a notification, we return an empty response.
+            if batch_rp.is_empty() && got_notification {
+                MethodResponse::notification()
+            }
+            // An empty batch is regarded as an invalid request here.
+            else {
+                MethodResponse::from_batch(batch_rp.finish())
+            }
+        }
+    }
 
     // TODO
     fn notification<'a>(&self, n: jsonrpsee::core::middleware::Notification<'a>) -> impl Future<Output = Self::NotificationResponse> + Send + 'a {
