@@ -182,4 +182,214 @@ describe("Leader & Follower replication integration test", function () {
             });
         });
     });
+
+    describe("Pending storage tests", function () {
+        it("Validate eth_getTransactionCount with 'pending' parameter updates correctly on follower nodes", async function () {
+            this.timeout(60000);
+
+            const testWallet = ethers.Wallet.createRandom().connect(ethers.provider);
+
+            updateProviderUrl("stratus");
+            await deployer.sendTransaction({
+                to: testWallet.address,
+                value: ethers.parseEther("1.0"),
+                gasLimit: GAS_LIMIT_OVERRIDE,
+            });
+
+            const leaderInitialCount = await sendWithRetry("eth_getTransactionCount", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus-follower");
+            const followerInitialCount = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+
+            updateProviderUrl("stratus");
+            const tx = await testWallet.sendTransaction({
+                to: ethers.Wallet.createRandom().address,
+                value: 1,
+                gasLimit: GAS_LIMIT_OVERRIDE,
+                gasPrice: 0,
+                type: 0,
+            });
+
+            await tx.wait();
+            await waitForFollowerToSyncWithLeader();
+
+            updateProviderUrl("stratus");
+            const leaderCountAfterTx = await sendWithRetry("eth_getTransactionCount", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus-follower");
+            const followerCountAfterTx = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+
+            // Verify leader incremented the nonce
+            expect(parseInt(leaderCountAfterTx, 16)).to.be.greaterThan(parseInt(leaderInitialCount, 16));
+
+            // Follower should also increment the nonce
+            expect(parseInt(followerCountAfterTx, 16)).to.be.greaterThan(parseInt(followerInitialCount, 16));
+
+            // Both nodes should return the same nonce
+            expect(followerCountAfterTx).to.equal(leaderCountAfterTx);
+        });
+
+        it("Validate account balances with 'pending' parameter update correctly on follower nodes", async function () {
+            this.timeout(60000);
+
+            const testWallet = ethers.Wallet.createRandom().connect(ethers.provider);
+
+            updateProviderUrl("stratus");
+            await deployer.sendTransaction({
+                to: testWallet.address,
+                value: ethers.parseEther("1.0"),
+                gasLimit: GAS_LIMIT_OVERRIDE,
+            });
+
+            await waitForFollowerToSyncWithLeader();
+
+            updateProviderUrl("stratus");
+            const leaderInitialBalance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus-follower");
+            const followerInitialBalance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus");
+            const tx = await testWallet.sendTransaction({
+                to: ethers.Wallet.createRandom().address,
+                value: ethers.parseEther("0.1"),
+                gasLimit: GAS_LIMIT_OVERRIDE,
+                gasPrice: 0,
+                type: 0,
+            });
+
+            await tx.wait();
+            await waitForFollowerToSyncWithLeader();
+
+            updateProviderUrl("stratus");
+            const leaderBalanceAfterTx = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus-follower");
+            const followerBalanceAfterTx = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            // Verify balances decreased on both nodes
+            expect(BigInt(leaderBalanceAfterTx)).to.be.lessThan(BigInt(leaderInitialBalance));
+            expect(BigInt(followerBalanceAfterTx)).to.be.lessThan(BigInt(followerInitialBalance));
+
+            // Both nodes should return the same balance
+            expect(followerBalanceAfterTx).to.equal(leaderBalanceAfterTx);
+        });
+
+        it("Validate contract storage slots update correctly on follower nodes", async function () {
+            this.timeout(60000);
+
+            updateProviderUrl("stratus");
+
+            const testWallet = ethers.Wallet.createRandom().connect(ethers.provider);
+
+            const leaderInitialBalance = await brlcToken.balanceOf(testWallet.address);
+
+            updateProviderUrl("stratus-follower");
+            const followerInitialBalance = await brlcToken.balanceOf(testWallet.address);
+
+            expect(followerInitialBalance.toString()).to.equal(leaderInitialBalance.toString());
+
+            updateProviderUrl("stratus");
+            const mintAmount = 100;
+            const tx = await brlcToken.mint(testWallet.address, mintAmount, { gasLimit: GAS_LIMIT_OVERRIDE });
+            await tx.wait();
+
+            await waitForFollowerToSyncWithLeader();
+
+            // Get token balances after minting
+            updateProviderUrl("stratus");
+            const leaderBalanceAfterTx = await brlcToken.balanceOf(testWallet.address);
+
+            updateProviderUrl("stratus-follower");
+            const followerBalanceAfterTx = await brlcToken.balanceOf(testWallet.address);
+
+            // Verify balances increased on both nodes
+            expect(leaderBalanceAfterTx.toString()).to.equal(
+                (BigInt(leaderInitialBalance.toString()) + BigInt(mintAmount)).toString(),
+            );
+            expect(followerBalanceAfterTx.toString()).to.equal(
+                (BigInt(followerInitialBalance.toString()) + BigInt(mintAmount)).toString(),
+            );
+
+            // Both nodes should return the same balance
+            expect(followerBalanceAfterTx.toString()).to.equal(leaderBalanceAfterTx.toString());
+        });
+
+        it("Validate contract bytecode synchronization between leader and follower", async function () {
+            this.timeout(60000);
+
+            updateProviderUrl("stratus");
+
+            const contractAddress = await brlcToken.getAddress();
+
+            await waitForFollowerToSyncWithLeader();
+
+            // Get bytecode from both nodes
+            updateProviderUrl("stratus");
+            const leaderBytecode = await sendWithRetry("eth_getCode", [contractAddress, "pending"]);
+
+            updateProviderUrl("stratus-follower");
+            const followerBytecode = await sendWithRetry("eth_getCode", [contractAddress, "pending"]);
+
+            // Verify bytecode is the same on both nodes
+            expect(followerBytecode).to.equal(leaderBytecode);
+            expect(followerBytecode).to.not.equal("0x");
+        });
+
+        it("Validate multiple transactions correctly update pending state on follower nodes", async function () {
+            this.timeout(120000);
+
+            const testWallet = ethers.Wallet.createRandom().connect(ethers.provider);
+
+            updateProviderUrl("stratus");
+            await deployer.sendTransaction({
+                to: testWallet.address,
+                value: ethers.parseEther("2.0"),
+                gasLimit: GAS_LIMIT_OVERRIDE,
+            });
+
+            await waitForFollowerToSyncWithLeader();
+
+            const recipients = Array(5)
+                .fill(0)
+                .map(() => ethers.Wallet.createRandom().address);
+            const txPromises = [];
+
+            for (const recipient of recipients) {
+                const tx = await testWallet.sendTransaction({
+                    to: recipient,
+                    value: ethers.parseEther("0.1"),
+                    gasLimit: GAS_LIMIT_OVERRIDE,
+                    gasPrice: 0,
+                    type: 0,
+                });
+                txPromises.push(tx.wait());
+            }
+
+            await Promise.all(txPromises);
+            await waitForFollowerToSyncWithLeader();
+
+            // Check nonce and balance on both nodes
+            updateProviderUrl("stratus");
+            const leaderNonce = await sendWithRetry("eth_getTransactionCount", [testWallet.address, "pending"]);
+            const leaderBalance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus-follower");
+            const followerNonce = await sendWithRetry("eth_getTransactionCount", [testWallet.address, "pending"]);
+            const followerBalance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            // Verify nonce and balance are the same on both nodes
+            expect(followerNonce).to.equal(leaderNonce);
+            expect(followerBalance).to.equal(leaderBalance);
+
+            // Verify nonce increased by the number of transactions
+            expect(parseInt(leaderNonce, 16)).to.equal(recipients.length);
+        });
+    });
 });

@@ -10,6 +10,7 @@ use parking_lot::RwLockWriteGuard;
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
@@ -302,6 +303,67 @@ impl InMemoryTemporaryStorage {
     pub fn reset(&self) -> anyhow::Result<(), StorageError> {
         self.pending_block.write().reset();
         *self.latest_block.write() = None;
+        Ok(())
+    }
+
+    /// Updates temporary storage with account state from a block
+    pub fn update_temporary_storage_from_block(&self, block: &Block) -> Result<(), StorageError> {
+        let pending_block = self.pending_block.upgradable_read();
+
+        let mut account_updates = HashMap::new();
+        let mut account_slot_updates = HashMap::new();
+
+        for tx in &block.transactions {
+            let sender_address = tx.input.signer;
+            let tx_nonce = tx.input.nonce;
+
+            let sender_account = account_updates.entry(sender_address).or_insert_with(|| Account::new_empty(sender_address));
+
+            if u64::from(sender_account.nonce) <= u64::from(tx_nonce) {
+                sender_account.nonce = tx_nonce.next_nonce();
+            }
+
+            for (address, changes) in &tx.execution.changes {
+                let account = account_updates.entry(*address).or_insert_with(|| Account::new_empty(*address));
+
+                if let Some(nonce) = changes.nonce.take_modified_ref() {
+                    account.nonce = *nonce;
+                }
+                if let Some(balance) = changes.balance.take_modified_ref() {
+                    account.balance = *balance;
+                }
+                if let Some(bytecode) = changes.bytecode.take_modified_ref() {
+                    account.bytecode = bytecode.clone();
+                }
+
+                for (slot_index, slot_change) in &changes.slots {
+                    if let Some(slot) = slot_change.take_modified_ref() {
+                        account_slot_updates.entry(*address).or_insert_with(HashMap::new).insert(*slot_index, *slot);
+                    }
+                }
+            }
+        }
+
+        let mut pending_block = parking_lot::RwLockUpgradableReadGuard::upgrade(pending_block);
+
+        for (address, account) in account_updates {
+            let account_with_slots = pending_block
+                .accounts
+                .entry(address)
+                .or_insert_with(|| crate::eth::storage::AccountWithSlots::new(address));
+
+            account_with_slots.info = account;
+        }
+
+        for (address, slots) in account_slot_updates {
+            let account_with_slots = pending_block
+                .accounts
+                .entry(address)
+                .or_insert_with(|| crate::eth::storage::AccountWithSlots::new(address));
+
+            account_with_slots.slots.extend(slots);
+        }
+
         Ok(())
     }
 }
