@@ -435,7 +435,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     tracing::info!("miner mode changed to interval(1s) successfully");
 
     GlobalState::set_node_mode(NodeMode::Leader);
-    //ctx.storage.clear_cache();
+    ctx.storage.clear_cache();
     tracing::info!("node mode changed to leader successfully, cache cleared");
 
     Ok(json!(true))
@@ -478,7 +478,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     tracing::info!("miner mode changed to external successfully");
 
     GlobalState::set_node_mode(NodeMode::Follower);
-    //ctx.storage.clear_cache();
+    ctx.storage.clear_cache();
     tracing::info!("storage cache cleared");
 
     tracing::info!("initializing importer");
