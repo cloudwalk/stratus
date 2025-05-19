@@ -729,12 +729,16 @@ impl StratusStorage {
 
     /// Translates a block filter to a specific storage point-in-time indicator.
     pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
-        if GlobalState::get_node_mode() == NodeMode::Follower && block_filter == BlockFilter::Pending && self.rocksdb_replication_enabled() {
-            // In follower mode with RocksDB replication mode, pending state is not available as transactions are not executed.
-            return Ok(PointInTime::Mined);
-        }
         match block_filter {
-            BlockFilter::Pending => Ok(PointInTime::Pending),
+            BlockFilter::Pending => {
+                // For follower nodes with RocksDB replication, redirect pending queries to mined state
+                // since transactions are only executed on the leader node
+                if GlobalState::get_node_mode() == NodeMode::Follower && self.rocksdb_replication_enabled() {
+                    Ok(PointInTime::Mined)
+                } else {
+                    Ok(PointInTime::Pending)
+                }
+            }
             BlockFilter::Latest => Ok(PointInTime::Mined),
             BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
             BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),
