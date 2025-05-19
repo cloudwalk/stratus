@@ -36,9 +36,7 @@ use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
-#[cfg(feature = "dev")]
 use crate::GlobalState;
-#[cfg(feature = "dev")]
 use crate::NodeMode;
 
 mod label {
@@ -731,6 +729,10 @@ impl StratusStorage {
 
     /// Translates a block filter to a specific storage point-in-time indicator.
     pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
+        if GlobalState::get_node_mode() == NodeMode::Follower && block_filter == BlockFilter::Pending {
+            // Override to Latest for follower nodes
+            return Ok(PointInTime::Mined);
+        }
         match block_filter {
             BlockFilter::Pending => Ok(PointInTime::Pending),
             BlockFilter::Latest => Ok(PointInTime::Mined),
