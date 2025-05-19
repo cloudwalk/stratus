@@ -402,13 +402,13 @@ describe("Leader & Follower replication integration test", function () {
             updateProviderUrl("stratus");
             await deployer.sendTransaction({
                 to: testWallet.address,
-                value: ethers.parseEther("1.0"),
+                value: ethers.parseEther("10.0"),
                 gasLimit: GAS_LIMIT_OVERRIDE,
             });
 
             const tx = await testWallet.sendTransaction({
                 to: ethers.Wallet.createRandom().address,
-                value: ethers.parseEther("0.1"),
+                value: ethers.parseEther("1.0"),
                 gasLimit: GAS_LIMIT_OVERRIDE,
                 gasPrice: 0,
                 type: 0,
@@ -431,6 +431,17 @@ describe("Leader & Follower replication integration test", function () {
                 "pending",
             ]);
             const followerPreSwitchBalance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            expect(leaderPreSwitchNonce).to.equal("0x1", "Leader nonce should be 0x1");
+            expect(BigInt(leaderPreSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("9.0")),
+                "Leader balance should be 9 ETH",
+            );
+            expect(followerPreSwitchNonce).to.equal("0x1", "Follower nonce should be 0x1");
+            expect(BigInt(followerPreSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("9.0")),
+                "Follower balance should be 9 ETH",
+            );
 
             expect(followerPreSwitchNonce).to.equal(leaderPreSwitchNonce);
             expect(followerPreSwitchBalance).to.equal(leaderPreSwitchBalance);
@@ -478,6 +489,17 @@ describe("Leader & Follower replication integration test", function () {
             ]);
             const newLeaderPostSwitchBalance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
 
+            expect(newLeaderPostSwitchNonce).to.equal("0x1", "New Leader nonce should be 0x1");
+            expect(BigInt(newLeaderPostSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("9.0")),
+                "New Leader balance should be 9 ETH",
+            );
+            expect(newFollowerPostSwitchNonce).to.equal("0x1", "New Follower nonce should be 0x1");
+            expect(BigInt(newFollowerPostSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("9.0")),
+                "New Follower balance should be 9 ETH",
+            );
+
             expect(newLeaderPostSwitchNonce).to.equal(
                 newFollowerPostSwitchNonce,
                 "Transaction count mismatch after leadership switch",
@@ -499,7 +521,7 @@ describe("Leader & Follower replication integration test", function () {
             updateProviderUrl("stratus-follower");
             const tx2 = await testWallet.sendTransaction({
                 to: ethers.Wallet.createRandom().address,
-                value: ethers.parseEther("0.1"),
+                value: ethers.parseEther("1.0"),
                 gasLimit: GAS_LIMIT_OVERRIDE,
                 gasPrice: 0,
                 type: 0,
@@ -518,6 +540,17 @@ describe("Leader & Follower replication integration test", function () {
                 "pending",
             ]);
             const followerAfterTx2Balance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            expect(leaderAfterTx2Nonce).to.equal("0x2", "Leader nonce after tx2 should be 0x2");
+            expect(BigInt(leaderAfterTx2Balance)).to.equal(
+                BigInt(ethers.parseEther("8.0")),
+                "Leader balance after tx2 should be 8 ETH",
+            );
+            expect(followerAfterTx2Nonce).to.equal("0x2", "Follower nonce after tx2 should be 0x2");
+            expect(BigInt(followerAfterTx2Balance)).to.equal(
+                BigInt(ethers.parseEther("8.0")),
+                "Follower balance after tx2 should be 8 ETH",
+            );
 
             expect(leaderAfterTx2Nonce).to.equal(
                 followerAfterTx2Nonce,
@@ -586,6 +619,17 @@ describe("Leader & Follower replication integration test", function () {
                 "pending",
             ]);
 
+            expect(leaderAfterSecondSwitchNonce).to.equal("0x2", "Leader nonce after second switch should be 0x2");
+            expect(BigInt(leaderAfterSecondSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("8.0")),
+                "Leader balance after second switch should be 8 ETH",
+            );
+            expect(followerAfterSecondSwitchNonce).to.equal("0x2", "Follower nonce after second switch should be 0x2");
+            expect(BigInt(followerAfterSecondSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("8.0")),
+                "Follower balance after second switch should be 8 ETH",
+            );
+
             expect(leaderAfterSecondSwitchNonce).to.equal(
                 followerAfterSecondSwitchNonce,
                 "Transaction count mismatch after second leadership switch",
@@ -607,7 +651,7 @@ describe("Leader & Follower replication integration test", function () {
             updateProviderUrl("stratus");
             const tx3 = await testWallet.sendTransaction({
                 to: ethers.Wallet.createRandom().address,
-                value: ethers.parseEther("0.1"),
+                value: ethers.parseEther("1.0"),
                 gasLimit: GAS_LIMIT_OVERRIDE,
                 gasPrice: 0,
                 type: 0,
@@ -626,6 +670,17 @@ describe("Leader & Follower replication integration test", function () {
                 "pending",
             ]);
             const followerAfterTx3Balance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            expect(leaderAfterTx3Nonce).to.equal("0x3", "Leader nonce after tx3 should be 0x3");
+            expect(BigInt(leaderAfterTx3Balance)).to.equal(
+                BigInt(ethers.parseEther("7.0")),
+                "Leader balance after tx3 should be 7 ETH",
+            );
+            expect(followerAfterTx3Nonce).to.equal("0x3", "Follower nonce after tx3 should be 0x3");
+            expect(BigInt(followerAfterTx3Balance)).to.equal(
+                BigInt(ethers.parseEther("7.0")),
+                "Follower balance after tx3 should be 7 ETH",
+            );
 
             expect(leaderAfterTx3Nonce).to.equal(
                 followerAfterTx3Nonce,

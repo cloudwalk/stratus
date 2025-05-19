@@ -95,6 +95,12 @@ impl StratusStorage {
         self.perm.has_genesis()
     }
 
+    /// Clears the storage cache.
+    pub fn clear_cache(&self) {
+        tracing::info!("clearing storage cache");
+        self.cache.clear();
+    }
+
     #[cfg(test)]
     pub fn new_test() -> Result<Self, StorageError> {
         use tempfile::tempdir;
