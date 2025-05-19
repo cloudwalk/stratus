@@ -208,6 +208,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, %block_number, "applying replication log");
         timed(|| self.perm.apply_replication_log(block_number, replication_log)).with(|m| {
             metrics::inc_storage_apply_replication_log(m.elapsed, label::PERM, m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, "replication", "replication", m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to apply replication log");
             }
