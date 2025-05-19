@@ -1,6 +1,3 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
-
 use rocksdb::WriteBatch;
 use tracing::Span;
 
@@ -219,59 +216,6 @@ impl StratusStorage {
         })?;
 
         Ok(())
-    }
-
-    /// Updates temporary storage with account state from a block
-    pub fn update_temporary_storage_from_block(&self, block: &Block) -> Result<(), StorageError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::update_temporary_storage_from_block", block_number = %block.number()).entered();
-        tracing::info!(block_number = %block.number(), "updating temporary storage from block");
-
-        // Update temporary storage
-        let result = timed(|| self.temp.update_temporary_storage_from_block(block)).with(|m| {
-            metrics::inc_storage_update_temporary_storage(m.elapsed, label::TEMP, m.result.is_ok());
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to update temporary storage from block");
-            }
-        });
-
-        // If temporary storage was updated successfully, also update the cache
-        if result.is_ok() {
-            let mut modified_accounts = HashSet::new();
-            let mut modified_account_slots = HashMap::new();
-
-            for tx in &block.transactions {
-                modified_accounts.insert(tx.input.signer);
-
-                for (address, changes) in &tx.execution.changes {
-                    modified_accounts.insert(*address);
-
-                    for (slot_index, slot_change) in &changes.slots {
-                        if slot_change.take_modified_ref().is_some() {
-                            modified_account_slots.entry(*address).or_insert_with(HashSet::new).insert(*slot_index);
-                        }
-                    }
-                }
-            }
-
-            // Update cache for all modified accounts
-            for address in &modified_accounts {
-                if let Ok(Some(account)) = self.temp.read_account(*address) {
-                    self.cache.cache_account(account);
-                }
-            }
-
-            // Update cache for all modified slots
-            for (address, slot_indices) in &modified_account_slots {
-                for slot_index in slot_indices {
-                    if let Ok(Some(slot)) = self.temp.read_slot(*address, *slot_index) {
-                        self.cache.cache_slot(*address, slot);
-                    }
-                }
-            }
-        }
-
-        result
     }
 
     // -------------------------------------------------------------------------

@@ -374,34 +374,19 @@ impl Miner {
             }
         }
 
-        // Apply replication log to permanent storage
+        // Apply replication log
         tracing::info!(block_number = %block_number, "applying replication log");
         let write_batch = replication_log.to_write_batch();
-        if let Err(e) = self.storage.apply_replication_log(block_number, write_batch) {
-            tracing::error!(reason = ?e, "failed to apply replication log");
-            return Err(e);
-        }
-
-        match self.storage.read_block(BlockFilter::Number(block_number)) {
-            Ok(Some(block)) =>
-                if let Err(e) = self.storage.update_temporary_storage_from_block(&block) {
-                    tracing::error!(reason = ?e, "failed to update temporary storage from block");
-                    return Err(e);
-                },
-            Ok(None) => {
-                tracing::error!(%block_number, "block not found after applying replication log");
-                return Err(StorageError::BlockNotFound {
-                    filter: BlockFilter::Number(block_number),
-                });
+        match self.storage.apply_replication_log(block_number, write_batch) {
+            Ok(_) => {
+                tracing::info!(block_number = %replication_log.block_number, "successfully applied replication log");
+                Ok(())
             }
             Err(e) => {
-                tracing::error!(reason = ?e, %block_number, "failed to read block after applying replication log");
-                return Err(e);
+                tracing::error!(reason = ?e, "failed to apply replication log");
+                Err(e)
             }
         }
-
-        tracing::info!(block_number = %replication_log.block_number, "successfully applied replication log");
-        Ok(())
     }
 
     // -----------------------------------------------------------------------------

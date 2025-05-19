@@ -75,10 +75,7 @@ metrics! {
     histogram_duration storage_reset{storage, success},
 
     "Time executing storage apply_replication_log operation."
-    histogram_duration storage_apply_replication_log{storage, success},
-
-    "Time executing storage update_temporary_storage operation."
-    histogram_duration storage_update_temporary_storage{storage, success}
+    histogram_duration storage_apply_replication_log{storage, success}
 }
 
 // Importer online metrics.

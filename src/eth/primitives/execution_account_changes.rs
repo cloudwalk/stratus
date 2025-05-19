@@ -28,19 +28,6 @@ pub struct ExecutionAccountChanges {
 }
 
 impl ExecutionAccountChanges {
-    /// Creates a new [`ExecutionAccountChanges`] with the given address.
-    pub fn new(address: Address) -> Self {
-        Self {
-            new_account: false,
-            address,
-            nonce: ExecutionValueChange::default(),
-            balance: ExecutionValueChange::default(),
-            bytecode: ExecutionValueChange::default(),
-            code_hash: CodeHash::default(),
-            slots: BTreeMap::new(),
-        }
-    }
-
     /// Creates a new [`ExecutionAccountChanges`] from Account original values.
     pub fn from_original_values(account: impl Into<Account>) -> Self {
         let account: Account = account.into();
