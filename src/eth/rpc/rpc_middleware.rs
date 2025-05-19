@@ -1,10 +1,13 @@
 //! Track RPC requests and responses using metrics and traces.
 
 use std::future::Future;
+use std::sync::Arc;
 use std::task::Poll;
 use std::time::Instant;
 
 use futures::future::BoxFuture;
+use jsonrpsee::core::middleware::Batch;
+use jsonrpsee::core::middleware::BatchEntry;
 use jsonrpsee::server::middleware::rpc::RpcService;
 use jsonrpsee::server::middleware::rpc::RpcServiceT;
 #[cfg(feature = "metrics")]
@@ -12,8 +15,10 @@ use jsonrpsee::server::ConnectionGuard;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::Id;
 use jsonrpsee::types::Params;
+use jsonrpsee::BatchResponseBuilder;
 use jsonrpsee::MethodResponse;
 use pin_project::pin_project;
+use strum::Display;
 use tracing::field;
 use tracing::info_span;
 use tracing::Level;
@@ -52,15 +57,22 @@ use crate::GlobalState;
 // Request handling
 // -----------------------------------------------------------------------------
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RpcMiddleware {
-    service: RpcService,
+    service: Arc<RpcService>,
 }
 
 impl RpcMiddleware {
     pub fn new(service: RpcService) -> Self {
-        Self { service }
+        Self { service: Arc::new(service) }
     }
+}
+
+#[derive(Default, Clone, Copy, Display)]
+enum RequestType {
+    Batch,
+    #[default]
+    Single,
 }
 
 impl RpcServiceT for RpcMiddleware {
@@ -68,17 +80,80 @@ impl RpcServiceT for RpcMiddleware {
     type MethodResponse = MethodResponse;
     type NotificationResponse = MethodResponse;
 
-    // TODO
-    fn batch<'a>(&self, requests: jsonrpsee::core::middleware::Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
-        self.service.batch(requests)
+    fn batch<'a>(&self, batch: Batch<'a>) -> impl Future<Output = Self::BatchResponse> + Send + 'a {
+        let mut batch_rp = BatchResponseBuilder::new_with_limit(1024 * 1024 * 100); // 100 MB
+        let service = self.clone();
+        let batch_size = batch.len();
+
+        tracing::info!(batch_size = batch_size, "processing RPC batch request");
+
+        async move {
+            let mut got_notification = false;
+            let start = Instant::now();
+            let mut call_count = 0;
+            let mut notification_count = 0;
+            let mut error_count = 0;
+
+            for batch_entry in batch.into_iter() {
+                match batch_entry {
+                    Ok(BatchEntry::Call(mut req)) => {
+                        call_count += 1;
+                        tracing::debug!(method = req.method_name(), "processing batch call");
+                        req.extensions_mut().insert(RequestType::Batch);
+                        let rp = service.call(req).await;
+                        if let Err(err) = batch_rp.append(rp) {
+                            tracing::error!(error = ?err, "failed to append batch call response");
+                            return err;
+                        }
+                    }
+                    Ok(BatchEntry::Notification(n)) => {
+                        notification_count += 1;
+                        tracing::debug!(method = n.method_name(), "processing batch notification");
+                        got_notification = true;
+                        service.notification(n).await;
+                    }
+                    Err(err) => {
+                        error_count += 1;
+                        tracing::warn!(error = ?err, "processing batch entry error");
+                        let (err, id) = err.into_parts();
+                        let rp = MethodResponse::error(id, err);
+                        if let Err(err) = batch_rp.append(rp) {
+                            tracing::error!(error = ?err, "failed to append batch error response");
+                            return err;
+                        }
+                    }
+                }
+            }
+
+            let elapsed = start.elapsed();
+            if batch_rp.is_empty() && got_notification {
+                tracing::info!(
+                    elapsed_ms = elapsed.as_millis(),
+                    calls = call_count,
+                    notifications = notification_count,
+                    errors = error_count,
+                    "completed empty batch with notifications"
+                );
+                MethodResponse::notification()
+            } else {
+                tracing::info!(
+                    elapsed_ms = elapsed.as_millis(),
+                    calls = call_count,
+                    notifications = notification_count,
+                    errors = error_count,
+                    "completed batch request"
+                );
+                MethodResponse::from_batch(batch_rp.finish())
+            }
+        }
     }
 
-    // TODO
     fn notification<'a>(&self, n: jsonrpsee::core::middleware::Notification<'a>) -> impl Future<Output = Self::NotificationResponse> + Send + 'a {
         self.service.notification(n)
     }
 
     fn call<'a>(&self, mut request: jsonrpsee::types::Request<'a>) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
+        let request_type = request.extensions().get::<RequestType>().copied().unwrap_or_default();
         let span = info_span!(
             parent: None,
             "rpc::request",
@@ -91,7 +166,8 @@ impl RpcServiceT for RpcMiddleware {
             rpc_tx_to = field::Empty,
             rpc_tx_nonce = field::Empty,
             rpc_tx_contract = field::Empty,
-            rpc_tx_function = field::Empty
+            rpc_tx_function = field::Empty,
+            rpc_req_type = request_type.to_string()
         );
         let middleware_enter = span.enter();
 
@@ -103,7 +179,6 @@ impl RpcServiceT for RpcMiddleware {
 
         if method == "eth_sendRawTransaction" {
             let tx_data_result = next_rpc_param::<Bytes>(params_clone.sequence());
-
             if let Ok((_, tx_data)) = tx_data_result {
                 let decoded_tx_result = parse_rpc_rlp::<TransactionInput>(&tx_data);
 
@@ -160,7 +235,13 @@ impl RpcServiceT for RpcMiddleware {
         {
             // started requests
             let tx_ref = tx.as_ref();
-            metrics::inc_rpc_requests_started(&client, &method, tx_ref.map(|tx| tx.contract), tx_ref.map(|tx| tx.function));
+            metrics::inc_rpc_requests_started(
+                &client,
+                &method,
+                tx_ref.map(|tx| tx.contract),
+                tx_ref.map(|tx| tx.function),
+                request_type.to_string(),
+            );
 
             // active requests
             if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
