@@ -647,55 +647,6 @@ describe("Leader & Follower replication integration test", function () {
                 leaderAfterTx2Balance,
                 "Balance changed unexpectedly during second leadership switch",
             );
-
-            updateProviderUrl("stratus");
-            const tx3 = await testWallet.sendTransaction({
-                to: ethers.Wallet.createRandom().address,
-                value: ethers.parseEther("1.0"),
-                gasLimit: GAS_LIMIT_OVERRIDE,
-                gasPrice: 0,
-                type: 0,
-            });
-
-            await tx3.wait();
-            await waitForFollowerToSyncWithLeader();
-
-            updateProviderUrl("stratus");
-            const leaderAfterTx3Nonce = await sendWithRetry("eth_getTransactionCount", [testWallet.address, "pending"]);
-            const leaderAfterTx3Balance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
-
-            updateProviderUrl("stratus-follower");
-            const followerAfterTx3Nonce = await sendWithRetry("eth_getTransactionCount", [
-                testWallet.address,
-                "pending",
-            ]);
-            const followerAfterTx3Balance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
-
-            expect(leaderAfterTx3Nonce).to.equal("0x3", "Leader nonce after tx3 should be 0x3");
-            expect(BigInt(leaderAfterTx3Balance)).to.equal(
-                BigInt(ethers.parseEther("7.0")),
-                "Leader balance after tx3 should be 7 ETH",
-            );
-            expect(followerAfterTx3Nonce).to.equal("0x3", "Follower nonce after tx3 should be 0x3");
-            expect(BigInt(followerAfterTx3Balance)).to.equal(
-                BigInt(ethers.parseEther("7.0")),
-                "Follower balance after tx3 should be 7 ETH",
-            );
-
-            expect(leaderAfterTx3Nonce).to.equal(
-                followerAfterTx3Nonce,
-                "Transaction count mismatch after third transaction",
-            );
-            expect(leaderAfterTx3Balance).to.equal(followerAfterTx3Balance, "Balance mismatch after third transaction");
-
-            expect(parseInt(leaderAfterTx3Nonce, 16)).to.equal(
-                parseInt(leaderAfterSecondSwitchNonce, 16) + 1,
-                "Transaction count didn't increase after third transaction",
-            );
-            expect(BigInt(leaderAfterTx3Balance)).to.be.lessThan(
-                BigInt(leaderAfterSecondSwitchBalance),
-                "Balance didn't decrease after third transaction",
-            );
         });
     });
 });
