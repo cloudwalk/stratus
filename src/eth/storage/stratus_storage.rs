@@ -36,9 +36,7 @@ use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
-#[cfg(feature = "dev")]
 use crate::GlobalState;
-#[cfg(feature = "dev")]
 use crate::NodeMode;
 
 mod label {
@@ -210,6 +208,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, %block_number, "applying replication log");
         timed(|| self.perm.apply_replication_log(block_number, replication_log)).with(|m| {
             metrics::inc_storage_apply_replication_log(m.elapsed, label::PERM, m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, "replication", "replication", m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to apply replication log");
             }
@@ -732,7 +731,15 @@ impl StratusStorage {
     /// Translates a block filter to a specific storage point-in-time indicator.
     pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
         match block_filter {
-            BlockFilter::Pending => Ok(PointInTime::Pending),
+            BlockFilter::Pending => {
+                // For follower nodes with RocksDB replication, redirect pending queries to mined state
+                // since transactions are only executed on the leader node
+                if GlobalState::get_node_mode() == NodeMode::Follower && self.rocksdb_replication_enabled() {
+                    Ok(PointInTime::Mined)
+                } else {
+                    Ok(PointInTime::Pending)
+                }
+            }
             BlockFilter::Latest => Ok(PointInTime::Mined),
             BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
             BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),

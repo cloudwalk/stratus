@@ -577,6 +577,7 @@ impl Importer {
                     duration = %duration.to_string_ext(),
                     "processed replication log",
                 );
+                metrics::inc_import_online_mined_block(duration);
             }
         }
 
