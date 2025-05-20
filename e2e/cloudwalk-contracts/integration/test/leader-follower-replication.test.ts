@@ -392,4 +392,261 @@ describe("Leader & Follower replication integration test", function () {
             expect(parseInt(leaderNonce, 16)).to.equal(recipients.length);
         });
     });
+
+    describe("Leadership switch tests", function () {
+        it("Validate consistency after leadership switch", async function () {
+            this.timeout(120000);
+
+            const testWallet = ethers.Wallet.createRandom().connect(ethers.provider);
+
+            updateProviderUrl("stratus");
+            await deployer.sendTransaction({
+                to: testWallet.address,
+                value: ethers.parseEther("10.0"),
+                gasLimit: GAS_LIMIT_OVERRIDE,
+            });
+
+            const tx = await testWallet.sendTransaction({
+                to: ethers.Wallet.createRandom().address,
+                value: ethers.parseEther("1.0"),
+                gasLimit: GAS_LIMIT_OVERRIDE,
+                gasPrice: 0,
+                type: 0,
+            });
+
+            await tx.wait();
+            await waitForFollowerToSyncWithLeader();
+
+            // Get pre-switch values from both nodes
+            updateProviderUrl("stratus");
+            const leaderPreSwitchNonce = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+            const leaderPreSwitchBalance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus-follower");
+            const followerPreSwitchNonce = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+            const followerPreSwitchBalance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            expect(leaderPreSwitchNonce).to.equal("0x1", "Leader nonce should be 0x1");
+            expect(BigInt(leaderPreSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("9.0")),
+                "Leader balance should be 9 ETH",
+            );
+            expect(followerPreSwitchNonce).to.equal("0x1", "Follower nonce should be 0x1");
+            expect(BigInt(followerPreSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("9.0")),
+                "Follower balance should be 9 ETH",
+            );
+
+            expect(followerPreSwitchNonce).to.equal(leaderPreSwitchNonce);
+            expect(followerPreSwitchBalance).to.equal(leaderPreSwitchBalance);
+
+            // First leadership switch
+            updateProviderUrl("stratus");
+            await sendWithRetry("stratus_disableTransactions", []);
+
+            await sendWithRetry("stratus_disableMiner", []);
+
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+            await sendWithRetry("stratus_changeToFollower", [
+                "http://0.0.0.0:3001/",
+                "ws://0.0.0.0:3001/",
+                "2s",
+                "100ms",
+                "10485760",
+            ]);
+
+            updateProviderUrl("stratus-follower");
+            await sendWithRetry("stratus_disableTransactions", []);
+
+            await sendWithRetry("stratus_changeToLeader", []);
+
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+            await sendWithRetry("stratus_enableTransactions", []);
+
+            updateProviderUrl("stratus");
+            await sendWithRetry("stratus_enableTransactions", []);
+
+            await new Promise((resolve) => setTimeout(resolve, 8000));
+
+            // Validate post-switch values from both nodes
+            updateProviderUrl("stratus");
+            const newFollowerPostSwitchNonce = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+            const newFollowerPostSwitchBalance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus-follower");
+            const newLeaderPostSwitchNonce = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+            const newLeaderPostSwitchBalance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            expect(newLeaderPostSwitchNonce).to.equal("0x1", "New Leader nonce should be 0x1");
+            expect(BigInt(newLeaderPostSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("9.0")),
+                "New Leader balance should be 9 ETH",
+            );
+            expect(newFollowerPostSwitchNonce).to.equal("0x1", "New Follower nonce should be 0x1");
+            expect(BigInt(newFollowerPostSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("9.0")),
+                "New Follower balance should be 9 ETH",
+            );
+
+            expect(newLeaderPostSwitchNonce).to.equal(
+                newFollowerPostSwitchNonce,
+                "Transaction count mismatch after leadership switch",
+            );
+            expect(newLeaderPostSwitchBalance).to.equal(
+                newFollowerPostSwitchBalance,
+                "Balance mismatch after leadership switch",
+            );
+
+            expect(parseInt(newLeaderPostSwitchNonce, 16)).to.equal(
+                parseInt(leaderPreSwitchNonce, 16),
+                "Transaction count changed unexpectedly after leadership switch",
+            );
+            expect(BigInt(newLeaderPostSwitchBalance)).to.equal(
+                BigInt(leaderPreSwitchBalance),
+                "Balance changed unexpectedly after leadership switch",
+            );
+
+            updateProviderUrl("stratus-follower");
+            const tx2 = await testWallet.sendTransaction({
+                to: ethers.Wallet.createRandom().address,
+                value: ethers.parseEther("1.0"),
+                gasLimit: GAS_LIMIT_OVERRIDE,
+                gasPrice: 0,
+                type: 0,
+            });
+
+            await tx2.wait();
+            await waitForFollowerToSyncWithLeader();
+
+            updateProviderUrl("stratus-follower");
+            const leaderAfterTx2Nonce = await sendWithRetry("eth_getTransactionCount", [testWallet.address, "pending"]);
+            const leaderAfterTx2Balance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            updateProviderUrl("stratus");
+            const followerAfterTx2Nonce = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+            const followerAfterTx2Balance = await sendWithRetry("eth_getBalance", [testWallet.address, "pending"]);
+
+            expect(leaderAfterTx2Nonce).to.equal("0x2", "Leader nonce after tx2 should be 0x2");
+            expect(BigInt(leaderAfterTx2Balance)).to.equal(
+                BigInt(ethers.parseEther("8.0")),
+                "Leader balance after tx2 should be 8 ETH",
+            );
+            expect(followerAfterTx2Nonce).to.equal("0x2", "Follower nonce after tx2 should be 0x2");
+            expect(BigInt(followerAfterTx2Balance)).to.equal(
+                BigInt(ethers.parseEther("8.0")),
+                "Follower balance after tx2 should be 8 ETH",
+            );
+
+            expect(leaderAfterTx2Nonce).to.equal(
+                followerAfterTx2Nonce,
+                "Transaction count mismatch after second transaction",
+            );
+            expect(leaderAfterTx2Balance).to.equal(
+                followerAfterTx2Balance,
+                "Balance mismatch after second transaction",
+            );
+
+            expect(parseInt(leaderAfterTx2Nonce, 16)).to.equal(
+                parseInt(newLeaderPostSwitchNonce, 16) + 1,
+                "Transaction count didn't increase after second transaction",
+            );
+            expect(BigInt(leaderAfterTx2Balance)).to.be.lessThan(
+                BigInt(newLeaderPostSwitchBalance),
+                "Balance didn't decrease after second transaction",
+            );
+
+            // Second leadership switch
+            updateProviderUrl("stratus-follower");
+            await sendWithRetry("stratus_disableTransactions", []);
+
+            await sendWithRetry("stratus_disableMiner", []);
+
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+            await sendWithRetry("stratus_changeToFollower", [
+                "http://0.0.0.0:3000/",
+                "ws://0.0.0.0:3000/",
+                "2s",
+                "100ms",
+                "10485760",
+            ]);
+
+            updateProviderUrl("stratus");
+            await sendWithRetry("stratus_disableTransactions", []);
+
+            await sendWithRetry("stratus_changeToLeader", []);
+
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+            await sendWithRetry("stratus_enableTransactions", []);
+
+            updateProviderUrl("stratus-follower");
+            await sendWithRetry("stratus_enableTransactions", []);
+
+            await new Promise((resolve) => setTimeout(resolve, 8000));
+
+            // Validate post-switch values from both nodes
+            updateProviderUrl("stratus");
+            const leaderAfterSecondSwitchNonce = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+            const leaderAfterSecondSwitchBalance = await sendWithRetry("eth_getBalance", [
+                testWallet.address,
+                "pending",
+            ]);
+
+            updateProviderUrl("stratus-follower");
+            const followerAfterSecondSwitchNonce = await sendWithRetry("eth_getTransactionCount", [
+                testWallet.address,
+                "pending",
+            ]);
+            const followerAfterSecondSwitchBalance = await sendWithRetry("eth_getBalance", [
+                testWallet.address,
+                "pending",
+            ]);
+
+            expect(leaderAfterSecondSwitchNonce).to.equal("0x2", "Leader nonce after second switch should be 0x2");
+            expect(BigInt(leaderAfterSecondSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("8.0")),
+                "Leader balance after second switch should be 8 ETH",
+            );
+            expect(followerAfterSecondSwitchNonce).to.equal("0x2", "Follower nonce after second switch should be 0x2");
+            expect(BigInt(followerAfterSecondSwitchBalance)).to.equal(
+                BigInt(ethers.parseEther("8.0")),
+                "Follower balance after second switch should be 8 ETH",
+            );
+
+            expect(leaderAfterSecondSwitchNonce).to.equal(
+                followerAfterSecondSwitchNonce,
+                "Transaction count mismatch after second leadership switch",
+            );
+            expect(leaderAfterSecondSwitchBalance).to.equal(
+                followerAfterSecondSwitchBalance,
+                "Balance mismatch after second leadership switch",
+            );
+
+            expect(leaderAfterSecondSwitchNonce).to.equal(
+                leaderAfterTx2Nonce,
+                "Transaction count changed unexpectedly during second leadership switch",
+            );
+            expect(leaderAfterSecondSwitchBalance).to.equal(
+                leaderAfterTx2Balance,
+                "Balance changed unexpectedly during second leadership switch",
+            );
+        });
+    });
 });
