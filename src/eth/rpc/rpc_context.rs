@@ -36,7 +36,7 @@ impl RpcContext {
         self.importer.read().clone()
     }
 
-    pub fn set_consensus(&self, new_consensus: Option<Arc<Importer>>) {
+    pub fn set_importer(&self, new_consensus: Option<Arc<Importer>>) {
         *self.importer.write() = new_consensus;
     }
 }

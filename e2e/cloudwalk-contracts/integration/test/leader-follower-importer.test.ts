@@ -97,6 +97,7 @@ describe("Leader & Follower importer integration test", function () {
         const nonce = parseInt(nonceResponse.data.result, 16);
         const signedTx = await BOB.signWeiTransfer(ALICE.address, 1, nonce);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
+        console.log(txResponse);
         expect(txResponse.data.error.code).to.equal(5001);
         expect(txResponse.data.error.message).to.equal("Consensus is temporarily unavailable for follower node.");
     });

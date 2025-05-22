@@ -153,7 +153,8 @@ impl Server {
     /// Starts JSON-RPC server.
     #[allow(clippy::too_many_arguments)]
     async fn _serve(&self) -> anyhow::Result<(ServerHandle, RpcSubscriptionsHandles)> {
-        let this = self.clone();
+        let mut this = self.clone();
+        this.importer = if GlobalState::is_importer_shutdown() { None } else { this.importer };
 
         const TASK_NAME: &str = "rpc-server";
         tracing::info!(%this.rpc_config.rpc_address, %this.rpc_config.rpc_max_connections, "creating {}", TASK_NAME);
@@ -583,7 +584,7 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) 
         return Err(ImporterError::AlreadyShutdown.into());
     }
 
-    ctx.set_consensus(None);
+    ctx.set_importer(None);
 
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
@@ -1174,7 +1175,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             }
         },
         NodeMode::Follower => match ctx.importer() {
-            Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
                 Ok(hash) => Ok(hex_data(hash)),
                 Err(e) => Err(e),
             },
