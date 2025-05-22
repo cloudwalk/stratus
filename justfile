@@ -223,6 +223,7 @@ e2e-admin-password:
             exit $exit_code
         fi
         killport 3000 -s sigterm
+        just _wait_for_stratus_finish
     done
 
 # E2E: Execute EOF (EVM Object Format) tests
