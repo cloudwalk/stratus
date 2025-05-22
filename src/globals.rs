@@ -11,6 +11,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 use tokio::runtime::Runtime;
+use tokio::sync::watch::Sender;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
@@ -128,6 +129,9 @@ static NODE_MODE: Mutex<NodeMode> = Mutex::new(NodeMode::Follower);
 
 static START_TIME: LazyLock<DateTime<Utc>> = LazyLock::new(Utc::now);
 
+/// Is stratus healthy?
+static HEALTH: LazyLock<Sender<bool>> = LazyLock::new(|| tokio::sync::watch::Sender::new(false));
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalState;
 
@@ -135,6 +139,32 @@ impl GlobalState {
     // -------------------------------------------------------------------------
     // Application Shutdown
     // -------------------------------------------------------------------------
+
+    pub fn set_unhealthy() {
+        HEALTH.send_if_modified(|health| {
+            if *health {
+                *health = false;
+                true
+            } else {
+                false
+            }
+        });
+    }
+
+    pub fn set_healthy() {
+        HEALTH.send_if_modified(|health| {
+            if !*health {
+                *health = true;
+                true
+            } else {
+                false
+            }
+        });
+    }
+
+    pub fn get_health_receiver() -> tokio::sync::watch::Receiver<bool> {
+        HEALTH.subscribe()
+    }
 
     /// Shutdown the application.
     ///

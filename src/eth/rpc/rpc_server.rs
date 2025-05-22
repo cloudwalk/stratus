@@ -19,8 +19,9 @@ use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::BatchRequestConfig;
 use jsonrpsee::server::RandomStringIdProvider;
 use jsonrpsee::server::RpcModule;
-use jsonrpsee::server::Server;
+use jsonrpsee::server::Server as RpcServer;
 use jsonrpsee::server::ServerConfig;
+use jsonrpsee::server::ServerHandle;
 use jsonrpsee::types::Params;
 use jsonrpsee::ws_client::RpcServiceBuilder;
 use jsonrpsee::Extensions;
@@ -40,6 +41,7 @@ use tracing::Span;
 
 use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
+use crate::config::StratusConfig;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::Importer;
@@ -91,13 +93,14 @@ use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
 use crate::GlobalState;
 use crate::NodeMode;
+
+use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
 // -----------------------------------------------------------------------------
 // Server
 // -----------------------------------------------------------------------------
 
-/// Starts JSON-RPC server.
-#[allow(clippy::too_many_arguments)]
-pub async fn serve_rpc(
+#[derive(Clone, derive_new::new)]
+pub struct Server {
     // services
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
@@ -105,87 +108,113 @@ pub async fn serve_rpc(
     consensus: Option<Arc<Importer>>,
 
     // config
-    app_config: impl serde::Serialize,
+    app_config: StratusConfig,
     rpc_config: RpcServerConfig,
     chain_id: ChainId,
-) -> anyhow::Result<()> {
-    const TASK_NAME: &str = "rpc-server";
-    tracing::info!(%rpc_config.rpc_address, %rpc_config.rpc_max_connections, "creating {}", TASK_NAME);
+}
 
-    // configure subscriptions
-    let subs = RpcSubscriptions::spawn(
-        miner.notifier_pending_txs.subscribe(),
-        miner.notifier_blocks.subscribe(),
-        miner.notifier_logs.subscribe(),
-    );
+impl Server {
+    pub async fn serve(self) -> Result<()> {
+        const TASK_NAME: &str = "rpc-server";
+        let mut health = GlobalState::get_health_receiver();
+        let (server_handle, subscriptions) = loop {
+            let (server_handle, subscriptions) = self._serve().await?;
+            let server_handle_watch = server_handle.clone();
 
-    // configure context
-    let ctx = RpcContext {
-        app_config: to_json_value(app_config),
-        chain_id,
-        client_version: "stratus",
-        gas_price: 0,
+            // await for cancellation or jsonrpsee to stop (should not happen) or health changes
+            select! {
+                // If the server stop unexpectedly, shutdown stratus and break the loop
+                _ = server_handle_watch.stopped() => {
+                    GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
+                    break (server_handle, subscriptions);
+                },
+                // If a shutdown is requested, stop the server and break the loop
+                _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
+                    let _ = server_handle.stop();
+                    break (server_handle, subscriptions);
+                },
+                // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
+                result = health.wait_for(|val| *val == false) => {
+                    let _ = server_handle.stop();
+                    subscriptions.abort();
+                    join!(server_handle.stopped(), subscriptions.stopped());
+                    result?;
+                }
 
-        // services
-        executor,
-        storage,
-        miner,
-        consensus: consensus.into(),
-        rpc_server: rpc_config.clone(),
-
-        // subscriptions
-        subs: Arc::clone(&subs.connected),
-    };
-
-    // configure module
-    let mut module = RpcModule::<RpcContext>::new(ctx);
-    module = register_methods(module)?;
-
-    // configure middleware
-    let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
-    let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
-    let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
-        ProxyGetRequestLayer::new([
-            ("/health", "stratus_health"),
-            ("/version", "stratus_version"),
-            ("/config", "stratus_config"),
-            ("/state", "stratus_state"),
-        ])
-        .unwrap(),
-    );
-
-    let server_config = ServerConfig::builder()
-        .set_id_provider(RandomStringIdProvider::new(8))
-        .max_connections(rpc_config.rpc_max_connections)
-        .max_response_body_size(rpc_config.rpc_max_response_size_bytes)
-        .set_batch_request_config(BatchRequestConfig::Limit(500))
-        .build();
-
-    // serve module
-    let server = Server::builder()
-        .set_rpc_middleware(rpc_middleware)
-        .set_http_middleware(http_middleware)
-        .set_config(server_config)
-        .build(rpc_config.rpc_address)
-        .await?;
-
-    let handle_rpc_server = server.start(module);
-    let handle_rpc_server_watch = handle_rpc_server.clone();
-
-    // await for cancellation or jsonrpsee to stop (should not happen)
-    select! {
-        _ = handle_rpc_server_watch.stopped() => {
-            GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
-        },
-        _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
-            let _ = handle_rpc_server.stop();
-        }
+            }
+        };
+        join!(server_handle.stopped(), subscriptions.stopped());
+        Ok(())
     }
 
-    // await rpc server and subscriptions to finish
-    join!(handle_rpc_server.stopped(), subs.handles.stopped());
+    /// Starts JSON-RPC server.
+    #[allow(clippy::too_many_arguments)]
+    async fn _serve(&self) -> anyhow::Result<(ServerHandle, RpcSubscriptionsHandles)> {
+        let this = self.clone();
 
-    Ok(())
+        const TASK_NAME: &str = "rpc-server";
+        tracing::info!(%this.rpc_config.rpc_address, %this.rpc_config.rpc_max_connections, "creating {}", TASK_NAME);
+
+        // configure subscriptions
+        let subs = RpcSubscriptions::spawn(
+            this.miner.notifier_pending_txs.subscribe(),
+            this.miner.notifier_blocks.subscribe(),
+            this.miner.notifier_logs.subscribe(),
+        );
+
+        // configure context
+        let ctx = RpcContext {
+            app_config: to_json_value(this.app_config),
+            chain_id: this.chain_id,
+            client_version: "stratus",
+            gas_price: 0,
+
+            // services
+            executor: this.executor,
+            storage: this.storage,
+            miner: this.miner,
+            consensus: this.consensus.into(),
+            rpc_server: this.rpc_config.clone(),
+
+            // subscriptions
+            subs: Arc::clone(&subs.connected),
+        };
+
+        // configure module
+        let mut module = RpcModule::<RpcContext>::new(ctx);
+        module = register_methods(module)?;
+
+        // configure middleware
+        let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
+        let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
+        let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
+            ProxyGetRequestLayer::new([
+                ("/health", "stratus_health"),
+                ("/version", "stratus_version"),
+                ("/config", "stratus_config"),
+                ("/state", "stratus_state"),
+            ])
+            .unwrap(),
+        );
+
+        let server_config = ServerConfig::builder()
+            .set_id_provider(RandomStringIdProvider::new(8))
+            .max_connections(this.rpc_config.rpc_max_connections)
+            .max_response_body_size(this.rpc_config.rpc_max_response_size_bytes)
+            .set_batch_request_config(BatchRequestConfig::Limit(500))
+            .build();
+
+        // serve module
+        let server = RpcServer::builder()
+            .set_rpc_middleware(rpc_middleware)
+            .set_http_middleware(http_middleware)
+            .set_config(server_config)
+            .build(this.rpc_config.rpc_address)
+            .await?;
+
+        let handle_rpc_server = server.start(module);
+        Ok((handle_rpc_server, subs.handles))
+    }
 }
 
 fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {

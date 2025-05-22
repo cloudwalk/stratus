@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use stratus::config::StratusConfig;
-use stratus::eth::rpc::serve_rpc;
+use stratus::eth::rpc::Server;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
@@ -40,7 +40,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     };
 
     // Init RPC server
-    serve_rpc(
+    Server::new(
         // Services
         Arc::clone(&storage),
         executor,
@@ -50,8 +50,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.clone(),
         config.rpc_server,
         config.executor.executor_chain_id.into(),
-    )
-    .await?;
+    ).serve().await?;
 
     // Explicitly block the `main` thread to drop the storage.
     drop(storage);
