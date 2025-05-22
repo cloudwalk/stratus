@@ -144,7 +144,7 @@ impl ImporterConfig {
 
         match consensus {
             Some(consensus) => {
-                ctx.set_consensus(Some(consensus));
+                ctx.set_importer(Some(consensus));
             }
             None => {
                 tracing::error!("failed to update consensus: Consensus is not set.");

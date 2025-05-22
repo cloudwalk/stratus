@@ -19,8 +19,9 @@ use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::server::BatchRequestConfig;
 use jsonrpsee::server::RandomStringIdProvider;
 use jsonrpsee::server::RpcModule;
-use jsonrpsee::server::Server;
+use jsonrpsee::server::Server as RpcServer;
 use jsonrpsee::server::ServerConfig;
+use jsonrpsee::server::ServerHandle;
 use jsonrpsee::types::Params;
 use jsonrpsee::ws_client::RpcServiceBuilder;
 use jsonrpsee::Extensions;
@@ -40,6 +41,7 @@ use tracing::Span;
 
 use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
+use crate::config::StratusConfig;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::Importer;
@@ -74,6 +76,7 @@ use crate::eth::primitives::Wei;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
+use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
@@ -85,6 +88,7 @@ use crate::ext::parse_duration;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::ext::InfallibleExt;
+use crate::ext::WatchReceiverExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
@@ -95,97 +99,126 @@ use crate::NodeMode;
 // Server
 // -----------------------------------------------------------------------------
 
-/// Starts JSON-RPC server.
-#[allow(clippy::too_many_arguments)]
-pub async fn serve_rpc(
+#[derive(Clone, derive_new::new)]
+pub struct Server {
     // services
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
     miner: Arc<Miner>,
-    consensus: Option<Arc<Importer>>,
+    importer: Option<Arc<Importer>>,
 
     // config
-    app_config: impl serde::Serialize,
+    app_config: StratusConfig,
     rpc_config: RpcServerConfig,
     chain_id: ChainId,
-) -> anyhow::Result<()> {
-    const TASK_NAME: &str = "rpc-server";
-    tracing::info!(%rpc_config.rpc_address, %rpc_config.rpc_max_connections, "creating {}", TASK_NAME);
+}
 
-    // configure subscriptions
-    let subs = RpcSubscriptions::spawn(
-        miner.notifier_pending_txs.subscribe(),
-        miner.notifier_blocks.subscribe(),
-        miner.notifier_logs.subscribe(),
-    );
+impl Server {
+    pub async fn serve(self) -> Result<()> {
+        const TASK_NAME: &str = "rpc-server";
+        // update health status
+        let _ = health(self.importer.clone()).await;
+        let mut health = GlobalState::get_health_receiver();
+        health.mark_unchanged();
 
-    // configure context
-    let ctx = RpcContext {
-        app_config: to_json_value(app_config),
-        chain_id,
-        client_version: "stratus",
-        gas_price: 0,
+        let (server_handle, subscriptions) = loop {
+            let (server_handle, subscriptions) = self._serve().await?;
+            let server_handle_watch = server_handle.clone();
 
-        // services
-        executor,
-        storage,
-        miner,
-        consensus: consensus.into(),
-        rpc_server: rpc_config.clone(),
-
-        // subscriptions
-        subs: Arc::clone(&subs.connected),
-    };
-
-    // configure module
-    let mut module = RpcModule::<RpcContext>::new(ctx);
-    module = register_methods(module)?;
-
-    // configure middleware
-    let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
-    let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
-    let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
-        ProxyGetRequestLayer::new([
-            ("/health", "stratus_health"),
-            ("/version", "stratus_version"),
-            ("/config", "stratus_config"),
-            ("/state", "stratus_state"),
-        ])
-        .unwrap(),
-    );
-
-    let server_config = ServerConfig::builder()
-        .set_id_provider(RandomStringIdProvider::new(8))
-        .max_connections(rpc_config.rpc_max_connections)
-        .max_response_body_size(rpc_config.rpc_max_response_size_bytes)
-        .set_batch_request_config(BatchRequestConfig::Limit(500))
-        .build();
-
-    // serve module
-    let server = Server::builder()
-        .set_rpc_middleware(rpc_middleware)
-        .set_http_middleware(http_middleware)
-        .set_config(server_config)
-        .build(rpc_config.rpc_address)
-        .await?;
-
-    let handle_rpc_server = server.start(module);
-    let handle_rpc_server_watch = handle_rpc_server.clone();
-
-    // await for cancellation or jsonrpsee to stop (should not happen)
-    select! {
-        _ = handle_rpc_server_watch.stopped() => {
-            GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
-        },
-        _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
-            let _ = handle_rpc_server.stop();
-        }
+            // await for cancellation or jsonrpsee to stop (should not happen) or health changes
+            select! {
+                // If the server stop unexpectedly, shutdown stratus and break the loop
+                _ = server_handle_watch.stopped() => {
+                    GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
+                    break (server_handle, subscriptions);
+                },
+                // If a shutdown is requested, stop the server and break the loop
+                _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
+                    let _ = server_handle.stop();
+                    break (server_handle, subscriptions);
+                },
+                // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
+                _ = health.wait_for_change(|healthy| !healthy) => {
+                        tracing::info!("health state changed to unhealthy, restarting the rpc server");
+                        let _ = server_handle.stop();
+                        subscriptions.abort();
+                        join!(server_handle.stopped(), subscriptions.stopped());
+                }
+            }
+        };
+        join!(server_handle.stopped(), subscriptions.stopped());
+        Ok(())
     }
 
-    // await rpc server and subscriptions to finish
-    join!(handle_rpc_server.stopped(), subs.handles.stopped());
+    /// Starts JSON-RPC server.
+    #[allow(clippy::too_many_arguments)]
+    async fn _serve(&self) -> anyhow::Result<(ServerHandle, RpcSubscriptionsHandles)> {
+        let mut this = self.clone();
+        this.importer = if GlobalState::is_importer_shutdown() { None } else { this.importer };
 
-    Ok(())
+        const TASK_NAME: &str = "rpc-server";
+        tracing::info!(%this.rpc_config.rpc_address, %this.rpc_config.rpc_max_connections, "creating {}", TASK_NAME);
+
+        // configure subscriptions
+        let subs = RpcSubscriptions::spawn(
+            this.miner.notifier_pending_txs.subscribe(),
+            this.miner.notifier_blocks.subscribe(),
+            this.miner.notifier_logs.subscribe(),
+        );
+
+        // configure context
+        let ctx = RpcContext {
+            app_config: to_json_value(this.app_config),
+            chain_id: this.chain_id,
+            client_version: "stratus",
+            gas_price: 0,
+
+            // services
+            executor: this.executor,
+            storage: this.storage,
+            miner: this.miner,
+            importer: this.importer.into(),
+            rpc_server: this.rpc_config.clone(),
+
+            // subscriptions
+            subs: Arc::clone(&subs.connected),
+        };
+
+        // configure module
+        let mut module = RpcModule::<RpcContext>::new(ctx);
+        module = register_methods(module)?;
+
+        // configure middleware
+        let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
+        let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
+        let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
+            ProxyGetRequestLayer::new([
+                ("/health", "stratus_health"),
+                ("/version", "stratus_version"),
+                ("/config", "stratus_config"),
+                ("/state", "stratus_state"),
+            ])
+            .unwrap(),
+        );
+
+        let server_config = ServerConfig::builder()
+            .set_id_provider(RandomStringIdProvider::new(8))
+            .max_connections(this.rpc_config.rpc_max_connections)
+            .max_response_body_size(this.rpc_config.rpc_max_response_size_bytes)
+            .set_batch_request_config(BatchRequestConfig::Limit(500))
+            .build();
+
+        // serve module
+        let server = RpcServer::builder()
+            .set_rpc_middleware(rpc_middleware)
+            .set_http_middleware(http_middleware)
+            .set_config(server_config)
+            .build(this.rpc_config.rpc_address)
+            .await?;
+
+        let handle_rpc_server = server.start(module);
+        Ok((handle_rpc_server, subs.handles))
+    }
 }
 
 fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {
@@ -305,16 +338,12 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
-async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    if GlobalState::is_shutdown() {
-        tracing::warn!("liveness check failed because of shutdown");
-        return Err(StateError::StratusShutdown.into());
-    }
-
+async fn health(importer: Option<Arc<Importer>>) -> Result<JsonValue, StratusError> {
+    tracing::info!("running health(/1)");
     let should_serve = match GlobalState::get_node_mode() {
         NodeMode::Leader | NodeMode::FakeLeader => true,
-        NodeMode::Follower => match context.consensus() {
-            Some(consensus) => consensus.should_serve().await,
+        NodeMode::Follower => match importer {
+            Some(importer) => importer.should_serve().await,
             None => false,
         },
     };
@@ -322,11 +351,21 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
     if not(should_serve) {
         tracing::warn!("readiness check failed because consensus is not ready");
         metrics::set_consensus_is_ready(0_u64);
+        GlobalState::set_unhealthy();
         return Err(StateError::StratusNotReady.into());
     }
 
     metrics::set_consensus_is_ready(1_u64);
+    GlobalState::set_healthy();
     Ok(json!(true))
+}
+
+async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    if GlobalState::is_shutdown() {
+        tracing::warn!("liveness check failed because of shutdown");
+        return Err(StateError::StratusShutdown.into());
+    }
+    health(context.importer()).await
 }
 
 // -----------------------------------------------------------------------------
@@ -540,12 +579,12 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) 
         return Err(StateError::StratusNotFollower.into());
     }
 
-    if GlobalState::is_importer_shutdown() && ctx.consensus().is_none() {
+    if GlobalState::is_importer_shutdown() && ctx.importer().is_none() {
         tracing::error!("importer is already shut down");
         return Err(ImporterError::AlreadyShutdown.into());
     }
 
-    ctx.set_consensus(None);
+    ctx.set_importer(None);
 
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
@@ -603,7 +642,7 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
         MinerMode::Interval(duration) => {
             tracing::info!(duration = ?duration, "changing miner mode to Interval");
 
-            if ctx.consensus().is_some() {
+            if ctx.importer().is_some() {
                 tracing::error!("cannot change miner mode to Interval with consensus set");
                 return Err(ConsensusError::Set.into());
             }
@@ -1135,8 +1174,8 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
                 Err(e)
             }
         },
-        NodeMode::Follower => match ctx.consensus() {
-            Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+        NodeMode::Follower => match ctx.importer() {
+            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
                 Ok(hash) => Ok(hex_data(hash)),
                 Err(e) => Err(e),
             },
