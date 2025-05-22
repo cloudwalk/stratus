@@ -119,6 +119,8 @@ impl Server {
         // update health status
         let _ = health(self.importer.clone()).await;
         let mut health = GlobalState::get_health_receiver();
+        health.mark_unchanged();
+
         let (server_handle, subscriptions) = loop {
             let (server_handle, subscriptions) = self._serve().await?;
             let server_handle_watch = server_handle.clone();
@@ -136,15 +138,17 @@ impl Server {
                     break (server_handle, subscriptions);
                 },
                 // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
-                result = health.wait_for(|val| *val == false) => {
-                    let _ = server_handle.stop();
-                    subscriptions.abort();
-                    join!(server_handle.stopped(), subscriptions.stopped());
-                    result?;
+                _ = health.changed() => {
+                    if !*health.borrow() {
+                        tracing::info!("health state changed to unhealthy, restarting the rpc server");
+                        let _ = server_handle.stop();
+                        subscriptions.abort();
+                        join!(server_handle.stopped(), subscriptions.stopped());
+                    }
                 }
-
             }
         };
+
         join!(server_handle.stopped(), subscriptions.stopped());
         Ok(())
     }
@@ -337,6 +341,7 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // -----------------------------------------------------------------------------
 
 async fn health(importer: Option<Arc<Importer>>) -> Result<JsonValue, StratusError> {
+    tracing::info!("running health(/1)");
     let should_serve = match GlobalState::get_node_mode() {
         NodeMode::Leader | NodeMode::FakeLeader => true,
         NodeMode::Follower => match importer {

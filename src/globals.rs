@@ -143,6 +143,7 @@ impl GlobalState {
     pub fn set_unhealthy() {
         HEALTH.send_if_modified(|health| {
             if *health {
+                tracing::info!("setting state to unhealthy");
                 *health = false;
                 true
             } else {
@@ -154,6 +155,7 @@ impl GlobalState {
     pub fn set_healthy() {
         HEALTH.send_if_modified(|health| {
             if !*health {
+                tracing::info!("setting state to healthy");
                 *health = true;
                 true
             } else {
