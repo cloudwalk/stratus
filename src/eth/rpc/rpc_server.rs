@@ -105,7 +105,7 @@ pub struct Server {
     storage: Arc<StratusStorage>,
     executor: Arc<Executor>,
     miner: Arc<Miner>,
-    consensus: Option<Arc<Importer>>,
+    importer: Option<Arc<Importer>>,
 
     // config
     app_config: StratusConfig,
@@ -116,6 +116,8 @@ pub struct Server {
 impl Server {
     pub async fn serve(self) -> Result<()> {
         const TASK_NAME: &str = "rpc-server";
+        // update health status
+        let _ = health(self.importer.clone()).await;
         let mut health = GlobalState::get_health_receiver();
         let (server_handle, subscriptions) = loop {
             let (server_handle, subscriptions) = self._serve().await?;
@@ -173,7 +175,7 @@ impl Server {
             executor: this.executor,
             storage: this.storage,
             miner: this.miner,
-            consensus: this.consensus.into(),
+            importer: this.importer.into(),
             rpc_server: this.rpc_config.clone(),
 
             // subscriptions
@@ -334,16 +336,11 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
-async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    if GlobalState::is_shutdown() {
-        tracing::warn!("liveness check failed because of shutdown");
-        return Err(StateError::StratusShutdown.into());
-    }
-
+async fn health(importer: Option<Arc<Importer>>) -> Result<JsonValue, StratusError> {
     let should_serve = match GlobalState::get_node_mode() {
         NodeMode::Leader | NodeMode::FakeLeader => true,
-        NodeMode::Follower => match context.consensus() {
-            Some(consensus) => consensus.should_serve().await,
+        NodeMode::Follower => match importer {
+            Some(importer) => importer.should_serve().await,
             None => false,
         },
     };
@@ -351,11 +348,21 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
     if not(should_serve) {
         tracing::warn!("readiness check failed because consensus is not ready");
         metrics::set_consensus_is_ready(0_u64);
+        GlobalState::set_unhealthy();
         return Err(StateError::StratusNotReady.into());
     }
 
     metrics::set_consensus_is_ready(1_u64);
+    GlobalState::set_healthy();
     Ok(json!(true))
+}
+
+async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    if GlobalState::is_shutdown() {
+        tracing::warn!("liveness check failed because of shutdown");
+        return Err(StateError::StratusShutdown.into());
+    }
+    health(context.importer()).await
 }
 
 // -----------------------------------------------------------------------------
@@ -569,7 +576,7 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) 
         return Err(StateError::StratusNotFollower.into());
     }
 
-    if GlobalState::is_importer_shutdown() && ctx.consensus().is_none() {
+    if GlobalState::is_importer_shutdown() && ctx.importer().is_none() {
         tracing::error!("importer is already shut down");
         return Err(ImporterError::AlreadyShutdown.into());
     }
@@ -632,7 +639,7 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
         MinerMode::Interval(duration) => {
             tracing::info!(duration = ?duration, "changing miner mode to Interval");
 
-            if ctx.consensus().is_some() {
+            if ctx.importer().is_some() {
                 tracing::error!("cannot change miner mode to Interval with consensus set");
                 return Err(ConsensusError::Set.into());
             }
@@ -1164,7 +1171,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
                 Err(e)
             }
         },
-        NodeMode::Follower => match ctx.consensus() {
+        NodeMode::Follower => match ctx.importer() {
             Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
                 Ok(hash) => Ok(hex_data(hash)),
                 Err(e) => Err(e),

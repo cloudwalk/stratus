@@ -26,17 +26,17 @@ pub struct RpcContext {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
     pub storage: Arc<StratusStorage>,
-    pub consensus: RwLock<Option<Arc<Importer>>>,
+    pub importer: RwLock<Option<Arc<Importer>>>,
     pub rpc_server: RpcServerConfig,
     pub subs: Arc<RpcSubscriptionsConnected>,
 }
 
 impl RpcContext {
-    pub fn consensus(&self) -> Option<Arc<Importer>> {
-        self.consensus.read().clone()
+    pub fn importer(&self) -> Option<Arc<Importer>> {
+        self.importer.read().clone()
     }
 
     pub fn set_consensus(&self, new_consensus: Option<Arc<Importer>>) {
-        *self.consensus.write() = new_consensus;
+        *self.importer.write() = new_consensus;
     }
 }
