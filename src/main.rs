@@ -50,7 +50,9 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.clone(),
         config.rpc_server,
         config.executor.executor_chain_id.into(),
-    ).serve().await?;
+    )
+    .serve()
+    .await?;
 
     // Explicitly block the `main` thread to drop the storage.
     drop(storage);

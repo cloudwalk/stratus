@@ -76,6 +76,7 @@ use crate::eth::primitives::Wei;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
+use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
@@ -87,14 +88,13 @@ use crate::ext::parse_duration;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::ext::InfallibleExt;
+use crate::ext::WatchReceiverExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
 use crate::GlobalState;
 use crate::NodeMode;
-
-use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
 // -----------------------------------------------------------------------------
 // Server
 // -----------------------------------------------------------------------------
@@ -138,17 +138,14 @@ impl Server {
                     break (server_handle, subscriptions);
                 },
                 // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
-                _ = health.changed() => {
-                    if !*health.borrow() {
+                _ = health.wait_for_change(|healthy| !healthy) => {
                         tracing::info!("health state changed to unhealthy, restarting the rpc server");
                         let _ = server_handle.stop();
                         subscriptions.abort();
                         join!(server_handle.stopped(), subscriptions.stopped());
-                    }
                 }
             }
         };
-
         join!(server_handle.stopped(), subscriptions.stopped());
         Ok(())
     }

@@ -13,6 +13,7 @@ use serde::Serializer;
 use tokio::select;
 use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
+use tokio::sync::watch::error::RecvError;
 
 use crate::infra::tracing::info_task_spawn;
 use crate::log_and_err;
@@ -406,4 +407,26 @@ macro_rules! gen_test_bincode {
             }
         }
     };
+}
+
+pub trait WatchReceiverExt<T> {
+    #[allow(async_fn_in_trait)]
+    async fn wait_for_change(
+        &mut self,
+        f: impl Fn(&T) -> bool,
+    ) -> Result<(), RecvError>;
+}
+
+impl<T> WatchReceiverExt<T> for tokio::sync::watch::Receiver<T> {
+    async fn wait_for_change(
+        &mut self,
+        f: impl Fn(&T) -> bool,
+    ) -> Result<(), RecvError>{
+        loop {
+            self.changed().await?;
+            if f(&self.borrow()) {
+                return Ok(());
+            }
+        }
+    }
 }
