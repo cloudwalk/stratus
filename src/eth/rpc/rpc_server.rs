@@ -115,19 +115,18 @@ pub struct Server {
 
 impl Server {
     pub async fn serve(self) -> Result<()> {
-        const TASK_NAME: &str = "rpc-server";
         let this = Arc::new(self);
+
+        const TASK_NAME: &str = "rpc-server";
         let health_worker_handle = tokio::task::spawn({
             let this = Arc::clone(&this);
             async move {
                 this.health_worker().await;
             }
         });
-        // update health status
-        let _ = this.health().await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
         let mut health = GlobalState::get_health_receiver();
         health.mark_unchanged();
-
         let (server_handle, subscriptions) = loop {
             let (server_handle, subscriptions) = this._serve().await?;
             let server_handle_watch = server_handle.clone();
@@ -230,16 +229,10 @@ impl Server {
 
     pub async fn health_worker(&self) {
         // Create an interval that ticks at the configured interval
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(self.rpc_config.health_check_interval_secs));
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(self.rpc_config.health_check_interval_ms));
 
         // Enter an infinite loop to periodically run the health check
         loop {
-            // Wait for the next tick
-            interval.tick().await;
-            if GlobalState::is_shutdown() {
-                break;
-            }
-
             // Call the health function and ignore its result
             let is_healthy = self.health().await;
             if !is_healthy {
@@ -247,6 +240,12 @@ impl Server {
             }
             GlobalState::set_health(is_healthy);
             metrics::set_consensus_is_ready(if is_healthy { 1u64 } else { 0u64 });
+
+            // Wait for the next tick
+            interval.tick().await;
+            if GlobalState::is_shutdown() {
+                break;
+            }
         }
     }
 

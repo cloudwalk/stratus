@@ -25,8 +25,8 @@ pub struct RpcServerConfig {
     pub rpc_max_subscriptions: u32,
 
     /// Health check interval in seconds
-    #[arg(long = "health-check-interval", env = "HEALTH_CHECK_INTERVAL_SECS", default_value = "5")]
-    pub health_check_interval_secs: u64,
+    #[arg(long = "health-check-interval", env = "HEALTH_CHECK_INTERVAL_MS", default_value = "100")]
+    pub health_check_interval_ms: u64,
 
     #[arg(long = "rpc-debug-trace-unsuccessful-only", value_parser=Self::parse_rpc_client_app_hashset ,env = "RPC_DEBUG_TRACE_UNSUCCESSFUL_ONLY")]
     pub rpc_debug_trace_unsuccessful_only: Option<HashSet<RpcClientApp>>,

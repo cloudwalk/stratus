@@ -311,6 +311,7 @@ shell-lint mode="--write":
 
 e2e-leader use_rocksdb_replication="false":
     #!/bin/bash
+    echo "starting e2e-leader"
     REPLICATION_FLAG=""
     if [ "{{use_rocksdb_replication}}" = "true" ]; then
         REPLICATION_FLAG="--use-rocksdb-replication"
