@@ -116,6 +116,7 @@ pub struct Server {
 impl Server {
     pub async fn serve(self) -> Result<()> {
         let this = Arc::new(self);
+        this.update_health().await;
 
         const TASK_NAME: &str = "rpc-server";
         let health_worker_handle = tokio::task::spawn({
@@ -124,7 +125,7 @@ impl Server {
                 this.health_worker().await;
             }
         });
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        this.update_health().await;
         let mut health = GlobalState::get_health_receiver();
         health.mark_unchanged();
         let (server_handle, subscriptions) = loop {
@@ -234,12 +235,7 @@ impl Server {
         // Enter an infinite loop to periodically run the health check
         loop {
             // Call the health function and ignore its result
-            let is_healthy = self.health().await;
-            if !is_healthy {
-                tracing::warn!("readiness check failed because consensus is not ready");
-            }
-            GlobalState::set_health(is_healthy);
-            metrics::set_consensus_is_ready(if is_healthy { 1u64 } else { 0u64 });
+            self.update_health().await;
 
             // Wait for the next tick
             interval.tick().await;
@@ -247,6 +243,15 @@ impl Server {
                 break;
             }
         }
+    }
+
+    async fn update_health(&self) {
+        let is_healthy = self.health().await;
+        if !is_healthy {
+            tracing::warn!("readiness check failed because consensus is not ready");
+        }
+        GlobalState::set_health(is_healthy);
+        metrics::set_consensus_is_ready(if is_healthy { 1u64 } else { 0u64 });
     }
 
     async fn health(&self) -> bool {
