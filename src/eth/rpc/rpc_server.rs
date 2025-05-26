@@ -116,19 +116,20 @@ pub struct Server {
 impl Server {
     pub async fn serve(self) -> Result<()> {
         const TASK_NAME: &str = "rpc-server";
+        let this = Arc::new(self);
         let health_worker_handle = tokio::task::spawn({
-            let this = self.clone();
+            let this = Arc::clone(&this);
             async move {
                 this.health_worker().await;
             }
         });
         // update health status
-        let _ = self.health().await;
+        let _ = this.health().await;
         let mut health = GlobalState::get_health_receiver();
         health.mark_unchanged();
 
         let (server_handle, subscriptions) = loop {
-            let (server_handle, subscriptions) = self._serve().await?;
+            let (server_handle, subscriptions) = this._serve().await?;
             let server_handle_watch = server_handle.clone();
 
             // await for cancellation or jsonrpsee to stop (should not happen) or health changes
