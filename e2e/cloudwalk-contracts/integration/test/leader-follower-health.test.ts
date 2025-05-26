@@ -9,7 +9,8 @@ it("Test follower health is based on getting new blocks", async function () {
     expect(healthyResponse).to.equal(true);
 
     let ws = new WebSocketProvider("ws://localhost:3001");
-    expect(await ws.getBlockNumber()).to.be.any;
+    // check that ws is connected
+    expect(await ws.getBlockNumber()).to.be.a("number");
 
     // Kill port 3000 to interrupt leader
     require("child_process").execSync("killport 3000 -s sigterm", { stdio: "inherit" });
@@ -21,6 +22,7 @@ it("Test follower health is based on getting new blocks", async function () {
 
     expect(unhealthyResponse.data.error.code).to.equal(7001);
     expect(unhealthyResponse.data.error.message).to.equal("Stratus is not ready to start servicing requests.");
+    // check that the ws connection was closed
     expect(ws.websocket.readyState).to.not.equal(WebSocket.OPEN);
 
     // Start the leader again
