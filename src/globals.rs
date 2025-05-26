@@ -142,7 +142,7 @@ impl GlobalState {
 
     pub fn set_health(new_health: bool) {
         HEALTH.send_if_modified(|health| {
-            if *health != new_health{
+            if *health != new_health {
                 tracing::info!(?new_health, "health status updated");
                 *health = new_health;
                 true
