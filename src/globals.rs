@@ -140,11 +140,10 @@ impl GlobalState {
     // Application Shutdown
     // -------------------------------------------------------------------------
 
-    pub fn set_unhealthy() {
+    pub fn set_health(new_health: bool) {
         HEALTH.send_if_modified(|health| {
-            if *health {
-                tracing::info!("setting state to unhealthy");
-                *health = false;
+            if *health == new_health{
+                *health = new_health;
                 true
             } else {
                 false
@@ -152,16 +151,8 @@ impl GlobalState {
         });
     }
 
-    pub fn set_healthy() {
-        HEALTH.send_if_modified(|health| {
-            if !*health {
-                tracing::info!("setting state to healthy");
-                *health = true;
-                true
-            } else {
-                false
-            }
-        });
+    pub fn is_healthy() -> bool {
+        *HEALTH.borrow()
     }
 
     pub fn get_health_receiver() -> tokio::sync::watch::Receiver<bool> {

@@ -116,8 +116,14 @@ pub struct Server {
 impl Server {
     pub async fn serve(self) -> Result<()> {
         const TASK_NAME: &str = "rpc-server";
+        let health_worker_handle = tokio::task::spawn({
+            let this = self.clone();
+            async move {
+                this.health_worker().await;
+            }
+        });
         // update health status
-        let _ = health(self.importer.clone()).await;
+        let _ = self.health().await;
         let mut health = GlobalState::get_health_receiver();
         health.mark_unchanged();
 
@@ -146,7 +152,8 @@ impl Server {
                 }
             }
         };
-        join!(server_handle.stopped(), subscriptions.stopped());
+        let res = join!(server_handle.stopped(), subscriptions.stopped(), health_worker_handle);
+        res.2?;
         Ok(())
     }
 
@@ -218,6 +225,40 @@ impl Server {
 
         let handle_rpc_server = server.start(module);
         Ok((handle_rpc_server, subs.handles))
+    }
+
+    pub async fn health_worker(&self) {
+        // Create an interval that ticks at the configured interval
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(self.rpc_config.health_check_interval_secs));
+
+        // Enter an infinite loop to periodically run the health check
+        loop {
+            // Wait for the next tick
+            interval.tick().await;
+            if GlobalState::is_shutdown() {
+                break;
+            }
+
+            // Call the health function and ignore its result
+            let is_healthy = self.health().await;
+            if !is_healthy {
+                tracing::warn!("readiness check failed because consensus is not ready");
+            }
+            GlobalState::set_health(is_healthy);
+            metrics::set_consensus_is_ready(if is_healthy { 1u64 } else { 0u64 });
+        }
+    }
+
+    async fn health(&self) -> bool {
+        let importer = &self.importer;
+        tracing::info!("running health(/1)");
+        match GlobalState::get_node_mode() {
+            NodeMode::Leader | NodeMode::FakeLeader => true,
+            NodeMode::Follower => match importer {
+                Some(importer) => importer.should_serve().await,
+                None => false,
+            },
+        }
     }
 }
 
@@ -338,34 +379,17 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
-async fn health(importer: Option<Arc<Importer>>) -> Result<JsonValue, StratusError> {
-    tracing::info!("running health(/1)");
-    let should_serve = match GlobalState::get_node_mode() {
-        NodeMode::Leader | NodeMode::FakeLeader => true,
-        NodeMode::Follower => match importer {
-            Some(importer) => importer.should_serve().await,
-            None => false,
-        },
-    };
-
-    if not(should_serve) {
-        tracing::warn!("readiness check failed because consensus is not ready");
-        metrics::set_consensus_is_ready(0_u64);
-        GlobalState::set_unhealthy();
-        return Err(StateError::StratusNotReady.into());
-    }
-
-    metrics::set_consensus_is_ready(1_u64);
-    GlobalState::set_healthy();
-    Ok(json!(true))
-}
-
-async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+async fn stratus_health(_: Params<'_>, _: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     if GlobalState::is_shutdown() {
         tracing::warn!("liveness check failed because of shutdown");
         return Err(StateError::StratusShutdown.into());
     }
-    health(context.importer()).await
+
+    if GlobalState::is_healthy() {
+        Ok(json!(true))
+    } else {
+        Err(StateError::StratusNotReady.into())
+    }
 }
 
 // -----------------------------------------------------------------------------
