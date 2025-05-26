@@ -1,7 +1,7 @@
 import { expect } from "chai";
+import { WebSocketProvider } from "ethers";
 
 import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
-import { WebSocketProvider } from "ethers";
 
 it("Test follower health is based on getting new blocks", async function () {
     updateProviderUrl("stratus-follower");
