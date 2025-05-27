@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use parking_lot::RwLock;
 use stratus::config::StratusConfig;
 use stratus::eth::rpc::Server;
 use stratus::GlobalServices;
@@ -28,7 +29,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // Init importer
-    let consensus = if let Some(importer_config) = &config.importer {
+    let consensus = Arc::new(RwLock::new(if let Some(importer_config) = &config.importer {
         tracing::info!(?importer_config, "creating importer");
         let kafka_connector = config.kafka_config.as_ref().map(|inner| inner.init()).transpose()?;
         importer_config
@@ -37,7 +38,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     } else {
         tracing::info!("no importer config, skipping importer");
         None
-    };
+    }));
 
     // Init RPC server
     Server::new(

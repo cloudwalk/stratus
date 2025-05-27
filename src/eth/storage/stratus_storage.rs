@@ -75,11 +75,10 @@ impl StratusStorage {
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            if GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled() {
-                if !this.has_genesis()? {
+            if (GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled())
+                && !this.has_genesis()? {
                     this.reset_to_genesis()?;
                 }
-            }
         }
 
         Ok(this)
@@ -122,7 +121,7 @@ impl StratusStorage {
         }
         .init();
 
-        return Self::new(
+        Self::new(
             temp,
             perm,
             cache,
@@ -136,7 +135,7 @@ impl StratusStorage {
                 genesis_file: crate::config::GenesisFileConfig::default(),
                 use_rocksdb_replication: false,
             },
-        );
+        )
     }
 
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
