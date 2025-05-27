@@ -829,6 +829,7 @@ mod tests {
     #[test]
     #[cfg(feature = "dev")]
     fn test_rocks_multi_get() {
+        use std::collections::HashMap;
         use std::collections::HashSet;
         use std::iter;
 
