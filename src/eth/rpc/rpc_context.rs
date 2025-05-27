@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
+#[cfg(feature = "dev")]
+use super::Server;
 use crate::alias::JsonValue;
 use crate::eth::executor::Executor;
 use crate::eth::follower::importer::Importer;
@@ -10,9 +12,6 @@ use crate::eth::primitives::ChainId;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StratusStorage;
-
-#[cfg(feature = "dev")]
-use super::Server;
 
 pub struct RpcContext {
     #[cfg(feature = "dev")] // TODO: Remove dev requirement and refac services/configs

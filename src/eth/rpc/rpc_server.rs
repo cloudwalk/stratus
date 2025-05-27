@@ -259,7 +259,7 @@ impl Server {
     async fn health(&self) -> bool {
         match GlobalState::get_node_mode() {
             NodeMode::Leader | NodeMode::FakeLeader => true,
-            NodeMode::Follower => {
+            NodeMode::Follower =>
                 if GlobalState::is_importer_shutdown() {
                     false
                 } else {
@@ -267,8 +267,7 @@ impl Server {
                         Some(importer) => importer.should_serve().await,
                         None => false,
                     }
-                }
-            }
+                },
         }
     }
 }
@@ -390,6 +389,7 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
+#[allow(unused_variables)]
 async fn stratus_health(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     #[cfg(feature = "dev")]
     ctx.server.update_health().await;
