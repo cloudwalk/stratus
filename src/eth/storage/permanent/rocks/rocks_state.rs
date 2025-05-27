@@ -829,7 +829,7 @@ mod tests {
     #[test]
     #[cfg(feature = "dev")]
     fn test_rocks_multi_get() {
-        use std::collections::HashSet;
+        use std::collections::{HashMap, HashSet};
         use std::iter;
 
         type Key = (AddressRocksdb, SlotIndexRocksdb);

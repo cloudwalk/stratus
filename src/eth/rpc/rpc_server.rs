@@ -176,6 +176,8 @@ impl Server {
 
         // configure context
         let ctx = RpcContext {
+            #[cfg(feature = "dev")]
+            server: Arc::new(this.clone()),
             app_config: to_json_value(this.app_config),
             chain_id: this.chain_id,
             client_version: "stratus",
@@ -255,14 +257,18 @@ impl Server {
     }
 
     async fn health(&self) -> bool {
-        let importer = &self.importer;
-        tracing::info!("running health(/1)");
         match GlobalState::get_node_mode() {
             NodeMode::Leader | NodeMode::FakeLeader => true,
-            NodeMode::Follower => match importer {
-                Some(importer) => importer.should_serve().await,
-                None => false,
-            },
+            NodeMode::Follower => {
+                if GlobalState::is_importer_shutdown() {
+                    false
+                } else {
+                    match &self.importer {
+                        Some(importer) => importer.should_serve().await,
+                        None => false,
+                    }
+                }
+            }
         }
     }
 }
@@ -384,7 +390,10 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
-async fn stratus_health(_: Params<'_>, _: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+async fn stratus_health(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    #[cfg(feature = "dev")]
+    ctx.server.update_health().await;
+
     if GlobalState::is_shutdown() {
         tracing::warn!("liveness check failed because of shutdown");
         return Err(StateError::StratusShutdown.into());

@@ -11,7 +11,13 @@ use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::storage::StratusStorage;
 
+#[cfg(feature = "dev")]
+use super::Server;
+
 pub struct RpcContext {
+    #[cfg(feature = "dev")] // TODO: Remove dev requirement and refac services/configs
+    pub server: Arc<Server>,
+
     // app config
     pub app_config: JsonValue,
 
