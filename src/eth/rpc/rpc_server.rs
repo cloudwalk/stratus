@@ -385,9 +385,7 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
-#[allow(unused_variables)]
 async fn stratus_health(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    #[cfg(feature = "dev")]
     ctx.server.update_health().await;
 
     if GlobalState::is_shutdown() {
