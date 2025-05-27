@@ -24,6 +24,8 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
+use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionError;
 use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
@@ -245,9 +247,16 @@ impl Importer {
                 for tx in block.0.transactions.into_transactions() {
                     tracing::info!(?tx, "executing tx as fake miner");
                     if let Err(e) = executor.execute_local_transaction(tx.try_into()?) {
-                        tracing::error!(reason = ?e, "transaction failed");
-                        GlobalState::shutdown_from("Importer (FakeMiner)", "Transaction Failed");
-                        return Err(anyhow!(e));
+                        match e {
+                            StratusError::Transaction(TransactionError::Nonce { transaction: _, account: _ }) => {
+                                tracing::warn!(reason = ?e, "transaction failed, was this node restarted?");
+                            }
+                            _ => {
+                                tracing::error!(reason = ?e, "transaction failed");
+                                GlobalState::shutdown_from("Importer (FakeMiner)", "Transaction Failed");
+                                return Err(anyhow!(e));
+                            }
+                        }
                     }
                 }
                 mine_and_commit(&miner);
@@ -577,6 +586,7 @@ impl Importer {
                     duration = %duration.to_string_ext(),
                     "processed replication log",
                 );
+                metrics::inc_import_online_mined_block(duration);
             }
         }
 
