@@ -380,12 +380,6 @@ impl RpcSubscriptionsHandles {
     pub async fn stopped(self) {
         let _ = join!(self.new_pending_txs, self.new_heads, self.logs);
     }
-
-    pub fn abort(&self) {
-        self.new_pending_txs.abort();
-        self.new_heads.abort();
-        self.logs.abort();
-    }
 }
 
 // -----------------------------------------------------------------------------
