@@ -11,7 +11,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 use tokio::runtime::Runtime;
-use tokio::sync::watch::Sender;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
@@ -129,9 +128,6 @@ static NODE_MODE: Mutex<NodeMode> = Mutex::new(NodeMode::Follower);
 
 static START_TIME: LazyLock<DateTime<Utc>> = LazyLock::new(Utc::now);
 
-/// Is stratus healthy?
-static HEALTH: LazyLock<Sender<bool>> = LazyLock::new(|| tokio::sync::watch::Sender::new(false));
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalState;
 
@@ -139,26 +135,6 @@ impl GlobalState {
     // -------------------------------------------------------------------------
     // Application Shutdown
     // -------------------------------------------------------------------------
-
-    pub fn set_health(new_health: bool) {
-        HEALTH.send_if_modified(|health| {
-            if *health != new_health {
-                tracing::info!(?new_health, "health status updated");
-                *health = new_health;
-                true
-            } else {
-                false
-            }
-        });
-    }
-
-    pub fn is_healthy() -> bool {
-        *HEALTH.borrow()
-    }
-
-    pub fn get_health_receiver() -> tokio::sync::watch::Receiver<bool> {
-        HEALTH.subscribe()
-    }
 
     /// Shutdown the application.
     ///
@@ -312,9 +288,9 @@ impl GlobalState {
             "is_leader": Self::get_node_mode() == NodeMode::Leader || Self::get_node_mode() == NodeMode::FakeLeader,
             "is_shutdown": Self::is_shutdown(),
             "is_importer_shutdown": Self::is_importer_shutdown(),
-            "is_interval_miner_running": ctx.server.miner.is_interval_miner_running(),
+            "is_interval_miner_running": ctx.miner.is_interval_miner_running(),
             "transactions_enabled": Self::is_transactions_enabled(),
-            "miner_paused": ctx.server.miner.is_paused(),
+            "miner_paused": ctx.miner.is_paused(),
             "unknown_client_enabled": Self::is_unknown_client_enabled(),
             "start_time": start_time.format("%d/%m/%Y %H:%M UTC").to_string(),
             "elapsed_time": elapsed_time,
