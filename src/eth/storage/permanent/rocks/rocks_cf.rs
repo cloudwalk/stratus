@@ -13,6 +13,7 @@ use anyhow::Result;
 use rocksdb::BoundColumnFamily;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
+use rocksdb::ReadOptions;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
 use serde::Deserialize;
@@ -202,7 +203,10 @@ where
 
     pub fn seek(&self, key: K) -> Result<Option<(K, V)>> {
         let cf = self.handle();
-        let mut iter = self.db.raw_iterator_cf(&cf);
+        let mut opts = ReadOptions::default();
+        opts.set_total_order_seek(false);
+
+        let mut iter = self.db.raw_iterator_cf_opt(&cf, opts);
 
         let serialized_key = self.serialize_key_with_context(&key)?;
         iter.seek(serialized_key);
