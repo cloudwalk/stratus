@@ -72,7 +72,6 @@ impl DbConfig {
                     rocksdb::DBCompressionType::None,
                     rocksdb::DBCompressionType::Lz4,
                 ]);
-                opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
                 opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
                 opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true); // mostly defaults except max_dict_bytes
                 opts.set_bottommost_zstd_max_train_bytes(1600 * 1024, true);
