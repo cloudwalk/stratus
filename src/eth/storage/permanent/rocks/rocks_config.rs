@@ -62,8 +62,8 @@ impl DbConfig {
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
 
                 opts.set_use_direct_reads(true);
-                opts.set_memtable_prefix_bloom_ratio(0.02);
-                opts.set_memtable_whole_key_filtering(true);
+                opts.set_memtable_prefix_bloom_ratio(0.02); // test removing this later
+                opts.set_memtable_whole_key_filtering(true); // test removing this later
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
             }
             DbConfig::HistoricalData | DbConfig::Default => {

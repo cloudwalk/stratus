@@ -200,6 +200,26 @@ where
         Ok(RocksCfIter::new(iter, &self.column_family))
     }
 
+    pub fn seek(&self, key: K) -> Result<Option<(K, V)>> {
+        let cf = self.handle();
+        let mut iter = self.db.raw_iterator_cf(&cf);
+
+        let serialized_key = self.serialize_key_with_context(&key)?;
+        iter.seek(serialized_key);
+
+        if !iter.valid() {
+            return Ok(None);
+        }
+        let Some(key) = iter.key() else { return Ok(None) };
+        let Some(value) = iter.value() else { return Ok(None) };
+
+        let deserialized_key = deserialize_with_context(key).with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family))?;
+        let deserialized_value =
+            deserialize_with_context(value).with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family))?;
+
+        Ok(Some((deserialized_key, deserialized_value)))
+    }
+
     pub fn first_value(&self) -> Result<Option<V>> {
         let cf = self.handle();
         let first_pair = self.db.iterator_cf(&cf, IteratorMode::Start).next().transpose()?;
