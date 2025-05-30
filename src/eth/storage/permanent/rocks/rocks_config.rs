@@ -11,6 +11,7 @@ pub enum CacheSetting {
 #[derive(Debug, Clone, Copy)]
 pub enum DbConfig {
     OptimizedPointLookUp,
+    HistoricalData,
     Default,
 }
 
@@ -61,14 +62,25 @@ impl DbConfig {
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
 
                 opts.set_use_direct_reads(true);
+                opts.set_memtable_prefix_bloom_ratio(0.02);
                 opts.set_memtable_whole_key_filtering(true);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
             }
-            DbConfig::Default => {
+            DbConfig::HistoricalData | DbConfig::Default => {
+                opts.set_compression_per_level(&[
+                    rocksdb::DBCompressionType::None,
+                    rocksdb::DBCompressionType::None,
+                    rocksdb::DBCompressionType::Lz4,
+                ]);
                 opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
                 opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
                 opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true); // mostly defaults except max_dict_bytes
                 opts.set_bottommost_zstd_max_train_bytes(1600 * 1024, true);
+                if matches!(self, DbConfig::HistoricalData) {
+                    opts.set_comparator("reverse", Box::new(|a, b| {
+                        a.cmp(b).reverse()
+                    }));
+                }
             }
         }
 

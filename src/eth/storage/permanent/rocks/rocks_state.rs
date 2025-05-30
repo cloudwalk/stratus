@@ -84,9 +84,9 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'stati
 
     hmap! {
         "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15), None),
-        "accounts_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(20)),
+        "accounts_history" => DbConfig::HistoricalData.to_options(CacheSetting::Disabled, Some(20)),
         "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45), Some(20)),
-        "account_slots_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(52)),
+        "account_slots_history" => DbConfig::HistoricalData.to_options(CacheSetting::Disabled, Some(52)),
         "transactions" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
         "blocks_by_number" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
         "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled, None)
@@ -323,16 +323,19 @@ impl RocksStorageState {
                     value: account_slot_value.into_inner().into(),
                 }))
             }
-            PointInTime::MinedPast(number) => {
-                let iterator_start = (address.into(), (index).into(), number.into());
+            PointInTime::MinedPast(block_number) => {
+                tracing::debug!(?address, ?index, ?block_number, "searching slot");
 
-                if let Some(((rocks_address, rocks_index, _), value)) = self
+                let iterator_start = (address.into(), (index).into(), block_number.into());
+
+                if let Some(((rocks_address, rocks_index, block), value)) = self
                     .account_slots_history
-                    .iter_from(iterator_start, rocksdb::Direction::Reverse)?
+                    .iter_from(iterator_start, rocksdb::Direction::Forward)?
                     .next()
                     .transpose()?
                 {
                     if rocks_index == (index).into() && rocks_address == address.into() {
+                        tracing::debug!(?block, ?rocks_index, ?rocks_address, "slot found in rocksdb storage");
                         return Ok(Some(Slot {
                             index: rocks_index.into(),
                             value: value.into_inner().into(),
@@ -361,11 +364,14 @@ impl RocksStorageState {
                 Ok(Some(account))
             }
             PointInTime::MinedPast(block_number) => {
+                tracing::debug!(?address, ?block_number, "searching account");
+
                 let iterator_start = (address.into(), block_number.into());
 
-                if let Some(next) = self.accounts_history.iter_from(iterator_start, rocksdb::Direction::Reverse)?.next() {
-                    let ((addr, _), account_info) = next?;
+                if let Some(next) = self.accounts_history.iter_from(iterator_start, rocksdb::Direction::Forward)?.next() {
+                    let ((addr, block), account_info) = next?;
                     if addr == address.into() {
+                        tracing::debug!(?block, ?address, "account found in rocksdb storage");
                         return Ok(Some(account_info.to_account(address)));
                     }
                 }
@@ -388,7 +394,6 @@ impl RocksStorageState {
                     Ok(None)
                 },
         };
-
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
