@@ -44,7 +44,7 @@ impl DbConfig {
         if let Some(prefix_len) = prefix_len {
             let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
             block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
-            opts.set_memtable_prefix_bloom_ratio(0.25); // try increasing the write buffer size maybe or this
+            opts.set_memtable_prefix_bloom_ratio(0.15); // try increasing the write buffer size maybe or this
             opts.set_prefix_extractor(transform);
         }
 
@@ -75,9 +75,6 @@ impl DbConfig {
                 opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true); // mostly defaults except max_dict_bytes
                 opts.set_bottommost_zstd_max_train_bytes(1600 * 1024, true);
                 if matches!(self, DbConfig::HistoricalData) {
-                    opts.set_memtable_whole_key_filtering(false);
-                    block_based_options.set_whole_key_filtering(false);
-
                     opts.set_comparator("reverse", Box::new(|a, b| {
                         a.cmp(b).reverse()
                     }));

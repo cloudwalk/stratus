@@ -84,9 +84,9 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> HashMap<&'stati
 
     hmap! {
         "accounts" => DbConfig::OptimizedPointLookUp.to_options(CacheSetting::Disabled, None),
-        "accounts_history" => DbConfig::HistoricalData.to_options(CacheSetting::Disabled, Some(20)),
+        "accounts_history" => DbConfig::HistoricalData.to_options(CacheSetting::Disabled, None),
         "account_slots" => DbConfig::OptimizedPointLookUp.to_options(CacheSetting::Disabled, Some(20)),
-        "account_slots_history" => DbConfig::HistoricalData.to_options(CacheSetting::Disabled, Some(52)),
+        "account_slots_history" => DbConfig::HistoricalData.to_options(CacheSetting::Disabled, None),
         "transactions" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
         "blocks_by_number" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
         "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled, None)
