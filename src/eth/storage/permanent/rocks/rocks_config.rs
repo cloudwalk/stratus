@@ -2,6 +2,8 @@ use rocksdb::BlockBasedOptions;
 use rocksdb::Cache;
 use rocksdb::Options;
 
+use crate::utils::GIGABYTE;
+
 pub enum CacheSetting {
     /// Enabled cache with the given size in bytes
     Enabled(usize),
@@ -25,6 +27,7 @@ impl DbConfig {
     pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>) -> Options {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
+        opts.optimize_level_style_compaction(GIGABYTE * 2);
 
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
@@ -44,7 +47,7 @@ impl DbConfig {
         if let Some(prefix_len) = prefix_len {
             let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
             block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
-            opts.set_memtable_prefix_bloom_ratio(0.15); // try increasing the write buffer size maybe or this
+            opts.set_memtable_prefix_bloom_ratio(0.15);
             opts.set_prefix_extractor(transform);
         }
 
@@ -62,6 +65,7 @@ impl DbConfig {
                 block_based_options.set_data_block_hash_ratio(0.3);
 
                 opts.set_use_direct_reads(true);
+                opts.set_memtable_prefix_bloom_ratio(0.02);
                 opts.set_memtable_whole_key_filtering(true);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
             }
