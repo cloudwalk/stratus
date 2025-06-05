@@ -24,7 +24,7 @@ impl Default for DbConfig {
 }
 
 impl DbConfig {
-    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>) -> Options {
+    pub fn to_options(self, cache_setting: CacheSetting) -> Options {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
         opts.optimize_level_style_compaction(GIGABYTE * 2);
@@ -42,13 +42,6 @@ impl DbConfig {
         {
             opts.enable_statistics();
             opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
-        }
-
-        if let Some(prefix_len) = prefix_len {
-            let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
-            block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
-            opts.set_memtable_prefix_bloom_ratio(0.15);
-            opts.set_prefix_extractor(transform);
         }
 
         if let CacheSetting::Enabled(cache_size) = cache_setting {
