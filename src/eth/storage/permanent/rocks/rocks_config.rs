@@ -27,7 +27,6 @@ impl DbConfig {
     pub fn to_options(self, cache_setting: CacheSetting) -> Options {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
-        opts.optimize_level_style_compaction(GIGABYTE * 2);
 
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
