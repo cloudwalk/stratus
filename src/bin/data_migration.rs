@@ -1,11 +1,24 @@
-use anyhow::{bail, Context, Result};
-use clap::Parser;
-use indicatif::{ProgressBar, ProgressStyle};
-use rocksdb::{BlockBasedOptions, Cache, DataBlockIndexType, IteratorMode, Options, ReadOptions, SliceTransform, WriteBatch, DB};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
+
+use anyhow::bail;
+use anyhow::Context;
+use anyhow::Result;
+use clap::Parser;
+use indicatif::ProgressBar;
+use indicatif::ProgressStyle;
+use rocksdb::BlockBasedOptions;
+use rocksdb::Cache;
+use rocksdb::DataBlockIndexType;
+use rocksdb::IteratorMode;
+use rocksdb::Options;
+use rocksdb::ReadOptions;
+use rocksdb::SliceTransform;
+use rocksdb::WriteBatch;
+use rocksdb::DB;
 use stratus::eth::storage::permanent::RocksStorageState;
 
 const ESTIMATE_NUM_KEYS: &str = "rocksdb.estimate-num-keys";
@@ -138,7 +151,6 @@ fn open_db(path: &str, cf_options_map: &BTreeMap<&'static str, Options>) -> Resu
     Ok(Arc::new(db))
 }
 
-
 /// Count the number of entries in a column family using RocksDB's estimate
 fn count_cf_entries(db: &Arc<DB>, cf_name: &str) -> Result<usize> {
     let cf = db.cf_handle(cf_name).context(format!("Failed to get column family handle for {}", cf_name))?;
@@ -226,8 +238,7 @@ fn main() -> Result<()> {
 
     // Create destination directory if it doesn't exist
     if !Path::new(&args.destination).exists() {
-        std::fs::create_dir_all(&args.destination)
-            .context(format!("Failed to create destination directory: {}", args.destination))?;
+        std::fs::create_dir_all(&args.destination).context(format!("Failed to create destination directory: {}", args.destination))?;
         tracing::info!("Created destination directory: {}", args.destination);
     }
 

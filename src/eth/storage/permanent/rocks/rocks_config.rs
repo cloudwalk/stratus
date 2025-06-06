@@ -2,8 +2,6 @@ use rocksdb::BlockBasedOptions;
 use rocksdb::Cache;
 use rocksdb::Options;
 
-use crate::utils::GIGABYTE;
-
 pub enum CacheSetting {
     /// Enabled cache with the given size in bytes
     Enabled(usize),
@@ -74,9 +72,7 @@ impl DbConfig {
                     opts.set_memtable_whole_key_filtering(false);
                     block_based_options.set_whole_key_filtering(false);
 
-                    opts.set_comparator("reverse", Box::new(|a, b| {
-                        a.cmp(b).reverse()
-                    }));
+                    opts.set_comparator("reverse", Box::new(|a, b| a.cmp(b).reverse()));
                 }
             }
         }
