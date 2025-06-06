@@ -52,7 +52,7 @@ pub fn load_dotenv_file() {
         }
     };
 
-    println!("reading env file | filename={}", env_filename);
+    println!("reading env file | filename={env_filename}");
 
     if let Err(e) = dotenvy::from_filename(env_filename) {
         println!("env file error: {e}");
@@ -152,7 +152,7 @@ impl CommonConfig {
                     if cfg!(feature = "flamegraph") {
                         return "tokio-async".to_string();
                     } else {
-                        return format!("tokio-async-{}", async_id);
+                        return format!("tokio-async-{async_id}");
                     }
                 }
 
@@ -161,7 +161,7 @@ impl CommonConfig {
                 if cfg!(feature = "flamegraph") {
                     "tokio-blocking".to_string()
                 } else {
-                    format!("tokio-blocking-{}", blocking_id)
+                    format!("tokio-blocking-{blocking_id}")
                 }
             })
             .build();
@@ -169,7 +169,7 @@ impl CommonConfig {
         match result {
             Ok(runtime) => Ok(runtime),
             Err(e) => {
-                println!("failed to create tokio runtime | reason={:?}", e);
+                println!("failed to create tokio runtime | reason={e:?}");
                 Err(e.into())
             }
         }

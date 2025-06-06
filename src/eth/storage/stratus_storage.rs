@@ -1,3 +1,4 @@
+use rocksdb::WriteBatch;
 use tracing::Span;
 
 use super::InMemoryTemporaryStorage;
@@ -35,6 +36,8 @@ use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
+use crate::GlobalState;
+use crate::NodeMode;
 
 mod label {
     pub(super) const TEMP: &str = "temporary";
@@ -72,16 +75,30 @@ impl StratusStorage {
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            if !this.has_genesis()? {
-                this.reset_to_genesis()?;
+            if GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled() {
+                if !this.has_genesis()? {
+                    this.reset_to_genesis()?;
+                }
             }
         }
 
         Ok(this)
     }
 
+    /// Returns whether RocksDB replication is enabled
+    pub fn rocksdb_replication_enabled(&self) -> bool {
+        self.perm.rocksdb_replication_enabled()
+    }
+
+    /// Returns whether the genesis block exists
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
         self.perm.has_genesis()
+    }
+
+    /// Clears the storage cache.
+    pub fn clear_cache(&self) {
+        tracing::info!("clearing storage cache");
+        self.cache.clear();
     }
 
     #[cfg(test)]
@@ -96,7 +113,7 @@ impl StratusStorage {
         let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
         let rocks_path_prefix = rocks_dir.path().to_str().unwrap().to_string();
 
-        let perm = RocksPermanentStorage::new(Some(rocks_path_prefix.clone()), std::time::Duration::from_secs(240), None, true, None)
+        let perm = RocksPermanentStorage::new(Some(rocks_path_prefix.clone()), std::time::Duration::from_secs(240), None, true, false, None)
             .expect("Failed to create RocksPermanentStorage for tests");
 
         let cache = CacheConfig {
@@ -124,7 +141,18 @@ impl StratusStorage {
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
-        Ok(self.read_pending_block_header().number)
+
+        let number = self.read_pending_block_header().number;
+
+        #[cfg(feature = "dev")]
+        if number == BlockNumber::ONE && self.rocksdb_replication_enabled() {
+            tracing::info!("starting importer from genesis block");
+            self.set_mined_block_number(BlockNumber::ZERO)?;
+            self.temp.set_pending_block_header(BlockNumber::ZERO)?;
+            return Ok(BlockNumber::ZERO);
+        }
+
+        Ok(number)
     }
 
     pub fn read_pending_block_header(&self) -> PendingBlockHeader {
@@ -161,6 +189,38 @@ impl StratusStorage {
                 tracing::error!(reason = ?e, "failed to set miner block number");
             }
         })
+    }
+
+    pub fn read_replication_log(&self, block_number: BlockNumber) -> Result<Option<WriteBatch>, StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_replication_log", %block_number).entered();
+        tracing::debug!(storage = %label::PERM, %block_number, "reading replication log");
+
+        timed(|| self.perm.read_replication_log(block_number)).with(|m| {
+            metrics::inc_storage_read_replication_log(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read replication log");
+            }
+        })
+    }
+
+    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> Result<(), StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::apply_replication_log", %block_number).entered();
+
+        tracing::debug!(storage = %label::TEMP, "finishing pending block");
+        self.finish_pending_block()?;
+
+        tracing::debug!(storage = %label::PERM, %block_number, "applying replication log");
+        timed(|| self.perm.apply_replication_log(block_number, replication_log)).with(|m| {
+            metrics::inc_storage_apply_replication_log(m.elapsed, label::PERM, m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, "replication", "replication", m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to apply replication log");
+            }
+        })?;
+
+        Ok(())
     }
 
     // -------------------------------------------------------------------------
@@ -353,6 +413,21 @@ impl StratusStorage {
         }
 
         result
+    }
+
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> Result<(), StorageError> {
+        let block_number = block.number();
+
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::save_genesis_block", block_number = %block_number).entered();
+        tracing::debug!(storage = %label::PERM, "saving genesis block");
+
+        timed(|| self.perm.save_genesis_block(block, accounts)).with(|m| {
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, "genesis", "genesis", m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to save genesis block");
+            }
+        })
     }
 
     pub fn save_block(&self, block: Block) -> Result<(), StorageError> {
@@ -662,7 +737,15 @@ impl StratusStorage {
     /// Translates a block filter to a specific storage point-in-time indicator.
     pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
         match block_filter {
-            BlockFilter::Pending => Ok(PointInTime::Pending),
+            BlockFilter::Pending => {
+                // For follower nodes with RocksDB replication, redirect pending queries to mined state
+                // since transactions are only executed on the leader node
+                if GlobalState::get_node_mode() == NodeMode::Follower && self.rocksdb_replication_enabled() {
+                    Ok(PointInTime::Mined)
+                } else {
+                    Ok(PointInTime::Pending)
+                }
+            }
             BlockFilter::Latest => Ok(PointInTime::Mined),
             BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
             BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),

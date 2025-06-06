@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::ops::Deref;
 
 use revm::primitives::Bytes as RevmBytes;
+use rocksdb::WriteBatch;
 
 use crate::eth::primitives::Bytes;
 
@@ -60,5 +61,17 @@ impl From<RevmBytes> for BytesRocksdb {
 impl From<BytesRocksdb> for RevmBytes {
     fn from(value: BytesRocksdb) -> Self {
         value.to_vec().into()
+    }
+}
+
+impl From<WriteBatch> for BytesRocksdb {
+    fn from(batch: WriteBatch) -> Self {
+        Self(batch.data().to_vec())
+    }
+}
+
+impl BytesRocksdb {
+    pub fn to_write_batch(&self) -> WriteBatch {
+        WriteBatch::from_data(&self.0)
     }
 }

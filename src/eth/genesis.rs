@@ -12,6 +12,7 @@ use ethereum_types::U256 as EthereumU256;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::alias::RevmBytecode;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
@@ -147,7 +148,7 @@ impl GenesisConfig {
                 let code_str = code.trim_start_matches("0x");
                 if let Ok(code_bytes) = hex::decode(code_str) {
                     if !code_bytes.is_empty() {
-                        account.bytecode = Some(revm::primitives::Bytecode::new_raw(code_bytes.into()));
+                        account.bytecode = Some(RevmBytecode::new_raw(code_bytes.into()));
                     }
                 }
             }

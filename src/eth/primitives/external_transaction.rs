@@ -1,8 +1,9 @@
+use alloy_consensus::transaction::Recovered;
 use alloy_consensus::Signed;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_primitives::Bytes;
-use alloy_primitives::PrimitiveSignature;
+use alloy_primitives::Signature;
 use alloy_primitives::TxKind;
 use anyhow::Context;
 use anyhow::Result;
@@ -88,6 +89,8 @@ impl ExternalTransaction {
 impl Dummy<Faker> for ExternalTransaction {
     fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let from: Address = faker.fake_with_rng(rng);
+        let to: Address = faker.fake_with_rng(rng);
+
         let block_hash: Hash = faker.fake_with_rng(rng);
 
         let gas_price: Wei = Wei::from(rng.next_u64());
@@ -106,17 +109,16 @@ impl Dummy<Faker> for ExternalTransaction {
         let r = U256::from(rng.next_u64());
         let s = U256::from(rng.next_u64());
         let v = rng.next_u64() % 2 == 0;
-        let signature = PrimitiveSignature::new(SignatureComponent(r).into(), SignatureComponent(s).into(), v);
+        let signature = Signature::new(SignatureComponent(r).into(), SignatureComponent(s).into(), v);
 
         let hash: Hash = faker.fake_with_rng(rng);
         let inner_tx = TxEnvelope::Legacy(Signed::new_unchecked(tx, signature, hash.into()));
 
         let inner = alloy_rpc_types_eth::Transaction {
-            inner: inner_tx,
+            inner: Recovered::new_unchecked(inner_tx, to.into()),
             block_hash: Some(block_hash.into()),
             block_number: Some(rng.next_u64()),
             transaction_index: Some(rng.next_u64()),
-            from: from.into(),
             effective_gas_price: Some(gas_price.as_u128()),
         };
 
@@ -163,7 +165,7 @@ mod tests {
 
         let tx: ExternalTransaction = serde_json::from_value(json).unwrap();
 
-        assert!(matches!(tx.0.inner, TxEnvelope::Legacy(_)));
+        assert!(matches!(tx.0.inner.inner(), TxEnvelope::Legacy(_)));
     }
 
     #[test]
@@ -187,7 +189,7 @@ mod tests {
 
         let tx: ExternalTransaction = serde_json::from_value(json).unwrap();
 
-        assert!(matches!(tx.0.inner, TxEnvelope::Eip2930(_)));
+        assert!(matches!(tx.0.inner.inner(), TxEnvelope::Eip2930(_)));
     }
 
     #[test]
@@ -210,7 +212,7 @@ mod tests {
 
         let tx: ExternalTransaction = serde_json::from_value(json).unwrap();
 
-        assert!(matches!(tx.0.inner, TxEnvelope::Eip1559(_)));
+        assert!(matches!(tx.0.inner.inner(), TxEnvelope::Eip1559(_)));
     }
 
     #[test]
@@ -233,7 +235,7 @@ mod tests {
 
         let tx: ExternalTransaction = serde_json::from_value(json).unwrap();
 
-        assert!(matches!(tx.0.inner, TxEnvelope::Eip1559(_)));
+        assert!(matches!(tx.0.inner.inner(), TxEnvelope::Eip1559(_)));
 
         // Test with v = 0x1 as well
         let json = json!({
@@ -254,6 +256,6 @@ mod tests {
 
         let tx: ExternalTransaction = serde_json::from_value(json).unwrap();
 
-        assert!(matches!(tx.0.inner, TxEnvelope::Eip1559(_)));
+        assert!(matches!(tx.0.inner.inner(), TxEnvelope::Eip1559(_)));
     }
 }

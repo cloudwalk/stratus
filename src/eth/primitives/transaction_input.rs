@@ -1,3 +1,4 @@
+use alloy_consensus::transaction::Recovered;
 use alloy_consensus::Signed;
 use alloy_consensus::Transaction;
 use alloy_consensus::TxEip1559;
@@ -8,7 +9,7 @@ use alloy_consensus::TxEip7702;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_eips::eip2718::Decodable2718;
-use alloy_primitives::PrimitiveSignature;
+use alloy_primitives::Signature;
 use alloy_primitives::TxKind;
 use alloy_rpc_types_eth::AccessList;
 use anyhow::anyhow;
@@ -85,11 +86,10 @@ impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         fn convert_tx(envelope: TxEnvelope) -> Result<TransactionInput, rlp::DecoderError> {
             TransactionInput::try_from(alloy_rpc_types_eth::Transaction {
-                inner: envelope,
+                inner: envelope.try_into_recovered().map_err(|_| rlp::DecoderError::Custom("signature error"))?,
                 block_hash: None,
                 block_number: None,
                 transaction_index: None,
-                from: Address::default().into(),
                 effective_gas_price: None,
             })
             .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))
@@ -125,7 +125,7 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value.0, false)
+        try_from_alloy_transaction(value.0)
     }
 }
 
@@ -133,21 +133,18 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value, true)
+        try_from_alloy_transaction(value)
     }
 }
 
-fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_signer: bool) -> anyhow::Result<TransactionInput> {
+fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow::Result<TransactionInput> {
     // extract signer
-    let signer: Address = match compute_signer {
-        true => match value.inner.recover_signer() {
-            Ok(signer) => Address::from(signer),
-            Err(e) => {
-                tracing::warn!(reason = ?e, "failed to recover transaction signer");
-                return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
-            }
-        },
-        false => Address::from(value.from),
+    let signer: Address = match value.inner.recover_signer() {
+        Ok(signer) => Address::from(signer),
+        Err(e) => {
+            tracing::warn!(reason = ?e, "failed to recover transaction signer");
+            return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
+        }
     };
 
     // Get signature components from the envelope
@@ -162,7 +159,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
         hash: Hash::from(*value.inner.tx_hash()),
         nonce: Nonce::from(value.inner.nonce()),
         signer,
-        from: Address::from(value.from),
+        from: signer,
         to: match value.inner.kind() {
             TxKind::Call(addr) => Some(Address::from(addr)),
             TxKind::Create => None,
@@ -183,7 +180,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, compute_s
 
 impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
-        let signature = PrimitiveSignature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_u64() == 1);
+        let signature = Signature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_u64() == 1);
 
         let tx_type = value.tx_type.map(|t| t.as_u64()).unwrap_or(0);
 
@@ -275,11 +272,10 @@ impl From<TransactionInput> for AlloyTransaction {
         };
 
         Self {
-            inner,
+            inner: Recovered::new_unchecked(inner, value.signer.into()),
             block_hash: None,
             block_number: None,
             transaction_index: None,
-            from: value.signer.into(),
             effective_gas_price: Some(value.gas_price.into()),
         }
     }
