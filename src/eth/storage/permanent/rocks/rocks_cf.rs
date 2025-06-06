@@ -13,6 +13,7 @@ use anyhow::Result;
 use rocksdb::BoundColumnFamily;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
+use rocksdb::ReadOptions;
 use rocksdb::WriteBatch;
 use rocksdb::DB;
 use serde::Deserialize;
@@ -198,6 +199,29 @@ where
 
         let iter = self.db.iterator_cf(&cf, IteratorMode::From(&serialized_key, direction));
         Ok(RocksCfIter::new(iter, &self.column_family))
+    }
+
+    pub fn seek(&self, key: K) -> Result<Option<(K, V)>> {
+        let cf = self.handle();
+        let mut opts = ReadOptions::default();
+        opts.set_total_order_seek(false);
+
+        let mut iter = self.db.raw_iterator_cf_opt(&cf, opts);
+
+        let serialized_key = self.serialize_key_with_context(&key)?;
+        iter.seek(serialized_key);
+
+        if !iter.valid() {
+            return Ok(None);
+        }
+        let Some(key) = iter.key() else { return Ok(None) };
+        let Some(value) = iter.value() else { return Ok(None) };
+
+        let deserialized_key = deserialize_with_context(key).with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family))?;
+        let deserialized_value =
+            deserialize_with_context(value).with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family))?;
+
+        Ok(Some((deserialized_key, deserialized_value)))
     }
 
     pub fn first_value(&self) -> Result<Option<V>> {

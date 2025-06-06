@@ -148,7 +148,7 @@ importer-offline-test *args="":
 # Test: run rust tests
 test:
     mkdir -p target/llvm-cov/codecov
-    cargo llvm-cov --lcov --output-path target/llvm-cov/codecov/rust_tests.info
+    cargo llvm-cov --lcov --output-path target/llvm-cov/codecov/rust_tests.info --ignore-filename-regex data_migration.rs
 
 # Test: Execute Rust doc tests
 test-doc name="":
@@ -169,8 +169,8 @@ run-test recipe="" *args="":
     sleep 10
     echo "Generating reports"
     mkdir -p target/llvm-cov/codecov
-    cargo llvm-cov report --html
-    cargo llvm-cov report --lcov --output-path target/llvm-cov/codecov/{{recipe}}.info
+    cargo llvm-cov report --html --ignore-filename-regex data_migration.rs
+    cargo llvm-cov report --lcov --output-path target/llvm-cov/codecov/{{recipe}}.info --ignore-filename-regex data_migration.rs
     exit $result_code
 
 # ------------------------------------------------------------------------------

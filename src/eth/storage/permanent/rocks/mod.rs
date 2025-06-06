@@ -16,7 +16,7 @@ mod cf_versions;
 mod rocks_cf;
 
 /// Settings and tweaks for the database and column families.
-mod rocks_config;
+pub mod rocks_config;
 
 /// Functionalities related to the whole database.
 pub mod rocks_db;
