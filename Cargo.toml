@@ -198,6 +198,10 @@ path = "src/bin/importer_offline.rs"
 name = "historic_events_processor"
 path = "src/bin/historic_events_processor.rs"
 
+[[bin]]
+name = "data_migration"
+path = "src/bin/data_migration.rs"
+
 # ------------------------------------------------------------------------------
 # Features
 # ------------------------------------------------------------------------------
