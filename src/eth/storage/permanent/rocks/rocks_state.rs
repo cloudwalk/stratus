@@ -86,16 +86,15 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
         CacheSetting::Enabled(size)
     };
 
-    // BTreeMap is used to ensure the order of the column families creation is deterministic
     btmap! {
-        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(15), None),
-        "accounts_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(20)),
-        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(45), Some(20)),
-        "account_slots_history" => DbConfig::Default.to_options(CacheSetting::Disabled, Some(52)),
-        "transactions" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "blocks_by_number" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "blocks_by_hash" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
-        "replication_logs" => DbConfig::Default.to_options(CacheSetting::Disabled, None),
+        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(10)),
+        "accounts_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
+        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(30)),
+        "account_slots_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
+        "transactions" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "blocks_by_number" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "blocks_by_hash" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "replication_logs" => DbConfig::Default.to_options(CacheSetting::Disabled),
     }
 }
 
@@ -339,16 +338,14 @@ impl RocksStorageState {
                     value: account_slot_value.into_inner().into(),
                 }))
             }
-            PointInTime::MinedPast(number) => {
-                let iterator_start = (address.into(), (index).into(), number.into());
+            PointInTime::MinedPast(block_number) => {
+                tracing::debug!(?address, ?index, ?block_number, "searching slot");
 
-                if let Some(((rocks_address, rocks_index, _), value)) = self
-                    .account_slots_history
-                    .iter_from(iterator_start, rocksdb::Direction::Reverse)?
-                    .next()
-                    .transpose()?
-                {
-                    if rocks_index == (index).into() && rocks_address == address.into() {
+                let key = (address.into(), (index).into(), block_number.into());
+
+                if let Some(((rocks_address, rocks_index, block), value)) = self.account_slots_history.seek(key)? {
+                    if rocks_index == index.into() && rocks_address == address.into() {
+                        tracing::debug!(?block, ?rocks_index, ?rocks_address, "slot found in rocksdb storage");
                         return Ok(Some(Slot {
                             index: rocks_index.into(),
                             value: value.into_inner().into(),
@@ -377,11 +374,13 @@ impl RocksStorageState {
                 Ok(Some(account))
             }
             PointInTime::MinedPast(block_number) => {
-                let iterator_start = (address.into(), block_number.into());
+                tracing::debug!(?address, ?block_number, "searching account");
 
-                if let Some(next) = self.accounts_history.iter_from(iterator_start, rocksdb::Direction::Reverse)?.next() {
-                    let ((addr, _), account_info) = next?;
+                let key = (address.into(), block_number.into());
+
+                if let Some(((addr, block), account_info)) = self.accounts_history.seek(key)? {
                     if addr == address.into() {
+                        tracing::debug!(?block, ?address, "account found in rocksdb storage");
                         return Ok(Some(account_info.to_account(address)));
                     }
                 }
@@ -404,7 +403,6 @@ impl RocksStorageState {
                     Ok(None)
                 },
         };
-
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
