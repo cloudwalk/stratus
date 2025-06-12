@@ -16,6 +16,7 @@ compile_contract() {
     version=$3
 
     log "Compiling: $contract ($repo)"
+    asdf plugin add solidity
     asdf install solidity $version
     asdf set solidity $version
     # compile
