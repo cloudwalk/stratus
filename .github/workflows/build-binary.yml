@@ -1,7 +1,5 @@
 name: Build Binary
 
-name: Update Contract Signatures
-
 permissions:
   contents: write
   pull-requests: write
