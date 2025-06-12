@@ -21,21 +21,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Rust
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.86
-
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        id: cache-cargo
-        with:
-          prefix-key: ${{ runner.os }}-v3-cargo
-          shared-key: stable-release
-          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
-          cache-provider: "github"
-          cache-directories: "~/.cargo/bin/"
-
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+
+      - name: Install asdf & tools
+        uses: asdf-vm/actions/install@v4
 
       - name: Set up Just
         uses: extractions/setup-just@v2
@@ -59,40 +49,22 @@ jobs:
         run: |
           git diff --exit-code --quiet static/contracts-signatures || echo "changes=true" >> $GITHUB_OUTPUT
 
-      - name: Configure Git
-        if: steps.check_changes.outputs.changes == 'true'
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Create branch with changes
-        if: steps.check_changes.outputs.changes == 'true'
-        run: |
-          current_date=$(date +%Y-%m-%d)
-          branch_name="update-signatures-${current_date}"
-          git checkout -b $branch_name
-          git add static/contracts-signatures
-          git commit -m "Update contract signatures - ${current_date}"
-          git push origin $branch_name
-          echo "branch_name=${branch_name}" >> $GITHUB_ENV
-
       - name: Create Pull Request
         if: steps.check_changes.outputs.changes == 'true'
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "Update contract signatures"
-          title: "Auto: Update contract signatures"
+          title: "auto: update contract signatures"
           body: |
             This PR updates the contract signatures by running:
             - `just contracts-clone`
             - `just contracts-compile`
-            
+
             The updated signature files are located in `static/contracts-signatures`.
-            
+
             This is an automated PR created by the daily signature update workflow.
-          branch: ${{ env.branch_name }}
+          branch: update-signatures
           base: main
           labels: |
             automated
-            dependencies
