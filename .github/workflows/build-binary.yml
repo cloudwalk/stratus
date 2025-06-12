@@ -1,21 +1,40 @@
 name: Build Binary
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  actions: write
 
 on:
-  schedule:
-    # Run once a day at 00:00 UTC
-    - cron: '0 0 * * *'
-  # Allow manual triggering
   workflow_dispatch:
+    inputs:
+      features:
+        description: "List of features to enable"
+        required: false
+        default: ""
+  push:
+    branches:
+      - "main"
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "tests/fixtures/**"
+      - "static/**"
+      - ".sqlx/**"
+
+env:
+  RETENTION_DAYS: 90
 
 jobs:
-  update_signatures:
-    name: Update Contract Signatures
+  build_binaries:
+    name: Build and upload
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 45
+
+    concurrency:
+      group: ${{ github.workflow }}-{{ github.run_id }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout code
@@ -24,50 +43,52 @@ jobs:
       - name: Set up Rust
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.86
 
-      - name: Install system dependencies
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: ${{ runner.os }}-v3-cargo
+          shared-key: artifact
+          cache-provider: "github"
+          save-if: ${{ github.ref_name == 'main' && github.event_name == 'push' }}
+
+      - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      - name: Install asdf & tools
-        uses: asdf-vm/actions/install@v4
-
-      - name: Set up Just
-        uses: extractions/setup-just@v2
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .tool-versions
-
-      - name: Install npm
-        run: npm install -g npm@10.8.2
-
-      - name: Clone contracts
-        run: just contracts-clone
-
-      - name: Compile contracts
-        run: just contracts-compile
-
-      - name: Check for changes
-        id: check_changes
+      - name: Build binaries
         run: |
-          git diff --exit-code --quiet static/contracts-signatures || echo "changes=true" >> $GITHUB_OUTPUT
+          cargo build --release \
+            --bin stratus \
+            --features "$FEATURES"
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 1
+          TRACING_LOG_FORMAT: json
+          NO_COLOR: 1
+          FEATURES: "${{ github.event.inputs.features || 'default' }}"
 
-      - name: Create Pull Request
-        if: steps.check_changes.outputs.changes == 'true'
-        uses: peter-evans/create-pull-request@v5
+      - name: Generate checksums
+        run: |
+          cd target/release
+          sha256sum stratus > ../../checksums.txt
+
+      - name: Upload stratus
+        uses: actions/upload-artifact@v4
+        id: upload-str
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update contract signatures"
-          title: "auto: update contract signatures"
-          body: |
-            This PR updates the contract signatures by running:
-            - `just contracts-clone`
-            - `just contracts-compile`
+          name: stratus-${{ github.sha }}
+          path: target/release/stratus
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
 
-            The updated signature files are located in `static/contracts-signatures`.
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ github.sha }}
+          path: checksums.txt
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
 
-            This is an automated PR created by the daily signature update workflow.
-          branch: update-signatures
-          base: main
-          labels: |
-            automated
+      - name: Print outputs
+        run: |
+          echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
+          echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
