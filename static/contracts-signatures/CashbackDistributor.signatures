@@ -1,4 +1,5 @@
 Function signatures:
+4e1e9a4e: $__VERSION()
 fc19dddc: BLOCKLISTER_ROLE()
 11bd90af: CASHBACK_RESET_PERIOD()
 a217fddf: DEFAULT_ADMIN_ROLE()
@@ -28,6 +29,7 @@ ea8b6b19: increaseCashback(uint256,uint256)
 d69c3d30: nextNonce()
 8456cb59: pause()
 5c975abb: paused()
+0ebd6bfa: previewCashbackCap(address,address)
 36568abe: renounceRole(bytes32,address)
 b2118a8d: rescueERC20(address,address,uint256)
 e99d4005: revokeCashback(uint256,uint256)
