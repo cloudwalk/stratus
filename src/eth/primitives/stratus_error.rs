@@ -258,7 +258,7 @@ impl ErrorCode for StratusError {
     }
 
     fn str_repr_from_err_code(code: i32) -> Option<&'static str> {
-        let major = code % 1000;
+        let major = code / 1000;
         match major {
             1 => RpcError::str_repr_from_err_code(code),
             2 => TransactionError::str_repr_from_err_code(code),
@@ -353,5 +353,58 @@ impl From<StratusError> for ErrorObjectOwned {
         };
 
         Self::owned(value.error_code(), value.rpc_message(), Some(data))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_str_repr_from_err_code() {
+        // RPC error
+        assert_eq!(
+            StratusError::str_repr_from_err_code(1001),
+            Some("BlockFilterInvalid")
+        );
+
+        // Transaction error
+        assert_eq!(
+            StratusError::str_repr_from_err_code(2001),
+            Some("AccountNotContract")
+        );
+
+        // Storage error
+        assert_eq!(
+            StratusError::str_repr_from_err_code(3001),
+            Some("BlockConflict")
+        );
+
+        // Importer error
+        assert_eq!(
+            StratusError::str_repr_from_err_code(4001),
+            Some("AlreadyRunning")
+        );
+
+        // Consensus error
+        assert_eq!(
+            StratusError::str_repr_from_err_code(5001),
+            Some("Unavailable")
+        );
+
+        // Unexpected error
+        assert_eq!(
+            StratusError::str_repr_from_err_code(6001),
+            Some("ChannelClosed")
+        );
+
+        // State error
+        assert_eq!(
+            StratusError::str_repr_from_err_code(7003),
+            Some("StratusNotFollower")
+        );
+
+        // Invalid error code
+        assert_eq!(StratusError::str_repr_from_err_code(9999), None);
     }
 }
