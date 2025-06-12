@@ -363,46 +363,25 @@ mod tests {
     #[test]
     fn test_str_repr_from_err_code() {
         // RPC error
-        assert_eq!(
-            StratusError::str_repr_from_err_code(1001),
-            Some("BlockFilterInvalid")
-        );
+        assert_eq!(StratusError::str_repr_from_err_code(1001), Some("BlockFilterInvalid"));
 
         // Transaction error
-        assert_eq!(
-            StratusError::str_repr_from_err_code(2001),
-            Some("AccountNotContract")
-        );
+        assert_eq!(StratusError::str_repr_from_err_code(2001), Some("AccountNotContract"));
 
         // Storage error
-        assert_eq!(
-            StratusError::str_repr_from_err_code(3001),
-            Some("BlockConflict")
-        );
+        assert_eq!(StratusError::str_repr_from_err_code(3001), Some("BlockConflict"));
 
         // Importer error
-        assert_eq!(
-            StratusError::str_repr_from_err_code(4001),
-            Some("AlreadyRunning")
-        );
+        assert_eq!(StratusError::str_repr_from_err_code(4001), Some("AlreadyRunning"));
 
         // Consensus error
-        assert_eq!(
-            StratusError::str_repr_from_err_code(5001),
-            Some("Unavailable")
-        );
+        assert_eq!(StratusError::str_repr_from_err_code(5001), Some("Unavailable"));
 
         // Unexpected error
-        assert_eq!(
-            StratusError::str_repr_from_err_code(6001),
-            Some("ChannelClosed")
-        );
+        assert_eq!(StratusError::str_repr_from_err_code(6001), Some("ChannelClosed"));
 
         // State error
-        assert_eq!(
-            StratusError::str_repr_from_err_code(7003),
-            Some("StratusNotFollower")
-        );
+        assert_eq!(StratusError::str_repr_from_err_code(7003), Some("StratusNotFollower"));
 
         // Invalid error code
         assert_eq!(StratusError::str_repr_from_err_code(9999), None);
