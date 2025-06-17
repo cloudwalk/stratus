@@ -1,4 +1,5 @@
 Function signatures:
+4e1e9a4e: $__VERSION()
 fc19dddc: BLOCKLISTER_ROLE()
 580a2c87: CASHBACK_ROUNDING_COEF()
 a217fddf: DEFAULT_ADMIN_ROLE()
