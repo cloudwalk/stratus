@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { TransactionReceipt, TransactionResponse } from "ethers";
 import { ethers } from "hardhat";
 
 import {
@@ -40,14 +41,13 @@ describe("Leader & Follower BRLC integration test", function () {
     });
 
     describe("Deploy and configure BRLC contract using transaction forwarding from follower to leader", function () {
-        it("Validate deployer is main minter", async function () {
+        it("Validate deployer is minter", async function () {
             updateProviderUrl("stratus-follower");
 
             await deployBRLC();
             await configureBRLC();
 
-            expect(deployer.address).to.equal(await brlcToken.mainMinter());
-            expect(await brlcToken.isMinter(deployer.address)).to.be.true;
+            expect(await brlcToken.hasRole(await brlcToken.MINTER_ROLE(), deployer.address)).to.equal(true);
 
             updateProviderUrl("stratus");
         });
@@ -202,6 +202,25 @@ describe("Leader & Follower BRLC integration test", function () {
                         leaderBlockNumbers[i],
                         `Transaction ${txHashList[i]} did not fall into the same block between Stratus Leader and Follower`,
                     ).to.equal(followerBlockNumbers[i]);
+                }
+            });
+
+            it(`${params.name}: Validate that each transaction is in its corresponding block`, async function () {
+                updateProviderUrl("stratus-follower");
+                for await (const txHash of txHashList) {
+                    const receipt: TransactionReceipt = await sendWithRetry("eth_getTransactionReceipt", [txHash], 20);
+                    const block = await sendWithRetry("eth_getBlockByNumber", [receipt.blockNumber, true], 20);
+                    expect(block).to.exist;
+
+                    const transaction = block.transactions.find((tx: TransactionResponse) => tx.hash === txHash);
+                    expect(transaction).to.exist;
+                    expect(transaction!.blockNumber).to.equal(receipt.blockNumber);
+                    expect(transaction!.blockHash).to.equal(receipt.blockHash);
+                    for (const log of receipt!.logs) {
+                        expect(log.blockNumber).to.equal(receipt.blockNumber);
+                        expect(log.blockHash).to.equal(receipt.blockHash);
+                    }
+                    return receipt.blockNumber;
                 }
             });
 

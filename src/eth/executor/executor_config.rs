@@ -1,9 +1,10 @@
 use std::cmp::max;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use clap::Parser;
 use display_json::DebugAsJson;
-use revm::primitives::SpecId;
+use revm::primitives::hardfork::SpecId;
 
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorStrategy;
@@ -47,7 +48,7 @@ pub struct ExecutorConfig {
 }
 
 fn parse_evm_spec(input: &str) -> anyhow::Result<SpecId> {
-    Ok(SpecId::from(input))
+    SpecId::from_str(input).map_err(|err| anyhow::anyhow!("unknown hard fork: {:?}", err))
 }
 
 impl ExecutorConfig {

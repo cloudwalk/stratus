@@ -15,7 +15,7 @@ pub enum RpcClientApp {
 impl Display for RpcClientApp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RpcClientApp::Identified(name) => write!(f, "{}", name),
+            RpcClientApp::Identified(name) => write!(f, "{name}"),
             RpcClientApp::Unknown => write!(f, "unknown"),
         }
     }
@@ -32,33 +32,33 @@ impl RpcClientApp {
             // Stratus
             v if v.starts_with("stratus") => {
                 let v = v.trim_start_matches("stratus");
-                format!("stratus::{}", v)
+                format!("stratus::{v}")
             }
 
             // Acquiring
-            v if v == "authorizer" => format!("acquiring::{}", v),
+            v if v == "authorizer" => format!("acquiring::{v}"),
 
             // Banking
-            v if v.starts_with("banking") || v.starts_with("balance") => format!("banking::{}", v),
+            v if v.starts_with("banking") || v.starts_with("balance") => format!("banking::{v}"),
 
             // Issuing
-            v if v.starts_with("issuing") || v.starts_with("infinitecard") => format!("issuing::{}", v),
+            v if v.starts_with("issuing") || v.starts_with("infinitecard") => format!("issuing::{v}"),
 
             // Lending
-            v if v.starts_with("lending") => format!("lending::{}", v),
+            v if v.starts_with("lending") => format!("lending::{v}"),
 
             // Infra
-            v if v == "blockscout" || v == "golani" || v == "tx-replayer" => format!("infra::{}", v),
+            v if v == "blockscout" || v == "golani" || v == "tx-replayer" => format!("infra::{v}"),
 
             // User
             v if v.starts_with("user-") => {
                 let v = v.trim_start_matches("user-");
-                format!("user::{}", v)
+                format!("user::{v}")
             }
-            v if v == "insomnia" => format!("user::{}", v),
+            v if v == "insomnia" => format!("user::{v}"),
 
             // Other
-            v => format!("other::{}", v),
+            v => format!("other::{v}"),
         };
         RpcClientApp::Identified(name)
     }

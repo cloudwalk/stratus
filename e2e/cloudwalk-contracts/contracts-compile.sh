@@ -16,10 +16,11 @@ compile_contract() {
     version=$3
 
     log "Compiling: $contract ($repo)"
-
+    asdf plugin add solidity
+    asdf install solidity $version
     asdf set solidity $version
     # compile
-    solc --base-path repos/"$repo"/contracts --include-path repos/"$repo"/node_modules --hashes --optimize -o repos/"$repo"/target --overwrite repos/"$repo"/contracts/"$contract".sol
+    asdf exec solc --base-path repos/"$repo"/contracts --include-path repos/"$repo"/node_modules --hashes --optimize -o repos/"$repo"/target --overwrite repos/"$repo"/contracts/"$contract".sol
 
     # copy from target folder to tests
     cp repos/"$repo"/target/"$contract".signatures ../../static/contracts-signatures/

@@ -10,13 +10,11 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalTransaction;
-use crate::eth::primitives::ExternalTransactionExecution;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::TransactionStage;
@@ -143,7 +141,7 @@ impl EvmInput {
     /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
     pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block_number: BlockNumber, block_timestamp: UnixTime) -> anyhow::Result<Self> {
         Ok(Self {
-            from: tx.from.into(),
+            from: tx.inner.signer().into(),
             to: tx.inner.to().map_into(),
             value: tx.inner.value().into(),
             data: tx.inner.input().clone().into(),
@@ -178,18 +176,6 @@ impl PartialEq<(&TransactionInput, &PendingBlockHeader)> for EvmInput {
     }
 }
 
-impl TryFrom<ExternalTransactionExecution> for EvmInput {
-    type Error = anyhow::Error;
-    fn try_from(value: ExternalTransactionExecution) -> Result<Self, Self::Error> {
-        EvmInput::from_external(
-            &value.tx,
-            &value.receipt,
-            value.receipt.block_number(),
-            value.evm_execution.execution.block_timestamp,
-        )
-    }
-}
-
 impl From<TransactionMined> for EvmInput {
     fn from(value: TransactionMined) -> Self {
         Self {
@@ -213,8 +199,7 @@ impl TryFrom<TransactionStage> for EvmInput {
 
     fn try_from(value: TransactionStage) -> Result<Self, Self::Error> {
         match value {
-            TransactionStage::Executed(TransactionExecution::External(tx)) => tx.try_into(),
-            TransactionStage::Executed(TransactionExecution::Local(tx)) => Ok(tx.evm_input),
+            TransactionStage::Executed(tx) => Ok(tx.evm_input),
             TransactionStage::Mined(tx) => Ok(tx.into()),
         }
     }

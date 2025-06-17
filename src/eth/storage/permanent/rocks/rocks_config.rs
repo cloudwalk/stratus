@@ -11,6 +11,7 @@ pub enum CacheSetting {
 #[derive(Debug, Clone, Copy)]
 pub enum DbConfig {
     OptimizedPointLookUp,
+    HistoricalData,
     Default,
 }
 
@@ -21,7 +22,7 @@ impl Default for DbConfig {
 }
 
 impl DbConfig {
-    pub fn to_options(self, cache_setting: CacheSetting, prefix_len: Option<usize>) -> Options {
+    pub fn to_options(self, cache_setting: CacheSetting) -> Options {
         let mut opts = Options::default();
         let mut block_based_options = BlockBasedOptions::default();
 
@@ -40,13 +41,6 @@ impl DbConfig {
             opts.set_statistics_level(rocksdb::statistics::StatsLevel::ExceptTimeForMutex);
         }
 
-        if let Some(prefix_len) = prefix_len {
-            let transform = rocksdb::SliceTransform::create_fixed_prefix(prefix_len);
-            block_based_options.set_index_type(rocksdb::BlockBasedIndexType::HashSearch);
-            opts.set_memtable_prefix_bloom_ratio(0.15);
-            opts.set_prefix_extractor(transform);
-        }
-
         if let CacheSetting::Enabled(cache_size) = cache_setting {
             let block_cache = Cache::new_lru_cache(cache_size / 2);
             let row_cache = Cache::new_lru_cache(cache_size / 2);
@@ -57,18 +51,29 @@ impl DbConfig {
 
         match self {
             DbConfig::OptimizedPointLookUp => {
-                block_based_options.set_data_block_hash_ratio(0.3);
                 block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
+                block_based_options.set_data_block_hash_ratio(0.3);
 
                 opts.set_use_direct_reads(true);
+                opts.set_memtable_prefix_bloom_ratio(0.02);
                 opts.set_memtable_whole_key_filtering(true);
                 opts.set_compression_type(rocksdb::DBCompressionType::None);
             }
-            DbConfig::Default => {
-                opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+            DbConfig::HistoricalData | DbConfig::Default => {
+                opts.set_compression_per_level(&[
+                    rocksdb::DBCompressionType::None,
+                    rocksdb::DBCompressionType::None,
+                    rocksdb::DBCompressionType::Lz4,
+                ]);
                 opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
                 opts.set_bottommost_compression_options(-14, 32767, 0, 16 * 1024, true); // mostly defaults except max_dict_bytes
                 opts.set_bottommost_zstd_max_train_bytes(1600 * 1024, true);
+                if matches!(self, DbConfig::HistoricalData) {
+                    opts.set_memtable_whole_key_filtering(false);
+                    block_based_options.set_whole_key_filtering(false);
+
+                    opts.set_comparator("reverse", Box::new(|a, b| a.cmp(b).reverse()));
+                }
             }
         }
 

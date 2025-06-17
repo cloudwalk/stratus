@@ -54,6 +54,7 @@ impl StorageCache {
             ),
         }
     }
+
     pub fn clear(&self) {
         self.slot_cache.clear();
         self.account_cache.clear();

@@ -30,7 +30,7 @@ jobs:
 
       - name: Set up Rust Nightly and Rust Docs
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2025-01-21
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2025-05-09
           rustup component add rust-docs
 
       - name: Rust Cache
@@ -42,9 +42,6 @@ jobs:
           key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           cache-provider: "github"
           cache-directories: "~/.cargo/bin/"
-
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev

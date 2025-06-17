@@ -192,6 +192,39 @@ describe("JSON-RPC", () => {
     });
 
     describe("Logs", () => {
+        it("indexes logs correctly", async () => {
+            // mine a test transaction
+            const contract = await deployTestContractBalances();
+            await sendEvmMine();
+
+            const tx1 = await contract.connect(ALICE.signer()).add(ALICE.address, 10);
+            const tx2 = await contract.connect(ALICE.signer()).add(ALICE.address, 10);
+            const tx3 = await contract.connect(ALICE.signer()).add(ALICE.address, 10);
+            const tx4 = await contract.connect(ALICE.signer()).add(ALICE.address, 10);
+            await sendEvmMine();
+
+            const txReceipt1 = await ETHERJS.getTransactionReceipt(tx1.hash);
+            const txReceipt2 = await ETHERJS.getTransactionReceipt(tx2.hash);
+            const txReceipt3 = await ETHERJS.getTransactionReceipt(tx3.hash);
+            const txReceipt4 = await ETHERJS.getTransactionReceipt(tx4.hash);
+
+            expect(txReceipt1).exist;
+            expect(txReceipt1?.status).eq(1);
+            expect(txReceipt1?.logs[0].index).eq(0);
+
+            expect(txReceipt2).exist;
+            expect(txReceipt2?.status).eq(1);
+            expect(txReceipt2?.logs[0].index).eq(1);
+
+            expect(txReceipt3).exist;
+            expect(txReceipt3?.status).eq(1);
+            expect(txReceipt3?.logs[0].index).eq(2);
+
+            expect(txReceipt4).exist;
+            expect(txReceipt4?.status).eq(1);
+            expect(txReceipt4?.logs[0].index).eq(3);
+        });
+
         describe("eth_getLogs", () => {
             it("returns the expected amount of logs for different block ranges", async () => {
                 await sendReset();
