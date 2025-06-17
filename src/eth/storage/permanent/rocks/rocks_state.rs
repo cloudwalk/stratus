@@ -166,19 +166,19 @@ impl RocksStorageState {
 
         let state = Self {
             db_path: path,
-            accounts: new_cf_ref(&db, "accounts", &cf_options_map)?,
-            accounts_history: new_cf_ref(&db, "accounts_history", &cf_options_map)?,
-            account_slots: new_cf_ref(&db, "account_slots", &cf_options_map)?,
-            account_slots_history: new_cf_ref(&db, "account_slots_history", &cf_options_map)?,
-            transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
-            blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
-            replication_logs: new_cf_ref(&db, "replication_logs", &cf_options_map)?,
+            accounts: new_cf_ref(db, "accounts", &cf_options_map)?,
+            accounts_history: new_cf_ref(db, "accounts_history", &cf_options_map)?,
+            account_slots: new_cf_ref(db, "account_slots", &cf_options_map)?,
+            account_slots_history: new_cf_ref(db, "account_slots_history", &cf_options_map)?,
+            transactions: new_cf_ref(db, "transactions", &cf_options_map)?,
+            blocks_by_number: new_cf_ref(db, "blocks_by_number", &cf_options_map)?,
+            blocks_by_hash: new_cf_ref(db, "blocks_by_hash", &cf_options_map)?,
+            replication_logs: new_cf_ref(db, "replication_logs", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "rocks_metrics")]
             db_options,
-            db: Arc::clone(&db),
+            db: Arc::clone(db),
             shutdown_timeout,
             enable_sync_write,
             use_rocksdb_replication,
