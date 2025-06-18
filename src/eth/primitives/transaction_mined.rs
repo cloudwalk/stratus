@@ -2,7 +2,6 @@ use alloy_consensus::Eip658Value;
 use alloy_consensus::Receipt;
 use alloy_consensus::ReceiptEnvelope;
 use alloy_consensus::ReceiptWithBloom;
-use anyhow::anyhow;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
@@ -11,8 +10,6 @@ use crate::alias::AlloyTransaction;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExternalReceipt;
-use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
@@ -28,6 +25,7 @@ pub struct TransactionMined {
     /// Transaction EVM execution result.
     pub execution: EvmExecution,
 
+    /// TODO: either remove logs from EvmExecution or remove them here
     /// Logs added to the block.
     pub logs: Vec<LogMined>,
 
@@ -54,31 +52,6 @@ impl Ord for TransactionMined {
 }
 
 impl TransactionMined {
-    /// Creates a new mined transaction from an external mined transaction that was re-executed locally.
-    ///
-    /// TODO: this kind of conversion should be infallibe.
-    pub fn from_external(tx: ExternalTransaction, receipt: ExternalReceipt, execution: EvmExecution) -> anyhow::Result<Self> {
-        Ok(Self {
-            input: tx.clone().try_into()?,
-            execution,
-            block_number: receipt.block_number(),
-            block_hash: receipt.block_hash(),
-            transaction_index: receipt
-                .0
-                .transaction_index
-                .map_into()
-                .ok_or_else(|| anyhow!("external receipt missing transaction index"))?,
-            logs: receipt
-                .0
-                .inner
-                .logs()
-                .iter()
-                .cloned()
-                .map(LogMined::try_from)
-                .collect::<Result<Vec<LogMined>, _>>()?,
-        })
-    }
-
     /// Check if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
         self.execution.is_success()
@@ -99,9 +72,7 @@ impl TransactionMined {
 
 impl From<TransactionMined> for AlloyTransaction {
     fn from(value: TransactionMined) -> Self {
-        let signer = value.input.signer;
         let gas_price = value.input.gas_price;
-
         let tx = AlloyTransaction::from(value.input);
 
         Self {
@@ -109,7 +80,6 @@ impl From<TransactionMined> for AlloyTransaction {
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             transaction_index: Some(value.transaction_index.into()),
-            from: signer.into(),
             effective_gas_price: Some(gas_price.into()),
         }
     }
@@ -149,7 +119,6 @@ impl From<TransactionMined> for AlloyReceipt {
             from: value.input.signer.into(),
             to: value.input.to.map_into(),
             contract_address: value.execution.contract_address().map_into(),
-            authorization_list: None,
         }
     }
 }

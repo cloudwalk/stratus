@@ -45,3 +45,4 @@ stratus.log
 
 # logs
 *.log
+out

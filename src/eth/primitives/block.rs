@@ -1,10 +1,17 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use alloy_primitives::B256;
 use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
 use itertools::Itertools;
+use keccak_hasher::KeccakHasher;
 
+use super::ExternalBlock;
+use super::Index;
+use super::LogMined;
+use super::PendingBlock;
+use super::Size;
+use super::TransactionExecution;
 use crate::alias::AlloyBlockAlloyTransaction;
 use crate::alias::AlloyBlockH256;
 use crate::alias::AlloyTransaction;
@@ -92,7 +99,7 @@ impl Block {
 
     /// Compact accounts changes removing intermediate values, keeping only the last modified nonce, balance, bytecode and slots.
     pub fn compact_account_changes(&self) -> Vec<ExecutionAccountChanges> {
-        let mut block_compacted_changes: HashMap<Address, ExecutionAccountChanges> = HashMap::new();
+        let mut block_compacted_changes: BTreeMap<Address, ExecutionAccountChanges> = BTreeMap::new();
         for transaction in &self.transactions {
             for transaction_changes in transaction.execution.changes.values() {
                 let account_compacted_changes = block_compacted_changes
@@ -121,6 +128,82 @@ impl Block {
         }
 
         block_compacted_changes.into_values().collect_vec()
+    }
+
+    fn mine_transaction(&mut self, tx: TransactionExecution, transaction_index: Index, log_index: &mut Index) -> TransactionMined {
+        let mined_logs = Self::mine_logs(self, &tx, transaction_index, log_index);
+
+        TransactionMined {
+            input: tx.input,
+            execution: tx.result.execution,
+            transaction_index,
+            block_number: self.header.number,
+            block_hash: self.header.hash,
+            logs: mined_logs,
+        }
+    }
+
+    fn mine_logs(&mut self, tx: &TransactionExecution, transaction_index: Index, log_index: &mut Index) -> Vec<LogMined> {
+        tx.result
+            .execution
+            .logs
+            .iter()
+            .map(|mined_log| {
+                self.header.bloom.accrue_log(mined_log);
+                let log = LogMined::mine_log(mined_log.clone(), self.number(), self.hash(), tx, *log_index, transaction_index);
+                *log_index = *log_index + Index::ONE;
+                log
+            })
+            .collect()
+    }
+
+    fn calculate_transaction_root(&mut self) {
+        if !self.transactions.is_empty() {
+            let transactions_hashes: Vec<Hash> = self.transactions.iter().map(|x| x.input.hash).collect();
+            self.header.transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
+        }
+    }
+
+    fn update_block_hash(&mut self) {
+        for transaction in self.transactions.iter_mut() {
+            transaction.block_hash = self.header.hash;
+            for log in transaction.logs.iter_mut() {
+                log.block_hash = self.header.hash;
+            }
+        }
+    }
+
+    pub fn apply_external(&mut self, external_block: &ExternalBlock) {
+        self.header.hash = external_block.hash();
+        self.header.timestamp = external_block.timestamp();
+        for transaction in self.transactions.iter_mut() {
+            assert!(transaction.execution.block_timestamp == self.header.timestamp);
+            transaction.block_hash = external_block.hash();
+            for log in transaction.logs.iter_mut() {
+                log.block_hash = external_block.hash();
+            }
+        }
+    }
+}
+
+impl From<PendingBlock> for Block {
+    fn from(value: PendingBlock) -> Self {
+        let mut block = Block::new(value.header.number, *value.header.timestamp);
+        let txs: Vec<TransactionExecution> = value.transactions.into_values().collect();
+        block.transactions.reserve(txs.len());
+        block.header.size = Size::from(txs.len() as u64);
+
+        let mut log_index = Index::ZERO;
+        for (tx_idx, tx) in txs.into_iter().enumerate() {
+            let transaction_index = Index::new(tx_idx as u64);
+            let mined_transaction = Self::mine_transaction(&mut block, tx, transaction_index, &mut log_index);
+            block.transactions.push(mined_transaction);
+        }
+
+        Self::calculate_transaction_root(&mut block);
+        Self::update_block_hash(&mut block);
+
+        block
     }
 }
 

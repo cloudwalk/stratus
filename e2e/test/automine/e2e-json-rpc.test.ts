@@ -3,7 +3,7 @@ import { TransactionReceipt, keccak256 } from "ethers";
 import { JsonRpcProvider } from "ethers";
 import { Block, Bytes } from "web3-types";
 
-import { ALICE, BOB } from "../helpers/account";
+import { ALICE, BOB, CHARLIE } from "../helpers/account";
 import { isStratus } from "../helpers/network";
 import {
     CHAIN_ID,
@@ -25,6 +25,7 @@ import {
     prepareSignedTx,
     send,
     sendAndGetError,
+    sendAndGetFullResponseBatch,
     sendEvmMine,
     sendExpect,
     sendRawTransaction,
@@ -251,6 +252,24 @@ describe("JSON-RPC", () => {
                 expect(txReceiptAfterMining).exist;
                 expect(txReceiptAfterMining?.status).eq(0);
                 expect(actualTxHash).eq(expectedTxHash);
+            });
+
+            it("handles batch requests", async () => {
+                const signedTx1 = await createLegacyTransaction(ALICE, 0);
+                const signedTx2 = await createLegacyTransaction(CHARLIE, 0);
+                let results = await sendAndGetFullResponseBatch([
+                    { method: "eth_sendRawTransaction", params: [signedTx1] },
+                    { method: "eth_sendRawTransaction", params: [signedTx2] },
+                    { method: "eth_getTransactionByHash", params: [keccak256(signedTx1)] },
+                    { method: "eth_sendRawTransaction", params: [signedTx1] },
+                ]);
+
+                expect(results.data[0].result).to.eq(keccak256(signedTx1));
+                expect(results.data[1].result).to.eq(keccak256(signedTx2));
+                expect(results.data[2].result).to.exist;
+                expect(results.data[3].error).to.exist;
+
+                console.log(results);
             });
         });
         describe("stratus_getTransactionResult", () => {

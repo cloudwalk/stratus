@@ -1,0 +1,70 @@
+name: Update Contract Signatures
+
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  schedule:
+    # Run once a day at 00:00 UTC
+    - cron: '0 0 * * *'
+  # Allow manual triggering
+  workflow_dispatch:
+
+jobs:
+  update_signatures:
+    name: Update Contract Signatures
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+
+      - name: Install asdf & tools
+        uses: asdf-vm/actions/install@v4
+
+      - name: Set up Just
+        uses: extractions/setup-just@v2
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+
+      - name: Install npm
+        run: npm install -g npm@10.8.2
+
+      - name: Clone contracts
+        run: just contracts-clone
+
+      - name: Compile contracts
+        run: just contracts-compile
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          git diff --exit-code --quiet static/contracts-signatures || echo "changes=true" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Update contract signatures"
+          title: "auto: update contract signatures"
+          body: |
+            This PR updates the contract signatures by running:
+            - `just contracts-clone`
+            - `just contracts-compile`
+
+            The updated signature files are located in `static/contracts-signatures`.
+
+            This is an automated PR created by the daily signature update workflow.
+          branch: update-signatures
+          base: main
+          labels: |
+            automated

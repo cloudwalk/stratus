@@ -106,8 +106,6 @@ pub use stratus_error::StorageError;
 pub use stratus_error::StratusError;
 pub use stratus_error::TransactionError;
 pub use stratus_error::UnexpectedError;
-pub use transaction_execution::ExternalTransactionExecution;
-pub use transaction_execution::LocalTransactionExecution;
 pub use transaction_execution::TransactionExecution;
 pub use transaction_input::TransactionInput;
 pub use transaction_mined::TransactionMined;
@@ -170,7 +168,6 @@ mod tests {
     gen_test_serde!(Gas);
     gen_test_serde!(Hash);
     gen_test_serde!(Index);
-    gen_test_serde!(LocalTransactionExecution);
     gen_test_serde!(Log);
     gen_test_serde!(LogFilter);
     gen_test_serde!(LogFilterInput);

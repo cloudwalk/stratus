@@ -33,9 +33,15 @@ impl TransactionMined {
         let logs = other
             .logs
             .into_iter()
-            .enumerate()
-            .map(|(log_index, log)| {
-                LogMined::from_rocks_primitives(log, block_number, block_hash, other.transaction_index.as_usize(), other.input.hash, log_index)
+            .map(|log| {
+                LogMined::from_rocks_primitives(
+                    log.log,
+                    block_number,
+                    block_hash,
+                    other.transaction_index.as_usize(),
+                    other.input.hash,
+                    log.index,
+                )
             })
             .collect();
         Self {

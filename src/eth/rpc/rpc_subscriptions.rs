@@ -187,7 +187,7 @@ impl RpcSubscriptions {
                     // Format the log message
                     let mut client_summary = Vec::new();
                     for (client_type, count) in client_type_counts.iter() {
-                        client_summary.push(format!("{}: {}", client_type, count));
+                        client_summary.push(format!("{client_type}: {count}"));
                     }
 
                     tracing::info!(
@@ -196,8 +196,8 @@ impl RpcSubscriptions {
                         "notifying subscribers about new pending transaction"
                     );
                 }
-
-                Self::notify(subscribers, tx_hash.to_string());
+                let value = serde_json::value::RawValue::from_string(serde_json::to_string(&tx_hash)?)?;
+                Self::notify(subscribers, value);
             }
             warn_task_rx_closed(TASK_NAME);
             Ok(())
@@ -236,7 +236,7 @@ impl RpcSubscriptions {
                     // Format the log message
                     let mut client_summary = Vec::new();
                     for (client_type, count) in client_type_counts.iter() {
-                        client_summary.push(format!("{}: {}", client_type, count));
+                        client_summary.push(format!("{client_type}: {count}"));
                     }
 
                     tracing::info!(
@@ -290,7 +290,7 @@ impl RpcSubscriptions {
                     // Format the log message
                     let mut client_summary = Vec::new();
                     for (client_type, count) in client_type_counts.iter() {
-                        client_summary.push(format!("{}: {}", client_type, count));
+                        client_summary.push(format!("{client_type}: {count}"));
                     }
 
                     tracing::info!(
