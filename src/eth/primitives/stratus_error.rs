@@ -67,7 +67,8 @@ pub enum RpcError {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 2000]
 pub enum TransactionError {
-    #[error("Account at {address} is not a contract.")]
+    // needs to be lowercase to work with callOptionalSignature
+    #[error("function selector was not recognized: Account at {address} is not a contract.")]
     #[error_code = 1]
     AccountNotContract { address: Address },
 
@@ -75,7 +76,8 @@ pub enum TransactionError {
     #[error_code = 2]
     Nonce { transaction: Nonce, account: Nonce },
 
-    #[error("Failed to execute transaction in EVM: {0:?}.")]
+    // needs to be lowercase to work with callOptionalSignature
+    #[error("evm execution error: {0:?}.")]
     #[error_code = 3]
     EvmFailed(String), // TODO: split this in multiple errors
 
@@ -87,7 +89,7 @@ pub enum TransactionError {
     #[error_code = 5]
     ForwardToLeaderFailed,
 
-    #[error("Transaction reverted during execution.")]
+    #[error("Transaction reverted during execution. output: {output}")]
     #[error_code = 6]
     RevertedCall { output: Bytes },
 
@@ -95,7 +97,7 @@ pub enum TransactionError {
     #[error_code = 7]
     FromZeroAddress,
 
-    #[error("Transaction reverted during execution.")]
+    #[error("Transaction reverted during execution. reason: {reason}")]
     #[error_code = 8]
     RevertedCallWithReason { reason: RevertReason },
 }
