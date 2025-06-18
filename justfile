@@ -562,7 +562,7 @@ stratus-parallel-config evms="5":
 
     just _log "Starting Stratus in parallel mode ({{evms}} EVMs)..."
     just _log "Logs will be saved to stratus-parallel.log"
-    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- \
+    RUST_LOG=debug cargo {{nightly_flag}} run --bin stratus {{release_flag}} -- \
         --leader \
         --executor-strategy parallel \
         --executor-evms {{evms}} \
@@ -573,13 +573,6 @@ stratus-parallel-config evms="5":
     just _log "Stratus started with PID $STRATUS_PID"
     just _log "Tailing logs (press Ctrl+C to stop viewing, Stratus will continue running)..."
     tail -f stratus-parallel.log
-
-    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- \
-        --leader \
-        --executor-strategy parallel \
-        --executor-evms {{evms}} \
-        --block-mode 2s \
-        > stratus-parallel.log 2>&1 &
 
     echo $! > stratus.pid
     just _log "Stratus started with PID $(cat stratus.pid)"

@@ -1,0 +1,75 @@
+{
+  "configuration": {
+    "rpc_url": "http://localhost:3000",
+    "num_transactions": 10
+  },
+  "results": [
+    {
+      "index": 0,
+      "nonce": 0,
+      "success": false,
+      "error": "HTTPConnectionPool(host='localhost', port=3000): Max retries exceeded with url: / (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x103a9b9d0>: Failed to establish a new connection: [Errno 61] Connection refused'))"
+    },
+    {
+      "index": 1,
+      "nonce": 1,
+      "success": false,
+      "error": "Failed to connect to Stratus"
+    },
+    {
+      "index": 2,
+      "nonce": 2,
+      "success": false,
+      "error": "Failed to connect to Stratus"
+    },
+    {
+      "index": 3,
+      "nonce": 3,
+      "success": false,
+      "error": "Failed to connect to Stratus"
+    },
+    {
+      "index": 4,
+      "nonce": 4,
+      "success": false,
+      "error": "Failed to connect to Stratus"
+    },
+    {
+      "index": 5,
+      "nonce": 5,
+      "success": false,
+      "error": "Failed to connect to Stratus"
+    },
+    {
+      "index": 6,
+      "nonce": 6,
+      "success": false,
+      "error": "Failed to connect to Stratus"
+    },
+    {
+      "index": 7,
+      "nonce": 7,
+      "success": false,
+      "error": "Failed to connect to Stratus"
+    },
+    {
+      "index": 8,
+      "nonce": 8,
+      "success": false,
+      "error": "Failed to connect to Stratus"
+    },
+    {
+      "index": 9,
+      "nonce": 9,
+      "success": false,
+      "error": "Failed to connect to Stratus"
+    }
+  ],
+  "summary": {
+    "successful": 0,
+    "failed": 10,
+    "total_time": 50.21480679512024,
+    "base_nonce": 0,
+    "base_block": 6
+  }
+}
