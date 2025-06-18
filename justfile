@@ -554,3 +554,34 @@ e2e-genesis:
     npm install
     npx hardhat test test/genesis/genesis.test.ts --network stratus
     killport 3000 -s sigterm
+# Stratus: Run in parallel mode with optimized config file
+stratus-parallel-config evms="5":
+    #!/bin/bash
+    just _log "Cleaning RocksDB data for fresh start..."
+    rm -rf data/rocksdb
+
+    just _log "Starting Stratus in parallel mode ({{evms}} EVMs)..."
+    just _log "Logs will be saved to stratus-parallel.log"
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- \
+        --leader \
+        --executor-strategy parallel \
+        --executor-evms {{evms}} \
+        --block-mode 2s \
+        > stratus-parallel.log 2>&1 &
+
+    STRATUS_PID=$!
+    just _log "Stratus started with PID $STRATUS_PID"
+    just _log "Tailing logs (press Ctrl+C to stop viewing, Stratus will continue running)..."
+    tail -f stratus-parallel.log
+
+    cargo {{nightly_flag}} run --bin stratus {{release_flag}} --features dev -- \
+        --leader \
+        --executor-strategy parallel \
+        --executor-evms {{evms}} \
+        --block-mode 2s \
+        > stratus-parallel.log 2>&1 &
+
+    echo $! > stratus.pid
+    just _log "Stratus started with PID $(cat stratus.pid)"
+    just _log "View logs with: tail -f stratus-parallel.log"
+    just _log "Stop with: kill $(cat stratus.pid)"
