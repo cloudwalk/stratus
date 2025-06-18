@@ -332,11 +332,11 @@ impl InMemoryTemporaryStorageState {
         self.accounts.clear();
     }
 
-    pub fn read_account(&self, address: Address) -> Option<Account> {
-        self.accounts.get(&address).map(|acc| &acc.info).cloned()
+    pub fn read_account(&self, address: Address) -> Option<&Account> {
+        self.accounts.get(&address).map(|acc| &acc.info)
     }
 
-    pub fn read_slot(&self, address: Address, slot: SlotIndex) -> Option<Slot> {
-        self.accounts.get(&address).and_then(|account| account.slots.get(&slot)).cloned()
+    pub fn read_slot(&self, address: Address, slot: SlotIndex) -> Option<&Slot> {
+        self.accounts.get(&address).and_then(|account| account.slots.get(&slot))
     }
 }
