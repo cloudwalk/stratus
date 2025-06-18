@@ -50,12 +50,12 @@ impl InMemoryTemporaryStorage {
         }
     }
 
-    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>, StorageError> {
+    fn check_conflicts(&self, execution: &EvmExecution, pending_block: &InMemoryTemporaryStorageState) -> Option<ExecutionConflicts> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
         for (&address, change) in &execution.changes {
             // check account info conflicts
-            if let Some(account) = self.read_account(address)? {
+            if let Some(account) = pending_block.read_account(address) {
                 if let Some(expected) = change.nonce.take_original_ref() {
                     let original = &account.nonce;
                     if expected != original {
@@ -73,7 +73,7 @@ impl InMemoryTemporaryStorage {
             // check slots conflicts
             for (&slot_index, slot_change) in &change.slots {
                 if let Some(expected) = slot_change.take_original_ref() {
-                    let Some(original) = self.read_slot(address, slot_index)? else {
+                    let Some(original) = pending_block.read_slot(address, slot_index) else {
                         continue;
                     };
                     if expected.value != original.value {
@@ -82,7 +82,7 @@ impl InMemoryTemporaryStorage {
                 }
             }
         }
-        Ok(conflicts.build())
+        conflicts.build()
     }
 
     // -------------------------------------------------------------------------
@@ -118,7 +118,7 @@ impl InMemoryTemporaryStorage {
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
         if check_conflicts {
-            if let Some(conflicts) = self.check_conflicts(&tx.result.execution)? {
+            if let Some(conflicts) = self.check_conflicts(&tx.result.execution, &pending_block) {
                 return Err(StorageError::TransactionConflict(conflicts.into()));
             }
         }
@@ -330,5 +330,13 @@ impl InMemoryTemporaryStorageState {
     pub fn reset(&mut self) {
         self.block = PendingBlock::new_at_now(1.into());
         self.accounts.clear();
+    }
+
+    pub fn read_account(&self, address: Address) -> Option<Account> {
+        self.accounts.get(&address).map(|acc| &acc.info).cloned()
+    }
+
+    pub fn read_slot(&self, address: Address, slot: SlotIndex) -> Option<Slot> {
+        self.accounts.get(&address).and_then(|account| account.slots.get(&slot)).cloned()
     }
 }
