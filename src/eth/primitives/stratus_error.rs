@@ -68,16 +68,16 @@ pub enum RpcError {
 #[major_error_code = 2000]
 pub enum TransactionError {
     // needs to be lowercase to work with callOptionalSignature
-    #[error("function selector was not recognized: Account at {address} is not a contract.")]
+    #[error("Precondition execution error: Account at {address} is not a contract.")]
     #[error_code = 1]
     AccountNotContract { address: Address },
 
-    #[error("Transaction nonce {transaction} does not match account nonce {account}.")]
+    #[error("Precondition execution error: Transaction nonce {transaction} does not match account nonce {account}.")]
     #[error_code = 2]
     Nonce { transaction: Nonce, account: Nonce },
 
     // needs to be lowercase to work with callOptionalSignature
-    #[error("evm execution error: {0:?}.")]
+    #[error("EVM execution error: {0:?}.")]
     #[error_code = 3]
     EvmFailed(String), // TODO: split this in multiple errors
 
@@ -89,7 +89,7 @@ pub enum TransactionError {
     #[error_code = 5]
     ForwardToLeaderFailed,
 
-    #[error("Transaction reverted during execution. output: {output}")]
+    #[error("Transaction reverted with unrecognised output: {output}")]
     #[error_code = 6]
     RevertedCall { output: Bytes },
 
@@ -97,7 +97,7 @@ pub enum TransactionError {
     #[error_code = 7]
     FromZeroAddress,
 
-    #[error("Transaction reverted during execution. reason: {reason}")]
+    #[error("Transaction reverted with reason: {reason}")]
     #[error_code = 8]
     RevertedCallWithReason { reason: RevertReason },
 }
