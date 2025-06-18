@@ -67,7 +67,7 @@ pub enum RpcError {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 2000]
 pub enum TransactionError {
-    // needs to be lowercase to work with callOptionalSignature
+    // Should contain `execution error` to work with callOptionalSignature
     #[error("Precondition execution error: Account at {address} is not a contract.")]
     #[error_code = 1]
     AccountNotContract { address: Address },
@@ -76,7 +76,7 @@ pub enum TransactionError {
     #[error_code = 2]
     Nonce { transaction: Nonce, account: Nonce },
 
-    // needs to be lowercase to work with callOptionalSignature
+    // Should contain `execution error` to work with callOptionalSignature
     #[error("EVM execution error: {0:?}.")]
     #[error_code = 3]
     EvmFailed(String), // TODO: split this in multiple errors
