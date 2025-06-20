@@ -99,7 +99,7 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
 }
 
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
-fn new_cf_ref<K, V>(db: &Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, Options>) -> Result<RocksCfRef<K, V>>
+fn new_cf_ref<'a, K, V>(db: &'a Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, Options>) -> Result<RocksCfRef<'a, K, V>>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
@@ -111,7 +111,7 @@ where
         .with_context(|| format!("matching column_family `{column_family}` given to `new_cf_ref` wasn't found in configuration map"))?;
 
     // NOTE: this doesn't create the CFs in the database, read `RocksCfRef` docs for details
-    RocksCfRef::new(Arc::clone(db), column_family)
+    RocksCfRef::new(db, column_family)
 }
 
 /// State handler for our RocksDB storage, separating "tables" by column families.
@@ -120,14 +120,14 @@ where
 pub struct RocksStorageState {
     pub db: Arc<DB>,
     db_path: String,
-    accounts: RocksCfRef<AddressRocksdb, CfAccountsValue>,
-    accounts_history: RocksCfRef<(AddressRocksdb, BlockNumberRocksdb), CfAccountsHistoryValue>,
-    account_slots: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb), CfAccountSlotsValue>,
-    account_slots_history: RocksCfRef<(AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), CfAccountSlotsHistoryValue>,
-    pub transactions: RocksCfRef<HashRocksdb, CfTransactionsValue>,
-    pub blocks_by_number: RocksCfRef<BlockNumberRocksdb, CfBlocksByNumberValue>,
-    blocks_by_hash: RocksCfRef<HashRocksdb, CfBlocksByHashValue>,
-    replication_logs: RocksCfRef<BlockNumberRocksdb, CfReplicationLogsValue>,
+    accounts: RocksCfRef<'static, AddressRocksdb, CfAccountsValue>,
+    accounts_history: RocksCfRef<'static, (AddressRocksdb, BlockNumberRocksdb), CfAccountsHistoryValue>,
+    account_slots: RocksCfRef<'static, (AddressRocksdb, SlotIndexRocksdb), CfAccountSlotsValue>,
+    account_slots_history: RocksCfRef<'static, (AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb), CfAccountSlotsHistoryValue>,
+    pub transactions: RocksCfRef<'static, HashRocksdb, CfTransactionsValue>,
+    pub blocks_by_number: RocksCfRef<'static, BlockNumberRocksdb, CfBlocksByNumberValue>,
+    blocks_by_hash: RocksCfRef<'static, HashRocksdb, CfBlocksByHashValue>,
+    replication_logs: RocksCfRef<'static, BlockNumberRocksdb, CfReplicationLogsValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "rocks_metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -166,19 +166,19 @@ impl RocksStorageState {
 
         let state = Self {
             db_path: path,
-            accounts: new_cf_ref(&db, "accounts", &cf_options_map)?,
-            accounts_history: new_cf_ref(&db, "accounts_history", &cf_options_map)?,
-            account_slots: new_cf_ref(&db, "account_slots", &cf_options_map)?,
-            account_slots_history: new_cf_ref(&db, "account_slots_history", &cf_options_map)?,
-            transactions: new_cf_ref(&db, "transactions", &cf_options_map)?,
-            blocks_by_number: new_cf_ref(&db, "blocks_by_number", &cf_options_map)?,
-            blocks_by_hash: new_cf_ref(&db, "blocks_by_hash", &cf_options_map)?,
-            replication_logs: new_cf_ref(&db, "replication_logs", &cf_options_map)?,
+            accounts: new_cf_ref(db, "accounts", &cf_options_map)?,
+            accounts_history: new_cf_ref(db, "accounts_history", &cf_options_map)?,
+            account_slots: new_cf_ref(db, "account_slots", &cf_options_map)?,
+            account_slots_history: new_cf_ref(db, "account_slots_history", &cf_options_map)?,
+            transactions: new_cf_ref(db, "transactions", &cf_options_map)?,
+            blocks_by_number: new_cf_ref(db, "blocks_by_number", &cf_options_map)?,
+            blocks_by_hash: new_cf_ref(db, "blocks_by_hash", &cf_options_map)?,
+            replication_logs: new_cf_ref(db, "replication_logs", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "rocks_metrics")]
             db_options,
-            db,
+            db: Arc::clone(db),
             shutdown_timeout,
             enable_sync_write,
             use_rocksdb_replication,
@@ -755,18 +755,18 @@ impl RocksStorageState {
         let db_name = self.db_path_filename();
 
         let column_families = vec![
-            ("accounts", self.accounts.handle()),
-            ("accounts_history", self.accounts_history.handle()),
-            ("account_slots", self.account_slots.handle()),
-            ("account_slots_history", self.account_slots_history.handle()),
-            ("transactions", self.transactions.handle()),
-            ("blocks_by_number", self.blocks_by_number.handle()),
-            ("blocks_by_hash", self.blocks_by_hash.handle()),
-            ("replication_logs", self.replication_logs.handle()),
+            ("accounts", &self.accounts.column_family),
+            ("accounts_history", &self.accounts_history.column_family),
+            ("account_slots", &self.account_slots.column_family),
+            ("account_slots_history", &self.account_slots_history.column_family),
+            ("transactions", &self.transactions.column_family),
+            ("blocks_by_number", &self.blocks_by_number.column_family),
+            ("blocks_by_hash", &self.blocks_by_hash.column_family),
+            ("replication_logs", &self.replication_logs.column_family),
         ];
 
         for (cf_name, cf_handle) in column_families {
-            if let Ok(Some(size)) = self.db.property_int_value_cf(&cf_handle, "rocksdb.total-sst-files-size") {
+            if let Ok(Some(size)) = self.db.property_int_value_cf(cf_handle, "rocksdb.total-sst-files-size") {
                 metrics::set_rocks_cf_size(size, db_name, cf_name);
             }
         }
@@ -827,6 +827,7 @@ mod tests {
     #[test]
     #[cfg(feature = "dev")]
     fn test_rocks_multi_get() {
+        use std::collections::HashMap;
         use std::collections::HashSet;
         use std::iter;
 
