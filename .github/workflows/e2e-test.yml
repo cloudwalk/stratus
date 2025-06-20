@@ -120,3 +120,39 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}-genesis-rocks-${{ github.ref || github.run_id }}
       cancel-in-progress: true
+
+  e2e-automine-stratus-rocks-parallel:
+    name: E2E Automine Stratus Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-stratus"
+      justfile_args: "automine parallel"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-automine-rocks-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-external-stratus-rocks-parallel:
+    name: E2E External Stratus Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-stratus"
+      justfile_args: "external parallel"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-external-rocks-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-interval-stratus-parallel:
+    name: E2E Interval Stratus
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-stratus"
+      justfile_args: "10ms parallel"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-interval-${{ github.ref || github.run_id }}
+      cancel-in-progress: true

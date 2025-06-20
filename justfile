@@ -267,14 +267,14 @@ e2e-hardhat block-mode="automine" test="":
     killport 8545
 
 # E2E: Starts and execute Hardhat tests in Stratus
-e2e-stratus block-mode="automine" test="":
+e2e-stratus block-mode="automine" executor-strategy="serial" test="":
     #!/bin/bash
     if [ -d e2e ]; then
         cd e2e
     fi
 
     just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000 --block-mode {{block-mode}}
+    just stratus-test -a 0.0.0.0:3000 --block-mode {{block-mode}} --executor-strategy {{executor-strategy}}
 
     just _log "Running E2E tests"
     if [[ {{block-mode}} =~ ^[0-9]+(ms|s)$ ]]; then

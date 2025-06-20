@@ -50,7 +50,7 @@ impl InMemoryTemporaryStorage {
         }
     }
 
-    fn check_conflicts(&self, execution: &EvmExecution, pending_block: &InMemoryTemporaryStorageState) -> Option<ExecutionConflicts> {
+    fn check_conflicts(execution: &EvmExecution, pending_block: &InMemoryTemporaryStorageState) -> Option<ExecutionConflicts> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
         for (&address, change) in &execution.changes {
@@ -118,7 +118,7 @@ impl InMemoryTemporaryStorage {
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
         if check_conflicts {
-            if let Some(conflicts) = self.check_conflicts(&tx.result.execution, &pending_block) {
+            if let Some(conflicts) = Self::check_conflicts(&tx.result.execution, &pending_block) {
                 return Err(StorageError::TransactionConflict(conflicts.into()));
             }
         }
