@@ -193,7 +193,7 @@ impl Evms {
 
         let tx_parallel = match config.executor_strategy {
             ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1, EvmKind::Transaction), // should not really be used if strategy is serial, but keep 1 for fallback
-            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.executor_evms, EvmKind::Transaction),
+            ExecutorStrategy::Prallel => spawn_evms("evm-tx-parallel", config.executor_evms, EvmKind::Transaction),
         };
         let tx_serial = spawn_evms("evm-tx-serial", 1, EvmKind::Transaction);
         let tx_external = spawn_evms("evm-tx-external", 1, EvmKind::Transaction);
@@ -490,7 +490,7 @@ impl Executor {
 
             // Executes transactions in parallel mode:
             // * Conflict detection prevents data corruption.
-            ExecutorStrategy::Paralell => {
+            ExecutorStrategy::Prallel => {
                 let parallel_attempt = self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Parallel, 1);
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
@@ -574,7 +574,7 @@ impl Executor {
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
             }
 
-            match self.miner.save_execution(tx_execution, matches!(evm_route, EvmRoute::Parallel), true) {
+            match self.miner.save_execution(tx_execution, matches!(self.config.executor_strategy, ExecutorStrategy::Prallel), true) {
                 Ok(_) => {
                     // track metrics
                     #[cfg(feature = "metrics")]
@@ -694,7 +694,7 @@ pub enum ExecutorStrategy {
     Serial,
 
     #[serde(rename = "parallel")]
-    Paralell,
+    Prallel,
 }
 
 impl FromStr for ExecutorStrategy {
@@ -703,7 +703,7 @@ impl FromStr for ExecutorStrategy {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_lowercase().as_str() {
             "serial" => Ok(Self::Serial),
-            "par" | "parallel" => Ok(Self::Paralell),
+            "par" | "parallel" => Ok(Self::Prallel),
             s => Err(anyhow!("unknown executor strategy: {}", s)),
         }
     }
