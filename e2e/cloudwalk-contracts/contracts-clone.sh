@@ -199,6 +199,5 @@ fi
 
 if [ "$cppv2" == 1 ]; then
     # Periphery Transition: attempts to clone the periphery v2 repository/contract using different methods
-    clone_alternative brlc-card-payment-processor-v2 main brlc-card-payment-processor-v2 ||
-        clone_alternative brlc-periphery main brlc-periphery-v2
+    clone brlc-card-payment-processor-v2
 fi
