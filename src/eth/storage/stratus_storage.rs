@@ -265,7 +265,7 @@ impl StratusStorage {
                 };
 
                 tracing::debug!(storage = %label::TEMP, %address, "reading account");
-                let temp_account = timed(|| self.temp.read_account(address)).with(|m| {
+                let temp_account = timed(|| self.temp.read_account(address, None)).with(|m| {
                     if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
                         metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time);
                     }
@@ -323,7 +323,7 @@ impl StratusStorage {
                 };
 
                 tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
-                let temp_slot = timed(|| self.temp.read_slot(address, index)).with(|m| {
+                let temp_slot = timed(|| self.temp.read_slot(address, index, None)).with(|m| {
                     if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
                         metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time);
                     }

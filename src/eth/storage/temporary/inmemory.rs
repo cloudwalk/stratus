@@ -50,12 +50,16 @@ impl InMemoryTemporaryStorage {
         }
     }
 
-    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>, StorageError> {
+    fn check_conflicts(
+        &self,
+        execution: &EvmExecution,
+        pending_block: &InMemoryTemporaryStorageState,
+    ) -> anyhow::Result<Option<ExecutionConflicts>, StorageError> {
         let mut conflicts = ExecutionConflictsBuilder::default();
 
         for (&address, change) in &execution.changes {
             // check account info conflicts
-            if let Some(account) = self.read_account(address)? {
+            if let Some(account) = self.read_account(address, Some(pending_block))? {
                 if let Some(expected) = change.nonce.take_original_ref() {
                     let original = &account.nonce;
                     if expected != original {
@@ -73,7 +77,7 @@ impl InMemoryTemporaryStorage {
             // check slots conflicts
             for (&slot_index, slot_change) in &change.slots {
                 if let Some(expected) = slot_change.take_original_ref() {
-                    let Some(original) = self.read_slot(address, slot_index)? else {
+                    let Some(original) = self.read_slot(address, slot_index, Some(pending_block))? else {
                         continue;
                     };
                     if expected.value != original.value {
@@ -107,6 +111,8 @@ impl InMemoryTemporaryStorage {
     pub fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool, is_local: bool) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
+        tracing::debug!("acquired upgradeable read lock");
+
         if is_local && tx.evm_input != (&tx.input, &pending_block.block.header) {
             let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
             return Err(StorageError::EvmInputMismatch {
@@ -116,9 +122,12 @@ impl InMemoryTemporaryStorage {
         }
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
+        tracing::debug!("upgraded read lock");
 
         if check_conflicts {
-            if let Some(conflicts) = self.check_conflicts(&tx.result.execution)? {
+            if let Some(conflicts) = self.check_conflicts(&tx.result.execution, &pending_block)? {
+                tracing::debug!("conflicts detected");
+
                 return Err(StorageError::TransactionConflict(conflicts.into()));
             }
         }
@@ -154,6 +163,7 @@ impl InMemoryTemporaryStorage {
 
         // save execution
         pending_block.block.push_transaction(tx);
+        tracing::debug!("save pending successful");
 
         Ok(())
     }
@@ -164,6 +174,7 @@ impl InMemoryTemporaryStorage {
 
     pub fn finish_pending_block(&self) -> anyhow::Result<PendingBlock, StorageError> {
         let pending_block = self.pending_block.upgradable_read();
+        tracing::debug!("acquired upgradeable read lock");
 
         // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
         #[cfg(feature = "dev")]
@@ -180,11 +191,14 @@ impl InMemoryTemporaryStorage {
         let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
+        tracing::debug!("acquired upgraded read lock");
+
         let mut latest = self.latest_block.write();
 
         *latest = Some(std::mem::replace(&mut *pending_block, next_state));
 
         drop(pending_block);
+        tracing::debug!("dropped (upgraded) write lock");
 
         #[cfg(not(feature = "dev"))]
         let finished_block = {
@@ -208,9 +222,19 @@ impl InMemoryTemporaryStorage {
     // Accounts and Slots
     // -------------------------------------------------------------------------
 
-    pub fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>, StorageError> {
-        Ok(match self.pending_block.read().accounts.get(&address) {
-            Some(pending_account) => Some(pending_account.info.clone()),
+    pub fn read_account(
+        &self,
+        address: Address,
+        pending_block_override: Option<&InMemoryTemporaryStorageState>,
+    ) -> anyhow::Result<Option<Account>, StorageError> {
+        let pending_acc = if let Some(pending_acc) = pending_block_override.as_ref().map(|state| state.accounts.get(&address)) {
+            pending_acc.map(|acc| acc.info.clone())
+        } else {
+            self.pending_block.read().accounts.get(&address).map(|acc| acc.info.clone())
+        };
+
+        Ok(match pending_acc {
+            Some(pending_account) => Some(pending_account),
             None => self
                 .latest_block
                 .read()
@@ -220,10 +244,27 @@ impl InMemoryTemporaryStorage {
         })
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError> {
+    pub fn read_slot(
+        &self,
+        address: Address,
+        index: SlotIndex,
+        pending_block_override: Option<&InMemoryTemporaryStorageState>,
+    ) -> anyhow::Result<Option<Slot>, StorageError> {
+        let pending_slot = if let Some(pending_acc) =
+            pending_block_override.map(|state| state.accounts.get(&address).and_then(|account| account.slots.get(&index)).cloned())
+        {
+            pending_acc
+        } else {
+            self.pending_block
+                .read()
+                .accounts
+                .get(&address)
+                .and_then(|account| account.slots.get(&index))
+                .cloned()
+        };
         Ok(
-            match self.pending_block.read().accounts.get(&address).and_then(|account| account.slots.get(&index)) {
-                Some(pending_slot) => Some(*pending_slot),
+            match pending_slot {
+                Some(pending_slot) => Some(pending_slot),
                 None => self
                     .latest_block
                     .read()
