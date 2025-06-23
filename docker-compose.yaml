@@ -76,7 +76,7 @@ services:
   # Grafana Stack
   # ----------------------------------------------------------------------------
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.0.2
     ports:
       - 3005:3000
     volumes:
@@ -92,7 +92,7 @@ services:
       - grafana-stack
 
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.4.4
     ports:
       - 3100:3100
     command: -config.file=/etc/loki/local-config.yaml
@@ -102,7 +102,7 @@ services:
       - grafana-stack
 
   promtail:
-    image: grafana/promtail:latest
+    image: grafana/promtail:main-bc418c4
     volumes:
       - ./static/promtail/config.yaml:/etc/promtail/config.yaml
       - .:/var/log/host  # Mount host logs to a specific directory
