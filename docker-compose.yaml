@@ -72,6 +72,52 @@ services:
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+  # ----------------------------------------------------------------------------
+  # Grafana Stack
+  # ----------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - 3005:3000
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./static/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+      - loki
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    networks:
+      - grafana-stack
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - 3100:3100
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+    networks:
+      - grafana-stack
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - ./static/promtail/config.yaml:/etc/promtail/config.yaml
+      - .:/var/log/host  # Mount host logs to a specific directory
+    command: -config.file=/etc/promtail/config.yaml -log.level=debug
+    depends_on:
+      - loki
+    networks:
+      - grafana-stack
 
 volumes:
   postgres-data:
+  loki-data:
+  grafana-data:
+  alloy-data:
+
+networks:
+  grafana-stack:
+    driver: bridge
