@@ -574,7 +574,10 @@ impl Executor {
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
             }
 
-            match self.miner.save_execution(tx_execution, matches!(self.config.executor_strategy, ExecutorStrategy::Prallel), true) {
+            match self
+                .miner
+                .save_execution(tx_execution, matches!(self.config.executor_strategy, ExecutorStrategy::Prallel), true)
+            {
                 Ok(_) => {
                     // track metrics
                     #[cfg(feature = "metrics")]
