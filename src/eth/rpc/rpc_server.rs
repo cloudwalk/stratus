@@ -667,7 +667,8 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<Json
     Ok(build_info::as_json())
 }
 
-fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_config(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<JsonValue, StratusError> {
+    ext.authentication().auth_admin()?;
     Ok(ctx.app_config.clone())
 }
 
