@@ -519,8 +519,7 @@ impl StratusStorage {
         // Update temporary storage
         self.temp.save_slot(address, slot)?;
 
-        // Update cache
-        self.cache.cache_slot(address, slot);
+        self.cache.clear();
 
         Ok(())
     }
@@ -533,11 +532,7 @@ impl StratusStorage {
         // Update temporary storage
         self.temp.save_account_nonce(address, nonce)?;
 
-        // Update cache
-        let point_in_time = PointInTime::Mined;
-        if let Some(account) = self.perm.read_account(address, point_in_time)? {
-            self.cache.cache_account(account);
-        }
+        self.cache.clear();
 
         Ok(())
     }
@@ -550,11 +545,7 @@ impl StratusStorage {
         // Update temporary storage
         self.temp.save_account_balance(address, balance)?;
 
-        // Update cache
-        let point_in_time = PointInTime::Mined;
-        if let Some(account) = self.perm.read_account(address, point_in_time)? {
-            self.cache.cache_account(account);
-        }
+        self.cache.clear();
 
         Ok(())
     }
