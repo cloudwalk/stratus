@@ -439,7 +439,8 @@ impl StratusStorage {
             self.perm.save_block(block)?;
             self.cache.cache_account_and_slots_latest_from_changes(changes);
             Ok(())
-        }).with(|m| {
+        })
+        .with(|m| {
             metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, %block_number, "failed to save block");
