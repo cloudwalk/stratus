@@ -512,6 +512,7 @@ impl StratusStorage {
     pub fn set_storage_at(&self, address: Address, index: SlotIndex, value: SlotValue) -> Result<(), StorageError> {
         // Create a slot with the given index and value
         let slot = Slot::new(index, value);
+        self.cache.clear();
 
         // Update permanent storage
         self.perm.save_slot(address, slot)?;
@@ -519,50 +520,45 @@ impl StratusStorage {
         // Update temporary storage
         self.temp.save_slot(address, slot)?;
 
-        self.cache.clear();
 
         Ok(())
     }
 
     #[cfg(feature = "dev")]
     pub fn set_nonce(&self, address: Address, nonce: Nonce) -> Result<(), StorageError> {
+        self.cache.clear();
+
         // Update permanent storage
         self.perm.save_account_nonce(address, nonce)?;
 
         // Update temporary storage
         self.temp.save_account_nonce(address, nonce)?;
 
-        self.cache.clear();
-
         Ok(())
     }
 
     #[cfg(feature = "dev")]
     pub fn set_balance(&self, address: Address, balance: Wei) -> Result<(), StorageError> {
+        self.cache.clear();
+
         // Update permanent storage
         self.perm.save_account_balance(address, balance)?;
 
         // Update temporary storage
         self.temp.save_account_balance(address, balance)?;
 
-        self.cache.clear();
 
         Ok(())
     }
 
     #[cfg(feature = "dev")]
     pub fn set_code(&self, address: Address, code: Bytes) -> Result<(), StorageError> {
+        self.cache.clear();
         // Update permanent storage
         self.perm.save_account_code(address, code.clone())?;
 
         // Update temporary storage
         self.temp.save_account_code(address, code)?;
-
-        // Update cache
-        let point_in_time = PointInTime::Mined;
-        if let Some(account) = self.perm.read_account(address, point_in_time)? {
-            self.cache.cache_account(account);
-        }
 
         Ok(())
     }
