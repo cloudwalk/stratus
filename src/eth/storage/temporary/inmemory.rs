@@ -242,11 +242,10 @@ impl InMemoryTemporaryStorage {
     pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
 
-        // Get or create the account
-        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
-
-        // Insert the slot
-        account.slots.insert(slot.index, slot);
+        // Only update if the account exists
+        if let Some(account) = pending_block.accounts.get_mut(&address) {
+            account.slots.insert(slot.index, slot);
+        }
 
         Ok(())
     }
@@ -255,11 +254,10 @@ impl InMemoryTemporaryStorage {
     pub fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
 
-        // Get or create the account
-        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
-
-        // Update the nonce
-        account.info.nonce = nonce;
+        // Only update if the account exists
+        if let Some(account) = pending_block.accounts.get_mut(&address) {
+            account.info.nonce = nonce;
+        }
 
         Ok(())
     }
@@ -268,11 +266,10 @@ impl InMemoryTemporaryStorage {
     pub fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
 
-        // Get or create the account
-        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
-
-        // Update the balance
-        account.info.balance = balance;
+        // Only update if the account exists
+        if let Some(account) = pending_block.accounts.get_mut(&address) {
+            account.info.balance = balance;
+        }
 
         Ok(())
     }
@@ -283,15 +280,14 @@ impl InMemoryTemporaryStorage {
 
         let mut pending_block = self.pending_block.write();
 
-        // Get or create the account
-        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
-
-        // Update the bytecode
-        account.info.bytecode = if code.0.is_empty() {
-            None
-        } else {
-            Some(RevmBytecode::new_raw(code.0.into()))
-        };
+        // Only update if the account exists
+        if let Some(account) = pending_block.accounts.get_mut(&address) {
+            account.info.bytecode = if code.0.is_empty() {
+                None
+            } else {
+                Some(RevmBytecode::new_raw(code.0.into()))
+            };
+        }
 
         Ok(())
     }
