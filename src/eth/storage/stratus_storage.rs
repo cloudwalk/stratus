@@ -595,7 +595,6 @@ impl StratusStorage {
         // Update temporary storage
         self.temp.save_slot(address, slot)?;
 
-
         Ok(())
     }
 
@@ -621,7 +620,6 @@ impl StratusStorage {
 
         // Update temporary storage
         self.temp.save_account_balance(address, balance)?;
-
 
         Ok(())
     }
