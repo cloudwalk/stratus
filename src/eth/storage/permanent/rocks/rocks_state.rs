@@ -86,7 +86,6 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
         CacheSetting::Enabled(size)
     };
 
-
     btmap! {
         "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(10)),
         "accounts_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
