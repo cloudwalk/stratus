@@ -75,10 +75,8 @@ impl StratusStorage {
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         {
-            if GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled() {
-                if !this.has_genesis()? {
-                    this.reset_to_genesis()?;
-                }
+            if (GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled()) && !this.has_genesis()? {
+                this.reset_to_genesis()?;
             }
         }
 
