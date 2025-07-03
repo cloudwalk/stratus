@@ -36,7 +36,7 @@ fn transaction_mined_rocks_db_to_events(
 fn get_total_blocks_and_transactions(state: &RocksStorageState) -> (u64, u64) {
     let total_blocks = state
         .db
-        .property_value_cf(&state.blocks_by_number.handle(), ESTIMATE_NUM_KEYS)
+        .property_value_cf(&state.blocks_by_number.column_family, ESTIMATE_NUM_KEYS)
         .unwrap()
         .unwrap()
         .parse::<u64>()
@@ -44,7 +44,7 @@ fn get_total_blocks_and_transactions(state: &RocksStorageState) -> (u64, u64) {
 
     let total_transactions = state
         .db
-        .property_value_cf(&state.transactions.handle(), ESTIMATE_NUM_KEYS)
+        .property_value_cf(&state.transactions.column_family, ESTIMATE_NUM_KEYS)
         .unwrap()
         .unwrap()
         .parse::<u64>()
@@ -90,7 +90,7 @@ fn process_block_events(block: BlockRocksdb) -> Vec<String> {
 /// Main function that processes blockchain data and generates events
 fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
-    let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, Some(0.1), false).context("failed to create rocksdb state")?;
+    let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, Some(0.1), false, false).context("failed to create rocksdb state")?;
 
     let (b_pb, tx_pb) = create_progress_bar(&state);
 
@@ -145,10 +145,7 @@ fn main() -> Result<(), anyhow::Error> {
                 if !std::path::Path::new(&folder_path).exists() {
                     std::fs::create_dir_all(&folder_path)?;
                 }
-                std::fs::write(
-                    format!("{}/ledger_wallet_events+backfill+{:010}.json", folder_path, offset),
-                    event_batch.join("\n"),
-                )?;
+                std::fs::write(format!("{folder_path}/ledger_wallet_events+backfill+{offset:010}.json"), event_batch.join("\n"))?;
                 offset += event_batch.len();
             }
             std::fs::write("last_processed_block", number.to_string())?;

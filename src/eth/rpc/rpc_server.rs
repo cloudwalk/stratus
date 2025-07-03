@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use alloy_primitives::hex;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
@@ -14,11 +15,14 @@ use ethereum_types::U256;
 use futures::join;
 use http::Method;
 use itertools::Itertools;
+use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
+use jsonrpsee::server::BatchRequestConfig;
 use jsonrpsee::server::RandomStringIdProvider;
 use jsonrpsee::server::RpcModule;
-use jsonrpsee::server::RpcServiceBuilder;
 use jsonrpsee::server::Server;
+use jsonrpsee::server::ServerConfig;
 use jsonrpsee::types::Params;
+use jsonrpsee::ws_client::RpcServiceBuilder;
 use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
@@ -69,7 +73,6 @@ use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
-use crate::eth::rpc::proxy_get_request::ProxyGetRequestTempLayer;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcHttpMiddleware;
@@ -141,21 +144,28 @@ pub async fn serve_rpc(
     // configure middleware
     let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
     let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
-    let http_middleware = tower::ServiceBuilder::new()
-        .layer(cors)
-        .layer_fn(RpcHttpMiddleware::new)
-        .layer(ProxyGetRequestTempLayer::new("/health", "stratus_health").unwrap())
-        .layer(ProxyGetRequestTempLayer::new("/version", "stratus_version").unwrap())
-        .layer(ProxyGetRequestTempLayer::new("/config", "stratus_config").unwrap())
-        .layer(ProxyGetRequestTempLayer::new("/state", "stratus_state").unwrap());
+    let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
+        ProxyGetRequestLayer::new([
+            ("/health", "stratus_health"),
+            ("/version", "stratus_version"),
+            ("/config", "stratus_config"),
+            ("/state", "stratus_state"),
+        ])
+        .unwrap(),
+    );
+
+    let server_config = ServerConfig::builder()
+        .set_id_provider(RandomStringIdProvider::new(8))
+        .max_connections(rpc_config.rpc_max_connections)
+        .max_response_body_size(rpc_config.rpc_max_response_size_bytes)
+        .set_batch_request_config(BatchRequestConfig::Limit(500))
+        .build();
 
     // serve module
     let server = Server::builder()
         .set_rpc_middleware(rpc_middleware)
         .set_http_middleware(http_middleware)
-        .set_id_provider(RandomStringIdProvider::new(8))
-        .max_connections(rpc_config.rpc_max_connections)
-        .max_response_body_size(rpc_config.rpc_max_response_size_bytes)
+        .set_config(server_config)
         .build(rpc_config.rpc_address)
         .await?;
 
@@ -231,6 +241,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
+    module.register_blocking_method("stratus_getReplicationLog", stratus_get_replication_log)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -424,7 +435,8 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     tracing::info!("miner mode changed to interval(1s) successfully");
 
     GlobalState::set_node_mode(NodeMode::Leader);
-    tracing::info!("node mode changed to leader successfully");
+    ctx.storage.clear_cache();
+    tracing::info!("node mode changed to leader successfully, cache cleared");
 
     Ok(json!(true))
 }
@@ -466,6 +478,8 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     tracing::info!("miner mode changed to external successfully");
 
     GlobalState::set_node_mode(NodeMode::Follower);
+    ctx.storage.clear_cache();
+    tracing::info!("storage cache cleared");
 
     tracing::info!("initializing importer");
     let init_importer_result = stratus_init_importer(params, Arc::clone(&ctx), ext).await;
@@ -653,7 +667,8 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<Json
     Ok(build_info::as_json())
 }
 
-fn stratus_config(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_config(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<JsonValue, StratusError> {
+    ext.authentication().auth_admin()?;
     Ok(ctx.app_config.clone())
 }
 
@@ -746,6 +761,49 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         "block": block.to_json_rpc_with_full_transactions(),
         "receipts": receipts,
     }))
+}
+
+fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!("rpc::stratus_getReplicationLog", filter = field::Empty).entered();
+
+    // parse params
+    let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+
+    // track
+    Span::with(|s| s.rec_str("filter", &filter));
+    tracing::info!(%filter, "reading replication log");
+
+    // Resolve the block filter to a specific block number
+    let block_number = match ctx.storage.read_block(filter)? {
+        Some(block) => block.number(),
+        None => {
+            tracing::info!(%filter, "block not found");
+            return Ok(JsonValue::Null);
+        }
+    };
+
+    // execute
+    let replication_log = ctx.storage.read_replication_log(block_number)?;
+
+    match replication_log {
+        Some(log) => {
+            let log_data = log.data();
+            let encoded = hex::encode(log_data);
+
+            tracing::info!(%block_number, log_size = log_data.len(), "replication log found");
+
+            Ok(json!({
+                "block_number": block_number,
+                "replication_log": encoded
+            }))
+        }
+        None => {
+            tracing::info!(%block_number, "replication log not found");
+            Ok(JsonValue::Null)
+        }
+    }
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
@@ -1054,7 +1112,6 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             .into());
         }
     };
-
     let tx_hash = tx.hash;
 
     // track

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use alloy_primitives::B256;
 use anyhow::anyhow;
@@ -18,20 +18,15 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
-#[cfg(test)]
-use crate::ext::ordered_map;
 use crate::log_and_err;
 
-pub type ExecutionChanges = HashMap<Address, ExecutionAccountChanges>;
+pub type ExecutionChanges = BTreeMap<Address, ExecutionAccountChanges>;
 
 /// Output of a transaction executed in the EVM.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct EvmExecution {
     /// Assumed block timestamp during the execution.
     pub block_timestamp: UnixTime,
-
-    /// Flag to indicate if  external receipt fixes have been applied.
-    pub receipt_applied: bool,
 
     /// Status of the execution.
     pub result: ExecutionResult,
@@ -46,7 +41,6 @@ pub struct EvmExecution {
     pub gas: Gas,
 
     /// Storage changes that happened during the transaction execution.
-    #[cfg_attr(test, serde(serialize_with = "ordered_map"))]
     pub changes: ExecutionChanges,
 
     /// The contract address if the executed transaction deploys a contract.
@@ -75,12 +69,11 @@ impl EvmExecution {
         // crete execution and apply costs
         let mut execution = Self {
             block_timestamp,
-            receipt_applied: false,
             result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
             gas: Gas::from(receipt.gas_used),
-            changes: HashMap::from([(sender_changes.address, sender_changes)]),
+            changes: BTreeMap::from([(sender_changes.address, sender_changes)]),
             deployed_contract_address: None,
         };
         execution.apply_receipt(receipt)?;
@@ -89,7 +82,7 @@ impl EvmExecution {
 
     /// Checks if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
-        matches!(self.result, ExecutionResult::Success { .. })
+        matches!(self.result, ExecutionResult::Success)
     }
 
     /// Checks if the current transaction was completed with a failure (reverted or halted).
@@ -180,12 +173,6 @@ impl EvmExecution {
     ///
     /// This method updates the attributes that can diverge based on the receipt of the external transaction.
     pub fn apply_receipt(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
-        // do nothing if receipt is already applied
-        if self.receipt_applied {
-            return Ok(());
-        }
-        self.receipt_applied = true;
-
         // fix gas
         self.gas = Gas::from(receipt.gas_used);
 
@@ -299,7 +286,6 @@ mod tests {
 
         // Verify execution state
         assert_eq!(execution.block_timestamp, timestamp);
-        assert!(execution.receipt_applied);
         assert!(execution.is_failure());
         assert_eq!(execution.output, Bytes::default());
         assert!(execution.logs.is_empty());
@@ -550,8 +536,7 @@ mod tests {
 
         // Set up execution with sender account
         let sender_changes = ExecutionAccountChanges::from_original_values(sender);
-        execution.changes = HashMap::from([(sender_address, sender_changes)]);
-        execution.receipt_applied = false;
+        execution.changes = BTreeMap::from([(sender_address, sender_changes)]);
         execution.gas = Gas::from(100u64);
 
         // Create a receipt with higher gas used and execution cost
@@ -566,21 +551,9 @@ mod tests {
         // Apply receipt
         execution.apply_receipt(&receipt).unwrap();
 
-        // Verify receipt_applied flag
-        assert!(execution.receipt_applied);
-
         // Verify sender balance was reduced by execution cost
         let sender_changes = execution.changes.get(&sender_address).unwrap();
         let modified_balance = sender_changes.balance.take_modified_ref().unwrap();
         assert_eq!(*modified_balance, Wei::from(900u64)); // 1000 - 100
-
-        // Verify applying receipt twice has no effect
-        execution.apply_receipt(&receipt).unwrap();
-
-        // Gas and balance should remain unchanged
-        assert_eq!(execution.gas, Gas::from(100u64));
-        let sender_changes = execution.changes.get(&sender_address).unwrap();
-        let modified_balance = sender_changes.balance.take_modified_ref().unwrap();
-        assert_eq!(*modified_balance, Wei::from(900u64));
     }
 }

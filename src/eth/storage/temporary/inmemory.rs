@@ -94,6 +94,12 @@ impl InMemoryTemporaryStorage {
         self.pending_block.read().block.header.clone()
     }
 
+    #[cfg(feature = "dev")]
+    pub fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
+        self.pending_block.write().block.header.number = block_number;
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // Block and executions
     // -------------------------------------------------------------------------
@@ -273,6 +279,8 @@ impl InMemoryTemporaryStorage {
 
     #[cfg(feature = "dev")]
     pub fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
+        use crate::alias::RevmBytecode;
+
         let mut pending_block = self.pending_block.write();
 
         // Get or create the account
@@ -282,7 +290,7 @@ impl InMemoryTemporaryStorage {
         account.info.bytecode = if code.0.is_empty() {
             None
         } else {
-            Some(revm::primitives::Bytecode::new_raw(code.0.into()))
+            Some(RevmBytecode::new_raw(code.0.into()))
         };
 
         Ok(())

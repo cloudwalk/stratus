@@ -1,3 +1,4 @@
+/// Binary to peform data migrations when changing rocks config. For this to work copy the previous rocks config to this file.
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
@@ -249,9 +250,10 @@ fn main() -> Result<()> {
     let source_db = open_db(&args.source, &source_cf_options)?;
 
     // Create destination database
-    let dest_db = RocksStorageState::new(args.destination, std::time::Duration::from_secs(240), Some(0.0), false)?
-        .db
-        .clone();
+
+    let state = RocksStorageState::new(args.destination, std::time::Duration::from_secs(240), Some(0.0), false, false)?;
+    let dest_db = Arc::clone(&state.db);
+
 
     // Get list of column families
     let cf_names = source_cf_options.keys().copied().collect::<Vec<_>>();

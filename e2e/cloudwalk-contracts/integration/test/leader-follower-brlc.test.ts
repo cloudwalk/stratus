@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { Block, Transaction, TransactionReceipt, TransactionResponse } from "ethers";
+import { TransactionReceipt, TransactionResponse } from "ethers";
 import { ethers } from "hardhat";
 
 import {
@@ -41,14 +41,13 @@ describe("Leader & Follower BRLC integration test", function () {
     });
 
     describe("Deploy and configure BRLC contract using transaction forwarding from follower to leader", function () {
-        it("Validate deployer is main minter", async function () {
+        it("Validate deployer is minter", async function () {
             updateProviderUrl("stratus-follower");
 
             await deployBRLC();
             await configureBRLC();
 
-            expect(deployer.address).to.equal(await brlcToken.mainMinter());
-            expect(await brlcToken.isMinter(deployer.address)).to.be.true;
+            expect(await brlcToken.hasRole(await brlcToken.MINTER_ROLE(), deployer.address)).to.equal(true);
 
             updateProviderUrl("stratus");
         });
