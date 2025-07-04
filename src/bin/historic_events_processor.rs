@@ -90,7 +90,15 @@ fn process_block_events(block: BlockRocksdb) -> Vec<String> {
 /// Main function that processes blockchain data and generates events
 fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
-    let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, Some(0.1), false, false).context("failed to create rocksdb state")?;
+    let state = RocksStorageState::new(
+        "data/rocksdb".to_string(),
+        TIMEOUT,
+        Some(0.1),
+        false,
+        #[cfg(feature = "dev")]
+        false,
+    )
+    .context("failed to create rocksdb state")?;
 
     let (b_pb, tx_pb) = create_progress_bar(&state);
 
