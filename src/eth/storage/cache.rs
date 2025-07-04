@@ -8,6 +8,7 @@ use rustc_hash::FxBuildHasher;
 use super::AccountWithSlots;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -16,6 +17,8 @@ use crate::eth::primitives::SlotValue;
 pub struct StorageCache {
     slot_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
     account_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
+    account_latest_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
+    slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
 }
 
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
@@ -27,6 +30,14 @@ pub struct CacheConfig {
     /// Capacity of account cache
     #[arg(long = "account-cache-capacity", env = "ACCOUNT_CACHE_CAPACITY", default_value = "20000")]
     pub account_cache_capacity: usize,
+
+    /// Capacity of account history cache
+    #[arg(long = "account-history-cache-capacity", env = "ACCOUNT_HISTORY_CACHE_CAPACITY", default_value = "20000")]
+    pub account_history_cache_capacity: usize,
+
+    /// Capacity of slot history cache
+    #[arg(long = "slot-history-cache-capacity", env = "SLOT_HISTORY_CACHE_CAPACITY", default_value = "100000")]
+    pub slot_history_cache_capacity: usize,
 }
 
 impl CacheConfig {
@@ -52,12 +63,28 @@ impl StorageCache {
                 FxBuildHasher,
                 DefaultLifecycle::default(),
             ),
+            account_latest_cache: Cache::with(
+                config.account_history_cache_capacity,
+                config.account_history_cache_capacity as u64,
+                UnitWeighter,
+                FxBuildHasher,
+                DefaultLifecycle::default(),
+            ),
+            slot_latest_cache: Cache::with(
+                config.slot_history_cache_capacity,
+                config.slot_history_cache_capacity as u64,
+                UnitWeighter,
+                FxBuildHasher,
+                DefaultLifecycle::default(),
+            ),
         }
     }
 
     pub fn clear(&self) {
         self.slot_cache.clear();
         self.account_cache.clear();
+        self.account_latest_cache.clear();
+        self.slot_latest_cache.clear();
     }
 
     pub fn cache_slot(&self, address: Address, slot: Slot) {
@@ -90,11 +117,49 @@ impl StorageCache {
         }
     }
 
+    pub fn cache_account_and_slots_latest_from_changes(&self, changes: Vec<ExecutionAccountChanges>) {
+        for change in changes {
+            // cache slots
+            for slot in change.slots.into_values().flat_map(|slot| slot.take()) {
+                self.slot_latest_cache.insert((change.address, slot.index), slot.value);
+            }
+
+            // cache account
+            let mut account = AccountWithSlots::new(change.address);
+            if let Some(nonce) = change.nonce.take_ref() {
+                account.info.nonce = *nonce;
+            }
+            if let Some(balance) = change.balance.take_ref() {
+                account.info.balance = *balance;
+            }
+            if let Some(Some(bytecode)) = change.bytecode.take_ref() {
+                account.info.bytecode = Some(bytecode.clone());
+            }
+            self.account_latest_cache.insert(change.address, account.info);
+        }
+    }
+
     pub fn get_slot(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         self.slot_cache.get(&(address, index)).map(|value| Slot { value, index })
     }
 
     pub fn get_account(&self, address: Address) -> Option<Account> {
         self.account_cache.get(&address)
+    }
+
+    pub fn cache_account_latest(&self, address: Address, account: Account) {
+        self.account_latest_cache.insert(address, account);
+    }
+
+    pub fn cache_slot_latest(&self, address: Address, slot: Slot) {
+        self.slot_latest_cache.insert((address, slot.index), slot.value);
+    }
+
+    pub fn get_account_latest(&self, address: Address) -> Option<Account> {
+        self.account_latest_cache.get(&address)
+    }
+
+    pub fn get_slot_latest(&self, address: Address, index: SlotIndex) -> Option<Slot> {
+        self.slot_latest_cache.get(&(address, index)).map(|value| Slot { value, index })
     }
 }

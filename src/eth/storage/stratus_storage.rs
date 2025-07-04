@@ -128,6 +128,8 @@ impl StratusStorage {
         let cache = CacheConfig {
             slot_cache_capacity: 100000,
             account_cache_capacity: 20000,
+            account_history_cache_capacity: 20000,
+            slot_history_cache_capacity: 100000,
         }
         .init();
 
@@ -263,29 +265,43 @@ impl StratusStorage {
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
 
         let account = 'query: {
-            if point_in_time.is_pending() {
-                if let Some(account) = timed(|| self.cache.get_account(address)).with(|m| {
-                    if m.result.is_some() {
-                        metrics::inc_storage_read_account(m.elapsed, label::CACHE, point_in_time);
-                    }
-                }) {
-                    tracing::debug!(storage = %label::CACHE, %address, ?account, "account found in cache");
-                    return Ok(account);
-                };
+            match point_in_time {
+                PointInTime::Pending => {
+                    if let Some(account) = timed(|| self.cache.get_account(address)).with(|m| {
+                        if m.result.is_some() {
+                            metrics::inc_storage_read_account(m.elapsed, label::CACHE, point_in_time);
+                        }
+                    }) {
+                        tracing::debug!(storage = %label::CACHE, %address, ?account, "account found in cache");
+                        return Ok(account);
+                    };
 
-                tracing::debug!(storage = %label::TEMP, %address, "reading account");
-                let temp_account = timed(|| self.temp.read_account(address)).with(|m| {
-                    if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                        metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time);
+                    tracing::debug!(storage = %label::TEMP, %address, "reading account");
+                    let temp_account = timed(|| self.temp.read_account(address)).with(|m| {
+                        if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
+                            metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time);
+                        }
+                        if let Err(ref e) = m.result {
+                            tracing::error!(reason = ?e, "failed to read account from temporary storage");
+                        }
+                    })?;
+                    if let Some(account) = temp_account {
+                        tracing::debug!(storage = %label::TEMP, %address, ?account, "account found in temporary storage");
+                        break 'query account;
                     }
-                    if let Err(ref e) = m.result {
-                        tracing::error!(reason = ?e, "failed to read account from temporary storage");
-                    }
-                })?;
-                if let Some(account) = temp_account {
-                    tracing::debug!(storage = %label::TEMP, %address, ?account, "account found in temporary storage");
-                    break 'query account;
                 }
+                PointInTime::Mined => {
+                    if let Some(account) = timed(|| self.cache.get_account_latest(address)).with(|m| {
+                        if m.result.is_some() {
+                            metrics::inc_storage_read_account(m.elapsed, label::CACHE, point_in_time);
+                        }
+                    }) {
+                        tracing::debug!(storage = %label::CACHE, %address, ?account, "account found in cache");
+                        return Ok(account);
+                    }
+                }
+
+                _ => (),
             }
 
             // always read from perm if necessary
@@ -298,6 +314,7 @@ impl StratusStorage {
                     tracing::error!(reason = ?e, "failed to read account from permanent storage");
                 }
             })?;
+
             match perm_account {
                 Some(account) => {
                     tracing::debug!(storage = %label::PERM, %address, ?account, "account found in permanent storage");
@@ -310,8 +327,14 @@ impl StratusStorage {
             }
         };
 
-        if point_in_time.is_pending() {
-            self.cache.cache_account(account.clone());
+        match point_in_time {
+            PointInTime::Pending => {
+                self.cache.cache_account(account.clone());
+            }
+            PointInTime::Mined => {
+                self.cache.cache_account_latest(address, account.clone());
+            }
+            _ => {}
         }
         Ok(account)
     }
@@ -321,29 +344,43 @@ impl StratusStorage {
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
         let slot = 'query: {
-            if point_in_time.is_pending() {
-                if let Some(slot) = timed(|| self.cache.get_slot(address, index)).with(|m| {
-                    if m.result.is_some() {
-                        metrics::inc_storage_read_slot(m.elapsed, label::CACHE, point_in_time);
-                    }
-                }) {
-                    tracing::debug!(storage = %label::CACHE, %address, %index, value = %slot.value, "slot found in cache");
-                    return Ok(slot);
-                };
+            match point_in_time {
+                PointInTime::Pending => {
+                    if let Some(slot) = timed(|| self.cache.get_slot(address, index)).with(|m| {
+                        if m.result.is_some() {
+                            metrics::inc_storage_read_slot(m.elapsed, label::CACHE, point_in_time);
+                        }
+                    }) {
+                        tracing::debug!(storage = %label::CACHE, %address, %index, value = %slot.value, "slot found in cache");
+                        return Ok(slot);
+                    };
 
-                tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
-                let temp_slot = timed(|| self.temp.read_slot(address, index)).with(|m| {
-                    if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                        metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time);
+                    tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
+                    let temp_slot = timed(|| self.temp.read_slot(address, index)).with(|m| {
+                        if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
+                            metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time);
+                        }
+                        if let Err(ref e) = m.result {
+                            tracing::error!(reason = ?e, "failed to read slot from temporary storage");
+                        }
+                    })?;
+                    if let Some(slot) = temp_slot {
+                        tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
+                        break 'query slot;
                     }
-                    if let Err(ref e) = m.result {
-                        tracing::error!(reason = ?e, "failed to read slot from temporary storage");
-                    }
-                })?;
-                if let Some(slot) = temp_slot {
-                    tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
-                    break 'query slot;
                 }
+                PointInTime::Mined => {
+                    if let Some(slot) = timed(|| self.cache.get_slot_latest(address, index)).with(|m| {
+                        if m.result.is_some() {
+                            metrics::inc_storage_read_slot(m.elapsed, label::CACHE, point_in_time);
+                        }
+                    }) {
+                        tracing::debug!(storage = %label::CACHE, %address, %index, value = %slot.value, "slot found in cache");
+                        return Ok(slot);
+                    }
+                }
+
+                _ => (),
             }
 
             // always read from perm if necessary
@@ -369,8 +406,14 @@ impl StratusStorage {
             }
         };
 
-        if point_in_time.is_pending() {
-            self.cache.cache_slot(address, slot);
+        match point_in_time {
+            PointInTime::Pending => {
+                self.cache.cache_slot(address, slot);
+            }
+            PointInTime::Mined => {
+                self.cache.cache_slot_latest(address, slot);
+            }
+            _ => {}
         }
         Ok(slot)
     }
@@ -475,7 +518,13 @@ impl StratusStorage {
 
         // save block
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
-        timed(|| self.perm.save_block(block)).with(|m| {
+        timed(|| {
+            let changes = block.compact_account_changes();
+            self.perm.save_block(block)?;
+            self.cache.cache_account_and_slots_latest_from_changes(changes);
+            Ok(())
+        })
+        .with(|m| {
             metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, %block_number, "failed to save block");
@@ -547,6 +596,7 @@ impl StratusStorage {
     pub fn set_storage_at(&self, address: Address, index: SlotIndex, value: SlotValue) -> Result<(), StorageError> {
         // Create a slot with the given index and value
         let slot = Slot::new(index, value);
+        self.cache.clear();
 
         // Update permanent storage
         self.perm.save_slot(address, slot)?;
@@ -554,59 +604,43 @@ impl StratusStorage {
         // Update temporary storage
         self.temp.save_slot(address, slot)?;
 
-        // Update cache
-        self.cache.cache_slot(address, slot);
-
         Ok(())
     }
 
     #[cfg(feature = "dev")]
     pub fn set_nonce(&self, address: Address, nonce: Nonce) -> Result<(), StorageError> {
+        self.cache.clear();
+
         // Update permanent storage
         self.perm.save_account_nonce(address, nonce)?;
 
         // Update temporary storage
         self.temp.save_account_nonce(address, nonce)?;
 
-        // Update cache
-        let point_in_time = PointInTime::Mined;
-        if let Some(account) = self.perm.read_account(address, point_in_time)? {
-            self.cache.cache_account(account);
-        }
-
         Ok(())
     }
 
     #[cfg(feature = "dev")]
     pub fn set_balance(&self, address: Address, balance: Wei) -> Result<(), StorageError> {
+        self.cache.clear();
+
         // Update permanent storage
         self.perm.save_account_balance(address, balance)?;
 
         // Update temporary storage
         self.temp.save_account_balance(address, balance)?;
 
-        // Update cache
-        let point_in_time = PointInTime::Mined;
-        if let Some(account) = self.perm.read_account(address, point_in_time)? {
-            self.cache.cache_account(account);
-        }
-
         Ok(())
     }
 
     #[cfg(feature = "dev")]
     pub fn set_code(&self, address: Address, code: Bytes) -> Result<(), StorageError> {
+        self.cache.clear();
         // Update permanent storage
         self.perm.save_account_code(address, code.clone())?;
 
         // Update temporary storage
         self.temp.save_account_code(address, code)?;
-
-        // Update cache
-        let point_in_time = PointInTime::Mined;
-        if let Some(account) = self.perm.read_account(address, point_in_time)? {
-            self.cache.cache_account(account);
-        }
 
         Ok(())
     }
