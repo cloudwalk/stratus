@@ -44,7 +44,7 @@ impl RocksPermanentStorage {
         shutdown_timeout: Duration,
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
-        use_rocksdb_replication: bool,
+        #[cfg(feature = "dev")] use_rocksdb_replication: bool,
         cf_size_metrics_interval: Option<Duration>,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
@@ -72,6 +72,7 @@ impl RocksPermanentStorage {
             shutdown_timeout,
             cache_size_multiplier,
             enable_sync_write,
+            #[cfg(feature = "dev")]
             use_rocksdb_replication,
         )?);
 
@@ -214,6 +215,7 @@ impl RocksPermanentStorage {
             })
     }
 
+    #[cfg(feature = "dev")]
     pub fn rocksdb_replication_enabled(&self) -> bool {
         self.state.use_rocksdb_replication
     }
