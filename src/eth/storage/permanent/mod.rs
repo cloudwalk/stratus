@@ -60,6 +60,7 @@ impl PermanentStorageConfig {
             self.rocks_shutdown_timeout,
             self.rocks_cache_size_multiplier,
             !self.rocks_disable_sync_write,
+            #[cfg(feature = "dev")]
             self.use_rocksdb_replication,
             self.rocks_cf_size_metrics_interval,
         )

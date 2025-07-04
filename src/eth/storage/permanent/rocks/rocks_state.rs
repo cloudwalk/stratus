@@ -139,6 +139,8 @@ pub struct RocksStorageState {
     db_options: Options,
     shutdown_timeout: Duration,
     enable_sync_write: bool,
+
+    #[cfg(feature = "dev")]
     pub use_rocksdb_replication: bool,
 }
 
@@ -148,7 +150,8 @@ impl RocksStorageState {
         shutdown_timeout: Duration,
         cache_multiplier: Option<f32>,
         enable_sync_write: bool,
-        use_rocksdb_replication: bool,
+
+        #[cfg(feature = "dev")] use_rocksdb_replication: bool,
     ) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
 
@@ -181,6 +184,8 @@ impl RocksStorageState {
             db: Arc::clone(db),
             shutdown_timeout,
             enable_sync_write,
+
+            #[cfg(feature = "dev")]
             use_rocksdb_replication,
         };
 
@@ -193,7 +198,14 @@ impl RocksStorageState {
     pub fn new_in_testdir() -> anyhow::Result<(Self, tempfile::TempDir)> {
         let test_dir = tempfile::tempdir()?;
         let path = test_dir.as_ref().display().to_string();
-        let state = Self::new(path, Duration::ZERO, None, true, false)?;
+        let state = Self::new(
+            path,
+            Duration::ZERO,
+            None,
+            true,
+            #[cfg(feature = "dev")]
+            false,
+        )?;
         Ok((state, test_dir))
     }
 

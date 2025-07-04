@@ -36,7 +36,9 @@ use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
+#[cfg(feature = "dev")]
 use crate::GlobalState;
+#[cfg(feature = "dev")]
 use crate::NodeMode;
 
 mod label {
@@ -84,6 +86,7 @@ impl StratusStorage {
     }
 
     /// Returns whether RocksDB replication is enabled
+    #[cfg(feature = "dev")]
     pub fn rocksdb_replication_enabled(&self) -> bool {
         self.perm.rocksdb_replication_enabled()
     }
@@ -111,8 +114,16 @@ impl StratusStorage {
         let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
         let rocks_path_prefix = rocks_dir.path().to_str().unwrap().to_string();
 
-        let perm = RocksPermanentStorage::new(Some(rocks_path_prefix.clone()), std::time::Duration::from_secs(240), None, true, false, None)
-            .expect("Failed to create RocksPermanentStorage for tests");
+        let perm = RocksPermanentStorage::new(
+            Some(rocks_path_prefix.clone()),
+            std::time::Duration::from_secs(240),
+            None,
+            true,
+            #[cfg(feature = "dev")]
+            false,
+            None,
+        )
+        .expect("Failed to create RocksPermanentStorage for tests");
 
         let cache = CacheConfig {
             slot_cache_capacity: 100000,
@@ -738,11 +749,15 @@ impl StratusStorage {
             BlockFilter::Pending => {
                 // For follower nodes with RocksDB replication, redirect pending queries to mined state
                 // since transactions are only executed on the leader node
+                #[cfg(feature = "dev")]
                 if GlobalState::get_node_mode() == NodeMode::Follower && self.rocksdb_replication_enabled() {
                     Ok(PointInTime::Mined)
                 } else {
                     Ok(PointInTime::Pending)
                 }
+
+                #[cfg(not(feature = "dev"))]
+                Ok(PointInTime::Pending)
             }
             BlockFilter::Latest => Ok(PointInTime::Mined),
             BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
