@@ -1,6 +1,5 @@
 version: "2"
 services:
-
   # ----------------------------------------------------------------------------
   # PostgreSQL
   # ----------------------------------------------------------------------------
@@ -14,7 +13,6 @@ services:
       - 5432:5432
     volumes:
       - "./static/schema/001-schema-external-rpc.sql:/docker-entrypoint-initdb.d/001-schema.sql"
-
   postgres-persistent:
     extends:
       service: postgres
@@ -22,7 +20,6 @@ services:
       - "postgres-data:/var/lib/postgresql/data"
     profiles:
       - manual
-
   # ----------------------------------------------------------------------------
   # Prometheus
   # ----------------------------------------------------------------------------
@@ -37,7 +34,6 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--web.enable-lifecycle"
       - "--log.level=debug"
-
   # ----------------------------------------------------------------------------
   # OpenTelemetry
   # ----------------------------------------------------------------------------
@@ -46,7 +42,6 @@ services:
     ports:
       - 4317:4317
       - 16686:16686
-
   # ----------------------------------------------------------------------------
   # Kafka
   # ----------------------------------------------------------------------------
@@ -55,7 +50,7 @@ services:
     hostname: kafka
     container_name: kafka
     ports:
-    - 29092:29092
+      - 29092:29092
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
@@ -72,6 +67,48 @@ services:
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
-
+  # ----------------------------------------------------------------------------
+  # Grafana Stack
+  # ----------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:12.0.2
+    ports:
+      - 3005:3000
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./static/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+      - loki
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    networks:
+      - grafana-stack
+  loki:
+    image: grafana/loki:3.4.4
+    ports:
+      - 3100:3100
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+    networks:
+      - grafana-stack
+  promtail:
+    image: grafana/promtail:main-bc418c4
+    volumes:
+      - ./static/promtail/config.yaml:/etc/promtail/config.yaml
+      - .:/var/log/host # Mount host logs to a specific directory
+    command: -config.file=/etc/promtail/config.yaml -log.level=debug
+    depends_on:
+      - loki
+    networks:
+      - grafana-stack
 volumes:
   postgres-data:
+  loki-data:
+  grafana-data:
+  alloy-data:
+networks:
+  grafana-stack:
+    driver: bridge

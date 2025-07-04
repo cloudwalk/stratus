@@ -262,17 +262,15 @@ impl InMemoryTemporaryStorage {
                 .and_then(|account| account.slots.get(&index))
                 .cloned()
         };
-        Ok(
-            match pending_slot {
-                Some(pending_slot) => Some(pending_slot),
-                None => self
-                    .latest_block
-                    .read()
-                    .as_ref()
-                    .and_then(|latest| latest.accounts.get(&address).and_then(|account| account.slots.get(&index)))
-                    .copied(),
-            },
-        )
+        Ok(match pending_slot {
+            Some(pending_slot) => Some(pending_slot),
+            None => self
+                .latest_block
+                .read()
+                .as_ref()
+                .and_then(|latest| latest.accounts.get(&address).and_then(|account| account.slots.get(&index)))
+                .copied(),
+        })
     }
 
     // -------------------------------------------------------------------------
