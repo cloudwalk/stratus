@@ -120,7 +120,7 @@ impl EvmInput {
     }
 
     /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas` for a mined block.
-    pub fn from_mined_block(input: CallInput, block: Block) -> Self {
+    pub fn from_mined_block(input: CallInput, block: Block, point_in_time: PointInTime) -> Self {
         Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
@@ -131,7 +131,7 @@ impl EvmInput {
             nonce: None,
             block_number: block.number(),
             block_timestamp: block.header.timestamp,
-            point_in_time: PointInTime::MinedPast(block.number()),
+            point_in_time,
             chain_id: None,
         }
     }
