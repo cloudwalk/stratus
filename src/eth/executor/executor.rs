@@ -635,7 +635,7 @@ impl Executor {
                 let Some(block) = self.storage.read_block(point_in_time.into())? else {
                     return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
                 };
-                EvmInput::from_mined_block(call_input.clone(), block)
+                EvmInput::from_mined_block(call_input.clone(), block, point_in_time)
             }
         };
 
