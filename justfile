@@ -103,6 +103,7 @@ stratus-test *args="":
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
     fi
+    echo "leader features: " $FEATURES
     cargo build --features $FEATURES
     cargo run --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
@@ -126,6 +127,7 @@ stratus-follower-test *args="":
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
     fi
+    echo "follower features: " $FEATURES
     cargo build --features $FEATURES
     LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features $FEATURES -- --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
