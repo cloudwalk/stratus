@@ -30,22 +30,24 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static 
     // small migration in case the feature is disabled after a previous run where it was enabled
     #[cfg(not(feature = "replication"))]
     {
-        let cfs = DB::list_cf(&db_opts, path)?;
-        if cfs.contains(&"replication_logs".to_string()) {
-            tracing::warn!("replication_logs cf found, dropping");
-            use rocksdb::WaitForCompactOptions;
+        if path.exists() {
+            let cfs = DB::list_cf(&db_opts, path)?;
+            if cfs.contains(&"replication_logs".to_string()) {
+                tracing::warn!("replication_logs cf found, dropping");
+                use rocksdb::WaitForCompactOptions;
 
-            let cf_opts = cf_config_iter
-                .clone()
-                .chain([("replication_logs", DbConfig::Default.to_options(CacheSetting::Disabled))]);
-            let db = DB::open_cf_with_opts(&db_opts, path, cf_opts)?;
-            db.drop_cf("replication_logs")?;
-            db.flush_wal(true)?;
-            let mut options = WaitForCompactOptions::default();
-            options.set_abort_on_pause(true);
-            options.set_flush(true);
-            db.wait_for_compact(&options)?;
-            drop(db);
+                let cf_opts = cf_config_iter
+                    .clone()
+                    .chain([("replication_logs", DbConfig::Default.to_options(CacheSetting::Disabled))]);
+                let db = DB::open_cf_with_opts(&db_opts, path, cf_opts)?;
+                db.drop_cf("replication_logs")?;
+                db.flush_wal(true)?;
+                let mut options = WaitForCompactOptions::default();
+                options.set_abort_on_pause(true);
+                options.set_flush(true);
+                db.wait_for_compact(&options)?;
+                drop(db);
+            }
         }
     }
 
