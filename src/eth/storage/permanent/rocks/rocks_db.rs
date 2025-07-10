@@ -32,6 +32,7 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static 
     {
         let cfs = DB::list_cf(&db_opts, path)?;
         if cfs.contains(&"replication_logs".to_string()) {
+            tracing::warn!("replication_logs cf found, dropping");
             use rocksdb::WaitForCompactOptions;
 
             let cf_opts = cf_config_iter
