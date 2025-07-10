@@ -30,7 +30,8 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static 
     // small migration in case the feature is disabled after a previous run where it was enabled
     #[cfg(not(feature = "replication"))]
     {
-        if path.exists() {
+        if path.exists() && path.join("CURRENT").exists() {
+            println!("path exists, checking if replication logs cf is present {:?}", path);
             let cfs = DB::list_cf(&db_opts, path)?;
             if cfs.contains(&"replication_logs".to_string()) {
                 tracing::warn!("replication_logs cf found, dropping");
