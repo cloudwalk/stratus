@@ -25,6 +25,7 @@ use super::cf_versions::CfAccountsHistoryValue;
 use super::cf_versions::CfAccountsValue;
 use super::cf_versions::CfBlocksByHashValue;
 use super::cf_versions::CfBlocksByNumberValue;
+#[cfg(feature = "replication")]
 use super::cf_versions::CfReplicationLogsValue;
 use super::cf_versions::CfTransactionsValue;
 use super::rocks_cf::RocksCfRef;
@@ -34,6 +35,7 @@ use super::rocks_db::create_or_open_db;
 use super::types::AccountRocksdb;
 use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
+#[cfg(feature = "replication")]
 use super::types::BytesRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
@@ -86,6 +88,18 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
         CacheSetting::Enabled(size)
     };
 
+    #[cfg(not(feature = "replication"))]
+    btmap! {
+        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(10)),
+        "accounts_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
+        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(30)),
+        "account_slots_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
+        "transactions" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "blocks_by_number" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "blocks_by_hash" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+    }
+
+    #[cfg(feature = "replication")]
     btmap! {
         "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(10)),
         "accounts_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
@@ -127,6 +141,7 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<'static, HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<'static, BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<'static, HashRocksdb, CfBlocksByHashValue>,
+    #[cfg(feature = "replication")]
     replication_logs: RocksCfRef<'static, BlockNumberRocksdb, CfReplicationLogsValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "rocks_metrics")]
@@ -140,7 +155,7 @@ pub struct RocksStorageState {
     shutdown_timeout: Duration,
     enable_sync_write: bool,
 
-    #[cfg(feature = "dev")]
+    #[cfg(feature = "replication")]
     pub use_rocksdb_replication: bool,
 }
 
@@ -150,8 +165,7 @@ impl RocksStorageState {
         shutdown_timeout: Duration,
         cache_multiplier: Option<f32>,
         enable_sync_write: bool,
-
-        #[cfg(feature = "dev")] use_rocksdb_replication: bool,
+        #[cfg(feature = "replication")] use_rocksdb_replication: bool,
     ) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
 
@@ -176,6 +190,7 @@ impl RocksStorageState {
             transactions: new_cf_ref(db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(db, "blocks_by_hash", &cf_options_map)?,
+            #[cfg(feature = "replication")]
             replication_logs: new_cf_ref(db, "replication_logs", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
@@ -185,7 +200,7 @@ impl RocksStorageState {
             shutdown_timeout,
             enable_sync_write,
 
-            #[cfg(feature = "dev")]
+            #[cfg(feature = "replication")]
             use_rocksdb_replication,
         };
 
@@ -203,7 +218,7 @@ impl RocksStorageState {
             Duration::ZERO,
             None,
             true,
-            #[cfg(feature = "dev")]
+            #[cfg(feature = "replication")]
             false,
         )?;
         Ok((state, test_dir))
@@ -418,6 +433,7 @@ impl RocksStorageState {
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
+    #[cfg(feature = "replication")]
     pub fn read_replication_log(&self, block_number: BlockNumber) -> Result<Option<WriteBatch>> {
         let block_number_rocks = block_number.into();
 
@@ -503,10 +519,13 @@ impl RocksStorageState {
             &mut batch,
         )?;
 
-        let batch_clone = WriteBatch::from_data(batch.data());
-        let batch_rocksdb = BytesRocksdb::from(batch_clone);
-        self.replication_logs
-            .prepare_batch_insertion([(number.into(), batch_rocksdb.into())], &mut batch)?;
+        #[cfg(feature = "replication")]
+        {
+            let batch_clone = WriteBatch::from_data(batch.data());
+            let batch_rocksdb = BytesRocksdb::from(batch_clone);
+            self.replication_logs
+                .prepare_batch_insertion([(number.into(), batch_rocksdb.into())], &mut batch)?;
+        }
 
         self.write_in_batch_for_multiple_cfs(batch)
     }
@@ -550,14 +569,17 @@ impl RocksStorageState {
 
         self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
 
-        let batch_clone = WriteBatch::from_data(batch.data());
-
-        let batch_rocksdb = BytesRocksdb::from(batch_clone);
-        self.replication_logs.prepare_batch_insertion([(number.into(), batch_rocksdb.into())], batch)?;
+        #[cfg(feature = "replication")]
+        {
+            let batch_clone = WriteBatch::from_data(batch.data());
+            let batch_rocksdb = BytesRocksdb::from(batch_clone);
+            self.replication_logs.prepare_batch_insertion([(number.into(), batch_rocksdb.into())], batch)?;
+        }
 
         Ok(())
     }
 
+    #[cfg(feature = "replication")]
     pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> Result<()> {
         let mut write_batch = replication_log;
 
@@ -774,6 +796,7 @@ impl RocksStorageState {
             ("transactions", &self.transactions.column_family),
             ("blocks_by_number", &self.blocks_by_number.column_family),
             ("blocks_by_hash", &self.blocks_by_hash.column_family),
+            #[cfg(feature = "replication")]
             ("replication_logs", &self.replication_logs.column_family),
         ];
 

@@ -255,7 +255,7 @@ fn main() -> Result<()> {
         std::time::Duration::from_secs(240),
         Some(0.0),
         false,
-        #[cfg(feature = "dev")]
+        #[cfg(feature = "replication")]
         false,
     )?;
     let dest_db = Arc::clone(&state.db);
