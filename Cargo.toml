@@ -230,6 +230,9 @@ jemalloc = ["dep:tikv-jemallocator"]
 # Use Jemalloc as the global allocator with profiling enabled
 jeprof = ["tikv-jemallocator/profiling"]
 
+# Enable replication CF (does not work with the latest cache)
+replication = []
+
 # ------------------------------------------------------------------------------
 # Lints
 # ------------------------------------------------------------------------------

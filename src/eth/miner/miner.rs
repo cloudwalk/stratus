@@ -16,8 +16,10 @@ use tracing::Span;
 
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
+#[cfg(feature = "replication")]
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockHeader;
+#[cfg(feature = "replication")]
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
@@ -25,6 +27,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+#[cfg(feature = "replication")]
 use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
@@ -45,6 +48,7 @@ pub enum CommitItem {
     /// A block
     Block(Block),
     /// A replication log from RocksDB
+    #[cfg(feature = "replication")]
     ReplicationLog(ReplicationLogRocksdb),
 }
 
@@ -287,6 +291,7 @@ impl Miner {
     pub fn commit(&self, item: CommitItem) -> anyhow::Result<(), StorageError> {
         match item {
             CommitItem::Block(block) => self.commit_block(block),
+            #[cfg(feature = "replication")]
             CommitItem::ReplicationLog(replication_log) => self.commit_log(replication_log),
         }
     }
@@ -328,6 +333,7 @@ impl Miner {
         Ok(())
     }
 
+    #[cfg(feature = "replication")]
     fn commit_log(&self, replication_log: ReplicationLogRocksdb) -> anyhow::Result<(), StorageError> {
         let block_number: BlockNumber = replication_log.block_number.into();
 

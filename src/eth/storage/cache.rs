@@ -8,6 +8,7 @@ use rustc_hash::FxBuildHasher;
 use super::AccountWithSlots;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+#[cfg(not(feature = "replication"))]
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Slot;
@@ -17,7 +18,9 @@ use crate::eth::primitives::SlotValue;
 pub struct StorageCache {
     slot_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
     account_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
+    #[cfg(not(feature = "replication"))]
     account_latest_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
+    #[cfg(not(feature = "replication"))]
     slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
 }
 
@@ -63,6 +66,7 @@ impl StorageCache {
                 FxBuildHasher,
                 DefaultLifecycle::default(),
             ),
+            #[cfg(not(feature = "replication"))]
             account_latest_cache: Cache::with(
                 config.account_history_cache_capacity,
                 config.account_history_cache_capacity as u64,
@@ -70,6 +74,7 @@ impl StorageCache {
                 FxBuildHasher,
                 DefaultLifecycle::default(),
             ),
+            #[cfg(not(feature = "replication"))]
             slot_latest_cache: Cache::with(
                 config.slot_history_cache_capacity,
                 config.slot_history_cache_capacity as u64,
@@ -83,7 +88,9 @@ impl StorageCache {
     pub fn clear(&self) {
         self.slot_cache.clear();
         self.account_cache.clear();
+        #[cfg(not(feature = "replication"))]
         self.account_latest_cache.clear();
+        #[cfg(not(feature = "replication"))]
         self.slot_latest_cache.clear();
     }
 
@@ -117,6 +124,7 @@ impl StorageCache {
         }
     }
 
+    #[cfg(not(feature = "replication"))]
     pub fn cache_account_and_slots_latest_from_changes(&self, changes: Vec<ExecutionAccountChanges>) {
         for change in changes {
             // cache slots
@@ -147,18 +155,22 @@ impl StorageCache {
         self.account_cache.get(&address)
     }
 
+    #[cfg(not(feature = "replication"))]
     pub fn cache_account_latest(&self, address: Address, account: Account) {
         self.account_latest_cache.insert(address, account);
     }
 
+    #[cfg(not(feature = "replication"))]
     pub fn cache_slot_latest(&self, address: Address, slot: Slot) {
         self.slot_latest_cache.insert((address, slot.index), slot.value);
     }
 
+    #[cfg(not(feature = "replication"))]
     pub fn get_account_latest(&self, address: Address) -> Option<Account> {
         self.account_latest_cache.get(&address)
     }
 
+    #[cfg(not(feature = "replication"))]
     pub fn get_slot_latest(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         self.slot_latest_cache.get(&(address, index)).map(|value| Slot { value, index })
     }

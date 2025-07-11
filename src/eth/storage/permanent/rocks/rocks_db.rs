@@ -27,6 +27,31 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static 
     tracing::debug!("generating options for column families");
     let db_opts = DbConfig::Default.to_options(CacheSetting::Disabled);
 
+    // small migration in case the feature is disabled after a previous run where it was enabled
+    #[cfg(not(feature = "replication"))]
+    {
+        if path.exists() && path.join("CURRENT").exists() {
+            println!("path exists, checking if replication logs cf is present {:?}", path);
+            let cfs = DB::list_cf(&db_opts, path)?;
+            if cfs.contains(&"replication_logs".to_string()) {
+                tracing::warn!("replication_logs cf found, dropping");
+                use rocksdb::WaitForCompactOptions;
+
+                let cf_opts = cf_config_iter
+                    .clone()
+                    .chain([("replication_logs", DbConfig::Default.to_options(CacheSetting::Disabled))]);
+                let db = DB::open_cf_with_opts(&db_opts, path, cf_opts)?;
+                db.drop_cf("replication_logs")?;
+                db.flush_wal(true)?;
+                let mut options = WaitForCompactOptions::default();
+                options.set_abort_on_pause(true);
+                options.set_flush(true);
+                db.wait_for_compact(&options)?;
+                drop(db);
+            }
+        }
+    }
+
     if !path.exists() {
         tracing::warn!(?path, "RocksDB at path doesn't exist, creating a new one there instead");
     }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-#[cfg(feature = "dev")]
+#[cfg(feature = "replication")]
 use alloy_primitives::hex;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
@@ -243,7 +243,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
 
-    #[cfg(feature = "dev")]
+    #[cfg(feature = "replication")]
     module.register_blocking_method("stratus_getReplicationLog", stratus_get_replication_log)?;
 
     // block
@@ -766,7 +766,7 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     }))
 }
 
-#[cfg(feature = "dev")]
+#[cfg(feature = "replication")]
 fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();

@@ -17,6 +17,7 @@ mod log_mined;
 mod logs_bloom;
 mod miner_nonce;
 mod nonce;
+#[cfg(feature = "replication")]
 mod replication_log;
 mod size;
 mod slot;
@@ -31,6 +32,7 @@ pub use block_number::BlockNumberRocksdb;
 pub use bytes::BytesRocksdb;
 pub use hash::HashRocksdb;
 pub use index::IndexRocksdb;
+#[cfg(feature = "replication")]
 pub use replication_log::ReplicationLogRocksdb;
 pub use slot::SlotIndexRocksdb;
 pub use slot::SlotValueRocksdb;
@@ -77,6 +79,7 @@ mod tests {
     gen_test_bincode!(LogsBloomRocksdb);
     gen_test_bincode!(MinerNonceRocksdb);
     gen_test_bincode!(NonceRocksdb);
+    #[cfg(feature = "replication")]
     gen_test_bincode!(ReplicationLogRocksdb);
     gen_test_bincode!(SizeRocksdb);
     gen_test_bincode!(SlotIndexRocksdb);

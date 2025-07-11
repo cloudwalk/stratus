@@ -37,6 +37,7 @@ pub struct PermanentStorageConfig {
     pub rocks_disable_sync_write: bool,
 
     /// Use RocksDB replication logs for importing data without re-executing transactions.
+    #[cfg(feature = "replication")]
     #[arg(long = "use-rocksdb-replication", env = "USE_ROCKSDB_REPLICATION")]
     pub use_rocksdb_replication: bool,
 
@@ -60,7 +61,7 @@ impl PermanentStorageConfig {
             self.rocks_shutdown_timeout,
             self.rocks_cache_size_multiplier,
             !self.rocks_disable_sync_write,
-            #[cfg(feature = "dev")]
+            #[cfg(feature = "replication")]
             self.use_rocksdb_replication,
             self.rocks_cf_size_metrics_interval,
         )

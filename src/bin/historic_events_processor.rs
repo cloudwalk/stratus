@@ -95,7 +95,7 @@ fn main() -> Result<(), anyhow::Error> {
         TIMEOUT,
         Some(0.1),
         false,
-        #[cfg(feature = "dev")]
+        #[cfg(feature = "replication")]
         false,
     )
     .context("failed to create rocksdb state")?;

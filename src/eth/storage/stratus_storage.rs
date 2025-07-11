@@ -1,3 +1,4 @@
+#[cfg(feature = "replication")]
 use rocksdb::WriteBatch;
 use tracing::Span;
 
@@ -76,19 +77,20 @@ impl StratusStorage {
 
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
-        {
-            if (GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled()) && !this.has_genesis()? {
-                this.reset_to_genesis()?;
-            }
+        if (GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled()) && !this.has_genesis()? {
+            this.reset_to_genesis()?;
         }
 
         Ok(this)
     }
 
     /// Returns whether RocksDB replication is enabled
-    #[cfg(feature = "dev")]
     pub fn rocksdb_replication_enabled(&self) -> bool {
-        self.perm.rocksdb_replication_enabled()
+        #[cfg(not(feature = "replication"))]
+        let replication_enabled = false;
+        #[cfg(feature = "replication")]
+        let replication_enabled = self.perm.rocksdb_replication_enabled();
+        replication_enabled
     }
 
     /// Returns whether the genesis block exists
@@ -119,7 +121,7 @@ impl StratusStorage {
             std::time::Duration::from_secs(240),
             None,
             true,
-            #[cfg(feature = "dev")]
+            #[cfg(feature = "replication")]
             false,
             None,
         )
@@ -133,7 +135,7 @@ impl StratusStorage {
         }
         .init();
 
-        return Self::new(
+        Self::new(
             temp,
             perm,
             cache,
@@ -146,7 +148,7 @@ impl StratusStorage {
                 rocks_cf_size_metrics_interval: None,
                 genesis_file: crate::config::GenesisFileConfig::default(),
             },
-        );
+        )
     }
 
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
@@ -202,6 +204,7 @@ impl StratusStorage {
         })
     }
 
+    #[cfg(feature = "replication")]
     pub fn read_replication_log(&self, block_number: BlockNumber) -> Result<Option<WriteBatch>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_replication_log", %block_number).entered();
@@ -215,6 +218,7 @@ impl StratusStorage {
         })
     }
 
+    #[cfg(feature = "replication")]
     pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> Result<(), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::apply_replication_log", %block_number).entered();
@@ -291,6 +295,7 @@ impl StratusStorage {
                     }
                 }
                 PointInTime::Mined => {
+                    #[cfg(not(feature = "replication"))]
                     if let Some(account) = timed(|| self.cache.get_account_latest(address)).with(|m| {
                         if m.result.is_some() {
                             metrics::inc_storage_read_account(m.elapsed, label::CACHE, point_in_time);
@@ -331,6 +336,7 @@ impl StratusStorage {
             PointInTime::Pending => {
                 self.cache.cache_account(account.clone());
             }
+            #[cfg(not(feature = "replication"))]
             PointInTime::Mined => {
                 self.cache.cache_account_latest(address, account.clone());
             }
@@ -370,6 +376,7 @@ impl StratusStorage {
                     }
                 }
                 PointInTime::Mined => {
+                    #[cfg(not(feature = "replication"))]
                     if let Some(slot) = timed(|| self.cache.get_slot_latest(address, index)).with(|m| {
                         if m.result.is_some() {
                             metrics::inc_storage_read_slot(m.elapsed, label::CACHE, point_in_time);
@@ -410,6 +417,7 @@ impl StratusStorage {
             PointInTime::Pending => {
                 self.cache.cache_slot(address, slot);
             }
+            #[cfg(not(feature = "replication"))]
             PointInTime::Mined => {
                 self.cache.cache_slot_latest(address, slot);
             }
@@ -519,8 +527,10 @@ impl StratusStorage {
         // save block
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| {
+            #[cfg(not(feature = "replication"))]
             let changes = block.compact_account_changes();
             self.perm.save_block(block)?;
+            #[cfg(not(feature = "replication"))]
             self.cache.cache_account_and_slots_latest_from_changes(changes);
             Ok(())
         })
