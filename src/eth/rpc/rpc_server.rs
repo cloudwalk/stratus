@@ -147,13 +147,11 @@ impl Server {
                     break (server_handle, subscriptions);
                 },
                 // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
-                _ = health.wait_for_change(|healthy| !healthy) => {
-                    if GlobalState::restart_on_unhealthy() {
-                        tracing::info!("health state changed to unhealthy, restarting the rpc server");
-                        let _ = server_handle.stop();
-                        subscriptions.abort();
-                        join!(server_handle.stopped(), subscriptions.stopped());
-                    }
+                _ = health.wait_for_change(|healthy| GlobalState::restart_on_unhealthy() && !healthy) => {
+                    tracing::info!("health state changed to unhealthy, restarting the rpc server");
+                    let _ = server_handle.stop();
+                    subscriptions.abort();
+                    join!(server_handle.stopped(), subscriptions.stopped());
                 }
             }
         };
@@ -163,7 +161,6 @@ impl Server {
     }
 
     /// Starts JSON-RPC server.
-    #[allow(clippy::too_many_arguments)]
     async fn _serve(&self) -> anyhow::Result<(ServerHandle, RpcSubscriptionsHandles)> {
         let this = self.clone();
         const TASK_NAME: &str = "rpc-server";

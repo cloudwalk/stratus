@@ -39,8 +39,9 @@ it("Test follower health is based on getting new blocks", async function () {
 it("stratus_disableRestartOnUnhealthy should not close connection", async function () {
     updateProviderUrl("stratus-follower");
     var healthyResponse = await sendWithRetry("stratus_health", []);
-    await sendWithRetry("stratus_disableRestartOnUnhealthy", []);
     expect(healthyResponse).to.equal(true);
+
+    await sendWithRetry("stratus_disableRestartOnUnhealthy", []);
 
     let ws = new WebSocketProvider("ws://localhost:3001");
     // check that ws is connected
@@ -57,7 +58,7 @@ it("stratus_disableRestartOnUnhealthy should not close connection", async functi
     expect(unhealthyResponse.data.error.code).to.equal(7001);
     expect(unhealthyResponse.data.error.message).to.equal("Stratus is not ready to start servicing requests.");
 
-    // check that the ws connection was closed
+    // check that the ws connection remained open
     expect(ws.websocket.readyState).to.equal(WebSocket.OPEN);
 
     // Start the leader again
