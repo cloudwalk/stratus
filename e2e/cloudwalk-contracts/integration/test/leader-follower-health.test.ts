@@ -3,7 +3,7 @@ import { WebSocketProvider } from "ethers";
 
 import { sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
 
-test("Test follower health is based on getting new blocks", async function () {
+it("Test follower health is based on getting new blocks", async function () {
     updateProviderUrl("stratus-follower");
     var healthyResponse = await sendWithRetry("stratus_health", []);
     expect(healthyResponse).to.equal(true);
@@ -36,7 +36,7 @@ test("Test follower health is based on getting new blocks", async function () {
     expect(healthyResponse).to.equal(true);
 });
 
-test("stratus_disableRestartOnUnhealthy should not close connection", async function () {
+it("stratus_disableRestartOnUnhealthy should not close connection", async function () {
     updateProviderUrl("stratus-follower");
     var healthyResponse = await sendWithRetry("stratus_health", []);
     await sendWithRetry("stratus_disableRestartOnUnhealthy", []);
