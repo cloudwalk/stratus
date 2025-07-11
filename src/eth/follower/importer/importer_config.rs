@@ -132,7 +132,12 @@ impl ImporterConfig {
         GlobalState::set_importer_shutdown(false);
 
         let consensus = match self
-            .init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage), None)
+            .init(
+                Arc::clone(&ctx.server.executor),
+                Arc::clone(&ctx.server.miner),
+                Arc::clone(&ctx.server.storage),
+                None,
+            )
             .await
         {
             Ok(consensus) => consensus,
@@ -145,7 +150,7 @@ impl ImporterConfig {
 
         match consensus {
             Some(consensus) => {
-                ctx.set_consensus(Some(consensus));
+                ctx.server.set_importer(Some(consensus));
             }
             None => {
                 tracing::error!("failed to update consensus: Consensus is not set.");
