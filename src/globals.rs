@@ -168,7 +168,7 @@ impl GlobalState {
     }
 
     pub fn set_restart_on_unhealthy(state: bool) {
-        RESTART_ON_UNHEALTHY.store(state, Ordering::Relaxed)
+        RESTART_ON_UNHEALTHY.store(state, Ordering::Relaxed);
     }
 
     /// Shutdown the application.
