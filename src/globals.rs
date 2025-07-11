@@ -132,6 +132,9 @@ static START_TIME: LazyLock<DateTime<Utc>> = LazyLock::new(Utc::now);
 /// Is stratus healthy?
 static HEALTH: LazyLock<Sender<bool>> = LazyLock::new(|| tokio::sync::watch::Sender::new(false));
 
+/// Should stratus restart when unhealthy?
+static RESTART_ON_UNHEALTHY: AtomicBool = AtomicBool::new(true);
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalState;
 
@@ -158,6 +161,14 @@ impl GlobalState {
 
     pub fn get_health_receiver() -> tokio::sync::watch::Receiver<bool> {
         HEALTH.subscribe()
+    }
+
+    pub fn restart_on_unhealthy() -> bool {
+        RESTART_ON_UNHEALTHY.load(Ordering::Relaxed)
+    }
+
+    pub fn set_restart_on_unhealthy(state: bool) {
+        RESTART_ON_UNHEALTHY.store(state, Ordering::Relaxed)
     }
 
     /// Shutdown the application.

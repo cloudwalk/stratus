@@ -148,10 +148,12 @@ impl Server {
                 },
                 // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
                 _ = health.wait_for_change(|healthy| !healthy) => {
+                    if GlobalState::restart_on_unhealthy() {
                         tracing::info!("health state changed to unhealthy, restarting the rpc server");
                         let _ = server_handle.stop();
                         subscriptions.abort();
                         join!(server_handle.stopped(), subscriptions.stopped());
+                    }
                 }
             }
         };
@@ -297,6 +299,8 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
+    module.register_method("stratus_enableRestartOnUnhealthy", stratus_enable_restart_on_unhealthy)?;
+    module.register_method("stratus_disableRestartOnUnhealthy", stratus_disable_restart_on_unhealthy)?;
     module.register_async_method("stratus_changeToLeader", stratus_change_to_leader)?;
     module.register_async_method("stratus_changeToFollower", stratus_change_to_follower)?;
     module.register_async_method("stratus_initImporter", stratus_init_importer)?;
@@ -735,6 +739,18 @@ fn stratus_pending_transactions_count(_: Params<'_>, ctx: &RpcContext, _: &Exten
     ctx.server.storage.pending_transactions().len()
 }
 
+fn stratus_disable_restart_on_unhealthy(_: Params<'_>, _: &RpcContext, ext: &Extensions) -> Result<bool, StratusError> {
+    ext.authentication().auth_admin()?;
+    GlobalState::set_restart_on_unhealthy(false);
+    Ok(GlobalState::restart_on_unhealthy())
+}
+
+fn stratus_enable_restart_on_unhealthy(_: Params<'_>, _: &RpcContext, ext: &Extensions) -> Result<bool, StratusError> {
+    ext.authentication().auth_admin()?;
+    GlobalState::set_restart_on_unhealthy(true);
+    Ok(GlobalState::restart_on_unhealthy())
+}
+
 // -----------------------------------------------------------------------------
 // Stratus - State
 // -----------------------------------------------------------------------------
@@ -743,9 +759,9 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<Json
     Ok(build_info::as_json())
 }
 
-fn stratus_config(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_config(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<StratusConfig, StratusError> {
     ext.authentication().auth_admin()?;
-    Ok(ctx.app_config.clone())
+    Ok(ctx.server.app_config.clone())
 }
 
 fn stratus_state(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
