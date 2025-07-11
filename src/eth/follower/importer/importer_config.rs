@@ -78,6 +78,7 @@ impl ImporterConfig {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
 
+        #[cfg(feature = "replication")]
         let importer_mode = if storage.rocksdb_replication_enabled() {
             ImporterMode::RocksDbReplication
         } else {

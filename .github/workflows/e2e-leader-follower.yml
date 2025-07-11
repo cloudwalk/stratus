@@ -38,6 +38,11 @@ jobs:
       matrix:
         test: [brlc, importer, miner, change, deploy, kafka, health, replication]
         use_rocksdb_replication: [false, true]
+        exclude:
+          - test: replication # requires substantial changes to the justfile and is not that useful of a test
+            use_rocksdb_replication: false
+          - test: health # kills and starts stratus again but hardhat test cannot take params, would need to duplicate the test
+            use_rocksdb_replication: true
     name: "E2E Leader & Follower on ${{ matrix.test }} (RocksDB Replication: ${{ matrix.use_rocksdb_replication }})"
     runs-on: ubuntu-22.04
     timeout-minutes: 45

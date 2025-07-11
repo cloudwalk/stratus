@@ -19,6 +19,7 @@ use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::miner::interval_miner::mine_and_commit;
 use crate::eth::miner::miner::CommitItem;
 use crate::eth::miner::Miner;
+#[cfg(feature = "replication")]
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
@@ -26,6 +27,7 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
+#[cfg(feature = "replication")]
 use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_named;
@@ -54,6 +56,7 @@ pub enum ImporterMode {
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     FakeLeader,
     /// Import blocks using RocksDB replication logs.
+    #[cfg(feature = "replication")]
     RocksDbReplication,
 }
 
@@ -143,6 +146,7 @@ impl Importer {
         let number: BlockNumber = storage.read_block_number_to_resume_import()?;
 
         match self.importer_mode {
+            #[cfg(feature = "replication")]
             ImporterMode::RocksDbReplication => {
                 // Use RocksDB replication approach
                 let (log_tx, log_rx) = mpsc::channel(10_000);
@@ -515,6 +519,7 @@ impl Importer {
     // -----------------------------------------------------------------------------
 
     // Applies replication logs to storage
+    #[cfg(feature = "replication")]
     async fn start_log_applier(
         storage: Arc<StratusStorage>,
         mut log_rx: mpsc::Receiver<ReplicationLogRocksdb>,
@@ -599,6 +604,7 @@ impl Importer {
     // -----------------------------------------------------------------------------
 
     /// Retrieves replication logs.
+    #[cfg(feature = "replication")]
     async fn start_log_fetcher(
         chain: Arc<BlockchainClient>,
         log_tx: mpsc::Sender<ReplicationLogRocksdb>,
@@ -674,6 +680,8 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
         };
     }
 }
+
+#[cfg(feature = "replication")]
 async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ReplicationLogRocksdb {
     const REPLICATION_RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {

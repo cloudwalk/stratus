@@ -18,14 +18,39 @@ use crate::infra::metrics;
 ///
 /// The returned `Options` **need** to be stored to refer to the DB metrics!
 #[tracing::instrument(skip_all, fields(path = ?path.as_ref()))]
-pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static str, Options>) -> anyhow::Result<(Arc<DB>, Options)> {
+pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static str, Options>) -> anyhow::Result<(&'static Arc<DB>, Options)> {
     let path = path.as_ref();
 
     tracing::debug!("creating settings for each column family");
     let cf_config_iter = cf_configs.iter().map(|(name, opts)| (*name, opts.clone()));
 
     tracing::debug!("generating options for column families");
-    let db_opts = DbConfig::Default.to_options(CacheSetting::Disabled, None);
+    let db_opts = DbConfig::Default.to_options(CacheSetting::Disabled);
+
+    // small migration in case the feature is disabled after a previous run where it was enabled
+    #[cfg(not(feature = "replication"))]
+    {
+        if path.exists() && path.join("CURRENT").exists() {
+            println!("path exists, checking if replication logs cf is present {:?}", path);
+            let cfs = DB::list_cf(&db_opts, path)?;
+            if cfs.contains(&"replication_logs".to_string()) {
+                tracing::warn!("replication_logs cf found, dropping");
+                use rocksdb::WaitForCompactOptions;
+
+                let cf_opts = cf_config_iter
+                    .clone()
+                    .chain([("replication_logs", DbConfig::Default.to_options(CacheSetting::Disabled))]);
+                let db = DB::open_cf_with_opts(&db_opts, path, cf_opts)?;
+                db.drop_cf("replication_logs")?;
+                db.flush_wal(true)?;
+                let mut options = WaitForCompactOptions::default();
+                options.set_abort_on_pause(true);
+                options.set_flush(true);
+                db.wait_for_compact(&options)?;
+                drop(db);
+            }
+        }
+    }
 
     if !path.exists() {
         tracing::warn!(?path, "RocksDB at path doesn't exist, creating a new one there instead");
@@ -53,5 +78,7 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static 
         metrics::set_rocks_last_startup_delay_millis(waited_for.as_millis() as u64, db_name);
     }
 
-    Ok((Arc::new(db), db_opts))
+    // we leak here to create a 'static reference to the db. This is safe because this function is only called once
+    // and the db is used until the program exits.
+    Ok((Box::leak(Box::new(Arc::new(db))), db_opts))
 }

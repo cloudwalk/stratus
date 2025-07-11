@@ -198,6 +198,10 @@ path = "src/bin/importer_offline.rs"
 name = "historic_events_processor"
 path = "src/bin/historic_events_processor.rs"
 
+[[bin]]
+name = "data_migration"
+path = "src/bin/data_migration.rs"
+
 # ------------------------------------------------------------------------------
 # Features
 # ------------------------------------------------------------------------------
@@ -225,6 +229,9 @@ jemalloc = ["dep:tikv-jemallocator"]
 
 # Use Jemalloc as the global allocator with profiling enabled
 jeprof = ["tikv-jemallocator/profiling"]
+
+# Enable replication CF (does not work with the latest cache)
+replication = []
 
 # ------------------------------------------------------------------------------
 # Lints
