@@ -268,7 +268,7 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
 
-        let account = 'query: {
+        let (account, found_in_perm) = 'query: {
             match point_in_time {
                 PointInTime::Pending => {
                     if let Some(account) = timed(|| self.cache.get_account(address)).with(|m| {
@@ -291,7 +291,7 @@ impl StratusStorage {
                     })?;
                     if let Some(account) = temp_account {
                         tracing::debug!(storage = %label::TEMP, %address, ?account, "account found in temporary storage");
-                        break 'query account;
+                        break 'query (account, false);
                     }
                 }
                 PointInTime::Mined => {
@@ -320,24 +320,32 @@ impl StratusStorage {
                 }
             })?;
 
-            match perm_account {
-                Some(account) => {
-                    tracing::debug!(storage = %label::PERM, %address, ?account, "account found in permanent storage");
-                    account
-                }
-                None => {
-                    tracing::debug!(storage = %label::PERM, %address, "account not found, assuming default value");
-                    Account::new_empty(address)
-                }
-            }
+            (
+                match perm_account {
+                    Some(account) => {
+                        tracing::debug!(storage = %label::PERM, %address, ?account, "account found in permanent storage");
+                        account
+                    }
+                    None => {
+                        tracing::debug!(storage = %label::PERM, %address, "account not found, assuming default value");
+                        Account::new_empty(address)
+                    }
+                },
+                true,
+            )
         };
 
-        match point_in_time {
-            PointInTime::Pending => {
+        match (point_in_time, found_in_perm) {
+            // Pending slots found in the permanent storage (or not found in any storage) are always mined already
+            (PointInTime::Pending, true) => {
+                self.cache.cache_account(account.clone());
+                self.cache.cache_account_latest(address, account.clone());
+            }
+            (PointInTime::Pending, false) => {
                 self.cache.cache_account(account.clone());
             }
             #[cfg(not(feature = "replication"))]
-            PointInTime::Mined => {
+            (PointInTime::Mined, _) => {
                 self.cache.cache_account_latest(address, account.clone());
             }
             _ => {}
@@ -349,7 +357,7 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
-        let slot = 'query: {
+        let (slot, found_in_perm) = 'query: {
             match point_in_time {
                 PointInTime::Pending => {
                     if let Some(slot) = timed(|| self.cache.get_slot(address, index)).with(|m| {
@@ -372,7 +380,7 @@ impl StratusStorage {
                     })?;
                     if let Some(slot) = temp_slot {
                         tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
-                        break 'query slot;
+                        break 'query (slot, false);
                     }
                 }
                 PointInTime::Mined => {
@@ -401,24 +409,33 @@ impl StratusStorage {
                 }
             })?;
 
-            match perm_slot {
-                Some(slot) => {
-                    tracing::debug!(storage = %label::PERM, %address, %index, value = %slot.value, "slot found in permanent storage");
-                    slot
-                }
-                None => {
-                    tracing::debug!(storage = %label::PERM, %address, %index, "slot not found, assuming default value");
-                    Slot::new_empty(index)
-                }
-            }
+            (
+                match perm_slot {
+                    Some(slot) => {
+                        tracing::debug!(storage = %label::PERM, %address, %index, value = %slot.value, "slot found in permanent storage");
+                        slot
+                    }
+                    None => {
+                        tracing::debug!(storage = %label::PERM, %address, %index, "slot not found, assuming default value");
+                        Slot::new_empty(index)
+                    }
+                },
+                true,
+            )
         };
 
-        match point_in_time {
-            PointInTime::Pending => {
+        match (point_in_time, found_in_perm) {
+            #[cfg(not(feature = "replication"))]
+            // Pending slots found in the permanent storage (or not found in any storage) are always mined already
+            (PointInTime::Pending, true) => {
+                self.cache.cache_slot(address, slot);
+                self.cache.cache_slot_latest(address, slot);
+            }
+            (PointInTime::Pending, false) => {
                 self.cache.cache_slot(address, slot);
             }
             #[cfg(not(feature = "replication"))]
-            PointInTime::Mined => {
+            (PointInTime::Mined, _) => {
                 self.cache.cache_slot_latest(address, slot);
             }
             _ => {}
