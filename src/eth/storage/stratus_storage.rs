@@ -337,6 +337,7 @@ impl StratusStorage {
 
         match (point_in_time, found_in_perm) {
             // Pending slots found in the permanent storage (or not found in any storage) are always mined already
+            #[cfg(not(feature = "replication"))]
             (PointInTime::Pending, true) => {
                 self.cache.cache_account(account.clone());
                 self.cache.cache_account_latest(address, account.clone());
