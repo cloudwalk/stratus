@@ -233,6 +233,7 @@ e2e-admin-password:
             exit $exit_code
         fi
         killport 3000 -s sigterm
+        just _wait_for_stratus_finish
     done
 
 # E2E: Execute EOF (EVM Object Format) tests
@@ -320,6 +321,7 @@ shell-lint mode="--write":
 
 e2e-leader use_rocksdb_replication="false":
     #!/bin/bash
+    echo "starting e2e-leader"
     REPLICATION_FLAG=""
     if [ "{{use_rocksdb_replication}}" = "true" ]; then
         REPLICATION_FLAG="--use-rocksdb-replication"
