@@ -35,12 +35,12 @@ use crate::eth::primitives::Wei;
 use crate::eth::storage::AccountWithSlots;
 
 #[derive(Debug)]
-pub struct InmemoryPendingTemporaryStorage {
+pub struct InmemoryTransactionTemporaryStorage {
     pub pending_block: RwLock<InMemoryTemporaryStorageState>,
     pub latest_block: RwLock<Option<InMemoryTemporaryStorageState>>,
 }
 
-impl InmemoryPendingTemporaryStorage {
+impl InmemoryTransactionTemporaryStorage {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
             pending_block: RwLock::new(InMemoryTemporaryStorageState {

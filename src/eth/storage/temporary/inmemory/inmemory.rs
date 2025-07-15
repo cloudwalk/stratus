@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use super::pending::InmemoryPendingTemporaryStorage;
+use super::transaction::InmemoryTransactionTemporaryStorage;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -27,13 +27,13 @@ use crate::eth::storage::AccountWithSlots;
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {
-    pub pending_storage: InmemoryPendingTemporaryStorage,
+    pub pending_storage: InmemoryTransactionTemporaryStorage,
 }
 
 impl InMemoryTemporaryStorage {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
-            pending_storage: InmemoryPendingTemporaryStorage::new(block_number),
+            pending_storage: InmemoryTransactionTemporaryStorage::new(block_number),
         }
     }
 
