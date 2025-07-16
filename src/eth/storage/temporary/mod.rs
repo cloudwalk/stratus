@@ -1,4 +1,5 @@
 pub use inmemory::InMemoryTemporaryStorage;
+pub use inmemory::ReadKind;
 
 mod inmemory;
 

@@ -163,6 +163,11 @@ impl InmemoryTransactionTemporaryStorage {
         self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
+    pub fn clone_pending_state(&self) -> InMemoryTemporaryStorageState {
+        let pending_block = self.pending_block.read();
+        (*pending_block).clone()
+    }
+
     pub fn finish_pending_block(&self) -> anyhow::Result<PendingBlock, StorageError> {
         let pending_block = self.pending_block.upgradable_read();
 

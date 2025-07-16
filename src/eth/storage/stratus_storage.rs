@@ -33,6 +33,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::temporary::ReadKind;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
@@ -265,7 +266,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_account(&self, address: Address, point_in_time: PointInTime) -> Result<Account, StorageError> {
+    pub fn read_account(&self, address: Address, point_in_time: PointInTime, kind: ReadKind) -> Result<Account, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
 
@@ -282,7 +283,7 @@ impl StratusStorage {
                     };
 
                     tracing::debug!(storage = %label::TEMP, %address, "reading account");
-                    let temp_account = timed(|| self.temp.read_account(address)).with(|m| {
+                    let temp_account = timed(|| self.temp.read_account(address, kind)).with(|m| {
                         if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
                             metrics::inc_storage_read_account(m.elapsed, label::TEMP, point_in_time);
                         }
@@ -355,7 +356,7 @@ impl StratusStorage {
         Ok(account)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> Result<Slot, StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime, kind: ReadKind) -> Result<Slot, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
@@ -372,7 +373,7 @@ impl StratusStorage {
                     };
 
                     tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
-                    let temp_slot = timed(|| self.temp.read_slot(address, index)).with(|m| {
+                    let temp_slot = timed(|| self.temp.read_slot(address, index, kind)).with(|m| {
                         if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
                             metrics::inc_storage_read_slot(m.elapsed, label::TEMP, point_in_time);
                         }
