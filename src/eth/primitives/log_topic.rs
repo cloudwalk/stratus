@@ -6,8 +6,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::alias::RevmB256;
-use crate::gen_newtype_from;
 
 /// Topic is part of a [`Log`](super::Log) emitted by the EVM during contract execution.
 #[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Hash)]
@@ -28,13 +26,19 @@ impl Dummy<Faker> for LogTopic {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = LogTopic, other = FixedBytes<32>, [u8; 32]);
 
-impl From<RevmB256> for LogTopic {
-    fn from(value: RevmB256) -> Self {
-        Self(value.0.into())
+impl From<FixedBytes<32>> for LogTopic {
+    fn from(value: FixedBytes<32>) -> Self {
+        Self(value)
     }
 }
+
+impl From<[u8; 32]> for LogTopic {
+    fn from(value: [u8; 32]) -> Self {
+        Self(FixedBytes::from(value))
+    }
+}
+
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

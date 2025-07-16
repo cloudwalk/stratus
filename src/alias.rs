@@ -32,10 +32,8 @@ pub type AlloyHeader = alloy_rpc_types_eth::Header;
 // -----------------------------------------------------------------------------
 pub type RevmAccountInfo = revm::state::AccountInfo;
 pub type RevmAddress = revm::primitives::Address;
-pub type RevmB256 = revm::primitives::B256;
 pub type RevmBytecode = revm::state::Bytecode;
 pub type RevmBytes = revm::primitives::Bytes;
 pub type RevmLog = revm::primitives::Log;
 pub type RevmOutput = revm::context::result::Output;
 pub type RevmState = revm::state::EvmState;
-pub type RevmU256 = revm::primitives::U256;

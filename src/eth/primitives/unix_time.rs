@@ -1,12 +1,12 @@
 use std::ops::Deref;
 
+use alloy_primitives::U256;
 use chrono::DateTime;
 use chrono::Utc;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::alias::RevmU256;
 use crate::ext::InfallibleExt;
 
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -64,7 +64,7 @@ impl From<u64> for UnixTime {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl From<UnixTime> for RevmU256 {
+impl From<UnixTime> for U256 {
     fn from(value: UnixTime) -> Self {
         Self::from_limbs([value.0, 0, 0, 0])
     }

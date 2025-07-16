@@ -3,7 +3,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
@@ -18,16 +17,57 @@ impl Dummy<Faker> for Difficulty {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Difficulty, other = u8, u16, u32, u64, u128, U256, usize, i32);
 
-impl From<[u64; 4]> for Difficulty {
-    fn from(value: [u64; 4]) -> Self {
-        Self(U256::from_limbs(value))
+impl From<u8> for Difficulty {
+    fn from(value: u8) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<u16> for Difficulty {
+    fn from(value: u16) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<u32> for Difficulty {
+    fn from(value: u32) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<u64> for Difficulty {
+    fn from(value: u64) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<u128> for Difficulty {
+    fn from(value: u128) -> Self {
+        Self(U256::from(value))
     }
 }
 
 impl From<U256> for Difficulty {
     fn from(value: U256) -> Self {
         Self(value)
+    }
+}
+
+impl From<usize> for Difficulty {
+    fn from(value: usize) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<i32> for Difficulty {
+    fn from(value: i32) -> Self {
+        Self(U256::from(value as u32))
+    }
+}
+
+impl From<[u64; 4]> for Difficulty {
+    fn from(value: [u64; 4]) -> Self {
+        Self(U256::from_limbs(value))
     }
 }

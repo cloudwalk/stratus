@@ -8,7 +8,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(pub U256);
@@ -20,7 +19,7 @@ impl SlotIndex {
     /// Computes the mapping index of a key.
     pub fn to_mapping_index(&self, key: Vec<u8>) -> SlotIndex {
         // populate self to bytes
-        let mut slot_index_bytes = self.0.to_be_bytes();
+        let slot_index_bytes: [u8; 32] = self.0.to_be_bytes();
 
         // populate key to bytes
         let mut key_bytes = [0u8; 32];
@@ -52,7 +51,18 @@ impl Display for SlotIndex {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 
-gen_newtype_from!(self = SlotIndex, other = U256, [u8; 32]);
+impl From<U256> for SlotIndex {
+    fn from(value: U256) -> Self {
+        Self(value)
+    }
+}
+
+impl From<[u8; 32]> for SlotIndex {
+    fn from(value: [u8; 32]) -> Self {
+        Self(U256::from_be_bytes(value))
+    }
+}
+
 
 impl From<[u64; 4]> for SlotIndex {
     fn from(value: [u64; 4]) -> Self {

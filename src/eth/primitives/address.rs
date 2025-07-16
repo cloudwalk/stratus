@@ -11,7 +11,6 @@ use hex_literal::hex;
 
 use crate::alias::RevmAddress;
 use crate::eth::primitives::LogTopic;
-use crate::gen_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
 #[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
@@ -71,7 +70,18 @@ impl Deref for Address {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Address, other = FixedBytes<20>, [u8; 20]);
+
+impl From<FixedBytes<20>> for Address {
+    fn from(value: FixedBytes<20>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<[u8; 20]> for Address {
+    fn from(value: [u8; 20]) -> Self {
+        Self(FixedBytes::from(value))
+    }
+}
 
 impl From<RevmAddress> for Address {
     fn from(value: RevmAddress) -> Self {

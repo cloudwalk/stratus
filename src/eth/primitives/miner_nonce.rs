@@ -3,7 +3,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::gen_newtype_from;
 
 /// The nonce of an Ethereum block.
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
@@ -18,7 +17,18 @@ impl Dummy<Faker> for MinerNonce {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = MinerNonce, other = B64, [u8; 8]);
+
+impl From<B64> for MinerNonce {
+    fn from(value: B64) -> Self {
+        Self(value)
+    }
+}
+
+impl From<[u8; 8]> for MinerNonce {
+    fn from(value: [u8; 8]) -> Self {
+        Self(B64::from(value))
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

@@ -215,7 +215,7 @@ impl Event for AccountTransfers {
 // -----------------------------------------------------------------------------
 
 /// ERC-20 transfer event hash.
-const TRANSFER_EVENT: LogTopic = LogTopic(B256::from(hex!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")));
+const TRANSFER_EVENT: LogTopic = LogTopic(B256::new(hex!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")));
 
 /// Converts a mined transaction into multiple account transfers events to be published.
 pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined>) -> Vec<AccountTransfers> {

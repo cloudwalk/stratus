@@ -3,15 +3,14 @@ use std::ops::AddAssign;
 use std::str::FromStr;
 
 use alloy_primitives::keccak256;
+use alloy_primitives::U256;
 use alloy_primitives::U64;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::alias::RevmU256;
 use crate::eth::primitives::Hash;
-use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
@@ -97,7 +96,54 @@ impl AddAssign<usize> for BlockNumber {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = BlockNumber, other = u8, u16, u32, u64, U64, usize, i32, i64);
+
+impl From<u8> for BlockNumber {
+    fn from(value: u8) -> Self {
+        Self(U64::from(value))
+    }
+}
+
+impl From<u16> for BlockNumber {
+    fn from(value: u16) -> Self {
+        Self(U64::from(value))
+    }
+}
+
+impl From<u32> for BlockNumber {
+    fn from(value: u32) -> Self {
+        Self(U64::from(value))
+    }
+}
+
+impl From<u64> for BlockNumber {
+    fn from(value: u64) -> Self {
+        Self(U64::from(value))
+    }
+}
+
+impl From<U64> for BlockNumber {
+    fn from(value: U64) -> Self {
+        Self(value)
+    }
+}
+
+impl From<usize> for BlockNumber {
+    fn from(value: usize) -> Self {
+        Self(U64::from(value))
+    }
+}
+
+impl From<i32> for BlockNumber {
+    fn from(value: i32) -> Self {
+        Self(U64::from(value as u32))
+    }
+}
+
+impl From<i64> for BlockNumber {
+    fn from(value: i64) -> Self {
+        Self(U64::from(value as u64))
+    }
+}
 
 impl FromStr for BlockNumber {
     type Err = anyhow::Error;
@@ -123,9 +169,9 @@ impl From<BlockNumber> for U64 {
     }
 }
 
-impl From<BlockNumber> for RevmU256 {
+impl From<BlockNumber> for U256 {
     fn from(block_number: BlockNumber) -> Self {
-        Self::from_limbs([block_number.as_u64(), 0, 0, 0])
+        Self::from(block_number.as_u64())
     }
 }
 

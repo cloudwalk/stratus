@@ -4,7 +4,6 @@ use fake::Dummy;
 use fake::Faker;
 use rand::Rng;
 
-use crate::gen_newtype_from;
 
 /// A signature component (r or s value)
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -19,7 +18,12 @@ impl Dummy<Faker> for SignatureComponent {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = SignatureComponent, other = U256);
+
+impl From<U256> for SignatureComponent {
+    fn from(value: U256) -> Self {
+        Self(value)
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

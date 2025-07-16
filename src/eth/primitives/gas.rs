@@ -3,8 +3,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::gen_newtype_from;
-use crate::gen_newtype_try_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
@@ -28,8 +26,41 @@ impl Dummy<Faker> for Gas {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Gas, other = u8, u16, u32, u64);
-gen_newtype_try_from!(self = Gas, other = i32);
+
+impl From<u8> for Gas {
+    fn from(value: u8) -> Self {
+        Self(U64::from(value))
+    }
+}
+
+impl From<u16> for Gas {
+    fn from(value: u16) -> Self {
+        Self(U64::from(value))
+    }
+}
+
+impl From<u32> for Gas {
+    fn from(value: u32) -> Self {
+        Self(U64::from(value))
+    }
+}
+
+impl From<u64> for Gas {
+    fn from(value: u64) -> Self {
+        Self(U64::from(value))
+    }
+}
+
+impl TryFrom<i32> for Gas {
+    type Error = anyhow::Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        if value < 0 {
+            return Err(anyhow::anyhow!("Gas cannot be negative"));
+        }
+        Ok(Self(U64::from(value as u32)))
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

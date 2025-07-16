@@ -5,7 +5,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::gen_newtype_try_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(pub U64);
@@ -19,7 +18,18 @@ impl Dummy<Faker> for ChainId {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_try_from!(self = ChainId, other = i32, u64);
+
+impl TryFrom<i32> for ChainId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        if value < 0 {
+            return Err(anyhow::anyhow!("ChainId cannot be negative"));
+        }
+        Ok(Self(U64::from(value as u32)))
+    }
+}
+
 
 impl TryFrom<U256> for ChainId {
     type Error = anyhow::Error;

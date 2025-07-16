@@ -5,7 +5,6 @@ use alloy_primitives::Bloom;
 use alloy_primitives::BloomInput;
 
 use crate::eth::primitives::Log;
-use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(transparent)]
@@ -37,7 +36,12 @@ impl DerefMut for LogsBloom {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = LogsBloom, other = [u8; 256]);
+
+impl From<[u8; 256]> for LogsBloom {
+    fn from(value: [u8; 256]) -> Self {
+        Self(Bloom::from(value))
+    }
+}
 
 impl From<Bloom> for LogsBloom {
     fn from(value: Bloom) -> Self {

@@ -14,7 +14,6 @@ use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
-use anyhow::Context;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use fake::Dummy;
@@ -266,7 +265,7 @@ impl From<TransactionInput> for AlloyTransaction {
                 TxLegacy {
                     chain_id: value.chain_id.map(Into::into),
                     nonce: value.nonce.into(),
-                    gas_price: value.gas_price.into().context("failed to convert gas price to u128")?,
+                    gas_price: value.gas_price,
                     gas_limit: value.gas_limit.into(),
                     to: TxKind::from(value.to.map(Into::into)),
                     value: value.value.into(),

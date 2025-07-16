@@ -5,7 +5,6 @@ use fake::Faker;
 use revm::primitives::FixedBytes;
 use revm::primitives::KECCAK_EMPTY;
 
-use crate::gen_newtype_from;
 
 /// Digest of the bytecode of a contract.
 /// In the case of an externally-owned account (EOA), bytecode is null
@@ -28,7 +27,12 @@ impl CodeHash {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = CodeHash, other = [u8; 32]);
+
+impl From<[u8; 32]> for CodeHash {
+    fn from(value: [u8; 32]) -> Self {
+        Self(B256::from(value))
+    }
+}
 
 impl Default for CodeHash {
     fn default() -> Self {

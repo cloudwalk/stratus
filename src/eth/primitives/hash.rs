@@ -16,7 +16,7 @@ impl Hash {
 
     /// Creates a hash from the given bytes.
     pub const fn new(bytes: [u8; 32]) -> Self {
-        Self(B256::from(bytes))
+        Self(B256::new(bytes))
     }
 }
 
@@ -63,7 +63,7 @@ impl From<B256> for Hash {
 }
 
 impl From<[u8; 32]> for Hash {
-    fn from(value: B256) -> Self {
+    fn from(value: [u8; 32]) -> Self {
         Self(B256::from(value))
     }
 }

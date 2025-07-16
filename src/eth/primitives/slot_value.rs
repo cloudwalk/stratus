@@ -5,7 +5,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SlotValue(pub U256);
@@ -42,7 +41,12 @@ impl From<SlotValue> for U256 {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = SlotValue, other = U256);
+
+impl From<U256> for SlotValue {
+    fn from(value: U256) -> Self {
+        Self(value)
+    }
+}
 
 
 impl From<[u64; 4]> for SlotValue {

@@ -5,7 +5,6 @@ use fake::Dummy;
 use fake::Faker;
 
 use crate::ext::RuintExt;
-use crate::gen_newtype_try_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Nonce(U64);
@@ -32,7 +31,17 @@ impl Dummy<Faker> for Nonce {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_try_from!(self = Nonce, other = i32);
+
+impl TryFrom<i32> for Nonce {
+    type Error = anyhow::Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        if value < 0 {
+            return Err(anyhow::anyhow!("Nonce cannot be negative"));
+        }
+        Ok(Self(U64::from(value as u32)))
+    }
+}
 
 impl From<u64> for Nonce {
     fn from(value: u64) -> Self {

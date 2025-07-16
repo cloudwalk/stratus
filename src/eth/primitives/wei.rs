@@ -1,10 +1,12 @@
+use std::str::FromStr;
+
 use alloy_primitives::U256;
 use anyhow::Context;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
+use sqlx::types::BigDecimal;
 
-use crate::gen_newtype_from;
 
 /// Native token amount in wei.
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq, derive_more::Sub, serde::Serialize, serde::Deserialize)]
@@ -58,7 +60,54 @@ impl Dummy<Faker> for Wei {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Wei, other = u8, u16, u32, u64, u128, U256, usize, i32);
+
+impl From<u8> for Wei {
+    fn from(value: u8) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<u16> for Wei {
+    fn from(value: u16) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<u32> for Wei {
+    fn from(value: u32) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<u64> for Wei {
+    fn from(value: u64) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<u128> for Wei {
+    fn from(value: u128) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<U256> for Wei {
+    fn from(value: U256) -> Self {
+        Self(value)
+    }
+}
+
+impl From<usize> for Wei {
+    fn from(value: usize) -> Self {
+        Self(U256::from(value))
+    }
+}
+
+impl From<i32> for Wei {
+    fn from(value: i32) -> Self {
+        Self(U256::from(value as u32))
+    }
+}
 
 impl From<[u64; 4]> for Wei {
     fn from(value: [u64; 4]) -> Self {
@@ -66,14 +115,14 @@ impl From<[u64; 4]> for Wei {
     }
 }
 
-// impl TryFrom<BigDecimal> for Wei {
-//     type Error = anyhow::Error;
+impl TryFrom<BigDecimal> for Wei {
+    type Error = anyhow::Error;
 
-//     fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
-//         let value_str = value.to_string();
-//         Ok(Wei(U256::from_dec_str(&value_str)?))
-//     }
-// }
+    fn try_from(value: BigDecimal) -> Result<Self, Self::Error> {
+        let value_str = value.to_string();
+        Ok(Wei(U256::from_str_radix(&value_str, 10)?))
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
@@ -93,13 +142,13 @@ impl From<Wei> for U256 {
     }
 }
 
-// impl TryFrom<Wei> for BigDecimal {
-//     type Error = anyhow::Error;
-//     fn try_from(value: Wei) -> Result<Self, Self::Error> {
-//         // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
-//         Ok(BigDecimal::from_str(&U256::from(value).to_string())?)
-//     }
-// }
+impl TryFrom<Wei> for BigDecimal {
+    type Error = anyhow::Error;
+    fn try_from(value: Wei) -> Result<Self, Self::Error> {
+        // HACK: If we could import BigInt or BigUint we could convert the bytes directly.
+        Ok(BigDecimal::from_str(&value.0.to_string())?)
+    }
+}
 
 #[cfg(test)]
 mod tests {
