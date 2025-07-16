@@ -154,7 +154,7 @@ fn open_db(path: &str, cf_options_map: &BTreeMap<&'static str, Options>) -> Resu
 
 /// Count the number of entries in a column family using RocksDB's estimate
 fn count_cf_entries(db: &Arc<DB>, cf_name: &str) -> Result<usize> {
-    let cf = db.cf_handle(cf_name).context(format!("Failed to get column family handle for {}", cf_name))?;
+    let cf = db.cf_handle(cf_name).context(format!("Failed to get column family handle for {cf_name}"))?;
 
     // Get the estimated number of keys from RocksDB
     match db.property_value_cf(&cf, ESTIMATE_NUM_KEYS)? {
@@ -170,11 +170,11 @@ fn count_cf_entries(db: &Arc<DB>, cf_name: &str) -> Result<usize> {
 fn migrate_column_family(source_db: &Arc<DB>, dest_db: &Arc<DB>, cf_name: &str, batch_size: usize) -> Result<usize> {
     let source_cf = source_db
         .cf_handle(cf_name)
-        .context(format!("Failed to get source column family handle for {}", cf_name))?;
+        .context(format!("Failed to get source column family handle for {cf_name}"))?;
 
     let dest_cf = dest_db
         .cf_handle(cf_name)
-        .context(format!("Failed to get destination column family handle for {}", cf_name))?;
+        .context(format!("Failed to get destination column family handle for {cf_name}"))?;
 
     // Count entries for progress reporting
     let total_entries = count_cf_entries(source_db, cf_name)?;
@@ -187,7 +187,7 @@ fn migrate_column_family(source_db: &Arc<DB>, dest_db: &Arc<DB>, cf_name: &str, 
             .unwrap()
             .progress_chars("##-"),
     );
-    progress.set_message(format!("Migrating {}", cf_name));
+    progress.set_message(format!("Migrating {cf_name}"));
 
     let mut batch = WriteBatch::default();
     let mut total_migrated = 0;
@@ -220,7 +220,7 @@ fn migrate_column_family(source_db: &Arc<DB>, dest_db: &Arc<DB>, cf_name: &str, 
         dest_db.write(batch).context("Error writing final batch to destination database")?;
     }
 
-    progress.finish_with_message(format!("Completed migrating {} ({} entries)", cf_name, total_migrated));
+    progress.finish_with_message(format!("Completed migrating {cf_name} ({total_migrated} entries)"));
 
     Ok(total_migrated)
 }

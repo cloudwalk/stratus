@@ -457,15 +457,14 @@ impl Database for RevmSession {
         let account = self.storage.read_account(address, self.input.point_in_time)?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
-        if let Some(ref to_address) = self.input.to {
-            if account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
+        if let Some(ref to_address) = self.input.to
+            && account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
                 if self.config.executor_reject_not_contract {
                     return Err(TransactionError::AccountNotContract { address: *to_address }.into());
                 } else {
                     tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
                 }
             }
-        }
 
         // early convert response because account will be moved
         let revm_account: AccountInfo = (&account).into();
