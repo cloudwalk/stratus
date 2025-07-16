@@ -1,4 +1,3 @@
-use alloy_consensus::transaction::Recovered;
 use alloy_consensus::Signed;
 use alloy_consensus::Transaction;
 use alloy_consensus::TxEip1559;
@@ -8,12 +7,14 @@ use alloy_consensus::TxEip4844Variant;
 use alloy_consensus::TxEip7702;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
+use alloy_consensus::transaction::Recovered;
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::Signature;
 use alloy_primitives::TxKind;
-use alloy_primitives::U256;
 use alloy_primitives::U64;
+use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
+use anyhow::Context;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use fake::Dummy;
@@ -22,7 +23,6 @@ use fake::Faker;
 use rlp::Decodable;
 
 use crate::alias::AlloyTransaction;
-use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
@@ -31,6 +31,7 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
+use crate::eth::primitives::signature_component::SignatureComponent;
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
@@ -178,9 +179,14 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl From<TransactionInput> for AlloyTransaction {
-    fn from(value: TransactionInput) -> Self {
-        let signature = Signature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_limbs()[0] == 1);
+impl TryFrom<TransactionInput> for AlloyTransaction {
+    type Error = anyhow::Error;
+    fn try_from(value: TransactionInput) -> Result<Self, Self::Error> {
+        let signature = Signature::new(
+            SignatureComponent(value.r).into(),
+            SignatureComponent(value.s).into(),
+            value.v.as_limbs()[0] == 1,
+        );
 
         let tx_type = value.tx_type.map(|t| t.as_limbs()[0]).unwrap_or(0);
 
@@ -190,7 +196,7 @@ impl From<TransactionInput> for AlloyTransaction {
                 TxEip2930 {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
-                    gas_price: value.gas_price.into(),
+                    gas_price: value.gas_price.try_into().context("failed to convert gas price to u128")?,
                     gas_limit: value.gas_limit.into(),
                     to: TxKind::from(value.to.map(Into::into)),
                     value: value.value.into(),
@@ -206,8 +212,8 @@ impl From<TransactionInput> for AlloyTransaction {
                 TxEip1559 {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
-                    max_fee_per_gas: value.gas_price.into(),
-                    max_priority_fee_per_gas: value.gas_price.into(),
+                    max_fee_per_gas: value.gas_price.into().context("failed to convert gas price to u128")?,
+                    max_priority_fee_per_gas: value.gas_price.into().context("failed to convert gas price to u128")?,
                     gas_limit: value.gas_limit.into(),
                     to: TxKind::from(value.to.map(Into::into)),
                     value: value.value.into(),
@@ -223,8 +229,8 @@ impl From<TransactionInput> for AlloyTransaction {
                 TxEip4844Variant::TxEip4844(TxEip4844 {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
-                    max_fee_per_gas: value.gas_price.into(),
-                    max_priority_fee_per_gas: value.gas_price.into(),
+                    max_fee_per_gas: value.gas_price.into().context("failed to convert gas price to u128")?,
+                    max_priority_fee_per_gas: value.gas_price.into().context("failed to convert gas price to u128")?,
                     gas_limit: value.gas_limit.into(),
                     to: value.to.map(Into::into).unwrap_or_default(),
                     value: value.value.into(),
@@ -243,8 +249,8 @@ impl From<TransactionInput> for AlloyTransaction {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
                     gas_limit: value.gas_limit.into(),
-                    max_fee_per_gas: value.gas_price.into(),
-                    max_priority_fee_per_gas: value.gas_price.into(),
+                    max_fee_per_gas: value.gas_price.into().context("failed to convert gas price to u128")?,
+                    max_priority_fee_per_gas: value.gas_price.into().context("failed to convert gas price to u128")?,
                     to: value.to.map(Into::into).unwrap_or_default(),
                     value: value.value.into(),
                     input: value.input.clone().into(),
@@ -260,7 +266,7 @@ impl From<TransactionInput> for AlloyTransaction {
                 TxLegacy {
                     chain_id: value.chain_id.map(Into::into),
                     nonce: value.nonce.into(),
-                    gas_price: value.gas_price.into(),
+                    gas_price: value.gas_price.into().context("failed to convert gas price to u128")?,
                     gas_limit: value.gas_limit.into(),
                     to: TxKind::from(value.to.map(Into::into)),
                     value: value.value.into(),
@@ -271,12 +277,12 @@ impl From<TransactionInput> for AlloyTransaction {
             )),
         };
 
-        Self {
+        Ok(Self {
             inner: Recovered::new_unchecked(inner, value.signer.into()),
             block_hash: None,
             block_number: None,
             transaction_index: None,
-            effective_gas_price: Some(value.gas_price.into()),
-        }
+            effective_gas_price: Some(value.gas_price.into().context("failed to convert gas price to u128")?),
+        })
     }
 }

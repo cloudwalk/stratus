@@ -1,7 +1,7 @@
-use alloy_consensus::transaction::Recovered;
 use alloy_consensus::Signed;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
+use alloy_consensus::transaction::Recovered;
 use alloy_primitives::Bytes;
 use alloy_primitives::Signature;
 use alloy_primitives::TxKind;
@@ -98,7 +98,7 @@ impl Dummy<Faker> for ExternalTransaction {
         let tx = TxLegacy {
             chain_id: Some(1),
             nonce: rng.next_u64(),
-            gas_price: gas_price.into(),
+            gas_price: gas_price.try_into().expect("wei was created with u64 which fits u128 qed."),
             gas_limit: rng.next_u64(),
             to: TxKind::Call(from.into()),
             value: value.into(),
@@ -118,7 +118,7 @@ impl Dummy<Faker> for ExternalTransaction {
             block_hash: Some(block_hash.into()),
             block_number: Some(rng.next_u64()),
             transaction_index: Some(rng.next_u64()),
-            effective_gas_price: Some(gas_price.as_u128()),
+            effective_gas_price: Some(gas_price.try_into().expect("wei was created with u64 which fits u128 qed.")),
         };
 
         ExternalTransaction(inner)

@@ -20,6 +20,12 @@ impl Dummy<Faker> for Size {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 
+impl From<u64> for Size {
+    fn from(value: u64) -> Self {
+        Self(U64::from(value))
+    }
+}
+
 impl TryFrom<U256> for Size {
     type Error = anyhow::Error;
 

@@ -33,7 +33,11 @@ impl Dummy<Faker> for Nonce {
 // -----------------------------------------------------------------------------
 gen_newtype_try_from!(self = Nonce, other = i32);
 
-
+impl From<u64> for Nonce {
+    fn from(value: u64) -> Self {
+        Self(U64::from(value))
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other

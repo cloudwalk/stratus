@@ -256,7 +256,7 @@ mod tests {
         let sender_address: Address = Faker.fake();
         let sender = Account {
             address: sender_address,
-            nonce: Nonce::from(1u16),
+            nonce: Nonce::from(1u64),
             balance: Wei::from(1000u64),
             bytecode: None,
             code_hash: CodeHash::default(),
@@ -297,7 +297,7 @@ mod tests {
 
         // Nonce should be incremented
         let modified_nonce = sender_changes.nonce.take_modified_ref().unwrap();
-        assert_eq!(*modified_nonce, Nonce::from(2u8));
+        assert_eq!(*modified_nonce, Nonce::from(2u64));
 
         // Balance should be reduced by execution cost
         if receipt.execution_cost() > Wei::ZERO {
@@ -525,7 +525,7 @@ mod tests {
         let sender_address: Address = Faker.fake();
         let sender = Account {
             address: sender_address,
-            nonce: Nonce::from(1u16),
+            nonce: Nonce::from(1u64),
             balance: Wei::from(1000u64),
             bytecode: None,
             code_hash: CodeHash::default(),
@@ -546,7 +546,7 @@ mod tests {
 
         // Make sure transaction has a cost
         let gas_price = Wei::from(1u64);
-        receipt.0.effective_gas_price = gas_price.into();
+        receipt.0.effective_gas_price = gas_price.try_into().expect("wei was created with u64 which fits u128 qed.");
 
         // Apply receipt
         execution.apply_receipt(&receipt).unwrap();

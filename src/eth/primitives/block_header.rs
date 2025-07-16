@@ -192,7 +192,7 @@ impl TryFrom<&ExternalBlock> for BlockHeader {
             difficulty: Difficulty::from(value.0.header.inner.difficulty),
             receipts_root: Hash::from(value.0.header.inner.receipts_root),
             uncle_hash: Hash::from(value.0.header.inner.ommers_hash),
-            size: Size::from(value.0.header.size.unwrap_or_default()),
+            size: Size::try_from(value.0.header.size.unwrap_or_default())?,
             state_root: Hash::from(value.0.header.inner.state_root),
             total_difficulty: Difficulty::from(value.0.header.total_difficulty.unwrap_or_default()),
             nonce: MinerNonce::from(value.0.header.inner.nonce.0),
