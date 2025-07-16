@@ -2,7 +2,6 @@ use alloy_consensus::Eip658Value;
 use alloy_consensus::Receipt;
 use alloy_consensus::ReceiptEnvelope;
 use alloy_consensus::ReceiptWithBloom;
-use anyhow::Context;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
@@ -71,27 +70,23 @@ impl TransactionMined {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl TryFrom<TransactionMined> for AlloyTransaction {
-    type Error = anyhow::Error;
-
-    fn try_from(value: TransactionMined) -> Result<Self, Self::Error> {
+impl From<TransactionMined> for AlloyTransaction {
+    fn from(value: TransactionMined) -> Self {
         let gas_price = value.input.gas_price;
-        let tx = AlloyTransaction::from(value.input.try_into()?);
+        let tx = AlloyTransaction::from(value.input);
 
-        Ok(Self {
+        Self {
             inner: tx.inner,
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             transaction_index: Some(value.transaction_index.into()),
-            effective_gas_price: Some(gas_price.try_into().context("failed to convert gas price to u128")?),
-        })
+            effective_gas_price: Some(gas_price),
+        }
     }
 }
 
-impl TryFrom<TransactionMined> for AlloyReceipt {
-    type Error = anyhow::Error;
-
-    fn try_from(value: TransactionMined) -> Result<Self, Self::Error> {
+impl From<TransactionMined> for AlloyReceipt {
+    fn from(value: TransactionMined) -> Self {
         let receipt = Receipt {
             status: Eip658Value::Eip658(value.is_success()),
             cumulative_gas_used: value.execution.gas.into(), // TODO: implement cumulative gas used correctly
@@ -111,20 +106,20 @@ impl TryFrom<TransactionMined> for AlloyReceipt {
             _ => ReceiptEnvelope::Legacy(receipt_with_bloom),
         };
 
-        Ok(Self {
+        Self {
             inner,
             transaction_hash: value.input.hash.into(),
             transaction_index: Some(value.transaction_index.into()),
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             gas_used: value.execution.gas.into(),
-            effective_gas_price: value.input.gas_price.try_into().context("failed to convert gas price to u128")?,
+            effective_gas_price: value.input.gas_price,
             blob_gas_used: None,
             blob_gas_price: None,
             from: value.input.signer.into(),
             to: value.input.to.map_into(),
             contract_address: value.execution.contract_address().map_into(),
-        })
+        }
     }
 }
 

@@ -210,28 +210,26 @@ impl From<PendingBlock> for Block {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl TryFrom<Block> for AlloyBlockAlloyTransaction {
-    type Error = anyhow::Error;
-    fn try_from(block: Block) -> Result<Self, Self::Error> {
+impl From<Block> for AlloyBlockAlloyTransaction {
+    fn from(block: Block) -> Self {
         let alloy_block: AlloyBlockAlloyTransaction = block.header.into();
-        let transactions: Vec<AlloyTransaction> = block.transactions.into_iter().map(|inner| inner.try_into()).collect::<anyhow::Result<_>>()?;
+        let transactions: Vec<AlloyTransaction> = block.transactions.into_iter().map_into().collect();
 
-        Ok(Self {
+        Self {
             transactions: BlockTransactions::Full(transactions),
             ..alloy_block
-        })
+        }
     }
 }
 
-impl TryFrom<Block> for AlloyBlockH256 {
-    type Error = anyhow::Error;
-    fn try_from(block: Block) -> Result<Self, Self::Error> {
+impl From<Block> for AlloyBlockH256 {
+    fn from(block: Block) -> Self {
         let alloy_block: AlloyBlockH256 = block.header.into();
         let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.hash).map(B256::from).collect();
 
-        Ok(Self {
+        Self {
             transactions: BlockTransactions::Hashes(transaction_hashes),
             ..alloy_block
-        })
+        }
     }
 }
