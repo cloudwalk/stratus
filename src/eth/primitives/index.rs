@@ -67,7 +67,7 @@ impl From<Index> for u64 {
 
 impl From<Index> for U64 {
     fn from(value: Index) -> U64 {
-        value.0.try_into().expect("u64 fits into U64 qed")
+        U64::from(value.0)
     }
 }
 

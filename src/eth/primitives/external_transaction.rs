@@ -118,7 +118,7 @@ impl Dummy<Faker> for ExternalTransaction {
             block_hash: Some(block_hash.into()),
             block_number: Some(rng.next_u64()),
             transaction_index: Some(rng.next_u64()),
-            effective_gas_price: Some(gas_price.try_into().expect("wei was created with u64 which fits u128 qed.")),
+            effective_gas_price: Some(gas_price),
         };
 
         ExternalTransaction(inner)

@@ -3,6 +3,8 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
+use crate::ext::RuintExt;
+
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Gas(U64);
@@ -12,7 +14,7 @@ impl Gas {
     pub const MAX: Gas = Gas(U64::MAX);
 
     pub fn as_u64(&self) -> u64 {
-        self.0.try_into().expect("U64 fits into u64 qed.")
+        self.0.as_u64()
     }
 }
 

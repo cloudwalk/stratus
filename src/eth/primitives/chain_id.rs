@@ -35,9 +35,7 @@ impl TryFrom<U256> for ChainId {
     type Error = anyhow::Error;
 
     fn try_from(value: U256) -> Result<Self, Self::Error> {
-        Ok(ChainId(
-            u64::try_from(value).map_err(|err| anyhow!(err))?.try_into().expect("u64 fits into U64 qed."),
-        ))
+        Ok(ChainId(U64::from(u64::try_from(value).map_err(|err| anyhow!(err))?)))
     }
 }
 
