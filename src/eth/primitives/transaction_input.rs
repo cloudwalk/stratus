@@ -32,6 +32,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
 use crate::eth::primitives::signature_component::SignatureComponent;
+use crate::ext::RuintExt;
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
@@ -184,10 +185,10 @@ impl From<TransactionInput> for AlloyTransaction {
         let signature = Signature::new(
             SignatureComponent(value.r).into(),
             SignatureComponent(value.s).into(),
-            value.v.as_limbs()[0] == 1,
+            value.v == U64::ONE,
         );
 
-        let tx_type = value.tx_type.map(|t| t.as_limbs()[0]).unwrap_or(0);
+        let tx_type = value.tx_type.map(|t| t.as_u64()).unwrap_or(0);
 
         let inner = match tx_type {
             // EIP-2930

@@ -15,6 +15,7 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::ext::OptionExt;
+use crate::ext::RuintExt;
 
 /// Transaction that was executed by the EVM and added to a block.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -98,7 +99,7 @@ impl From<TransactionMined> for AlloyReceipt {
             logs_bloom: value.compute_bloom().into(),
         };
 
-        let inner = match value.input.tx_type.map(|tx| tx.as_limbs()[0]) {
+        let inner = match value.input.tx_type.map(|tx| tx.as_u64()) {
             Some(1) => ReceiptEnvelope::Eip2930(receipt_with_bloom),
             Some(2) => ReceiptEnvelope::Eip1559(receipt_with_bloom),
             Some(3) => ReceiptEnvelope::Eip4844(receipt_with_bloom),

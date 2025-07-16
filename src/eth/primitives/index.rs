@@ -2,6 +2,7 @@ use alloy_primitives::U256;
 use alloy_primitives::U64;
 use display_json::DebugAsJson;
 
+use crate::ext::RuintExt;
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
 
@@ -28,7 +29,7 @@ gen_newtype_try_from!(self = Index, other = U256, i64);
 
 impl From<U64> for Index {
     fn from(value: U64) -> Self {
-        Index(value.into_limbs()[0])
+        Index(value.as_u64())
     }
 }
 

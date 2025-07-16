@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::time::Duration;
 
+use alloy_primitives::U256;
+use alloy_primitives::U64;
 use anyhow::anyhow;
 use chrono::DateTime;
 use chrono::Utc;
@@ -50,6 +52,22 @@ pub fn type_basename<T>() -> &'static str {
 // -----------------------------------------------------------------------------
 // From / TryFrom
 // -----------------------------------------------------------------------------
+
+pub trait RuintExt {
+    fn as_u64(&self) -> u64;
+}
+
+impl RuintExt for U256 {
+    fn as_u64(&self) -> u64 {
+        self.as_limbs()[0]
+    }
+}
+
+impl RuintExt for U64 {
+    fn as_u64(&self) -> u64 {
+        self.as_limbs()[0]
+    }
+}
 
 /// Generates [`From`] implementation for a [newtype](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) that delegates to the inner type [`From`].
 #[macro_export]

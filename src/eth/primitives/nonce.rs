@@ -4,6 +4,7 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
+use crate::ext::RuintExt;
 use crate::gen_newtype_try_from;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -13,7 +14,7 @@ impl Nonce {
     pub const ZERO: Nonce = Nonce(U64::ZERO);
 
     pub fn as_u64(&self) -> u64 {
-        self.0.as_limbs()[0]
+        self.0.as_u64()
     }
 
     /// Returns the next nonce.

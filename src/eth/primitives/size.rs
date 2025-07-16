@@ -5,6 +5,8 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
+use crate::ext::RuintExt;
+
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
@@ -39,7 +41,7 @@ impl TryFrom<U256> for Size {
 // ----------------------------------------------------------------------------
 impl From<Size> for u64 {
     fn from(value: Size) -> Self {
-        value.0.as_limbs()[0]
+        value.0.as_u64()
     }
 }
 
