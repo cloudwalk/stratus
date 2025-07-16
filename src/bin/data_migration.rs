@@ -5,21 +5,21 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
 use clap::Parser;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 use rocksdb::BlockBasedOptions;
 use rocksdb::Cache;
+use rocksdb::DB;
 use rocksdb::DataBlockIndexType;
 use rocksdb::IteratorMode;
 use rocksdb::Options;
 use rocksdb::ReadOptions;
 use rocksdb::SliceTransform;
 use rocksdb::WriteBatch;
-use rocksdb::DB;
 use stratus::eth::storage::permanent::RocksStorageState;
 
 const ESTIMATE_NUM_KEYS: &str = "rocksdb.estimate-num-keys";

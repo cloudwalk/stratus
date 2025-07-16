@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
-use alloy_primitives::{U256, U64};
+use alloy_primitives::U64;
+use alloy_primitives::U256;
 
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
@@ -10,7 +11,8 @@ use super::hash::HashRocksdb;
 use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
 use crate::eth::primitives::TransactionInput;
-use crate::ext::{OptionExt, RuintExt};
+use crate::ext::OptionExt;
+use crate::ext::RuintExt;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct TransactionInputRocksdb {

@@ -1,7 +1,7 @@
 use alloy_consensus::ReceiptEnvelope;
+use alloy_primitives::B256;
 use alloy_primitives::Bloom;
 use alloy_primitives::Bytes;
-use alloy_primitives::B256;
 use alloy_primitives::U256;
 use fake::Dummy;
 use fake::Faker;

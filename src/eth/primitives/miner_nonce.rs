@@ -3,7 +3,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-
 /// The nonce of an Ethereum block.
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MinerNonce(B64);

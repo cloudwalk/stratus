@@ -1,5 +1,5 @@
-use alloy_primitives::U256;
 use alloy_primitives::U64;
+use alloy_primitives::U256;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;

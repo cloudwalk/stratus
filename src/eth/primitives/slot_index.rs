@@ -1,13 +1,12 @@
 use std::fmt::Display;
 use std::io::Read;
 
-use alloy_primitives::keccak256;
 use alloy_primitives::FixedBytes;
 use alloy_primitives::U256;
+use alloy_primitives::keccak256;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
-
 
 #[derive(DebugAsJson, Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(pub U256);
@@ -62,7 +61,6 @@ impl From<[u8; 32]> for SlotIndex {
         Self(U256::from_be_bytes(value))
     }
 }
-
 
 impl From<[u64; 4]> for SlotIndex {
     fn from(value: [u64; 4]) -> Self {

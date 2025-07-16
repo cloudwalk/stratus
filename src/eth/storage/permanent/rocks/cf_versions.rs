@@ -145,10 +145,10 @@ mod tests {
     use std::marker::PhantomData;
     use std::path::Path;
 
-    use anyhow::bail;
-    use anyhow::ensure;
     use anyhow::Context;
     use anyhow::Result;
+    use anyhow::bail;
+    use anyhow::ensure;
     use fake::Dummy;
     use fake::Faker;
 

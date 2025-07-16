@@ -92,13 +92,13 @@ impl Dummy<Faker> for ExternalTransaction {
 
         let block_hash: Hash = faker.fake_with_rng(rng);
 
-        let gas_price: Wei = Wei::from(rng.next_u64());
+        let gas_price: u128 = faker.fake_with_rng(rng);
         let value: Wei = Wei::from(rng.next_u64());
 
         let tx = TxLegacy {
             chain_id: Some(1),
             nonce: rng.next_u64(),
-            gas_price: gas_price.try_into().expect("wei was created with u64 which fits u128 qed."),
+            gas_price,
             gas_limit: rng.next_u64(),
             to: TxKind::Call(from.into()),
             value: value.into(),

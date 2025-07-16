@@ -4,10 +4,10 @@ use std::io::BufReader;
 use std::path::Path;
 use std::str::FromStr;
 
-use alloy_primitives::hex;
-use alloy_primitives::FixedBytes;
 use alloy_primitives::B64;
+use alloy_primitives::FixedBytes;
 use alloy_primitives::U256;
+use alloy_primitives::hex;
 use anyhow::Result;
 use const_hex::FromHex;
 use serde::Deserialize;

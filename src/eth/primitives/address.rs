@@ -85,13 +85,13 @@ impl From<[u8; 20]> for Address {
 
 impl From<RevmAddress> for Address {
     fn from(value: RevmAddress) -> Self {
-        Address(value.0 .0.into())
+        Address(value.0.0.into())
     }
 }
 
 impl From<LogTopic> for Address {
     fn from(value: LogTopic) -> Self {
-        Self(FixedBytes::from_slice(&value.0 .0[12..32]))
+        Self(FixedBytes::from_slice(&value.0.0[12..32]))
     }
 }
 
@@ -144,7 +144,7 @@ impl From<Address> for FixedBytes<20> {
 
 impl From<Address> for RevmAddress {
     fn from(value: Address) -> Self {
-        revm::primitives::Address(value.0 .0.into())
+        revm::primitives::Address(value.0.0.into())
     }
 }
 

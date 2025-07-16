@@ -1,11 +1,10 @@
 use std::fmt::Display;
 
-use alloy_primitives::FixedBytes;
 use alloy_primitives::B256;
+use alloy_primitives::FixedBytes;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
-
 
 /// Topic is part of a [`Log`](super::Log) emitted by the EVM during contract execution.
 #[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Hash)]
@@ -39,7 +38,6 @@ impl From<[u8; 32]> for LogTopic {
     }
 }
 
-
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
@@ -51,12 +49,12 @@ impl AsRef<[u8]> for LogTopic {
 
 impl From<LogTopic> for [u8; 32] {
     fn from(value: LogTopic) -> Self {
-        value.0 .0
+        value.0.0
     }
 }
 
 impl From<LogTopic> for B256 {
     fn from(value: LogTopic) -> Self {
-        Self::from(value.0)
+        value.0
     }
 }

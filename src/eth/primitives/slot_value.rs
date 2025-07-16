@@ -5,7 +5,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SlotValue(pub U256);
 
@@ -48,13 +47,11 @@ impl From<U256> for SlotValue {
     }
 }
 
-
 impl From<[u64; 4]> for SlotValue {
     fn from(value: [u64; 4]) -> Self {
         Self(U256::from_limbs(value))
     }
 }
-
 
 impl From<alloy_primitives::FixedBytes<32>> for SlotValue {
     fn from(value: alloy_primitives::FixedBytes<32>) -> Self {

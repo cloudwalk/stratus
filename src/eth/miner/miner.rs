@@ -1,15 +1,15 @@
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use itertools::Itertools;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
-use tokio::sync::broadcast;
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::Span;
@@ -27,11 +27,11 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::storage::StratusStorage;
 #[cfg(feature = "replication")]
 use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
-use crate::eth::storage::StratusStorage;
-use crate::ext::not;
 use crate::ext::DisplayExt;
+use crate::ext::not;
 use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
 use crate::infra::tracing::SpanExt;
 
@@ -442,16 +442,16 @@ impl Miner {
 // Miner
 // -----------------------------------------------------------------------------
 pub mod interval_miner {
+    use std::sync::Arc;
     use std::sync::mpsc;
     use std::sync::mpsc::RecvTimeoutError;
-    use std::sync::Arc;
     use std::time::Duration;
 
     use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
-    use crate::eth::miner::miner::CommitItem;
     use crate::eth::miner::Miner;
+    use crate::eth::miner::miner::CommitItem;
     use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
 

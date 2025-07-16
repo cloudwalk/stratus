@@ -1,12 +1,11 @@
-use alloy_primitives::U256;
 use alloy_primitives::U64;
+use alloy_primitives::U256;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
 use crate::ext::RuintExt;
-
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]

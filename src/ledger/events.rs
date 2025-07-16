@@ -10,9 +10,9 @@ use chrono::Utc;
 use display_json::DebugAsJson;
 use hex_literal::hex;
 use itertools::Itertools;
-use serde::ser::SerializeStruct;
 use serde::Deserialize;
 use serde::Serialize;
+use serde::ser::SerializeStruct;
 use uuid::Uuid;
 
 use crate::eth::primitives::Address;
@@ -310,7 +310,6 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::eth::primitives::test_accounts;
     use crate::eth::primitives::Address;
     use crate::eth::primitives::BlockNumber;
     use crate::eth::primitives::Bytes;
@@ -318,12 +317,13 @@ mod tests {
     use crate::eth::primitives::LogMined;
     use crate::eth::primitives::TransactionMined;
     use crate::eth::primitives::UnixTime;
+    use crate::eth::primitives::test_accounts;
     use crate::ext::to_json_value;
-    use crate::ledger::events::transaction_to_events;
     use crate::ledger::events::AccountTransfer;
     use crate::ledger::events::AccountTransferDirection;
     use crate::ledger::events::AccountTransfers;
     use crate::ledger::events::TRANSFER_EVENT;
+    use crate::ledger::events::transaction_to_events;
 
     #[test]
     fn ledger_events_serde_account_transfers() {

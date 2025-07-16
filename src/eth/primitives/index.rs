@@ -1,5 +1,5 @@
-use alloy_primitives::U256;
 use alloy_primitives::U64;
+use alloy_primitives::U256;
 use display_json::DebugAsJson;
 
 use crate::ext::RuintExt;
@@ -33,8 +33,7 @@ impl TryFrom<U256> for Index {
     type Error = anyhow::Error;
 
     fn try_from(value: U256) -> Result<Self, Self::Error> {
-        let u64_value = u64::try_from(value)
-            .map_err(|_| anyhow::anyhow!("U256 value too large for Index"))?;
+        let u64_value = u64::try_from(value).map_err(|_| anyhow::anyhow!("U256 value too large for Index"))?;
         Ok(Self(u64_value))
     }
 }
@@ -74,6 +73,6 @@ impl From<Index> for U64 {
 
 impl From<Index> for U256 {
     fn from(value: Index) -> U256 {
-        value.0.try_into().expect("u64 fits into U256 qed")
+        U256::from(value.0)
     }
 }

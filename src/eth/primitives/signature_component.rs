@@ -4,7 +4,6 @@ use fake::Dummy;
 use fake::Faker;
 use rand::Rng;
 
-
 /// A signature component (r or s value)
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SignatureComponent(pub U256);

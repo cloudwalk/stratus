@@ -3,7 +3,6 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
-
 // Type representing `r` and `s` variables from the ECDSA signature.
 #[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EcdsaRs(U256);

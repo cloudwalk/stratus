@@ -1,8 +1,8 @@
 use alloy_consensus::constants::EMPTY_OMMER_ROOT_HASH;
 use alloy_consensus::constants::EMPTY_ROOT_HASH;
-use alloy_primitives::FixedBytes;
-use alloy_primitives::B256;
 use alloy_primitives::B64;
+use alloy_primitives::B256;
+use alloy_primitives::FixedBytes;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::Block as AlloyBlock;
 use alloy_rpc_types_eth::BlockTransactions;
@@ -19,7 +19,6 @@ use crate::alias::AlloyBloom;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyConsensusHeader;
 use crate::alias::AlloyHeader;
-use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
@@ -30,6 +29,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Size;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::ext::InfallibleExt;
 
 /// Special hash used in block mining to indicate no uncle blocks.

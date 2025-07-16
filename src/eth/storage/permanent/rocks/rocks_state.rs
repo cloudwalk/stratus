@@ -1,20 +1,20 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::time::Duration;
 use std::time::Instant;
 
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
+use rocksdb::DB;
 use rocksdb::Direction;
 use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
-use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 use sugars::btmap;

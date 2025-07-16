@@ -5,13 +5,14 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
+use crate::ext::RuintExt;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(pub U64);
 
 impl Dummy<Faker> for ChainId {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
-        rng.next_u64().try_into().expect("u64 fits into U64 qed.")
+        rng.next_u64().into()
     }
 }
 
@@ -29,7 +30,6 @@ impl TryFrom<i32> for ChainId {
         Ok(Self(U64::from(value as u32)))
     }
 }
-
 
 impl TryFrom<U256> for ChainId {
     type Error = anyhow::Error;
@@ -52,7 +52,7 @@ impl From<u64> for ChainId {
 // -----------------------------------------------------------------------------
 impl From<ChainId> for u64 {
     fn from(value: ChainId) -> Self {
-        value.try_into().expect("U64 fits into u64 qed.")
+        value.0.as_u64()
     }
 }
 

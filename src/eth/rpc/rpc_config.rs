@@ -40,10 +40,6 @@ impl RpcServerConfig {
 
         let set: HashSet<RpcClientApp> = input.split(',').map(|s| RpcClientApp::parse(s.trim())).collect();
 
-        if set.is_empty() {
-            Err(anyhow!("invalid client list"))
-        } else {
-            Ok(set)
-        }
+        if set.is_empty() { Err(anyhow!("invalid client list")) } else { Ok(set) }
     }
 }

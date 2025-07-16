@@ -27,7 +27,7 @@ impl From<WeiRocksdb> for Wei {
 
 impl From<WeiRocksdb> for u128 {
     fn from(value: WeiRocksdb) -> Self {
-        u128::try_from(value).expect("the eth/primitivive type is u128 so this will fit.")
+        U256::from_limbs(value.0).to::<u128>()
     }
 }
 

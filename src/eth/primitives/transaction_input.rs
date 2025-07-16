@@ -181,11 +181,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
 
 impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
-        let signature = Signature::new(
-            SignatureComponent(value.r).into(),
-            SignatureComponent(value.s).into(),
-            value.v == U64::ONE,
-        );
+        let signature = Signature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v == U64::ONE);
 
         let tx_type = value.tx_type.map(|t| t.as_u64()).unwrap_or(0);
 
@@ -212,7 +208,7 @@ impl From<TransactionInput> for AlloyTransaction {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
                     max_fee_per_gas: value.gas_price,
-                    max_priority_fee_per_gas: value.gas_price.into(),
+                    max_priority_fee_per_gas: value.gas_price,
                     gas_limit: value.gas_limit.into(),
                     to: TxKind::from(value.to.map(Into::into)),
                     value: value.value.into(),
@@ -228,8 +224,8 @@ impl From<TransactionInput> for AlloyTransaction {
                 TxEip4844Variant::TxEip4844(TxEip4844 {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
-                    max_fee_per_gas: value.gas_price.into(),
-                    max_priority_fee_per_gas: value.gas_price.into(),
+                    max_fee_per_gas: value.gas_price,
+                    max_priority_fee_per_gas: value.gas_price,
                     gas_limit: value.gas_limit.into(),
                     to: value.to.map(Into::into).unwrap_or_default(),
                     value: value.value.into(),
@@ -248,8 +244,8 @@ impl From<TransactionInput> for AlloyTransaction {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
                     gas_limit: value.gas_limit.into(),
-                    max_fee_per_gas: value.gas_price.into(),
-                    max_priority_fee_per_gas: value.gas_price.into(),
+                    max_fee_per_gas: value.gas_price,
+                    max_priority_fee_per_gas: value.gas_price,
                     to: value.to.map(Into::into).unwrap_or_default(),
                     value: value.value.into(),
                     input: value.input.clone().into(),

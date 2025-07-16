@@ -5,7 +5,6 @@ use fake::Faker;
 use revm::primitives::FixedBytes;
 use revm::primitives::KECCAK_EMPTY;
 
-
 /// Digest of the bytecode of a contract.
 /// In the case of an externally-owned account (EOA), bytecode is null
 /// and the code hash is fixed as the keccak256 hash of an empty string

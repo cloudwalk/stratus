@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 
-
 use alloy_primitives::B64;
 
 use crate::eth::primitives::MinerNonce;

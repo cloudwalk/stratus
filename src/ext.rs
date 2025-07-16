@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use alloy_primitives::U256;
 use alloy_primitives::U64;
+use alloy_primitives::U256;
 use anyhow::anyhow;
 use chrono::DateTime;
 use chrono::Utc;
@@ -13,13 +13,13 @@ use jsonrpsee::types::SubscriptionId;
 use serde::Serialize;
 use serde::Serializer;
 use tokio::select;
-use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
+use tokio::signal::unix::signal;
 use tokio::sync::watch::error::RecvError;
 
+use crate::GlobalState;
 use crate::infra::tracing::info_task_spawn;
 use crate::log_and_err;
-use crate::GlobalState;
 
 // -----------------------------------------------------------------------------
 // Language constructs
@@ -29,11 +29,7 @@ use crate::GlobalState;
 #[macro_export]
 macro_rules! if_else {
     ($condition: expr, $_true: expr, $_false: expr) => {
-        if $condition {
-            $_true
-        } else {
-            $_false
-        }
+        if $condition { $_true } else { $_false }
     };
 }
 

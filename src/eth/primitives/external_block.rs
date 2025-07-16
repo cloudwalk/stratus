@@ -1,8 +1,8 @@
 use alloy_eips::eip4895::Withdrawals;
+use alloy_primitives::B64;
+use alloy_primitives::B256;
 use alloy_primitives::Bloom;
 use alloy_primitives::Bytes;
-use alloy_primitives::B256;
-use alloy_primitives::B64;
 use alloy_primitives::U256;
 use fake::Dummy;
 use fake::Fake;
@@ -12,11 +12,11 @@ use serde::Deserialize;
 use super::Block;
 use crate::alias::AlloyBlockExternalTransaction;
 use crate::alias::JsonValue;
-use crate::eth::primitives::external_transaction::ExternalTransaction;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::external_transaction::ExternalTransaction;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, derive_more::Deref, derive_more::DerefMut, serde::Deserialize, serde::Serialize)]

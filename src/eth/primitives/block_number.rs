@@ -2,9 +2,9 @@ use std::ops::Add;
 use std::ops::AddAssign;
 use std::str::FromStr;
 
-use alloy_primitives::keccak256;
-use alloy_primitives::U256;
 use alloy_primitives::U64;
+use alloy_primitives::U256;
+use alloy_primitives::keccak256;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
 use fake::Dummy;
@@ -28,11 +28,7 @@ impl BlockNumber {
 
     /// Returns the previous block number.
     pub fn prev(&self) -> Option<Self> {
-        if self.is_zero() {
-            None
-        } else {
-            Some(Self(self.0 - U64::ONE))
-        }
+        if self.is_zero() { None } else { Some(Self(self.0 - U64::ONE)) }
     }
 
     /// Returns the next block number.
@@ -49,11 +45,7 @@ impl BlockNumber {
     ///
     /// Assumes that self is the lower-end of the range.
     pub fn count_to(self, higher_end: BlockNumber) -> u64 {
-        if higher_end >= self {
-            higher_end.as_u64() - self.as_u64() + 1
-        } else {
-            0
-        }
+        if higher_end >= self { higher_end.as_u64() - self.as_u64() + 1 } else { 0 }
     }
 
     pub fn as_i64(&self) -> i64 {

@@ -7,7 +7,6 @@ use fake::Dummy;
 use fake::Faker;
 use sqlx::types::BigDecimal;
 
-
 /// Native token amount in wei.
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialOrd, Ord, PartialEq, Eq, derive_more::Sub, serde::Serialize, serde::Deserialize)]
 pub struct Wei(pub U256);

@@ -20,8 +20,8 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
-use crate::ext::not;
 use crate::ext::OptionExt;
+use crate::ext::not;
 use crate::if_else;
 
 /// EVM input data. Usually derived from a transaction or call.
