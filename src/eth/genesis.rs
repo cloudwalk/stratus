@@ -313,7 +313,7 @@ impl Default for GenesisConfig {
         // Add test accounts
         let test_accounts = crate::eth::primitives::test_accounts();
         for account in test_accounts {
-            let address_str = format!("0x{}", hex::encode(account.address.as_bytes()));
+            let address_str = format!("0x{}", hex::encode(account.address.as_slice()));
             let balance_hex = format!("0x{:x}", account.balance.0);
 
             let mut genesis_account = GenesisAccount {
@@ -324,11 +324,10 @@ impl Default for GenesisConfig {
             };
 
             // Add code if not empty
-            if let Some(ref bytecode) = account.bytecode {
-                if !bytecode.is_empty() {
+            if let Some(ref bytecode) = account.bytecode
+                && !bytecode.is_empty() {
                     genesis_account.code = Some(format!("0x{}", hex::encode(bytecode.bytes())));
                 }
-            }
 
             alloc.insert(address_str, genesis_account);
         }
