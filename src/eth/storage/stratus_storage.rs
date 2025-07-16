@@ -463,7 +463,7 @@ impl StratusStorage {
                     Err(StorageError::EvmInputMismatch { .. }) => {
                         tracing::warn!("failed to save execution due to mismatch, will retry");
                     }
-                    Err(ref e) => tracing::error!(reason = ?e, "failed to save execution"),
+                    Err(e) => tracing::error!(reason = ?e, "failed to save execution"),
                     _ => (),
                 }
             })

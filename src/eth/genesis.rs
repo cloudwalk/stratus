@@ -6,9 +6,10 @@ use std::str::FromStr;
 
 use alloy_primitives::hex;
 use alloy_primitives::FixedBytes;
+use alloy_primitives::B64;
+use alloy_primitives::U256;
 use anyhow::Result;
 use const_hex::FromHex;
-use ethereum_types::U256 as EthereumU256;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -127,7 +128,7 @@ impl GenesisConfig {
             } else {
                 // For decimal strings
                 let value = genesis_account.balance.parse::<u64>().unwrap_or(0);
-                Wei::from(EthereumU256::from(value))
+                Wei::from(U256::from(value))
             };
 
             account.balance = balance;
@@ -289,9 +290,9 @@ impl GenesisConfig {
         header.parent_hash = parent_hash;
         header.difficulty = difficulty.into();
 
-        // For nonce, we need to convert to H64 first
-        let nonce_h64 = ethereum_types::H64::from_slice(&nonce_bytes);
-        header.nonce = nonce_h64.into();
+        // For nonce, we need to convert to B64 first
+        let nonce_b64 = B64::from_slice(&nonce_bytes);
+        header.nonce = nonce_b64.into();
 
         // Create the block
         let block = Block {
@@ -452,7 +453,7 @@ mod tests {
         let account = &accounts[0];
         assert_eq!(account.address, addr);
         assert_eq!(account.nonce, Nonce::from(1u64));
-        assert_eq!(account.balance, Wei::from(EthereumU256::from(4096))); // 0x1000 in decimal
+        assert_eq!(account.balance, Wei::from(U256::from(4096))); // 0x1000 in decimal
 
         // Clean up
         std::fs::remove_file(file_path).unwrap();
@@ -534,7 +535,9 @@ mod tests {
         assert_eq!(genesis_from_clap.config.chainId, 2008);
 
         // Test 3: Clap integration - environment variables
-        env::set_var("GENESIS_JSON_PATH", file_path);
+        unsafe {
+            env::set_var("GENESIS_JSON_PATH", file_path);
+        }
         let args = vec!["program"]; // No command line arguments
         let config = GenesisFileConfig::parse_from(args);
         assert_eq!(config.genesis_path, Some(file_path.to_string()));
@@ -546,6 +549,8 @@ mod tests {
         assert_eq!(genesis_from_env.config.chainId, 2008);
 
         // Clean up
-        env::remove_var("GENESIS_JSON_PATH");
+        unsafe {
+            env::remove_var("GENESIS_JSON_PATH");
+        }
     }
 }
