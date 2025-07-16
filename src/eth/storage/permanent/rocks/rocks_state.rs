@@ -371,13 +371,15 @@ impl RocksStorageState {
                 let key = (address.into(), (index).into(), block_number.into());
 
                 if let Some(((rocks_address, rocks_index, block), value)) = self.account_slots_history.seek(key)?
-                    && rocks_index == index.into() && rocks_address == address.into() {
-                        tracing::debug!(?block, ?rocks_index, ?rocks_address, "slot found in rocksdb storage");
-                        return Ok(Some(Slot {
-                            index: rocks_index.into(),
-                            value: value.into_inner().into(),
-                        }));
-                    }
+                    && rocks_index == index.into()
+                    && rocks_address == address.into()
+                {
+                    tracing::debug!(?block, ?rocks_index, ?rocks_address, "slot found in rocksdb storage");
+                    return Ok(Some(Slot {
+                        index: rocks_index.into(),
+                        value: value.into_inner().into(),
+                    }));
+                }
                 Ok(None)
             }
         }
@@ -405,10 +407,11 @@ impl RocksStorageState {
                 let key = (address.into(), block_number.into());
 
                 if let Some(((addr, block), account_info)) = self.accounts_history.seek(key)?
-                    && addr == address.into() {
-                        tracing::debug!(?block, ?address, "account found in rocksdb storage");
-                        return Ok(Some(account_info.to_account(address)));
-                    }
+                    && addr == address.into()
+                {
+                    tracing::debug!(?block, ?address, "account found in rocksdb storage");
+                    return Ok(Some(account_info.to_account(address)));
+                }
                 Ok(None)
             }
         }

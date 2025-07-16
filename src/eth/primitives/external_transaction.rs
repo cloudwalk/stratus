@@ -35,32 +35,36 @@ impl<'de> serde::Deserialize<'de> for ExternalTransaction {
         if let Value::Object(ref mut map) = value {
             // If v is 0x0 or 0x1, this is a type 2 (EIP-1559) transaction
             if let Some(Value::String(v_value)) = map.get("v")
-                && (v_value == "0x0" || v_value == "0x1") && !map.contains_key("type") {
-                    map.insert("type".to_string(), Value::String("0x2".to_string()));
-                }
+                && (v_value == "0x0" || v_value == "0x1")
+                && !map.contains_key("type")
+            {
+                map.insert("type".to_string(), Value::String("0x2".to_string()));
+            }
 
             // Check if this is a type 2 transaction
             if let Some(Value::String(type_value)) = map.get("type")
-                && type_value == "0x2" {
-                    // For EIP-1559 transactions, ensure max_fee_per_gas and max_priority_fee_per_gas are present
-                    if !map.contains_key("maxFeePerGas") {
-                        map.insert("maxFeePerGas".to_string(), Value::String("0x0".to_string()));
-                    }
-                    if !map.contains_key("maxPriorityFeePerGas") {
-                        map.insert("maxPriorityFeePerGas".to_string(), Value::String("0x0".to_string()));
-                    }
-                    if !map.contains_key("accessList") {
-                        map.insert("accessList".to_string(), Value::Array(Vec::new()));
-                    }
+                && type_value == "0x2"
+            {
+                // For EIP-1559 transactions, ensure max_fee_per_gas and max_priority_fee_per_gas are present
+                if !map.contains_key("maxFeePerGas") {
+                    map.insert("maxFeePerGas".to_string(), Value::String("0x0".to_string()));
                 }
+                if !map.contains_key("maxPriorityFeePerGas") {
+                    map.insert("maxPriorityFeePerGas".to_string(), Value::String("0x0".to_string()));
+                }
+                if !map.contains_key("accessList") {
+                    map.insert("accessList".to_string(), Value::Array(Vec::new()));
+                }
+            }
             // Check if this is a type 1 transaction
             if let Some(Value::String(type_value)) = map.get("type")
-                && type_value == "0x1" {
-                    // For EIP-2930 transactions, ensure accessList is present
-                    if !map.contains_key("accessList") {
-                        map.insert("accessList".to_string(), Value::Array(Vec::new()));
-                    }
+                && type_value == "0x1"
+            {
+                // For EIP-2930 transactions, ensure accessList is present
+                if !map.contains_key("accessList") {
+                    map.insert("accessList".to_string(), Value::Array(Vec::new()));
                 }
+            }
         }
 
         // Use the inner type's deserialization

@@ -117,10 +117,9 @@ impl InMemoryTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        if check_conflicts
-            && let Some(conflicts) = self.check_conflicts(&tx.result.execution)? {
-                return Err(StorageError::TransactionConflict(conflicts.into()));
-            }
+        if check_conflicts && let Some(conflicts) = self.check_conflicts(&tx.result.execution)? {
+            return Err(StorageError::TransactionConflict(conflicts.into()));
+        }
 
         // save account changes
         let changes = tx.result.execution.changes.values();

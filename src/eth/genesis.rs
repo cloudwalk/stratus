@@ -148,9 +148,10 @@ impl GenesisConfig {
             if let Some(code) = &genesis_account.code {
                 let code_str = code.trim_start_matches("0x");
                 if let Ok(code_bytes) = hex::decode(code_str)
-                    && !code_bytes.is_empty() {
-                        account.bytecode = Some(RevmBytecode::new_raw(code_bytes.into()));
-                    }
+                    && !code_bytes.is_empty()
+                {
+                    account.bytecode = Some(RevmBytecode::new_raw(code_bytes.into()));
+                }
             }
 
             // Process storage slots if they exist
