@@ -231,7 +231,7 @@ impl SpanExt for Span {
     where
         T: ToString,
     {
-        if let Some(ref value) = value {
+        if let Some(value) = value {
             self.record(field, value.to_string().as_str());
         }
     }
