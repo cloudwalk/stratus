@@ -86,7 +86,7 @@ impl ExternalTransaction {
 }
 
 impl Dummy<Faker> for ExternalTransaction {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let from: Address = faker.fake_with_rng(rng);
         let to: Address = faker.fake_with_rng(rng);
 

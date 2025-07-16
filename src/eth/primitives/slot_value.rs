@@ -24,7 +24,7 @@ impl Display for SlotValue {
 }
 
 impl Dummy<Faker> for SlotValue {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(U256::random_with(rng))
     }
 }

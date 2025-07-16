@@ -11,7 +11,7 @@ use crate::gen_newtype_try_from;
 pub struct ChainId(pub U64);
 
 impl Dummy<Faker> for ChainId {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().try_into().expect("u64 fits into U64 qed.")
     }
 }

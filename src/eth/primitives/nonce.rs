@@ -23,7 +23,7 @@ impl Nonce {
 }
 
 impl Dummy<Faker> for Nonce {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(U64::random_with(rng))
     }
 }

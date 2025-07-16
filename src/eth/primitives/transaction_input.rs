@@ -59,7 +59,7 @@ pub struct TransactionInput {
 }
 
 impl Dummy<Faker> for TransactionInput {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         Self {
             tx_type: Some(U64::random_with(rng)),
             chain_id: faker.fake_with_rng(rng),

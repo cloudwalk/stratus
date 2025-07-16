@@ -27,7 +27,7 @@ impl Display for Hash {
 }
 
 impl Dummy<Faker> for Hash {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         B256::random_with(rng).into()
     }
 }

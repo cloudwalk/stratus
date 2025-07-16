@@ -14,7 +14,7 @@ use crate::gen_newtype_from;
 pub struct CodeHash(pub B256);
 
 impl Dummy<Faker> for CodeHash {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(B256::random_with(rng))
     }
 }

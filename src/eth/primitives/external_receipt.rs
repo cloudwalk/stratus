@@ -50,7 +50,7 @@ impl ExternalReceipt {
 }
 
 impl Dummy<Faker> for ExternalReceipt {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_faker: &Faker, rng: &mut R) -> Self {
         let mut addr_bytes = [0u8; 20];
         let mut hash_bytes = [0u8; 32];
         rng.fill_bytes(&mut addr_bytes);

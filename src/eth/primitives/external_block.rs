@@ -54,7 +54,7 @@ impl PartialEq<Block> for ExternalBlock {
 }
 
 impl Dummy<Faker> for ExternalBlock {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let mut addr_bytes = [0u8; 20];
         let mut hash_bytes = [0u8; 32];
         let mut nonce_bytes = [0u8; 8];

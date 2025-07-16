@@ -10,7 +10,7 @@ use crate::gen_newtype_from;
 pub struct MinerNonce(B64);
 
 impl Dummy<Faker> for MinerNonce {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         B64::random_with(rng).into()
     }
 }
