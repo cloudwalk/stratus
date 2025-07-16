@@ -33,11 +33,16 @@ impl Dummy<Faker> for SlotValue {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-gen_newtype_from!(self = SlotValue, other = U256, [u8; 32]);
+impl From<SlotValue> for U256 {
+    fn from(value: SlotValue) -> Self {
+        value.0
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
+gen_newtype_from!(self = SlotValue, other = U256);
 
 
 impl From<[u64; 4]> for SlotValue {
@@ -46,8 +51,10 @@ impl From<[u64; 4]> for SlotValue {
     }
 }
 
+
+
 impl From<alloy_primitives::FixedBytes<32>> for SlotValue {
     fn from(value: alloy_primitives::FixedBytes<32>) -> Self {
-        Self::from(value.0)
+        Self::from(U256::from_be_bytes(value.0))
     }
 }
