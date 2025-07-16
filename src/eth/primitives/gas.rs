@@ -1,7 +1,5 @@
-use anyhow::anyhow;
+use alloy_primitives::U64;
 use display_json::DebugAsJson;
-use ethereum_types::U256;
-use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 
@@ -13,11 +11,11 @@ use crate::gen_newtype_try_from;
 pub struct Gas(U64);
 
 impl Gas {
-    pub const ZERO: Gas = Gas(U64::zero());
+    pub const ZERO: Gas = Gas(U64::ZERO);
     pub const MAX: Gas = Gas(U64::MAX);
 
     pub fn as_u64(&self) -> u64 {
-        self.0.as_u64()
+        self.0.try_into().expect("U64 fits into u64 qed.")
     }
 }
 
@@ -33,25 +31,12 @@ impl Dummy<Faker> for Gas {
 gen_newtype_from!(self = Gas, other = u8, u16, u32, u64);
 gen_newtype_try_from!(self = Gas, other = i32);
 
-impl TryFrom<U256> for Gas {
-    type Error = anyhow::Error;
-
-    fn try_from(value: U256) -> Result<Self, Self::Error> {
-        Ok(Gas(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // ----------------------------------------------------------------------------
-impl From<Gas> for U256 {
-    fn from(value: Gas) -> Self {
-        value.0.as_u64().into()
-    }
-}
 
 impl From<Gas> for u64 {
     fn from(value: Gas) -> Self {
-        value.0.as_u64()
+        value.as_u64()
     }
 }

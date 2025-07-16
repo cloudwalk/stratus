@@ -5,15 +5,14 @@ use alloy_consensus::TxLegacy;
 use alloy_primitives::Bytes;
 use alloy_primitives::Signature;
 use alloy_primitives::TxKind;
+use alloy_primitives::U256;
 use anyhow::Context;
 use anyhow::Result;
-use ethereum_types::U256;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
 
 use crate::alias::AlloyTransaction;
-use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
@@ -109,7 +108,7 @@ impl Dummy<Faker> for ExternalTransaction {
         let r = U256::from(rng.next_u64());
         let s = U256::from(rng.next_u64());
         let v = rng.next_u64() % 2 == 0;
-        let signature = Signature::new(SignatureComponent(r).into(), SignatureComponent(s).into(), v);
+        let signature = Signature::new(r, s, v);
 
         let hash: Hash = faker.fake_with_rng(rng);
         let inner_tx = TxEnvelope::Legacy(Signed::new_unchecked(tx, signature, hash.into()));

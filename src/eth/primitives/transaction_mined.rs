@@ -98,7 +98,7 @@ impl From<TransactionMined> for AlloyReceipt {
             logs_bloom: value.compute_bloom().into(),
         };
 
-        let inner = match value.input.tx_type.map(|tx| tx.as_u64()) {
+        let inner = match value.input.tx_type.map(|tx| tx.as_limbs()[0]) {
             Some(1) => ReceiptEnvelope::Eip2930(receipt_with_bloom),
             Some(2) => ReceiptEnvelope::Eip1559(receipt_with_bloom),
             Some(3) => ReceiptEnvelope::Eip4844(receipt_with_bloom),
@@ -148,9 +148,9 @@ mod tests {
 
     #[test]
     fn sort_transactions() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let v = (0..1000)
-            .map(|_| create_tx(rng.gen_range(0..100), rng.gen_range(0..100)))
+            .map(|_| create_tx(rng.random_range(0..100), rng.random_range(0..100)))
             .sorted()
             .map(|tx| (tx.block_number.as_u64(), tx.transaction_index.0))
             .collect_vec();

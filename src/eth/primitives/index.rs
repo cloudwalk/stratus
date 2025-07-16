@@ -1,6 +1,6 @@
+use alloy_primitives::U256;
+use alloy_primitives::U64;
 use display_json::DebugAsJson;
-use ethereum_types::U256;
-use ethereum_types::U64;
 
 use crate::gen_newtype_from;
 use crate::gen_newtype_try_from;
@@ -28,7 +28,7 @@ gen_newtype_try_from!(self = Index, other = U256, i64);
 
 impl From<U64> for Index {
     fn from(value: U64) -> Self {
-        Index(value.as_u64())
+        Index(value.into_limbs()[0])
     }
 }
 
@@ -44,12 +44,12 @@ impl From<Index> for u64 {
 
 impl From<Index> for U64 {
     fn from(value: Index) -> U64 {
-        value.0.into()
+        value.0.try_into().expect("u64 fits into U64 qed")
     }
 }
 
 impl From<Index> for U256 {
     fn from(value: Index) -> U256 {
-        value.0.into()
+        value.0.try_into().expect("u64 fits into U256 qed")
     }
 }

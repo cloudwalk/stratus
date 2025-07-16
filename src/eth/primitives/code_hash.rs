@@ -1,5 +1,5 @@
+use alloy_primitives::B256;
 use display_json::DebugAsJson;
-use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
 use revm::primitives::FixedBytes;
@@ -11,16 +11,16 @@ use crate::gen_newtype_from;
 /// In the case of an externally-owned account (EOA), bytecode is null
 /// and the code hash is fixed as the keccak256 hash of an empty string
 #[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct CodeHash(pub H256);
+pub struct CodeHash(pub B256);
 
 impl Dummy<Faker> for CodeHash {
     fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
-        Self(H256::random_using(rng))
+        Self(B256::random_with(rng))
     }
 }
 
 impl CodeHash {
-    pub fn new(inner: H256) -> Self {
+    pub fn new(inner: B256) -> Self {
         CodeHash(inner)
     }
 }

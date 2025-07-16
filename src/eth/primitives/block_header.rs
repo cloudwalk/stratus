@@ -1,6 +1,9 @@
 use alloy_consensus::constants::EMPTY_OMMER_ROOT_HASH;
 use alloy_consensus::constants::EMPTY_ROOT_HASH;
 use alloy_primitives::FixedBytes;
+use alloy_primitives::B256;
+use alloy_primitives::B64;
+use alloy_primitives::U256;
 use alloy_rpc_types_eth::Block as AlloyBlock;
 use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
@@ -11,14 +14,11 @@ use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
 use crate::alias::AlloyAddress;
-use crate::alias::AlloyB256;
-use crate::alias::AlloyB64;
 use crate::alias::AlloyBlockVoid;
 use crate::alias::AlloyBloom;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyConsensusHeader;
 use crate::alias::AlloyHeader;
-use crate::alias::AlloyUint256;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -124,7 +124,7 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
 
             // block: relation with other blocks
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
-            parent_hash: AlloyB256::from(header.parent_hash),
+            parent_hash: B256::from(header.parent_hash),
             parent_beacon_block_root: None,
 
             // mining: identifiers
@@ -132,8 +132,8 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
             beneficiary: AlloyAddress::from(header.author),
 
             // mining: difficulty
-            difficulty: AlloyUint256::ZERO,
-            nonce: AlloyB64::ZERO,
+            difficulty: U256::ZERO,
+            nonce: B64::ZERO,
 
             // mining: gas
             gas_limit: header.gas_limit.as_u64(),
@@ -143,21 +143,21 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
             excess_blob_gas: None,
 
             // transactions
-            transactions_root: AlloyB256::from(header.transactions_root),
+            transactions_root: B256::from(header.transactions_root),
             receipts_root: EMPTY_ROOT_HASH,
             withdrawals_root: None,
 
             // data
             logs_bloom: AlloyBloom::from(header.bloom),
             extra_data: AlloyBytes::default(),
-            state_root: AlloyB256::from(header.state_root),
+            state_root: B256::from(header.state_root),
             requests_hash: None,
         };
 
         let rpc_header = AlloyHeader {
             hash: header.hash.into(),
             inner,
-            total_difficulty: Some(AlloyUint256::ZERO),
+            total_difficulty: Some(U256::ZERO),
             size: Some(header.size.into()),
         };
 

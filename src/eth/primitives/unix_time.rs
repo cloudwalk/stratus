@@ -3,7 +3,6 @@ use std::ops::Deref;
 use chrono::DateTime;
 use chrono::Utc;
 use display_json::DebugAsJson;
-use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 
@@ -58,12 +57,6 @@ impl Dummy<Faker> for UnixTime {
 impl From<u64> for UnixTime {
     fn from(value: u64) -> Self {
         UnixTime(value)
-    }
-}
-
-impl From<U256> for UnixTime {
-    fn from(value: U256) -> Self {
-        value.low_u64().into()
     }
 }
 

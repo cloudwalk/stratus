@@ -1,5 +1,5 @@
+use alloy_primitives::U64;
 use display_json::DebugAsJson;
-use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 

@@ -3,9 +3,9 @@ use std::ops::AddAssign;
 use std::str::FromStr;
 
 use alloy_primitives::keccak256;
+use alloy_primitives::U64;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
-use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 
@@ -18,9 +18,9 @@ use crate::gen_newtype_from;
 pub struct BlockNumber(pub U64);
 
 impl BlockNumber {
-    pub const ZERO: BlockNumber = BlockNumber(U64::zero());
-    pub const ONE: BlockNumber = BlockNumber(U64::one());
-    pub const MAX: BlockNumber = BlockNumber(U64([i64::MAX as u64])); // use i64 to avoid overflow PostgreSQL because its max limit is i64, not u64.
+    pub const ZERO: BlockNumber = BlockNumber(U64::ZERO);
+    pub const ONE: BlockNumber = BlockNumber(U64::ONE);
+    pub const MAX: BlockNumber = BlockNumber(U64::MAX);
 
     /// Calculates the keccak256 hash of the block number.
     pub fn hash(&self) -> Hash {
@@ -32,13 +32,13 @@ impl BlockNumber {
         if self.is_zero() {
             None
         } else {
-            Some(Self(self.0 - 1))
+            Some(Self(self.0 - U64::ONE))
         }
     }
 
     /// Returns the next block number.
     pub fn next_block_number(&self) -> Self {
-        Self(self.0 + 1)
+        Self(self.0 + U64::ONE)
     }
 
     /// Checks if it is the zero block number.
@@ -58,15 +58,15 @@ impl BlockNumber {
     }
 
     pub fn as_i64(&self) -> i64 {
-        self.0.as_u64() as i64
+        self.0.try_into().unwrap()
     }
 
     pub fn as_u64(&self) -> u64 {
-        self.0.as_u64()
+        self.0.try_into().unwrap()
     }
 
     pub fn as_u32(&self) -> u32 {
-        self.0.as_u64() as u32
+        self.0.try_into().unwrap()
     }
 }
 
@@ -84,13 +84,13 @@ impl Add<usize> for BlockNumber {
     type Output = BlockNumber;
 
     fn add(self, rhs: usize) -> Self::Output {
-        Self(self.0 + rhs)
+        Self(self.0 + U64::from(rhs))
     }
 }
 
 impl AddAssign<usize> for BlockNumber {
     fn add_assign(&mut self, rhs: usize) {
-        self.0 = self.0 + rhs;
+        self.0 = self.0 + U64::from(rhs);
     }
 }
 
@@ -125,12 +125,12 @@ impl From<BlockNumber> for U64 {
 
 impl From<BlockNumber> for RevmU256 {
     fn from(block_number: BlockNumber) -> Self {
-        Self::from_limbs([block_number.0.as_u64(), 0, 0, 0])
+        Self::from_limbs([block_number.as_u64(), 0, 0, 0])
     }
 }
 
 impl From<BlockNumber> for [u8; 8] {
     fn from(block_number: BlockNumber) -> Self {
-        block_number.0.as_u64().to_be_bytes()
+        block_number.as_u64().to_be_bytes()
     }
 }

@@ -1,5 +1,5 @@
+use alloy_primitives::U256;
 use display_json::DebugAsJson;
-use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 
@@ -11,7 +11,7 @@ pub struct EcdsaRs(U256);
 
 impl Dummy<Faker> for EcdsaRs {
     fn dummy_with_rng<R: rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
-        Self(U256([rng.next_u64(), rng.next_u64(), rng.next_u64(), rng.next_u64()]))
+        Self(U256::random_with(rng))
     }
 }
 
