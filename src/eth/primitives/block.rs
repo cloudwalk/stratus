@@ -76,9 +76,9 @@ impl Block {
     }
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
-    pub fn to_json_rpc_with_full_transactions(self) -> anyhow::Result<JsonValue> {
-        let alloy_block: AlloyBlockAlloyTransaction = self.try_into()?;
-        Ok(to_json_value(alloy_block))
+    pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
+        let alloy_block: AlloyBlockAlloyTransaction = self.into();
+        to_json_value(alloy_block)
     }
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.

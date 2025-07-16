@@ -9,10 +9,10 @@ use std::time::Duration;
 
 #[cfg(feature = "replication")]
 use alloy_primitives::hex;
+use alloy_primitives::U256;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
-use ethereum_types::U256;
 use futures::join;
 use http::Method;
 use itertools::Itertools;
@@ -1068,7 +1068,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
             let overestimated_gas = (result.gas.as_u64()) as f64 * 1.1;
-            Ok(hex_num(overestimated_gas as u64))
+            Ok(hex_num(U256::from(overestimated_gas as u64)))
         }
 
         // result is failure
