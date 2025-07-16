@@ -325,9 +325,10 @@ impl Default for GenesisConfig {
 
             // Add code if not empty
             if let Some(ref bytecode) = account.bytecode
-                && !bytecode.is_empty() {
-                    genesis_account.code = Some(format!("0x{}", hex::encode(bytecode.bytes())));
-                }
+                && !bytecode.is_empty()
+            {
+                genesis_account.code = Some(format!("0x{}", hex::encode(bytecode.bytes())));
+            }
 
             alloc.insert(address_str, genesis_account);
         }
