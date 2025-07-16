@@ -76,9 +76,9 @@ impl Block {
     }
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
-    pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
-        let alloy_block: AlloyBlockAlloyTransaction = self.into();
-        to_json_value(alloy_block)
+    pub fn to_json_rpc_with_full_transactions(self) -> anyhow::Result<JsonValue> {
+        let alloy_block: AlloyBlockAlloyTransaction = self.try_into()?;
+        Ok(to_json_value(alloy_block))
     }
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
@@ -210,26 +210,28 @@ impl From<PendingBlock> for Block {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
-impl From<Block> for AlloyBlockAlloyTransaction {
-    fn from(block: Block) -> Self {
+impl TryFrom<Block> for AlloyBlockAlloyTransaction {
+    type Error = anyhow::Error;
+    fn try_from(block: Block) -> Result<Self, Self::Error> {
         let alloy_block: AlloyBlockAlloyTransaction = block.header.into();
-        let transactions: Vec<AlloyTransaction> = block.transactions.into_iter().map_into().collect();
+        let transactions: Vec<AlloyTransaction> = block.transactions.into_iter().map(|inner| inner.try_into()).collect::<anyhow::Result<_>>()?;
 
-        Self {
+        Ok(Self {
             transactions: BlockTransactions::Full(transactions),
             ..alloy_block
-        }
+        })
     }
 }
 
-impl From<Block> for AlloyBlockH256 {
-    fn from(block: Block) -> Self {
+impl TryFrom<Block> for AlloyBlockH256 {
+    type Error = anyhow::Error;
+    fn try_from(block: Block) -> Result<Self, Self::Error> {
         let alloy_block: AlloyBlockH256 = block.header.into();
         let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.hash).map(B256::from).collect();
 
-        Self {
+        Ok(Self {
             transactions: BlockTransactions::Hashes(transaction_hashes),
             ..alloy_block
-        }
+        })
     }
 }

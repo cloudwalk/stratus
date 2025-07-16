@@ -22,28 +22,28 @@ pub enum TransactionStage {
 
 impl TransactionStage {
     /// Serializes itself to JSON-RPC transaction format.
-    pub fn to_json_rpc_transaction(self) -> JsonValue {
-        match self {
+    pub fn to_json_rpc_transaction(self) -> anyhow::Result<JsonValue> {
+        Ok(match self {
             TransactionStage::Executed(tx) => {
-                let json_rpc_payload: AlloyTransaction = tx.input.into();
+                let json_rpc_payload: AlloyTransaction = tx.input.try_into()?;
                 to_json_value(json_rpc_payload)
             }
             TransactionStage::Mined(tx) => {
-                let json_rpc_payload: AlloyTransaction = tx.into();
+                let json_rpc_payload: AlloyTransaction = tx.try_into()?;
                 to_json_value(json_rpc_payload)
             }
-        }
+        })
     }
 
     /// Serializes itself to JSON-RPC receipt format.
-    pub fn to_json_rpc_receipt(self) -> JsonValue {
-        match self {
+    pub fn to_json_rpc_receipt(self) -> anyhow::Result<JsonValue> {
+        Ok(match self {
             TransactionStage::Executed(_) => JsonValue::Null,
             TransactionStage::Mined(tx) => {
-                let json_rpc_format: AlloyReceipt = tx.into();
+                let json_rpc_format: AlloyReceipt = tx.try_into()?;
                 to_json_value(json_rpc_format)
             }
-        }
+        })
     }
 
     pub fn deployed_contract_address(&self) -> Option<Address> {

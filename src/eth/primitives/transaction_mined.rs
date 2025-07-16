@@ -2,18 +2,19 @@ use alloy_consensus::Eip658Value;
 use alloy_consensus::Receipt;
 use alloy_consensus::ReceiptEnvelope;
 use alloy_consensus::ReceiptWithBloom;
+use anyhow::Context;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
 use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
-use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::ext::OptionExt;
 
 /// Transaction that was executed by the EVM and added to a block.
@@ -70,23 +71,27 @@ impl TransactionMined {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl From<TransactionMined> for AlloyTransaction {
-    fn from(value: TransactionMined) -> Self {
-        let gas_price = value.input.gas_price;
-        let tx = AlloyTransaction::from(value.input);
+impl TryFrom<TransactionMined> for AlloyTransaction {
+    type Error = anyhow::Error;
 
-        Self {
+    fn try_from(value: TransactionMined) -> Result<Self, Self::Error> {
+        let gas_price = value.input.gas_price;
+        let tx = AlloyTransaction::from(value.input.try_into()?);
+
+        Ok(Self {
             inner: tx.inner,
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             transaction_index: Some(value.transaction_index.into()),
-            effective_gas_price: Some(gas_price.into()),
-        }
+            effective_gas_price: Some(gas_price.try_into().context("failed to convert gas price to u128")?),
+        })
     }
 }
 
-impl From<TransactionMined> for AlloyReceipt {
-    fn from(value: TransactionMined) -> Self {
+impl TryFrom<TransactionMined> for AlloyReceipt {
+    type Error = anyhow::Error;
+
+    fn try_from(value: TransactionMined) -> Result<Self, Self::Error> {
         let receipt = Receipt {
             status: Eip658Value::Eip658(value.is_success()),
             cumulative_gas_used: value.execution.gas.into(), // TODO: implement cumulative gas used correctly
@@ -106,20 +111,20 @@ impl From<TransactionMined> for AlloyReceipt {
             _ => ReceiptEnvelope::Legacy(receipt_with_bloom),
         };
 
-        Self {
+        Ok(Self {
             inner,
             transaction_hash: value.input.hash.into(),
             transaction_index: Some(value.transaction_index.into()),
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             gas_used: value.execution.gas.into(),
-            effective_gas_price: value.input.gas_price.as_u128(), // TODO: implement effective gas price used correctly
+            effective_gas_price: value.input.gas_price.try_into().context("failed to convert gas price to u128")?,
             blob_gas_used: None,
             blob_gas_price: None,
             from: value.input.signer.into(),
             to: value.input.to.map_into(),
             contract_address: value.execution.contract_address().map_into(),
-        }
+        })
     }
 }
 
