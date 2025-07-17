@@ -153,7 +153,6 @@ mod tests {
     use super::*;
     use crate::ext::not;
     use crate::ext::type_basename;
-    use crate::utils::test_utils::fake_first;
     use crate::utils::test_utils::glob_to_string_paths;
 
     /// A drop bomb that guarantees that all variants of an enum have been tested.
@@ -218,18 +217,29 @@ mod tests {
         glob_to_string_paths(pattern).context("failed to get all bincode snapshots from folder")
     }
 
+    fn load_json_fixture<CfValue>(cf_name: &str, _variant_name: &str) -> Result<CfValue>
+    where
+        CfValue: for<'de> Deserialize<'de> + ToCfName,
+    {
+        let json_path = format!("tests/fixtures/cf_versions/{cf_name}/{cf_name}.json");
+        let json_content = fs::read_to_string(&json_path).with_context(|| format!("failed to read JSON fixture at {json_path}"))?;
+
+        serde_json::from_str(&json_content).with_context(|| format!("failed to deserialize CfValue from JSON fixture at {json_path}"))
+    }
+
     /// Store snapshots of the current serialization format for each version.
     #[test]
     fn test_snapshot_bincode_deserialization_for_single_version_enums() {
-        fn test_deserialization<CfValue, Inner, F>(inner_to_cf_value: F) -> Result<TestRunConfirmation<CfValue>>
+        fn test_deserialization<CfValue, Inner, F>(_inner_to_cf_value: F) -> Result<TestRunConfirmation<CfValue>>
         where
             CfValue: From<Inner> + for<'de> Deserialize<'de> + Serialize + Clone + Debug + PartialEq + Into<&'static str> + ToCfName,
             F: FnOnce(Inner) -> CfValue,
             Inner: Dummy<Faker>,
         {
-            let expected: CfValue = inner_to_cf_value(fake_first::<Inner>());
-            let variant_name: &'static str = expected.clone().into();
             let cf_name = CfValue::CF_NAME;
+            // For single version enums, we expect V1 variant
+            let variant_name = "V1";
+            let expected: CfValue = load_json_fixture(cf_name, variant_name)?;
 
             let snapshot_parent_path = format!("tests/fixtures/cf_versions/{cf_name}");
             let snapshot_path = format!("{snapshot_parent_path}/{variant_name}.bincode");

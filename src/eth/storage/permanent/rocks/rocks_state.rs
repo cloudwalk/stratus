@@ -917,6 +917,7 @@ mod tests {
                     ..Faker.fake()
                 },
                 transactions: vec![TransactionMined {
+                    block_number: number.into(),
                     logs: vec![Faker.fake(), Faker.fake()],
                     ..Faker.fake()
                 }],
