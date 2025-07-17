@@ -1,3 +1,4 @@
+use std::i64;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::str::FromStr;
@@ -19,7 +20,7 @@ pub struct BlockNumber(pub U64);
 impl BlockNumber {
     pub const ZERO: BlockNumber = BlockNumber(U64::ZERO);
     pub const ONE: BlockNumber = BlockNumber(U64::ONE);
-    pub const MAX: BlockNumber = BlockNumber(U64::MAX);
+    pub const MAX: BlockNumber = BlockNumber(U64::from_limbs([i64::MAX as u64]));
 
     /// Calculates the keccak256 hash of the block number.
     pub fn hash(&self) -> Hash {
