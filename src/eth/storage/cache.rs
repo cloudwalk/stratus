@@ -1,8 +1,8 @@
 use clap::Parser;
 use display_json::DebugAsJson;
+use quick_cache::UnitWeighter;
 use quick_cache::sync::Cache;
 use quick_cache::sync::DefaultLifecycle;
-use quick_cache::UnitWeighter;
 use rustc_hash::FxBuildHasher;
 
 use super::AccountWithSlots;

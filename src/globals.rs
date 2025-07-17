@@ -1,7 +1,7 @@
 use std::fmt::Debug;
+use std::sync::LazyLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::LazyLock;
 
 use chrono::DateTime;
 use chrono::Utc;
@@ -11,8 +11,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 use tokio::runtime::Runtime;
-use tokio::sync::watch::Sender;
 use tokio::sync::Semaphore;
+use tokio::sync::watch::Sender;
 use tokio_util::sync::CancellationToken;
 
 use crate::alias::JsonValue;

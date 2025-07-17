@@ -8,15 +8,15 @@ use chrono::Timelike;
 use indicatif::ProgressBar;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
 use stratus::eth::primitives::TransactionMined;
+use stratus::eth::storage::permanent::rocks::RocksStorageState;
 use stratus::eth::storage::permanent::rocks::types::BlockNumberRocksdb;
 use stratus::eth::storage::permanent::rocks::types::BlockRocksdb;
 use stratus::eth::storage::permanent::rocks::types::HashRocksdb;
 use stratus::eth::storage::permanent::rocks::types::TransactionMinedRocksdb;
 use stratus::eth::storage::permanent::rocks::types::UnixTimeRocksdb;
-use stratus::eth::storage::permanent::rocks::RocksStorageState;
-use stratus::ledger::events::transaction_to_events;
 use stratus::ledger::events::AccountTransfers;
 use stratus::ledger::events::Event;
+use stratus::ledger::events::transaction_to_events;
 
 /// Database timeout duration in seconds
 const TIMEOUT: Duration = Duration::from_secs(5);

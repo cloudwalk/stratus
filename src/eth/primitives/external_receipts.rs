@@ -25,7 +25,7 @@ impl ExternalReceipts {
 }
 
 impl Dummy<Faker> for ExternalReceipts {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let count = (rng.next_u32() % 5 + 1) as usize;
         let receipts = (0..count).map(|_| ExternalReceipt::dummy_with_rng(faker, rng)).collect::<Vec<_>>();
 

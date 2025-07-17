@@ -6,6 +6,8 @@ use display_json::DebugAsJson;
 use serde_json::json;
 
 use super::importer::ImporterMode;
+use crate::GlobalState;
+use crate::NodeMode;
 use crate::eth::executor::Executor;
 use crate::eth::follower::importer::Importer;
 use crate::eth::miner::Miner;
@@ -18,10 +20,8 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::spawn_named;
-use crate::infra::kafka::KafkaConnector;
 use crate::infra::BlockchainClient;
-use crate::GlobalState;
-use crate::NodeMode;
+use crate::infra::kafka::KafkaConnector;
 
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
 #[group(requires_all = ["external_rpc", "follower"])]

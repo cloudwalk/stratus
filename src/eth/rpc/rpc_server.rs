@@ -7,27 +7,27 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use alloy_primitives::U256;
 #[cfg(feature = "replication")]
 use alloy_primitives::hex;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
-use ethereum_types::U256;
 use futures::join;
 use http::Method;
 use itertools::Itertools;
-use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
+use jsonrpsee::Extensions;
+use jsonrpsee::IntoSubscriptionCloseResponse;
+use jsonrpsee::PendingSubscriptionSink;
 use jsonrpsee::server::BatchRequestConfig;
 use jsonrpsee::server::RandomStringIdProvider;
 use jsonrpsee::server::RpcModule;
 use jsonrpsee::server::Server as RpcServer;
 use jsonrpsee::server::ServerConfig;
 use jsonrpsee::server::ServerHandle;
+use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
 use jsonrpsee::types::Params;
 use jsonrpsee::ws_client::RpcServiceBuilder;
-use jsonrpsee::Extensions;
-use jsonrpsee::IntoSubscriptionCloseResponse;
-use jsonrpsee::PendingSubscriptionSink;
 use parking_lot::RwLock;
 use serde_json::json;
 use tokio::runtime::Handle;
@@ -36,11 +36,13 @@ use tokio::sync::Semaphore;
 use tokio::sync::SemaphorePermit;
 use tower_http::cors::Any;
 use tower_http::cors::CorsLayer;
-use tracing::field;
-use tracing::info_span;
 use tracing::Instrument;
 use tracing::Span;
+use tracing::field;
+use tracing::info_span;
 
+use crate::GlobalState;
+use crate::NodeMode;
 use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
 use crate::config::StratusConfig;
@@ -75,28 +77,26 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
-use crate::eth::rpc::next_rpc_param;
-use crate::eth::rpc::next_rpc_param_or_default;
-use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
-use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
+use crate::eth::rpc::next_rpc_param;
+use crate::eth::rpc::next_rpc_param_or_default;
+use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
+use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
 use crate::eth::storage::StratusStorage;
+use crate::ext::InfallibleExt;
+use crate::ext::WatchReceiverExt;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
-use crate::ext::InfallibleExt;
-use crate::ext::WatchReceiverExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
-use crate::GlobalState;
-use crate::NodeMode;
 // -----------------------------------------------------------------------------
 // Server
 // -----------------------------------------------------------------------------
@@ -1068,7 +1068,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
             let overestimated_gas = (result.gas.as_u64()) as f64 * 1.1;
-            Ok(hex_num(overestimated_gas as u64))
+            Ok(hex_num(U256::from(overestimated_gas as u64)))
         }
 
         // result is failure

@@ -6,9 +6,11 @@ use super::InMemoryTemporaryStorage;
 use super::RocksPermanentStorage;
 use super::StorageCache;
 #[cfg(feature = "dev")]
-use crate::eth::genesis::GenesisConfig;
+use crate::GlobalState;
 #[cfg(feature = "dev")]
-use crate::eth::primitives::test_accounts;
+use crate::NodeMode;
+#[cfg(feature = "dev")]
+use crate::eth::genesis::GenesisConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -34,14 +36,12 @@ use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::temporary::ReadKind;
+#[cfg(feature = "dev")]
+use crate::eth::primitives::test_accounts;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
-#[cfg(feature = "dev")]
-use crate::GlobalState;
-#[cfg(feature = "dev")]
-use crate::NodeMode;
 
 mod label {
     pub(super) const TEMP: &str = "temporary";
@@ -148,6 +148,7 @@ impl StratusStorage {
                 rocks_disable_sync_write: false,
                 rocks_cf_size_metrics_interval: None,
                 genesis_file: crate::config::GenesisFileConfig::default(),
+                #[cfg(feature = "replication")]
                 use_rocksdb_replication: false,
             },
         )
@@ -464,7 +465,7 @@ impl StratusStorage {
                     Err(StorageError::EvmInputMismatch { .. }) => {
                         tracing::warn!("failed to save execution due to mismatch, will retry");
                     }
-                    Err(ref e) => tracing::error!(reason = ?e, "failed to save execution"),
+                    Err(e) => tracing::error!(reason = ?e, "failed to save execution"),
                     _ => (),
                 }
             })

@@ -50,8 +50,8 @@ mod unix_time;
 mod unix_time_now;
 mod wei;
 
-pub use account::test_accounts;
 pub use account::Account;
+pub use account::test_accounts;
 pub use address::Address;
 pub use block::Block;
 pub use block_filter::BlockFilter;

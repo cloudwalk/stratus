@@ -13,7 +13,7 @@ use super::PendingBlock;
 use super::Size;
 use super::TransactionExecution;
 use crate::alias::AlloyBlockAlloyTransaction;
-use crate::alias::AlloyBlockH256;
+use crate::alias::AlloyBlockB256;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
@@ -83,7 +83,7 @@ impl Block {
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
     pub fn to_json_rpc_with_transactions_hashes(self) -> JsonValue {
-        let alloy_block: AlloyBlockH256 = self.into();
+        let alloy_block: AlloyBlockB256 = self.into();
         to_json_value(alloy_block)
     }
 
@@ -222,9 +222,9 @@ impl From<Block> for AlloyBlockAlloyTransaction {
     }
 }
 
-impl From<Block> for AlloyBlockH256 {
+impl From<Block> for AlloyBlockB256 {
     fn from(block: Block) -> Self {
-        let alloy_block: AlloyBlockH256 = block.header.into();
+        let alloy_block: AlloyBlockB256 = block.header.into();
         let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.hash).map(B256::from).collect();
 
         Self {

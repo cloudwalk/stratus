@@ -3,22 +3,24 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
-use alloy_rpc_types_trace::geth::call::FlatCallFrame;
-use alloy_rpc_types_trace::geth::mux::MuxFrame;
 use alloy_rpc_types_trace::geth::CallFrame;
 use alloy_rpc_types_trace::geth::FourByteFrame;
 use alloy_rpc_types_trace::geth::GethDebugBuiltInTracerType;
 use alloy_rpc_types_trace::geth::GethDebugTracerType;
 use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::NoopFrame;
+use alloy_rpc_types_trace::geth::call::FlatCallFrame;
+use alloy_rpc_types_trace::geth::mux::MuxFrame;
 use anyhow::anyhow;
 use itertools::Itertools;
 use log::log_enabled;
-use revm::context::result::EVMError;
-use revm::context::result::ExecutionResult as RevmExecutionResult;
-use revm::context::result::HaltReason;
-use revm::context::result::InvalidTransaction;
-use revm::context::result::ResultAndState;
+use revm::Context;
+use revm::Database;
+use revm::DatabaseRef;
+use revm::ExecuteCommitEvm;
+use revm::ExecuteEvm;
+use revm::InspectEvm;
+use revm::Journal;
 use revm::context::BlockEnv;
 use revm::context::CfgEnv;
 use revm::context::ContextTr;
@@ -27,28 +29,26 @@ use revm::context::JournalOutput;
 use revm::context::JournalTr;
 use revm::context::TransactTo;
 use revm::context::TxEnv;
+use revm::context::result::EVMError;
+use revm::context::result::ExecutionResult as RevmExecutionResult;
+use revm::context::result::HaltReason;
+use revm::context::result::InvalidTransaction;
+use revm::context::result::ResultAndState;
 use revm::database::CacheDB;
-use revm::handler::instructions::EthInstructions;
-use revm::handler::instructions::InstructionProvider;
 use revm::handler::EthFrame;
 use revm::handler::EthPrecompiles;
 use revm::handler::EvmTr;
 use revm::handler::Handler;
 use revm::handler::PrecompileProvider;
-use revm::interpreter::interpreter::EthInterpreter;
+use revm::handler::instructions::EthInstructions;
+use revm::handler::instructions::InstructionProvider;
 use revm::interpreter::InterpreterResult;
-use revm::primitives::hardfork::SpecId;
+use revm::interpreter::interpreter::EthInterpreter;
 use revm::primitives::B256;
 use revm::primitives::U256;
+use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use revm::state::EvmState;
-use revm::Context;
-use revm::Database;
-use revm::DatabaseRef;
-use revm::ExecuteCommitEvm;
-use revm::ExecuteEvm;
-use revm::InspectEvm;
-use revm::Journal;
 use revm_inspectors::tracing::FourByteInspector;
 use revm_inspectors::tracing::MuxInspector;
 use revm_inspectors::tracing::TracingInspector;
@@ -81,8 +81,8 @@ use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::storage::StratusStorage;
-use crate::ext::not;
 use crate::ext::OptionExt;
+use crate::ext::not;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
@@ -105,10 +105,10 @@ struct StratusHandler<EVM> {
 impl<EVM> Handler for StratusHandler<EVM>
 where
     EVM: EvmTr<
-        Context: ContextTr<Journal: JournalTr<FinalOutput = JournalOutput>>,
-        Precompiles: PrecompileProvider<EVM::Context, Output = InterpreterResult>,
-        Instructions: InstructionProvider<Context = EVM::Context, InterpreterTypes = EthInterpreter>,
-    >,
+            Context: ContextTr<Journal: JournalTr<FinalOutput = JournalOutput>>,
+            Precompiles: PrecompileProvider<EVM::Context, Output = InterpreterResult>,
+            Instructions: InstructionProvider<Context = EVM::Context, InterpreterTypes = EthInterpreter>,
+        >,
 {
     type Evm = EVM;
     type Error = EVMError<<<EVM::Context as ContextTr>::Db as Database>::Error, InvalidTransaction>;
@@ -277,8 +277,8 @@ impl Evm {
         })?;
 
         let tx_info = TransactionInfo {
-            block_hash: Some(block.hash().0 .0.into()),
-            hash: Some(tx_hash.0 .0.into()),
+            block_hash: Some(block.hash().0.0.into()),
+            hash: Some(tx_hash.0.0.into()),
             index: tx.index().map_into(),
             block_number: Some(block.number().as_u64()),
             base_fee: None,
@@ -383,7 +383,7 @@ impl TxEnvExt for TxEnv {
             None => TransactTo::Create,
         };
         self.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
-        self.gas_price = input.gas_price.into();
+        self.gas_price = input.gas_price;
         self.chain_id = input.chain_id.map_into();
         self.nonce = input.nonce.map_into().unwrap_or_default();
         self.data = input.data.into();
@@ -457,13 +457,15 @@ impl Database for RevmSession {
         let account = self.storage.read_account(address, self.input.point_in_time)?;
 
         // warn if the loaded account is the `to` account and it does not have a bytecode
-        if let Some(ref to_address) = self.input.to {
-            if account.bytecode.is_none() && &address == to_address && self.input.is_contract_call() {
-                if self.config.executor_reject_not_contract {
-                    return Err(TransactionError::AccountNotContract { address: *to_address }.into());
-                } else {
-                    tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
-                }
+        if let Some(to_address) = self.input.to
+            && account.bytecode.is_none()
+            && address == to_address
+            && self.input.is_contract_call()
+        {
+            if self.config.executor_reject_not_contract {
+                return Err(TransactionError::AccountNotContract { address: to_address }.into());
+            } else {
+                tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
             }
         }
 

@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use alloy_primitives::B256;
-use anyhow::anyhow;
 use anyhow::Ok;
+use anyhow::anyhow;
 use display_json::DebugAsJson;
 use hex_literal::hex;
 use revm::primitives::alloy_primitives;
@@ -256,7 +256,7 @@ mod tests {
         let sender_address: Address = Faker.fake();
         let sender = Account {
             address: sender_address,
-            nonce: Nonce::from(1u16),
+            nonce: Nonce::from(1u64),
             balance: Wei::from(1000u64),
             bytecode: None,
             code_hash: CodeHash::default(),
@@ -297,7 +297,7 @@ mod tests {
 
         // Nonce should be incremented
         let modified_nonce = sender_changes.nonce.take_modified_ref().unwrap();
-        assert_eq!(*modified_nonce, Nonce::from(2u8));
+        assert_eq!(*modified_nonce, Nonce::from(2u64));
 
         // Balance should be reduced by execution cost
         if receipt.execution_cost() > Wei::ZERO {
@@ -314,7 +314,7 @@ mod tests {
 
         // Create a mock receipt (failed)
         let mut receipt: ExternalReceipt = Faker.fake();
-        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+        if let alloy_consensus::ReceiptEnvelope::Legacy(r) = &mut receipt.0.inner {
             r.receipt.status = alloy_consensus::Eip658Value::Eip658(false);
         } else {
             panic!("expected be legacy!")
@@ -333,7 +333,7 @@ mod tests {
 
         // Create a mock receipt with different number of logs
         let mut receipt: ExternalReceipt = Faker.fake();
-        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+        if let alloy_consensus::ReceiptEnvelope::Legacy(r) = &mut receipt.0.inner {
             r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
             r.receipt.logs = vec![alloy_rpc_types_eth::Log::default()]; // Only one log
         } else {
@@ -366,7 +366,7 @@ mod tests {
 
         // Create a receipt with this log
         let mut receipt: ExternalReceipt = Faker.fake();
-        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+        if let alloy_consensus::ReceiptEnvelope::Legacy(r) = &mut receipt.0.inner {
             r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
             r.receipt.logs = vec![receipt_log.clone()];
         } else {
@@ -399,7 +399,7 @@ mod tests {
 
         // Create receipt with this log
         let mut receipt: ExternalReceipt = Faker.fake();
-        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+        if let alloy_consensus::ReceiptEnvelope::Legacy(r) = &mut receipt.0.inner {
             r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
             r.receipt.logs = vec![receipt_log.clone()];
         } else {
@@ -430,7 +430,7 @@ mod tests {
 
         // Create receipt with this log
         let mut receipt: ExternalReceipt = Faker.fake();
-        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+        if let alloy_consensus::ReceiptEnvelope::Legacy(r) = &mut receipt.0.inner {
             r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
             r.receipt.logs = vec![receipt_log.clone()];
         } else {
@@ -496,7 +496,7 @@ mod tests {
 
         // Create receipt with these logs
         let mut receipt: ExternalReceipt = Faker.fake();
-        if let alloy_consensus::ReceiptEnvelope::Legacy(ref mut r) = &mut receipt.0.inner {
+        if let alloy_consensus::ReceiptEnvelope::Legacy(r) = &mut receipt.0.inner {
             r.receipt.status = alloy_consensus::Eip658Value::Eip658(true);
             r.receipt.logs = vec![erc20_receipt_log.clone(), balance_receipt_log.clone(), regular_receipt_log.clone()];
         } else {
@@ -525,7 +525,7 @@ mod tests {
         let sender_address: Address = Faker.fake();
         let sender = Account {
             address: sender_address,
-            nonce: Nonce::from(1u16),
+            nonce: Nonce::from(1u64),
             balance: Wei::from(1000u64),
             bytecode: None,
             code_hash: CodeHash::default(),
@@ -546,7 +546,7 @@ mod tests {
 
         // Make sure transaction has a cost
         let gas_price = Wei::from(1u64);
-        receipt.0.effective_gas_price = gas_price.into();
+        receipt.0.effective_gas_price = gas_price.try_into().expect("wei was created with u64 which fits u128 qed.");
 
         // Apply receipt
         execution.apply_receipt(&receipt).unwrap();
