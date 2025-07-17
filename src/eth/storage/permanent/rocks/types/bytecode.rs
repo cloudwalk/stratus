@@ -1,17 +1,17 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use revm::bytecode::eip7702::Eip7702Bytecode;
-use revm::bytecode::eof::CodeInfo;
-use revm::bytecode::eof::EofBody;
-use revm::bytecode::eof::EofHeader;
 use revm::bytecode::Eof;
 use revm::bytecode::JumpTable;
 use revm::bytecode::LegacyAnalyzedBytecode;
 use revm::bytecode::LegacyRawBytecode;
+use revm::bytecode::eip7702::Eip7702Bytecode;
+use revm::bytecode::eof::CodeInfo;
+use revm::bytecode::eof::EofBody;
+use revm::bytecode::eof::EofHeader;
 
-use super::bytes::BytesRocksdb;
 use super::AddressRocksdb;
+use super::bytes::BytesRocksdb;
 use crate::alias::RevmBytecode;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
@@ -110,7 +110,7 @@ impl From<RevmBytecode> for BytecodeRocksdb {
                 raw: eof.raw.clone().into(),
             }),
             RevmBytecode::Eip7702(bytecode) => BytecodeRocksdb::Eip7702(Eip7702BytecodeRocksdb {
-                delegated_address: AddressRocksdb(bytecode.delegated_address.0 .0),
+                delegated_address: AddressRocksdb(bytecode.delegated_address.0.0),
                 version: bytecode.version,
                 raw: bytecode.raw.into(),
             }),

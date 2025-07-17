@@ -9,12 +9,12 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use glob::glob;
+use nom::IResult;
 use nom::bytes::complete::tag;
 use nom::character::complete::hex_digit1;
 use nom::combinator::rest;
 use nom::sequence::preceded;
 use nom::sequence::separated_pair;
-use nom::IResult;
 use vergen::EmitBuilder;
 
 fn main() {

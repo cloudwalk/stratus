@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use parking_lot::RwLock;
-use stratus::config::StratusConfig;
-use stratus::eth::rpc::Server;
 use stratus::GlobalServices;
 use stratus::GlobalState;
+use stratus::config::StratusConfig;
+use stratus::eth::rpc::Server;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 use tikv_jemallocator::Jemalloc;
 

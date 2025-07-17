@@ -20,8 +20,8 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
-use crate::ext::not;
 use crate::ext::OptionExt;
+use crate::ext::not;
 use crate::if_else;
 
 /// EVM input data. Usually derived from a transaction or call.
@@ -67,7 +67,7 @@ pub struct EvmInput {
     pub gas_limit: Gas,
 
     /// Gas price paid by each unit of gas consumed by the transaction.
-    pub gas_price: Wei,
+    pub gas_price: u128,
 
     /// Number of the block where the transaction will be or was included.
     pub block_number: BlockNumber,
@@ -93,7 +93,7 @@ impl EvmInput {
             value: input.value,
             data: input.input.clone(),
             gas_limit: Gas::MAX,
-            gas_price: Wei::ZERO,
+            gas_price: 0,
             nonce: Some(input.nonce),
             block_number: pending_header.number,
             block_timestamp: *pending_header.timestamp,
@@ -110,7 +110,7 @@ impl EvmInput {
             value: input.value,
             data: input.data,
             gas_limit: Gas::MAX,
-            gas_price: Wei::ZERO,
+            gas_price: 0,
             nonce: None,
             block_number: pending_header.number,
             block_timestamp: *pending_header.timestamp,
@@ -127,7 +127,7 @@ impl EvmInput {
             value: input.value,
             data: input.data,
             gas_limit: Gas::MAX,
-            gas_price: Wei::ZERO,
+            gas_price: 0,
             nonce: None,
             block_number: block.number(),
             block_timestamp: block.header.timestamp,
@@ -147,7 +147,7 @@ impl EvmInput {
             data: tx.inner.input().clone().into(),
             nonce: Some(tx.inner.nonce().into()),
             gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.inner.gas_limit().into()),
-            gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.inner.gas_price().map_into().unwrap_or(Wei::ZERO)),
+            gas_price: if_else!(receipt.is_success(), 0, tx.inner.gas_price().map_into().unwrap_or(0)),
             point_in_time: PointInTime::Pending,
             block_number,
             block_timestamp,

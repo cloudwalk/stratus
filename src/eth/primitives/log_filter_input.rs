@@ -2,11 +2,11 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use display_json::DebugAsJson;
-use serde_with::formats::PreferMany;
-use serde_with::serde_as;
 use serde_with::DefaultOnNull;
 use serde_with::OneOrMany;
 use serde_with::PickFirst;
+use serde_with::formats::PreferMany;
+use serde_with::serde_as;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;

@@ -5,10 +5,10 @@ use std::time::Duration;
 #[cfg(feature = "replication")]
 use alloy_primitives::hex;
 use anyhow::Context;
+use jsonrpsee::core::ClientError;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::client::Subscription;
 use jsonrpsee::core::client::SubscriptionClientT;
-use jsonrpsee::core::ClientError;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
 #[cfg(feature = "replication")]
@@ -18,6 +18,7 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
+use crate::GlobalState;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
@@ -35,11 +36,10 @@ use crate::eth::primitives::Wei;
 use crate::eth::rpc::RpcClientApp;
 #[cfg(feature = "replication")]
 use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
-use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
+use crate::ext::to_json_value;
 use crate::infra::tracing::TracingExt;
 use crate::log_and_err;
-use crate::GlobalState;
 
 #[derive(Debug)]
 pub struct BlockchainClient {

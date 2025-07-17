@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 use futures::join;
 use itertools::Itertools;
@@ -10,12 +10,13 @@ use jsonrpsee::ConnectionId;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
 use serde::ser::SerializeMap;
-use tokio::sync::broadcast;
 use tokio::sync::RwLock;
+use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
 use tokio::time::Duration;
+use tokio::time::timeout;
 
+use crate::GlobalState;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
@@ -25,16 +26,15 @@ use crate::eth::primitives::RpcError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::UnixTimeNow;
 use crate::eth::rpc::RpcClientApp;
+use crate::ext::DisplayExt;
+use crate::ext::SleepReason;
 use crate::ext::not;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
-use crate::ext::DisplayExt;
-use crate::ext::SleepReason;
 use crate::if_else;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_rx_closed;
-use crate::GlobalState;
 
 /// Frequency of cleaning up closed subscriptions.
 const CLEANING_FREQUENCY: Duration = Duration::from_secs(10);
@@ -523,8 +523,6 @@ impl RpcSubscriptionsConnected {
 
 #[cfg(feature = "metrics")]
 mod sub_metrics {
-    use super::label;
-    use super::metrics;
     use super::ConnectionId;
     use super::HashMap;
     use super::Itertools;
@@ -532,6 +530,8 @@ mod sub_metrics {
     use super::RpcClientApp;
     use super::Subscription;
     use super::SubscriptionWithFilter;
+    use super::label;
+    use super::metrics;
 
     pub fn update_new_pending_txs_subscription_metrics(subs: &HashMap<ConnectionId, Subscription>) {
         update_subscription_count(label::PENDING_TXS, subs.values());

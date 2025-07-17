@@ -10,19 +10,20 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
+use tracing::Span;
 use tracing::debug_span;
 #[cfg(feature = "tracing")]
 use tracing::info_span;
-use tracing::Span;
 
 use super::evm_input::InspectorInput;
+use crate::GlobalState;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
-use crate::eth::executor::evm::EvmKind;
 use crate::eth::executor::Evm;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::executor::evm::EvmKind;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
@@ -44,15 +45,14 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::primitives::UnixTime;
 use crate::eth::storage::StratusStorage;
-use crate::ext::spawn_thread;
-use crate::ext::to_json_string;
 #[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
+use crate::ext::spawn_thread;
+use crate::ext::to_json_string;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
-use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
-use crate::GlobalState;
+use crate::infra::tracing::warn_task_tx_closed;
 
 // -----------------------------------------------------------------------------
 // Evm task

@@ -4,13 +4,13 @@ use clap::ValueEnum;
 use display_json::DebugAsJson;
 use futures::Stream;
 use futures::StreamExt;
+use rdkafka::ClientConfig;
 use rdkafka::message::Header;
 use rdkafka::message::OwnedHeaders;
-use rdkafka::producer::future_producer::OwnedDeliveryResult;
 use rdkafka::producer::DeliveryFuture;
 use rdkafka::producer::FutureProducer;
 use rdkafka::producer::FutureRecord;
-use rdkafka::ClientConfig;
+use rdkafka::producer::future_producer::OwnedDeliveryResult;
 
 use crate::infra::metrics;
 use crate::ledger::events::Event;

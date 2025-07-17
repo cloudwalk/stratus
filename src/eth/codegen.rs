@@ -15,7 +15,7 @@ pub type ContractName = &'static str;
 /// Returns the contract name to be used in observability tasks.
 pub fn contract_name(address: &Option<Address>) -> ContractName {
     let Some(address) = address else { return metrics::LABEL_MISSING };
-    match CONTRACTS.get(address.as_bytes()) {
+    match CONTRACTS.get(address.as_slice()) {
         Some(contract_name) => contract_name,
         None => metrics::LABEL_UNKNOWN,
     }

@@ -4,9 +4,9 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::StratusError;
 use crate::eth::rpc::RpcClientApp;
+use crate::infra::BlockchainClient;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
-use crate::infra::BlockchainClient;
 
 #[allow(async_fn_in_trait)]
 pub trait Consensus: Send + Sync {
