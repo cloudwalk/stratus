@@ -234,6 +234,7 @@ e2e-admin-password:
         fi
         killport 3000 -s sigterm
         just _wait_for_stratus_finish
+        sleep 20
     done
 
 # E2E: Execute EOF (EVM Object Format) tests
