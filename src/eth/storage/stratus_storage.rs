@@ -277,6 +277,7 @@ impl StratusStorage {
         })
     }
 
+    #[cfg(not(feature = "replication"))]
     fn _read_account_latest_cache(&self, address: Address) -> Option<Account> {
         timed(|| self.cache.get_account_latest(address)).with(|m| {
             if m.result.is_some() {
@@ -394,6 +395,7 @@ impl StratusStorage {
         })
     }
 
+    #[cfg(not(feature = "replication"))]
     fn _read_slot_latest_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         timed(|| self.cache.get_slot_latest(address, index)).with(|m| {
             if m.result.is_some() {

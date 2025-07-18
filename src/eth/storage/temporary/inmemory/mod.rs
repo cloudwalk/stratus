@@ -20,10 +20,6 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 #[cfg(feature = "dev")]
-use crate::eth::primitives::UnixTime;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::UnixTimeNow;
-#[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::AccountWithSlots;
 use crate::eth::storage::temporary::inmemory::call::InMemoryCallTemporaryStorage;
@@ -104,7 +100,7 @@ impl InMemoryTemporaryStorage {
 
     #[cfg(feature = "dev")]
     pub fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
-        self.pending_storage.set_pending_block_header(block_number)
+        self.transaction_storage.set_pending_block_header(block_number)
     }
 
     pub fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool, is_local: bool) -> Result<(), StorageError> {
@@ -141,22 +137,22 @@ impl InMemoryTemporaryStorage {
 
     #[cfg(feature = "dev")]
     pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
-        self.pending_storage.save_slot(address, slot)
+        self.transaction_storage.save_slot(address, slot)
     }
 
     #[cfg(feature = "dev")]
     pub fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
-        self.pending_storage.save_account_nonce(address, nonce)
+        self.transaction_storage.save_account_nonce(address, nonce)
     }
 
     #[cfg(feature = "dev")]
     pub fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
-        self.pending_storage.save_account_balance(address, balance)
+        self.transaction_storage.save_account_balance(address, balance)
     }
 
     #[cfg(feature = "dev")]
     pub fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
-        self.pending_storage.save_account_code(address, code)
+        self.transaction_storage.save_account_code(address, code)
     }
 
     pub fn reset(&self) -> anyhow::Result<(), StorageError> {
