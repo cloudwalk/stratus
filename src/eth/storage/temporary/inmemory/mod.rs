@@ -72,12 +72,7 @@ impl Ord for TxCount {
 
 impl PartialOrd for TxCount {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match (self, other) {
-            (TxCount::Full, TxCount::Full) => Some(std::cmp::Ordering::Equal),
-            (TxCount::Full, TxCount::Partial(_)) => Some(std::cmp::Ordering::Greater),
-            (TxCount::Partial(_), TxCount::Full) => Some(std::cmp::Ordering::Less),
-            (TxCount::Partial(a), TxCount::Partial(b)) => a.partial_cmp(b),
-        }
+        Some(self.cmp(other))
     }
 }
 
