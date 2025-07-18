@@ -6,6 +6,7 @@ mod call;
 mod inmemory;
 mod transaction;
 
+#[derive(Clone, Copy)]
 pub enum ReadKind {
     Call((BlockNumber, TxCount)),
     Transaction
