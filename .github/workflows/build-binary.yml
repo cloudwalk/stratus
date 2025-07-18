@@ -34,7 +34,7 @@ jobs:
 
     concurrency:
       group: ${{ github.workflow }}-{{ github.run_id }}
-      cancel-in-progress: true
+      cancel-in-progress: false
 
     steps:
       - name: Checkout code
