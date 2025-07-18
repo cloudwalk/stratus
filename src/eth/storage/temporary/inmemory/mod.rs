@@ -32,7 +32,7 @@ use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTe
 mod call;
 mod transaction;
 
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize, fake::Dummy)]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize, fake::Dummy, Eq)]
 pub enum TxCount {
     Full,
     Partial(u64),
@@ -55,6 +55,17 @@ impl std::ops::AddAssign<u64> for TxCount {
         match self {
             TxCount::Full => {}                       // If it's Full, keep it Full
             TxCount::Partial(count) => *count += rhs, // If it's Partial, increment the counter
+        }
+    }
+}
+
+impl Ord for TxCount {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (TxCount::Full, TxCount::Full) => std::cmp::Ordering::Equal,
+            (TxCount::Full, TxCount::Partial(_)) => std::cmp::Ordering::Greater,
+            (TxCount::Partial(_), TxCount::Full) => std::cmp::Ordering::Less,
+            (TxCount::Partial(a), TxCount::Partial(b)) => a.cmp(b),
         }
     }
 }

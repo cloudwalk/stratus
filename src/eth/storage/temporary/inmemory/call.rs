@@ -35,7 +35,11 @@ impl InMemoryCallTemporaryStorage {
         if let Some(block_state) = self.storage.get(&block)
             && let Some(accounts) = block_state.accounts.get(&address)
         {
-            return accounts.iter().rev().find(|(_, t)| *t <= tx).map(|(acc, _)| acc.clone());
+            let vec_index = match accounts.binary_search_by_key(&&tx, |(_, tx_count)| tx_count) {
+                Ok(index) => index,
+                Err(index) => index - 1,
+            };
+            return accounts.get(vec_index).map(|(acc, _)| acc.clone());
         }
         None
     }
@@ -47,11 +51,12 @@ impl InMemoryCallTemporaryStorage {
         if let Some(block_state) = self.storage.get(&block)
             && let Some(slot_values) = block_state.slots.get(&(address, slot))
         {
-            return slot_values
-                .iter()
-                .rev()
-                .find(|(_, t)| *t <= tx)
-                .map(|(value, _)| Slot { index: slot, value: *value });
+            let vec_index = match slot_values.binary_search_by_key(&&tx, |(_, tx_count)| tx_count) {
+                Ok(index) => index,
+                Err(index) => index - 1,
+            };
+
+            return slot_values.get(vec_index).map(|(value, _)| Slot { index: slot, value: *value });
         }
         None
     }
