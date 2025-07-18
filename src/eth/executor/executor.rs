@@ -44,6 +44,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::primitives::UnixTime;
+use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
 #[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
@@ -413,7 +414,7 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending)?;
+                let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending, ReadKind::Transaction)?;
                 let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
                 let evm_result = EvmExecutionResult {
                     execution,
@@ -537,7 +538,7 @@ impl Executor {
             });
 
             // prepare evm input
-            let pending_header = self.storage.read_pending_block_header();
+            let (pending_header, _) = self.storage.read_pending_block_header();
             let evm_input = EvmInput::from_eth_transaction(&tx_input, &pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
@@ -628,8 +629,8 @@ impl Executor {
         // execute
         let evm_input = match point_in_time {
             PointInTime::Pending => {
-                let pending_header = self.storage.read_pending_block_header();
-                EvmInput::from_pending_block(call_input.clone(), pending_header)
+                let (pending_header, tx_count) = self.storage.read_pending_block_header();
+                EvmInput::from_pending_block(call_input.clone(), pending_header, tx_count)
             }
             point_in_time => {
                 let Some(block) = self.storage.read_block(point_in_time.into())? else {

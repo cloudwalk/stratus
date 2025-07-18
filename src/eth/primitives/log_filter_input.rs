@@ -60,7 +60,7 @@ impl LogFilterInput {
 
         // translate point-in-time to block according to context
         let from = match from {
-            PointInTime::Pending => storage.read_pending_block_header().number,
+            PointInTime::Pending => storage.read_pending_block_header().0.number,
             PointInTime::Mined => storage.read_mined_block_number()?,
             PointInTime::MinedPast(number) => number,
         };

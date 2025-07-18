@@ -37,6 +37,7 @@ use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
+use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::ReadKind;
 use crate::ext::not;
 use crate::infra::metrics;
@@ -158,7 +159,7 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
 
-        let number = self.read_pending_block_header().number;
+        let number = self.read_pending_block_header().0.number;
 
         #[cfg(feature = "dev")]
         if number == BlockNumber::ONE && self.rocksdb_replication_enabled() {
@@ -171,7 +172,7 @@ impl StratusStorage {
         Ok(number)
     }
 
-    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
+    pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_pending_block_number").entered();
         tracing::debug!(storage = %label::TEMP, "reading pending block number");
@@ -319,33 +320,46 @@ impl StratusStorage {
         })
     }
 
+    fn _latest_cache_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> bool {
+        if matches!(point_in_time, PointInTime::MinedPast(_)) {
+            return false;
+        }
+
+        match kind {
+            ReadKind::Call((block_number, _)) => {
+                // Check if the provided block number is less than or equal to the mined block number
+                match self.read_mined_block_number() {
+                    Ok(mined_block_number) => block_number <= mined_block_number,
+                    Err(_) => false, // If we can't read mined block number, assume cache is invalid
+                }
+            }
+            _ => true,
+        }
+    }
+
     pub fn read_account(&self, address: Address, point_in_time: PointInTime, kind: ReadKind) -> Result<Account, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
 
         let (account, found_in_perm) = 'query: {
-            match point_in_time {
-                PointInTime::Pending => {
-                    if self.temp.account_cache_is_valid(address, kind)
-                        && let Some(account) = self._read_account_pending_cache(address)
-                    {
-                        return Ok(account);
-                    }
-
-                    if let Some(account) = self._read_account_temp(address, kind)? {
-                        tracing::debug!(storage = %label::TEMP, %address, ?account, "account found in temporary storage");
-                        break 'query (account, false);
-                    }
-                }
-                PointInTime::Mined =>
+            if point_in_time == PointInTime::Pending {
+                if matches!(kind, ReadKind::Transaction)
+                    && let Some(account) = self._read_account_pending_cache(address)
                 {
-                    #[cfg(not(feature = "replication"))]
-                    if let Some(account) = self._read_account_latest_cache(address) {
-                        return Ok(account);
-                    }
+                    return Ok(account);
                 }
 
-                _ => (),
+                if let Some(account) = self._read_account_temp(address, kind)? {
+                    tracing::debug!(storage = %label::TEMP, %address, ?account, "account found in temporary storage");
+                    break 'query (account, false);
+                }
+            }
+
+            #[cfg(not(feature = "replication"))]
+            if self._latest_cache_is_valid(point_in_time, kind)
+                && let Some(account) = self._read_account_latest_cache(address)
+            {
+                return Ok(account);
             }
 
             // always read from perm if necessary
@@ -428,28 +442,25 @@ impl StratusStorage {
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
         let (slot, found_in_perm) = 'query: {
-            match point_in_time {
-                PointInTime::Pending => {
-                    if self.temp.slot_cache_is_valid(address, index, kind)
-                        && let Some(slot) = self._read_slot_pending_cache(address, index)
-                    {
-                        return Ok(slot);
-                    }
-
-                    if let Some(slot) = self._read_slot_temp(address, index, kind)? {
-                        tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
-                        break 'query (slot, false);
-                    }
-                }
-                PointInTime::Mined =>
+            if point_in_time == PointInTime::Pending {
+                // tx can read from pending cache
+                if matches!(kind, ReadKind::Transaction)
+                    && let Some(slot) = self._read_slot_pending_cache(address, index)
                 {
-                    #[cfg(not(feature = "replication"))]
-                    if let Some(slot) = self._read_slot_latest_cache(address, index) {
-                        return Ok(slot);
-                    }
+                    return Ok(slot);
                 }
 
-                _ => (),
+                if let Some(slot) = self._read_slot_temp(address, index, kind)? {
+                    tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
+                    break 'query (slot, false);
+                }
+            }
+
+            #[cfg(not(feature = "replication"))]
+            if self._latest_cache_is_valid(point_in_time, kind)
+                && let Some(slot) = self._read_slot_latest_cache(address, index)
+            {
+                return Ok(slot);
             }
 
             // always read from perm if necessary
@@ -558,11 +569,11 @@ impl StratusStorage {
 
         // check pending number
         let pending_header = self.read_pending_block_header();
-        if block_number >= pending_header.number {
-            tracing::error!(%block_number, pending_number = %pending_header.number, "failed to save block because mismatch with pending block number");
+        if block_number >= pending_header.0.number {
+            tracing::error!(%block_number, pending_number = %pending_header.0.number, "failed to save block because mismatch with pending block number");
             return Err(StorageError::PendingNumberConflict {
                 new: block_number,
-                pending: pending_header.number,
+                pending: pending_header.0.number,
             });
         }
 

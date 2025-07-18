@@ -7,7 +7,6 @@ use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
 use parking_lot::RwLockWriteGuard;
 
-use super::inmemory::InMemoryTemporaryStorageState;
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -33,6 +32,8 @@ use crate::eth::primitives::UnixTimeNow;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::AccountWithSlots;
+use crate::eth::storage::TxCount;
+use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
 
 #[derive(Debug)]
 pub struct InmemoryTransactionTemporaryStorage {
@@ -91,8 +92,9 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
 
     // Uneeded clone here, return Cow
-    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
-        self.pending_block.read().block.header.clone()
+    pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
+        let pending_block = self.pending_block.read();
+        (pending_block.block.header.clone(), (pending_block.block.transactions.len() as u64).into())
     }
 
     #[cfg(feature = "dev")]

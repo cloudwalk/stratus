@@ -11,8 +11,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::TransactionExecution;
-
-pub type TxCount = u64;
+use crate::eth::storage::temporary::inmemory::TxCount;
 
 #[derive(Debug)]
 pub struct InMemoryCallTemporaryStorage {
@@ -33,10 +32,10 @@ impl InMemoryCallTemporaryStorage {
     ///
     /// Returns the account data if found, otherwise None.
     pub fn read_account(&self, block: BlockNumber, tx: TxCount, address: Address) -> Option<Account> {
-        if let Some(block_state) = self.storage.get(&block) {
-            if let Some(accounts) = block_state.accounts.get(&address) {
-                return accounts.iter().rev().find(|(_, t)| *t <= tx).map(|(acc, _)| acc.clone());
-            }
+        if let Some(block_state) = self.storage.get(&block)
+            && let Some(accounts) = block_state.accounts.get(&address)
+        {
+            return accounts.iter().rev().find(|(_, t)| *t <= tx).map(|(acc, _)| acc.clone());
         }
         None
     }
@@ -45,45 +44,16 @@ impl InMemoryCallTemporaryStorage {
     ///
     /// Returns the slot value if found, otherwise None.
     pub fn read_slot(&self, block: BlockNumber, tx: TxCount, address: Address, slot: SlotIndex) -> Option<Slot> {
-        if let Some(block_state) = self.storage.get(&block) {
-            if let Some(slot_values) = block_state.slots.get(&(address, slot)) {
-                return slot_values.iter().rev().find(|(_, t)| *t <= tx).map(|(value, _)| Slot {
-                    index: slot,
-                    value: *value
-                });
-            }
+        if let Some(block_state) = self.storage.get(&block)
+            && let Some(slot_values) = block_state.slots.get(&(address, slot))
+        {
+            return slot_values
+                .iter()
+                .rev()
+                .find(|(_, t)| *t <= tx)
+                .map(|(value, _)| Slot { index: slot, value: *value });
         }
         None
-    }
-
-    /// Checks if the account cache is valid for the given parameters.
-    ///
-    /// Returns false if there's an account entry AFTER the provided transaction count,
-    /// indicating that the cached data is stale.
-    pub fn account_cache_is_valid(&self, block: BlockNumber, tx: TxCount, address: Address) -> bool {
-        if let Some(block_state) = self.storage.get(&block) {
-            if let Some(accounts) = block_state.accounts.get(&address) {
-                // Check if there's any account entry with tx_count > tx
-                return !accounts.iter().any(|(_, t)| *t > tx);
-            }
-        }
-        // If no entries exist, cache is valid
-        true
-    }
-
-    /// Checks if the slot cache is valid for the given parameters.
-    ///
-    /// Returns false if there's a slot entry AFTER the provided transaction count,
-    /// indicating that the cached data is stale.
-    pub fn slot_cache_is_valid(&self, block: BlockNumber, tx: TxCount, address: Address, slot: SlotIndex) -> bool {
-        if let Some(block_state) = self.storage.get(&block) {
-            if let Some(slot_values) = block_state.slots.get(&(address, slot)) {
-                // Check if there's any slot entry with tx_count > tx
-                return !slot_values.iter().any(|(_, t)| *t > tx);
-            }
-        }
-        // If no entries exist, cache is valid
-        true
     }
 
     /// Updates the storage by appending new entries from the given TransactionExecution.
@@ -130,7 +100,11 @@ impl InMemoryCallTemporaryStorage {
             // Add slot changes
             for (slot_index, slot_change) in &change.slots {
                 if let Some(slot) = slot_change.take_modified_ref() {
-                    block_state.slots.entry((*address, *slot_index)).or_default().push((slot.value, current_tx_count));
+                    block_state
+                        .slots
+                        .entry((*address, *slot_index))
+                        .or_default()
+                        .push((slot.value, current_tx_count));
                 }
             }
         }
