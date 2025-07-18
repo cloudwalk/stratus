@@ -24,7 +24,6 @@ use crate::eth::primitives::UnixTimeNow;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::temporary::inmemory::call::InMemoryCallTemporaryStorage;
-use crate::eth::storage::temporary::inmemory::call::TxCount;
 use crate::eth::storage::temporary::inmemory::ReadKind;
 use crate::eth::storage::AccountWithSlots;
 
