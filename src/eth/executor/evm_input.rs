@@ -20,6 +20,8 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
+use crate::eth::storage::ReadKind;
+use crate::eth::storage::TxCount;
 use crate::ext::OptionExt;
 use crate::ext::not;
 use crate::if_else;
@@ -82,6 +84,8 @@ pub struct EvmInput {
     ///
     /// If not specified, it will not be validated.
     pub chain_id: Option<ChainId>,
+
+    pub kind: ReadKind,
 }
 
 impl EvmInput {
@@ -99,11 +103,12 @@ impl EvmInput {
             block_timestamp: *pending_header.timestamp,
             point_in_time: PointInTime::Pending,
             chain_id: input.chain_id,
+            kind: ReadKind::Transaction,
         }
     }
 
     /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas` for a pending block.
-    pub fn from_pending_block(input: CallInput, pending_header: PendingBlockHeader) -> Self {
+    pub fn from_pending_block(input: CallInput, pending_header: PendingBlockHeader, tx_count: TxCount) -> Self {
         Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
@@ -116,6 +121,7 @@ impl EvmInput {
             block_timestamp: *pending_header.timestamp,
             point_in_time: PointInTime::Pending,
             chain_id: None,
+            kind: ReadKind::Call((pending_header.number, tx_count)),
         }
     }
 
@@ -133,6 +139,7 @@ impl EvmInput {
             block_timestamp: block.header.timestamp,
             point_in_time,
             chain_id: None,
+            kind: ReadKind::Call((block.number(), TxCount::Full)),
         }
     }
 
@@ -152,6 +159,7 @@ impl EvmInput {
             block_number,
             block_timestamp,
             chain_id: tx.inner.chain_id().map(Into::into),
+            kind: ReadKind::Transaction,
         })
     }
 
@@ -190,6 +198,7 @@ impl From<TransactionMined> for EvmInput {
             block_timestamp: value.execution.block_timestamp,
             point_in_time: PointInTime::MinedPast(value.block_number),
             chain_id: value.input.chain_id,
+            kind: ReadKind::Transaction,
         }
     }
 }

@@ -6,7 +6,9 @@ pub use permanent::PermanentStorageConfig;
 pub use permanent::RocksPermanentStorage;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
+pub use temporary::ReadKind;
 pub use temporary::TemporaryStorageConfig;
+pub use temporary::TxCount;
 
 mod cache;
 pub mod permanent;
