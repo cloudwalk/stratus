@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 
-
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -20,14 +19,13 @@ use crate::eth::primitives::TransactionExecution;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::AccountWithSlots;
-use crate::eth::storage::temporary::inmemory::call::InMemoryCallTemporaryStorage;
-use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::TxCount;
+use crate::eth::storage::temporary::inmemory::call::InMemoryCallTemporaryStorage;
+use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
 
 mod call;
 mod transaction;
-
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {

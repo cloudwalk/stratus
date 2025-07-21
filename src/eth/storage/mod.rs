@@ -78,7 +78,6 @@ impl StorageConfig {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize, fake::Dummy, Eq)]
 pub enum TxCount {
     Full,
