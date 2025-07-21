@@ -58,7 +58,7 @@ pub struct StratusStorage {
     temp: InMemoryTemporaryStorage,
     cache: StorageCache,
     perm: RocksPermanentStorage,
-    // CONTRACT: Always acquire a lock when reading from latest (cache OR perm) and when saving a block
+    // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block
     transient_state_lock: parking_lot::RwLock<()>,
     #[cfg(feature = "dev")]
     perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
