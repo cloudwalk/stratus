@@ -168,7 +168,7 @@ impl RocksPermanentStorage {
     }
 
     #[cfg(feature = "replication")]
-    pub fn apply_replication_log(&mut self, block_number: BlockNumber, replication_log: WriteBatch) -> anyhow::Result<(), StorageError> {
+    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> anyhow::Result<(), StorageError> {
         self.state
             .apply_replication_log(block_number, replication_log)
             .map_err(|err| StorageError::RocksError { err })
@@ -181,7 +181,7 @@ impl RocksPermanentStorage {
         Ok(())
     }
 
-    pub fn save_genesis_block(&mut self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
@@ -197,7 +197,7 @@ impl RocksPermanentStorage {
             })
     }
 
-    pub fn save_block(&mut self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {

@@ -57,8 +57,9 @@ mod label {
 pub struct StratusStorage {
     temp: InMemoryTemporaryStorage,
     cache: StorageCache,
-    // We only acquire read locks except when saving a block.
-    perm: parking_lot::RwLock<RocksPermanentStorage>,
+    perm: RocksPermanentStorage,
+    // CONTRACT: Always acquire a lock when reading from latest (cache OR perm) and when saving a block
+    transient_state_lock: parking_lot::RwLock<()>,
     #[cfg(feature = "dev")]
     perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
 }
@@ -74,7 +75,8 @@ impl StratusStorage {
         let this = Self {
             temp,
             cache,
-            perm: parking_lot::RwLock::new(perm),
+            perm: perm,
+            transient_state_lock: parking_lot::RwLock::new(()),
             #[cfg(feature = "dev")]
             perm_config,
         };
@@ -93,13 +95,13 @@ impl StratusStorage {
         #[cfg(not(feature = "replication"))]
         let replication_enabled = false;
         #[cfg(feature = "replication")]
-        let replication_enabled = self.perm.read().rocksdb_replication_enabled();
+        let replication_enabled = self.perm.rocksdb_replication_enabled();
         replication_enabled
     }
 
     /// Returns whether the genesis block exists
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
-        self.perm.read().has_genesis()
+        self.perm.has_genesis()
     }
 
     /// Clears the storage cache.
@@ -189,7 +191,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_mined_block_number").entered();
         tracing::debug!(storage = %label::PERM, "reading mined block number");
 
-        timed(|| self.perm.read().read_mined_block_number()).with(|m| {
+        timed(|| self.perm.read_mined_block_number()).with(|m| {
             metrics::inc_storage_read_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read miner block number");
@@ -202,7 +204,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::set_mined_block_number", %block_number).entered();
         tracing::debug!(storage = %label::PERM, %block_number, "setting mined block number");
 
-        timed(|| self.perm.read().set_mined_block_number(block_number)).with(|m| {
+        timed(|| self.perm.set_mined_block_number(block_number)).with(|m| {
             metrics::inc_storage_set_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to set miner block number");
@@ -216,7 +218,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_replication_log", %block_number).entered();
         tracing::debug!(storage = %label::PERM, %block_number, "reading replication log");
 
-        timed(|| self.perm.read().read_replication_log(block_number)).with(|m| {
+        timed(|| self.perm.read_replication_log(block_number)).with(|m| {
             metrics::inc_storage_read_replication_log(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read replication log");
@@ -233,7 +235,7 @@ impl StratusStorage {
         self.finish_pending_block()?;
 
         tracing::debug!(storage = %label::PERM, %block_number, "applying replication log");
-        timed(|| self.perm.write().apply_replication_log(block_number, replication_log)).with(|m| {
+        timed(|| self.perm.apply_replication_log(block_number, replication_log)).with(|m| {
             metrics::inc_storage_apply_replication_log(m.elapsed, label::PERM, m.result.is_ok());
             metrics::inc_storage_save_block(m.elapsed, label::PERM, "replication", "replication", m.result.is_ok());
             if let Err(ref e) = m.result {
@@ -255,14 +257,14 @@ impl StratusStorage {
         // keep only accounts that does not exist in permanent storage
         let mut missing_accounts = Vec::new();
         for account in accounts {
-            let perm_account = self.perm.read().read_account(account.address, PointInTime::Mined)?;
+            let perm_account = self.perm.read_account(account.address, PointInTime::Mined)?;
             if perm_account.is_none() {
                 missing_accounts.push(account);
             }
         }
 
         tracing::debug!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
-        timed(|| self.perm.read().save_accounts(missing_accounts)).with(|m| {
+        timed(|| self.perm.save_accounts(missing_accounts)).with(|m| {
             metrics::inc_storage_save_accounts(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to save accounts");
@@ -303,7 +305,7 @@ impl StratusStorage {
 
     fn _read_account_perm(&self, address: Address, point_in_time: PointInTime) -> Result<Account, StorageError> {
         tracing::debug!(storage = %label::PERM, %address, "reading account");
-        let account = timed(|| self.perm.read().read_account(address, point_in_time)).with(|m| {
+        let account = timed(|| self.perm.read_account(address, point_in_time)).with(|m| {
             if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
                 metrics::inc_storage_read_account(m.elapsed, label::PERM, point_in_time);
             }
@@ -324,11 +326,11 @@ impl StratusStorage {
     }
 
     // If this functions returns the lock, it means that the latest state is safe to read, otherwise the state has been altered
-    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> Option<RwLockReadGuard<'_, RocksPermanentStorage>> {
+    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> Option<RwLockReadGuard<'_, ()>> {
         if matches!(point_in_time, PointInTime::MinedPast(_)) {
             return None;
         }
-        let guard = self.perm.read();
+        let guard = self.transient_state_lock.read();
         match kind {
             ReadKind::Call((block_number, _)) => {
                 // Check if the provided block number is less than or equal to the mined block number
@@ -373,7 +375,7 @@ impl StratusStorage {
 
             // always read from perm if necessary
             let ret = (self._read_account_perm(address, point_in_time)?, true);
-            drop(guard);
+            guard.map(RwLockReadGuard::unlock_fair);
             ret
         };
 
@@ -429,7 +431,7 @@ impl StratusStorage {
 
     fn _read_slot_perm(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> Result<Slot, StorageError> {
         tracing::debug!(storage = %label::PERM, %address, %index, %point_in_time, "reading slot");
-        let slot = timed(|| self.perm.read().read_slot(address, index, point_in_time)).with(|m| {
+        let slot = timed(|| self.perm.read_slot(address, index, point_in_time)).with(|m| {
             if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
                 metrics::inc_storage_read_slot(m.elapsed, label::PERM, point_in_time);
             }
@@ -482,7 +484,7 @@ impl StratusStorage {
 
             // always read from perm if necessary
             let ret = (self._read_slot_perm(address, index, point_in_time)?, true);
-            drop(guard);
+            guard.map(RwLockReadGuard::unlock_fair);
             ret
         };
 
@@ -561,7 +563,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::save_genesis_block", block_number = %block_number).entered();
         tracing::debug!(storage = %label::PERM, "saving genesis block");
 
-        timed(|| self.perm.write().save_genesis_block(block, accounts)).with(|m| {
+        timed(|| self.perm.save_genesis_block(block, accounts)).with(|m| {
             metrics::inc_storage_save_block(m.elapsed, label::PERM, "genesis", "genesis", m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to save genesis block");
@@ -606,11 +608,13 @@ impl StratusStorage {
         // save block
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| {
+            let guard = self.transient_state_lock.write();
             #[cfg(not(feature = "replication"))]
             let changes = block.compact_account_changes();
-            self.perm.write().save_block(block)?;
+            self.perm.save_block(block)?;
             #[cfg(not(feature = "replication"))]
             self.cache.cache_account_and_slots_latest_from_changes(changes);
+            drop(guard);
             Ok(())
         })
         .with(|m| {
@@ -626,7 +630,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_block", %filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading block");
 
-        timed(|| self.perm.read().read_block(filter)).with(|m| {
+        timed(|| self.perm.read_block(filter)).with(|m| {
             metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read block");
@@ -652,7 +656,7 @@ impl StratusStorage {
 
         // read from perm
         tracing::debug!(storage = %label::PERM, %tx_hash, "reading transaction");
-        let perm_tx = timed(|| self.perm.read().read_transaction(tx_hash)).with(|m| {
+        let perm_tx = timed(|| self.perm.read_transaction(tx_hash)).with(|m| {
             metrics::inc_storage_read_transaction(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read transaction from permanent storage");
@@ -669,7 +673,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_logs", ?filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading logs");
 
-        timed(|| self.perm.read().read_logs(filter)).with(|m| {
+        timed(|| self.perm.read_logs(filter)).with(|m| {
             metrics::inc_storage_read_logs(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read logs");
@@ -688,7 +692,7 @@ impl StratusStorage {
         self.cache.clear();
 
         // Update permanent storage
-        self.perm.read().save_slot(address, slot)?;
+        self.perm.save_slot(address, slot)?;
 
         // Update temporary storage
         self.temp.save_slot(address, slot)?;
@@ -701,7 +705,7 @@ impl StratusStorage {
         self.cache.clear();
 
         // Update permanent storage
-        self.perm.read().save_account_nonce(address, nonce)?;
+        self.perm.save_account_nonce(address, nonce)?;
 
         // Update temporary storage
         self.temp.save_account_nonce(address, nonce)?;
@@ -714,7 +718,7 @@ impl StratusStorage {
         self.cache.clear();
 
         // Update permanent storage
-        self.perm.read().save_account_balance(address, balance)?;
+        self.perm.save_account_balance(address, balance)?;
 
         // Update temporary storage
         self.temp.save_account_balance(address, balance)?;
@@ -726,7 +730,7 @@ impl StratusStorage {
     pub fn set_code(&self, address: Address, code: Bytes) -> Result<(), StorageError> {
         self.cache.clear();
         // Update permanent storage
-        self.perm.read().save_account_code(address, code.clone())?;
+        self.perm.save_account_code(address, code.clone())?;
 
         // Update temporary storage
         self.temp.save_account_code(address, code)?;
@@ -754,7 +758,7 @@ impl StratusStorage {
 
         // reset perm
         tracing::debug!(storage = %label::PERM, "reseting permanent storage");
-        timed(|| self.perm.write().reset()).with(|m| {
+        timed(|| self.perm.reset()).with(|m| {
             metrics::inc_storage_reset(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to reset permanent storage");
@@ -852,7 +856,7 @@ impl StratusStorage {
         if !genesis_slots.is_empty() {
             tracing::info!("Saving {} storage slots from genesis", genesis_slots.len());
             for (address, slot) in genesis_slots {
-                self.perm.read().save_slot(address, slot)?;
+                self.perm.save_slot(address, slot)?;
             }
         }
 
