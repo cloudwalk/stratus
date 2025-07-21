@@ -38,7 +38,7 @@ use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
 use crate::eth::storage::TxCount;
-use crate::eth::storage::temporary::ReadKind;
+use crate::eth::storage::ReadKind;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
@@ -321,7 +321,7 @@ impl StratusStorage {
         })
     }
 
-    fn _latest_cache_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> bool {
+    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> bool {
         if matches!(point_in_time, PointInTime::MinedPast(_)) {
             return false;
         }
@@ -357,7 +357,7 @@ impl StratusStorage {
             }
 
             #[cfg(not(feature = "replication"))]
-            if self._latest_cache_is_valid(point_in_time, kind)
+            if self._latest_is_valid(point_in_time, kind)
                 && let Some(account) = self._read_account_latest_cache(address)
             {
                 return Ok(account);
@@ -439,7 +439,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime, kind: ReadKind) -> Result<Slot, StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, mut point_in_time: PointInTime, kind: ReadKind) -> Result<Slot, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
@@ -459,10 +459,12 @@ impl StratusStorage {
             }
 
             #[cfg(not(feature = "replication"))]
-            if self._latest_cache_is_valid(point_in_time, kind)
+            if self._latest_is_valid(point_in_time, kind)
                 && let Some(slot) = self._read_slot_latest_cache(address, index)
             {
                 return Ok(slot);
+            } else if let ReadKind::Call((block_number, _)) = kind {
+                point_in_time = PointInTime::MinedPast(block_number);
             }
 
             // always read from perm if necessary
