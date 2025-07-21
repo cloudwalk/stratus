@@ -2,33 +2,31 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
+use alloy_primitives::FixedBytes;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
-use ethereum_types::H160;
-use ethereum_types::H256;
 use fake::Dummy;
 use fake::Faker;
 use hex_literal::hex;
 
 use crate::alias::RevmAddress;
 use crate::eth::primitives::LogTopic;
-use crate::gen_newtype_from;
 
 /// Address of an Ethereum account (wallet or contract).
 #[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
-pub struct Address(pub H160);
+pub struct Address(pub FixedBytes<20>);
 
 impl Address {
     // Special ETH address used in some contexts.
-    pub const ZERO: Address = Address(H160::zero());
+    pub const ZERO: Address = Address(FixedBytes::ZERO);
 
     /// Special address that receives the block reward.
-    pub const COINBASE: Address = Address(H160(hex!("00000000000000000000000000000000000000ff")));
-    pub const BRLC: Address = Address(H160(hex!("a9a55a81a4c085ec0c31585aed4cfb09d78dfd53")));
+    pub const COINBASE: Address = Address(FixedBytes(hex!("00000000000000000000000000000000000000ff")));
+    pub const BRLC: Address = Address(FixedBytes(hex!("a9a55a81a4c085ec0c31585aed4cfb09d78dfd53")));
 
     /// Creates a new address from the given bytes.
     pub const fn new(bytes: [u8; 20]) -> Self {
-        Self(H160(bytes))
+        Self(FixedBytes(bytes))
     }
 
     /// Checks if current address is the zero address.
@@ -57,13 +55,13 @@ impl Display for Address {
 }
 
 impl Dummy<Faker> for Address {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
-        H160::random_using(rng).into()
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        Address(FixedBytes::random_with(rng))
     }
 }
 
 impl Deref for Address {
-    type Target = H160;
+    type Target = FixedBytes<20>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -72,17 +70,28 @@ impl Deref for Address {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Address, other = H160, [u8; 20]);
+
+impl From<FixedBytes<20>> for Address {
+    fn from(value: FixedBytes<20>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<[u8; 20]> for Address {
+    fn from(value: [u8; 20]) -> Self {
+        Self(FixedBytes::from(value))
+    }
+}
 
 impl From<RevmAddress> for Address {
     fn from(value: RevmAddress) -> Self {
-        Address(value.0 .0.into())
+        Address(value.0.0.into())
     }
 }
 
 impl From<LogTopic> for Address {
     fn from(value: LogTopic) -> Self {
-        Self(H160::from_slice(&value.0 .0[12..32]))
+        Self(FixedBytes::from_slice(&value.0.0[12..32]))
     }
 }
 
@@ -93,7 +102,7 @@ impl TryFrom<Vec<u8>> for Address {
         if value.len() != 20 {
             return Err(anyhow!("array of bytes to be converted to address must have exactly 20 bytes"));
         }
-        Ok(Self(H160::from_slice(&value)))
+        Ok(Self(FixedBytes::from_slice(&value)))
     }
 }
 
@@ -123,11 +132,11 @@ impl FromStr for Address {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(H160::from_str(s)?))
+        Ok(Self(FixedBytes::from_str(s)?))
     }
 }
 
-impl From<Address> for H160 {
+impl From<Address> for FixedBytes<20> {
     fn from(value: Address) -> Self {
         value.0
     }
@@ -135,12 +144,13 @@ impl From<Address> for H160 {
 
 impl From<Address> for RevmAddress {
     fn from(value: Address) -> Self {
-        revm::primitives::Address(value.0 .0.into())
+        revm::primitives::Address(value.0.0.into())
     }
 }
 
 impl From<Address> for LogTopic {
     fn from(value: Address) -> Self {
-        Self(H256::from(value.0))
+        let padding = FixedBytes::<12>::ZERO;
+        Self(padding.concat_const(value.0))
     }
 }

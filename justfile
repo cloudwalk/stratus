@@ -99,8 +99,13 @@ stratus *args="":
 stratus-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
-    cargo build --features dev
-    cargo run --bin stratus --features dev -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
+    FEATURES="dev"
+    if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
+        FEATURES="dev,replication"
+    fi
+    echo "leader features: " $FEATURES
+    cargo build --features $FEATURES
+    cargo run --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
@@ -118,8 +123,13 @@ stratus-follower *args="":
 stratus-follower-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
-    cargo build --features dev
-    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features dev -- --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
+    FEATURES="dev"
+    if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
+        FEATURES="dev,replication"
+    fi
+    echo "follower features: " $FEATURES
+    cargo build --features $FEATURES
+    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features $FEATURES -- --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
 # Bin: Download external RPC blocks and receipts to temporary storage
@@ -223,6 +233,8 @@ e2e-admin-password:
             exit $exit_code
         fi
         killport 3000 -s sigterm
+        just _wait_for_stratus_finish
+        sleep 20
     done
 
 # E2E: Execute EOF (EVM Object Format) tests
@@ -310,6 +322,7 @@ shell-lint mode="--write":
 
 e2e-leader use_rocksdb_replication="false":
     #!/bin/bash
+    echo "starting e2e-leader"
     REPLICATION_FLAG=""
     if [ "{{use_rocksdb_replication}}" = "true" ]; then
         REPLICATION_FLAG="--use-rocksdb-replication"

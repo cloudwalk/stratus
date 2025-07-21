@@ -2,11 +2,11 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use display_json::DebugAsJson;
-use serde_with::formats::PreferMany;
-use serde_with::serde_as;
 use serde_with::DefaultOnNull;
 use serde_with::OneOrMany;
 use serde_with::PickFirst;
+use serde_with::formats::PreferMany;
+use serde_with::serde_as;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
@@ -60,7 +60,7 @@ impl LogFilterInput {
 
         // translate point-in-time to block according to context
         let from = match from {
-            PointInTime::Pending => storage.read_pending_block_header().number,
+            PointInTime::Pending => storage.read_pending_block_header().0.number,
             PointInTime::Mined => storage.read_mined_block_number()?,
             PointInTime::MinedPast(number) => number,
         };

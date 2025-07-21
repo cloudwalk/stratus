@@ -32,14 +32,16 @@ use crate::eth::primitives::UnixTimeNow;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::AccountWithSlots;
+use crate::eth::storage::TxCount;
+use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
 
 #[derive(Debug)]
-pub struct InMemoryTemporaryStorage {
+pub struct InmemoryTransactionTemporaryStorage {
     pub pending_block: RwLock<InMemoryTemporaryStorageState>,
     pub latest_block: RwLock<Option<InMemoryTemporaryStorageState>>,
 }
 
-impl InMemoryTemporaryStorage {
+impl InmemoryTransactionTemporaryStorage {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
             pending_block: RwLock::new(InMemoryTemporaryStorageState {
@@ -90,8 +92,9 @@ impl InMemoryTemporaryStorage {
     // -------------------------------------------------------------------------
 
     // Uneeded clone here, return Cow
-    pub fn read_pending_block_header(&self) -> PendingBlockHeader {
-        self.pending_block.read().block.header.clone()
+    pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
+        let pending_block = self.pending_block.read();
+        (pending_block.block.header.clone(), (pending_block.block.transactions.len() as u64).into())
     }
 
     #[cfg(feature = "dev")]
@@ -117,10 +120,8 @@ impl InMemoryTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        if check_conflicts {
-            if let Some(conflicts) = self.check_conflicts(&tx.result.execution)? {
-                return Err(StorageError::TransactionConflict(conflicts.into()));
-            }
+        if check_conflicts && let Some(conflicts) = self.check_conflicts(&tx.result.execution)? {
+            return Err(StorageError::TransactionConflict(conflicts.into()));
         }
 
         // save account changes
@@ -160,6 +161,11 @@ impl InMemoryTemporaryStorage {
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {
         self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
+    }
+
+    pub fn clone_pending_state(&self) -> InMemoryTemporaryStorageState {
+        let pending_block = self.pending_block.read();
+        (*pending_block).clone()
     }
 
     pub fn finish_pending_block(&self) -> anyhow::Result<PendingBlock, StorageError> {
@@ -242,11 +248,10 @@ impl InMemoryTemporaryStorage {
     pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
 
-        // Get or create the account
-        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
-
-        // Insert the slot
-        account.slots.insert(slot.index, slot);
+        // Only update if the account exists
+        if let Some(account) = pending_block.accounts.get_mut(&address) {
+            account.slots.insert(slot.index, slot);
+        }
 
         Ok(())
     }
@@ -255,11 +260,10 @@ impl InMemoryTemporaryStorage {
     pub fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
 
-        // Get or create the account
-        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
-
-        // Update the nonce
-        account.info.nonce = nonce;
+        // Only update if the account exists
+        if let Some(account) = pending_block.accounts.get_mut(&address) {
+            account.info.nonce = nonce;
+        }
 
         Ok(())
     }
@@ -268,11 +272,10 @@ impl InMemoryTemporaryStorage {
     pub fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
 
-        // Get or create the account
-        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
-
-        // Update the balance
-        account.info.balance = balance;
+        // Only update if the account exists
+        if let Some(account) = pending_block.accounts.get_mut(&address) {
+            account.info.balance = balance;
+        }
 
         Ok(())
     }
@@ -283,15 +286,14 @@ impl InMemoryTemporaryStorage {
 
         let mut pending_block = self.pending_block.write();
 
-        // Get or create the account
-        let account = pending_block.accounts.entry(address).or_insert_with(|| AccountWithSlots::new(address));
-
-        // Update the bytecode
-        account.info.bytecode = if code.0.is_empty() {
-            None
-        } else {
-            Some(RevmBytecode::new_raw(code.0.into()))
-        };
+        // Only update if the account exists
+        if let Some(account) = pending_block.accounts.get_mut(&address) {
+            account.info.bytecode = if code.0.is_empty() {
+                None
+            } else {
+                Some(RevmBytecode::new_raw(code.0.into()))
+            };
+        }
 
         Ok(())
     }
@@ -303,32 +305,5 @@ impl InMemoryTemporaryStorage {
         self.pending_block.write().reset();
         *self.latest_block.write() = None;
         Ok(())
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Inner State
-// -----------------------------------------------------------------------------
-
-#[derive(Debug)]
-pub struct InMemoryTemporaryStorageState {
-    /// Block that is being mined.
-    pub block: PendingBlock,
-
-    /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
-    pub accounts: HashMap<Address, AccountWithSlots, hash_hasher::HashBuildHasher>,
-}
-
-impl InMemoryTemporaryStorageState {
-    pub fn new(block_number: BlockNumber) -> Self {
-        Self {
-            block: PendingBlock::new_at_now(block_number),
-            accounts: HashMap::default(),
-        }
-    }
-
-    pub fn reset(&mut self) {
-        self.block = PendingBlock::new_at_now(1.into());
-        self.accounts.clear();
     }
 }

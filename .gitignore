@@ -40,7 +40,7 @@ vendor
 stratus.log
 
 # OS specific
-.DS_Store
+*.DS_Store
 .aider*
 
 # logs

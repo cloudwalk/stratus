@@ -1,9 +1,8 @@
+use alloy_primitives::U64;
+use alloy_primitives::U256;
 use display_json::DebugAsJson;
-use ethereum_types::U256;
-use ethereum_types::U64;
 
-use crate::gen_newtype_from;
-use crate::gen_newtype_try_from;
+use crate::ext::RuintExt;
 
 /// Represents a transaction index or log index.
 #[derive(
@@ -23,8 +22,32 @@ impl Index {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Index, other = u64);
-gen_newtype_try_from!(self = Index, other = U256, i64);
+
+impl From<u64> for Index {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+impl TryFrom<U256> for Index {
+    type Error = anyhow::Error;
+
+    fn try_from(value: U256) -> Result<Self, Self::Error> {
+        let u64_value = u64::try_from(value).map_err(|_| anyhow::anyhow!("U256 value too large for Index"))?;
+        Ok(Self(u64_value))
+    }
+}
+
+impl TryFrom<i64> for Index {
+    type Error = anyhow::Error;
+
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        if value < 0 {
+            return Err(anyhow::anyhow!("Index cannot be negative"));
+        }
+        Ok(Self(value as u64))
+    }
+}
 
 impl From<U64> for Index {
     fn from(value: U64) -> Self {
@@ -44,12 +67,12 @@ impl From<Index> for u64 {
 
 impl From<Index> for U64 {
     fn from(value: Index) -> U64 {
-        value.0.into()
+        U64::from(value.0)
     }
 }
 
 impl From<Index> for U256 {
     fn from(value: Index) -> U256 {
-        value.0.into()
+        U256::from(value.0)
     }
 }

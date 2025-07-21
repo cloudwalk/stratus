@@ -208,6 +208,7 @@ dependencies = [
  "const-hex",
  "derive_more 2.0.1",
  "foldhash",
+ "getrandom 0.3.3",
  "hashbrown 0.15.3",
  "indexmap 2.7.1",
  "itoa",
@@ -1530,6 +1531,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "debugid"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1698,9 +1713,9 @@ dependencies = [
 
 [[package]]
 name = "dummy"
-version = "0.7.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e57e12b69e57fad516e01e2b3960f122696fdb13420e1a88ed8e210316f2876"
+checksum = "3bbcf21279103a67372982cb1156a2154a452451dff2b884cf897ccecce389e0"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -1889,14 +1904,14 @@ dependencies = [
 
 [[package]]
 name = "fake"
-version = "2.9.2"
+version = "4.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c25829bde82205da46e1823b2259db6273379f626fc211f126f65654a2669be"
+checksum = "2f5f203b70a419cb8880d1cfe6bebe488add0a0307d404e9f24021e5fd864b80"
 dependencies = [
  "chrono",
  "deunicode",
  "dummy",
- "rand 0.8.5",
+ "rand 0.9.1",
 ]
 
 [[package]]
@@ -4876,6 +4891,9 @@ name = "rustc-hash"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
+dependencies = [
+ "rand 0.8.5",
+]
 
 [[package]]
 name = "rustc-hex"
@@ -5881,12 +5899,12 @@ dependencies = [
  "const-hex",
  "const_format",
  "crossbeam-channel",
+ "dashmap",
  "derive-new",
  "derive_more 0.99.17",
  "display_json",
  "dotenvy",
  "ethabi",
- "ethereum-types",
  "fake",
  "futures",
  "futures-channel",
@@ -5924,8 +5942,7 @@ dependencies = [
  "pin-project",
  "prost-types",
  "quick_cache",
- "rand 0.8.5",
- "rand_core 0.6.4",
+ "rand 0.9.1",
  "rdkafka",
  "reqwest 0.12.4",
  "revm",

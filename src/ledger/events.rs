@@ -3,16 +3,16 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
+use alloy_primitives::B256;
+use alloy_primitives::U256;
 use chrono::DateTime;
 use chrono::Utc;
 use display_json::DebugAsJson;
-use ethereum_types::H256;
-use ethereum_types::U256;
 use hex_literal::hex;
 use itertools::Itertools;
-use serde::ser::SerializeStruct;
 use serde::Deserialize;
 use serde::Serialize;
+use serde::ser::SerializeStruct;
 use uuid::Uuid;
 
 use crate::eth::primitives::Address;
@@ -215,7 +215,7 @@ impl Event for AccountTransfers {
 // -----------------------------------------------------------------------------
 
 /// ERC-20 transfer event hash.
-const TRANSFER_EVENT: LogTopic = LogTopic(H256(hex!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")));
+const TRANSFER_EVENT: LogTopic = LogTopic(B256::new(hex!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")));
 
 /// Converts a mined transaction into multiple account transfers events to be published.
 pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined>) -> Vec<AccountTransfers> {
@@ -237,7 +237,7 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined
             let token = log.log.address;
             let from: Address = log.log.topic1?.into();
             let to: Address = log.log.topic2?.into();
-            let amount = U256::from_big_endian(&amount_bytes); // TODO: review
+            let amount = U256::from_be_bytes(amount_bytes); // TODO: review
 
             Some((token, from, to, amount))
         })
@@ -302,15 +302,14 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined
 mod tests {
     use std::borrow::Cow;
 
+    use alloy_primitives::U256;
     use chrono::DateTime;
     use chrono::Utc;
-    use ethereum_types::U256;
     use fake::Fake;
     use fake::Faker;
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::eth::primitives::test_accounts;
     use crate::eth::primitives::Address;
     use crate::eth::primitives::BlockNumber;
     use crate::eth::primitives::Bytes;
@@ -318,12 +317,13 @@ mod tests {
     use crate::eth::primitives::LogMined;
     use crate::eth::primitives::TransactionMined;
     use crate::eth::primitives::UnixTime;
+    use crate::eth::primitives::test_accounts;
     use crate::ext::to_json_value;
-    use crate::ledger::events::transaction_to_events;
     use crate::ledger::events::AccountTransfer;
     use crate::ledger::events::AccountTransferDirection;
     use crate::ledger::events::AccountTransfers;
     use crate::ledger::events::TRANSFER_EVENT;
+    use crate::ledger::events::transaction_to_events;
 
     #[test]
     fn ledger_events_serde_account_transfers() {
@@ -341,7 +341,7 @@ mod tests {
                 token_address: Address::ZERO,
                 debit_party_address: Address::ZERO,
                 credit_party_address: Address::ZERO,
-                amount: U256::max_value(),
+                amount: U256::MAX,
                 direction: AccountTransferDirection::Credit,
             }],
         };
@@ -386,7 +386,7 @@ mod tests {
         let amount_bytes = [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255,
         ];
-        let amount_u256 = U256::from_big_endian(&amount_bytes);
+        let amount_u256 = U256::from_be_slice(&amount_bytes);
 
         // 1. generate fake block data transaction and block data
         let block_timestamp: UnixTime = 1729108070.into();

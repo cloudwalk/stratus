@@ -7,6 +7,7 @@
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+#[cfg(feature = "replication")]
 use rocksdb::WriteBatch;
 use serde::Deserialize;
 use serde::Serialize;
@@ -17,6 +18,7 @@ use strum::VariantNames;
 use super::types::AccountRocksdb;
 use super::types::BlockNumberRocksdb;
 use super::types::BlockRocksdb;
+#[cfg(feature = "replication")]
 use super::types::BytesRocksdb;
 use super::types::SlotValueRocksdb;
 use crate::eth::primitives::Account;
@@ -83,7 +85,7 @@ impl_single_version_cf_value!(CfAccountSlotsHistoryValue, SlotValueRocksdb, Slot
 impl_single_version_cf_value!(CfTransactionsValue, BlockNumberRocksdb, BlockNumber);
 impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
-impl_single_version_cf_value!(CfLogsValue, BlockNumberRocksdb, BlockNumber);
+#[cfg(feature = "replication")]
 impl_single_version_cf_value!(CfReplicationLogsValue, BytesRocksdb, WriteBatch);
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -106,7 +108,7 @@ impl_to_cf_name!(CfAccountSlotsHistoryValue, "account_slots_history");
 impl_to_cf_name!(CfTransactionsValue, "transactions");
 impl_to_cf_name!(CfBlocksByNumberValue, "blocks_by_number");
 impl_to_cf_name!(CfBlocksByHashValue, "blocks_by_hash");
-impl_to_cf_name!(CfLogsValue, "logs");
+#[cfg(feature = "replication")]
 impl_to_cf_name!(CfReplicationLogsValue, "replication_logs");
 /// Test that deserialization works for each variant of the enum.
 ///
@@ -141,17 +143,16 @@ mod tests {
     use std::marker::PhantomData;
     use std::path::Path;
 
-    use anyhow::bail;
-    use anyhow::ensure;
     use anyhow::Context;
     use anyhow::Result;
+    use anyhow::bail;
+    use anyhow::ensure;
     use fake::Dummy;
     use fake::Faker;
 
     use super::*;
     use crate::ext::not;
     use crate::ext::type_basename;
-    use crate::utils::test_utils::fake_first;
     use crate::utils::test_utils::glob_to_string_paths;
 
     /// A drop bomb that guarantees that all variants of an enum have been tested.
@@ -216,18 +217,29 @@ mod tests {
         glob_to_string_paths(pattern).context("failed to get all bincode snapshots from folder")
     }
 
+    fn load_json_fixture<CfValue>(cf_name: &str, _variant_name: &str) -> Result<CfValue>
+    where
+        CfValue: for<'de> Deserialize<'de> + ToCfName,
+    {
+        let json_path = format!("tests/fixtures/cf_versions/{cf_name}/{cf_name}.json");
+        let json_content = fs::read_to_string(&json_path).with_context(|| format!("failed to read JSON fixture at {json_path}"))?;
+
+        serde_json::from_str(&json_content).with_context(|| format!("failed to deserialize CfValue from JSON fixture at {json_path}"))
+    }
+
     /// Store snapshots of the current serialization format for each version.
     #[test]
     fn test_snapshot_bincode_deserialization_for_single_version_enums() {
-        fn test_deserialization<CfValue, Inner, F>(inner_to_cf_value: F) -> Result<TestRunConfirmation<CfValue>>
+        fn test_deserialization<CfValue, Inner, F>(_inner_to_cf_value: F) -> Result<TestRunConfirmation<CfValue>>
         where
             CfValue: From<Inner> + for<'de> Deserialize<'de> + Serialize + Clone + Debug + PartialEq + Into<&'static str> + ToCfName,
             F: FnOnce(Inner) -> CfValue,
             Inner: Dummy<Faker>,
         {
-            let expected: CfValue = inner_to_cf_value(fake_first::<Inner>());
-            let variant_name: &'static str = expected.clone().into();
             let cf_name = CfValue::CF_NAME;
+            // For single version enums, we expect V1 variant
+            let variant_name = "V1";
+            let expected: CfValue = load_json_fixture(cf_name, variant_name)?;
 
             let snapshot_parent_path = format!("tests/fixtures/cf_versions/{cf_name}");
             let snapshot_path = format!("{snapshot_parent_path}/{variant_name}.bincode");
@@ -276,7 +288,7 @@ mod tests {
         let mut transactions_checker = EnumCoverageDropBombChecker::<CfTransactionsValue>::new();
         let mut blocks_by_number_checker = EnumCoverageDropBombChecker::<CfBlocksByNumberValue>::new();
         let mut blocks_by_hash_checker = EnumCoverageDropBombChecker::<CfBlocksByHashValue>::new();
-        let mut logs_checker = EnumCoverageDropBombChecker::<CfLogsValue>::new();
+        #[cfg(feature = "replication")]
         let mut replication_logs_checker = EnumCoverageDropBombChecker::<CfReplicationLogsValue>::new();
 
         accounts_checker.add(test_deserialization::<_, AccountRocksdb, _>(CfAccountsValue::V1).unwrap());
@@ -286,7 +298,7 @@ mod tests {
         transactions_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfTransactionsValue::V1).unwrap());
         blocks_by_number_checker.add(test_deserialization::<_, BlockRocksdb, _>(CfBlocksByNumberValue::V1).unwrap());
         blocks_by_hash_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfBlocksByHashValue::V1).unwrap());
-        logs_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfLogsValue::V1).unwrap());
+        #[cfg(feature = "replication")]
         replication_logs_checker.add(test_deserialization::<_, BytesRocksdb, _>(CfReplicationLogsValue::V1).unwrap());
     }
 }

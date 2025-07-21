@@ -6,24 +6,25 @@ use std::task::Poll;
 use std::time::Instant;
 
 use futures::future::BoxFuture;
-use jsonrpsee::core::middleware::Batch;
-use jsonrpsee::core::middleware::BatchEntry;
-use jsonrpsee::server::middleware::rpc::RpcService;
-use jsonrpsee::server::middleware::rpc::RpcServiceT;
-#[cfg(feature = "metrics")]
-use jsonrpsee::server::ConnectionGuard;
-use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
-use jsonrpsee::types::Id;
-use jsonrpsee::types::Params;
 use jsonrpsee::BatchResponseBuilder;
 use jsonrpsee::MethodResponse;
+use jsonrpsee::core::middleware::Batch;
+use jsonrpsee::core::middleware::BatchEntry;
+#[cfg(feature = "metrics")]
+use jsonrpsee::server::ConnectionGuard;
+use jsonrpsee::server::middleware::rpc::RpcService;
+use jsonrpsee::server::middleware::rpc::RpcServiceT;
+use jsonrpsee::types::Id;
+use jsonrpsee::types::Params;
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use pin_project::pin_project;
 use strum::Display;
-use tracing::field;
-use tracing::info_span;
 use tracing::Level;
 use tracing::Span;
+use tracing::field;
+use tracing::info_span;
 
+use crate::GlobalState;
 use crate::alias::JsonValue;
 use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
@@ -38,20 +39,19 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::RpcError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::parse_rpc_rlp;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
-use crate::eth::rpc::RpcClientApp;
 use crate::event_with;
 use crate::ext::from_json_str;
 use crate::ext::to_json_string;
 #[cfg(feature = "metrics")]
 use crate::if_else;
 use crate::infra::metrics;
-use crate::infra::tracing::new_cid;
 use crate::infra::tracing::SpanExt;
 use crate::infra::tracing::TracingExt;
-use crate::GlobalState;
+use crate::infra::tracing::new_cid;
 
 // -----------------------------------------------------------------------------
 // Request handling

@@ -63,7 +63,9 @@ pub fn load_dotenv_file() {
 pub fn load_env_aliases() {
     fn env_alias(canonical: &'static str, alias: &'static str) {
         if let Ok(value) = env::var(alias) {
-            env::set_var(canonical, value);
+            unsafe {
+                env::set_var(canonical, value);
+            }
         }
     }
     env_alias("EXECUTOR_CHAIN_ID", "CHAIN_ID");
@@ -389,7 +391,9 @@ mod tests {
         assert_eq!(config.genesis_path, Some("/path/to/genesis.json".to_string()));
 
         // Test with environment variable
-        env::set_var("GENESIS_JSON_PATH", "/env/path/to/genesis.json");
+        unsafe {
+            env::set_var("GENESIS_JSON_PATH", "/env/path/to/genesis.json");
+        }
         let args = vec!["program"]; // No command line argument
         let config = GenesisFileConfig::parse_from(args);
         assert_eq!(config.genesis_path, Some("/env/path/to/genesis.json".to_string()));
@@ -400,6 +404,8 @@ mod tests {
         assert_eq!(config.genesis_path, Some("/cli/path/to/genesis.json".to_string()));
 
         // Clean up
-        env::remove_var("GENESIS_JSON_PATH");
+        unsafe {
+            env::remove_var("GENESIS_JSON_PATH");
+        }
     }
 }
