@@ -1,6 +1,4 @@
 pub use inmemory::InMemoryTemporaryStorage;
-pub use inmemory::ReadKind;
-pub use inmemory::TxCount;
 
 mod inmemory;
 

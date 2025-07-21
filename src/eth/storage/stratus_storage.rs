@@ -1,3 +1,4 @@
+use parking_lot::RwLockReadGuard;
 #[cfg(feature = "replication")]
 use rocksdb::WriteBatch;
 use tracing::Span;
@@ -37,8 +38,8 @@ use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
+use crate::eth::storage::ReadKind;
 use crate::eth::storage::TxCount;
-use crate::eth::storage::temporary::ReadKind;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
@@ -57,6 +58,8 @@ pub struct StratusStorage {
     temp: InMemoryTemporaryStorage,
     cache: StorageCache,
     perm: RocksPermanentStorage,
+    // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block
+    transient_state_lock: parking_lot::RwLock<()>,
     #[cfg(feature = "dev")]
     perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
 }
@@ -73,6 +76,7 @@ impl StratusStorage {
             temp,
             cache,
             perm,
+            transient_state_lock: parking_lot::RwLock::new(()),
             #[cfg(feature = "dev")]
             perm_config,
         };
@@ -321,24 +325,25 @@ impl StratusStorage {
         })
     }
 
-    fn _latest_cache_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> bool {
+    // If this functions returns the lock, it means that the latest state is safe to read, otherwise the state has been altered
+    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> Option<RwLockReadGuard<'_, ()>> {
         if matches!(point_in_time, PointInTime::MinedPast(_)) {
-            return false;
+            return None;
         }
-
+        let guard = self.transient_state_lock.read();
         match kind {
             ReadKind::Call((block_number, _)) => {
                 // Check if the provided block number is less than or equal to the mined block number
                 match self.read_mined_block_number() {
-                    Ok(mined_block_number) => block_number <= mined_block_number,
-                    Err(_) => false, // If we can't read mined block number, assume cache is invalid
+                    Ok(mined_block_number) => (block_number <= mined_block_number).then_some(guard),
+                    Err(_) => None, // If we can't read mined block number, assume latest is invalid
                 }
             }
-            _ => true,
+            _ => Some(guard),
         }
     }
 
-    pub fn read_account(&self, address: Address, point_in_time: PointInTime, kind: ReadKind) -> Result<Account, StorageError> {
+    pub fn read_account(&self, address: Address, mut point_in_time: PointInTime, kind: ReadKind) -> Result<Account, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
 
@@ -356,15 +361,24 @@ impl StratusStorage {
                 }
             }
 
-            #[cfg(not(feature = "replication"))]
-            if self._latest_cache_is_valid(point_in_time, kind)
-                && let Some(account) = self._read_account_latest_cache(address)
+            let guard = self._latest_is_valid(point_in_time, kind);
+            if guard.is_some() {
+                #[cfg(not(feature = "replication"))]
+                if let Some(account) = self._read_account_latest_cache(address) {
+                    return Ok(account);
+                }
+            } else if let ReadKind::Call((block_number, _)) = kind
+                && !matches!(point_in_time, PointInTime::MinedPast(_))
             {
-                return Ok(account);
+                point_in_time = PointInTime::MinedPast(block_number);
             }
 
             // always read from perm if necessary
-            (self._read_account_perm(address, point_in_time)?, true)
+            let ret = (self._read_account_perm(address, point_in_time)?, true);
+            if let Some(inner) = guard {
+                RwLockReadGuard::unlock_fair(inner);
+            }
+            ret
         };
 
         match (point_in_time, found_in_perm) {
@@ -439,7 +453,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime, kind: ReadKind) -> Result<Slot, StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, mut point_in_time: PointInTime, kind: ReadKind) -> Result<Slot, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
 
@@ -458,15 +472,24 @@ impl StratusStorage {
                 }
             }
 
-            #[cfg(not(feature = "replication"))]
-            if self._latest_cache_is_valid(point_in_time, kind)
-                && let Some(slot) = self._read_slot_latest_cache(address, index)
+            let guard = self._latest_is_valid(point_in_time, kind);
+            if guard.is_some() {
+                #[cfg(not(feature = "replication"))]
+                if let Some(slot) = self._read_slot_latest_cache(address, index) {
+                    return Ok(slot);
+                }
+            } else if let ReadKind::Call((block_number, _)) = kind
+                && !matches!(point_in_time, PointInTime::MinedPast(_))
             {
-                return Ok(slot);
+                point_in_time = PointInTime::MinedPast(block_number);
             }
 
             // always read from perm if necessary
-            (self._read_slot_perm(address, index, point_in_time)?, true)
+            let ret = (self._read_slot_perm(address, index, point_in_time)?, true);
+            if let Some(inner) = guard {
+                RwLockReadGuard::unlock_fair(inner);
+            }
+            ret
         };
 
         match (point_in_time, found_in_perm) {
@@ -589,11 +612,13 @@ impl StratusStorage {
         // save block
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| {
+            let guard = self.transient_state_lock.write();
             #[cfg(not(feature = "replication"))]
             let changes = block.compact_account_changes();
             self.perm.save_block(block)?;
             #[cfg(not(feature = "replication"))]
             self.cache.cache_account_and_slots_latest_from_changes(changes);
+            drop(guard);
             Ok(())
         })
         .with(|m| {
