@@ -375,7 +375,7 @@ impl StratusStorage {
 
             // always read from perm if necessary
             let ret = (self._read_account_perm(address, point_in_time)?, true);
-            if let Some(_guard) = guard { RwLockReadGuard::unlock_fair(_guard) }
+            if let Some(inner) = guard { RwLockReadGuard::unlock_fair(inner) }
             ret
         };
 
@@ -484,7 +484,7 @@ impl StratusStorage {
 
             // always read from perm if necessary
             let ret = (self._read_slot_perm(address, index, point_in_time)?, true);
-            if let Some(_guard) = guard { RwLockReadGuard::unlock_fair(_guard) }
+            if let Some(inner) = guard { RwLockReadGuard::unlock_fair(inner) }
             ret
         };
 
