@@ -37,8 +37,8 @@ use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
-use crate::eth::storage::TxCount;
 use crate::eth::storage::ReadKind;
+use crate::eth::storage::TxCount;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
@@ -463,7 +463,9 @@ impl StratusStorage {
                 && let Some(slot) = self._read_slot_latest_cache(address, index)
             {
                 return Ok(slot);
-            } else if let ReadKind::Call((block_number, _)) = kind {
+            } else if let ReadKind::Call((block_number, _)) = kind
+                && !matches!(point_in_time, PointInTime::MinedPast(_))
+            {
                 point_in_time = PointInTime::MinedPast(block_number);
             }
 
