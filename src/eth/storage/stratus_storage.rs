@@ -75,7 +75,7 @@ impl StratusStorage {
         let this = Self {
             temp,
             cache,
-            perm: perm,
+            perm,
             transient_state_lock: parking_lot::RwLock::new(()),
             #[cfg(feature = "dev")]
             perm_config,
@@ -375,7 +375,7 @@ impl StratusStorage {
 
             // always read from perm if necessary
             let ret = (self._read_account_perm(address, point_in_time)?, true);
-            guard.map(RwLockReadGuard::unlock_fair);
+            if let Some(_guard) = guard { RwLockReadGuard::unlock_fair(_guard) }
             ret
         };
 
@@ -484,7 +484,7 @@ impl StratusStorage {
 
             // always read from perm if necessary
             let ret = (self._read_slot_perm(address, index, point_in_time)?, true);
-            guard.map(RwLockReadGuard::unlock_fair);
+            if let Some(_guard) = guard { RwLockReadGuard::unlock_fair(_guard) }
             ret
         };
 
