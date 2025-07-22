@@ -19,6 +19,7 @@ use revm::Database;
 use revm::DatabaseRef;
 use revm::ExecuteCommitEvm;
 use revm::ExecuteEvm;
+use revm::InspectEvm;
 use revm::Journal;
 use revm::context::BlockEnv;
 use revm::context::CfgEnv;
@@ -271,7 +272,7 @@ impl Evm {
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
                 evm_with_inspector.fill_env(inspect_input);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
-                evm_with_inspector.transact(tx)?;
+                evm_with_inspector.inspect_tx(tx)?;
                 FourByteFrame::from(&inspector).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
@@ -280,7 +281,7 @@ impl Evm {
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
                 evm_with_inspector.fill_env(inspect_input);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
-                let res = evm_with_inspector.transact(tx)?;
+                let res = evm_with_inspector.inspect_tx(tx)?;
                 inspector.geth_builder().geth_call_traces(call_config, res.result.gas_used()).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::PreStateTracer) => {
@@ -289,7 +290,7 @@ impl Evm {
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
                 evm_with_inspector.fill_env(inspect_input);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
-                let res = evm_with_inspector.transact(tx)?;
+                let res = evm_with_inspector.inspect_tx(tx)?;
 
                 inspector.geth_builder().geth_prestate_traces(&res, &prestate_config, &cache_db)?.into()
             }
@@ -300,7 +301,7 @@ impl Evm {
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
                 evm_with_inspector.fill_env(inspect_input);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
-                let res = evm_with_inspector.transact(tx)?;
+                let res = evm_with_inspector.inspect_tx(tx)?;
                 inspector.try_into_mux_frame(&res, &cache_db, tx_info)?.into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => {
@@ -309,7 +310,7 @@ impl Evm {
                 let mut evm_with_inspector = evm.with_inspector(&mut inspector);
                 evm_with_inspector.fill_env(inspect_input);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
-                let res = evm_with_inspector.transact(tx)?;
+                let res = evm_with_inspector.inspect_tx(tx)?;
                 inspector
                     .with_transaction_gas_limit(res.result.gas_used())
                     .into_parity_builder()
