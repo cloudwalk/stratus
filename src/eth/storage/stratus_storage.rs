@@ -358,7 +358,7 @@ impl StratusStorage {
 
             loop {
                 let was_valid = self._latest_is_valid(point_in_time, kind);
-                if self._latest_is_valid(point_in_time, kind) {
+                if was_valid {
                     #[cfg(not(feature = "replication"))]
                     if let Some(account) = self._read_account_latest_cache(address) {
                         return Ok(account);
@@ -472,7 +472,7 @@ impl StratusStorage {
 
             loop {
                 let was_valid = self._latest_is_valid(point_in_time, kind);
-                if self._latest_is_valid(point_in_time, kind) {
+                if was_valid {
                     #[cfg(not(feature = "replication"))]
                     if let Some(slot) = self._read_slot_latest_cache(address, index) {
                         return Ok(slot);
