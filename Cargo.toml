@@ -77,12 +77,12 @@ ethabi = "=18.0.0"
 keccak-hasher = "=0.15.3"  # this version must be compatible with triehash
 rlp = "=0.5.2"
 triehash = "=0.8.4"
-revm-inspectors = "=0.21.0"
-alloy-rpc-types-trace = "=0.15.11"
-alloy-rpc-types-eth = "=0.15.11"
-alloy-consensus = { version = "=0.15.11", features = ["k256"] }
-alloy-primitives = { version = "=1.1.0", features = ["rand"] }
-alloy-eips = "=0.15.11"
+revm-inspectors = "=0.26.5"
+alloy-rpc-types-trace = "=1.0.12"
+alloy-rpc-types-eth = "=1.0.12"
+alloy-consensus = { version = "=1.0.12", features = ["k256"] }
+alloy-primitives = { version = "=1.2.0", features = ["rand"] }
+alloy-eips = "=1.0.12"
 
 # network
 jsonrpsee = { version = "=0.25.1", features = ["server", "client"] }
@@ -140,10 +140,10 @@ dashmap = "6.1.0"
 # ------------------------------------------------------------------------------
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
-revm = { version = "=23.1.0", features = ["asm-keccak", "serde"] }
+revm = { version = "=27.0.1", features = ["asm-keccak", "serde"] }
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
-revm = { version = "=23.1.0", features = ["serde"]}
+revm = { version = "=27.0.1", features = ["serde"]}
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { version = "=0.6", optional = true }
