@@ -2,9 +2,6 @@
 
 use std::collections::HashMap;
 
-use serde::Deserialize;
-use serde::Serialize;
-
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -22,63 +19,13 @@ use crate::eth::primitives::TransactionExecution;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::AccountWithSlots;
+use crate::eth::storage::ReadKind;
+use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::call::InMemoryCallTemporaryStorage;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
 
 mod call;
 mod transaction;
-
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize, fake::Dummy, Eq)]
-pub enum TxCount {
-    Full,
-    Partial(u64),
-}
-
-impl From<u64> for TxCount {
-    fn from(value: u64) -> Self {
-        TxCount::Partial(value)
-    }
-}
-
-impl Default for TxCount {
-    fn default() -> Self {
-        TxCount::Partial(0)
-    }
-}
-
-impl std::ops::AddAssign<u64> for TxCount {
-    fn add_assign(&mut self, rhs: u64) {
-        match self {
-            TxCount::Full => {}                       // If it's Full, keep it Full
-            TxCount::Partial(count) => *count += rhs, // If it's Partial, increment the counter
-        }
-    }
-}
-
-impl Ord for TxCount {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match (self, other) {
-            (TxCount::Full, TxCount::Full) => std::cmp::Ordering::Equal,
-            (TxCount::Full, TxCount::Partial(_)) => std::cmp::Ordering::Greater,
-            (TxCount::Partial(_), TxCount::Full) => std::cmp::Ordering::Less,
-            (TxCount::Partial(a), TxCount::Partial(b)) => a.cmp(b),
-        }
-    }
-}
-
-impl PartialOrd for TxCount {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Default, fake::Dummy)]
-pub enum ReadKind {
-    Call((BlockNumber, TxCount)),
-    #[default]
-    Transaction,
-    RPC,
-}
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {

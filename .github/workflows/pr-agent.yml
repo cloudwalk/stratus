@@ -35,7 +35,7 @@ env:
     * When you detect a core component or service is being initialized, ensure its initialization is being logged with all relevant configurations.
     * When too much cloning is happening, suggest to use references if possible.
     * When you detect an infinite loop, ensure that tracing events inside the loop use `parent: None` to avoid unbounded Vec growth resulting in memory leak. Example: `tracing::info!(parent: None, "some message");`
-
+    * When editing StratusStorage pay attention to the transient_state_lock contract, "Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block"
 jobs:
   pr_agent_job:
     if: ${{ github.event.sender.type != 'Bot' }}
