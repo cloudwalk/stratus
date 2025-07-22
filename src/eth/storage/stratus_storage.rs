@@ -385,15 +385,15 @@ impl StratusStorage {
             // Pending accounts found in the permanent storage (or not found in any storage) are always mined already
             #[cfg(not(feature = "replication"))]
             (PointInTime::Pending, true) => {
-                self.cache.cache_account(account.clone());
-                self.cache.cache_account_latest(address, account.clone());
+                self.cache.cache_account_if_missing(account.clone());
+                self.cache.cache_account_latest_if_missing(address, account.clone());
             }
             (PointInTime::Pending, false) => {
-                self.cache.cache_account(account.clone());
+                self.cache.cache_account_if_missing(account.clone());
             }
             #[cfg(not(feature = "replication"))]
             (PointInTime::Mined, _) => {
-                self.cache.cache_account_latest(address, account.clone());
+                self.cache.cache_account_latest_if_missing(address, account.clone());
             }
             _ => {}
         }
@@ -496,15 +496,15 @@ impl StratusStorage {
             #[cfg(not(feature = "replication"))]
             // Pending slots found in the permanent storage (or not found in any storage) are always mined already
             (PointInTime::Pending, true) => {
-                self.cache.cache_slot(address, slot);
-                self.cache.cache_slot_latest(address, slot);
+                self.cache.cache_slot_if_missing(address, slot);
+                self.cache.cache_slot_latest_if_missing(address, slot);
             }
             (PointInTime::Pending, false) => {
-                self.cache.cache_slot(address, slot);
+                self.cache.cache_slot_if_missing(address, slot);
             }
             #[cfg(not(feature = "replication"))]
             (PointInTime::Mined, _) => {
-                self.cache.cache_slot_latest(address, slot);
+                self.cache.cache_slot_latest_if_missing(address, slot);
             }
             _ => {}
         }
