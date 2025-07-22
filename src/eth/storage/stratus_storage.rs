@@ -325,21 +325,24 @@ impl StratusStorage {
         })
     }
 
-    // If this functions returns the lock, it means that the latest state is safe to read, otherwise the state has been altered
-    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> Option<RwLockReadGuard<'_, ()>> {
+    // For calls, this function returns a guard if latest is safe to read
+    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> (bool, Option<RwLockReadGuard<'_, ()>>) {
         if matches!(point_in_time, PointInTime::MinedPast(_)) {
-            return None;
+            return (false, None);
         }
-        let guard = self.transient_state_lock.read();
         match kind {
             ReadKind::Call((block_number, _)) => {
+                let guard = self.transient_state_lock.read();
                 // Check if the provided block number is less than or equal to the mined block number
                 match self.read_mined_block_number() {
-                    Ok(mined_block_number) => (block_number <= mined_block_number).then_some(guard),
-                    Err(_) => None, // If we can't read mined block number, assume latest is invalid
+                    Ok(mined_block_number) => {
+                        let is_valid = block_number <= mined_block_number;
+                        (is_valid, (is_valid).then_some(guard))
+                    }
+                    Err(_) => (false, None), // If we can't read mined block number, assume latest is invalid
                 }
             }
-            _ => Some(guard),
+            _ => (true, None),
         }
     }
 
@@ -361,8 +364,8 @@ impl StratusStorage {
                 }
             }
 
-            let guard = self._latest_is_valid(point_in_time, kind);
-            if guard.is_some() {
+            let (is_valid, guard) = self._latest_is_valid(point_in_time, kind);
+            if is_valid {
                 #[cfg(not(feature = "replication"))]
                 if let Some(account) = self._read_account_latest_cache(address) {
                     return Ok(account);
@@ -472,8 +475,8 @@ impl StratusStorage {
                 }
             }
 
-            let guard = self._latest_is_valid(point_in_time, kind);
-            if guard.is_some() {
+            let (is_valid, guard) = self._latest_is_valid(point_in_time, kind);
+            if is_valid {
                 #[cfg(not(feature = "replication"))]
                 if let Some(slot) = self._read_slot_latest_cache(address, index) {
                     return Ok(slot);
