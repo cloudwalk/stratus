@@ -11,6 +11,8 @@ use crate::alias::RevmBytecode;
 pub enum BytecodeRocksdb {
     LegacyRaw(BytesRocksdb),
     LegacyAnalyzed(LegacyAnalyzedBytecodeRocksdb),
+    /// Deprecated EOF variant kept to maintain bincode discriminant positions. This prevents existing Eip7702 data from failing deserialization.
+    /// TODO: Remove this variant on next database migration when discriminant compatibility is no longer needed.
     EofDeprecated,
     Eip7702(Eip7702BytecodeRocksdb),
 }
