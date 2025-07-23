@@ -23,26 +23,17 @@ use revm::InspectEvm;
 use revm::Journal;
 use revm::context::BlockEnv;
 use revm::context::CfgEnv;
-use revm::context::ContextTr;
 use revm::context::Evm as RevmEvm;
-use revm::context::JournalOutput;
-use revm::context::JournalTr;
 use revm::context::TransactTo;
 use revm::context::TxEnv;
 use revm::context::result::EVMError;
 use revm::context::result::ExecutionResult as RevmExecutionResult;
-use revm::context::result::HaltReason;
 use revm::context::result::InvalidTransaction;
 use revm::context::result::ResultAndState;
 use revm::database::CacheDB;
 use revm::handler::EthFrame;
 use revm::handler::EthPrecompiles;
-use revm::handler::EvmTr;
-use revm::handler::Handler;
-use revm::handler::PrecompileProvider;
 use revm::handler::instructions::EthInstructions;
-use revm::handler::instructions::InstructionProvider;
-use revm::interpreter::InterpreterResult;
 use revm::interpreter::interpreter::EthInterpreter;
 use revm::primitives::B256;
 use revm::primitives::U256;
@@ -90,51 +81,12 @@ use crate::infra::metrics;
 const GAS_MAX_LIMIT: u64 = 1_000_000_000;
 type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
 type GeneralRevm<DB> =
-    RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, (), EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles>;
+    RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, (), EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles, EthFrame>;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm {
-    evm: RevmEvm<ContextWithDB, (), EthInstructions<EthInterpreter, ContextWithDB>, EthPrecompiles>,
+    evm: RevmEvm<ContextWithDB, (), EthInstructions<EthInterpreter, ContextWithDB>, EthPrecompiles, EthFrame>,
     kind: EvmKind,
-}
-
-struct StratusHandler<EVM> {
-    pub _phantom: core::marker::PhantomData<EVM>,
-}
-
-impl<EVM> Handler for StratusHandler<EVM>
-where
-    EVM: EvmTr<
-            Context: ContextTr<Journal: JournalTr<FinalOutput = JournalOutput>>,
-            Precompiles: PrecompileProvider<EVM::Context, Output = InterpreterResult>,
-            Instructions: InstructionProvider<Context = EVM::Context, InterpreterTypes = EthInterpreter>,
-        >,
-{
-    type Evm = EVM;
-    type Error = EVMError<<<EVM::Context as ContextTr>::Db as Database>::Error, InvalidTransaction>;
-    type Frame = EthFrame<
-        EVM,
-        EVMError<<<EVM::Context as ContextTr>::Db as Database>::Error, InvalidTransaction>,
-        <EVM::Instructions as InstructionProvider>::InterpreterTypes,
-    >;
-    type HaltReason = HaltReason;
-
-    fn validate(&self, evm: &mut Self::Evm) -> Result<revm::interpreter::InitialAndFloorGas, Self::Error> {
-        let env_result = self.validate_env(evm);
-        let gas_result = self.validate_initial_tx_gas(evm);
-        if env_result.is_err() || gas_result.is_err() {
-            evm.ctx().journal().finalize();
-        }
-        gas_result
-    }
-}
-
-impl<EVM> Default for StratusHandler<EVM> {
-    fn default() -> Self {
-        Self {
-            _phantom: core::marker::PhantomData,
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -164,13 +116,13 @@ impl Evm {
         let start = metrics::now();
 
         // configure session
-        self.evm.db().reset(input.clone());
+        self.evm.journaled_state.database.reset(input.clone());
 
         self.evm.fill_env(input);
 
         if log_enabled!(log::Level::Debug) {
-            let block_env_log = self.evm.block().clone();
-            let tx_env_log = self.evm.tx().clone();
+            let block_env_log = self.evm.block.clone();
+            let tx_env_log = self.evm.tx.clone();
             // execute transaction
             tracing::debug!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
         }
@@ -179,12 +131,12 @@ impl Evm {
         let evm_result = self.evm.transact(tx);
 
         // extract results
-        let session = self.evm.db();
+        let session = &mut self.evm.journaled_state.database;
         let session_input = std::mem::take(&mut session.input);
         let session_storage_changes = std::mem::take(&mut session.storage_changes);
         let session_metrics = std::mem::take(&mut session.metrics);
         #[cfg(feature = "metrics")]
-        let session_point_in_time = std::mem::take(&mut session.input.point_in_time);
+        let session_point_in_time = session.input.point_in_time;
 
         // parse result
         let execution = match evm_result {
@@ -261,7 +213,8 @@ impl Evm {
 
         let tx = self
             .evm
-            .db()
+            .journaled_state
+            .database
             .storage
             .read_transaction(tx_hash)?
             .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
@@ -270,11 +223,17 @@ impl Evm {
             return Ok(default_trace(tracer_type, tx));
         }
 
-        let block = self.evm.db().storage.read_block(BlockFilter::Number(tx.block_number()))?.ok_or_else(|| {
-            StratusError::Storage(StorageError::BlockNotFound {
-                filter: BlockFilter::Number(tx.block_number()),
-            })
-        })?;
+        let block = self
+            .evm
+            .journaled_state
+            .database
+            .storage
+            .read_block(BlockFilter::Number(tx.block_number()))?
+            .ok_or_else(|| {
+                StratusError::Storage(StorageError::BlockNotFound {
+                    filter: BlockFilter::Number(tx.block_number()),
+                })
+            })?;
 
         let tx_info = TransactionInfo {
             block_hash: Some(block.hash().0.0.into()),
@@ -284,14 +243,14 @@ impl Evm {
             base_fee: None,
         };
         let inspect_input: EvmInput = tx.try_into()?;
-        self.evm.db().reset(EvmInput {
+        self.evm.journaled_state.database.reset(EvmInput {
             point_in_time: PointInTime::MinedPast(inspect_input.block_number.prev().unwrap_or_default()),
             ..Default::default()
         });
 
         let spec = self.evm.cfg.spec;
 
-        let mut cache_db = CacheDB::new(self.evm.db());
+        let mut cache_db = CacheDB::new(&self.evm.journaled_state.database);
         let mut evm = Self::create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db, self.kind);
 
         // Execute all transactions before target tx_hash
@@ -310,43 +269,48 @@ impl Evm {
         let trace_result: GethTrace = match tracer_type {
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => {
                 let mut inspector = FourByteInspector::default();
-                let mut evm = evm.with_inspector(&mut inspector);
-                evm.fill_env(inspect_input);
-                evm.inspect_replay()?;
+                let mut evm_with_inspector = evm.with_inspector(&mut inspector);
+                evm_with_inspector.fill_env(inspect_input);
+                let tx = std::mem::take(&mut evm_with_inspector.tx);
+                evm_with_inspector.inspect_tx(tx)?;
                 FourByteFrame::from(&inspector).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
                 let call_config = opts.tracer_config.into_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_call_config(&call_config));
-                let mut evm = evm.with_inspector(&mut inspector);
-                evm.fill_env(inspect_input);
-                let res = evm.inspect_replay()?;
+                let mut evm_with_inspector = evm.with_inspector(&mut inspector);
+                evm_with_inspector.fill_env(inspect_input);
+                let tx = std::mem::take(&mut evm_with_inspector.tx);
+                let res = evm_with_inspector.inspect_tx(tx)?;
                 inspector.geth_builder().geth_call_traces(call_config, res.result.gas_used()).into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::PreStateTracer) => {
                 let prestate_config = opts.tracer_config.into_pre_state_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_geth_prestate_config(&prestate_config));
-                let mut evm = evm.with_inspector(&mut inspector);
-                evm.fill_env(inspect_input);
-                let res = evm.inspect_replay()?;
+                let mut evm_with_inspector = evm.with_inspector(&mut inspector);
+                evm_with_inspector.fill_env(inspect_input);
+                let tx = std::mem::take(&mut evm_with_inspector.tx);
+                let res = evm_with_inspector.inspect_tx(tx)?;
 
-                inspector.geth_builder().geth_prestate_traces(&res, &prestate_config, cache_db)?.into()
+                inspector.geth_builder().geth_prestate_traces(&res, &prestate_config, &cache_db)?.into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer) => NoopFrame::default().into(),
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => {
                 let mux_config = opts.tracer_config.into_mux_config()?;
                 let mut inspector = MuxInspector::try_from_config(mux_config).map_err(|e| anyhow!(e))?;
-                let mut evm = evm.with_inspector(&mut inspector);
-                evm.fill_env(inspect_input);
-                let res = evm.inspect_replay()?;
+                let mut evm_with_inspector = evm.with_inspector(&mut inspector);
+                evm_with_inspector.fill_env(inspect_input);
+                let tx = std::mem::take(&mut evm_with_inspector.tx);
+                let res = evm_with_inspector.inspect_tx(tx)?;
                 inspector.try_into_mux_frame(&res, &cache_db, tx_info)?.into()
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => {
                 let flat_call_config = opts.tracer_config.into_flat_call_config()?;
                 let mut inspector = TracingInspector::new(TracingInspectorConfig::from_flat_call_config(&flat_call_config));
-                let mut evm = evm.with_inspector(&mut inspector);
-                evm.fill_env(inspect_input);
-                let res = evm.inspect_replay()?;
+                let mut evm_with_inspector = evm.with_inspector(&mut inspector);
+                evm_with_inspector.fill_env(inspect_input);
+                let tx = std::mem::take(&mut evm_with_inspector.tx);
+                let res = evm_with_inspector.inspect_tx(tx)?;
                 inspector
                     .with_transaction_gas_limit(res.result.gas_used())
                     .into_parity_builder()
@@ -368,10 +332,10 @@ trait EvmExt<DB: Database> {
     fn fill_env(&mut self, input: EvmInput);
 }
 
-impl<DB: Database, INSP, I, P> EvmExt<DB> for RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, INSP, I, P> {
+impl<DB: Database, INSP, I, P, F> EvmExt<DB> for RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, INSP, I, P, F> {
     fn fill_env(&mut self, input: EvmInput) {
-        self.modify_block(|block_env| block_env.fill_env(&input));
-        self.modify_tx(|tx_env| tx_env.fill_env(input));
+        self.block.fill_env(&input);
+        self.tx.fill_env(input);
     }
 }
 
@@ -398,8 +362,8 @@ trait BlockEnvExt {
 
 impl BlockEnvExt for BlockEnv {
     fn fill_env(&mut self, input: &EvmInput) {
-        self.timestamp = *input.block_timestamp;
-        self.number = input.block_number.as_u64();
+        self.timestamp = U256::from(*input.block_timestamp);
+        self.number = U256::from(input.block_number.as_u64());
         self.basefee = 0;
     }
 }
