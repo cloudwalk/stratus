@@ -416,8 +416,9 @@ macro_rules! gen_test_bincode {
             #[test]
             pub fn [<bincode_ $type:snake>]() {
                 let value = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
-                let binary = bincode::serialize(&value).unwrap();
-                assert_eq!(bincode::deserialize::<$type>(&binary).unwrap(), value);
+                let binary = bincode::serde::encode_to_vec(&value, bincode::config::legacy()).unwrap();
+                let (deserialized, _) = bincode::serde::decode_from_slice::<$type, _>(&binary, bincode::config::legacy()).unwrap();
+                assert_eq!(deserialized, value);
             }
         }
     };

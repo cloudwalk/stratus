@@ -267,7 +267,7 @@ mod tests {
                 // adding a new snapshot for a new variant is safe as long as you don't mess up in the points above
                 // -> CAREFUL WHEN UPDATING SNAPSHOTS <-
                 if env::var("DANGEROUS_UPDATE_SNAPSHOTS").is_ok() {
-                    let serialized = bincode::serialize(&expected)?;
+                    let serialized = bincode::serde::encode_to_vec(&expected, bincode::config::legacy())?;
                     fs::create_dir_all(&snapshot_parent_path)?;
                     fs::write(snapshot_path, serialized)?;
                 } else {
@@ -286,7 +286,7 @@ mod tests {
                 "snapshot path {snapshot_path:?} doesn't match the expected for v1: {snapshot_path:?}"
             );
 
-            let deserialized = bincode::deserialize::<CfValue>(&fs::read(snapshot_path)?)?;
+            let (deserialized, _) = bincode::serde::decode_from_slice::<CfValue, _>(&fs::read(snapshot_path)?, bincode::config::legacy())?;
             ensure!(
                 expected == deserialized,
                 "deserialized value doesn't match expected\n deserialized = {deserialized:?}\n expected = {expected:?}",

@@ -300,16 +300,17 @@ fn deserialize_with_context<T>(bytes: &[u8]) -> Result<T>
 where
     T: for<'de> Deserialize<'de>,
 {
-    bincode::deserialize::<T>(bytes)
+    let (result, _bytes_read) = bincode::serde::decode_from_slice::<T, _>(bytes, bincode::config::legacy())
         .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
-        .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<T>()))
+        .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<T>()))?;
+    Ok(result)
 }
 
 fn serialize_with_context<T>(input: T) -> Result<Vec<u8>>
 where
     T: Serialize + Debug,
 {
-    bincode::serialize(&input).with_context(|| format!("failed to serialize '{input:?}'"))
+    bincode::serde::encode_to_vec(&input, bincode::config::legacy()).with_context(|| format!("failed to serialize '{input:?}'"))
 }
 
 /// An iterator over K-V pairs in a CF.
