@@ -11,6 +11,7 @@ use crate::alias::RevmBytecode;
 pub enum BytecodeRocksdb {
     LegacyRaw(BytesRocksdb),
     LegacyAnalyzed(LegacyAnalyzedBytecodeRocksdb),
+    EofDeprecated,
     Eip7702(Eip7702BytecodeRocksdb),
 }
 
@@ -54,6 +55,10 @@ impl From<BytecodeRocksdb> for RevmBytecode {
                 analyzed.original_len,
                 JumpTable::from_slice(&analyzed.jump_table, analyzed.jump_table.len() * 8),
             )),
+            BytecodeRocksdb::EofDeprecated => {
+                tracing::error!("encountered deprecated EOF bytecode variant during deserialization, returning empty bytecode");
+                RevmBytecode::LegacyAnalyzed(LegacyRawBytecode(vec![].into()).into_analyzed())
+            },
             BytecodeRocksdb::Eip7702(bytecode) => RevmBytecode::Eip7702(Eip7702Bytecode {
                 delegated_address: bytecode.delegated_address.0.into(),
                 version: bytecode.version,

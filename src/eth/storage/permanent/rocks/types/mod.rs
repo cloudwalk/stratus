@@ -41,6 +41,7 @@ pub use unix_time::UnixTimeRocksdb;
 #[cfg(test)]
 mod tests {
     use block_header::BlockHeaderRocksdb;
+    use bytecode::BytecodeRocksdb;
     use chain_id::ChainIdRocksdb;
     use difficulty::DifficultyRocksdb;
     use execution::ExecutionRocksdb;
@@ -66,6 +67,7 @@ mod tests {
     gen_test_bincode!(BlockHeaderRocksdb);
     gen_test_bincode!(BlockNumberRocksdb);
     gen_test_bincode!(BlockRocksdb);
+    gen_test_bincode!(BytecodeRocksdb);
     gen_test_bincode!(BytesRocksdb);
     gen_test_bincode!(ChainIdRocksdb);
     gen_test_bincode!(DifficultyRocksdb);
