@@ -19,7 +19,7 @@ use crate::eth::rpc::RpcContext;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
-use crate::ext::spawn_named;
+use crate::ext::spawn;
 use crate::infra::BlockchainClient;
 use crate::infra::kafka::KafkaConnector;
 
@@ -106,7 +106,7 @@ impl ImporterConfig {
         );
         let importer = Arc::new(importer);
 
-        spawn_named(TASK_NAME, {
+        spawn(TASK_NAME, {
             let importer = Arc::clone(&importer);
             async move {
                 if let Err(e) = importer.run_importer_online().await {

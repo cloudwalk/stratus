@@ -232,16 +232,13 @@ pub async fn traced_sleep(duration: Duration, _: SleepReason) {
 /// Spawns an async Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
 #[allow(clippy::expect_used)]
-pub fn spawn_named<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
+pub fn spawn<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
 where
     T: Send + 'static,
 {
     info_task_spawn(name);
 
-    tokio::task::Builder::new()
-        .name(name)
-        .spawn(task)
-        .expect("spawning named async task should not fail")
+    tokio::task::spawn(task)
 }
 
 /// Spawns a thread with the given name. Thread has access to Tokio current runtime.
@@ -276,7 +273,7 @@ pub async fn spawn_signal_handler() -> anyhow::Result<()> {
         Err(e) => return log_and_err!(reason = e, "failed to init SIGINT watcher"),
     };
 
-    spawn_named("sys::signal_handler", async move {
+    spawn("sys::signal_handler", async move {
         select! {
             _ = sigterm.recv() => {
                 GlobalState::shutdown_from(TASK_NAME, "received SIGTERM");
