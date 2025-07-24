@@ -1,11 +1,11 @@
 use futures::future::BoxFuture;
+use jsonrpsee::MethodResponse;
+use jsonrpsee::ResponsePayload;
 use jsonrpsee::core::middleware::ResponseFuture;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Id;
-use jsonrpsee::MethodResponse;
-use jsonrpsee::ResponsePayload;
-use revm::context::result::EVMError;
 use revm::context::DBErrorMarker;
+use revm::context::result::EVMError;
 use stratus_macros::ErrorCode;
 
 use super::execution_result::RevertReason;

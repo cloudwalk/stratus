@@ -1,19 +1,18 @@
-use alloy_consensus::transaction::Recovered;
 use alloy_consensus::Signed;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
+use alloy_consensus::transaction::Recovered;
 use alloy_primitives::Bytes;
 use alloy_primitives::Signature;
 use alloy_primitives::TxKind;
+use alloy_primitives::U256;
 use anyhow::Context;
 use anyhow::Result;
-use ethereum_types::U256;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
 
 use crate::alias::AlloyTransaction;
-use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
@@ -35,34 +34,35 @@ impl<'de> serde::Deserialize<'de> for ExternalTransaction {
 
         if let Value::Object(ref mut map) = value {
             // If v is 0x0 or 0x1, this is a type 2 (EIP-1559) transaction
-            if let Some(Value::String(v_value)) = map.get("v") {
-                if (v_value == "0x0" || v_value == "0x1") && !map.contains_key("type") {
-                    map.insert("type".to_string(), Value::String("0x2".to_string()));
-                }
+            if let Some(Value::String(v_value)) = map.get("v")
+                && (v_value == "0x0" || v_value == "0x1")
+                && !map.contains_key("type")
+            {
+                map.insert("type".to_string(), Value::String("0x2".to_string()));
             }
 
             // Check if this is a type 2 transaction
-            if let Some(Value::String(type_value)) = map.get("type") {
-                if type_value == "0x2" {
-                    // For EIP-1559 transactions, ensure max_fee_per_gas and max_priority_fee_per_gas are present
-                    if !map.contains_key("maxFeePerGas") {
-                        map.insert("maxFeePerGas".to_string(), Value::String("0x0".to_string()));
-                    }
-                    if !map.contains_key("maxPriorityFeePerGas") {
-                        map.insert("maxPriorityFeePerGas".to_string(), Value::String("0x0".to_string()));
-                    }
-                    if !map.contains_key("accessList") {
-                        map.insert("accessList".to_string(), Value::Array(Vec::new()));
-                    }
+            if let Some(Value::String(type_value)) = map.get("type")
+                && type_value == "0x2"
+            {
+                // For EIP-1559 transactions, ensure max_fee_per_gas and max_priority_fee_per_gas are present
+                if !map.contains_key("maxFeePerGas") {
+                    map.insert("maxFeePerGas".to_string(), Value::String("0x0".to_string()));
+                }
+                if !map.contains_key("maxPriorityFeePerGas") {
+                    map.insert("maxPriorityFeePerGas".to_string(), Value::String("0x0".to_string()));
+                }
+                if !map.contains_key("accessList") {
+                    map.insert("accessList".to_string(), Value::Array(Vec::new()));
                 }
             }
             // Check if this is a type 1 transaction
-            if let Some(Value::String(type_value)) = map.get("type") {
-                if type_value == "0x1" {
-                    // For EIP-2930 transactions, ensure accessList is present
-                    if !map.contains_key("accessList") {
-                        map.insert("accessList".to_string(), Value::Array(Vec::new()));
-                    }
+            if let Some(Value::String(type_value)) = map.get("type")
+                && type_value == "0x1"
+            {
+                // For EIP-2930 transactions, ensure accessList is present
+                if !map.contains_key("accessList") {
+                    map.insert("accessList".to_string(), Value::Array(Vec::new()));
                 }
             }
         }
@@ -87,19 +87,19 @@ impl ExternalTransaction {
 }
 
 impl Dummy<Faker> for ExternalTransaction {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let from: Address = faker.fake_with_rng(rng);
         let to: Address = faker.fake_with_rng(rng);
 
         let block_hash: Hash = faker.fake_with_rng(rng);
 
-        let gas_price: Wei = Wei::from(rng.next_u64());
+        let gas_price: u128 = faker.fake_with_rng(rng);
         let value: Wei = Wei::from(rng.next_u64());
 
         let tx = TxLegacy {
             chain_id: Some(1),
             nonce: rng.next_u64(),
-            gas_price: gas_price.into(),
+            gas_price,
             gas_limit: rng.next_u64(),
             to: TxKind::Call(from.into()),
             value: value.into(),
@@ -109,7 +109,7 @@ impl Dummy<Faker> for ExternalTransaction {
         let r = U256::from(rng.next_u64());
         let s = U256::from(rng.next_u64());
         let v = rng.next_u64() % 2 == 0;
-        let signature = Signature::new(SignatureComponent(r).into(), SignatureComponent(s).into(), v);
+        let signature = Signature::new(r, s, v);
 
         let hash: Hash = faker.fake_with_rng(rng);
         let inner_tx = TxEnvelope::Legacy(Signed::new_unchecked(tx, signature, hash.into()));
@@ -119,7 +119,7 @@ impl Dummy<Faker> for ExternalTransaction {
             block_hash: Some(block_hash.into()),
             block_number: Some(rng.next_u64()),
             transaction_index: Some(rng.next_u64()),
-            effective_gas_price: Some(gas_price.as_u128()),
+            effective_gas_price: Some(gas_price),
         };
 
         ExternalTransaction(inner)

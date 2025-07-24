@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Context;
-use rocksdb::Options;
 use rocksdb::DB;
+use rocksdb::Options;
 
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
@@ -18,7 +18,7 @@ use crate::infra::metrics;
 ///
 /// The returned `Options` **need** to be stored to refer to the DB metrics!
 #[tracing::instrument(skip_all, fields(path = ?path.as_ref()))]
-pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static str, Options>) -> anyhow::Result<(Arc<DB>, Options)> {
+pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static str, Options>) -> anyhow::Result<(&'static Arc<DB>, Options)> {
     let path = path.as_ref();
 
     tracing::debug!("creating settings for each column family");
@@ -53,5 +53,7 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static 
         metrics::set_rocks_last_startup_delay_millis(waited_for.as_millis() as u64, db_name);
     }
 
-    Ok((Arc::new(db), db_opts))
+    // we leak here to create a 'static reference to the db. This is safe because this function is only called once
+    // and the db is used until the program exits.
+    Ok((Box::leak(Box::new(Arc::new(db))), db_opts))
 }

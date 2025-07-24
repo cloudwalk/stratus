@@ -1,13 +1,15 @@
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::bail;
+#[cfg(feature = "replication")]
 use rocksdb::WriteBatch;
 
 use super::rocks_state::RocksStorageState;
+use crate::GlobalState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -27,10 +29,9 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::ext::SleepReason;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
-use crate::ext::SleepReason;
-use crate::GlobalState;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {
@@ -44,7 +45,7 @@ impl RocksPermanentStorage {
         shutdown_timeout: Duration,
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
-        use_rocksdb_replication: bool,
+        #[cfg(feature = "replication")] use_rocksdb_replication: bool,
         cf_size_metrics_interval: Option<Duration>,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
@@ -72,6 +73,7 @@ impl RocksPermanentStorage {
             shutdown_timeout,
             cache_size_multiplier,
             enable_sync_write,
+            #[cfg(feature = "replication")]
             use_rocksdb_replication,
         )?);
 
@@ -155,6 +157,7 @@ impl RocksPermanentStorage {
         })
     }
 
+    #[cfg(feature = "replication")]
     pub fn read_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<WriteBatch>, StorageError> {
         self.state
             .read_replication_log(block_number)
@@ -164,6 +167,7 @@ impl RocksPermanentStorage {
             })
     }
 
+    #[cfg(feature = "replication")]
     pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> anyhow::Result<(), StorageError> {
         self.state
             .apply_replication_log(block_number, replication_log)
@@ -214,6 +218,7 @@ impl RocksPermanentStorage {
             })
     }
 
+    #[cfg(feature = "replication")]
     pub fn rocksdb_replication_enabled(&self) -> bool {
         self.state.use_rocksdb_replication
     }

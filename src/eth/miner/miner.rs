@@ -1,23 +1,25 @@
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use itertools::Itertools;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
-use tokio::sync::broadcast;
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::Span;
 
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
+#[cfg(feature = "replication")]
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockHeader;
+#[cfg(feature = "replication")]
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
@@ -25,10 +27,11 @@ use crate::eth::primitives::LogMined;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::eth::storage::StratusStorage;
-use crate::ext::not;
+#[cfg(feature = "replication")]
+use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::ext::DisplayExt;
+use crate::ext::not;
 use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
 use crate::infra::tracing::SpanExt;
 
@@ -45,6 +48,7 @@ pub enum CommitItem {
     /// A block
     Block(Block),
     /// A replication log from RocksDB
+    #[cfg(feature = "replication")]
     ReplicationLog(ReplicationLogRocksdb),
 }
 
@@ -287,6 +291,7 @@ impl Miner {
     pub fn commit(&self, item: CommitItem) -> anyhow::Result<(), StorageError> {
         match item {
             CommitItem::Block(block) => self.commit_block(block),
+            #[cfg(feature = "replication")]
             CommitItem::ReplicationLog(replication_log) => self.commit_log(replication_log),
         }
     }
@@ -328,6 +333,7 @@ impl Miner {
         Ok(())
     }
 
+    #[cfg(feature = "replication")]
     fn commit_log(&self, replication_log: ReplicationLogRocksdb) -> anyhow::Result<(), StorageError> {
         let block_number: BlockNumber = replication_log.block_number.into();
 
@@ -436,16 +442,16 @@ impl Miner {
 // Miner
 // -----------------------------------------------------------------------------
 pub mod interval_miner {
+    use std::sync::Arc;
     use std::sync::mpsc;
     use std::sync::mpsc::RecvTimeoutError;
-    use std::sync::Arc;
     use std::time::Duration;
 
     use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
-    use crate::eth::miner::miner::CommitItem;
     use crate::eth::miner::Miner;
+    use crate::eth::miner::miner::CommitItem;
     use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
 

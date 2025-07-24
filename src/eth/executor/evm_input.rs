@@ -20,8 +20,10 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
-use crate::ext::not;
+use crate::eth::storage::ReadKind;
+use crate::eth::storage::TxCount;
 use crate::ext::OptionExt;
+use crate::ext::not;
 use crate::if_else;
 
 /// EVM input data. Usually derived from a transaction or call.
@@ -67,7 +69,7 @@ pub struct EvmInput {
     pub gas_limit: Gas,
 
     /// Gas price paid by each unit of gas consumed by the transaction.
-    pub gas_price: Wei,
+    pub gas_price: u128,
 
     /// Number of the block where the transaction will be or was included.
     pub block_number: BlockNumber,
@@ -82,6 +84,8 @@ pub struct EvmInput {
     ///
     /// If not specified, it will not be validated.
     pub chain_id: Option<ChainId>,
+
+    pub kind: ReadKind,
 }
 
 impl EvmInput {
@@ -93,46 +97,49 @@ impl EvmInput {
             value: input.value,
             data: input.input.clone(),
             gas_limit: Gas::MAX,
-            gas_price: Wei::ZERO,
+            gas_price: 0,
             nonce: Some(input.nonce),
             block_number: pending_header.number,
             block_timestamp: *pending_header.timestamp,
             point_in_time: PointInTime::Pending,
             chain_id: input.chain_id,
+            kind: ReadKind::Transaction,
         }
     }
 
     /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas` for a pending block.
-    pub fn from_pending_block(input: CallInput, pending_header: PendingBlockHeader) -> Self {
+    pub fn from_pending_block(input: CallInput, pending_header: PendingBlockHeader, tx_count: TxCount) -> Self {
         Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
             value: input.value,
             data: input.data,
             gas_limit: Gas::MAX,
-            gas_price: Wei::ZERO,
+            gas_price: 0,
             nonce: None,
             block_number: pending_header.number,
             block_timestamp: *pending_header.timestamp,
             point_in_time: PointInTime::Pending,
             chain_id: None,
+            kind: ReadKind::Call((pending_header.number, tx_count)),
         }
     }
 
     /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas` for a mined block.
-    pub fn from_mined_block(input: CallInput, block: Block) -> Self {
+    pub fn from_mined_block(input: CallInput, block: Block, point_in_time: PointInTime) -> Self {
         Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
             value: input.value,
             data: input.data,
             gas_limit: Gas::MAX,
-            gas_price: Wei::ZERO,
+            gas_price: 0,
             nonce: None,
             block_number: block.number(),
             block_timestamp: block.header.timestamp,
-            point_in_time: PointInTime::MinedPast(block.number()),
+            point_in_time,
             chain_id: None,
+            kind: ReadKind::Call((block.number(), TxCount::Full)),
         }
     }
 
@@ -147,11 +154,12 @@ impl EvmInput {
             data: tx.inner.input().clone().into(),
             nonce: Some(tx.inner.nonce().into()),
             gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.inner.gas_limit().into()),
-            gas_price: if_else!(receipt.is_success(), Wei::ZERO, tx.inner.gas_price().map_into().unwrap_or(Wei::ZERO)),
+            gas_price: if_else!(receipt.is_success(), 0, tx.inner.gas_price().map_into().unwrap_or(0)),
             point_in_time: PointInTime::Pending,
             block_number,
             block_timestamp,
             chain_id: tx.inner.chain_id().map(Into::into),
+            kind: ReadKind::Transaction,
         })
     }
 
@@ -190,6 +198,7 @@ impl From<TransactionMined> for EvmInput {
             block_timestamp: value.execution.block_timestamp,
             point_in_time: PointInTime::MinedPast(value.block_number),
             chain_id: value.input.chain_id,
+            kind: ReadKind::Transaction,
         }
     }
 }
