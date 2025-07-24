@@ -8,7 +8,7 @@ use anyhow::anyhow;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde_with::DeserializeFromStr, serde_with::SerializeDisplay, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde_with::DeserializeFromStr, serde_with::SerializeDisplay)]
 pub struct LogsBloomRocksdb([u8; 256]);
 
 gen_newtype_from!(self = LogsBloomRocksdb, other = Bloom, LogsBloom);

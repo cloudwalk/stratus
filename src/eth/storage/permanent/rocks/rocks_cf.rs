@@ -41,8 +41,8 @@ pub struct RocksCfRef<'a, K, V> {
 
 impl<'a, K, V> RocksCfRef<'a, K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+    K: bincode::Encode + bincode::Decode<()> + Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
+    V: bincode::Encode + bincode::Decode<()> + Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     /// Create Column Family reference struct.
     pub fn new(db: &'a Arc<DB>, column_family: &str) -> Result<Self> {
@@ -298,18 +298,19 @@ where
 
 fn deserialize_with_context<T>(bytes: &[u8]) -> Result<T>
 where
-    T: for<'de> Deserialize<'de>,
+    T: bincode::Decode<()>,
 {
-    bincode::deserialize::<T>(bytes)
+    bincode::decode_from_slice(bytes, bincode::config::standard())
+        .map(|(result, _)| result)
         .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
         .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<T>()))
 }
 
 fn serialize_with_context<T>(input: T) -> Result<Vec<u8>>
 where
-    T: Serialize + Debug,
+    T: bincode::Encode + Debug,
 {
-    bincode::serialize(&input).with_context(|| format!("failed to serialize '{input:?}'"))
+    bincode::encode_to_vec(&input, bincode::config::standard()).with_context(|| format!("failed to serialize '{input:?}'"))
 }
 
 /// An iterator over K-V pairs in a CF.
@@ -321,8 +322,8 @@ pub struct RocksCfIter<'a, K, V> {
 
 impl<'a, K, V> RocksCfIter<'a, K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + bincode::Decode<()>,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + bincode::Decode<()>,
 {
     fn new(iter: DBIteratorWithThreadMode<'a, DB>, column_family: &'a str) -> Self {
         Self {
@@ -344,8 +345,8 @@ where
 
 impl<K, V> Iterator for RocksCfIter<'_, K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + bincode::Decode<()>,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + bincode::Decode<()>,
 {
     type Item = Result<(K, V)>;
 
@@ -391,7 +392,7 @@ pub struct RocksCfKeysIter<'a, K> {
 
 impl<K> Iterator for RocksCfKeysIter<'_, K>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + Clone + bincode::Decode<()>,
 {
     type Item = Result<K>;
 

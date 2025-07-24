@@ -7,7 +7,7 @@ use crate::ext::OptionExt;
 
 type LogTopic = [u8; 32];
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct LogRocksdb {
     pub address: AddressRocksdb,
     pub topics: (Option<LogTopic>, Option<LogTopic>, Option<LogTopic>, Option<LogTopic>),

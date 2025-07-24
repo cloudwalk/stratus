@@ -7,7 +7,7 @@ use rocksdb::WriteBatch;
 
 use crate::eth::primitives::Bytes;
 
-#[derive(Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct BytesRocksdb(pub Vec<u8>);
 
 impl Deref for BytesRocksdb {
