@@ -30,7 +30,7 @@ use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::ext::SleepReason;
-use crate::ext::spawn_named;
+use crate::ext::spawn;
 use crate::ext::traced_sleep;
 
 #[derive(Debug)]
@@ -83,7 +83,7 @@ impl RocksPermanentStorage {
         #[cfg(feature = "metrics")]
         if let Some(interval) = cf_size_metrics_interval {
             tracing::info!("starting column family size metrics collector with interval {:?}", interval);
-            spawn_named(
+            spawn(
                 "rocks::cf_size_metrics_collector",
                 Self::start_cf_size_metrics_collector(Arc::clone(&state), interval),
             );

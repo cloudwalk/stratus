@@ -51,8 +51,8 @@ impl DbConfig {
 
         match self {
             DbConfig::OptimizedPointLookUp => {
-                block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
                 block_based_options.set_data_block_hash_ratio(0.3);
+                block_based_options.set_data_block_index_type(rocksdb::DataBlockIndexType::BinaryAndHash);
 
                 opts.set_use_direct_reads(true);
                 opts.set_memtable_prefix_bloom_ratio(0.02);

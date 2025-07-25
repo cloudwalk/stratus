@@ -33,7 +33,7 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
-use crate::ext::spawn_named;
+use crate::ext::spawn;
 use crate::ext::traced_sleep;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::infra::BlockchainClient;
@@ -152,21 +152,21 @@ impl Importer {
                 let (log_tx, log_rx) = mpsc::channel(10_000);
 
                 // Spawn log applier
-                let task_applier = spawn_named(
+                let task_applier = spawn(
                     "importer::log-applier",
                     Importer::start_log_applier(Arc::clone(storage), log_rx, self.kafka_connector.clone(), Arc::clone(&self.miner)),
                 );
 
                 // Spawn block number fetcher
                 let number_fetcher_chain = Arc::clone(&self.chain);
-                let task_number_fetcher = spawn_named(
+                let task_number_fetcher = spawn(
                     "importer::number-fetcher",
                     Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
                 );
 
                 // Spawn log fetcher
                 let log_fetcher_chain = Arc::clone(&self.chain);
-                let task_log_fetcher = spawn_named("importer::log-fetcher", Importer::start_log_fetcher(log_fetcher_chain, log_tx, number));
+                let task_log_fetcher = spawn("importer::log-fetcher", Importer::start_log_fetcher(log_fetcher_chain, log_tx, number));
 
                 // Await all tasks
                 if let Err(e) = try_join!(task_applier, task_log_fetcher, task_number_fetcher) {
@@ -178,7 +178,7 @@ impl Importer {
                 let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
 
                 // Spawn block executor
-                let task_executor = spawn_named(
+                let task_executor = spawn(
                     "importer::executor",
                     Importer::start_block_executor(
                         Arc::clone(&self.executor),
@@ -191,14 +191,14 @@ impl Importer {
 
                 // Spawn block number fetcher
                 let number_fetcher_chain = Arc::clone(&self.chain);
-                let task_number_fetcher = spawn_named(
+                let task_number_fetcher = spawn(
                     "importer::number-fetcher",
                     Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
                 );
 
                 // Spawn block fetcher
                 let block_fetcher_chain = Arc::clone(&self.chain);
-                let task_block_fetcher = spawn_named(
+                let task_block_fetcher = spawn(
                     "importer::block-fetcher",
                     Importer::start_block_fetcher(block_fetcher_chain, backlog_tx, number),
                 );
