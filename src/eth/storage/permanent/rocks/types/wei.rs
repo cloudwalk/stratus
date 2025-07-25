@@ -4,7 +4,7 @@ use alloy_primitives::U256;
 
 use crate::eth::primitives::Wei;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct WeiRocksdb([u64; 4]);
 
 impl From<U256> for WeiRocksdb {

@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-docker run --rm -i -v $(pwd):/app/root eof-solc:latest "$@"

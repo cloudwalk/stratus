@@ -10,7 +10,7 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::ext::OptionExt;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct AccountRocksdb {
     pub balance: WeiRocksdb,
     pub nonce: NonceRocksdb,
