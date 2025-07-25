@@ -1023,15 +1023,14 @@ mod tests {
             let before_rocks = BlockNumberRocksdb::from(before as u32);
             let after_rocks = BlockNumberRocksdb::from(after as u32);
 
-            let before_bytes = bincode::encode_to_vec(&before_rocks, rocks_bincode_config()).unwrap();
-            let after_bytes = bincode::encode_to_vec(&after_rocks, rocks_bincode_config()).unwrap();
+            let before_bytes = bincode::encode_to_vec(before_rocks, rocks_bincode_config()).unwrap();
+            let after_bytes = bincode::encode_to_vec(after_rocks, rocks_bincode_config()).unwrap();
 
             let lexicographic_order_correct = before_bytes < after_bytes;
 
             assert!(
                 lexicographic_order_correct,
-                "Block {} should serialize to bytes < Block {} for RocksDB ordering",
-                before, after
+                "Block {before} should serialize to bytes < Block {after} for RocksDB ordering",
             );
         }
     }
