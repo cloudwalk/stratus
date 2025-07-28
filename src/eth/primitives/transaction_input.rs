@@ -1,4 +1,3 @@
-use alloy_consensus::transaction::Recovered;
 use alloy_consensus::Signed;
 use alloy_consensus::Transaction;
 use alloy_consensus::TxEip1559;
@@ -8,21 +7,22 @@ use alloy_consensus::TxEip4844Variant;
 use alloy_consensus::TxEip7702;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
+use alloy_consensus::transaction::Recovered;
+use alloy_consensus::transaction::SignerRecoverable;
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::Signature;
 use alloy_primitives::TxKind;
+use alloy_primitives::U64;
+use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
-use ethereum_types::U256;
-use ethereum_types::U64;
 use fake::Dummy;
 use fake::Fake;
 use fake::Faker;
 use rlp::Decodable;
 
 use crate::alias::AlloyTransaction;
-use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
@@ -31,6 +31,8 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
+use crate::eth::primitives::signature_component::SignatureComponent;
+use crate::ext::RuintExt;
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInput {
@@ -50,7 +52,7 @@ pub struct TransactionInput {
     pub value: Wei,
     pub input: Bytes,
     pub gas_limit: Gas,
-    pub gas_price: Wei,
+    pub gas_price: u128,
 
     pub v: U64,
     pub r: U256,
@@ -58,9 +60,9 @@ pub struct TransactionInput {
 }
 
 impl Dummy<Faker> for TransactionInput {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         Self {
-            tx_type: Some(rng.next_u64().into()),
+            tx_type: Some(U64::random_with(rng)),
             chain_id: faker.fake_with_rng(rng),
             hash: faker.fake_with_rng(rng),
             nonce: faker.fake_with_rng(rng),
@@ -71,9 +73,9 @@ impl Dummy<Faker> for TransactionInput {
             input: faker.fake_with_rng(rng),
             gas_limit: faker.fake_with_rng(rng),
             gas_price: faker.fake_with_rng(rng),
-            v: rng.next_u64().into(),
-            r: rng.next_u64().into(),
-            s: rng.next_u64().into(),
+            v: U64::random_with(rng),
+            r: U256::random_with(rng),
+            s: U256::random_with(rng),
         }
     }
 }
@@ -149,9 +151,9 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
 
     // Get signature components from the envelope
     let signature = value.inner.signature();
-    let r = U256::from(signature.r().to_be_bytes::<32>());
-    let s = U256::from(signature.s().to_be_bytes::<32>());
-    let v = if signature.v() { U64::from(1) } else { U64::from(0) };
+    let r = signature.r();
+    let s = signature.s();
+    let v = if signature.v() { U64::ONE } else { U64::ZERO };
 
     Ok(TransactionInput {
         tx_type: Some(U64::from(value.inner.tx_type() as u8)),
@@ -167,7 +169,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         value: Wei::from(value.inner.value()),
         input: Bytes::from(value.inner.input().clone()),
         gas_limit: Gas::from(value.inner.gas_limit()),
-        gas_price: Wei::from(value.inner.gas_price().or(value.effective_gas_price).unwrap_or_default()),
+        gas_price: value.inner.gas_price().or(value.effective_gas_price).unwrap_or_default(),
         v,
         r,
         s,
@@ -180,7 +182,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
 
 impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
-        let signature = Signature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v.as_u64() == 1);
+        let signature = Signature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v == U64::ONE);
 
         let tx_type = value.tx_type.map(|t| t.as_u64()).unwrap_or(0);
 
@@ -190,7 +192,7 @@ impl From<TransactionInput> for AlloyTransaction {
                 TxEip2930 {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
-                    gas_price: value.gas_price.into(),
+                    gas_price: value.gas_price,
                     gas_limit: value.gas_limit.into(),
                     to: TxKind::from(value.to.map(Into::into)),
                     value: value.value.into(),
@@ -206,8 +208,8 @@ impl From<TransactionInput> for AlloyTransaction {
                 TxEip1559 {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
-                    max_fee_per_gas: value.gas_price.into(),
-                    max_priority_fee_per_gas: value.gas_price.into(),
+                    max_fee_per_gas: value.gas_price,
+                    max_priority_fee_per_gas: value.gas_price,
                     gas_limit: value.gas_limit.into(),
                     to: TxKind::from(value.to.map(Into::into)),
                     value: value.value.into(),
@@ -223,8 +225,8 @@ impl From<TransactionInput> for AlloyTransaction {
                 TxEip4844Variant::TxEip4844(TxEip4844 {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
-                    max_fee_per_gas: value.gas_price.into(),
-                    max_priority_fee_per_gas: value.gas_price.into(),
+                    max_fee_per_gas: value.gas_price,
+                    max_priority_fee_per_gas: value.gas_price,
                     gas_limit: value.gas_limit.into(),
                     to: value.to.map(Into::into).unwrap_or_default(),
                     value: value.value.into(),
@@ -243,8 +245,8 @@ impl From<TransactionInput> for AlloyTransaction {
                     chain_id: value.chain_id.unwrap_or_default().into(),
                     nonce: value.nonce.into(),
                     gas_limit: value.gas_limit.into(),
-                    max_fee_per_gas: value.gas_price.into(),
-                    max_priority_fee_per_gas: value.gas_price.into(),
+                    max_fee_per_gas: value.gas_price,
+                    max_priority_fee_per_gas: value.gas_price,
                     to: value.to.map(Into::into).unwrap_or_default(),
                     value: value.value.into(),
                     input: value.input.clone().into(),
@@ -260,7 +262,7 @@ impl From<TransactionInput> for AlloyTransaction {
                 TxLegacy {
                     chain_id: value.chain_id.map(Into::into),
                     nonce: value.nonce.into(),
-                    gas_price: value.gas_price.into(),
+                    gas_price: value.gas_price,
                     gas_limit: value.gas_limit.into(),
                     to: TxKind::from(value.to.map(Into::into)),
                     value: value.value.into(),
@@ -276,7 +278,7 @@ impl From<TransactionInput> for AlloyTransaction {
             block_hash: None,
             block_number: None,
             transaction_index: None,
-            effective_gas_price: Some(value.gas_price.into()),
+            effective_gas_price: Some(value.gas_price),
         }
     }
 }

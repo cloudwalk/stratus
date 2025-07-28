@@ -7,15 +7,15 @@ use std::iter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::anyhow;
 use rocksdb::ColumnFamilyRef;
+use rocksdb::DB;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
 use rocksdb::ReadOptions;
 use rocksdb::WriteBatch;
-use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 

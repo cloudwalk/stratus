@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::io::stdout;
 use std::io::IsTerminal;
+use std::io::stdout;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
@@ -13,18 +13,18 @@ use opentelemetry::KeyValue;
 use opentelemetry_otlp::Protocol;
 use opentelemetry_otlp::SpanExporterBuilder;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::Resource as SdkResource;
 use opentelemetry_sdk::runtime;
 use opentelemetry_sdk::trace;
 use opentelemetry_sdk::trace::BatchConfigBuilder;
 use opentelemetry_sdk::trace::Tracer as SdkTracer;
-use opentelemetry_sdk::Resource as SdkResource;
 use tonic::metadata::MetadataKey;
 use tonic::metadata::MetadataMap;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
 use tracing_subscriber::fmt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::Layer;
 
 use crate::ext::spawn_named;
 use crate::infra::build_info;

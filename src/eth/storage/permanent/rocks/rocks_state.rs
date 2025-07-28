@@ -1,20 +1,20 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::time::Duration;
 use std::time::Instant;
 
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
+use rocksdb::DB;
 use rocksdb::Direction;
 use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
-use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 use sugars::btmap;
@@ -371,14 +371,15 @@ impl RocksStorageState {
 
                 let key = (address.into(), (index).into(), block_number.into());
 
-                if let Some(((rocks_address, rocks_index, block), value)) = self.account_slots_history.seek(key)? {
-                    if rocks_index == index.into() && rocks_address == address.into() {
-                        tracing::debug!(?block, ?rocks_index, ?rocks_address, "slot found in rocksdb storage");
-                        return Ok(Some(Slot {
-                            index: rocks_index.into(),
-                            value: value.into_inner().into(),
-                        }));
-                    }
+                if let Some(((rocks_address, rocks_index, block), value)) = self.account_slots_history.seek(key)?
+                    && rocks_index == index.into()
+                    && rocks_address == address.into()
+                {
+                    tracing::debug!(?block, ?rocks_index, ?rocks_address, "slot found in rocksdb storage");
+                    return Ok(Some(Slot {
+                        index: rocks_index.into(),
+                        value: value.into_inner().into(),
+                    }));
                 }
                 Ok(None)
             }
@@ -406,11 +407,11 @@ impl RocksStorageState {
 
                 let key = (address.into(), block_number.into());
 
-                if let Some(((addr, block), account_info)) = self.accounts_history.seek(key)? {
-                    if addr == address.into() {
-                        tracing::debug!(?block, ?address, "account found in rocksdb storage");
-                        return Ok(Some(account_info.to_account(address)));
-                    }
+                if let Some(((addr, block), account_info)) = self.accounts_history.seek(key)?
+                    && addr == address.into()
+                {
+                    tracing::debug!(?block, ?address, "account found in rocksdb storage");
+                    return Ok(Some(account_info.to_account(address)));
                 }
                 Ok(None)
             }
@@ -917,6 +918,7 @@ mod tests {
                     ..Faker.fake()
                 },
                 transactions: vec![TransactionMined {
+                    block_number: number.into(),
                     logs: vec![Faker.fake(), Faker.fake()],
                     ..Faker.fake()
                 }],

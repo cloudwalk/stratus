@@ -90,7 +90,6 @@ impl_single_version_cf_value!(CfAccountSlotsHistoryValue, SlotValueRocksdb, Slot
 impl_single_version_cf_value!(CfTransactionsValue, BlockNumberRocksdb, BlockNumber);
 impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
-impl_single_version_cf_value!(CfLogsValue, BlockNumberRocksdb, BlockNumber);
 #[cfg(feature = "replication")]
 impl_single_version_cf_value!(CfReplicationLogsValue, BytesRocksdb, WriteBatch);
 
@@ -114,7 +113,6 @@ impl_to_cf_name!(CfAccountSlotsHistoryValue, "account_slots_history");
 impl_to_cf_name!(CfTransactionsValue, "transactions");
 impl_to_cf_name!(CfBlocksByNumberValue, "blocks_by_number");
 impl_to_cf_name!(CfBlocksByHashValue, "blocks_by_hash");
-impl_to_cf_name!(CfLogsValue, "logs");
 #[cfg(feature = "replication")]
 impl_to_cf_name!(CfReplicationLogsValue, "replication_logs");
 /// Test that deserialization works for each variant of the enum.
@@ -150,17 +148,14 @@ mod tests {
     use std::marker::PhantomData;
     use std::path::Path;
 
-    use anyhow::bail;
-    use anyhow::ensure;
     use anyhow::Context;
     use anyhow::Result;
-    use fake::Dummy;
-    use fake::Faker;
+    use anyhow::bail;
+    use anyhow::ensure;
 
     use super::*;
     use crate::ext::not;
     use crate::ext::type_basename;
-    use crate::utils::test_utils::fake_first;
     use crate::utils::test_utils::glob_to_string_paths;
 
     /// A drop bomb that guarantees that all variants of an enum have been tested.
@@ -225,18 +220,45 @@ mod tests {
         glob_to_string_paths(pattern).context("failed to get all bincode snapshots from folder")
     }
 
+    fn load_or_generate_json_fixture<CfValue>(cf_name: &str, _variant_name: &str) -> Result<CfValue>
+    where
+        CfValue: for<'de> Deserialize<'de> + Serialize + fake::Dummy<fake::Faker> + ToCfName,
+    {
+        let json_path = format!("tests/fixtures/cf_versions/{cf_name}/{cf_name}.json");
+        let json_parent_path = format!("tests/fixtures/cf_versions/{cf_name}");
+
+        // Try to load existing fixture first
+        if Path::new(&json_path).exists() {
+            let json_content = fs::read_to_string(&json_path).with_context(|| format!("failed to read JSON fixture at {json_path}"))?;
+            return serde_json::from_str(&json_content).with_context(|| format!("failed to deserialize CfValue from JSON fixture at {json_path}"));
+        }
+
+        // Generate fixture if it doesn't exist and DANGEROUS_UPDATE_SNAPSHOTS is set
+        if env::var("DANGEROUS_UPDATE_SNAPSHOTS").is_ok() {
+            let generated_fixture = crate::utils::test_utils::fake_first::<CfValue>();
+            let json_content =
+                serde_json::to_string_pretty(&generated_fixture).with_context(|| format!("failed to serialize generated fixture for {cf_name}"))?;
+
+            fs::create_dir_all(&json_parent_path).with_context(|| format!("failed to create directory {json_parent_path}"))?;
+            fs::write(&json_path, &json_content).with_context(|| format!("failed to write JSON fixture to {json_path}"))?;
+
+            return Ok(generated_fixture);
+        }
+
+        bail!("JSON fixture at '{json_path}' doesn't exist and DANGEROUS_UPDATE_SNAPSHOTS is not set");
+    }
+
     /// Store snapshots of the current serialization format for each version.
     #[test]
     fn test_snapshot_bincode_deserialization_for_single_version_enums() {
-        fn test_deserialization<CfValue, Inner, F>(inner_to_cf_value: F) -> Result<TestRunConfirmation<CfValue>>
+        fn test_deserialization<CfValue>() -> Result<TestRunConfirmation<CfValue>>
         where
-            CfValue: From<Inner> + for<'de> Deserialize<'de> + Serialize + Clone + Debug + PartialEq + Into<&'static str> + ToCfName,
-            F: FnOnce(Inner) -> CfValue,
-            Inner: Dummy<Faker>,
+            CfValue: for<'de> Deserialize<'de> + Serialize + Clone + Debug + PartialEq + Into<&'static str> + ToCfName + fake::Dummy<fake::Faker>,
         {
-            let expected: CfValue = inner_to_cf_value(fake_first::<Inner>());
-            let variant_name: &'static str = expected.clone().into();
             let cf_name = CfValue::CF_NAME;
+            // For single version enums, we expect V1 variant
+            let variant_name = "V1";
+            let expected: CfValue = load_or_generate_json_fixture(cf_name, variant_name)?;
 
             let snapshot_parent_path = format!("tests/fixtures/cf_versions/{cf_name}");
             let snapshot_path = format!("{snapshot_parent_path}/{variant_name}.bincode");
@@ -285,20 +307,18 @@ mod tests {
         let mut transactions_checker = EnumCoverageDropBombChecker::<CfTransactionsValue>::new();
         let mut blocks_by_number_checker = EnumCoverageDropBombChecker::<CfBlocksByNumberValue>::new();
         let mut blocks_by_hash_checker = EnumCoverageDropBombChecker::<CfBlocksByHashValue>::new();
-        let mut logs_checker = EnumCoverageDropBombChecker::<CfLogsValue>::new();
         #[cfg(feature = "replication")]
         let mut replication_logs_checker = EnumCoverageDropBombChecker::<CfReplicationLogsValue>::new();
 
-        accounts_checker.add(test_deserialization::<_, AccountRocksdb, _>(CfAccountsValue::V1).unwrap());
-        accounts_history_checker.add(test_deserialization::<_, AccountRocksdb, _>(CfAccountsHistoryValue::V1).unwrap());
-        account_slots_checker.add(test_deserialization::<_, SlotValueRocksdb, _>(CfAccountSlotsValue::V1).unwrap());
-        account_slots_history_checker.add(test_deserialization::<_, SlotValueRocksdb, _>(CfAccountSlotsHistoryValue::V1).unwrap());
-        transactions_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfTransactionsValue::V1).unwrap());
-        blocks_by_number_checker.add(test_deserialization::<_, BlockRocksdb, _>(CfBlocksByNumberValue::V1).unwrap());
-        blocks_by_hash_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfBlocksByHashValue::V1).unwrap());
-        logs_checker.add(test_deserialization::<_, BlockNumberRocksdb, _>(CfLogsValue::V1).unwrap());
+        accounts_checker.add(test_deserialization::<CfAccountsValue>().unwrap());
+        accounts_history_checker.add(test_deserialization::<CfAccountsHistoryValue>().unwrap());
+        account_slots_checker.add(test_deserialization::<CfAccountSlotsValue>().unwrap());
+        account_slots_history_checker.add(test_deserialization::<CfAccountSlotsHistoryValue>().unwrap());
+        transactions_checker.add(test_deserialization::<CfTransactionsValue>().unwrap());
+        blocks_by_number_checker.add(test_deserialization::<CfBlocksByNumberValue>().unwrap());
+        blocks_by_hash_checker.add(test_deserialization::<CfBlocksByHashValue>().unwrap());
         #[cfg(feature = "replication")]
-        replication_logs_checker.add(test_deserialization::<_, BytesRocksdb, _>(CfReplicationLogsValue::V1).unwrap());
+        replication_logs_checker.add(test_deserialization::<CfReplicationLogsValue>().unwrap());
     }
 }
 

@@ -15,7 +15,7 @@ impl From<DifficultyRocksdb> for Difficulty {
 
 impl From<Difficulty> for DifficultyRocksdb {
     fn from(value: Difficulty) -> Self {
-        Self(value.0 .0)
+        Self(value.0.into_limbs())
     }
 }
 

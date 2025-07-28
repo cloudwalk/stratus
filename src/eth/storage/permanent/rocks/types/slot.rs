@@ -9,7 +9,7 @@ pub struct SlotValueRocksdb([u64; 4]);
 
 impl From<SlotValue> for SlotValueRocksdb {
     fn from(item: SlotValue) -> Self {
-        SlotValueRocksdb(item.0 .0)
+        SlotValueRocksdb(item.0.into_limbs())
     }
 }
 
@@ -24,7 +24,7 @@ pub struct SlotIndexRocksdb([u64; 4]);
 
 impl From<SlotIndex> for SlotIndexRocksdb {
     fn from(item: SlotIndex) -> Self {
-        SlotIndexRocksdb(item.0 .0)
+        SlotIndexRocksdb(item.0.into_limbs())
     }
 }
 

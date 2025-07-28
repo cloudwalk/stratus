@@ -151,3 +151,7 @@ Stratus is a high-performance EVM-compatible blockchain infrastructure written i
 ## Development Best Practices
 
 - Always run `cargo check` after making changes
+
+## Storage Best Practices
+
+- When editing StratusStorage pay attention to the transient_state_lock contract, "Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block"

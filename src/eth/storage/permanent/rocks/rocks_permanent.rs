@@ -1,7 +1,7 @@
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::bail;
@@ -9,6 +9,7 @@ use anyhow::bail;
 use rocksdb::WriteBatch;
 
 use super::rocks_state::RocksStorageState;
+use crate::GlobalState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -28,10 +29,9 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::ext::SleepReason;
 use crate::ext::spawn_named;
 use crate::ext::traced_sleep;
-use crate::ext::SleepReason;
-use crate::GlobalState;
 
 #[derive(Debug)]
 pub struct RocksPermanentStorage {

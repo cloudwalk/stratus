@@ -2,8 +2,8 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::str::FromStr;
 
+use alloy_primitives::Bloom;
 use anyhow::anyhow;
-use ethereum_types::Bloom;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;

@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Context;
-use rocksdb::Options;
 use rocksdb::DB;
+use rocksdb::Options;
 
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;

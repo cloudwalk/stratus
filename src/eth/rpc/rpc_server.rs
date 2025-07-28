@@ -7,26 +7,28 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use alloy_primitives::U256;
 #[cfg(feature = "replication")]
 use alloy_primitives::hex;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
-use ethereum_types::U256;
 use futures::join;
 use http::Method;
 use itertools::Itertools;
-use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
-use jsonrpsee::server::BatchRequestConfig;
-use jsonrpsee::server::RandomStringIdProvider;
-use jsonrpsee::server::RpcModule;
-use jsonrpsee::server::Server;
-use jsonrpsee::server::ServerConfig;
-use jsonrpsee::types::Params;
-use jsonrpsee::ws_client::RpcServiceBuilder;
 use jsonrpsee::Extensions;
 use jsonrpsee::IntoSubscriptionCloseResponse;
 use jsonrpsee::PendingSubscriptionSink;
+use jsonrpsee::server::BatchRequestConfig;
+use jsonrpsee::server::RandomStringIdProvider;
+use jsonrpsee::server::RpcModule;
+use jsonrpsee::server::Server as RpcServer;
+use jsonrpsee::server::ServerConfig;
+use jsonrpsee::server::ServerHandle;
+use jsonrpsee::server::middleware::http::ProxyGetRequestLayer;
+use jsonrpsee::types::Params;
+use jsonrpsee::ws_client::RpcServiceBuilder;
+use parking_lot::RwLock;
 use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::select;
@@ -34,13 +36,16 @@ use tokio::sync::Semaphore;
 use tokio::sync::SemaphorePermit;
 use tower_http::cors::Any;
 use tower_http::cors::CorsLayer;
-use tracing::field;
-use tracing::info_span;
 use tracing::Instrument;
 use tracing::Span;
+use tracing::field;
+use tracing::info_span;
 
+use crate::GlobalState;
+use crate::NodeMode;
 use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
+use crate::config::StratusConfig;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::Importer;
@@ -72,121 +77,196 @@ use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
-use crate::eth::rpc::next_rpc_param;
-use crate::eth::rpc::next_rpc_param_or_default;
-use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::RpcContext;
 use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
+use crate::eth::rpc::next_rpc_param;
+use crate::eth::rpc::next_rpc_param_or_default;
+use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
+use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
+use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
+use crate::ext::InfallibleExt;
+use crate::ext::WatchReceiverExt;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
-use crate::ext::InfallibleExt;
 use crate::infra::build_info;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
-use crate::GlobalState;
-use crate::NodeMode;
 // -----------------------------------------------------------------------------
 // Server
 // -----------------------------------------------------------------------------
 
-/// Starts JSON-RPC server.
-#[allow(clippy::too_many_arguments)]
-pub async fn serve_rpc(
+#[derive(Clone, derive_new::new)]
+pub struct Server {
     // services
-    storage: Arc<StratusStorage>,
-    executor: Arc<Executor>,
-    miner: Arc<Miner>,
-    consensus: Option<Arc<Importer>>,
+    pub storage: Arc<StratusStorage>,
+    pub executor: Arc<Executor>,
+    pub miner: Arc<Miner>,
+    pub importer: Arc<RwLock<Option<Arc<Importer>>>>,
 
     // config
-    app_config: impl serde::Serialize,
-    rpc_config: RpcServerConfig,
-    chain_id: ChainId,
-) -> anyhow::Result<()> {
-    const TASK_NAME: &str = "rpc-server";
-    tracing::info!(%rpc_config.rpc_address, %rpc_config.rpc_max_connections, "creating {}", TASK_NAME);
+    pub app_config: StratusConfig,
+    pub rpc_config: RpcServerConfig,
+    pub chain_id: ChainId,
+}
 
-    // configure subscriptions
-    let subs = RpcSubscriptions::spawn(
-        miner.notifier_pending_txs.subscribe(),
-        miner.notifier_blocks.subscribe(),
-        miner.notifier_logs.subscribe(),
-    );
+impl Server {
+    pub async fn serve(self) -> Result<()> {
+        let this = Arc::new(self);
+        this.update_health().await;
 
-    // configure context
-    let ctx = RpcContext {
-        app_config: to_json_value(app_config),
-        chain_id,
-        client_version: "stratus",
-        gas_price: 0,
+        const TASK_NAME: &str = "rpc-server";
+        let health_worker_handle = tokio::task::spawn({
+            let this = Arc::clone(&this);
+            async move {
+                this.health_worker().await;
+            }
+        });
+        this.update_health().await;
+        let mut health = GlobalState::get_health_receiver();
+        health.mark_unchanged();
+        let (server_handle, subscriptions) = loop {
+            let (server_handle, subscriptions) = this._serve().await?;
+            let server_handle_watch = server_handle.clone();
 
-        // services
-        executor,
-        storage,
-        miner,
-        consensus: consensus.into(),
-        rpc_server: rpc_config.clone(),
+            // await for cancellation or jsonrpsee to stop (should not happen) or health changes
+            select! {
+                // If the server stop unexpectedly, shutdown stratus and break the loop
+                _ = server_handle_watch.stopped() => {
+                    GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
+                    break (server_handle, subscriptions);
+                },
+                // If a shutdown is requested, stop the server and break the loop
+                _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
+                    let _ = server_handle.stop();
+                    break (server_handle, subscriptions);
+                },
+                // If the health state changes to unhealthy, stop the server and subscriptions and recreate them (causing all connections to be dropped)
+                _ = health.wait_for_change(|healthy| GlobalState::restart_on_unhealthy() && !healthy) => {
+                    tracing::info!("health state changed to unhealthy, restarting the rpc server");
+                    let _ = server_handle.stop();
+                    subscriptions.abort();
+                    join!(server_handle.stopped(), subscriptions.stopped());
+                }
+            }
+        };
+        let res = join!(server_handle.stopped(), subscriptions.stopped(), health_worker_handle);
+        res.2?;
+        Ok(())
+    }
 
-        // subscriptions
-        subs: Arc::clone(&subs.connected),
-    };
+    /// Starts JSON-RPC server.
+    async fn _serve(&self) -> anyhow::Result<(ServerHandle, RpcSubscriptionsHandles)> {
+        let this = self.clone();
+        const TASK_NAME: &str = "rpc-server";
+        tracing::info!(%this.rpc_config.rpc_address, %this.rpc_config.rpc_max_connections, "creating {}", TASK_NAME);
 
-    // configure module
-    let mut module = RpcModule::<RpcContext>::new(ctx);
-    module = register_methods(module)?;
+        // configure subscriptions
+        let subs = RpcSubscriptions::spawn(
+            this.miner.notifier_pending_txs.subscribe(),
+            this.miner.notifier_blocks.subscribe(),
+            this.miner.notifier_logs.subscribe(),
+        );
 
-    // configure middleware
-    let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
-    let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
-    let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
-        ProxyGetRequestLayer::new([
-            ("/health", "stratus_health"),
-            ("/version", "stratus_version"),
-            ("/config", "stratus_config"),
-            ("/state", "stratus_state"),
-        ])
-        .unwrap(),
-    );
+        // configure context
+        let ctx = RpcContext {
+            server: Arc::new(this.clone()),
+            client_version: "stratus",
+            gas_price: 0,
+            subs: Arc::clone(&subs.connected),
+        };
 
-    let server_config = ServerConfig::builder()
-        .set_id_provider(RandomStringIdProvider::new(8))
-        .max_connections(rpc_config.rpc_max_connections)
-        .max_response_body_size(rpc_config.rpc_max_response_size_bytes)
-        .set_batch_request_config(BatchRequestConfig::Limit(500))
-        .build();
+        // configure module
+        let mut module = RpcModule::<RpcContext>::new(ctx);
+        module = register_methods(module)?;
 
-    // serve module
-    let server = Server::builder()
-        .set_rpc_middleware(rpc_middleware)
-        .set_http_middleware(http_middleware)
-        .set_config(server_config)
-        .build(rpc_config.rpc_address)
-        .await?;
+        // configure middleware
+        let cors = CorsLayer::new().allow_methods([Method::POST]).allow_origin(Any).allow_headers(Any);
+        let rpc_middleware = RpcServiceBuilder::new().layer_fn(RpcMiddleware::new);
+        let http_middleware = tower::ServiceBuilder::new().layer(cors).layer_fn(RpcHttpMiddleware::new).layer(
+            ProxyGetRequestLayer::new([
+                ("/health", "stratus_health"),
+                ("/version", "stratus_version"),
+                ("/config", "stratus_config"),
+                ("/state", "stratus_state"),
+            ])
+            .unwrap(),
+        );
 
-    let handle_rpc_server = server.start(module);
-    let handle_rpc_server_watch = handle_rpc_server.clone();
+        let server_config = ServerConfig::builder()
+            .set_id_provider(RandomStringIdProvider::new(8))
+            .max_connections(this.rpc_config.rpc_max_connections)
+            .max_response_body_size(this.rpc_config.rpc_max_response_size_bytes)
+            .set_batch_request_config(BatchRequestConfig::Limit(500))
+            .build();
 
-    // await for cancellation or jsonrpsee to stop (should not happen)
-    select! {
-        _ = handle_rpc_server_watch.stopped() => {
-            GlobalState::shutdown_from(TASK_NAME, "finished unexpectedly");
-        },
-        _ = GlobalState::wait_shutdown_warn(TASK_NAME) => {
-            let _ = handle_rpc_server.stop();
+        // serve module
+        let server = RpcServer::builder()
+            .set_rpc_middleware(rpc_middleware)
+            .set_http_middleware(http_middleware)
+            .set_config(server_config)
+            .build(this.rpc_config.rpc_address)
+            .await?;
+
+        let handle_rpc_server = server.start(module);
+        Ok((handle_rpc_server, subs.handles))
+    }
+
+    pub async fn health_worker(&self) {
+        // Create an interval that ticks at the configured interval
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(self.rpc_config.health_check_interval_ms));
+
+        // Enter an infinite loop to periodically run the health check
+        loop {
+            // Call the health function and ignore its result
+            self.update_health().await;
+
+            // Wait for the next tick
+            interval.tick().await;
+            if GlobalState::is_shutdown() {
+                break;
+            }
         }
     }
 
-    // await rpc server and subscriptions to finish
-    join!(handle_rpc_server.stopped(), subs.handles.stopped());
+    async fn update_health(&self) {
+        let is_healthy = self.health().await;
+        GlobalState::set_health(is_healthy);
+        metrics::set_consensus_is_ready(if is_healthy { 1u64 } else { 0u64 });
+    }
 
-    Ok(())
+    fn read_importer(&self) -> Option<Arc<Importer>> {
+        self.importer.read().as_ref().map(Arc::clone)
+    }
+
+    pub fn set_importer(&self, importer: Option<Arc<Importer>>) {
+        *self.importer.write() = importer;
+    }
+
+    async fn health(&self) -> bool {
+        match GlobalState::get_node_mode() {
+            NodeMode::Leader | NodeMode::FakeLeader => true,
+            NodeMode::Follower =>
+                if GlobalState::is_importer_shutdown() {
+                    tracing::warn!("stratus is unhealthy because importer is shutdown");
+                    false
+                } else {
+                    match self.read_importer() {
+                        Some(importer) => importer.should_serve().await,
+                        None => {
+                            tracing::warn!("stratus is unhealthy because importer is not available");
+                            false
+                        }
+                    }
+                },
+        }
+    }
 }
 
 fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModule<RpcContext>> {
@@ -217,6 +297,8 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
+    module.register_method("stratus_enableRestartOnUnhealthy", stratus_enable_restart_on_unhealthy)?;
+    module.register_method("stratus_disableRestartOnUnhealthy", stratus_disable_restart_on_unhealthy)?;
     module.register_async_method("stratus_changeToLeader", stratus_change_to_leader)?;
     module.register_async_method("stratus_changeToFollower", stratus_change_to_follower)?;
     module.register_async_method("stratus_initImporter", stratus_init_importer)?;
@@ -286,7 +368,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
 #[cfg(feature = "dev")]
 fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    ctx.miner.mine_local_and_commit()?;
+    ctx.server.miner.mine_local_and_commit()?;
     Ok(to_json_value(true))
 }
 
@@ -296,7 +378,7 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
     use crate::log_and_err;
 
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
-    let latest = ctx.storage.read_block(BlockFilter::Latest)?;
+    let latest = ctx.server.storage.read_block(BlockFilter::Latest)?;
     match latest {
         Some(block) => UnixTime::set_offset(block.header.timestamp, timestamp)?,
         None => return log_and_err!("reading latest block returned None")?,
@@ -308,28 +390,21 @@ fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Ext
 // Status - Health checks
 // -----------------------------------------------------------------------------
 
-async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+#[allow(unused_variables)]
+async fn stratus_health(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    #[cfg(feature = "dev")]
+    ctx.server.update_health().await;
+
     if GlobalState::is_shutdown() {
         tracing::warn!("liveness check failed because of shutdown");
         return Err(StateError::StratusShutdown.into());
     }
 
-    let should_serve = match GlobalState::get_node_mode() {
-        NodeMode::Leader | NodeMode::FakeLeader => true,
-        NodeMode::Follower => match context.consensus() {
-            Some(consensus) => consensus.should_serve().await,
-            None => false,
-        },
-    };
-
-    if not(should_serve) {
-        tracing::warn!("readiness check failed because consensus is not ready");
-        metrics::set_consensus_is_ready(0_u64);
-        return Err(StateError::StratusNotReady.into());
+    if GlobalState::is_healthy() {
+        Ok(json!(true))
+    } else {
+        Err(StateError::StratusNotReady.into())
     }
-
-    metrics::set_consensus_is_ready(1_u64);
-    Ok(json!(true))
 }
 
 // -----------------------------------------------------------------------------
@@ -338,7 +413,7 @@ async fn stratus_health(_: Params<'_>, context: Arc<RpcContext>, _: Extensions) 
 
 #[cfg(feature = "dev")]
 fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    ctx.storage.reset_to_genesis()?;
+    ctx.server.storage.reset_to_genesis()?;
     Ok(to_json_value(true))
 }
 
@@ -350,7 +425,7 @@ fn stratus_set_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, _: Extension
 
     tracing::info!(%address, %index, %value, "setting storage at address and index");
 
-    ctx.storage.set_storage_at(address, index, value)?;
+    ctx.server.storage.set_storage_at(address, index, value)?;
 
     Ok(to_json_value(true))
 }
@@ -362,7 +437,7 @@ fn stratus_set_nonce(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) ->
 
     tracing::info!(%address, %nonce, "setting nonce for address");
 
-    ctx.storage.set_nonce(address, nonce)?;
+    ctx.server.storage.set_nonce(address, nonce)?;
 
     Ok(to_json_value(true))
 }
@@ -374,7 +449,7 @@ fn stratus_set_balance(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) 
 
     tracing::info!(%address, %balance, "setting balance for address");
 
-    ctx.storage.set_balance(address, balance)?;
+    ctx.server.storage.set_balance(address, balance)?;
 
     Ok(to_json_value(true))
 }
@@ -386,7 +461,7 @@ fn stratus_set_code(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> 
 
     tracing::info!(%address, code_size = %code.0.len(), "setting code for address");
 
-    ctx.storage.set_code(address, code)?;
+    ctx.server.storage.set_code(address, code)?;
 
     Ok(to_json_value(true))
 }
@@ -438,7 +513,7 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     tracing::info!("miner mode changed to interval(1s) successfully");
 
     GlobalState::set_node_mode(NodeMode::Leader);
-    ctx.storage.clear_cache();
+    ctx.server.storage.clear_cache();
     tracing::info!("node mode changed to leader successfully, cache cleared");
 
     Ok(json!(true))
@@ -464,7 +539,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         return Err(StateError::TransactionsEnabled.into());
     }
 
-    let pending_txs = ctx.storage.pending_transactions();
+    let pending_txs = ctx.server.storage.pending_transactions();
     if not(pending_txs.is_empty()) {
         tracing::error!(pending_txs = ?pending_txs.len(), "cannot change to follower mode with pending transactions");
         return Err(StorageError::PendingTransactionsExist {
@@ -481,7 +556,7 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
     tracing::info!("miner mode changed to external successfully");
 
     GlobalState::set_node_mode(NodeMode::Follower);
-    ctx.storage.clear_cache();
+    ctx.server.storage.clear_cache();
     tracing::info!("storage cache cleared");
 
     tracing::info!("initializing importer");
@@ -543,12 +618,12 @@ fn stratus_shutdown_importer(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) 
         return Err(StateError::StratusNotFollower.into());
     }
 
-    if GlobalState::is_importer_shutdown() && ctx.consensus().is_none() {
+    if GlobalState::is_importer_shutdown() && ctx.server.read_importer().is_none() {
         tracing::error!("importer is already shut down");
         return Err(ImporterError::AlreadyShutdown.into());
     }
 
-    ctx.set_consensus(None);
+    ctx.server.set_importer(None);
 
     const TASK_NAME: &str = "rpc-server::importer-shutdown";
     GlobalState::shutdown_importer_from(TASK_NAME, "received importer shutdown request");
@@ -577,14 +652,14 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
         return Err(StateError::TransactionsEnabled.into());
     }
 
-    let previous_mode = ctx.miner.mode();
+    let previous_mode = ctx.server.miner.mode();
 
     if previous_mode == new_mode {
         tracing::warn!(?new_mode, current = ?new_mode, "miner mode already set, skipping");
         return Ok(json!(false));
     }
 
-    if not(ctx.miner.is_paused()) && previous_mode.is_interval() {
+    if not(ctx.server.miner.is_paused()) && previous_mode.is_interval() {
         return log_and_err!("can't change miner mode from Interval without pausing it first").map_err(Into::into);
     }
 
@@ -592,7 +667,7 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
         MinerMode::External => {
             tracing::info!("changing miner mode to External");
 
-            let pending_txs = ctx.storage.pending_transactions();
+            let pending_txs = ctx.server.storage.pending_transactions();
             if not(pending_txs.is_empty()) {
                 tracing::error!(pending_txs = ?pending_txs.len(), "cannot change miner mode to External with pending transactions");
                 return Err(StorageError::PendingTransactionsExist {
@@ -601,17 +676,17 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
                 .into());
             }
 
-            ctx.miner.switch_to_external_mode().await;
+            ctx.server.miner.switch_to_external_mode().await;
         }
         MinerMode::Interval(duration) => {
             tracing::info!(duration = ?duration, "changing miner mode to Interval");
 
-            if ctx.consensus().is_some() {
+            if ctx.server.read_importer().is_some() {
                 tracing::error!("cannot change miner mode to Interval with consensus set");
                 return Err(ConsensusError::Set.into());
             }
 
-            ctx.miner.start_interval_mining(duration).await;
+            ctx.server.miner.start_interval_mining(duration).await;
         }
         MinerMode::Automine => {
             return log_and_err!("Miner mode change to 'automine' is unsupported.").map_err(Into::into);
@@ -647,19 +722,31 @@ fn stratus_disable_transactions(_: Params<'_>, _: &RpcContext, ext: &Extensions)
 
 fn stratus_enable_miner(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<bool, StratusError> {
     ext.authentication().auth_admin()?;
-    ctx.miner.unpause();
+    ctx.server.miner.unpause();
     Ok(true)
 }
 
 fn stratus_disable_miner(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<bool, StratusError> {
     ext.authentication().auth_admin()?;
-    ctx.miner.pause();
+    ctx.server.miner.pause();
     Ok(false)
 }
 
 /// Returns the count of executed transactions waiting to enter the next block.
 fn stratus_pending_transactions_count(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> usize {
-    ctx.storage.pending_transactions().len()
+    ctx.server.storage.pending_transactions().len()
+}
+
+fn stratus_disable_restart_on_unhealthy(_: Params<'_>, _: &RpcContext, ext: &Extensions) -> Result<bool, StratusError> {
+    ext.authentication().auth_admin()?;
+    GlobalState::set_restart_on_unhealthy(false);
+    Ok(GlobalState::restart_on_unhealthy())
+}
+
+fn stratus_enable_restart_on_unhealthy(_: Params<'_>, _: &RpcContext, ext: &Extensions) -> Result<bool, StratusError> {
+    ext.authentication().auth_admin()?;
+    GlobalState::set_restart_on_unhealthy(true);
+    Ok(GlobalState::restart_on_unhealthy())
 }
 
 // -----------------------------------------------------------------------------
@@ -670,9 +757,9 @@ fn stratus_version(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<Json
     Ok(build_info::as_json())
 }
 
-fn stratus_config(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_config(_: Params<'_>, ctx: &RpcContext, ext: &Extensions) -> Result<StratusConfig, StratusError> {
     ext.authentication().auth_admin()?;
-    Ok(ctx.app_config.clone())
+    Ok(ctx.server.app_config.clone())
 }
 
 fn stratus_state(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
@@ -706,11 +793,11 @@ async fn net_listening(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
 }
 
 fn net_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> String {
-    ctx.chain_id.to_string()
+    ctx.server.chain_id.to_string()
 }
 
 fn eth_chain_id(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> String {
-    hex_num(ctx.chain_id)
+    hex_num(ctx.server.chain_id)
 }
 
 fn web3_client_version(_: Params<'_>, ctx: &RpcContext, _: &Extensions) -> String {
@@ -735,7 +822,7 @@ fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     let _method_enter = info_span!("rpc::eth_blockNumber", block_number = field::Empty).entered();
 
     // execute
-    let block_number = ctx.storage.read_mined_block_number()?;
+    let block_number = ctx.server.storage.read_mined_block_number()?;
     Span::with(|s| s.rec_str("block_number", &block_number));
 
     Ok(to_json_value(block_number))
@@ -752,7 +839,7 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     // track
     tracing::info!(%filter, "reading block and receipts");
 
-    let Some(block) = ctx.storage.read_block(filter)? else {
+    let Some(block) = ctx.server.storage.read_block(filter)? else {
         tracing::info!(%filter, "block not found");
         return Ok(JsonValue::Null);
     };
@@ -780,7 +867,7 @@ fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     tracing::info!(%filter, "reading replication log");
 
     // Resolve the block filter to a specific block number
-    let block_number = match ctx.storage.read_block(filter)? {
+    let block_number = match ctx.server.storage.read_block(filter)? {
         Some(block) => block.number(),
         None => {
             tracing::info!(%filter, "block not found");
@@ -789,7 +876,7 @@ fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     };
 
     // execute
-    let replication_log = ctx.storage.read_replication_log(block_number)?;
+    let replication_log = ctx.server.storage.read_replication_log(block_number)?;
 
     match replication_log {
         Some(log) => {
@@ -849,7 +936,7 @@ fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcC
     tracing::info!(%filter, %full_transactions, "reading block");
 
     // execute
-    let block = ctx.storage.read_block(filter)?;
+    let block = ctx.server.storage.read_block(filter)?;
     Span::with(|s| {
         s.record("found", block.is_some());
         if let Some(ref block) = block {
@@ -893,7 +980,7 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     tracing::info!(%tx_hash, "reading transaction");
 
     // execute
-    let tx = ctx.storage.read_transaction(tx_hash)?;
+    let tx = ctx.server.storage.read_transaction(tx_hash)?;
     Span::with(|s| {
         s.record("found", tx.is_some());
     });
@@ -919,7 +1006,7 @@ fn rpc_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>) -> Resu
     tracing::info!("reading transaction receipt");
 
     // execute
-    let tx = ctx.storage.read_transaction(tx_hash)?;
+    let tx = ctx.server.storage.read_transaction(tx_hash)?;
     Span::with(|s| {
         s.record("found", tx.is_some());
     });
@@ -977,12 +1064,12 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     tracing::info!("executing eth_estimateGas");
 
     // execute
-    match ctx.executor.execute_local_call(call, PointInTime::Mined) {
+    match ctx.server.executor.execute_local_call(call, PointInTime::Mined) {
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
             let overestimated_gas = (result.gas.as_u64()) as f64 * 1.1;
-            Ok(hex_num(overestimated_gas as u64))
+            Ok(hex_num(U256::from(overestimated_gas as u64)))
         }
 
         // result is failure
@@ -1013,8 +1100,8 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<EvmExecution, St
     tracing::info!(%filter, "executing eth_call");
 
     // execute
-    let point_in_time = ctx.storage.translate_to_point_in_time(filter)?;
-    ctx.executor.execute_local_call(call, point_in_time)
+    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
+    ctx.server.executor.execute_local_call(call, point_in_time)
 }
 
 fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
@@ -1049,12 +1136,13 @@ fn debug_trace_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extens
     let (params, tx_hash) = next_rpc_param::<Hash>(params.sequence())?;
     let (_, opts) = next_rpc_param_or_default::<Option<GethDebugTracingOptions>>(params)?;
     let trace_unsuccessful_only = ctx
-        .rpc_server
+        .server
+        .rpc_config
         .rpc_debug_trace_unsuccessful_only
         .as_ref()
         .is_some_and(|inner| inner.contains(ext.rpc_client()));
 
-    match ctx.executor.trace_transaction(tx_hash, opts, trace_unsuccessful_only) {
+    match ctx.server.executor.trace_transaction(tx_hash, opts, trace_unsuccessful_only) {
         Ok(result) => {
             tracing::info!(?tx_hash, "executed debug_traceTransaction successfully");
             Ok(result)
@@ -1133,15 +1221,15 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
 
     // execute locally or forward to leader
     match GlobalState::get_node_mode() {
-        NodeMode::Leader | NodeMode::FakeLeader => match ctx.executor.execute_local_transaction(tx) {
+        NodeMode::Leader | NodeMode::FakeLeader => match ctx.server.executor.execute_local_transaction(tx) {
             Ok(_) => Ok(hex_data(tx_hash)),
             Err(e) => {
                 tracing::warn!(reason = ?e, ?tx_hash, "failed to execute eth_sendRawTransaction");
                 Err(e)
             }
         },
-        NodeMode::Follower => match ctx.consensus() {
-            Some(consensus) => match Handle::current().block_on(consensus.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
+        NodeMode::Follower => match &ctx.server.read_importer() {
+            Some(importer) => match Handle::current().block_on(importer.forward_to_leader(tx_hash, tx_data, ext.rpc_client())) {
                 Ok(hash) => Ok(hex_data(hash)),
                 Err(e) => Err(e),
             },
@@ -1173,13 +1261,13 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
 
     // parse params
     let (_, filter_input) = next_rpc_param_or_default::<LogFilterInput>(params.sequence())?;
-    let mut filter = filter_input.parse(&ctx.storage)?;
+    let mut filter = filter_input.parse(&ctx.server.storage)?;
 
     // for this operation, the filter always need the end block specified to calculate the difference
     let to_block = match filter.to_block {
         Some(block) => block,
         None => {
-            let block = ctx.storage.read_mined_block_number()?;
+            let block = ctx.server.storage.read_mined_block_number()?;
             filter.to_block = Some(block);
             block
         }
@@ -1205,7 +1293,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     }
 
     // execute
-    let logs = ctx.storage.read_logs(&filter)?;
+    let logs = ctx.server.storage.read_logs(&filter)?;
     Ok(JsonValue::Array(logs.into_iter().map(|x| x.to_json_rpc_log()).collect()))
 }
 
@@ -1233,8 +1321,8 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     });
     tracing::info!(%address, %filter, "reading account nonce");
 
-    let point_in_time = ctx.storage.translate_to_point_in_time(filter)?;
-    let account = ctx.storage.read_account(address, point_in_time)?;
+    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
+    let account = ctx.server.storage.read_account(address, point_in_time, ReadKind::RPC)?;
     Ok(hex_num(account.nonce))
 }
 
@@ -1255,8 +1343,8 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) ->
     tracing::info!(%address, %filter, "reading account native balance");
 
     // execute
-    let point_in_time = ctx.storage.translate_to_point_in_time(filter)?;
-    let account = ctx.storage.read_account(address, point_in_time)?;
+    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
+    let account = ctx.server.storage.read_account(address, point_in_time, ReadKind::RPC)?;
     Ok(hex_num(account.balance))
 }
 
@@ -1276,8 +1364,8 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     });
 
     // execute
-    let point_in_time = ctx.storage.translate_to_point_in_time(filter)?;
-    let account = ctx.storage.read_account(address, point_in_time)?;
+    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
+    let account = ctx.server.storage.read_account(address, point_in_time, ReadKind::RPC)?;
 
     Ok(account.bytecode.map(|bytecode| hex_data(bytecode.original_bytes())).unwrap_or_else(hex_null))
 }
@@ -1304,7 +1392,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
         };
 
         // check subscription limits
-        if let Err(e) = ctx.subs.check_client_subscriptions(ctx.rpc_server.rpc_max_subscriptions, client).await {
+        if let Err(e) = ctx.subs.check_client_subscriptions(ctx.server.rpc_config.rpc_max_subscriptions, client).await {
             pending.reject(e).await;
             return Ok(());
         }
@@ -1325,7 +1413,7 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
 
             "logs" => {
                 let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
-                let filter = filter.parse(&ctx.storage)?;
+                let filter = filter.parse(&ctx.server.storage)?;
                 ctx.subs.add_logs_subscription(client, filter, pending.accept().await?).await;
             }
 
@@ -1363,8 +1451,8 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
     });
 
     // execute
-    let point_in_time = ctx.storage.translate_to_point_in_time(block_filter)?;
-    let slot = ctx.storage.read_slot(address, index, point_in_time)?;
+    let point_in_time = ctx.server.storage.translate_to_point_in_time(block_filter)?;
+    let slot = ctx.server.storage.read_slot(address, index, point_in_time, ReadKind::RPC)?;
 
     // It must be padded, even if it is zero.
     Ok(hex_num_zero_padded(slot.value.as_u256()))

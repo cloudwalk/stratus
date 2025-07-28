@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
-use ethereum_types::U256;
+use alloy_primitives::U64;
+use alloy_primitives::U256;
 
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
@@ -12,6 +13,7 @@ use super::wei::WeiRocksdb;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
+use crate::ext::RuintExt;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct TransactionInputRocksdb {
@@ -46,8 +48,8 @@ impl From<TransactionInput> for TransactionInputRocksdb {
             gas_limit: GasRocksdb::from(item.gas_limit),
             gas_price: WeiRocksdb::from(item.gas_price),
             v: item.v.as_u64(),
-            r: item.r.0,
-            s: item.s.0,
+            r: item.r.into_limbs(),
+            s: item.s.into_limbs(),
         }
     }
 }
@@ -65,10 +67,10 @@ impl From<TransactionInputRocksdb> for TransactionInput {
             input: item.input.into(),
             gas_limit: item.gas_limit.into(),
             gas_price: item.gas_price.into(),
-            v: item.v.into(),
-            r: U256(item.r),
-            s: U256(item.s),
-            tx_type: item.tx_type.map_into(),
+            v: U64::from(item.v),
+            r: U256::from_limbs(item.r),
+            s: U256::from_limbs(item.s),
+            tx_type: item.tx_type.map(|typ| U64::from(typ)),
         }
     }
 }
