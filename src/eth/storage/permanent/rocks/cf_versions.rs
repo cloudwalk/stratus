@@ -29,6 +29,7 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::SlotValue;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::types::old_types_hotfix::OldCfBlocksByNumberValue;
 macro_rules! impl_single_version_cf_value {
     ($name:ident, $inner_type:ty, $non_rocks_equivalent: ty) => {
@@ -92,6 +93,35 @@ impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
 #[cfg(feature = "replication")]
 impl_single_version_cf_value!(CfReplicationLogsValue, BytesRocksdb, WriteBatch);
+
+impl SerializeDeserializeWithContext for CfAccountSlotsHistoryValue {}
+impl SerializeDeserializeWithContext for CfAccountSlotsValue {}
+impl SerializeDeserializeWithContext for CfAccountsHistoryValue {}
+impl SerializeDeserializeWithContext for CfAccountsValue {}
+impl SerializeDeserializeWithContext for CfBlocksByHashValue {}
+impl SerializeDeserializeWithContext for CfTransactionsValue {}
+
+// Tuple implementations for composite keys
+impl SerializeDeserializeWithContext for (AddressRocksdb, BlockNumberRocksdb) {}
+impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb) {}
+impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb) {}
+
+impl SerializeDeserializeWithContext for CfBlocksByNumberValue {
+    fn deserialize_with_context(bytes: &[u8]) -> anyhow::Result<Self>
+    where
+        Self: for<'de> Deserialize<'de>,
+    {
+        let res = bincode::deserialize::<Self>(bytes);
+
+        match res {
+            Err(_) => Ok(bincode::deserialize::<OldCfBlocksByNumberValue>(bytes)
+                .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
+                .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<Self>()))?
+                .into()),
+            Ok(ok) => Ok(ok),
+        }
+    }
+}
 
 #[cfg_attr(not(test), allow(dead_code))]
 trait ToCfName {
@@ -319,52 +349,5 @@ mod tests {
         blocks_by_hash_checker.add(test_deserialization::<CfBlocksByHashValue>().unwrap());
         #[cfg(feature = "replication")]
         replication_logs_checker.add(test_deserialization::<CfReplicationLogsValue>().unwrap());
-    }
-}
-
-pub trait SerializeDeserializeWithContext {
-    fn deserialize_with_context(bytes: &[u8]) -> anyhow::Result<Self>
-    where
-        Self: for<'de> Deserialize<'de>,
-    {
-        bincode::deserialize::<Self>(bytes)
-            .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
-            .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<Self>()))
-    }
-
-    fn serialize_with_context(input: &Self) -> anyhow::Result<Vec<u8>>
-    where
-        Self: Serialize + Debug,
-    {
-        bincode::serialize(input).with_context(|| format!("failed to serialize '{input:?}'"))
-    }
-}
-
-impl SerializeDeserializeWithContext for CfAccountSlotsHistoryValue {}
-impl SerializeDeserializeWithContext for CfAccountSlotsValue {}
-impl SerializeDeserializeWithContext for CfAccountsHistoryValue {}
-impl SerializeDeserializeWithContext for CfAccountsValue {}
-impl SerializeDeserializeWithContext for CfBlocksByHashValue {}
-impl SerializeDeserializeWithContext for CfTransactionsValue {}
-
-// Tuple implementations for composite keys
-impl SerializeDeserializeWithContext for (AddressRocksdb, BlockNumberRocksdb) {}
-impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb) {}
-impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb) {}
-
-impl SerializeDeserializeWithContext for CfBlocksByNumberValue {
-    fn deserialize_with_context(bytes: &[u8]) -> anyhow::Result<Self>
-    where
-        Self: for<'de> Deserialize<'de>,
-    {
-        let res = bincode::deserialize::<Self>(bytes);
-
-        match res {
-            Err(_) => Ok(bincode::deserialize::<OldCfBlocksByNumberValue>(bytes)
-                .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
-                .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<Self>()))?
-                .into()),
-            Ok(ok) => Ok(ok),
-        }
     }
 }

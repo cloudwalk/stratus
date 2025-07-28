@@ -19,7 +19,7 @@ use rocksdb::WriteBatch;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 #[cfg(feature = "rocks_metrics")]
 use crate::infra::metrics;
 

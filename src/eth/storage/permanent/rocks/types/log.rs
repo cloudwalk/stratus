@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
 use crate::eth::primitives::Log;
-use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 
 type LogTopic = [u8; 32];

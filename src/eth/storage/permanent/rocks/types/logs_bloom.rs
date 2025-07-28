@@ -6,7 +6,7 @@ use alloy_primitives::Bloom;
 use anyhow::anyhow;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
-use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde_with::DeserializeFromStr, serde_with::SerializeDisplay, fake::Dummy)]

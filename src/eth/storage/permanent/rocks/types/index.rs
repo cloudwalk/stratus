@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use crate::eth::primitives::Index;
-use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Copy, Hash, fake::Dummy)]
 pub struct IndexRocksdb(pub(self) u32);

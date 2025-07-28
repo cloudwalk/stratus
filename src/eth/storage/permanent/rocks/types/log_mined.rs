@@ -5,7 +5,7 @@ use super::hash::HashRocksdb;
 use super::log::LogRocksdb;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
-use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct LogMinedRocksdb {

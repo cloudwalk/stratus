@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use crate::eth::primitives::Address;
-use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct AddressRocksdb(pub [u8; 20]);

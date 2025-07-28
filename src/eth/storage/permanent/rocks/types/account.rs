@@ -8,7 +8,7 @@ use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]

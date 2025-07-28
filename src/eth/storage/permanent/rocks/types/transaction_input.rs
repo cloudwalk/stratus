@@ -11,7 +11,7 @@ use super::hash::HashRocksdb;
 use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 use crate::ext::RuintExt;
 

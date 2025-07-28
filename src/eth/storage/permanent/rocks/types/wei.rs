@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use alloy_primitives::U256;
 
 use crate::eth::primitives::Wei;
-use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct WeiRocksdb([u64; 4]);

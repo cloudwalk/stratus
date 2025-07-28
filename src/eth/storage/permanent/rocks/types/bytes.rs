@@ -6,7 +6,7 @@ use revm::primitives::Bytes as RevmBytes;
 use rocksdb::WriteBatch;
 
 use crate::eth::primitives::Bytes;
-use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct BytesRocksdb(pub Vec<u8>);
