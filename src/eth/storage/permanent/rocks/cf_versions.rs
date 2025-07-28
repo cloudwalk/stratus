@@ -345,7 +345,6 @@ impl SerializeDeserializeWithContext for CfAccountSlotsValue {}
 impl SerializeDeserializeWithContext for CfAccountsHistoryValue {}
 impl SerializeDeserializeWithContext for CfAccountsValue {}
 impl SerializeDeserializeWithContext for CfBlocksByHashValue {}
-impl SerializeDeserializeWithContext for CfLogsValue {}
 impl SerializeDeserializeWithContext for CfTransactionsValue {}
 
 // Tuple implementations for composite keys
