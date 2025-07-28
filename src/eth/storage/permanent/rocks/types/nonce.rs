@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use crate::eth::primitives::Nonce;
+use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
@@ -23,3 +24,5 @@ impl From<Nonce> for NonceRocksdb {
 impl NonceRocksdb {
     pub const ZERO: NonceRocksdb = NonceRocksdb(0u64);
 }
+
+impl SerializeDeserializeWithContext for NonceRocksdb {}

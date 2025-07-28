@@ -10,6 +10,7 @@ use super::logs_bloom::LogsBloomRocksdb;
 use super::miner_nonce::MinerNonceRocksdb;
 use super::size::SizeRocksdb;
 use super::unix_time::UnixTimeRocksdb;
+use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct BlockHeaderRocksdb {
@@ -32,3 +33,5 @@ pub struct BlockHeaderRocksdb {
     pub total_difficulty: DifficultyRocksdb,
     pub nonce: MinerNonceRocksdb,
 }
+
+impl SerializeDeserializeWithContext for BlockHeaderRocksdb {}

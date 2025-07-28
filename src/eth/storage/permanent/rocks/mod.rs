@@ -10,7 +10,7 @@ mod rocks_permanent;
 pub mod rocks_state;
 
 /// CFs versionated by value variant.
-mod cf_versions;
+pub mod cf_versions;
 
 /// Data manipulation for column families.
 mod rocks_cf;

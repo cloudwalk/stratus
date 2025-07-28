@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use crate::eth::primitives::Difficulty;
+use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 #[serde(transparent)]
@@ -17,3 +18,5 @@ impl From<Difficulty> for DifficultyRocksdb {
         Self(value.0 .0)
     }
 }
+
+impl SerializeDeserializeWithContext for DifficultyRocksdb {}

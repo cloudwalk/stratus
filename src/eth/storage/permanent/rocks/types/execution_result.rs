@@ -1,6 +1,7 @@
 use super::bytes::BytesRocksdb;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionResult;
+use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub enum ExecutionResultRocksdb {
@@ -38,3 +39,5 @@ impl From<ExecutionResultBuilder> for (ExecutionResult, Bytes) {
         }
     }
 }
+
+impl SerializeDeserializeWithContext for ExecutionResultRocksdb {}

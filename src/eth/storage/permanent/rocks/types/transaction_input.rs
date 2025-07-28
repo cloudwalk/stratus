@@ -10,6 +10,7 @@ use super::hash::HashRocksdb;
 use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
@@ -71,3 +72,5 @@ impl From<TransactionInputRocksdb> for TransactionInput {
         }
     }
 }
+
+impl SerializeDeserializeWithContext for TransactionInputRocksdb {}

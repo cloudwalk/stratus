@@ -13,6 +13,7 @@ use revm::bytecode::LegacyRawBytecode;
 use super::bytes::BytesRocksdb;
 use super::AddressRocksdb;
 use crate::alias::RevmBytecode;
+use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub enum BytecodeRocksdb {
@@ -198,3 +199,11 @@ mod tests {
         }
     }
 }
+
+impl SerializeDeserializeWithContext for BytecodeRocksdb {}
+impl SerializeDeserializeWithContext for LegacyAnalyzedBytecodeRocksdb {}
+impl SerializeDeserializeWithContext for EofHeaderRocksdb {}
+impl SerializeDeserializeWithContext for EofBodyRocksdb {}
+impl SerializeDeserializeWithContext for TypesSectionRocksdb {}
+impl SerializeDeserializeWithContext for EofRocksdb {}
+impl SerializeDeserializeWithContext for Eip7702BytecodeRocksdb {}

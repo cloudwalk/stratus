@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use ethereum_types::Bloom;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
+use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde_with::DeserializeFromStr, serde_with::SerializeDisplay, fake::Dummy)]
@@ -34,3 +35,5 @@ impl FromStr for LogsBloomRocksdb {
         Ok(Self(bytes))
     }
 }
+
+impl SerializeDeserializeWithContext for LogsBloomRocksdb {}

@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use crate::eth::primitives::UnixTime;
+use crate::eth::storage::permanent::rocks::cf_versions::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
@@ -19,3 +20,5 @@ impl From<UnixTimeRocksdb> for UnixTime {
         value.0.into()
     }
 }
+
+impl SerializeDeserializeWithContext for UnixTimeRocksdb {}
