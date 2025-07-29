@@ -18,12 +18,10 @@ use strum::IntoStaticStr;
 use strum::VariantNames;
 
 use super::types::AccountRocksdb;
-use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
 use super::types::BlockRocksdb;
 #[cfg(feature = "replication")]
 use super::types::BytesRocksdb;
-use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
@@ -100,11 +98,8 @@ impl SerializeDeserializeWithContext for CfAccountsHistoryValue {}
 impl SerializeDeserializeWithContext for CfAccountsValue {}
 impl SerializeDeserializeWithContext for CfBlocksByHashValue {}
 impl SerializeDeserializeWithContext for CfTransactionsValue {}
-
-// Tuple implementations for composite keys
-impl SerializeDeserializeWithContext for (AddressRocksdb, BlockNumberRocksdb) {}
-impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb) {}
-impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb) {}
+#[cfg(feature = "replication")]
+impl SerializeDeserializeWithContext for CfReplicationLogsValue {}
 
 impl SerializeDeserializeWithContext for CfBlocksByNumberValue {
     fn deserialize_with_context(bytes: &[u8]) -> anyhow::Result<Self>

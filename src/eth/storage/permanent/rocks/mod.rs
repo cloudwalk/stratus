@@ -8,6 +8,10 @@ pub use rocks_state::RocksStorageState;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
+use crate::eth::storage::permanent::rocks::types::BlockNumberRocksdb;
+use crate::eth::storage::permanent::rocks::types::SlotIndexRocksdb;
+
 /// Exposed API.
 mod rocks_permanent;
 
@@ -28,6 +32,11 @@ pub mod rocks_db;
 
 /// All types to be serialized and desserialized in the db.
 pub mod types;
+
+// Tuple implementations for composite keys
+impl SerializeDeserializeWithContext for (AddressRocksdb, BlockNumberRocksdb) {}
+impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb) {}
+impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb, BlockNumberRocksdb) {}
 
 pub trait SerializeDeserializeWithContext {
     fn deserialize_with_context(bytes: &[u8]) -> anyhow::Result<Self>
