@@ -10,7 +10,7 @@ metadata:
     opentelemetry/application-name: stratus
     prometheus/application-name: stratus
     grafana/dashboard-selector: stratus
-    grafana/alert-label-selector: stratus
+    grafana/alert-label-selector: service=stratus
   labels:
     cloudwalk.io/regulation-scope: none
     cloudwalk.io/critical-level: high
