@@ -9,6 +9,8 @@ metadata:
     sentry/application-name: stratus
     opentelemetry/application-name: stratus
     prometheus/application-name: stratus
+    grafana/dashboard-selector: stratus
+    grafana/alert-label-selector: stratus
   labels:
     cloudwalk.io/regulation-scope: none
     cloudwalk.io/critical-level: high
