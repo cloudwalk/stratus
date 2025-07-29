@@ -18,6 +18,7 @@ metadata:
     - rust
     - blockchain
     - evm
+    - virtual-machine-deploy
   links:
     - url: https://github.com/cloudwalk/stratus
       title: Repository
