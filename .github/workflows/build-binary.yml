@@ -55,7 +55,7 @@ jobs:
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Install cargo-pgo
-        run: cargo install cargo-pgo
+        run: cargo install --git https://github.com/Kobzol/cargo-pgo --branch release-plz-2025-04-04T20-27-31Z --locked
 
       - name: Build instrumented binary
         run: cargo pgo instrument --profiles-dir /tmp/${{ github.sha }} build -- --bin stratus --features "$FEATURES"
