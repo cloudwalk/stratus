@@ -29,7 +29,7 @@ use stratus::eth::miner::miner::CommitItem;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalReceipts;
-use stratus::ext::spawn_named;
+use stratus::ext::spawn;
 use stratus::ext::spawn_thread;
 use stratus::log_and_err;
 use stratus::utils::DropTimer;
@@ -103,7 +103,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         block_end,
         fetch_to_execute_tx,
     );
-    spawn_named("block_fetcher", async {
+    spawn("block_fetcher", async {
         if let Err(e) = block_fetcher_fut.await {
             tracing::error!(reason = ?e, "'block-fetcher' task failed");
         }
