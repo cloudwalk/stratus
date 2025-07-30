@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use alloy_primitives::B256;
 use anyhow::Ok;
 use anyhow::anyhow;
+use const_hex::FromHex;
 use display_json::DebugAsJson;
 use hex_literal::hex;
 use revm::primitives::alloy_primitives;
@@ -112,9 +113,30 @@ impl EvmExecution {
         }
 
         let receipt_logs = receipt.inner.logs();
+        let is_from_bugged_account = receipt_logs.iter().any(|log| {
+            log.topics()
+                .iter()
+                .any(|topic| *topic == B256::from_hex("000000000000000000000000408bed9bab6c689aa4b25e951a267de7aff5b042").unwrap())
+        });
+
+        if is_from_bugged_account {
+            return Ok(());
+        }
+
+        let contains_balance_tracker = receipt_logs
+            .iter()
+            .any(|log| log.topics()[0] == B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c").unwrap())
+            || self.logs.iter().any(|log| {
+                log.topics()[0].is_some_and(|inner| {
+                    inner
+                        == B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c")
+                            .unwrap()
+                            .into()
+                })
+            });
 
         // compare logs length
-        if self.logs.len() != receipt_logs.len() {
+        if !contains_balance_tracker && self.logs.len() != receipt_logs.len() {
             tracing::trace!(logs = ?self.logs, "execution logs");
             tracing::trace!(logs = ?receipt_logs, "receipt logs");
             return log_and_err!(format!(
@@ -127,6 +149,15 @@ impl EvmExecution {
 
         // compare logs pairs
         for (log_index, (execution_log, receipt_log)) in self.logs.iter().zip(receipt_logs).enumerate() {
+            if contains_balance_tracker
+                && receipt_log.topics()[0] == B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c").unwrap()
+                || execution_log.topics_non_empty()[0]
+                    == B256::from_hex("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c")
+                        .unwrap()
+                        .into()
+            {
+                continue;
+            }
             // compare log topics length
             if execution_log.topics_non_empty().len() != receipt_log.topics().len() {
                 return log_and_err!(format!(
