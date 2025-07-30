@@ -47,7 +47,7 @@ stratus_macros = { path = "./crates/stratus_macros" }
 tokio = { version = "=1.45.0", features = [
     "rt-multi-thread",
     "macros",
-    "signal",
+    "signal"
 ] }
 tokio-util = "=0.7.11"
 
