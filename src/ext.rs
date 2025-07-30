@@ -237,7 +237,6 @@ where
     T: Send + 'static,
 {
     info_task_spawn(name);
-
     tokio::task::spawn(task)
 }
 
