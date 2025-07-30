@@ -74,7 +74,7 @@ jobs:
         uses: actions/upload-artifact@v4
         id: upload-str
         with:
-          name: stratus-${{ github.sha }}
+          name: stratus-${{ github.sha }}-instrumented
           path: target/x86_64-unknown-linux-gnu/release/stratus
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
