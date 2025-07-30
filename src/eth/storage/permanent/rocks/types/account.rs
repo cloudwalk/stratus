@@ -8,6 +8,7 @@ use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -51,3 +52,5 @@ impl From<Account> for AccountRocksdb {
         }
     }
 }
+
+impl SerializeDeserializeWithContext for AccountRocksdb {}

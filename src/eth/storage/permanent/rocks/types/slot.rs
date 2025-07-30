@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Clone, Debug, Copy, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct SlotValueRocksdb([u64; 4]);
@@ -34,3 +35,6 @@ impl From<SlotIndexRocksdb> for SlotIndex {
         SlotIndex::from(item.0)
     }
 }
+
+impl SerializeDeserializeWithContext for SlotValueRocksdb {}
+impl SerializeDeserializeWithContext for SlotIndexRocksdb {}

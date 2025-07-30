@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use alloy_primitives::B64;
 
 use crate::eth::primitives::MinerNonce;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -15,3 +16,5 @@ impl From<MinerNonceRocksdb> for MinerNonce {
         value.0.into()
     }
 }
+
+impl SerializeDeserializeWithContext for MinerNonceRocksdb {}

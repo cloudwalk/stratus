@@ -9,6 +9,7 @@ use super::log::LogRocksdb;
 use super::unix_time::UnixTimeRocksdb;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::Log;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -48,3 +49,5 @@ impl From<ExecutionRocksdb> for EvmExecution {
         }
     }
 }
+
+impl SerializeDeserializeWithContext for ExecutionRocksdb {}

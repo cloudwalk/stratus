@@ -5,6 +5,7 @@ use super::hash::HashRocksdb;
 use super::log::LogRocksdb;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct LogMinedRocksdb {
@@ -40,3 +41,5 @@ impl LogMined {
         }
     }
 }
+
+impl SerializeDeserializeWithContext for LogMinedRocksdb {}

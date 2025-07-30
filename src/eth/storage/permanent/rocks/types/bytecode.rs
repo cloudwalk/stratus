@@ -6,6 +6,7 @@ use revm::bytecode::eip7702::Eip7702Bytecode;
 use super::AddressRocksdb;
 use super::bytes::BytesRocksdb;
 use crate::alias::RevmBytecode;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub enum BytecodeRocksdb {
@@ -62,3 +63,7 @@ impl From<BytecodeRocksdb> for RevmBytecode {
         }
     }
 }
+
+impl SerializeDeserializeWithContext for BytecodeRocksdb {}
+impl SerializeDeserializeWithContext for LegacyAnalyzedBytecodeRocksdb {}
+impl SerializeDeserializeWithContext for Eip7702BytecodeRocksdb {}
