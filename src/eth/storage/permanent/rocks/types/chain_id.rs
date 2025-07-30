@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use crate::eth::primitives::ChainId;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::RuintExt;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
@@ -17,3 +18,5 @@ impl From<ChainIdRocksdb> for ChainId {
         value.0.into()
     }
 }
+
+impl SerializeDeserializeWithContext for ChainIdRocksdb {}
