@@ -14,9 +14,6 @@ updates:
         patterns:
           - "alloy-*"
           - "revm*"
-        update-types:
-          - "minor"
-          - "patch"
     labels:
       - "dependencies"
       - "rust"
