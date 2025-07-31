@@ -3,6 +3,7 @@ updates:
 
   - package-ecosystem: "cargo"
     directory: "/"
+    
     schedule:
       interval: "weekly"
       day: "monday"
@@ -14,6 +15,7 @@ updates:
         patterns:
           - "alloy-*"
           - "revm*"
+    
     labels:
       - "dependencies"
       - "rust"
