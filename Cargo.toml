@@ -150,8 +150,8 @@ tikv-jemallocator = { version = "=0.6", optional = true }
 
 [dev-dependencies]
 serde_plain = "=1.0.2"
-tempfile = "=3.10.1"
-glob = "=0.3.1"
+tempfile = "=3.14.0"
+glob = "=0.3.2"
 
 # ------------------------------------------------------------------------------
 # Build dependencies
@@ -159,17 +159,11 @@ glob = "=0.3.1"
 
 [build-dependencies]
 const-hex = "=1.14.1"
-glob = "=0.3.1"
+glob = "=0.3.2"
 hostname = "=0.4.0"
-nom = "=7.1.3"
-phf_codegen = "=0.11.2"
-vergen = { version = "=8.2.4", features = [
-    "build",
-    "cargo",
-    "git",
-    "gitcl",
-    "rustc",
-] }
+nom = "=8.0.0"
+phf_codegen = "=0.12.1"
+vergen-gitcl = { version = "=1.0.8", features = ["build", "cargo", "rustc", "si"] }
 
 # ------------------------------------------------------------------------------
 # Binaries
