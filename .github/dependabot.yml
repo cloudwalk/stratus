@@ -1,0 +1,27 @@
+version: 2
+updates:
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+
+    groups:
+      alloy-revm-updates:
+        patterns:
+          - "alloy-*"
+          - "revm*"
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "rust"
+      - "dependabot"
+
+    commit-message:
+      prefix: "deps"
+      include: "scope"
