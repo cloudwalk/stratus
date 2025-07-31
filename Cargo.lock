@@ -7325,8 +7325,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "console-subscriber"
-version = "0.2.0"
-source = "git+https://github.com/tokio-rs/console.git?rev=852a977bab71d0f6ae47c6c5c1c20b8679c9e576#852a977bab71d0f6ae47c6c5c1c20b8679c9e576"
