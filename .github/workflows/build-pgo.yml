@@ -39,15 +39,6 @@ jobs:
       - name: Set up Rust
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        id: cache-cargo
-        with:
-          prefix-key: ${{ runner.os }}-v3-cargo
-          shared-key: artifact
-          cache-provider: "github"
-          save-if: ${{ github.ref_name == 'main' && github.event_name == 'push' }}
-
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
