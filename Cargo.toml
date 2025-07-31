@@ -11,11 +11,11 @@ default-run = "stratus"
 [dependencies]
 
 # general
-anyhow = "=1.0.86"
-cfg-if = "=1.0.0"
+anyhow = "=1.0.98"
+cfg-if = "=1.0.1"
 chrono = { version = "=0.4.38", features = ["serde"] }
-const_format = "=0.2.32"
-const-hex = "=1.14.0"
+const_format = "=0.2.34"
+const-hex = "=1.14.1"
 derive_more = "=0.99.17"
 derive-new = "=0.6.0"
 hash_hasher = "=2.0.3"
@@ -40,7 +40,7 @@ strum = { version = "=0.26.2", features = ["derive"] }
 quick_cache = "=0.6.9"
 sugars = "=3.0.1"
 thiserror = "=1.0.61"
-uuid = { version = "=1.10.0", features = ["v7"]}
+uuid = { version = "=1.17.0", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
 
 # async
@@ -91,7 +91,7 @@ tower-http = { version = "=0.5.2", features = ["cors"] }
 http = "=1.1.0"
 http-body = "=1.0.1"
 http-body-util = "=0.1.2"
-bytes = "=1.9.0"
+bytes = "=1.10.1"
 
 # observability
 log = "=0.4.20"
@@ -164,7 +164,7 @@ glob = "=0.3.1"
 # ------------------------------------------------------------------------------
 
 [build-dependencies]
-const-hex = "=1.14.0"
+const-hex = "=1.14.1"
 glob = "=0.3.1"
 hostname = "=0.4.0"
 nom = "=7.1.3"
