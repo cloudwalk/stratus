@@ -16,7 +16,6 @@ use nom::character::complete::hex_digit1;
 use nom::combinator::rest;
 use nom::sequence::preceded;
 use nom::sequence::separated_pair;
-use phf_codegen;
 use vergen_gitcl::BuildBuilder;
 use vergen_gitcl::CargoBuilder;
 use vergen_gitcl::Emitter;
