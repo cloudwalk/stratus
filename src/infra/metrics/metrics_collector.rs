@@ -1,11 +1,3 @@
-//! Async metrics collector for high-performance, non-blocking metrics collection.
-//!
-//! This module provides an asynchronous metrics collection system that:
-//! - Never blocks hot paths (microsecond-level metric recording)
-//! - Never fails application logic (silent drops when buffers are full)
-//! - Maintains API compatibility with existing synchronous metrics
-//! - Provides batching and aggregation for improved performance
-
 use std::time::Duration;
 
 use tokio::sync::mpsc;
