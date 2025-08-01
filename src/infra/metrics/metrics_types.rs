@@ -5,6 +5,7 @@ use metrics::Label;
 use metrics::describe_counter;
 use metrics::describe_gauge;
 use metrics::describe_histogram;
+use rand::Rng;
 
 pub type HistogramInt = u32;
 pub type Sum = u64;
@@ -183,4 +184,21 @@ impl<T> Timed<T> {
     {
         self.result
     }
+}
+
+// -----------------------------------------------------------------------------
+// Sampling
+// -----------------------------------------------------------------------------
+
+/// Fast thread-local sampling check with global enable/disable
+#[inline]
+pub fn should_sample(rate: f64) -> bool {
+    if !crate::infra::metrics::is_sampling_enabled() {
+        return true;
+    }
+    
+    if rate >= 1.0 { return true; }
+    if rate <= 0.0 { return false; }
+    
+    rand::rng().random_bool(rate)
 }

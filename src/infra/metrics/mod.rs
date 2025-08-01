@@ -5,7 +5,7 @@ mod metrics_types;
 
 use std::time::Instant;
 
-pub use metrics_config::MetricsConfig;
+pub use metrics_config::{MetricsConfig, is_sampling_enabled};
 pub use metrics_definitions::*;
 pub use metrics_types::*;
 

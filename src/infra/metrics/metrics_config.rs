@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 use std::stringify;
+use std::sync::OnceLock;
 
 use clap::Parser;
 use display_json::DebugAsJson;
@@ -19,12 +20,29 @@ pub struct MetricsConfig {
     /// Metrics exporter binding address.
     #[arg(long = "metrics-exporter-address", env = "METRICS_EXPORTER_ADDRESS", default_value = "0.0.0.0:9000")]
     pub metrics_exporter_address: SocketAddr,
+    
+    /// Enable metrics sampling for metrics that have sampling configured.
+    /// When disabled, all metrics are recorded regardless of @sample() annotations.
+    #[arg(long = "metrics-enable-sampling", env = "METRICS_ENABLE_SAMPLING", default_value = "true")]
+    pub enable_sampling: bool,
 }
+
+// Global sampling state
+static SAMPLING_ENABLED: OnceLock<bool> = OnceLock::new();
 
 impl MetricsConfig {
     /// Inits application global metrics exporter.
     pub fn init(&self) -> anyhow::Result<()> {
-        tracing::info!(address = %self.metrics_exporter_address, "creating metrics exporter");
+        tracing::info!(
+            address = %self.metrics_exporter_address,
+            sampling_enabled = %self.enable_sampling,
+            "creating metrics exporter"
+        );
+
+        // Initialize global sampling state
+        SAMPLING_ENABLED.set(self.enable_sampling).map_err(|_| {
+            anyhow::anyhow!("Failed to initialize sampling configuration")
+        })?;
 
         // get metric definitions
         let mut metrics = Vec::new();
@@ -48,6 +66,11 @@ impl MetricsConfig {
 
         Ok(())
     }
+}
+
+/// Check if sampling is globally enabled
+pub fn is_sampling_enabled() -> bool {
+    SAMPLING_ENABLED.get().copied().unwrap_or(true)
 }
 
 #[cfg(feature = "metrics")]
