@@ -116,11 +116,6 @@ impl AsyncMetricSender {
             }
         }
     }
-
-    /// Get current statistics
-    pub fn stats(&self) -> AsyncMetricsStats {
-        AsyncMetricsStats::default()
-    }
 }
 
 /// Async metrics collector that processes metrics in batches
@@ -275,11 +270,6 @@ impl AsyncMetricsCollector {
     #[cfg(not(feature = "metrics"))]
     fn record_metric_to_prometheus(_metric: &MetricMessage) {
         // No-op when metrics are disabled
-    }
-
-    /// Get current statistics
-    pub fn stats(&self) -> AsyncMetricsStats {
-        AsyncMetricsStats::default()
     }
 }
 
