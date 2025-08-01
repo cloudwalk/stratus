@@ -73,6 +73,12 @@ outdated:
     command -v cargo-outdated >/dev/null 2>&1 || { cargo install cargo-outdated; }
     cargo outdated --root-deps-only --ignore-external-rel
 
+# Stratus: Check for unused dependencies
+check-unused-deps:
+    #!/bin/bash
+    command -v cargo-udeps >/dev/null 2>&1 || { cargo +nightly install cargo-udeps; }
+    cargo +nightly udeps --all-targets
+
 # Stratus: Update only the project dependencies
 update:
     cargo update stratus
@@ -236,22 +242,6 @@ e2e-admin-password:
         just _wait_for_stratus_finish
         sleep 20
     done
-
-# E2E: Execute EOF (EVM Object Format) tests
-e2e-eof:
-    #!/bin/bash
-    # Start Stratus
-    just stratus-test -a 0.0.0.0:3000 --executor-evm-spec Osaka
-
-    cd e2e/eof
-
-    docker build -t eof-solc:latest -f Dockerfile.eof-solc .
-
-    forge install
-    # Run tests using alice pk
-    forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "deploy()" --slow
-    forge script test/TestEof.s.sol:TestEof --rpc-url http://0.0.0.0:3000/ --broadcast -vvvv --legacy --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --sig "run()" --slow
-
 
 # E2E: Starts and execute Hardhat tests in Hardhat
 e2e-hardhat block-mode="automine" test="":

@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use crate::eth::primitives::Size;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
@@ -20,3 +21,5 @@ impl From<SizeRocksdb> for Size {
         value.0.into()
     }
 }
+
+impl SerializeDeserializeWithContext for SizeRocksdb {}
