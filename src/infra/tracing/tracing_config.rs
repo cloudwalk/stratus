@@ -165,7 +165,7 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
         .build();
 
     // configure tracer
-    let tracer = match protocol {
+    match protocol {
         TracingProtocol::Grpc => {
             let mut protocol_metadata = MetadataMap::new();
             for (key, value) in headers {
@@ -214,9 +214,7 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
                 .build()
                 .tracer("stratus")
         }
-    };
-
-    tracer
+    }
 }
 
 // -----------------------------------------------------------------------------

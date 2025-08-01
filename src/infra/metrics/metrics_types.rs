@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use metrics::Label;
 use metrics::describe_counter;
 use metrics::describe_gauge;
 use metrics::describe_histogram;
@@ -111,18 +110,6 @@ impl From<i32> for MetricLabelValue {
     fn from(value: i32) -> Self {
         Self::Some(value.to_string())
     }
-}
-
-/// Converts a list of label keys-value pairs to `metrics::Label`. Labels with missing values are filtered out.
-pub(super) fn into_labels(labels: Vec<(&'static str, MetricLabelValue)>) -> Vec<Label> {
-    labels
-        .into_iter()
-        .filter_map(|(key, value)| match value {
-            MetricLabelValue::Some(value) => Some((key, value)),
-            MetricLabelValue::None => None,
-        })
-        .map(|(key, value)| Label::new(key, value))
-        .collect()
 }
 
 // -----------------------------------------------------------------------------
