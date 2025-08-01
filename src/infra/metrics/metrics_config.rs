@@ -40,7 +40,7 @@ pub struct MetricsConfig {
 
 impl MetricsConfig {
     /// Inits application global metrics exporter and async metrics system.
-    pub fn init(&self) -> anyhow::Result<()> {
+    pub async fn init(&self) -> anyhow::Result<()> {
         tracing::info!(address = %self.metrics_exporter_address, "creating metrics exporter");
 
         // get metric definitions
@@ -65,7 +65,7 @@ impl MetricsConfig {
 
         // init metrics system
         let config = self.metrics_config();
-        Self::init_metrics(config)?;
+        Self::init_metrics(config).await?;
 
         Ok(())
     }
@@ -80,7 +80,7 @@ impl MetricsConfig {
     }
 
     /// Initialize the metrics system
-    fn init_metrics(config: AsyncMetricsConfig) -> anyhow::Result<()> {
+    async fn init_metrics(config: AsyncMetricsConfig) -> anyhow::Result<()> {
         let (tx, rx) = tokio::sync::mpsc::channel(config.buffer_size);
 
         let sender = AsyncMetricSender::new(tx, config.clone());
