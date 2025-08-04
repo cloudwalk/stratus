@@ -3,7 +3,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub enum ExecutionResultRocksdb {
     Success,
     Reverted,

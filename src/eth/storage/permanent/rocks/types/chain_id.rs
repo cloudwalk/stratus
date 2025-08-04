@@ -4,7 +4,7 @@ use crate::eth::primitives::ChainId;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::RuintExt;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ChainIdRocksdb(pub u64);
 
 impl From<ChainId> for ChainIdRocksdb {

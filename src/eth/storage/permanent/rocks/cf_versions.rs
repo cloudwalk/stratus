@@ -31,7 +31,7 @@ use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::types::old_types_hotfix::OldCfBlocksByNumberValue;
 macro_rules! impl_single_version_cf_value {
     ($name:ident, $inner_type:ty, $non_rocks_equivalent: ty) => {
-        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount, VariantNames, IntoStaticStr, fake::Dummy)]
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount, VariantNames, IntoStaticStr, fake::Dummy, bincode::Encode, bincode::Decode)]
         pub enum $name {
             V1($inner_type),
         }
@@ -104,16 +104,19 @@ impl SerializeDeserializeWithContext for CfReplicationLogsValue {}
 impl SerializeDeserializeWithContext for CfBlocksByNumberValue {
     fn deserialize_with_context(bytes: &[u8]) -> anyhow::Result<Self>
     where
-        Self: for<'de> Deserialize<'de>,
+        Self: for<'de> Deserialize<'de> + bincode::Decode<()>,
     {
-        let res = bincode::deserialize::<Self>(bytes);
+        use crate::rocks_bincode_config;
+        let res = bincode::decode_from_slice(bytes, rocks_bincode_config());
 
         match res {
-            Err(_) => Ok(bincode::deserialize::<OldCfBlocksByNumberValue>(bytes)
-                .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
-                .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<Self>()))?
-                .into()),
-            Ok(ok) => Ok(ok),
+            Err(_) => {
+                let (old_value, _): (OldCfBlocksByNumberValue, _) = bincode::decode_from_slice(bytes, rocks_bincode_config())
+                    .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
+                    .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<Self>()))?;
+                Ok(old_value.into())
+            }
+            Ok((ok, _)) => Ok(ok),
         }
     }
 }
@@ -247,7 +250,7 @@ mod tests {
 
     fn load_or_generate_json_fixture<CfValue>(cf_name: &str, _variant_name: &str) -> Result<CfValue>
     where
-        CfValue: for<'de> Deserialize<'de> + Serialize + fake::Dummy<fake::Faker> + ToCfName,
+        CfValue: for<'de> Deserialize<'de> + Serialize + fake::Dummy<fake::Faker> + ToCfName + bincode::Encode + bincode::Decode<()>,
     {
         let json_path = format!("tests/fixtures/cf_versions/{cf_name}/{cf_name}.json");
         let json_parent_path = format!("tests/fixtures/cf_versions/{cf_name}");
@@ -278,7 +281,16 @@ mod tests {
     fn test_snapshot_bincode_deserialization_for_single_version_enums() {
         fn test_deserialization<CfValue>() -> Result<TestRunConfirmation<CfValue>>
         where
-            CfValue: for<'de> Deserialize<'de> + Serialize + Clone + Debug + PartialEq + Into<&'static str> + ToCfName + fake::Dummy<fake::Faker>,
+            CfValue: for<'de> Deserialize<'de>
+                + Serialize
+                + Clone
+                + Debug
+                + PartialEq
+                + Into<&'static str>
+                + ToCfName
+                + fake::Dummy<fake::Faker>
+                + bincode::Encode
+                + bincode::Decode<()>,
         {
             let cf_name = CfValue::CF_NAME;
             // For single version enums, we expect V1 variant
@@ -297,7 +309,8 @@ mod tests {
                 // adding a new snapshot for a new variant is safe as long as you don't mess up in the points above
                 // -> CAREFUL WHEN UPDATING SNAPSHOTS <-
                 if env::var("DANGEROUS_UPDATE_SNAPSHOTS").is_ok() {
-                    let serialized = bincode::serialize(&expected)?;
+                    use crate::rocks_bincode_config;
+                    let serialized = bincode::encode_to_vec(&expected, rocks_bincode_config())?;
                     fs::create_dir_all(&snapshot_parent_path)?;
                     fs::write(snapshot_path, serialized)?;
                 } else {
@@ -316,7 +329,8 @@ mod tests {
                 "snapshot path {snapshot_path:?} doesn't match the expected for v1: {snapshot_path:?}"
             );
 
-            let deserialized = bincode::deserialize::<CfValue>(&fs::read(snapshot_path)?)?;
+            use crate::rocks_bincode_config;
+            let (deserialized, _) = bincode::decode_from_slice(&fs::read(snapshot_path)?, rocks_bincode_config())?;
             ensure!(
                 expected == deserialized,
                 "deserialized value doesn't match expected\n deserialized = {deserialized:?}\n expected = {expected:?}",
