@@ -8,24 +8,21 @@ use super::bytes::BytesRocksdb;
 use crate::alias::RevmBytecode;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub enum BytecodeRocksdb {
     LegacyRaw(BytesRocksdb),
     LegacyAnalyzed(LegacyAnalyzedBytecodeRocksdb),
-    /// Deprecated EOF variant kept to maintain bincode discriminant positions. This prevents existing Eip7702 data from failing deserialization.
-    /// TODO: Remove this variant on next database migration when discriminant compatibility is no longer needed.
-    EofDeprecated,
     Eip7702(Eip7702BytecodeRocksdb),
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct LegacyAnalyzedBytecodeRocksdb {
     bytecode: BytesRocksdb,
     original_len: usize,
     jump_table: Vec<u8>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Eip7702BytecodeRocksdb {
     pub delegated_address: AddressRocksdb,
     pub version: u8,
@@ -58,10 +55,6 @@ impl From<BytecodeRocksdb> for RevmBytecode {
                 analyzed.original_len,
                 JumpTable::from_slice(&analyzed.jump_table, analyzed.jump_table.len() * 8),
             )),
-            BytecodeRocksdb::EofDeprecated => {
-                tracing::error!("encountered deprecated EOF bytecode variant during deserialization, returning empty bytecode");
-                RevmBytecode::LegacyAnalyzed(LegacyRawBytecode(vec![].into()).into_analyzed())
-            }
             BytecodeRocksdb::Eip7702(bytecode) => RevmBytecode::Eip7702(Eip7702Bytecode {
                 delegated_address: bytecode.delegated_address.0.into(),
                 version: bytecode.version,

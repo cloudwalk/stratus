@@ -16,7 +16,7 @@ use crate::eth::storage::permanent::rocks::types::log::LogRocksdb;
 use crate::eth::storage::permanent::rocks::types::log_mined::LogMinedRocksdb;
 use crate::eth::storage::permanent::rocks::types::transaction_input::TransactionInputRocksdb;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy, bincode::Encode, bincode::Decode)]
 pub struct OldExecutionRocksdb {
     block_timestamp: UnixTimeRocksdb,
     execution_costs_applied: bool,
@@ -27,7 +27,7 @@ pub struct OldExecutionRocksdb {
     deployed_contract_address: Option<AddressRocksdb>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy, bincode::Encode, bincode::Decode)]
 pub struct OldTransactionMinedRocksdb {
     input: TransactionInputRocksdb,
     execution: OldExecutionRocksdb,
@@ -35,7 +35,7 @@ pub struct OldTransactionMinedRocksdb {
     transaction_index: IndexRocksdb,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy, bincode::Encode, bincode::Decode)]
 pub struct OldBlockRocksdb {
     header: BlockHeaderRocksdb,
     transactions: Vec<OldTransactionMinedRocksdb>,
@@ -82,7 +82,7 @@ impl From<OldCfBlocksByNumberValue> for CfBlocksByNumberValue {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, bincode::Encode, bincode::Decode)]
 pub enum OldCfBlocksByNumberValue {
     V1(OldBlockRocksdb),
 }
