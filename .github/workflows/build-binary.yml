@@ -61,7 +61,6 @@ jobs:
             --bin stratus \
             --features "$FEATURES"
         env:
-          CARGO_PROFILE_RELEASE_DEBUG: 1
           TRACING_LOG_FORMAT: json
           NO_COLOR: 1
           FEATURES: "${{ github.event.inputs.features || 'default' }}"
