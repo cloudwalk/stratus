@@ -349,7 +349,7 @@ impl Future for RpcResponse<'_> {
                     ..Default::default()
                 }));
             });
-            
+
             log_tracing_event();
 
             // track metrics
