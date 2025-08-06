@@ -4,7 +4,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Ord, PartialOrd, Hash, derive_more::Display, bincode::Encode, bincode::Decode, fake::Dummy)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Ord, PartialOrd, Hash, derive_more::Display, fake::Dummy)]
 pub struct BlockNumberRocksdb(pub u32);
 
 gen_newtype_from!(self = BlockNumberRocksdb, other = u8, u16, u32);

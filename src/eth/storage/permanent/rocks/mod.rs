@@ -41,20 +41,17 @@ impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb, Bloc
 pub trait SerializeDeserializeWithContext {
     fn deserialize_with_context(bytes: &[u8]) -> anyhow::Result<Self>
     where
-        Self: for<'de> Deserialize<'de> + bincode::Decode<()>,
+        Self: for<'de> Deserialize<'de>,
     {
-        use crate::rocks_bincode_config;
-        let (result, _) = bincode::decode_from_slice(bytes, rocks_bincode_config())
+        bincode::deserialize::<Self>(bytes)
             .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
-            .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<Self>()))?;
-        Ok(result)
+            .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<Self>()))
     }
 
     fn serialize_with_context(input: &Self) -> anyhow::Result<Vec<u8>>
     where
-        Self: Serialize + Debug + bincode::Encode,
+        Self: Serialize + Debug,
     {
-        use crate::rocks_bincode_config;
-        bincode::encode_to_vec(input, rocks_bincode_config()).with_context(|| format!("failed to serialize '{input:?}'"))
+        bincode::serialize(input).with_context(|| format!("failed to serialize '{input:?}'"))
     }
 }

@@ -411,19 +411,12 @@ macro_rules! gen_test_bincode {
         paste::paste! {
             #[test]
             pub fn [<bincode_ $type:snake>]() {
-                use $crate::rocks_bincode_config;
                 let value = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
-                let binary = bincode::encode_to_vec(&value, rocks_bincode_config()).unwrap();
-                let (decoded, _): ($type, _) = bincode::decode_from_slice(&binary, rocks_bincode_config()).unwrap();
-                assert_eq!(decoded, value);
+                let binary = bincode::serialize(&value).unwrap();
+                assert_eq!(bincode::deserialize::<$type>(&binary).unwrap(), value);
             }
         }
     };
-}
-
-/// Custom bincode configuration for RocksDB that preserves lexicographical ordering.
-pub fn rocks_bincode_config() -> impl bincode::config::Config {
-    bincode::config::standard().with_big_endian()
 }
 
 pub trait WatchReceiverExt<T> {

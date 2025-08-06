@@ -42,8 +42,8 @@ pub struct RocksCfRef<'a, K, V> {
 
 impl<'a, K, V> RocksCfRef<'a, K, V>
 where
-    K: bincode::Encode + bincode::Decode<()> + Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext,
-    V: bincode::Encode + bincode::Decode<()> + Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext,
 {
     /// Create Column Family reference struct.
     pub fn new(db: &'a Arc<DB>, column_family: &str) -> Result<Self> {
@@ -306,8 +306,8 @@ pub struct RocksCfIter<'a, K, V> {
 
 impl<'a, K, V> RocksCfIter<'a, K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Decode<()>,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
 {
     fn new(iter: DBIteratorWithThreadMode<'a, DB>, column_family: &'a str) -> Self {
         Self {
@@ -329,8 +329,8 @@ where
 
 impl<K, V> Iterator for RocksCfIter<'_, K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Decode<()>,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext,
 {
     type Item = Result<(K, V)>;
 
@@ -376,7 +376,7 @@ pub struct RocksCfKeysIter<'a, K> {
 
 impl<K> Iterator for RocksCfKeysIter<'_, K>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext,
 {
     type Item = Result<K>;
 

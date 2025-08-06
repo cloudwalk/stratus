@@ -116,8 +116,8 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
 fn new_cf_ref<'a, K, V>(db: &'a Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, Options>) -> Result<RocksCfRef<'a, K, V>>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
@@ -1010,29 +1010,6 @@ mod tests {
             } else {
                 previous_order = Some(actual_cf_order);
             }
-        }
-    }
-
-    #[test]
-    fn test_bincode_lexicographical_ordering() {
-        use super::super::types::BlockNumberRocksdb;
-        use crate::rocks_bincode_config;
-
-        let boundary_tests = vec![(250, 251), (255, 256), (511, 512), (1023, 1024), (2047, 2048)];
-
-        for (before, after) in boundary_tests {
-            let before_rocks = BlockNumberRocksdb::from(before as u32);
-            let after_rocks = BlockNumberRocksdb::from(after as u32);
-
-            let before_bytes = bincode::encode_to_vec(before_rocks, rocks_bincode_config()).unwrap();
-            let after_bytes = bincode::encode_to_vec(after_rocks, rocks_bincode_config()).unwrap();
-
-            let lexicographic_order_correct = before_bytes < after_bytes;
-
-            assert!(
-                lexicographic_order_correct,
-                "Block {before} should serialize to bytes < Block {after} for RocksDB ordering",
-            );
         }
     }
 }

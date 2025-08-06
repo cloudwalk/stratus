@@ -15,7 +15,7 @@ use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 use crate::ext::RuintExt;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
 pub struct TransactionInputRocksdb {
     pub tx_type: Option<u8>,
     pub chain_id: Option<ChainIdRocksdb>,

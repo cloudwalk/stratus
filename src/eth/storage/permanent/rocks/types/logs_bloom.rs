@@ -9,7 +9,7 @@ use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde_with::DeserializeFromStr, serde_with::SerializeDisplay)]
+#[derive(Debug, Clone, PartialEq, Eq, serde_with::DeserializeFromStr, serde_with::SerializeDisplay, fake::Dummy)]
 pub struct LogsBloomRocksdb([u8; 256]);
 
 gen_newtype_from!(self = LogsBloomRocksdb, other = Bloom, LogsBloom);
