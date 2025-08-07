@@ -4,7 +4,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
 use itertools::Itertools;
-use keccak_hasher::KeccakHasher;
+use alloy_trie::root::ordered_trie_root;
 
 use super::ExternalBlock;
 use super::Index;
@@ -159,8 +159,8 @@ impl Block {
 
     fn calculate_transaction_root(&mut self) {
         if !self.transactions.is_empty() {
-            let transactions_hashes: Vec<Hash> = self.transactions.iter().map(|x| x.input.hash).collect();
-            self.header.transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
+            let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.input.hash.0).collect();
+            self.header.transactions_root = ordered_trie_root(&transactions_hashes[..]).into();
         }
     }
 
