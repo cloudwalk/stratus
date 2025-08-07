@@ -188,7 +188,7 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
                 .with_resource(resource.clone())
                 .with_span_processor(batch_processor)
                 .build()
-                .tracer("stratus")
+                .tracer(build_info::binary_name())
         }
         TracingProtocol::HttpBinary | TracingProtocol::HttpJson => {
             let mut protocol_headers = HashMap::new();
@@ -212,7 +212,7 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
                 .with_resource(resource.clone())
                 .with_span_processor(batch_processor)
                 .build()
-                .tracer("stratus")
+                .tracer(build_info::binary_name())
         }
     }
 }
