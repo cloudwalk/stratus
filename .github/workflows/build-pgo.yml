@@ -1,4 +1,4 @@
-name: Build Optimized Binary (PGO)
+name: Build Instrumented Binary (PGO)
 
 on:
   workflow_dispatch:
@@ -7,18 +7,29 @@ on:
         description: "List of features to enable"
         required: false
         default: ""
+  push:
+    branches:
+      - "main"
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "tests/fixtures/**"
+      - "static/**"
+      - ".sqlx/**"
 
 env:
   RETENTION_DAYS: 90
 
 jobs:
-  build_optimized:
-    name: Build PGO optimized binary
+  build_binaries:
+    name: Build and upload
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ github.run_id }}
+      group: ${{ github.workflow }}-{{ github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -31,32 +42,11 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      - name: Add LLVM tools
-        run: rustup component add llvm-tools-preview
-
       - name: Install cargo-pgo
         run: cargo install --git https://github.com/Kobzol/cargo-pgo --branch release-plz-2025-04-04T20-27-31Z --rev 5c73c7b --locked
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
-
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Create profiles directory
-        run: mkdir -p /tmp/profiles/8708c6e203e6e3da02a70e3e97a56ac50f14d252
-
-      - name: Download profile data from GCS
-        run: |
-          echo "Downloading profile data for commit: 8708c6e203e6e3da02a70e3e97a56ac50f14d252"
-          gsutil -m cp -r gs://stratus_performance_benchmark_staging/profile-data/8708c6e203e6e3da02a70e3e97a56ac50f14d252/\* /tmp/profiles/8708c6e203e6e3da02a70e3e97a56ac50f14d252/
-          echo "Profile data downloaded to: /tmp/profiles/8708c6e203e6e3da02a70e3e97a56ac50f14d252"
-          ls -la /tmp/profiles/8708c6e203e6e3da02a70e3e97a56ac50f14d252/
-
-      - name: Build optimized binary with PGO
-        run: cargo pgo optimize --profiles-dir /tmp/profiles/8708c6e203e6e3da02a70e3e97a56ac50f14d252 build -- --bin stratus --features "$FEATURES"
+      - name: Build instrumented binary
+        run: cargo pgo instrument --profiles-dir /tmp/${{ github.sha }} build -- --bin stratus --features "$FEATURES"
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 1
           TRACING_LOG_FORMAT: json
@@ -66,13 +56,13 @@ jobs:
       - name: Generate checksums
         run: |
           cd target/x86_64-unknown-linux-gnu/release
-          sha256sum stratus > ../../../checksums-optimized.txt
+          sha256sum stratus > ../../../checksums.txt
 
-      - name: Upload optimized stratus binary
+      - name: Upload stratus
         uses: actions/upload-artifact@v4
-        id: upload-optimized
+        id: upload-str
         with:
-          name: stratus-optimized-8708c6e203e6e3da02a70e3e97a56ac50f14d252
+          name: stratus-instrumented-${{ github.sha }}
           path: target/x86_64-unknown-linux-gnu/release/stratus
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
@@ -80,13 +70,12 @@ jobs:
       - name: Upload checksums
         uses: actions/upload-artifact@v4
         with:
-          name: checksums-optimized-8708c6e203e6e3da02a70e3e97a56ac50f14d252
-          path: checksums-optimized.txt
+          name: checksums-${{ github.sha }}
+          path: checksums.txt
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
 
       - name: Print outputs
         run: |
-          echo "Optimized Artifact ID: ${{ steps.upload-optimized.outputs.artifact-id }}"
-          echo "Optimized Artifact URL: ${{ steps.upload-optimized.outputs.artifact-url }}"
-          echo "Built optimized binary for commit: 8708c6e203e6e3da02a70e3e97a56ac50f14d252"
+          echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
+          echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
