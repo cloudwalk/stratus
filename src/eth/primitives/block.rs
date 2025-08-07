@@ -159,8 +159,8 @@ impl Block {
 
     fn calculate_transaction_root(&mut self) {
         if !self.transactions.is_empty() {
-            let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.input.hash.0).collect();
-            self.header.transactions_root = ordered_trie_root(&transactions_hashes[..]).into();
+            let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.input.hash).map(B256::from).collect();
+            self.header.transactions_root = ordered_trie_root(&transactions_hashes).into();
         }
     }
 
