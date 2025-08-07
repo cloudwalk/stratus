@@ -4,7 +4,7 @@ use crate::eth::primitives::Gas;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct GasRocksdb(u64);
 
