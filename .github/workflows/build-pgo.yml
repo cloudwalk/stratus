@@ -31,6 +31,9 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
+      - name: Add LLVM tools
+        run: rustup component add llvm-tools-preview
+
       - name: Install cargo-pgo
         run: cargo install --git https://github.com/Kobzol/cargo-pgo --branch release-plz-2025-04-04T20-27-31Z --rev 5c73c7b --locked
 
