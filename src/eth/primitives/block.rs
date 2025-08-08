@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use alloy_primitives::B256;
 use alloy_rpc_types_eth::BlockTransactions;
+use alloy_trie::root::ordered_trie_root;
 use display_json::DebugAsJson;
 use itertools::Itertools;
-use alloy_trie::root::ordered_trie_root;
 
 use super::ExternalBlock;
 use super::Index;
