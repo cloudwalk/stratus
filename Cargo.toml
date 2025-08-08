@@ -76,11 +76,11 @@ keccak-hasher = "=0.15.3"  # this version must be compatible with triehash
 rlp = "=0.5.2"
 triehash = "=0.8.4"
 revm-inspectors = "=0.26.5"
-alloy-rpc-types-trace = "=1.0.12"
-alloy-rpc-types-eth = "=1.0.12"
-alloy-consensus = { version = "=1.0.12", features = ["k256"] }
-alloy-primitives = { version = "=1.2.0", features = ["rand"] }
-alloy-eips = "=1.0.12"
+alloy-rpc-types-trace = "=1.0.19"
+alloy-rpc-types-eth = "=1.0.19"
+alloy-consensus = { version = "=1.0.19", features = ["k256"] }
+alloy-primitives = { version = "=1.3.0", features = ["rand"] }
+alloy-eips = "=1.0.24"
 
 # network
 jsonrpsee = { version = "=0.25.1", features = ["server", "client"] }
@@ -136,7 +136,7 @@ dashmap = "6.1.0"
 # ------------------------------------------------------------------------------
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
-revm = { version = "=27.0.1", features = ["asm-keccak", "serde"] }
+revm = { version = "=28.0.0", features = ["asm-keccak", "serde"] }
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
 revm = { version = "=27.0.1", features = ["serde"]}
