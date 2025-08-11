@@ -1114,7 +1114,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "regex",
@@ -3570,15 +3570,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "nonempty"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "303e8749c804ccd6ca3b428de7fe0d86cb86bc7606bc15291f100fd487960bb8"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -6076,14 +6067,13 @@ dependencies = [
  "humantime",
  "indexmap 2.10.0",
  "indicatif",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "jsonrpsee",
  "log",
  "metrics",
  "metrics-exporter-prometheus",
  "nanoid",
  "nom 8.0.0",
- "nonempty",
  "oneshot",
  "opentelemetry",
  "opentelemetry-otlp",

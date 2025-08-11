@@ -13,9 +13,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExecutionConflicts;
-use crate::eth::primitives::ExecutionConflictsBuilder;
 use crate::eth::primitives::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
@@ -52,41 +49,6 @@ impl InmemoryTransactionTemporaryStorage {
         }
     }
 
-    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>, StorageError> {
-        let mut conflicts = ExecutionConflictsBuilder::default();
-
-        for (&address, change) in &execution.changes {
-            // check account info conflicts
-            if let Some(account) = self.read_account(address)? {
-                if let Some(expected) = change.nonce.take_original_ref() {
-                    let original = &account.nonce;
-                    if expected != original {
-                        conflicts.add_nonce(address, *original, *expected);
-                    }
-                }
-                if let Some(expected) = change.balance.take_original_ref() {
-                    let original = &account.balance;
-                    if expected != original {
-                        conflicts.add_balance(address, *original, *expected);
-                    }
-                }
-            }
-
-            // check slots conflicts
-            for (&slot_index, slot_change) in &change.slots {
-                if let Some(expected) = slot_change.take_original_ref() {
-                    let Some(original) = self.read_slot(address, slot_index)? else {
-                        continue;
-                    };
-                    if expected.value != original.value {
-                        conflicts.add_slot(address, slot_index, original.value, expected.value);
-                    }
-                }
-            }
-        }
-        Ok(conflicts.build())
-    }
-
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------
@@ -107,7 +69,7 @@ impl InmemoryTransactionTemporaryStorage {
     // Block and executions
     // -------------------------------------------------------------------------
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool, is_local: bool) -> Result<(), StorageError> {
+    pub fn save_pending_execution(&self, tx: TransactionExecution, is_local: bool) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
         if is_local && tx.evm_input != (&tx.input, &pending_block.block.header) {
@@ -119,10 +81,6 @@ impl InmemoryTransactionTemporaryStorage {
         }
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
-
-        if check_conflicts && let Some(conflicts) = self.check_conflicts(&tx.result.execution)? {
-            return Err(StorageError::TransactionConflict(conflicts.into()));
-        }
 
         // save account changes
         let changes = tx.result.execution.changes.values();
