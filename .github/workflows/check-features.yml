@@ -49,7 +49,7 @@ jobs:
           cache-provider: "github"
           cache-directories: "~/.cargo/bin/"
 
-      - name: Install libsasl2-dev libssl-dev
+      - name: Install dependencies
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Set up Just
