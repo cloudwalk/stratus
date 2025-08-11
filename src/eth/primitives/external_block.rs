@@ -1,8 +1,8 @@
 use alloy_eips::eip4895::Withdrawals;
+use alloy_primitives::B64;
+use alloy_primitives::B256;
 use alloy_primitives::Bloom;
 use alloy_primitives::Bytes;
-use alloy_primitives::B256;
-use alloy_primitives::B64;
 use alloy_primitives::U256;
 use fake::Dummy;
 use fake::Fake;
@@ -12,11 +12,11 @@ use serde::Deserialize;
 use super::Block;
 use crate::alias::AlloyBlockExternalTransaction;
 use crate::alias::JsonValue;
-use crate::eth::primitives::external_transaction::ExternalTransaction;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::external_transaction::ExternalTransaction;
 use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, derive_more::Deref, derive_more::DerefMut, serde::Deserialize, serde::Serialize)]
@@ -54,7 +54,7 @@ impl PartialEq<Block> for ExternalBlock {
 }
 
 impl Dummy<Faker> for ExternalBlock {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let mut addr_bytes = [0u8; 20];
         let mut hash_bytes = [0u8; 32];
         let mut nonce_bytes = [0u8; 8];

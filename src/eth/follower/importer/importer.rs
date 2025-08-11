@@ -1,24 +1,26 @@
 use std::borrow::Cow;
 use std::cmp::min;
+use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::Duration;
 
 use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
-use futures::try_join;
 use futures::StreamExt;
+use futures::try_join;
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::timeout;
 use tracing::Span;
 
+use crate::GlobalState;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
-use crate::eth::miner::miner::interval_miner::mine_and_commit;
-use crate::eth::miner::miner::CommitItem;
 use crate::eth::miner::Miner;
+use crate::eth::miner::miner::CommitItem;
+use crate::eth::miner::miner::interval_miner::mine_and_commit;
+#[cfg(feature = "replication")]
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
@@ -26,26 +28,26 @@ use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
-use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::eth::storage::StratusStorage;
-use crate::ext::spawn_named;
-use crate::ext::traced_sleep;
+#[cfg(feature = "replication")]
+use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
+use crate::ext::spawn;
+use crate::ext::traced_sleep;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
+use crate::infra::BlockchainClient;
 use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+use crate::infra::tracing::SpanExt;
 use crate::infra::tracing::warn_task_rx_closed;
 use crate::infra::tracing::warn_task_tx_closed;
-use crate::infra::tracing::SpanExt;
-use crate::infra::BlockchainClient;
 use crate::ledger::events::transaction_to_events;
 use crate::log_and_err;
+use crate::utils::DropTimer;
 #[cfg(feature = "metrics")]
 use crate::utils::calculate_tps;
-use crate::utils::DropTimer;
-use crate::GlobalState;
 
 #[derive(Clone, Copy)]
 pub enum ImporterMode {
@@ -54,6 +56,7 @@ pub enum ImporterMode {
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     FakeLeader,
     /// Import blocks using RocksDB replication logs.
+    #[cfg(feature = "replication")]
     RocksDbReplication,
 }
 
@@ -143,26 +146,27 @@ impl Importer {
         let number: BlockNumber = storage.read_block_number_to_resume_import()?;
 
         match self.importer_mode {
+            #[cfg(feature = "replication")]
             ImporterMode::RocksDbReplication => {
                 // Use RocksDB replication approach
                 let (log_tx, log_rx) = mpsc::channel(10_000);
 
                 // Spawn log applier
-                let task_applier = spawn_named(
+                let task_applier = spawn(
                     "importer::log-applier",
                     Importer::start_log_applier(Arc::clone(storage), log_rx, self.kafka_connector.clone(), Arc::clone(&self.miner)),
                 );
 
                 // Spawn block number fetcher
                 let number_fetcher_chain = Arc::clone(&self.chain);
-                let task_number_fetcher = spawn_named(
+                let task_number_fetcher = spawn(
                     "importer::number-fetcher",
                     Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
                 );
 
                 // Spawn log fetcher
                 let log_fetcher_chain = Arc::clone(&self.chain);
-                let task_log_fetcher = spawn_named("importer::log-fetcher", Importer::start_log_fetcher(log_fetcher_chain, log_tx, number));
+                let task_log_fetcher = spawn("importer::log-fetcher", Importer::start_log_fetcher(log_fetcher_chain, log_tx, number));
 
                 // Await all tasks
                 if let Err(e) = try_join!(task_applier, task_log_fetcher, task_number_fetcher) {
@@ -174,7 +178,7 @@ impl Importer {
                 let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
 
                 // Spawn block executor
-                let task_executor = spawn_named(
+                let task_executor = spawn(
                     "importer::executor",
                     Importer::start_block_executor(
                         Arc::clone(&self.executor),
@@ -187,14 +191,14 @@ impl Importer {
 
                 // Spawn block number fetcher
                 let number_fetcher_chain = Arc::clone(&self.chain);
-                let task_number_fetcher = spawn_named(
+                let task_number_fetcher = spawn(
                     "importer::number-fetcher",
                     Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
                 );
 
                 // Spawn block fetcher
                 let block_fetcher_chain = Arc::clone(&self.chain);
-                let task_block_fetcher = spawn_named(
+                let task_block_fetcher = spawn(
                     "importer::block-fetcher",
                     Importer::start_block_fetcher(block_fetcher_chain, backlog_tx, number),
                 );
@@ -515,6 +519,7 @@ impl Importer {
     // -----------------------------------------------------------------------------
 
     // Applies replication logs to storage
+    #[cfg(feature = "replication")]
     async fn start_log_applier(
         storage: Arc<StratusStorage>,
         mut log_rx: mpsc::Receiver<ReplicationLogRocksdb>,
@@ -599,6 +604,7 @@ impl Importer {
     // -----------------------------------------------------------------------------
 
     /// Retrieves replication logs.
+    #[cfg(feature = "replication")]
     async fn start_log_fetcher(
         chain: Arc<BlockchainClient>,
         log_tx: mpsc::Sender<ReplicationLogRocksdb>,
@@ -674,6 +680,8 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
         };
     }
 }
+
+#[cfg(feature = "replication")]
 async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ReplicationLogRocksdb {
     const REPLICATION_RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {

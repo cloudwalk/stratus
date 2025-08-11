@@ -7,18 +7,19 @@ use std::iter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::anyhow;
 use rocksdb::ColumnFamilyRef;
+use rocksdb::DB;
 use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
 use rocksdb::ReadOptions;
 use rocksdb::WriteBatch;
-use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 #[cfg(feature = "rocks_metrics")]
 use crate::infra::metrics;
 
@@ -41,8 +42,8 @@ pub struct RocksCfRef<'a, K, V> {
 
 impl<'a, K, V> RocksCfRef<'a, K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+    K: bincode::Encode + bincode::Decode<()> + Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext,
+    V: bincode::Encode + bincode::Decode<()> + Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext,
 {
     /// Create Column Family reference struct.
     pub fn new(db: &'a Arc<DB>, column_family: &str) -> Result<Self> {
@@ -192,9 +193,9 @@ where
         let Some(value) = iter.value() else { return Ok(None) };
 
         let deserialized_key =
-            deserialize_with_context(key).with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family_name))?;
+            K::deserialize_with_context(key).with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family_name))?;
         let deserialized_value =
-            deserialize_with_context(value).with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family_name))?;
+            V::deserialize_with_context(value).with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family_name))?;
 
         Ok(Some((deserialized_key, deserialized_value)))
     }
@@ -280,36 +281,20 @@ where
     }
 
     fn deserialize_key_with_context(&self, key_bytes: &[u8]) -> Result<K> {
-        deserialize_with_context(key_bytes).with_context(|| format!("when deserializing a key of cf '{}'", self.column_family_name))
+        K::deserialize_with_context(key_bytes).with_context(|| format!("when deserializing a key of cf '{}'", self.column_family_name))
     }
 
     fn deserialize_value_with_context(&self, value_bytes: &[u8]) -> Result<V> {
-        deserialize_with_context(value_bytes).with_context(|| format!("failed to deserialize value_bytes of cf '{}'", self.column_family_name))
+        V::deserialize_with_context(value_bytes).with_context(|| format!("failed to deserialize value_bytes of cf '{}'", self.column_family_name))
     }
 
     fn serialize_key_with_context(&self, key: &K) -> Result<Vec<u8>> {
-        serialize_with_context(key).with_context(|| format!("failed to serialize key of cf '{}'", self.column_family_name))
+        K::serialize_with_context(key).with_context(|| format!("failed to serialize key of cf '{}'", self.column_family_name))
     }
 
     fn serialize_value_with_context(&self, value: &V) -> Result<Vec<u8>> {
-        serialize_with_context(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family_name))
+        V::serialize_with_context(value).with_context(|| format!("failed to serialize value of cf '{}'", self.column_family_name))
     }
-}
-
-fn deserialize_with_context<T>(bytes: &[u8]) -> Result<T>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    bincode::deserialize::<T>(bytes)
-        .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
-        .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<T>()))
-}
-
-fn serialize_with_context<T>(input: T) -> Result<Vec<u8>>
-where
-    T: Serialize + Debug,
-{
-    bincode::serialize(&input).with_context(|| format!("failed to serialize '{input:?}'"))
 }
 
 /// An iterator over K-V pairs in a CF.
@@ -321,8 +306,8 @@ pub struct RocksCfIter<'a, K, V> {
 
 impl<'a, K, V> RocksCfIter<'a, K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Decode<()>,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
 {
     fn new(iter: DBIteratorWithThreadMode<'a, DB>, column_family: &'a str) -> Self {
         Self {
@@ -344,8 +329,8 @@ where
 
 impl<K, V> Iterator for RocksCfIter<'_, K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Decode<()>,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
 {
     type Item = Result<(K, V)>;
 
@@ -360,14 +345,14 @@ where
             Err(e) => return Some(Err(e)),
         };
 
-        let deserialized_key = deserialize_with_context(&key).with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family));
+        let deserialized_key = K::deserialize_with_context(&key).with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family));
         let deserialized_key = match deserialized_key {
             Ok(inner) => inner,
             Err(e) => return Some(Err(e)),
         };
 
         let deserialized_value =
-            deserialize_with_context(&value).with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family));
+            V::deserialize_with_context(&value).with_context(|| format!("iterator failed to deserialize value in cf '{}'", self.column_family));
         let deserialized_value = match deserialized_value {
             Ok(inner) => inner,
             Err(e) => return Some(Err(e)),
@@ -391,7 +376,7 @@ pub struct RocksCfKeysIter<'a, K> {
 
 impl<K> Iterator for RocksCfKeysIter<'_, K>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
 {
     type Item = Result<K>;
 
@@ -406,7 +391,7 @@ where
             Err(e) => return Some(Err(e)),
         };
 
-        let deserialized_key = deserialize_with_context(&key).with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family));
+        let deserialized_key = K::deserialize_with_context(&key).with_context(|| format!("iterator failed to deserialize key in cf '{}'", self.column_family));
         let deserialized_key = match deserialized_key {
             Ok(inner) => inner,
             Err(e) => return Some(Err(e)),

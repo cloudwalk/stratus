@@ -8,8 +8,9 @@ use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct TransactionMinedRocksdb {
     pub input: TransactionInputRocksdb,
     pub execution: ExecutionRocksdb,
@@ -54,3 +55,5 @@ impl TransactionMined {
         }
     }
 }
+
+impl SerializeDeserializeWithContext for TransactionMinedRocksdb {}

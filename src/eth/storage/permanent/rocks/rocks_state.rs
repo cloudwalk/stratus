@@ -1,20 +1,20 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Debug;
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::time::Duration;
 use std::time::Instant;
 
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
+use rocksdb::DB;
 use rocksdb::Direction;
 use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
-use rocksdb::DB;
 use serde::Deserialize;
 use serde::Serialize;
 use sugars::btmap;
@@ -25,6 +25,7 @@ use super::cf_versions::CfAccountsHistoryValue;
 use super::cf_versions::CfAccountsValue;
 use super::cf_versions::CfBlocksByHashValue;
 use super::cf_versions::CfBlocksByNumberValue;
+#[cfg(feature = "replication")]
 use super::cf_versions::CfReplicationLogsValue;
 use super::cf_versions::CfTransactionsValue;
 use super::rocks_cf::RocksCfRef;
@@ -34,6 +35,7 @@ use super::rocks_db::create_or_open_db;
 use super::types::AccountRocksdb;
 use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
+#[cfg(feature = "replication")]
 use super::types::BytesRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
@@ -57,6 +59,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -86,6 +89,18 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
         CacheSetting::Enabled(size)
     };
 
+    #[cfg(not(feature = "replication"))]
+    btmap! {
+        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(10)),
+        "accounts_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
+        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(30)),
+        "account_slots_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
+        "transactions" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "blocks_by_number" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "blocks_by_hash" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+    }
+
+    #[cfg(feature = "replication")]
     btmap! {
         "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(10)),
         "accounts_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
@@ -101,8 +116,8 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
 fn new_cf_ref<'a, K, V>(db: &'a Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, Options>) -> Result<RocksCfRef<'a, K, V>>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone,
+    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
+    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
@@ -127,6 +142,7 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<'static, HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<'static, BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<'static, HashRocksdb, CfBlocksByHashValue>,
+    #[cfg(feature = "replication")]
     replication_logs: RocksCfRef<'static, BlockNumberRocksdb, CfReplicationLogsValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "rocks_metrics")]
@@ -139,6 +155,8 @@ pub struct RocksStorageState {
     db_options: Options,
     shutdown_timeout: Duration,
     enable_sync_write: bool,
+
+    #[cfg(feature = "replication")]
     pub use_rocksdb_replication: bool,
 }
 
@@ -148,7 +166,7 @@ impl RocksStorageState {
         shutdown_timeout: Duration,
         cache_multiplier: Option<f32>,
         enable_sync_write: bool,
-        use_rocksdb_replication: bool,
+        #[cfg(feature = "replication")] use_rocksdb_replication: bool,
     ) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
 
@@ -173,6 +191,7 @@ impl RocksStorageState {
             transactions: new_cf_ref(db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(db, "blocks_by_hash", &cf_options_map)?,
+            #[cfg(feature = "replication")]
             replication_logs: new_cf_ref(db, "replication_logs", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
@@ -181,6 +200,8 @@ impl RocksStorageState {
             db: Arc::clone(db),
             shutdown_timeout,
             enable_sync_write,
+
+            #[cfg(feature = "replication")]
             use_rocksdb_replication,
         };
 
@@ -193,7 +214,14 @@ impl RocksStorageState {
     pub fn new_in_testdir() -> anyhow::Result<(Self, tempfile::TempDir)> {
         let test_dir = tempfile::tempdir()?;
         let path = test_dir.as_ref().display().to_string();
-        let state = Self::new(path, Duration::ZERO, None, true, false)?;
+        let state = Self::new(
+            path,
+            Duration::ZERO,
+            None,
+            true,
+            #[cfg(feature = "replication")]
+            false,
+        )?;
         Ok((state, test_dir))
     }
 
@@ -343,14 +371,15 @@ impl RocksStorageState {
 
                 let key = (address.into(), (index).into(), block_number.into());
 
-                if let Some(((rocks_address, rocks_index, block), value)) = self.account_slots_history.seek(key)? {
-                    if rocks_index == index.into() && rocks_address == address.into() {
-                        tracing::debug!(?block, ?rocks_index, ?rocks_address, "slot found in rocksdb storage");
-                        return Ok(Some(Slot {
-                            index: rocks_index.into(),
-                            value: value.into_inner().into(),
-                        }));
-                    }
+                if let Some(((rocks_address, rocks_index, block), value)) = self.account_slots_history.seek(key)?
+                    && rocks_index == index.into()
+                    && rocks_address == address.into()
+                {
+                    tracing::debug!(?block, ?rocks_index, ?rocks_address, "slot found in rocksdb storage");
+                    return Ok(Some(Slot {
+                        index: rocks_index.into(),
+                        value: value.into_inner().into(),
+                    }));
                 }
                 Ok(None)
             }
@@ -378,11 +407,11 @@ impl RocksStorageState {
 
                 let key = (address.into(), block_number.into());
 
-                if let Some(((addr, block), account_info)) = self.accounts_history.seek(key)? {
-                    if addr == address.into() {
-                        tracing::debug!(?block, ?address, "account found in rocksdb storage");
-                        return Ok(Some(account_info.to_account(address)));
-                    }
+                if let Some(((addr, block), account_info)) = self.accounts_history.seek(key)?
+                    && addr == address.into()
+                {
+                    tracing::debug!(?block, ?address, "account found in rocksdb storage");
+                    return Ok(Some(account_info.to_account(address)));
                 }
                 Ok(None)
             }
@@ -406,6 +435,7 @@ impl RocksStorageState {
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
+    #[cfg(feature = "replication")]
     pub fn read_replication_log(&self, block_number: BlockNumber) -> Result<Option<WriteBatch>> {
         let block_number_rocks = block_number.into();
 
@@ -491,10 +521,13 @@ impl RocksStorageState {
             &mut batch,
         )?;
 
-        let batch_clone = WriteBatch::from_data(batch.data());
-        let batch_rocksdb = BytesRocksdb::from(batch_clone);
-        self.replication_logs
-            .prepare_batch_insertion([(number.into(), batch_rocksdb.into())], &mut batch)?;
+        #[cfg(feature = "replication")]
+        {
+            let batch_clone = WriteBatch::from_data(batch.data());
+            let batch_rocksdb = BytesRocksdb::from(batch_clone);
+            self.replication_logs
+                .prepare_batch_insertion([(number.into(), batch_rocksdb.into())], &mut batch)?;
+        }
 
         self.write_in_batch_for_multiple_cfs(batch)
     }
@@ -538,14 +571,17 @@ impl RocksStorageState {
 
         self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
 
-        let batch_clone = WriteBatch::from_data(batch.data());
-
-        let batch_rocksdb = BytesRocksdb::from(batch_clone);
-        self.replication_logs.prepare_batch_insertion([(number.into(), batch_rocksdb.into())], batch)?;
+        #[cfg(feature = "replication")]
+        {
+            let batch_clone = WriteBatch::from_data(batch.data());
+            let batch_rocksdb = BytesRocksdb::from(batch_clone);
+            self.replication_logs.prepare_batch_insertion([(number.into(), batch_rocksdb.into())], batch)?;
+        }
 
         Ok(())
     }
 
+    #[cfg(feature = "replication")]
     pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> Result<()> {
         let mut write_batch = replication_log;
 
@@ -762,6 +798,7 @@ impl RocksStorageState {
             ("transactions", &self.transactions.column_family),
             ("blocks_by_number", &self.blocks_by_number.column_family),
             ("blocks_by_hash", &self.blocks_by_hash.column_family),
+            #[cfg(feature = "replication")]
             ("replication_logs", &self.replication_logs.column_family),
         ];
 
@@ -881,6 +918,7 @@ mod tests {
                     ..Faker.fake()
                 },
                 transactions: vec![TransactionMined {
+                    block_number: number.into(),
                     logs: vec![Faker.fake(), Faker.fake()],
                     ..Faker.fake()
                 }],
@@ -972,6 +1010,29 @@ mod tests {
             } else {
                 previous_order = Some(actual_cf_order);
             }
+        }
+    }
+
+    #[test]
+    fn test_bincode_lexicographical_ordering() {
+        use super::super::types::BlockNumberRocksdb;
+        use crate::rocks_bincode_config;
+
+        let boundary_tests = vec![(250, 251), (255, 256), (511, 512), (1023, 1024), (2047, 2048)];
+
+        for (before, after) in boundary_tests {
+            let before_rocks = BlockNumberRocksdb::from(before as u32);
+            let after_rocks = BlockNumberRocksdb::from(after as u32);
+
+            let before_bytes = bincode::encode_to_vec(before_rocks, rocks_bincode_config()).unwrap();
+            let after_bytes = bincode::encode_to_vec(after_rocks, rocks_bincode_config()).unwrap();
+
+            let lexicographic_order_correct = before_bytes < after_bytes;
+
+            assert!(
+                lexicographic_order_correct,
+                "Block {before} should serialize to bytes < Block {after} for RocksDB ordering",
+            );
         }
     }
 }

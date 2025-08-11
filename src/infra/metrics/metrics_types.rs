@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
+use metrics::Label;
 use metrics::describe_counter;
 use metrics::describe_gauge;
 use metrics::describe_histogram;
-use metrics::Label;
 
 pub type HistogramInt = u32;
 pub type Sum = u64;

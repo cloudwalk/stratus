@@ -34,3 +34,28 @@ scrape_configs:
           span_id:
       - output:
           source: message
+  - job_name: stratus_follower
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: stratus_follower
+          __path__: /var/log/host/stratus_follower.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
+            caller: caller
+            error: error
+            trace_id: trace_id
+            span_id: span_id
+      - labels:
+          level:
+          caller:
+          error:
+          trace_id:
+          span_id:
+      - output:
+          source: message

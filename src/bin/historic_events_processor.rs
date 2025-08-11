@@ -8,15 +8,15 @@ use chrono::Timelike;
 use indicatif::ProgressBar;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
 use stratus::eth::primitives::TransactionMined;
+use stratus::eth::storage::permanent::rocks::RocksStorageState;
 use stratus::eth::storage::permanent::rocks::types::BlockNumberRocksdb;
 use stratus::eth::storage::permanent::rocks::types::BlockRocksdb;
 use stratus::eth::storage::permanent::rocks::types::HashRocksdb;
 use stratus::eth::storage::permanent::rocks::types::TransactionMinedRocksdb;
 use stratus::eth::storage::permanent::rocks::types::UnixTimeRocksdb;
-use stratus::eth::storage::permanent::rocks::RocksStorageState;
-use stratus::ledger::events::transaction_to_events;
 use stratus::ledger::events::AccountTransfers;
 use stratus::ledger::events::Event;
+use stratus::ledger::events::transaction_to_events;
 
 /// Database timeout duration in seconds
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -90,7 +90,15 @@ fn process_block_events(block: BlockRocksdb) -> Vec<String> {
 /// Main function that processes blockchain data and generates events
 fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
-    let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, Some(0.1), false, false).context("failed to create rocksdb state")?;
+    let state = RocksStorageState::new(
+        "data/rocksdb".to_string(),
+        TIMEOUT,
+        Some(0.1),
+        false,
+        #[cfg(feature = "replication")]
+        false,
+    )
+    .context("failed to create rocksdb state")?;
 
     let (b_pb, tx_pb) = create_progress_bar(&state);
 
