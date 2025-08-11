@@ -48,7 +48,8 @@ jobs:
         run: |
           echo "CC=clang" >> $GITHUB_ENV
           echo "CXX=clang++" >> $GITHUB_ENV
-          echo "RUSTFLAGS=-C linker=clang" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-C linker=clang -C link-arg=-fuse-ld=lld" >> $GITHUB_ENV
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang" >> $GITHUB_ENV
 
       - name: Install cargo-pgo
         run: cargo install --git https://github.com/Kobzol/cargo-pgo --branch release-plz-2025-04-04T20-27-31Z --rev 5c73c7b --locked
