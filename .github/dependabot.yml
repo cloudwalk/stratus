@@ -3,6 +3,9 @@ updates:
 
   - package-ecosystem: "cargo"
     directory: "/"
+
+    pull-request-branch-name:
+      separator: "-"
     
     schedule:
       interval: "weekly"
