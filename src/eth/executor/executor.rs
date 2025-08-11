@@ -1,13 +1,11 @@
 use std::cmp::max;
 use std::mem;
-use std::str::FromStr;
 use std::sync::Arc;
 
 #[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
-use anyhow::anyhow;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
 use tracing::Span;
@@ -98,11 +96,8 @@ impl InspectorTask {
 
 /// Manages EVM pool and communication channels.
 struct Evms {
-    /// Pool for parallel execution of transactions received via `eth_sendRawTransaction`. Usually contains multiple EVMs.
-    pub tx_parallel: crossbeam_channel::Sender<EvmTask>,
-
     /// Pool for serial execution of transactions received via `eth_sendRawTransaction`. Usually contains a single EVM.
-    pub tx_serial: crossbeam_channel::Sender<EvmTask>,
+    pub tx_local: crossbeam_channel::Sender<EvmTask>,
 
     /// Pool for serial execution of external transactions received via `importer-online` or `importer-offline`. Usually contains a single EVM.
     pub tx_external: crossbeam_channel::Sender<EvmTask>,
@@ -192,11 +187,7 @@ impl Evms {
             tx
         };
 
-        let tx_parallel = match config.executor_strategy {
-            ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1, EvmKind::Transaction), // should not really be used if strategy is serial, but keep 1 for fallback
-            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.executor_evms, EvmKind::Transaction),
-        };
-        let tx_serial = spawn_evms("evm-tx-serial", 1, EvmKind::Transaction);
+        let tx_local = spawn_evms("evm-tx-serial", 1, EvmKind::Transaction);
         let tx_external = spawn_evms("evm-tx-external", 1, EvmKind::Transaction);
         let call_present = spawn_evms(
             "evm-call-present",
@@ -211,8 +202,7 @@ impl Evms {
         let inspector = spawn_inspectors("inspector", max(config.executor_inspector_evms.unwrap_or(config.executor_evms / 4), 1));
 
         Evms {
-            tx_parallel,
-            tx_serial,
+            tx_local,
             tx_external,
             call_present,
             call_past,
@@ -226,8 +216,7 @@ impl Evms {
 
         let task = EvmTask::new(evm_input, execution_tx);
         let _ = match route {
-            EvmRoute::Parallel => self.tx_parallel.send(task),
-            EvmRoute::Serial => self.tx_serial.send(task),
+            EvmRoute::Local => self.tx_local.send(task),
             EvmRoute::External => self.tx_external.send(task),
             EvmRoute::CallPresent => self.call_present.send(task),
             EvmRoute::CallPast => self.call_past.send(task),
@@ -252,11 +241,8 @@ impl Evms {
 
 #[derive(Debug, Clone, Copy, strum::Display)]
 pub enum EvmRoute {
-    #[strum(to_string = "parallel")]
-    Parallel,
-
-    #[strum(to_string = "serial")]
-    Serial,
+    #[strum(to_string = "local")]
+    Local,
 
     #[strum(to_string = "external")]
     External,
@@ -275,15 +261,12 @@ pub enum EvmRoute {
 /// Locks used for local execution.
 #[derive(Default)]
 pub struct ExecutorLocks {
-    serial: Mutex<()>,
+    transaction: Mutex<()>,
 }
 
 pub struct Executor {
     /// Executor inner locks.
     locks: ExecutorLocks,
-
-    /// Executor configuration.
-    config: ExecutorConfig,
 
     /// Channels to send transactions to background EVMs.
     evms: Evms,
@@ -301,7 +284,6 @@ impl Executor {
         let evms = Evms::spawn(Arc::clone(&storage), &config);
         Self {
             locks: ExecutorLocks::default(),
-            config,
             evms,
             miner,
             storage,
@@ -433,7 +415,7 @@ impl Executor {
         }
 
         // persist state
-        self.miner.save_execution(tx_execution, false, false)?;
+        self.miner.save_execution(tx_execution, false)?;
 
         // track metrics
         #[cfg(feature = "metrics")]
@@ -476,34 +458,13 @@ impl Executor {
         // execute according to the strategy
         const INFINITE_ATTEMPTS: usize = usize::MAX;
 
-        let tx_execution = match self.config.executor_strategy {
-            // Executes transactions in serial mode:
-            // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
-            // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
-            // * Conflict detection runs, but it should never trigger because of the Mutex.
-            ExecutorStrategy::Serial => {
-                // acquire serial execution lock
-                let _serial_lock = self.locks.serial.lock();
+        // Executes transactions serially:
+        // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.
+        // * Without a Mutex, conflict can happen because the next transactions starts executing before the previous one is saved.
+        let _transaction_lock = self.locks.transaction.lock();
 
-                // execute transaction
-                self.execute_local_transaction_attempts(tx, EvmRoute::Serial, INFINITE_ATTEMPTS)
-            }
-
-            // Executes transactions in parallel mode:
-            // * Conflict detection prevents data corruption.
-            ExecutorStrategy::Paralell => {
-                let parallel_attempt = self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Parallel, 1);
-                match parallel_attempt {
-                    Ok(tx_execution) => Ok(tx_execution),
-                    Err(e) =>
-                        if let StratusError::Storage(StorageError::TransactionConflict(_)) = e {
-                            self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
-                        } else {
-                            Err(e)
-                        },
-                }
-            }
-        };
+        // execute transaction
+        let tx_execution = self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS);
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_local_transaction(start.elapsed(), tx_execution.is_ok(), contract, function);
@@ -512,7 +473,7 @@ impl Executor {
     }
 
     /// Executes a transaction until it reaches the max number of attempts.
-    fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, evm_route: EvmRoute, max_attempts: usize) -> Result<(), StratusError> {
+    fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, max_attempts: usize) -> Result<(), StratusError> {
         // validate
         if tx_input.signer.is_zero() {
             return Err(TransactionError::FromZeroAddress.into());
@@ -555,7 +516,7 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            let evm_result = self.evms.execute(evm_input.clone(), evm_route)?;
+            let evm_result = self.evms.execute(evm_input.clone(), EvmRoute::Local)?;
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
@@ -575,7 +536,7 @@ impl Executor {
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
             }
 
-            match self.miner.save_execution(tx_execution, matches!(evm_route, EvmRoute::Parallel), true) {
+            match self.miner.save_execution(tx_execution, true) {
                 Ok(_) => {
                     // track metrics
                     #[cfg(feature = "metrics")]
@@ -587,13 +548,6 @@ impl Executor {
                     return Ok(());
                 }
                 Err(e) => match e {
-                    StratusError::Storage(StorageError::TransactionConflict(ref conflicts)) => {
-                        tracing::warn!(%attempt, ?conflicts, "temporary storage conflict detected when saving execution");
-                        if attempt >= max_attempts {
-                            return Err(e);
-                        }
-                        continue;
-                    }
                     StratusError::Storage(StorageError::EvmInputMismatch { ref expected, ref actual }) => {
                         tracing::warn!(?expected, ?actual, "evm input and block header mismatch");
                         if attempt >= max_attempts {
@@ -686,26 +640,5 @@ impl Executor {
             })
         })
         .with(|m| metrics::inc_evm_inspect(m.elapsed, serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned())))
-    }
-}
-
-#[derive(Clone, Copy, serde::Serialize)]
-pub enum ExecutorStrategy {
-    #[serde(rename = "serial")]
-    Serial,
-
-    #[serde(rename = "parallel")]
-    Paralell,
-}
-
-impl FromStr for ExecutorStrategy {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_lowercase().as_str() {
-            "serial" => Ok(Self::Serial),
-            "par" | "parallel" => Ok(Self::Paralell),
-            s => Err(anyhow!("unknown executor strategy: {}", s)),
-        }
     }
 }
