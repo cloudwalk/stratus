@@ -133,4 +133,12 @@ impl InMemoryTemporaryStorageState {
         self.block = PendingBlock::new_at_now(1.into());
         self.accounts.clear();
     }
+
+    pub fn read_account(&self, address: Address) -> Option<Account> {
+        self.accounts.get(&address).map(|acc| &acc.info).cloned()
+    }
+
+    pub fn read_slot(&self, address: Address, slot: SlotIndex) -> Option<Slot> {
+        self.accounts.get(&address).and_then(|account| account.slots.get(&slot)).copied()
+    }
 }
