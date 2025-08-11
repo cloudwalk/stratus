@@ -4051,12 +4051,22 @@ dependencies = [
 
 [[package]]
 name = "phf"
-version = "0.11.2"
+version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ade2d8b8f33c7333b51bcf0428d37e217e9f32192ae4772156f65063b8ce03dc"
+checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
 dependencies = [
  "phf_macros",
  "phf_shared 0.11.3",
+ "serde",
+]
+
+[[package]]
+name = "phf"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "913273894cec178f401a31ec4b656318d95473527be05c0752cc41cdc32be8b7"
+dependencies = [
+ "phf_shared 0.12.1",
  "serde",
 ]
 
@@ -4728,7 +4738,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70db41f111d3a17362b8bb4ca4c3a77469f9742162add3152838ef6aff523019"
 dependencies = [
  "bitvec",
- "phf",
+ "phf 0.11.3",
  "revm-primitives",
  "serde",
 ]
@@ -6080,7 +6090,7 @@ dependencies = [
  "opentelemetry_sdk",
  "parking_lot",
  "paste",
- "phf",
+ "phf 0.12.1",
  "phf_codegen",
  "pin-project",
  "quick_cache",
