@@ -72,7 +72,7 @@ futures-channel = "=0.3.31"
 
 # ethereum / rpc
 ethabi = "=18.0.0"
-keccak-hasher = "=0.15.3"  # this version must be compatible with triehash
+keccak-hasher = "=0.16.0"  # this version must be compatible with triehash
 rlp = "=0.5.2"
 triehash = "=0.8.4"
 revm-inspectors = "=0.26.5"
