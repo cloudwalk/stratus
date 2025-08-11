@@ -113,7 +113,7 @@ tracing-subscriber = { version = "=0.3.19", features = ["env-filter", "json"] }
 tracing-serde = "=0.2.0"
 
 # storage
-rocksdb = { version = "=0.23.0", features = ["multi-threaded-cf", "io-uring"] }
+rocksdb = { version = "=0.24.0", features = ["multi-threaded-cf", "io-uring"] }
 sqlx = { version = "=0.8.6", features = [
     "runtime-tokio",
     "postgres",
