@@ -25,7 +25,6 @@ humantime = "=2.2.0"
 indexmap = { version = "=2.10.0", features = ["serde"] }
 itertools = "=0.13.0"
 nanoid = "=0.4.0"
-nonempty = { version = "=0.10.0", features = ["serialize"] }
 oneshot = "=0.1.11"
 parking_lot = "=0.12.4"
 paste = "=1.0.15"
