@@ -23,7 +23,7 @@ jobs:
   check_unused_deps:
     name: Check for unused dependencies
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
