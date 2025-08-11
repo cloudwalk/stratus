@@ -50,9 +50,9 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.set_pending_block_header(block_number)
     }
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool, is_local: bool) -> Result<(), StorageError> {
+    pub fn save_pending_execution(&self, tx: TransactionExecution, is_local: bool) -> Result<(), StorageError> {
         self.call_storage.update_state_with_transaction(&tx);
-        self.transaction_storage.save_pending_execution(tx, check_conflicts, is_local)
+        self.transaction_storage.save_pending_execution(tx, is_local)
     }
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {
