@@ -21,7 +21,7 @@ it("Test follower health is based on getting new blocks", async function () {
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     expect(unhealthyResponse.data.error.code).to.equal(7001);
-    expect(unhealthyResponse.data.error.message).to.equal("Stratus is not ready to start servicing requests.");
+    expect(unhealthyResponse.data.error.message).to.equal("stratus is not ready to start servicing requests.");
 
     // check that the ws connection was closed
     expect(ws.websocket.readyState).to.not.equal(WebSocket.OPEN);
@@ -56,7 +56,7 @@ it("stratus_disableRestartOnUnhealthy should not close connection", async functi
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     expect(unhealthyResponse.data.error.code).to.equal(7001);
-    expect(unhealthyResponse.data.error.message).to.equal("Stratus is not ready to start servicing requests.");
+    expect(unhealthyResponse.data.error.message).to.equal("stratus is not ready to start servicing requests.");
 
     // check that the ws connection remained open
     expect(ws.websocket.readyState).to.equal(WebSocket.OPEN);

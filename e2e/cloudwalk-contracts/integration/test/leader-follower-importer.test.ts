@@ -34,7 +34,7 @@ describe("Leader & Follower importer integration test", function () {
         updateProviderUrl("stratus");
         const responseLeader = await sendAndGetFullResponse("stratus_shutdownImporter", []);
         expect(responseLeader.data.error.code).eq(7003);
-        expect(responseLeader.data.error.message).eq("Stratus node is not a follower.");
+        expect(responseLeader.data.error.message).eq("stratus node is not a follower.");
     });
 
     it("Shutdown command to Follower should succeed", async function () {
@@ -57,7 +57,7 @@ describe("Leader & Follower importer integration test", function () {
         expect(followerNode.is_importer_shutdown).to.equal(true);
         const followerHealth = await sendAndGetFullResponse("stratus_health", []);
         expect(followerHealth.data.error.code).eq(7001);
-        expect(followerHealth.data.error.message).eq("Stratus is not ready to start servicing requests.");
+        expect(followerHealth.data.error.message).eq("stratus is not ready to start servicing requests.");
     });
 
     it("Validate Leader state and health after Follower shutdown", async function () {
@@ -111,7 +111,7 @@ describe("Leader & Follower importer integration test", function () {
             "10485760",
         ]);
         expect(responseLeader.data.error.code).to.equal(7003);
-        expect(responseLeader.data.error.message).to.equal("Stratus node is not a follower.");
+        expect(responseLeader.data.error.message).to.equal("stratus node is not a follower.");
     });
 
     it("Init command to Follower without addresses should fail", async function () {

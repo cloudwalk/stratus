@@ -51,7 +51,7 @@ describe("Leader & Follower change integration test", function () {
             "10485760",
         ]);
         expect(response.data.error.code).to.equal(7007);
-        expect(response.data.error.message).to.equal("Can't change miner mode while transactions are enabled.");
+        expect(response.data.error.message).to.equal("can't change miner mode while transactions are enabled.");
     });
 
     it("Change Leader to Follower with miner enabled should fail ", async function () {
@@ -107,7 +107,7 @@ describe("Leader & Follower change integration test", function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
         expect(response.data.error.code).to.equal(7007);
-        expect(response.data.error.message).to.equal("Can't change miner mode while transactions are enabled.");
+        expect(response.data.error.message).to.equal("can't change miner mode while transactions are enabled.");
     });
 
     it("Change Follower to Leader should succeed", async function () {
