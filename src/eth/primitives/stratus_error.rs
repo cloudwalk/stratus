@@ -1,11 +1,11 @@
 use futures::future::BoxFuture;
+use jsonrpsee::MethodResponse;
+use jsonrpsee::ResponsePayload;
 use jsonrpsee::core::middleware::ResponseFuture;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Id;
-use jsonrpsee::MethodResponse;
-use jsonrpsee::ResponsePayload;
-use revm::context::result::EVMError;
 use revm::context::DBErrorMarker;
+use revm::context::result::EVMError;
 use stratus_macros::ErrorCode;
 
 use super::execution_result::RevertReason;
@@ -15,7 +15,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionConflicts;
 use crate::eth::primitives::Nonce;
 use crate::ext::to_json_value;
 
@@ -113,10 +112,10 @@ pub enum StorageError {
     #[error_code = 2]
     MinedNumberConflict { new: BlockNumber, mined: BlockNumber },
 
-    #[error("Transaction execution conflicts: {0:?}.")]
-    #[error_code = 3]
-    TransactionConflict(Box<ExecutionConflicts>),
-
+    // *deprecated*
+    // #[error("Transaction execution conflicts: {0:?}.")]
+    // #[error_code = 3]
+    // TransactionConflict(Box<ExecutionConflicts>),
     #[error("Transaction input does not match block header")]
     #[error_code = 4]
     EvmInputMismatch { expected: Box<EvmInput>, actual: Box<EvmInput> },

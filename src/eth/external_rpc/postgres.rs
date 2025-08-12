@@ -3,11 +3,11 @@
 use std::time::Duration;
 
 use log::LevelFilter;
+use sqlx::ConnectOptions;
+use sqlx::PgPool;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::BigDecimal;
-use sqlx::ConnectOptions;
-use sqlx::PgPool;
 
 use crate::alias::JsonValue;
 use crate::eth::external_rpc::ExternalBlockWithReceipts;
@@ -19,9 +19,9 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Wei;
+use crate::ext::SleepReason;
 use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
-use crate::ext::SleepReason;
 use crate::log_and_err;
 
 const MAX_RETRIES: u64 = 50;
@@ -142,7 +142,7 @@ impl ExternalRpc for PostgresExternalRpc {
 
         let result = sqlx::query_file!(
             "src/eth/external_rpc/sql/insert_external_balance.sql",
-            address.as_ref(),
+            address.as_ref() as &[u8],
             TryInto::<BigDecimal>::try_into(balance)?
         )
         .execute(&self.pool)

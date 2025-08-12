@@ -5,8 +5,9 @@ use super::block_number::BlockNumberRocksdb;
 use super::bytes::BytesRocksdb;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ReplicationLogRocksdb {
     pub block_number: BlockNumberRocksdb,
     pub log_data: BytesRocksdb,
@@ -28,3 +29,5 @@ impl ReplicationLogRocksdb {
         &self.log_data.0
     }
 }
+
+impl SerializeDeserializeWithContext for ReplicationLogRocksdb {}

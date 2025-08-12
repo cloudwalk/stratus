@@ -1,8 +1,9 @@
 use std::fmt::Debug;
 
 use crate::eth::primitives::Index;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Copy, Hash, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, Copy, Hash, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct IndexRocksdb(pub(self) u32);
 
 impl IndexRocksdb {
@@ -22,3 +23,5 @@ impl From<IndexRocksdb> for Index {
         Index::new(item.0 as u64)
     }
 }
+
+impl SerializeDeserializeWithContext for IndexRocksdb {}
