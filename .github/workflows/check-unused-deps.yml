@@ -52,17 +52,8 @@ jobs:
       - name: Install cargo-udeps
         run: cargo +nightly install cargo-udeps --locked
 
+      - name: Set up Just
+        uses: extractions/setup-just@v2
+
       - name: Check for unused dependencies
-        run: |
-          echo "Checking for unused dependencies..."
-          OUTPUT=$(cargo +nightly udeps --all-targets 2>&1)
-          echo "$OUTPUT"
-          
-          # Check if there are unused dependencies (excluding the notes)
-          if echo "$OUTPUT" | grep -q "unused dependencies:"; then
-            echo "❌ Found unused dependencies!"
-            echo "$OUTPUT" | grep -A 100 "unused dependencies:"
-            exit 1
-          else
-            echo "✅ No unused dependencies found!"
-          fi
+        run: just check-unused-deps
