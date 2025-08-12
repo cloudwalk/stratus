@@ -2,6 +2,7 @@
 #![allow(clippy::expect_used)]
 #![allow(clippy::panic)]
 
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -16,8 +17,12 @@ use nom::character::complete::hex_digit1;
 use nom::combinator::rest;
 use nom::sequence::preceded;
 use nom::sequence::separated_pair;
+use vergen_gitcl::AddCustomEntries;
 use vergen_gitcl::BuildBuilder;
 use vergen_gitcl::CargoBuilder;
+use vergen_gitcl::CargoRerunIfChanged;
+use vergen_gitcl::CargoWarning;
+use vergen_gitcl::DefaultConfig;
 use vergen_gitcl::Emitter;
 use vergen_gitcl::GitclBuilder;
 use vergen_gitcl::RustcBuilder;
@@ -45,6 +50,49 @@ fn print_build_directives() {
 // -----------------------------------------------------------------------------
 // Code generation: Build Info
 // -----------------------------------------------------------------------------
+
+#[derive(Default)]
+struct Custom {}
+
+impl AddCustomEntries<&str, &str> for Custom {
+    fn add_calculated_entries(
+        &self,
+        _idempotent: bool,
+        cargo_rustc_env_map: &mut BTreeMap<&str, &str>,
+        _cargo_rerun_if_changed: &mut CargoRerunIfChanged,
+        _cargo_warning: &mut CargoWarning,
+    ) -> anyhow::Result<()> {
+        // Get git remote URL using git command
+        let git_repo_url = Command::new("git")
+            .args(["remote", "get-url", "origin"])
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8(output.stdout).ok()
+                } else {
+                    None
+                }
+            })
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let git_url_static = Box::leak(git_repo_url.into_boxed_str());
+        cargo_rustc_env_map.insert("VERGEN_GIT_REPO_URL", git_url_static);
+        Ok(())
+    }
+
+    fn add_default_entries(
+        &self,
+        _config: &DefaultConfig,
+        _cargo_rustc_env_map: &mut BTreeMap<&str, &str>,
+        _cargo_rerun_if_changed: &mut CargoRerunIfChanged,
+        _cargo_warning: &mut CargoWarning,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
 fn generate_build_info() {
     // Capture the hostname of the machine where the binary is being built
     let build_hostname = hostname::get().unwrap_or_default().to_string_lossy().into_owned();
@@ -101,7 +149,9 @@ fn generate_build_info() {
         .unwrap()
         .add_instructions(&RustcBuilder::default().semver(true).channel(true).host_triple(true).build().unwrap())
         .unwrap()
-        .add_instructions(&SysinfoBuilder::default().build().unwrap())
+        .add_instructions(&SysinfoBuilder::default().os_version(true).user(true).build().unwrap())
+        .unwrap()
+        .add_custom_instructions(&Custom::default())
         .unwrap()
         .emit()
     {
