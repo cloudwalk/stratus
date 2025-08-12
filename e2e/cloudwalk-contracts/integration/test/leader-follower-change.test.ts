@@ -201,7 +201,7 @@ describe("Leader & Follower change integration test", function () {
         let semaphoreFailureCount = 0;
 
         const SEMAPHORE_ERROR_CODE = 7005;
-        const SEMAPHORE_ERROR_MESSAGE = "Stratus node is already in the process of changing mode.";
+        const SEMAPHORE_ERROR_MESSAGE = "stratus node is already in the process of changing mode.";
 
         allResponses.forEach((response, index) => {
             if (response.status === "fulfilled" && response.value.data.result === true) {
