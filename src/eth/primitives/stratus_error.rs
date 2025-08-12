@@ -26,39 +26,39 @@ pub trait ErrorCode {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 1000]
 pub enum RpcError {
-    #[error("Block filter does not point to a valid block.")]
+    #[error("block filter does not point to a valid block.")]
     #[error_code = 1]
     BlockFilterInvalid { filter: BlockFilter },
 
-    #[error("Denied because will fetch data from {actual} blocks, but the max allowed is {max}.")]
+    #[error("denied because will fetch data from {actual} blocks, but the max allowed is {max}.")]
     #[error_code = 2]
     BlockRangeInvalid { actual: u64, max: u64 },
 
-    #[error("Denied because client did not identify itself.")]
+    #[error("denied because client did not identify itself.")]
     #[error_code = 3]
     ClientMissing,
 
-    #[error("Failed to decode {rust_type} parameter.")]
+    #[error("failed to decode {rust_type} parameter.")]
     #[error_code = 4]
     ParameterInvalid { rust_type: &'static str, decode_error: String },
 
-    #[error("Expected {rust_type} parameter, but received nothing.")]
+    #[error("expected {rust_type} parameter, but received nothing.")]
     #[error_code = 5]
     ParameterMissing { rust_type: &'static str },
 
-    #[error("Invalid subscription event: {event}")]
+    #[error("invalid subscription event: {event}")]
     #[error_code = 6]
     SubscriptionInvalid { event: String },
 
-    #[error("Denied because reached maximum subscription limit of {max}.")]
+    #[error("denied because reached maximum subscription limit of {max}.")]
     #[error_code = 7]
     SubscriptionLimit { max: u32 },
 
-    #[error("Failed to decode transaction RLP data.")]
+    #[error("failed to decode transaction RLP data.")]
     #[error_code = 8]
     TransactionInvalid { decode_error: String },
 
-    #[error("Miner mode param is invalid.")]
+    #[error("miner mode param is invalid.")]
     #[error_code = 9]
     MinerModeParamInvalid,
 }
@@ -66,37 +66,35 @@ pub enum RpcError {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 2000]
 pub enum TransactionError {
-    // needs to be lowercase to work with callOptionalSignature
-    #[error("function selector was not recognized: Account at {address} is not a contract.")]
+    #[error("function selector was not recognized: account at {address} is not a contract.")]
     #[error_code = 1]
     AccountNotContract { address: Address },
 
-    #[error("Transaction nonce {transaction} does not match account nonce {account}.")]
+    #[error("transaction nonce {transaction} does not match account nonce {account}.")]
     #[error_code = 2]
     Nonce { transaction: Nonce, account: Nonce },
 
-    // needs to be lowercase to work with callOptionalSignature
-    #[error("evm execution error: {0:?}.")]
+    #[error("EVM execution error: {0:?}.")]
     #[error_code = 3]
     EvmFailed(String), // TODO: split this in multiple errors
 
-    #[error("Failed to execute transaction in leader: {0:?}.")]
+    #[error("failed to execute transaction in leader: {0:?}.")]
     #[error_code = 4]
     LeaderFailed(ErrorObjectOwned),
 
-    #[error("Failed to forward transaction to leader node.")]
+    #[error("failed to forward transaction to leader node.")]
     #[error_code = 5]
     ForwardToLeaderFailed,
 
-    #[error("Transaction reverted during execution. output: {output}")]
+    #[error("transaction reverted during execution. output: {output}")]
     #[error_code = 6]
     RevertedCall { output: Bytes },
 
-    #[error("Transaction from zero address is not allowed.")]
+    #[error("transaction from zero address is not allowed.")]
     #[error_code = 7]
     FromZeroAddress,
 
-    #[error("Transaction reverted during execution. reason: {reason}")]
+    #[error("transaction reverted during execution. reason: {reason}")]
     #[error_code = 8]
     RevertedCallWithReason { reason: RevertReason },
 }
@@ -104,11 +102,11 @@ pub enum TransactionError {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 3000]
 pub enum StorageError {
-    #[error("Block conflict: {number} already exists in the permanent storage.")]
+    #[error("block conflict: {number} already exists in the permanent storage.")]
     #[error_code = 1]
     BlockConflict { number: BlockNumber },
 
-    #[error("Mined number conflict between new block number ({new}) and mined block number ({mined}).")]
+    #[error("mined number conflict between new block number ({new}) and mined block number ({mined}).")]
     #[error_code = 2]
     MinedNumberConflict { new: BlockNumber, mined: BlockNumber },
 
@@ -116,27 +114,27 @@ pub enum StorageError {
     // #[error("Transaction execution conflicts: {0:?}.")]
     // #[error_code = 3]
     // TransactionConflict(Box<ExecutionConflicts>),
-    #[error("Transaction input does not match block header")]
+    #[error("transaction input does not match block header")]
     #[error_code = 4]
     EvmInputMismatch { expected: Box<EvmInput>, actual: Box<EvmInput> },
 
-    #[error("Pending number conflict between new block number ({new}) and pending block number ({pending}).")]
+    #[error("pending number conflict between new block number ({new}) and pending block number ({pending}).")]
     #[error_code = 5]
     PendingNumberConflict { new: BlockNumber, pending: BlockNumber },
 
-    #[error("There are ({pending_txs}) pending transactions.")]
+    #[error("there are ({pending_txs}) pending transactions.")]
     #[error_code = 6]
     PendingTransactionsExist { pending_txs: usize },
 
-    #[error("Rocksdb returned an error: {err}")]
+    #[error("rocksdb returned an error: {err}")]
     #[error_code = 7]
     RocksError { err: anyhow::Error },
 
-    #[error("Block not found using filter: {filter}")]
+    #[error("block not found using filter: {filter}")]
     #[error_code = 8]
     BlockNotFound { filter: BlockFilter },
 
-    #[error("Unexpected storage error: {msg}")]
+    #[error("unexpected storage error: {msg}")]
     #[error_code = 9]
     Unexpected { msg: String },
 }
@@ -144,19 +142,19 @@ pub enum StorageError {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 4000]
 pub enum ImporterError {
-    #[error("Importer is already running.")]
+    #[error("importer is already running.")]
     #[error_code = 1]
     AlreadyRunning,
 
-    #[error("Importer is already shutdown.")]
+    #[error("importer is already shutdown.")]
     #[error_code = 2]
     AlreadyShutdown,
 
-    #[error("Failed to parse importer configuration.")]
+    #[error("failed to parse importer configuration.")]
     #[error_code = 3]
     ConfigParseError,
 
-    #[error("Failed to initialize importer.")]
+    #[error("failed to initialize importer.")]
     #[error_code = 4]
     InitError,
 }
@@ -164,15 +162,15 @@ pub enum ImporterError {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 5000]
 pub enum ConsensusError {
-    #[error("Consensus is temporarily unavailable for follower node.")]
+    #[error("consensus is temporarily unavailable for follower node.")]
     #[error_code = 1]
     Unavailable,
 
-    #[error("Consensus is set.")]
+    #[error("consensus is set.")]
     #[error_code = 2]
     Set,
 
-    #[error("Failed to update consensus: Consensus is not set.")]
+    #[error("failed to update consensus: Consensus is not set.")]
     #[error_code = 3]
     NotSet,
 }
@@ -180,11 +178,11 @@ pub enum ConsensusError {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 6000]
 pub enum UnexpectedError {
-    #[error("Unexpected channel {channel} closed.")]
+    #[error("unexpected channel {channel} closed.")]
     #[error_code = 1]
     ChannelClosed { channel: &'static str },
 
-    #[error("Unexpected error: {0:?}.")]
+    #[error("unexpected error: {0:?}.")]
     #[error_code = 2]
     Unexpected(anyhow::Error),
 }
@@ -192,31 +190,31 @@ pub enum UnexpectedError {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 7000]
 pub enum StateError {
-    #[error("Stratus is not ready to start servicing requests.")]
+    #[error("stratus is not ready to start servicing requests.")]
     #[error_code = 1]
     StratusNotReady,
 
-    #[error("Stratus is shutting down.")]
+    #[error("stratus is shutting down.")]
     #[error_code = 2]
     StratusShutdown,
 
-    #[error("Stratus node is not a follower.")]
+    #[error("stratus node is not a follower.")]
     #[error_code = 3]
     StratusNotFollower,
 
-    #[error("Incorrect password, cancelling operation.")]
+    #[error("incorrect password, cancelling operation.")]
     #[error_code = 4]
     InvalidPassword,
 
-    #[error("Stratus node is already in the process of changing mode.")]
+    #[error("stratus node is already in the process of changing mode.")]
     #[error_code = 5]
     ModeChangeInProgress,
 
-    #[error("Transaction processing is temporarily disabled.")]
+    #[error("transaction processing is temporarily disabled.")]
     #[error_code = 6]
     TransactionsDisabled,
 
-    #[error("Can't change miner mode while transactions are enabled.")]
+    #[error("can't change miner mode while transactions are enabled.")]
     #[error_code = 7]
     TransactionsEnabled,
 }
