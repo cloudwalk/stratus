@@ -66,7 +66,7 @@ describe("Leader & Follower change integration test", function () {
         ]);
         expect(response.data.error.code).to.equal(6002);
         expect(response.data.error.message.split("\n")[0]).to.equal(
-            "Unexpected error: can't change miner mode from Interval without pausing it first",
+            "unexpected error: can't change miner mode from Interval without pausing it first",
         );
     });
 

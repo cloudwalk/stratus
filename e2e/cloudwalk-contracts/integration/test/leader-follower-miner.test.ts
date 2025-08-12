@@ -67,7 +67,7 @@ describe("Miner mode change integration test", function () {
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
         expect(response.data.error.code).eq(6002);
         expect(response.data.error.message.split("\n")[0]).to.equal(
-            "Unexpected error: can't change miner mode from Interval without pausing it first",
+            "unexpected error: can't change miner mode from Interval without pausing it first",
         );
     });
 
@@ -75,7 +75,7 @@ describe("Miner mode change integration test", function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["1s"]);
         expect(response.data.error.code).eq(5002);
-        expect(response.data.error.message).eq("Consensus is set.");
+        expect(response.data.error.message).eq("consensus is set.");
     });
 
     it("Disable miner on Leader", async function () {
@@ -98,14 +98,14 @@ describe("Miner mode change integration test", function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", []);
         expect(response.data.error.code).eq(1005);
-        expect(response.data.error.message).eq("Expected String parameter, but received nothing.");
+        expect(response.data.error.message).eq("expected String parameter, but received nothing.");
     });
 
     it("Miner change on Leader with invalid params should fail", async function () {
         updateProviderUrl("stratus");
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["invalidMode"]);
         expect(response.data.error.code).eq(1009);
-        expect(response.data.error.message).eq("Miner mode param is invalid.");
+        expect(response.data.error.message).eq("miner mode param is invalid.");
     });
 
     it("Miner change on Leader with same mode should return false", async function () {
@@ -125,7 +125,7 @@ describe("Miner mode change integration test", function () {
         const response = await sendAndGetFullResponse("stratus_changeMinerMode", ["automine"]);
         expect(response.data.error.code).eq(6002);
         expect(response.data.error.message.split("\n")[0]).eq(
-            "Unexpected error: Miner mode change to 'automine' is unsupported.",
+            "unexpected error: Miner mode change to 'automine' is unsupported.",
         );
     });
 
