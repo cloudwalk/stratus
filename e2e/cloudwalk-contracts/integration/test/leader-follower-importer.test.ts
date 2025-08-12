@@ -47,7 +47,7 @@ describe("Leader & Follower importer integration test", function () {
         updateProviderUrl("stratus-follower");
         const responseFollower = await sendAndGetFullResponse("stratus_shutdownImporter", []);
         expect(responseFollower.data.error.code).to.equal(4002);
-        expect(responseFollower.data.error.message).to.equal("Importer is already shutdown.");
+        expect(responseFollower.data.error.message).to.equal("importer is already shutdown.");
     });
 
     it("Validate Follower state and health after shutdown", async function () {
@@ -98,7 +98,7 @@ describe("Leader & Follower importer integration test", function () {
         const signedTx = await BOB.signWeiTransfer(ALICE.address, 1, nonce);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(txResponse.data.error.code).to.equal(5001);
-        expect(txResponse.data.error.message).to.equal("Consensus is temporarily unavailable for follower node.");
+        expect(txResponse.data.error.message).to.equal("consensus is temporarily unavailable for follower node.");
     });
 
     it("Init command to Leader should fail", async function () {
@@ -118,7 +118,7 @@ describe("Leader & Follower importer integration test", function () {
         updateProviderUrl("stratus-follower");
         const responseInvalidFollower = await sendAndGetFullResponse("stratus_initImporter", []);
         expect(responseInvalidFollower.data.error.code).to.equal(1005);
-        expect(responseInvalidFollower.data.error.message).to.equal("Expected String parameter, but received nothing.");
+        expect(responseInvalidFollower.data.error.message).to.equal("expected String parameter, but received nothing.");
     });
 
     it("Init command to Follower with invalid addresses should fail", async function () {
@@ -130,7 +130,7 @@ describe("Leader & Follower importer integration test", function () {
             "10485760",
         ]);
         expect(responseInvalidAddressFollower.data.error.code).to.equal(4004);
-        expect(responseInvalidAddressFollower.data.error.message).to.equal("Failed to initialize importer.");
+        expect(responseInvalidAddressFollower.data.error.message).to.equal("failed to initialize importer.");
     });
 
     it("Init command to Follower with valid params should succeed", async function () {
@@ -153,7 +153,7 @@ describe("Leader & Follower importer integration test", function () {
             "10485760",
         ]);
         expect(responseSecondInitFollower.data.error.code).to.equal(4001);
-        expect(responseSecondInitFollower.data.error.message).to.equal("Importer is already running.");
+        expect(responseSecondInitFollower.data.error.message).to.equal("importer is already running.");
     });
 
     it("Wait until Follower is in sync with Leader", async function () {

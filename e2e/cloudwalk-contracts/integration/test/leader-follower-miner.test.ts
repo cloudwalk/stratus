@@ -168,7 +168,7 @@ describe("Miner mode change integration test", function () {
         // Change Miner mode to External on Leader with Pending Transactions should fail
         const changeMinerModeResponse = await sendAndGetFullResponse("stratus_changeMinerMode", ["external"]);
         expect(changeMinerModeResponse.data.error.code).eq(3006);
-        expect(changeMinerModeResponse.data.error.message).eq("There are (1) pending transactions.");
+        expect(changeMinerModeResponse.data.error.message).eq("there are (1) pending transactions.");
 
         // Clean up
         updateProviderUrl("stratus");
