@@ -56,4 +56,4 @@ jobs:
         uses: extractions/setup-just@v2
 
       - name: Check for unused dependencies
-        run: just check-unused-deps
+        run: just check-unused-deps -2025-05-22
