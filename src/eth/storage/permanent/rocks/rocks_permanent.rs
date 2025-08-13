@@ -264,7 +264,7 @@ impl RocksPermanentStorage {
             }
 
             if let Err(e) = state.export_column_family_size_metrics() {
-                tracing::warn!("Failed to export column family metrics: {:?}", e);
+                tracing::warn!("failed to export column family metrics: {:?}", e);
             }
 
             traced_sleep(interval, SleepReason::Interval).await;
