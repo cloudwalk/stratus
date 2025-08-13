@@ -49,11 +49,8 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      - name: Install cargo-udeps
-        run: cargo +nightly install cargo-udeps --locked
-
       - name: Set up Just
         uses: extractions/setup-just@v2
 
       - name: Check for unused dependencies
-        run: just check-unused-deps
+        run: just check-unused-deps -2025-05-22
