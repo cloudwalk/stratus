@@ -33,15 +33,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Rust Nightly
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2025-05-22
+      - name: Set up Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
+          rustup toolchain install nightly
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         id: cache-cargo
         with:
           prefix-key: ${{ runner.os }}-v3-cargo
-          shared-key: nightly-debug
+          shared-key: stable-debug
           key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
           cache-provider: "github"
           cache-directories: "~/.cargo/bin/"
@@ -50,7 +52,7 @@ jobs:
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Install cargo-udeps
-        run: cargo +nightly-2025-05-22 install cargo-udeps --locked
+        run: cargo +nightly install cargo-udeps --locked
 
       - name: Set up Just
         uses: extractions/setup-just@v2
