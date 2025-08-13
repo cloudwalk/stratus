@@ -51,7 +51,7 @@ describe("Leader & Follower change integration test", function () {
             "10485760",
         ]);
         expect(response.data.error.code).to.equal(7007);
-        expect(response.data.error.message).to.equal("Can't change miner mode while transactions are enabled.");
+        expect(response.data.error.message).to.equal("can't change miner mode while transactions are enabled.");
     });
 
     it("Change Leader to Follower with miner enabled should fail ", async function () {
@@ -66,7 +66,7 @@ describe("Leader & Follower change integration test", function () {
         ]);
         expect(response.data.error.code).to.equal(6002);
         expect(response.data.error.message.split("\n")[0]).to.equal(
-            "Unexpected error: can't change miner mode from Interval without pausing it first",
+            "unexpected error: can't change miner mode from Interval without pausing it first",
         );
     });
 
@@ -107,7 +107,7 @@ describe("Leader & Follower change integration test", function () {
         updateProviderUrl("stratus-follower");
         const response = await sendAndGetFullResponse("stratus_changeToLeader", []);
         expect(response.data.error.code).to.equal(7007);
-        expect(response.data.error.message).to.equal("Can't change miner mode while transactions are enabled.");
+        expect(response.data.error.message).to.equal("can't change miner mode while transactions are enabled.");
     });
 
     it("Change Follower to Leader should succeed", async function () {
@@ -201,7 +201,7 @@ describe("Leader & Follower change integration test", function () {
         let semaphoreFailureCount = 0;
 
         const SEMAPHORE_ERROR_CODE = 7005;
-        const SEMAPHORE_ERROR_MESSAGE = "Stratus node is already in the process of changing mode.";
+        const SEMAPHORE_ERROR_MESSAGE = "stratus node is already in the process of changing mode.";
 
         allResponses.forEach((response, index) => {
             if (response.status === "fulfilled" && response.value.data.result === true) {
