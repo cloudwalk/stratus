@@ -36,9 +36,6 @@ jobs:
       - name: Set up Rust Nightly
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2025-05-22
 
-      - name: Install cargo-udeps
-        run: cargo +nightly-2025-05-22 install cargo-udeps --locked
-
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         id: cache-cargo
@@ -56,4 +53,5 @@ jobs:
         uses: extractions/setup-just@v2
 
       - name: Check for unused dependencies
-        run: just check-unused-deps -2025-05-22
+        run: just check-unused-deps nightly-version="-2025-05-22"
+        
