@@ -197,6 +197,8 @@ impl RocksPermanentStorage {
             })
     }
 
+
+
     pub fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {

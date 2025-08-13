@@ -59,10 +59,10 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::cf_versions::CfBlockChangesValue;
 use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
-use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -264,12 +264,11 @@ impl RocksStorageState {
 
         for change in changes {
             let address: AddressRocksdb = change.address.into();
+            let mut account_change_entry = AccountChangesRocksdb::default();
 
             if change.is_account_modified() {
-                let address: AddressRocksdb = change.address.into();
                 let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
-                let mut account_change_entry = AccountChangesRocksdb::default();
-                account_change_entry.address = address;
+
                 if let Some(nonce) = change.nonce.take_modified() {
                     account_info_entry.nonce = nonce.into();
                     account_change_entry.nonce = Some(nonce.into());
@@ -283,7 +282,6 @@ impl RocksStorageState {
                     account_change_entry.bytecode = bytecode.map_into();
                 }
 
-                account_change_entry.has_changes().then(|| block_changes.account_changes.push(account_change_entry));
                 self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
                 self.accounts_history
                     .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
@@ -294,7 +292,7 @@ impl RocksStorageState {
                     let slot_index = slot_index.into();
                     let slot_value: SlotValueRocksdb = slot.value.into();
 
-                    block_changes.slot_changes.push((address, slot_index, slot_value));
+                    account_change_entry.slot_changes.insert(slot_index, slot_value);
                     self.account_slots
                         .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
                     self.account_slots_history
@@ -302,6 +300,9 @@ impl RocksStorageState {
                 }
             }
 
+            account_change_entry
+                .has_changes()
+                .then(|| block_changes.account_changes.insert(address, account_change_entry));
         }
 
         self.block_changes.prepare_batch_insertion([(block_number, block_changes.into())], batch)?;
@@ -441,12 +442,13 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
+                }
+            }
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
@@ -568,7 +570,8 @@ impl RocksStorageState {
         let block_hash = block.hash();
 
         // this is an optimization, instead of saving the entire block into the database,
-        // remove all discardable account changes
+        // remove all discardable account changes, this seems uneeded ever since we isolated the types,
+        // BlockRocksdb doesnt even contain a field for the changes
         let block_without_changes = {
             let mut block_mut = block;
             // mutate it
@@ -584,7 +587,6 @@ impl RocksStorageState {
 
         let block_by_hash = (block_hash.into(), number.into());
         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], batch)?;
-
 
         self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
 
@@ -714,6 +716,15 @@ impl RocksStorageState {
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
         Ok(())
+    }
+
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<Block>> {
+        let Some(mut block_wo_changes) = self.read_block(selection)? else {
+            return Ok(None);
+        };
+        let changes = self.block_changes.get(&block_wo_changes.number().into())?;
+        block_wo_changes.transactions[0].execution.changes = changes.map(|changes| changes.into_inner().into()).unwrap_or_default();
+        Ok(Some(block_wo_changes))
     }
 }
 

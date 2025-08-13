@@ -15,8 +15,8 @@ use crate::eth::primitives::Wei;
 /// Changes that happened to an account during a transaction.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionAccountChanges {
-    pub new_account: bool,
-    pub address: Address,
+    pub new_account: bool, // I think this is useless
+    pub address: Address, // redundant because this is present in the BTreeMap
     pub nonce: ExecutionValueChange<Nonce>,
     pub balance: ExecutionValueChange<Wei>,
 
@@ -24,7 +24,7 @@ pub struct ExecutionAccountChanges {
     #[dummy(default)]
     pub bytecode: ExecutionValueChange<Option<RevmBytecode>>,
     pub code_hash: CodeHash, // TODO: should be wrapped in a ExecutionValueChange
-    pub slots: BTreeMap<SlotIndex, ExecutionValueChange<Slot>>,
+    pub slots: BTreeMap<SlotIndex, ExecutionValueChange<Slot>>, // should map idx to slotvalue
 }
 
 impl ExecutionAccountChanges {

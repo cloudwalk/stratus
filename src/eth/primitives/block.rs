@@ -28,7 +28,7 @@ use crate::ext::to_json_value;
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     pub header: BlockHeader,
-    pub transactions: Vec<TransactionMined>,
+    pub transactions: Vec<TransactionMined>, // I think we can move the changes up from the transaction mined to the block level
 }
 
 impl Block {
