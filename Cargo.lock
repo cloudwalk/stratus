@@ -6108,7 +6108,7 @@ dependencies = [
  "strum",
  "sugars",
  "tempfile",
- "thiserror 1.0.61",
+ "thiserror 2.0.12",
  "tikv-jemallocator",
  "tokio",
  "tokio-util",
