@@ -18,6 +18,7 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
+use crate::eth::primitives::Block;
 use crate::GlobalState;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
@@ -176,6 +177,22 @@ impl BlockchainClient {
         match result {
             Ok(block) => Ok(block),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
+        }
+    }
+
+    /// Fetches a block by number with changes.
+    pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<Block>> {
+        tracing::debug!(%block_number, "fetching block");
+
+        let number = to_json_value(block_number);
+        let result = self
+            .http
+            .request::<Option<Block>, _>("stratus_getBlockWithChanges", [number])
+            .await;
+
+        match result {
+            Ok(block) => Ok(block),
+            Err(e) => log_and_err!(reason = e, "failed to fetch block with changes"),
         }
     }
 

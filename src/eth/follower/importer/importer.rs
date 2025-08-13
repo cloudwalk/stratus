@@ -20,6 +20,7 @@ use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::CommitItem;
 use crate::eth::miner::miner::interval_miner::mine_and_commit;
+use crate::eth::primitives::Block;
 #[cfg(feature = "replication")]
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
@@ -55,6 +56,7 @@ pub enum ImporterMode {
     NormalFollower,
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     FakeLeader,
+    BlockWithChanges,
     /// Import blocks using RocksDB replication logs.
     #[cfg(feature = "replication")]
     RocksDbReplication,
@@ -173,7 +175,7 @@ impl Importer {
                     tracing::error!(reason = ?e, "importer-online failed");
                 }
             }
-            _ => {
+            ImporterMode::NormalFollower | ImporterMode::FakeLeader => {
                 // Use existing block fetcher and executor approach
                 let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
 
@@ -205,6 +207,35 @@ impl Importer {
 
                 // Await all tasks
                 if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
+                    tracing::error!(reason = ?e, "importer-online failed");
+                }
+            }
+            ImporterMode::BlockWithChanges => {
+                // Use existing block fetcher and executor approach
+                let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
+
+                // Spawn block executor
+                let task_saver = spawn(
+                    "importer::executor",
+                    Importer::start_block_saver(Arc::clone(&self.storage), backlog_rx, self.kafka_connector.clone()),
+                );
+
+                // Spawn block number fetcher
+                let number_fetcher_chain = Arc::clone(&self.chain);
+                let task_number_fetcher = spawn(
+                    "importer::number-fetcher",
+                    Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
+                );
+
+                // Spawn block fetcher
+                let block_fetcher_chain = Arc::clone(&self.chain);
+                let task_block_fetcher = spawn(
+                    "importer::block-with-changes-fetcher",
+                    Importer::start_block_with_changes_fetcher(block_fetcher_chain, backlog_tx, number),
+                );
+
+                // Await all tasks
+                if let Err(e) = try_join!(task_saver, task_block_fetcher, task_number_fetcher) {
                     tracing::error!(reason = ?e, "importer-online failed");
                 }
             }
@@ -328,6 +359,67 @@ impl Importer {
         Ok(())
     }
 
+    async fn start_block_saver(
+        storage: Arc<StratusStorage>,
+        mut backlog_rx: mpsc::Receiver<Block>,
+        kafka_connector: Option<Arc<KafkaConnector>>,
+    ) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "block-saver";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
+
+        loop {
+            if Self::should_shutdown(TASK_NAME) {
+                return Ok(());
+            }
+
+            let block = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
+                Ok(Some(inner)) => inner,
+                Ok(None) => break, // channel closed
+                Err(_timed_out) => {
+                    tracing::warn!(timeout = "2s", "timeout reading block executor channel, expected around 1 block per second");
+                    continue;
+                }
+            };
+
+            #[cfg(feature = "metrics")]
+            let (start, block_number, block_tx_len) = (metrics::now(), block.number(), block.transactions.len());
+
+            // statistics
+            #[cfg(feature = "metrics")]
+            {
+                let duration = start.elapsed();
+                let tps = calculate_tps(duration, block_tx_len);
+
+                tracing::info!(
+                    tps,
+                    %block_number,
+                    duration = %duration.to_string_ext(),
+                    "reexecuted external block",
+                );
+            }
+
+            if let Some(ref kafka_conn) = kafka_connector {
+                let events = block
+                    .transactions
+                    .iter()
+                    .flat_map(|tx| transaction_to_events(block.header.timestamp, Cow::Borrowed(tx)));
+
+                kafka_conn.send_buffered(events, 50).await?;
+            }
+
+            storage.save_block(block)?;
+
+            #[cfg(feature = "metrics")]
+            {
+                metrics::inc_n_importer_online_transactions_total(block_tx_len as u64);
+                metrics::inc_import_online_mined_block(start.elapsed());
+            }
+        }
+
+        warn_task_tx_closed(TASK_NAME);
+        Ok(())
+    }
+
     // -----------------------------------------------------------------------------
     // Number fetcher
     // -----------------------------------------------------------------------------
@@ -373,18 +465,21 @@ impl Importer {
                         set_external_rpc_current_block(block.number());
                         continue;
                     }
-                    Ok(None) =>
+                    Ok(None) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
-                        },
-                    Ok(Some(Err(e))) =>
+                        }
+                    }
+                    Ok(Some(Err(e))) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
-                        },
-                    Err(_) =>
+                        }
+                    }
+                    Err(_) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
-                        },
+                        }
+                    }
                 }
 
                 if Self::should_shutdown(TASK_NAME) {
@@ -400,10 +495,11 @@ impl Importer {
                             tracing::info!("{} resubscribed to newHeads event", TASK_NAME);
                             sub_new_heads = Some(sub);
                         }
-                        Err(e) =>
+                        Err(e) => {
                             if !Self::should_shutdown(TASK_NAME) {
                                 tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
-                            },
+                            }
+                        }
                     }
                 }
             }
@@ -424,10 +520,11 @@ impl Importer {
                     set_external_rpc_current_block(block_number);
                     traced_sleep(sync_interval, SleepReason::SyncData).await;
                 }
-                Err(e) =>
+                Err(e) => {
                     if !Self::should_shutdown(TASK_NAME) {
                         tracing::error!(reason = ?e, "failed to retrieve block number. retrying now.");
-                    },
+                    }
+                }
             }
         }
     }
@@ -514,6 +611,49 @@ impl Importer {
         }
     }
 
+    /// Retrieves blocks with changes.
+    async fn start_block_with_changes_fetcher(
+        chain: Arc<BlockchainClient>,
+        backlog_tx: mpsc::Sender<Block>,
+        mut importer_block_number: BlockNumber,
+    ) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "external-block-fetcher";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
+
+        loop {
+            if Self::should_shutdown(TASK_NAME) {
+                return Ok(());
+            }
+
+            // if we are ahead of current block number, await until we are behind again
+            let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
+            if importer_block_number.as_u64() > external_rpc_current_block {
+                yield_now().await;
+                continue;
+            }
+
+            // we are behind current, so we will fetch multiple blocks in parallel to catch up
+            let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1; // TODO: use count_to from BlockNumber
+            let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
+            tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with blocks");
+
+            let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
+            while blocks_to_fetch > 0 {
+                blocks_to_fetch -= 1;
+                tasks.push(fetch_block_with_changes(Arc::clone(&chain), importer_block_number));
+                importer_block_number = importer_block_number.next_block_number();
+            }
+
+            // keep fetching in order
+            let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
+            while let Some(block) = tasks.next().await {
+                if backlog_tx.send(block).await.is_err() {
+                    warn_task_rx_closed(TASK_NAME);
+                    return Ok(());
+                }
+            }
+        }
+    }
     // -----------------------------------------------------------------------------
     // Replication Log Applier
     // -----------------------------------------------------------------------------
@@ -549,7 +689,7 @@ impl Importer {
             // Send Kafka events if enabled
             if let Ok(current_block_number) = storage.read_mined_block_number() {
                 match storage.read_block(BlockFilter::Number(current_block_number)) {
-                    Ok(Some(current_block)) =>
+                    Ok(Some(current_block)) => {
                         if let Some(ref kafka_conn) = kafka_connector {
                             let events = current_block
                                 .transactions
@@ -560,7 +700,8 @@ impl Importer {
                                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events");
                                 return log_and_err!(reason = e, message);
                             }
-                        },
+                        }
+                    }
                     Ok(None) => {
                         tracing::info!(
                             %current_block_number,
@@ -669,6 +810,29 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
 
         match chain.fetch_block_and_receipts(block_number).await {
             Ok(Some(response)) => return (response.block, response.receipts),
+            Ok(None) => {
+                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block and receipts not available yet, retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+            }
+            Err(e) => {
+                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch block and receipts, retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
+            }
+        };
+    }
+}
+
+async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> Block {
+    const RETRY_DELAY: Duration = Duration::from_millis(10);
+    Span::with(|s| {
+        s.rec_str("block_number", &block_number);
+    });
+
+    loop {
+        tracing::info!(%block_number, "fetching block and receipts");
+
+        match chain.fetch_block_with_changes(block_number).await {
+            Ok(Some(response)) => return response,
             Ok(None) => {
                 tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block and receipts not available yet, retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
