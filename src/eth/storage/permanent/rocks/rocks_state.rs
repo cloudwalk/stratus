@@ -59,6 +59,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::permanent::rocks::cf_versions::CfBlockChangesValue;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
@@ -142,6 +143,7 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<'static, HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<'static, BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<'static, HashRocksdb, CfBlocksByHashValue>,
+    block_changes: RocksCfRef<'static, BlockNumberRocksdb, CfBlockChangesValue>,
     #[cfg(feature = "replication")]
     replication_logs: RocksCfRef<'static, BlockNumberRocksdb, CfReplicationLogsValue>,
     /// Last collected stats for a histogram
@@ -191,6 +193,7 @@ impl RocksStorageState {
             transactions: new_cf_ref(db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(db, "blocks_by_hash", &cf_options_map)?,
+            block_changes: new_cf_ref(db, "block_changes", &cf_options_map)?,
             #[cfg(feature = "replication")]
             replication_logs: new_cf_ref(db, "replication_logs", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]

@@ -27,6 +27,7 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::SlotValue;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::types::old_types_hotfix::OldCfBlocksByNumberValue;
 macro_rules! impl_single_version_cf_value {
@@ -89,6 +90,7 @@ impl_single_version_cf_value!(CfAccountSlotsHistoryValue, SlotValueRocksdb, Slot
 impl_single_version_cf_value!(CfTransactionsValue, BlockNumberRocksdb, BlockNumber);
 impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
+impl_single_version_cf_value!(CfBlockChangesValue, BlockChangesRocksdb, ());
 #[cfg(feature = "replication")]
 impl_single_version_cf_value!(CfReplicationLogsValue, BytesRocksdb, WriteBatch);
 
@@ -98,6 +100,7 @@ impl SerializeDeserializeWithContext for CfAccountsHistoryValue {}
 impl SerializeDeserializeWithContext for CfAccountsValue {}
 impl SerializeDeserializeWithContext for CfBlocksByHashValue {}
 impl SerializeDeserializeWithContext for CfTransactionsValue {}
+impl SerializeDeserializeWithContext for CfBlockChangesValue {}
 #[cfg(feature = "replication")]
 impl SerializeDeserializeWithContext for CfReplicationLogsValue {}
 
