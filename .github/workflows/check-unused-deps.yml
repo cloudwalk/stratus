@@ -36,6 +36,9 @@ jobs:
       - name: Set up Rust Nightly
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2025-05-22
 
+      - name: Install cargo-udeps
+        run: cargo +nightly-2025-05-22 install cargo-udeps --locked
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         id: cache-cargo
@@ -48,9 +51,6 @@ jobs:
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
-
-      - name: Install cargo-udeps
-        run: cargo +nightly-2025-05-22 install cargo-udeps --locked
 
       - name: Set up Just
         uses: extractions/setup-just@v2
