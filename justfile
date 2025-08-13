@@ -74,10 +74,10 @@ outdated:
     cargo outdated --root-deps-only --ignore-external-rel
 
 # Stratus: Check for unused dependencies
-check-unused-deps:
+check-unused-deps nightly-version="":
     #!/bin/bash
-    command -v cargo-udeps >/dev/null 2>&1 || { cargo +nightly install cargo-udeps; }
-    cargo +nightly udeps --all-targets
+    command -v cargo-udeps >/dev/null 2>&1 || { cargo +nightly{{nightly-version}} install cargo-udeps; }
+    cargo +nightly{{nightly-version}} udeps --all-targets
 
 # Stratus: Update only the project dependencies
 update:
