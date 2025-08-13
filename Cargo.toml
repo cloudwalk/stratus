@@ -122,7 +122,7 @@ sqlx = { version = "=0.8.6", features = [
 ] }
 
 # test
-fake = { version = "=4.3.0", features = ["chrono", "derive"] }
+fake = { version = "=4.4.0", features = ["chrono", "derive"] }
 rdkafka = {version = "=0.36.2", features = ["ssl", "sasl"] }
 sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
