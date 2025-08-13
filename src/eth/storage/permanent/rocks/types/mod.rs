@@ -28,6 +28,7 @@ mod unix_time;
 mod wei;
 mod block_changes;
 pub use block_changes::BlockChangesRocksdb;
+pub use block_changes::AccountChangesRocksdb;
 pub use account::AccountRocksdb;
 pub use address::AddressRocksdb;
 pub use block::BlockRocksdb;
