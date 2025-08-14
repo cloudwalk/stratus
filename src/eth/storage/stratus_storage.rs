@@ -869,7 +869,7 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
-        self.save_block(genesis_block)?;
+        self.save_block(genesis_block, false)?;
 
         // accounts
         self.save_accounts(genesis_accounts)?;
