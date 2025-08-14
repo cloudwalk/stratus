@@ -290,14 +290,14 @@ impl Miner {
 
     pub fn commit(&self, item: CommitItem) -> anyhow::Result<(), StorageError> {
         match item {
-            CommitItem::Block(block) => self.commit_block(block),
+            CommitItem::Block(block) => self.commit_block(block, false),
             #[cfg(feature = "replication")]
             CommitItem::ReplicationLog(replication_log) => self.commit_log(replication_log),
         }
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub fn commit_block(&self, block: Block, skip_pending_check: bool) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -323,7 +323,7 @@ impl Miner {
         };
 
         // save storage
-        self.storage.save_block(block, false)?;
+        self.storage.save_block(block, skip_pending_check)?;
         self.storage.set_mined_block_number(block_number)?;
 
         // Send notifications after saving the block

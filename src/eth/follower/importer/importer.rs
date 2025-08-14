@@ -217,7 +217,7 @@ impl Importer {
                 // Spawn block executor
                 let task_saver = spawn(
                     "importer::executor",
-                    Importer::start_block_saver(Arc::clone(&self.storage), backlog_rx, self.kafka_connector.clone()),
+                    Importer::start_block_saver(Arc::clone(&self.miner), backlog_rx, self.kafka_connector.clone()),
                 );
 
                 // Spawn block number fetcher
@@ -360,7 +360,7 @@ impl Importer {
     }
 
     async fn start_block_saver(
-        storage: Arc<StratusStorage>,
+        miner: Arc<Miner>,
         mut backlog_rx: mpsc::Receiver<Block>,
         kafka_connector: Option<Arc<KafkaConnector>>,
     ) -> anyhow::Result<()> {
@@ -381,22 +381,10 @@ impl Importer {
                 }
             };
 
-            #[cfg(feature = "metrics")]
-            let (start, block_number, block_tx_len) = (metrics::now(), block.number(), block.transactions.len());
+            tracing::info!(block_number = %block.number(), "received block with changes");
 
-            // statistics
             #[cfg(feature = "metrics")]
-            {
-                let duration = start.elapsed();
-                let tps = calculate_tps(duration, block_tx_len);
-
-                tracing::info!(
-                    tps,
-                    %block_number,
-                    duration = %duration.to_string_ext(),
-                    "reexecuted external block",
-                );
-            }
+            let (start, block_tx_len) = (metrics::now(), block.transactions.len());
 
             if let Some(ref kafka_conn) = kafka_connector {
                 let events = block
@@ -407,7 +395,7 @@ impl Importer {
                 kafka_conn.send_buffered(events, 50).await?;
             }
 
-            storage.save_block(block, true)?;
+            miner.commit_block(block, true)?;
 
             #[cfg(feature = "metrics")]
             {
