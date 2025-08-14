@@ -52,7 +52,7 @@ jobs:
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.test }}-${{ matrix.use_rocksdb_replication }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.test }}-${{ matrix.use_rocksdb_replication }}-${{ matrix.use_block_changes_replication }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
