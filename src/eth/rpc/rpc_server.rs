@@ -607,6 +607,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         external_rpc_timeout,
         sync_interval,
         external_rpc_max_response_size_bytes,
+        enable_block_changes_replication: false
     };
 
     importer_config.init_follower_importer(ctx).await
