@@ -1,28 +1,24 @@
 use std::fmt::Display;
 use std::io::Read;
 
-use alloy_primitives::keccak256;
 use alloy_primitives::FixedBytes;
+use alloy_primitives::U256;
+use alloy_primitives::keccak256;
 use display_json::DebugAsJson;
-use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
-
-use crate::alias::RevmU256;
-use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct SlotIndex(pub U256);
 
 impl SlotIndex {
-    pub const ZERO: SlotIndex = SlotIndex(U256::zero());
-    pub const ONE: SlotIndex = SlotIndex(U256::one());
+    pub const ZERO: SlotIndex = SlotIndex(U256::ZERO);
+    pub const ONE: SlotIndex = SlotIndex(U256::ONE);
 
     /// Computes the mapping index of a key.
     pub fn to_mapping_index(&self, key: Vec<u8>) -> SlotIndex {
         // populate self to bytes
-        let mut slot_index_bytes = [0u8; 32];
-        self.0.to_big_endian(&mut slot_index_bytes);
+        let slot_index_bytes: [u8; 32] = self.0.to_be_bytes();
 
         // populate key to bytes
         let mut key_bytes = [0u8; 32];
@@ -39,8 +35,8 @@ impl SlotIndex {
 }
 
 impl Dummy<Faker> for SlotIndex {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
-        rng.next_u64().into()
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        Self(U256::random_with(rng))
     }
 }
 
@@ -54,17 +50,21 @@ impl Display for SlotIndex {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 
-gen_newtype_from!(self = SlotIndex, other = u64, U256, [u8; 32]);
-
-impl From<[u64; 4]> for SlotIndex {
-    fn from(value: [u64; 4]) -> Self {
-        Self(U256(value))
+impl From<U256> for SlotIndex {
+    fn from(value: U256) -> Self {
+        Self(value)
     }
 }
 
-impl From<RevmU256> for SlotIndex {
-    fn from(value: RevmU256) -> Self {
-        Self(value.to_be_bytes().into())
+impl From<[u8; 32]> for SlotIndex {
+    fn from(value: [u8; 32]) -> Self {
+        Self(U256::from_be_bytes(value))
+    }
+}
+
+impl From<[u64; 4]> for SlotIndex {
+    fn from(value: [u64; 4]) -> Self {
+        Self(U256::from_limbs(value))
     }
 }
 

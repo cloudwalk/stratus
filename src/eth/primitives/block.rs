@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use alloy_primitives::B256;
 use alloy_rpc_types_eth::BlockTransactions;
+use alloy_trie::root::ordered_trie_root;
 use display_json::DebugAsJson;
 use itertools::Itertools;
-use keccak_hasher::KeccakHasher;
 
 use super::ExternalBlock;
 use super::Index;
@@ -13,7 +13,7 @@ use super::PendingBlock;
 use super::Size;
 use super::TransactionExecution;
 use crate::alias::AlloyBlockAlloyTransaction;
-use crate::alias::AlloyBlockH256;
+use crate::alias::AlloyBlockB256;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
@@ -83,7 +83,7 @@ impl Block {
 
     /// Serializes itself to JSON-RPC block format with only transactions hashes included.
     pub fn to_json_rpc_with_transactions_hashes(self) -> JsonValue {
-        let alloy_block: AlloyBlockH256 = self.into();
+        let alloy_block: AlloyBlockB256 = self.into();
         to_json_value(alloy_block)
     }
 
@@ -159,8 +159,8 @@ impl Block {
 
     fn calculate_transaction_root(&mut self) {
         if !self.transactions.is_empty() {
-            let transactions_hashes: Vec<Hash> = self.transactions.iter().map(|x| x.input.hash).collect();
-            self.header.transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
+            let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.input.hash).map(B256::from).collect();
+            self.header.transactions_root = ordered_trie_root(&transactions_hashes).into();
         }
     }
 
@@ -222,9 +222,9 @@ impl From<Block> for AlloyBlockAlloyTransaction {
     }
 }
 
-impl From<Block> for AlloyBlockH256 {
+impl From<Block> for AlloyBlockB256 {
     fn from(block: Block) -> Self {
-        let alloy_block: AlloyBlockH256 = block.header.into();
+        let alloy_block: AlloyBlockB256 = block.header.into();
         let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.hash).map(B256::from).collect();
 
         Self {

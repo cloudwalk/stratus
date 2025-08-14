@@ -6,8 +6,9 @@ use revm::primitives::Bytes as RevmBytes;
 use rocksdb::WriteBatch;
 
 use crate::eth::primitives::Bytes;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct BytesRocksdb(pub Vec<u8>);
 
 impl Deref for BytesRocksdb {
@@ -75,3 +76,5 @@ impl BytesRocksdb {
         WriteBatch::from_data(&self.0)
     }
 }
+
+impl SerializeDeserializeWithContext for BytesRocksdb {}

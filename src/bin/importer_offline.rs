@@ -9,31 +9,31 @@
 //! arrive.
 
 use std::cmp::min;
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::mpsc;
 
 use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::StreamExt;
 use itertools::Itertools;
+use stratus::GlobalServices;
+use stratus::GlobalState;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
 use stratus::eth::external_rpc::ExternalBlockWithReceipts;
 use stratus::eth::external_rpc::ExternalRpc;
 use stratus::eth::external_rpc::PostgresExternalRpc;
-use stratus::eth::miner::miner::CommitItem;
 use stratus::eth::miner::Miner;
 use stratus::eth::miner::MinerMode;
+use stratus::eth::miner::miner::CommitItem;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
 use stratus::eth::primitives::ExternalReceipts;
-use stratus::ext::spawn_named;
+use stratus::ext::spawn;
 use stratus::ext::spawn_thread;
 use stratus::log_and_err;
-use stratus::utils::calculate_tps_and_bpm;
 use stratus::utils::DropTimer;
-use stratus::GlobalServices;
-use stratus::GlobalState;
+use stratus::utils::calculate_tps_and_bpm;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 use tikv_jemallocator::Jemalloc;
 use tokio::sync::mpsc as async_mpsc;
@@ -103,7 +103,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         block_end,
         fetch_to_execute_tx,
     );
-    spawn_named("block_fetcher", async {
+    spawn("block_fetcher", async {
         if let Err(e) = block_fetcher_fut.await {
             tracing::error!(reason = ?e, "'block-fetcher' task failed");
         }

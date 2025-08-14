@@ -21,3 +21,9 @@ _wait_for_stratus port="3000":
         cat stratus.log
         exit 255
     fi
+
+_wait_for_stratus_finish port="3000":
+    #!/bin/bash
+    while nc -z localhost {{port}}; do
+        sleep 0.1 # wait for 1/10 of the second before check again
+    done
