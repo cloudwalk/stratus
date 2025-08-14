@@ -19,10 +19,14 @@ pub const GIT_COMMIT_MESSAGE: &str = env!("VERGEN_GIT_COMMIT_MESSAGE");
 pub const GIT_COMMIT_AUTHOR: &str = env!("VERGEN_GIT_COMMIT_AUTHOR_NAME");
 pub const GIT_BRANCH: &str = env!("VERGEN_GIT_BRANCH");
 pub const GIT_DESCRIBE: &str = env!("VERGEN_GIT_DESCRIBE");
+pub const GIT_REPO_URL: &str = env!("VERGEN_GIT_REPO_URL");
 
 pub const RUST_VERSION: &str = env!("VERGEN_RUSTC_SEMVER");
 pub const RUST_CHANNEL: &str = env!("VERGEN_RUSTC_CHANNEL");
 pub const RUST_TARGET: &str = env!("VERGEN_RUSTC_HOST_TRIPLE");
+
+pub const SYSTEM_VERSION: &str = env!("VERGEN_SYSINFO_OS_VERSION");
+pub const SYSTEM_USER: &str = env!("VERGEN_SYSINFO_USER");
 
 const VERSION_WITH_BRANCH: &str = const_format::formatcp!("{GIT_BRANCH}::{GIT_COMMIT}");
 const VERSION_WITH_DESCRIBE: &str = const_format::formatcp!("{GIT_DESCRIBE}::{GIT_COMMIT}");
@@ -81,11 +85,16 @@ pub fn as_json() -> JsonValue {
                 "commit_author": GIT_COMMIT_AUTHOR,
                 "branch": GIT_BRANCH,
                 "describe": GIT_DESCRIBE,
+                "repo_url": GIT_REPO_URL,
             },
             "rust": {
                 "version": RUST_VERSION,
                 "channel": RUST_CHANNEL,
                 "target": RUST_TARGET,
+            },
+            "system": {
+                "version": SYSTEM_VERSION,
+                "user": SYSTEM_USER,
             }
         }
     )

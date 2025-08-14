@@ -10,14 +10,14 @@ describe("Admin Password (with password set)", () => {
     it("should reject requests without password", async () => {
         const error = await sendAndGetError("stratus_enableTransactions", []);
         expect(error.code).eq(7004); // Internal error
-        expect(error.message).to.contain("Incorrect password");
+        expect(error.message).to.contain("incorrect password");
     });
 
     it("should reject requests with wrong password", async () => {
         const headers = { Authorization: "Password wrong123" };
         const error = await sendAndGetError("stratus_enableTransactions", [], headers);
         expect(error.code).eq(7004); // Internal error
-        expect(error.message).to.contain("Incorrect password");
+        expect(error.message).to.contain("incorrect password");
     });
 
     it("should accept requests with correct password", async () => {

@@ -190,7 +190,7 @@ impl Miner {
             return;
         };
 
-        tracing::warn!("Shutting down interval miner to switch to external mode");
+        tracing::warn!("shutting down interval miner to switch to external mode");
 
         self.shutdown_signal.lock().cancel();
 

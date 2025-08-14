@@ -531,7 +531,7 @@ impl Executor {
             let contract = codegen::contract_name(&tx_input.to);
 
             if let ExecutionResult::Reverted { reason } = &tx_execution.result.execution.result {
-                tracing::info!(?reason, "Local transaction execution reverted");
+                tracing::info!(?reason, "local transaction execution reverted");
                 #[cfg(feature = "metrics")]
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
             }
