@@ -578,7 +578,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn save_block(&self, block: Block) -> Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, skip_pending_check: bool) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
@@ -595,14 +595,16 @@ impl StratusStorage {
             });
         }
 
-        // check pending number
-        let pending_header = self.read_pending_block_header();
-        if block_number >= pending_header.0.number {
-            tracing::error!(%block_number, pending_number = %pending_header.0.number, "failed to save block because mismatch with pending block number");
-            return Err(StorageError::PendingNumberConflict {
-                new: block_number,
-                pending: pending_header.0.number,
-            });
+        if !skip_pending_check {
+            // check pending number
+            let pending_header = self.read_pending_block_header();
+            if block_number >= pending_header.0.number {
+                tracing::error!(%block_number, pending_number = %pending_header.0.number, "failed to save block because mismatch with pending block number");
+                return Err(StorageError::PendingNumberConflict {
+                    new: block_number,
+                    pending: pending_header.0.number,
+                });
+            }
         }
 
         // check mined block

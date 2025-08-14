@@ -323,7 +323,7 @@ impl Miner {
         };
 
         // save storage
-        self.storage.save_block(block)?;
+        self.storage.save_block(block, false)?;
         self.storage.set_mined_block_number(block_number)?;
 
         // Send notifications after saving the block

@@ -208,7 +208,7 @@ impl Importer {
                 // Await all tasks
                 if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
                     tracing::error!(reason = ?e, "importer-online failed");
-                }
+                } // this is wrong!!
             }
             ImporterMode::BlockWithChanges => {
                 // Use existing block fetcher and executor approach
@@ -234,10 +234,10 @@ impl Importer {
                     Importer::start_block_with_changes_fetcher(block_fetcher_chain, backlog_tx, number),
                 );
 
-                // Await all tasks
-                if let Err(e) = try_join!(task_saver, task_block_fetcher, task_number_fetcher) {
-                    tracing::error!(reason = ?e, "importer-online failed");
-                }
+                let results = try_join!(task_saver, task_block_fetcher, task_number_fetcher)?;
+                results.0?;
+                results.1?;
+                results.2?;
             }
         }
 
@@ -407,7 +407,7 @@ impl Importer {
                 kafka_conn.send_buffered(events, 50).await?;
             }
 
-            storage.save_block(block)?;
+            storage.save_block(block, true)?;
 
             #[cfg(feature = "metrics")]
             {
@@ -617,7 +617,7 @@ impl Importer {
         backlog_tx: mpsc::Sender<Block>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
-        const TASK_NAME: &str = "external-block-fetcher";
+        const TASK_NAME: &str = "block-with-changes-fetcher";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
 
         loop {
