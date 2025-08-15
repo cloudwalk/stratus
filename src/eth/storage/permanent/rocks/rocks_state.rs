@@ -60,6 +60,9 @@ use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::cf_versions::CfBlockChangesValue;
+use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -98,6 +101,7 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
         "transactions" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
         "blocks_by_number" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
         "blocks_by_hash" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "block_changes" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
     }
 
     #[cfg(feature = "replication")]
@@ -109,6 +113,7 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
         "transactions" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
         "blocks_by_number" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
         "blocks_by_hash" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "block_changes" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
         "replication_logs" => DbConfig::Default.to_options(CacheSetting::Disabled),
     }
 }
@@ -142,6 +147,7 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<'static, HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<'static, BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<'static, HashRocksdb, CfBlocksByHashValue>,
+    block_changes: RocksCfRef<'static, BlockNumberRocksdb, CfBlockChangesValue>,
     #[cfg(feature = "replication")]
     replication_logs: RocksCfRef<'static, BlockNumberRocksdb, CfReplicationLogsValue>,
     /// Last collected stats for a histogram
@@ -191,6 +197,7 @@ impl RocksStorageState {
             transactions: new_cf_ref(db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(db, "blocks_by_hash", &cf_options_map)?,
+            block_changes: new_cf_ref(db, "block_changes", &cf_options_map)?,
             #[cfg(feature = "replication")]
             replication_logs: new_cf_ref(db, "replication_logs", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
@@ -254,22 +261,27 @@ impl RocksStorageState {
     where
         C: IntoIterator<Item = ExecutionAccountChanges>,
     {
+        let mut block_changes = BlockChangesRocksdb::default();
+        let block_number = block_number.into();
+
         for change in changes {
-            let block_number = block_number.into();
             let address: AddressRocksdb = change.address.into();
+            let mut account_change_entry = AccountChangesRocksdb::default();
 
             if change.is_account_modified() {
-                let address: AddressRocksdb = change.address.into();
                 let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
 
                 if let Some(nonce) = change.nonce.take_modified() {
                     account_info_entry.nonce = nonce.into();
+                    account_change_entry.nonce = Some(nonce.into());
                 }
                 if let Some(balance) = change.balance.take_modified() {
                     account_info_entry.balance = balance.into();
+                    account_change_entry.balance = Some(balance.into());
                 }
                 if let Some(bytecode) = change.bytecode.take_modified() {
-                    account_info_entry.bytecode = bytecode.map_into();
+                    account_info_entry.bytecode = bytecode.clone().map_into();
+                    account_change_entry.bytecode = bytecode.map_into();
                 }
 
                 self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
@@ -282,13 +294,20 @@ impl RocksStorageState {
                     let slot_index = slot_index.into();
                     let slot_value: SlotValueRocksdb = slot.value.into();
 
+                    account_change_entry.slot_changes.insert(slot_index, slot_value);
                     self.account_slots
                         .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
                     self.account_slots_history
                         .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
                 }
             }
+
+            account_change_entry
+                .has_changes()
+                .then(|| block_changes.account_changes.insert(address, account_change_entry));
         }
+
+        self.block_changes.prepare_batch_insertion([(block_number, block_changes.into())], batch)?;
 
         Ok(())
     }
@@ -552,7 +571,8 @@ impl RocksStorageState {
         let block_hash = block.hash();
 
         // this is an optimization, instead of saving the entire block into the database,
-        // remove all discardable account changes
+        // remove all discardable account changes, this seems uneeded ever since we isolated the types,
+        // BlockRocksdb doesnt even contain a field for the changes
         let block_without_changes = {
             let mut block_mut = block;
             // mutate it
@@ -697,6 +717,15 @@ impl RocksStorageState {
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
         Ok(())
+    }
+
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<Block>> {
+        let Some(mut block_wo_changes) = self.read_block(selection)? else {
+            return Ok(None);
+        };
+        let changes = self.block_changes.get(&block_wo_changes.number().into())?;
+        block_wo_changes.transactions[0].execution.changes = changes.map(|changes| changes.into_inner().into()).unwrap_or_default();
+        Ok(Some(block_wo_changes))
     }
 }
 

@@ -1,6 +1,7 @@
 mod account;
 mod address;
 mod block;
+mod block_changes;
 mod block_header;
 mod block_number;
 mod bytecode;
@@ -28,6 +29,8 @@ mod wei;
 pub use account::AccountRocksdb;
 pub use address::AddressRocksdb;
 pub use block::BlockRocksdb;
+pub use block_changes::AccountChangesRocksdb;
+pub use block_changes::BlockChangesRocksdb;
 pub use block_number::BlockNumberRocksdb;
 pub use bytes::BytesRocksdb;
 pub use hash::HashRocksdb;

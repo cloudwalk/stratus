@@ -324,6 +324,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
+    module.register_blocking_method("stratus_getBlockWithChanges", stratus_get_block_with_changes)?;
 
     #[cfg(feature = "replication")]
     module.register_blocking_method("stratus_getReplicationLog", stratus_get_replication_log)?;
@@ -606,6 +607,9 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         external_rpc_timeout,
         sync_interval,
         external_rpc_max_response_size_bytes,
+        enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
+            .ok()
+            .is_some_and(|val| val == "1" || val == "true"),
     };
 
     importer_config.init_follower_importer(ctx).await
@@ -851,6 +855,27 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         "block": block.to_json_rpc_with_full_transactions(),
         "receipts": receipts,
     }))
+}
+
+fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!("rpc::stratus_getBlockWithChanges").entered();
+
+    // parse params
+    let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+
+    // track
+    tracing::info!(%filter, "reading block and receipts");
+
+    let Some(block) = ctx.server.storage.read_block_with_changes(filter)? else {
+        tracing::info!(%filter, "block not found");
+        return Ok(JsonValue::Null);
+    };
+
+    tracing::info!(%filter, "block with transactions found");
+
+    Ok(json!(block))
 }
 
 #[cfg(feature = "replication")]
