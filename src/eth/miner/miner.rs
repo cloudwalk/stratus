@@ -47,6 +47,8 @@ cfg_if::cfg_if! {
 pub enum CommitItem {
     /// A block
     Block(Block),
+    /// A block that wasn't executed in this node and instead contains all changes already pre-computed
+    ReplicationBlock(Block),
     /// A replication log from RocksDB
     #[cfg(feature = "replication")]
     ReplicationLog(ReplicationLogRocksdb),
@@ -290,14 +292,18 @@ impl Miner {
 
     pub fn commit(&self, item: CommitItem) -> anyhow::Result<(), StorageError> {
         match item {
-            CommitItem::Block(block) => self.commit_block(block, false),
+            CommitItem::Block(block) => self.commit_block(block),
+            CommitItem::ReplicationBlock(block) => {
+                self.storage.finish_pending_block()?;
+                self.commit_block(block)
+            },
             #[cfg(feature = "replication")]
             CommitItem::ReplicationLog(replication_log) => self.commit_log(replication_log),
         }
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit_block(&self, block: Block, skip_pending_check: bool) -> anyhow::Result<(), StorageError> {
+    pub fn commit_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -323,7 +329,7 @@ impl Miner {
         };
 
         // save storage
-        self.storage.save_block(block, skip_pending_check)?;
+        self.storage.save_block(block)?;
         self.storage.set_mined_block_number(block_number)?;
 
         // Send notifications after saving the block

@@ -110,11 +110,6 @@ impl StratusStorage {
         self.cache.clear();
     }
 
-    pub fn reinit_temp(&self, block_number: BlockNumber) {
-        tracing::info!(?block_number, "reinitializing temp storage");
-        self.temp.reinit(block_number);
-    }
-
     #[cfg(test)]
     pub fn new_test() -> Result<Self, StorageError> {
         use tempfile::tempdir;
@@ -583,7 +578,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn save_block(&self, block: Block, skip_pending_check: bool) -> Result<(), StorageError> {
+    pub fn save_block(&self, block: Block) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
@@ -600,16 +595,14 @@ impl StratusStorage {
             });
         }
 
-        if !skip_pending_check {
-            // check pending number
-            let pending_header = self.read_pending_block_header();
-            if block_number >= pending_header.0.number {
-                tracing::error!(%block_number, pending_number = %pending_header.0.number, "failed to save block because mismatch with pending block number");
-                return Err(StorageError::PendingNumberConflict {
-                    new: block_number,
-                    pending: pending_header.0.number,
-                });
-            }
+        // check pending number
+        let pending_header = self.read_pending_block_header();
+        if block_number >= pending_header.0.number {
+            tracing::error!(%block_number, pending_number = %pending_header.0.number, "failed to save block because mismatch with pending block number");
+            return Err(StorageError::PendingNumberConflict {
+                new: block_number,
+                pending: pending_header.0.number,
+            });
         }
 
         // check mined block
@@ -874,7 +867,7 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
-        self.save_block(genesis_block, false)?;
+        self.save_block(genesis_block)?;
 
         // accounts
         self.save_accounts(genesis_accounts)?;

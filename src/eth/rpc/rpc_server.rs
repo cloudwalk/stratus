@@ -88,7 +88,6 @@ use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
-use crate::eth::storage::compute_pending_block_number;
 use crate::ext::InfallibleExt;
 use crate::ext::WatchReceiverExt;
 use crate::ext::not;
@@ -692,8 +691,6 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
                 return Err(ConsensusError::Set.into());
             }
 
-            let pending_block_number = compute_pending_block_number(&ctx.server.storage.perm)?;
-            ctx.server.storage.reinit_temp(pending_block_number);
             ctx.server.miner.start_interval_mining(duration).await;
         }
         MinerMode::Automine => {

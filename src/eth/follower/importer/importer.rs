@@ -395,7 +395,7 @@ impl Importer {
                 kafka_conn.send_buffered(events, 50).await?;
             }
 
-            miner.commit_block(block, true)?;
+            miner.commit_block(block)?;
 
             #[cfg(feature = "metrics")]
             {
