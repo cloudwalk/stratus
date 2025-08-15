@@ -629,7 +629,9 @@ impl StratusStorage {
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, %block_number, "failed to save block");
             }
-        })
+        })?;
+
+        self.set_mined_block_number(block_number)
     }
 
     pub fn read_block(&self, filter: BlockFilter) -> Result<Option<Block>, StorageError> {
