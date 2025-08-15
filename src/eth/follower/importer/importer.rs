@@ -817,7 +817,7 @@ async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: Bl
     });
 
     loop {
-        tracing::info!(%block_number, "fetching block and receipts");
+        tracing::info!(%block_number, "fetching block and changes");
 
         match chain.fetch_block_with_changes(block_number).await {
             Ok(Some(response)) => return response,

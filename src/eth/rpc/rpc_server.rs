@@ -41,7 +41,6 @@ use tracing::Span;
 use tracing::field;
 use tracing::info_span;
 
-use crate::eth::storage::compute_pending_block_number;
 use crate::GlobalState;
 use crate::NodeMode;
 use crate::alias::AlloyReceipt;
@@ -89,6 +88,7 @@ use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
+use crate::eth::storage::compute_pending_block_number;
 use crate::ext::InfallibleExt;
 use crate::ext::WatchReceiverExt;
 use crate::ext::not;
@@ -253,7 +253,7 @@ impl Server {
     async fn health(&self) -> bool {
         match GlobalState::get_node_mode() {
             NodeMode::Leader | NodeMode::FakeLeader => true,
-            NodeMode::Follower =>
+            NodeMode::Follower => {
                 if GlobalState::is_importer_shutdown() {
                     tracing::warn!("stratus is unhealthy because importer is shutdown");
                     false
@@ -265,7 +265,8 @@ impl Server {
                             false
                         }
                     }
-                },
+                }
+            }
         }
     }
 }
@@ -608,7 +609,9 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         external_rpc_timeout,
         sync_interval,
         external_rpc_max_response_size_bytes,
-        enable_block_changes_replication: false
+        enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
+            .ok()
+            .is_some_and(|val| val == "1" || val == "true"),
     };
 
     importer_config.init_follower_importer(ctx).await
