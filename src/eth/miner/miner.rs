@@ -296,7 +296,7 @@ impl Miner {
             CommitItem::ReplicationBlock(block) => {
                 self.storage.finish_pending_block()?;
                 self.commit_block(block)
-            },
+            }
             #[cfg(feature = "replication")]
             CommitItem::ReplicationLog(replication_log) => self.commit_log(replication_log),
         }

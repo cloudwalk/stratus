@@ -65,18 +65,18 @@ impl ImporterConfig {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
             NodeMode::Follower =>
-            self.init_follower(
-                executor,
-                miner,
-                storage,
-                kafka_connector,
-                if self.enable_block_changes_replication {
-                    ImporterMode::BlockWithChanges
-                } else {
-                    ImporterMode::NormalFollower
-                },
-            )
-                    .await,
+                self.init_follower(
+                    executor,
+                    miner,
+                    storage,
+                    kafka_connector,
+                    if self.enable_block_changes_replication {
+                        ImporterMode::BlockWithChanges
+                    } else {
+                        ImporterMode::NormalFollower
+                    },
+                )
+                .await,
             NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader).await,
         }
     }

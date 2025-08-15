@@ -16,14 +16,14 @@ use crate::eth::primitives::Wei;
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionAccountChanges {
     pub new_account: bool, // I think this is useless
-    pub address: Address, // redundant because this is present in the BTreeMap
+    pub address: Address,  // redundant because this is present in the BTreeMap
     pub nonce: ExecutionValueChange<Nonce>,
     pub balance: ExecutionValueChange<Wei>,
 
     // TODO: bytecode related information should be grouped in a Bytecode struct
     #[dummy(default)]
     pub bytecode: ExecutionValueChange<Option<RevmBytecode>>,
-    pub code_hash: CodeHash, // TODO: should be wrapped in a ExecutionValueChange
+    pub code_hash: CodeHash,                                    // TODO: should be wrapped in a ExecutionValueChange
     pub slots: BTreeMap<SlotIndex, ExecutionValueChange<Slot>>, // should map idx to slotvalue
 }
 
