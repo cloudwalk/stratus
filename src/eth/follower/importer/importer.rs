@@ -721,7 +721,7 @@ impl Consensus for Importer {
                 elapsed
             ))
         } else {
-            Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number()?.as_u64())
+            Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number().as_u64())
         }
     }
 
