@@ -113,6 +113,7 @@ pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'stat
         "transactions" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
         "blocks_by_number" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
         "blocks_by_hash" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "block_changes" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
         "replication_logs" => DbConfig::Default.to_options(CacheSetting::Disabled),
     }
 }
