@@ -56,6 +56,7 @@ pub enum ImporterMode {
     NormalFollower,
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     FakeLeader,
+    /// Fetch a block with pre-computed changes
     BlockWithChanges,
     /// Import blocks using RocksDB replication logs.
     #[cfg(feature = "replication")]
@@ -395,7 +396,7 @@ impl Importer {
                 kafka_conn.send_buffered(events, 50).await?;
             }
 
-            miner.commit_block(block)?;
+            miner.commit(CommitItem::ReplicationBlock(block))?;
 
             #[cfg(feature = "metrics")]
             {

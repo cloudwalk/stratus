@@ -164,6 +164,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
 
         let number = self.read_pending_block_header().0.number;
+        tracing::info!(?number, "got block number to resume import");
 
         #[cfg(feature = "dev")]
         if number == BlockNumber::ONE && self.rocksdb_replication_enabled() {
@@ -771,13 +772,11 @@ impl StratusStorage {
 
         self.cache.clear();
 
-        tracing::info!("reseting storage to genesis state");
-
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::reset").entered();
 
         // reset perm
-        tracing::debug!(storage = %label::PERM, "reseting permanent storage");
+        tracing::debug!(storage = %label::PERM, "resetting permanent storage");
         timed(|| self.perm.reset()).with(|m| {
             metrics::inc_storage_reset(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
