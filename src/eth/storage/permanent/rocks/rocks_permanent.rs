@@ -175,7 +175,7 @@ impl RocksPermanentStorage {
                 tracing::error!(reason = ?e, "failed to apply replication log in RocksPermanent");
             })?;
 
-        self.set_mined_block_number(block_number)?;
+        self.set_mined_block_number(block_number);
 
         Ok(())
     }
