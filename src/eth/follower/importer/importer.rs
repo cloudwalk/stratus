@@ -374,21 +374,18 @@ impl Importer {
                         set_external_rpc_current_block(block.number());
                         continue;
                     }
-                    Ok(None) => {
+                    Ok(None) =>
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
-                        }
-                    }
-                    Ok(Some(Err(e))) => {
+                        },
+                    Ok(Some(Err(e))) =>
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
-                        }
-                    }
-                    Err(_) => {
+                        },
+                    Err(_) =>
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
-                        }
-                    }
+                        },
                 }
 
                 if Self::should_shutdown(TASK_NAME) {
@@ -404,11 +401,10 @@ impl Importer {
                             tracing::info!("{} resubscribed to newHeads event", TASK_NAME);
                             sub_new_heads = Some(sub);
                         }
-                        Err(e) => {
+                        Err(e) =>
                             if !Self::should_shutdown(TASK_NAME) {
                                 tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
-                            }
-                        }
+                            },
                     }
                 }
             }
@@ -429,11 +425,10 @@ impl Importer {
                     set_external_rpc_current_block(block_number);
                     traced_sleep(sync_interval, SleepReason::SyncData).await;
                 }
-                Err(e) => {
+                Err(e) =>
                     if !Self::should_shutdown(TASK_NAME) {
                         tracing::error!(reason = ?e, "failed to retrieve block number. retrying now.");
-                    }
-                }
+                    },
             }
         }
     }
@@ -555,7 +550,7 @@ impl Importer {
             // Send Kafka events if enabled
             let current_block_number = storage.read_mined_block_number();
             match storage.read_block(BlockFilter::Number(current_block_number)) {
-                Ok(Some(current_block)) => {
+                Ok(Some(current_block)) =>
                     if let Some(ref kafka_conn) = kafka_connector {
                         let events = current_block
                             .transactions
@@ -566,8 +561,7 @@ impl Importer {
                             let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events");
                             return log_and_err!(reason = e, message);
                         }
-                    }
-                }
+                    },
                 Ok(None) => {
                     tracing::info!(
                         %current_block_number,
