@@ -631,9 +631,7 @@ impl StratusStorage {
             }
         })?;
 
-        self.set_mined_block_number(block_number)?;
-
-        Ok(())
+        self.set_mined_block_number(block_number)
     }
 
     pub fn read_block(&self, filter: BlockFilter) -> Result<Option<Block>, StorageError> {
