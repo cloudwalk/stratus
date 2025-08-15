@@ -18,7 +18,6 @@ mod log_mined;
 mod logs_bloom;
 mod miner_nonce;
 mod nonce;
-pub mod old_types_hotfix;
 #[cfg(feature = "replication")]
 mod replication_log;
 mod size;
