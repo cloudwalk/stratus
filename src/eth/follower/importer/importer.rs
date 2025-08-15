@@ -204,9 +204,10 @@ impl Importer {
                 );
 
                 // Await all tasks
-                if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
-                    tracing::error!(reason = ?e, "importer-online failed");
-                }
+                let results = try_join!(task_executor, task_block_fetcher, task_number_fetcher)?;
+                results.0?;
+                results.1?;
+                results.2?;
             }
         }
 
