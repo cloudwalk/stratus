@@ -8,7 +8,6 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use anyhow::Context;
 #[cfg(feature = "replication")]
 use rocksdb::WriteBatch;
 use serde::Deserialize;
@@ -28,7 +27,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::SlotValue;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
-use crate::eth::storage::permanent::rocks::types::old_types_hotfix::OldCfBlocksByNumberValue;
+
 macro_rules! impl_single_version_cf_value {
     ($name:ident, $inner_type:ty, $non_rocks_equivalent: ty) => {
         #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount, VariantNames, IntoStaticStr, fake::Dummy, bincode::Encode, bincode::Decode)]
@@ -100,26 +99,7 @@ impl SerializeDeserializeWithContext for CfBlocksByHashValue {}
 impl SerializeDeserializeWithContext for CfTransactionsValue {}
 #[cfg(feature = "replication")]
 impl SerializeDeserializeWithContext for CfReplicationLogsValue {}
-
-impl SerializeDeserializeWithContext for CfBlocksByNumberValue {
-    fn deserialize_with_context(bytes: &[u8]) -> anyhow::Result<Self>
-    where
-        Self: for<'de> Deserialize<'de> + bincode::Decode<()>,
-    {
-        use crate::rocks_bincode_config;
-        let res = bincode::decode_from_slice(bytes, rocks_bincode_config());
-
-        match res {
-            Err(_) => {
-                let (old_value, _): (OldCfBlocksByNumberValue, _) = bincode::decode_from_slice(bytes, rocks_bincode_config())
-                    .with_context(|| format!("failed to deserialize '{}'", hex_fmt::HexFmt(bytes)))
-                    .with_context(|| format!("failed to deserialize to type '{}'", std::any::type_name::<Self>()))?;
-                Ok(old_value.into())
-            }
-            Ok((ok, _)) => Ok(ok),
-        }
-    }
-}
+impl SerializeDeserializeWithContext for CfBlocksByNumberValue {}
 
 #[cfg_attr(not(test), allow(dead_code))]
 trait ToCfName {
