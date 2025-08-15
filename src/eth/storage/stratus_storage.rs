@@ -57,7 +57,7 @@ mod label {
 pub struct StratusStorage {
     temp: InMemoryTemporaryStorage,
     cache: StorageCache,
-    perm: RocksPermanentStorage,
+    pub perm: RocksPermanentStorage,
     // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block
     transient_state_lock: parking_lot::RwLock<()>,
     #[cfg(feature = "dev")]
@@ -108,6 +108,11 @@ impl StratusStorage {
     pub fn clear_cache(&self) {
         tracing::info!("clearing storage cache");
         self.cache.clear();
+    }
+
+    pub fn reinit_temp(&self, block_number: BlockNumber) {
+        tracing::info!(?block_number, "reinitializing temp storage");
+        self.temp.reinit(block_number);
     }
 
     #[cfg(test)]

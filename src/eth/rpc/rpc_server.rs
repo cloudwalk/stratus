@@ -41,6 +41,7 @@ use tracing::Span;
 use tracing::field;
 use tracing::info_span;
 
+use crate::eth::storage::compute_pending_block_number;
 use crate::GlobalState;
 use crate::NodeMode;
 use crate::alias::AlloyReceipt;
@@ -688,6 +689,8 @@ async fn change_miner_mode(new_mode: MinerMode, ctx: &RpcContext) -> Result<Json
                 return Err(ConsensusError::Set.into());
             }
 
+            let pending_block_number = compute_pending_block_number(&ctx.server.storage.perm)?;
+            ctx.server.storage.reinit_temp(pending_block_number);
             ctx.server.miner.start_interval_mining(duration).await;
         }
         MinerMode::Automine => {

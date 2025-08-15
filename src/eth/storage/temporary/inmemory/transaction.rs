@@ -49,6 +49,16 @@ impl InmemoryTransactionTemporaryStorage {
         }
     }
 
+    pub fn reinit(&self, block_number: BlockNumber) {
+        let mut pending = self.pending_block.write();
+        let mut latest = self.latest_block.write();
+        *pending = InMemoryTemporaryStorageState {
+            block: PendingBlock::new_at_now(block_number),
+            accounts: HashMap::default(),
+        };
+        *latest = None;
+    }
+
     // -------------------------------------------------------------------------
     // Block number
     // -------------------------------------------------------------------------

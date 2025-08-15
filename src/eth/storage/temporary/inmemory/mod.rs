@@ -41,6 +41,10 @@ impl InMemoryTemporaryStorage {
         }
     }
 
+    pub fn reinit(&self, block_number: BlockNumber) {
+        self.transaction_storage.reinit(block_number);
+    }
+
     pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
         self.transaction_storage.read_pending_block_header()
     }
