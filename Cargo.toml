@@ -150,7 +150,7 @@ tikv-jemallocator = { version = "=0.6", optional = true }
 [dev-dependencies]
 serde_plain = "=1.0.2"
 tempfile = "=3.20.0"
-glob = "=0.3.2"
+glob = "=0.3.3"
 
 # ------------------------------------------------------------------------------
 # Build dependencies
@@ -159,7 +159,7 @@ glob = "=0.3.2"
 [build-dependencies]
 anyhow = "=1.0.98"
 const-hex = "=1.14.1"
-glob = "=0.3.2"
+glob = "=0.3.3"
 hostname = "=0.4.1"
 nom = "=8.0.0"
 phf_codegen = "=0.12.1"
