@@ -48,7 +48,7 @@ tokio = { version = "=1.47.1", features = [
     "macros",
     "signal"
 ] }
-tokio-util = "=0.7.15"
+tokio-util = "=0.7.16"
 
 # config
 clap = { version = "=4.5.45", features = ["derive", "env"] }
@@ -82,7 +82,7 @@ alloy-eips = "=1.0.24"
 
 # network
 jsonrpsee = { version = "=0.25.1", features = ["server", "client"] }
-reqwest = { version = "=0.12.22", features = ["json"] }
+reqwest = { version = "=0.12.23", features = ["json"] }
 tonic = "=0.13.1"
 tower = "=0.5.2"
 tower-http = { version = "=0.6.6", features = ["cors"] }
