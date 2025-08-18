@@ -43,7 +43,7 @@ uuid = { version = "=1.17.0", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
 
 # async
-tokio = { version = "=1.47.0", features = [
+tokio = { version = "=1.47.1", features = [
     "rt-multi-thread",
     "macros",
     "signal"
