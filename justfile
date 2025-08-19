@@ -310,20 +310,25 @@ shell-lint mode="--write":
     @shfmt {{ mode }} --indent 4 e2e/cloudwalk-contracts/*.sh
     @shellcheck e2e/cloudwalk-contracts/*.sh --severity=warning --shell=bash
 
-e2e-leader use_rocksdb_replication="false":
+e2e-leader use_rocksdb_replication="false" use_block_changes_replication="false":
     #!/bin/bash
     echo "starting e2e-leader"
     REPLICATION_FLAG=""
     if [ "{{use_rocksdb_replication}}" = "true" ]; then
         REPLICATION_FLAG="--use-rocksdb-replication"
     fi
+    # Leader doesn't need block changes flag, only follower does
     RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000 ${REPLICATION_FLAG}
 
-e2e-follower test="brlc" use_rocksdb_replication="false":
+e2e-follower test="brlc" use_rocksdb_replication="false" use_block_changes_replication="false":
     #!/bin/bash
     REPLICATION_FLAG=""
     if [ "{{use_rocksdb_replication}}" = "true" ]; then
         REPLICATION_FLAG="--use-rocksdb-replication"
+    fi
+    BLOCK_CHANGES_FLAG=""
+    if [ "{{use_block_changes_replication}}" = "true" ]; then
+        BLOCK_CHANGES_FLAG="--enable-block-changes-replication"
     fi
     if [ "{{test}}" = "kafka" ]; then
     # Start Kafka using Docker Compose
@@ -332,21 +337,21 @@ e2e-follower test="brlc" use_rocksdb_replication="false":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 ${REPLICATION_FLAG} -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 ${REPLICATION_FLAG} ${BLOCK_CHANGES_FLAG} -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 ${REPLICATION_FLAG} -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 ${REPLICATION_FLAG} ${BLOCK_CHANGES_FLAG} -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
     fi
 
 
-_e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false":
+_e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false" use_block_changes_replication="false":
     #!/bin/bash
     mkdir e2e_logs
 
     # Start Stratus with leader flag
-    just e2e-leader {{use_rocksdb_replication}}
+    just e2e-leader {{use_rocksdb_replication}} {{use_block_changes_replication}}
 
     # Start Stratus with follower flag
-    just e2e-follower {{test}} {{use_rocksdb_replication}}
+    just e2e-follower {{test}} {{use_rocksdb_replication}} {{use_block_changes_replication}}
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
@@ -390,8 +395,8 @@ _e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false":
     fi
 
 # E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc" use_rocksdb_replication="false":
-    just _e2e-leader-follower-up-impl {{test}} {{use_rocksdb_replication}}
+e2e-leader-follower-up test="brlc" use_rocksdb_replication="false" use_block_changes_replication="false":
+    just _e2e-leader-follower-up-impl {{test}} {{use_rocksdb_replication}} {{use_block_changes_replication}}
     just e2e-leader-follower-down
 
 # E2E: Leader & Follower Down

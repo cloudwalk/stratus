@@ -57,7 +57,7 @@ mod label {
 pub struct StratusStorage {
     temp: InMemoryTemporaryStorage,
     cache: StorageCache,
-    perm: RocksPermanentStorage,
+    pub perm: RocksPermanentStorage,
     // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block
     transient_state_lock: parking_lot::RwLock<()>,
     #[cfg(feature = "dev")]
@@ -164,6 +164,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
 
         let number = self.read_pending_block_header().0.number;
+        tracing::info!(?number, "got block number to resume import");
 
         #[cfg(feature = "dev")]
         if number == BlockNumber::ONE && self.rocksdb_replication_enabled() {
@@ -639,6 +640,19 @@ impl StratusStorage {
         })
     }
 
+    pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<Block>, StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_block_with_changes", %filter).entered();
+        tracing::debug!(storage = %label::PERM, ?filter, "reading block");
+
+        timed(|| self.perm.read_block(filter)).with(|m| {
+            metrics::inc_storage_read_block_with_changes(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read block with changes");
+            }
+        })
+    }
+
     pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionStage>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_transaction", %tx_hash).entered();
@@ -752,13 +766,11 @@ impl StratusStorage {
 
         self.cache.clear();
 
-        tracing::info!("reseting storage to genesis state");
-
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::reset").entered();
 
         // reset perm
-        tracing::debug!(storage = %label::PERM, "reseting permanent storage");
+        tracing::debug!(storage = %label::PERM, "resetting permanent storage");
         timed(|| self.perm.reset()).with(|m| {
             metrics::inc_storage_reset(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
