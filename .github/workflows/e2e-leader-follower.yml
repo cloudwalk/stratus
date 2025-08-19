@@ -37,22 +37,14 @@ jobs:
       fail-fast: false
       matrix:
         test:
-          [brlc, importer, miner, change, deploy, kafka, health, replication]
-        use_rocksdb_replication: [false, true]
+          [brlc, importer, miner, change, deploy, kafka, health]
         use_block_changes_replication: [false, true]
-        exclude:
-          - test: replication # requires substantial changes to the justfile and is not that useful of a test
-            use_rocksdb_replication: false
-          - test: health # kills and starts stratus again but hardhat test cannot take params, would need to duplicate the test
-            use_rocksdb_replication: true
-          - use_rocksdb_replication: true
-            use_block_changes_replication: true
-    name: "E2E Leader & Follower on ${{ matrix.test }} (RocksDB Replication: ${{ matrix.use_rocksdb_replication }}) (Block changes Replication: ${{ matrix.use_block_changes_replication }})"
+    name: "E2E Leader & Follower on ${{ matrix.test }} (Replication: ${{ matrix.use_block_changes_replication }})"
     runs-on: ubuntu-22.04
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.test }}-${{ matrix.use_rocksdb_replication }}-${{ matrix.use_block_changes_replication }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-${{ matrix.test }}-${{ matrix.use_block_changes_replication }}-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -117,7 +109,7 @@ jobs:
         run: just contracts-flatten --token
 
       - name: Run e2e tests
-        run: just run-test e2e-leader-follower-up ${{ matrix.test }} ${{ matrix.use_rocksdb_replication }} ${{ matrix.use_block_changes_replication }}
+        run: just run-test e2e-leader-follower-up ${{ matrix.test }} ${{ matrix.use_block_changes_replication }}
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error

@@ -8,8 +8,6 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-#[cfg(feature = "replication")]
-use rocksdb::WriteBatch;
 use serde::Deserialize;
 use serde::Serialize;
 use strum::EnumCount;
@@ -19,8 +17,6 @@ use strum::VariantNames;
 use super::types::AccountRocksdb;
 use super::types::BlockNumberRocksdb;
 use super::types::BlockRocksdb;
-#[cfg(feature = "replication")]
-use super::types::BytesRocksdb;
 use super::types::SlotValueRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Block;
@@ -90,8 +86,6 @@ impl_single_version_cf_value!(CfTransactionsValue, BlockNumberRocksdb, BlockNumb
 impl_single_version_cf_value!(CfBlocksByNumberValue, BlockRocksdb, Block);
 impl_single_version_cf_value!(CfBlocksByHashValue, BlockNumberRocksdb, BlockNumber);
 impl_single_version_cf_value!(CfBlockChangesValue, BlockChangesRocksdb, ());
-#[cfg(feature = "replication")]
-impl_single_version_cf_value!(CfReplicationLogsValue, BytesRocksdb, WriteBatch);
 
 impl SerializeDeserializeWithContext for CfAccountSlotsHistoryValue {}
 impl SerializeDeserializeWithContext for CfAccountSlotsValue {}
@@ -100,8 +94,6 @@ impl SerializeDeserializeWithContext for CfAccountsValue {}
 impl SerializeDeserializeWithContext for CfBlocksByHashValue {}
 impl SerializeDeserializeWithContext for CfTransactionsValue {}
 impl SerializeDeserializeWithContext for CfBlockChangesValue {}
-#[cfg(feature = "replication")]
-impl SerializeDeserializeWithContext for CfReplicationLogsValue {}
 impl SerializeDeserializeWithContext for CfBlocksByNumberValue {}
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -124,8 +116,6 @@ impl_to_cf_name!(CfAccountSlotsHistoryValue, "account_slots_history");
 impl_to_cf_name!(CfTransactionsValue, "transactions");
 impl_to_cf_name!(CfBlocksByNumberValue, "blocks_by_number");
 impl_to_cf_name!(CfBlocksByHashValue, "blocks_by_hash");
-#[cfg(feature = "replication")]
-impl_to_cf_name!(CfReplicationLogsValue, "replication_logs");
 /// Test that deserialization works for each variant of the enum.
 ///
 /// This is intended to give an error when the following happens:
@@ -329,8 +319,6 @@ mod tests {
         let mut transactions_checker = EnumCoverageDropBombChecker::<CfTransactionsValue>::new();
         let mut blocks_by_number_checker = EnumCoverageDropBombChecker::<CfBlocksByNumberValue>::new();
         let mut blocks_by_hash_checker = EnumCoverageDropBombChecker::<CfBlocksByHashValue>::new();
-        #[cfg(feature = "replication")]
-        let mut replication_logs_checker = EnumCoverageDropBombChecker::<CfReplicationLogsValue>::new();
 
         accounts_checker.add(test_deserialization::<CfAccountsValue>().unwrap());
         accounts_history_checker.add(test_deserialization::<CfAccountsHistoryValue>().unwrap());
@@ -339,7 +327,5 @@ mod tests {
         transactions_checker.add(test_deserialization::<CfTransactionsValue>().unwrap());
         blocks_by_number_checker.add(test_deserialization::<CfBlocksByNumberValue>().unwrap());
         blocks_by_hash_checker.add(test_deserialization::<CfBlocksByHashValue>().unwrap());
-        #[cfg(feature = "replication")]
-        replication_logs_checker.add(test_deserialization::<CfReplicationLogsValue>().unwrap());
     }
 }

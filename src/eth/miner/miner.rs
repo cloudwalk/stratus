@@ -16,11 +16,7 @@ use tracing::Span;
 
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
-#[cfg(feature = "replication")]
-use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockHeader;
-#[cfg(feature = "replication")]
-use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
@@ -28,8 +24,6 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::StratusStorage;
-#[cfg(feature = "replication")]
-use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::not;
 use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
@@ -49,9 +43,6 @@ pub enum CommitItem {
     Block(Block),
     /// A block that wasn't executed in this node and instead contains all changes already pre-computed
     ReplicationBlock(Block),
-    /// A replication log from RocksDB
-    #[cfg(feature = "replication")]
-    ReplicationLog(ReplicationLogRocksdb),
 }
 
 pub struct Miner {
@@ -297,8 +288,6 @@ impl Miner {
                 self.storage.finish_pending_block()?;
                 self.commit_block(block)
             }
-            #[cfg(feature = "replication")]
-            CommitItem::ReplicationLog(replication_log) => self.commit_log(replication_log),
         }
     }
 
@@ -336,67 +325,6 @@ impl Miner {
         self.send_block_header_notification(&block_header);
 
         Ok(())
-    }
-
-    #[cfg(feature = "replication")]
-    fn commit_log(&self, replication_log: ReplicationLogRocksdb) -> anyhow::Result<(), StorageError> {
-        let block_number: BlockNumber = replication_log.block_number.into();
-
-        // track
-        #[cfg(feature = "tracing")]
-        let _span = info_span!("miner::commit_log", %block_number).entered();
-        tracing::info!(block_number = %block_number, "committing replication log");
-
-        // lock
-        let _commit_lock = self.locks.commit.lock();
-
-        // Read current block for notifications
-        let current_block_number = self.storage.read_mined_block_number();
-        match self.storage.read_block(BlockFilter::Number(current_block_number)) {
-            Ok(Some(current_block)) => {
-                // Send notifications for the current block
-                if self.has_block_header_subscribers() {
-                    self.send_block_header_notification(&Some(current_block.header.clone()));
-                }
-                if self.has_log_subscribers() {
-                    let logs = current_block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec();
-                    self.send_log_notifications(&Some(logs));
-                }
-                if self.has_pending_tx_subscribers() {
-                    let tx_hashes = current_block.transactions.iter().map(|tx| tx.input.hash).collect_vec();
-                    for tx_hash in tx_hashes {
-                        self.send_pending_tx_notification(&Some(tx_hash));
-                    }
-                }
-            }
-            Ok(None) => {
-                tracing::info!(
-                    %current_block_number,
-                    "no block found for current block number"
-                );
-            }
-            Err(e) => {
-                tracing::error!(
-                    %current_block_number,
-                    error = ?e,
-                    "failed to read current block"
-                );
-            }
-        }
-
-        // Apply replication log
-        tracing::info!(block_number = %block_number, "applying replication log");
-        let write_batch = replication_log.to_write_batch();
-        match self.storage.apply_replication_log(block_number, write_batch) {
-            Ok(_) => {
-                tracing::info!(block_number = %replication_log.block_number, "successfully applied replication log");
-                Ok(())
-            }
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to apply replication log");
-                Err(e)
-            }
-        }
     }
 
     // -----------------------------------------------------------------------------
