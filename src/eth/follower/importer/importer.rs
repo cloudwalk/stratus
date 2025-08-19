@@ -207,9 +207,10 @@ impl Importer {
                 );
 
                 // Await all tasks
-                if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
-                    tracing::error!(reason = ?e, "importer-online failed");
-                } // this is wrong!!
+                let results = try_join!(task_executor, task_block_fetcher, task_number_fetcher)?;
+                results.0?;
+                results.1?;
+                results.2?;
             }
             ImporterMode::BlockWithChanges => {
                 // Use existing block fetcher and executor approach
@@ -667,34 +668,33 @@ impl Importer {
             let start = metrics::now();
 
             // Send Kafka events if enabled
-            if let Ok(current_block_number) = storage.read_mined_block_number() {
-                match storage.read_block(BlockFilter::Number(current_block_number)) {
-                    Ok(Some(current_block)) =>
-                        if let Some(ref kafka_conn) = kafka_connector {
-                            let events = current_block
-                                .transactions
-                                .iter()
-                                .flat_map(|tx| transaction_to_events(current_block.header.timestamp, Cow::Borrowed(tx)));
+            let current_block_number = storage.read_mined_block_number();
+            match storage.read_block(BlockFilter::Number(current_block_number)) {
+                Ok(Some(current_block)) =>
+                    if let Some(ref kafka_conn) = kafka_connector {
+                        let events = current_block
+                            .transactions
+                            .iter()
+                            .flat_map(|tx| transaction_to_events(current_block.header.timestamp, Cow::Borrowed(tx)));
 
-                            if let Err(e) = kafka_conn.send_buffered(events, 50).await {
-                                let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events");
-                                return log_and_err!(reason = e, message);
-                            }
-                        },
-                    Ok(None) => {
-                        tracing::info!(
-                            %current_block_number,
-                            external_rpc_current_block = %EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed),
-                            "no block found for current block number"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            %current_block_number,
-                            error = ?e,
-                            "failed to read current block"
-                        );
-                    }
+                        if let Err(e) = kafka_conn.send_buffered(events, 50).await {
+                            let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events");
+                            return log_and_err!(reason = e, message);
+                        }
+                    },
+                Ok(None) => {
+                    tracing::info!(
+                        %current_block_number,
+                        external_rpc_current_block = %EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed),
+                        "no block found for current block number"
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        %current_block_number,
+                        error = ?e,
+                        "failed to read current block"
+                    );
                 }
             }
 
@@ -864,7 +864,7 @@ impl Consensus for Importer {
                 elapsed
             ))
         } else {
-            Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number()?.as_u64())
+            Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number().as_u64())
         }
     }
 

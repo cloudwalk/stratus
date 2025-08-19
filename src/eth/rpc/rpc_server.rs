@@ -826,7 +826,7 @@ fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     let _method_enter = info_span!("rpc::eth_blockNumber", block_number = field::Empty).entered();
 
     // execute
-    let block_number = ctx.server.storage.read_mined_block_number()?;
+    let block_number = ctx.server.storage.read_mined_block_number();
     Span::with(|s| s.rec_str("block_number", &block_number));
 
     Ok(to_json_value(block_number))
@@ -1292,7 +1292,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     let to_block = match filter.to_block {
         Some(block) => block,
         None => {
-            let block = ctx.server.storage.read_mined_block_number()?;
+            let block = ctx.server.storage.read_mined_block_number();
             filter.to_block = Some(block);
             block
         }

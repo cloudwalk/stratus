@@ -330,7 +330,6 @@ impl Miner {
 
         // save storage
         self.storage.save_block(block)?;
-        self.storage.set_mined_block_number(block_number)?;
 
         // Send notifications after saving the block
         self.send_log_notifications(&block_logs);
@@ -352,37 +351,36 @@ impl Miner {
         let _commit_lock = self.locks.commit.lock();
 
         // Read current block for notifications
-        if let Ok(current_block_number) = self.storage.read_mined_block_number() {
-            match self.storage.read_block(BlockFilter::Number(current_block_number)) {
-                Ok(Some(current_block)) => {
-                    // Send notifications for the current block
-                    if self.has_block_header_subscribers() {
-                        self.send_block_header_notification(&Some(current_block.header.clone()));
-                    }
-                    if self.has_log_subscribers() {
-                        let logs = current_block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec();
-                        self.send_log_notifications(&Some(logs));
-                    }
-                    if self.has_pending_tx_subscribers() {
-                        let tx_hashes = current_block.transactions.iter().map(|tx| tx.input.hash).collect_vec();
-                        for tx_hash in tx_hashes {
-                            self.send_pending_tx_notification(&Some(tx_hash));
-                        }
+        let current_block_number = self.storage.read_mined_block_number();
+        match self.storage.read_block(BlockFilter::Number(current_block_number)) {
+            Ok(Some(current_block)) => {
+                // Send notifications for the current block
+                if self.has_block_header_subscribers() {
+                    self.send_block_header_notification(&Some(current_block.header.clone()));
+                }
+                if self.has_log_subscribers() {
+                    let logs = current_block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec();
+                    self.send_log_notifications(&Some(logs));
+                }
+                if self.has_pending_tx_subscribers() {
+                    let tx_hashes = current_block.transactions.iter().map(|tx| tx.input.hash).collect_vec();
+                    for tx_hash in tx_hashes {
+                        self.send_pending_tx_notification(&Some(tx_hash));
                     }
                 }
-                Ok(None) => {
-                    tracing::info!(
-                        %current_block_number,
-                        "no block found for current block number"
-                    );
-                }
-                Err(e) => {
-                    tracing::error!(
-                        %current_block_number,
-                        error = ?e,
-                        "failed to read current block"
-                    );
-                }
+            }
+            Ok(None) => {
+                tracing::info!(
+                    %current_block_number,
+                    "no block found for current block number"
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    %current_block_number,
+                    error = ?e,
+                    "failed to read current block"
+                );
             }
         }
 

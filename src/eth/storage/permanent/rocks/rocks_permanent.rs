@@ -96,13 +96,12 @@ impl RocksPermanentStorage {
     // Block number operations
     // -------------------------------------------------------------------------
 
-    pub fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber, StorageError> {
-        Ok(self.block_number.load(Ordering::SeqCst).into())
+    pub fn read_mined_block_number(&self) -> BlockNumber {
+        self.block_number.load(Ordering::SeqCst).into()
     }
 
-    pub fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<(), StorageError> {
+    pub fn set_mined_block_number(&self, number: BlockNumber) {
         self.block_number.store(number.as_u32(), Ordering::SeqCst);
-        Ok(())
     }
 
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
@@ -186,7 +185,7 @@ impl RocksPermanentStorage {
                 tracing::error!(reason = ?e, "failed to apply replication log in RocksPermanent");
             })?;
 
-        self.set_mined_block_number(block_number)?;
+        self.set_mined_block_number(block_number);
 
         Ok(())
     }

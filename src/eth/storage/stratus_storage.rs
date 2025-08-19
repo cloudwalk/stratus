@@ -169,7 +169,7 @@ impl StratusStorage {
         #[cfg(feature = "dev")]
         if number == BlockNumber::ONE && self.rocksdb_replication_enabled() {
             tracing::info!("starting importer from genesis block");
-            self.set_mined_block_number(BlockNumber::ZERO)?;
+            self.set_mined_block_number(BlockNumber::ZERO);
             self.temp.set_pending_block_header(BlockNumber::ZERO)?;
             return Ok(BlockNumber::ZERO);
         }
@@ -187,30 +187,25 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_mined_block_number(&self) -> Result<BlockNumber, StorageError> {
+    pub fn read_mined_block_number(&self) -> BlockNumber {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_mined_block_number").entered();
         tracing::debug!(storage = %label::PERM, "reading mined block number");
 
         timed(|| self.perm.read_mined_block_number()).with(|m| {
-            metrics::inc_storage_read_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read miner block number");
-            }
+            metrics::inc_storage_read_mined_block_number(m.elapsed, label::PERM, true);
         })
     }
 
-    pub fn set_mined_block_number(&self, block_number: BlockNumber) -> Result<(), StorageError> {
+    // TODO: make this infallible
+    pub fn set_mined_block_number(&self, block_number: BlockNumber) {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::set_mined_block_number", %block_number).entered();
         tracing::debug!(storage = %label::PERM, %block_number, "setting mined block number");
 
         timed(|| self.perm.set_mined_block_number(block_number)).with(|m| {
-            metrics::inc_storage_set_mined_block_number(m.elapsed, label::PERM, m.result.is_ok());
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to set miner block number");
-            }
-        })
+            metrics::inc_storage_set_mined_block_number(m.elapsed, label::PERM, true);
+        });
     }
 
     #[cfg(feature = "replication")]
@@ -335,13 +330,8 @@ impl StratusStorage {
             ReadKind::Call((block_number, _)) => {
                 let guard = self.transient_state_lock.read();
                 // Check if the provided block number is less than or equal to the mined block number
-                match self.read_mined_block_number() {
-                    Ok(mined_block_number) => {
-                        let is_valid = block_number <= mined_block_number;
-                        (is_valid, (is_valid).then_some(guard))
-                    }
-                    Err(_) => (false, None), // If we can't read mined block number, assume latest is invalid
-                }
+                let is_valid = block_number <= self.read_mined_block_number();
+                (is_valid, (is_valid).then_some(guard))
             }
             _ => (true, None),
         }
@@ -587,7 +577,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), "saving block");
 
         // check mined number
-        let mined_number = self.read_mined_block_number()?;
+        let mined_number = self.read_mined_block_number();
         if not(block_number.is_zero()) && block_number != mined_number.next_block_number() {
             tracing::error!(%block_number, %mined_number, "failed to save block because mismatch with mined block number");
             return Err(StorageError::MinedNumberConflict {
@@ -630,7 +620,11 @@ impl StratusStorage {
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, %block_number, "failed to save block");
             }
-        })
+        })?;
+
+        self.set_mined_block_number(block_number);
+
+        Ok(())
     }
 
     pub fn read_block(&self, filter: BlockFilter) -> Result<Option<Block>, StorageError> {
@@ -880,7 +874,7 @@ impl StratusStorage {
         }
 
         // block number
-        self.set_mined_block_number(BlockNumber::ZERO)?;
+        self.set_mined_block_number(BlockNumber::ZERO);
 
         Ok(())
     }
