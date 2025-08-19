@@ -11,7 +11,7 @@ default-run = "stratus"
 [dependencies]
 
 # general
-anyhow = "=1.0.98"
+anyhow = "=1.0.99"
 cfg-if = "=1.0.1"
 chrono = { version = "=0.4.41", features = ["serde"] }
 const_format = "=0.2.34"
@@ -38,17 +38,17 @@ static_assertions = "=1.1.0"
 strum = { version = "=0.27.2", features = ["derive"] }
 quick_cache = "=0.6.9"
 sugars = "=3.0.1"
-thiserror = "=2.0.12"
+thiserror = "=2.0.15"
 uuid = { version = "=1.17.0", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
 
 # async
-tokio = { version = "=1.47.0", features = [
+tokio = { version = "=1.47.1", features = [
     "rt-multi-thread",
     "macros",
     "signal"
 ] }
-tokio-util = "=0.7.15"
+tokio-util = "=0.7.16"
 
 # config
 clap = { version = "=4.5.45", features = ["derive", "env"] }
@@ -82,7 +82,7 @@ alloy-eips = "=1.0.24"
 
 # network
 jsonrpsee = { version = "=0.25.1", features = ["server", "client"] }
-reqwest = { version = "=0.12.22", features = ["json"] }
+reqwest = { version = "=0.12.23", features = ["json"] }
 tonic = "=0.13.1"
 tower = "=0.5.2"
 tower-http = { version = "=0.6.6", features = ["cors"] }
@@ -150,16 +150,16 @@ tikv-jemallocator = { version = "=0.6", optional = true }
 [dev-dependencies]
 serde_plain = "=1.0.2"
 tempfile = "=3.20.0"
-glob = "=0.3.2"
+glob = "=0.3.3"
 
 # ------------------------------------------------------------------------------
 # Build dependencies
 # ------------------------------------------------------------------------------
 
 [build-dependencies]
-anyhow = "=1.0.98"
+anyhow = "=1.0.99"
 const-hex = "=1.14.1"
-glob = "=0.3.2"
+glob = "=0.3.3"
 hostname = "=0.4.1"
 nom = "=8.0.0"
 phf_codegen = "=0.12.1"
