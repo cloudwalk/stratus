@@ -790,21 +790,13 @@ impl RocksStorageState {
     pub fn export_column_family_size_metrics(&self) -> Result<()> {
         let db_name = self.db_path_filename();
 
-        let column_families = vec![
-            ("accounts", &self.accounts.column_family),
-            ("accounts_history", &self.accounts_history.column_family),
-            ("account_slots", &self.account_slots.column_family),
-            ("account_slots_history", &self.account_slots_history.column_family),
-            ("transactions", &self.transactions.column_family),
-            ("blocks_by_number", &self.blocks_by_number.column_family),
-            ("blocks_by_hash", &self.blocks_by_hash.column_family),
-            #[cfg(feature = "replication")]
-            ("replication_logs", &self.replication_logs.column_family),
-        ];
+        let cf_names = DB::list_cf(&Options::default(), &self.db_path)?;
 
-        for (cf_name, cf_handle) in column_families {
-            if let Ok(Some(size)) = self.db.property_int_value_cf(cf_handle, "rocksdb.total-sst-files-size") {
-                metrics::set_rocks_cf_size(size, db_name, cf_name);
+        for cf_name in cf_names {
+            if let Some(cf_handle) = self.db.cf_handle(&cf_name) {
+                if let Ok(Some(size)) = self.db.property_int_value_cf(&cf_handle, "rocksdb.total-sst-files-size") {
+                    metrics::set_rocks_cf_size(size, db_name, &cf_name);
+                }
             }
         }
 
