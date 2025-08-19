@@ -29,6 +29,7 @@ use crate::ext::to_json_value;
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<TransactionMined>,
+}
 
 impl Block {
     /// Creates a new block with the given number and timestamp.

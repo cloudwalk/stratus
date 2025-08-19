@@ -28,7 +28,6 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::SlotValue;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
-use crate::eth::storage::permanent::rocks::types::old_types_hotfix::OldCfBlocksByNumberValue;
 
 macro_rules! impl_single_version_cf_value {
     ($name:ident, $inner_type:ty, $non_rocks_equivalent: ty) => {
