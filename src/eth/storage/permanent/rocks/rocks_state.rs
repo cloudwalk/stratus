@@ -793,10 +793,9 @@ impl RocksStorageState {
         let cf_names = DB::list_cf(&Options::default(), &self.db_path)?;
 
         for cf_name in cf_names {
-            if let Some(cf_handle) = self.db.cf_handle(&cf_name) {
-                if let Ok(Some(size)) = self.db.property_int_value_cf(&cf_handle, "rocksdb.total-sst-files-size") {
-                    metrics::set_rocks_cf_size(size, db_name, &cf_name);
-                }
+            if let Some(cf_handle) = self.db.cf_handle(&cf_name)
+                && let Ok(Some(size)) = self.db.property_int_value_cf(&cf_handle, "rocksdb.total-sst-files-size") {
+                metrics::set_rocks_cf_size(size, db_name, &cf_name);
             }
         }
 
