@@ -83,6 +83,22 @@ where
     }
 }
 
+impl<T> From<Option<T>> for ExecutionValueChange<T>
+where
+    T: PartialEq + serde::Serialize,
+{
+    fn from(value: Option<T>) -> Self {
+        let modified = match value {
+            None => ValueState::NotSet,
+            Some(value) => ValueState::Set(value),
+        };
+        ExecutionValueChange {
+            original: ValueState::NotSet,
+            modified,
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Value State
 // -----------------------------------------------------------------------------

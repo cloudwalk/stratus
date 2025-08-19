@@ -47,6 +47,8 @@ cfg_if::cfg_if! {
 pub enum CommitItem {
     /// A block
     Block(Block),
+    /// A block that wasn't executed in this node and instead contains all changes already pre-computed
+    ReplicationBlock(Block),
     /// A replication log from RocksDB
     #[cfg(feature = "replication")]
     ReplicationLog(ReplicationLogRocksdb),
@@ -291,6 +293,10 @@ impl Miner {
     pub fn commit(&self, item: CommitItem) -> anyhow::Result<(), StorageError> {
         match item {
             CommitItem::Block(block) => self.commit_block(block),
+            CommitItem::ReplicationBlock(block) => {
+                self.storage.finish_pending_block()?;
+                self.commit_block(block)
+            }
             #[cfg(feature = "replication")]
             CommitItem::ReplicationLog(replication_log) => self.commit_log(replication_log),
         }
