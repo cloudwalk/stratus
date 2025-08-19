@@ -5,10 +5,6 @@ use super::InMemoryTemporaryStorage;
 use super::RocksPermanentStorage;
 use super::StorageCache;
 #[cfg(feature = "dev")]
-use crate::GlobalState;
-#[cfg(feature = "dev")]
-use crate::NodeMode;
-#[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -81,7 +77,7 @@ impl StratusStorage {
 
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
-        if (GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled()) && !this.has_genesis()? {
+        if !this.has_genesis()? {
             this.reset_to_genesis()?;
         }
 
@@ -134,8 +130,6 @@ impl StratusStorage {
                 rocks_disable_sync_write: false,
                 rocks_cf_size_metrics_interval: None,
                 genesis_file: crate::config::GenesisFileConfig::default(),
-                #[cfg(feature = "replication")]
-                use_rocksdb_replication: false,
             },
         )
     }
@@ -146,14 +140,6 @@ impl StratusStorage {
 
         let number = self.read_pending_block_header().0.number;
         tracing::info!(?number, "got block number to resume import");
-
-        #[cfg(feature = "dev")]
-        if number == BlockNumber::ONE && self.rocksdb_replication_enabled() {
-            tracing::info!("starting importer from genesis block");
-            self.set_mined_block_number(BlockNumber::ZERO);
-            self.temp.set_pending_block_header(BlockNumber::ZERO)?;
-            return Ok(BlockNumber::ZERO);
-        }
 
         Ok(number)
     }
@@ -823,19 +809,7 @@ impl StratusStorage {
     /// Translates a block filter to a specific storage point-in-time indicator.
     pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
         match block_filter {
-            BlockFilter::Pending => {
-                // For follower nodes with RocksDB replication, redirect pending queries to mined state
-                // since transactions are only executed on the leader node
-                #[cfg(feature = "dev")]
-                if GlobalState::get_node_mode() == NodeMode::Follower && self.rocksdb_replication_enabled() {
-                    Ok(PointInTime::Mined)
-                } else {
-                    Ok(PointInTime::Pending)
-                }
-
-                #[cfg(not(feature = "dev"))]
-                Ok(PointInTime::Pending)
-            }
+            BlockFilter::Pending => Ok(PointInTime::Pending),
             BlockFilter::Latest => Ok(PointInTime::Mined),
             BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
             BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),
