@@ -248,7 +248,6 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::eth::primitives::CodeHash;
     use crate::eth::primitives::Nonce;
 
     #[test]
@@ -260,7 +259,6 @@ mod tests {
             nonce: Nonce::from(1u64),
             balance: Wei::from(1000u64),
             bytecode: None,
-            code_hash: CodeHash::default(),
         };
 
         // Create a mock failed receipt
@@ -528,7 +526,6 @@ mod tests {
             nonce: Nonce::from(1u64),
             balance: Wei::from(1000u64),
             bytecode: None,
-            code_hash: CodeHash::default(),
         };
 
         // Create a mock execution
