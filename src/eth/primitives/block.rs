@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use alloy_primitives::B256;
 use alloy_rpc_types_eth::BlockTransactions;
 use alloy_trie::root::ordered_trie_root;
@@ -16,10 +14,9 @@ use crate::alias::AlloyBlockAlloyTransaction;
 use crate::alias::AlloyBlockB256;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
-use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
@@ -98,13 +95,12 @@ impl Block {
     }
 
     /// Compact accounts changes removing intermediate values, keeping only the last modified nonce, balance, bytecode and slots.
-    pub fn compact_account_changes(&self) -> Vec<ExecutionAccountChanges> {
-        let mut block_compacted_changes: BTreeMap<Address, ExecutionAccountChanges> = BTreeMap::new();
+    // TODO: We need to rework the block structure so that this can consume the block.
+    pub fn compact_account_changes(&self) -> ExecutionChanges {
+        let mut block_compacted_changes = ExecutionChanges::new();
         for transaction in &self.transactions {
-            for transaction_changes in transaction.execution.changes.values() {
-                let account_compacted_changes = block_compacted_changes
-                    .entry(transaction_changes.address)
-                    .or_insert(transaction_changes.clone());
+            for (address, transaction_changes) in transaction.execution.changes.iter() {
+                let account_compacted_changes = block_compacted_changes.entry(*address).or_insert(transaction_changes.clone());
 
                 if let Some(&nonce) = transaction_changes.nonce.take_modified_ref() {
                     account_compacted_changes.nonce.set_modified(nonce);
@@ -127,7 +123,7 @@ impl Block {
             }
         }
 
-        block_compacted_changes.into_values().collect_vec()
+        block_compacted_changes
     }
 
     fn mine_transaction(&mut self, tx: TransactionExecution, transaction_index: Index, log_index: &mut Index) -> TransactionMined {

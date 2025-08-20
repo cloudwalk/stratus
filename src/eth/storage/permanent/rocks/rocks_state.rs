@@ -43,7 +43,7 @@ use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -216,15 +216,12 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    fn prepare_batch_with_execution_changes<C>(&self, changes: C, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()>
-    where
-        C: IntoIterator<Item = ExecutionAccountChanges>,
-    {
+    fn prepare_batch_with_execution_changes(&self, changes: ExecutionChanges, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
         let mut block_changes = BlockChangesRocksdb::default();
         let block_number = block_number.into();
 
-        for change in changes {
-            let address: AddressRocksdb = change.address.into();
+        for (address, change) in changes {
+            let address: AddressRocksdb = address.into();
             let mut account_change_entry = AccountChangesRocksdb::default();
 
             if change.is_account_modified() {
@@ -801,6 +798,7 @@ mod tests {
     use super::*;
     use crate::alias::RevmBytecode;
     use crate::eth::primitives::BlockHeader;
+    use crate::eth::primitives::ExecutionAccountChanges;
     use crate::eth::primitives::ExecutionValueChange;
 
     #[test]
@@ -882,9 +880,8 @@ mod tests {
     fn regression_test_saving_account_changes_for_accounts_that_didnt_change() {
         let (state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
 
+        let addr: Address = Faker.fake();
         let change_base = ExecutionAccountChanges {
-            new_account: false,
-            address: Faker.fake(),
             nonce: ExecutionValueChange::from_original(Faker.fake()),
             balance: ExecutionValueChange::from_original(Faker.fake()),
             bytecode: ExecutionValueChange::from_original(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
@@ -892,29 +889,35 @@ mod tests {
             slots: BTreeMap::new(),
         };
 
-        // 4 changes for the same address, the first isn't modified, the other three are
-        let changes = [
-            ExecutionAccountChanges { ..change_base.clone() },
+        let change_1 = ExecutionChanges::from([(addr, ExecutionAccountChanges { ..change_base.clone() })]);
+        let change_2 = ExecutionChanges::from([(
+            addr,
             ExecutionAccountChanges {
                 nonce: ExecutionValueChange::from_modified(Faker.fake()),
                 ..change_base.clone()
             },
+        )]);
+        let change_3 = ExecutionChanges::from([(
+            addr,
             ExecutionAccountChanges {
                 balance: ExecutionValueChange::from_modified(Faker.fake()),
                 ..change_base.clone()
             },
+        )]);
+        let change_4 = ExecutionChanges::from([(
+            addr,
             ExecutionAccountChanges {
                 bytecode: ExecutionValueChange::from_modified(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
                 ..change_base
             },
-        ];
+        )]);
 
         let mut batch = WriteBatch::default();
         // add accounts in separate blocks so they show up in history
-        state.prepare_batch_with_execution_changes([changes[0].clone()], 1.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes([changes[1].clone()], 2.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes([changes[2].clone()], 3.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes([changes[3].clone()], 4.into(), &mut batch).unwrap();
+        state.prepare_batch_with_execution_changes(change_1, 1.into(), &mut batch).unwrap();
+        state.prepare_batch_with_execution_changes(change_2, 2.into(), &mut batch).unwrap();
+        state.prepare_batch_with_execution_changes(change_3, 3.into(), &mut batch).unwrap();
+        state.prepare_batch_with_execution_changes(change_4, 4.into(), &mut batch).unwrap();
         state.write_in_batch_for_multiple_cfs(batch).unwrap();
 
         let accounts = state.read_all_accounts().unwrap();

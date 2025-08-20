@@ -38,8 +38,6 @@ impl From<BlockChangesRocksdb> for ExecutionChanges {
                 (
                     address.into(),
                     ExecutionAccountChanges {
-                        new_account: false,
-                        address: address.into(),
                         nonce: changes.nonce.map(Nonce::from).into(),
                         balance: changes.balance.map(Wei::from).into(),
                         bytecode: changes.bytecode.map(|inner| Some(RevmBytecode::from(inner))).into(),

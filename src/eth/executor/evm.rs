@@ -521,9 +521,9 @@ fn parse_revm_execution(revm_result: ResultAndState, input: EvmInput, execution_
 
     tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
     let mut deployed_contract_address = None;
-    for changes in changes.values() {
+    for (address, changes) in changes.iter() {
         if changes.bytecode.is_modified() {
-            deployed_contract_address = Some(changes.address);
+            deployed_contract_address = Some(*address);
         }
     }
 
@@ -593,8 +593,9 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
 
         // handle account created (contracts) or touched (everything else)
         if account_created {
+            let addr = account.address;
             let account_changes = ExecutionAccountChanges::from_modified_values(account, account_modified_slots);
-            execution_changes.insert(account_changes.address, account_changes);
+            execution_changes.insert(addr, account_changes);
         } else if account_touched {
             let Some(account_changes) = execution_changes.get_mut(&address) else {
                 tracing::error!(keys = ?execution_changes.keys(), %address, "account touched, but not loaded by evm");
