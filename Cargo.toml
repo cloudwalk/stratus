@@ -17,7 +17,7 @@ chrono = { version = "=0.4.41", features = ["serde"] }
 const_format = "=0.2.34"
 const-hex = "=1.14.1"
 derive_more = "=2.0.1"
-derive-new = "=0.6.0"
+derive-new = "=0.7.0"
 hash_hasher = "=2.0.4"
 hex_fmt = "=0.3.0"
 hex-literal = "=1.0.0"
