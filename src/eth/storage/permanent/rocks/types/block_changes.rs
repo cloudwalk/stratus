@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use crate::alias::RevmBytecode;
-use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionValueChange;
@@ -41,7 +40,6 @@ impl From<BlockChangesRocksdb> for ExecutionChanges {
                         nonce: changes.nonce.map(Nonce::from).into(),
                         balance: changes.balance.map(Wei::from).into(),
                         bytecode: changes.bytecode.map(|inner| Some(RevmBytecode::from(inner))).into(),
-                        code_hash: CodeHash::default(),
                         slots: changes
                             .slot_changes
                             .into_iter()

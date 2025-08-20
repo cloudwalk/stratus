@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use display_json::DebugAsJson;
 
-use super::CodeHash;
 use crate::alias::RevmBytecode;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::ExecutionValueChange;
@@ -20,7 +19,6 @@ pub struct ExecutionAccountChanges {
     // TODO: bytecode related information should be grouped in a Bytecode struct
     #[dummy(default)]
     pub bytecode: ExecutionValueChange<Option<RevmBytecode>>,
-    pub code_hash: CodeHash,                                    // TODO: should be wrapped in a ExecutionValueChange (might be useless)
     pub slots: BTreeMap<SlotIndex, ExecutionValueChange<Slot>>, // TODO: should map idx to slotvalue
 }
 
@@ -33,7 +31,6 @@ impl ExecutionAccountChanges {
             balance: ExecutionValueChange::from_original(account.balance),
             bytecode: ExecutionValueChange::from_original(account.bytecode),
             slots: BTreeMap::new(),
-            code_hash: account.code_hash,
         }
     }
 
@@ -46,8 +43,6 @@ impl ExecutionAccountChanges {
 
             // bytecode
             bytecode: ExecutionValueChange::from_modified(account.bytecode),
-            code_hash: account.code_hash,
-
             slots: BTreeMap::new(),
         };
 

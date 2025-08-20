@@ -885,7 +885,6 @@ mod tests {
             nonce: ExecutionValueChange::from_original(Faker.fake()),
             balance: ExecutionValueChange::from_original(Faker.fake()),
             bytecode: ExecutionValueChange::from_original(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
-            code_hash: Faker.fake(),
             slots: BTreeMap::new(),
         };
 
