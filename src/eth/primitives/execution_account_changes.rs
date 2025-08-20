@@ -5,7 +5,6 @@ use display_json::DebugAsJson;
 use super::CodeHash;
 use crate::alias::RevmBytecode;
 use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
 use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
@@ -15,8 +14,6 @@ use crate::eth::primitives::Wei;
 /// Changes that happened to an account during a transaction.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionAccountChanges {
-    pub new_account: bool, // TODO: check if this is needed, remove if not so
-    pub address: Address,  // TODO: check if redundant because this is present in the BTreeMap
     pub nonce: ExecutionValueChange<Nonce>,
     pub balance: ExecutionValueChange<Wei>,
 
@@ -32,8 +29,6 @@ impl ExecutionAccountChanges {
     pub fn from_original_values(account: impl Into<Account>) -> Self {
         let account: Account = account.into();
         Self {
-            new_account: false,
-            address: account.address,
             nonce: ExecutionValueChange::from_original(account.nonce),
             balance: ExecutionValueChange::from_original(account.balance),
             bytecode: ExecutionValueChange::from_original(account.bytecode),
@@ -46,8 +41,6 @@ impl ExecutionAccountChanges {
     pub fn from_modified_values(account: impl Into<Account>, modified_slots: Vec<Slot>) -> Self {
         let account: Account = account.into();
         let mut changes = Self {
-            new_account: true,
-            address: account.address,
             nonce: ExecutionValueChange::from_modified(account.nonce),
             balance: ExecutionValueChange::from_modified(account.balance),
 
