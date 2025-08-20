@@ -5,8 +5,6 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
-#[cfg(feature = "replication")]
-use rocksdb::WriteBatch;
 
 use super::rocks_state::RocksStorageState;
 use crate::GlobalState;
@@ -45,7 +43,6 @@ impl RocksPermanentStorage {
         shutdown_timeout: Duration,
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
-        #[cfg(feature = "replication")] use_rocksdb_replication: bool,
         cf_size_metrics_interval: Option<Duration>,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
@@ -68,14 +65,7 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = Arc::new(RocksStorageState::new(
-            path,
-            shutdown_timeout,
-            cache_size_multiplier,
-            enable_sync_write,
-            #[cfg(feature = "replication")]
-            use_rocksdb_replication,
-        )?);
+        let state = Arc::new(RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write)?);
 
         let block_number = state.preload_block_number()?;
 
@@ -141,6 +131,16 @@ impl RocksPermanentStorage {
         block.map_err(|err| StorageError::RocksError { err })
     }
 
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>, StorageError> {
+        let block = self.state.read_block_with_changes(selection).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to read block with changes in RocksPermanent");
+        });
+        if let Ok(Some(block)) = &block {
+            tracing::trace!(?selection, ?block, "block found");
+        }
+        block.map_err(|err| StorageError::RocksError { err })
+    }
+
     pub fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError> {
         self.state
             .read_transaction(hash)
@@ -154,30 +154,6 @@ impl RocksPermanentStorage {
         self.state.read_logs(filter).map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read log in RocksPermanent");
         })
-    }
-
-    #[cfg(feature = "replication")]
-    pub fn read_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<WriteBatch>, StorageError> {
-        self.state
-            .read_replication_log(block_number)
-            .map_err(|err| StorageError::RocksError { err })
-            .inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to read replication log in RocksPermanent");
-            })
-    }
-
-    #[cfg(feature = "replication")]
-    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> anyhow::Result<(), StorageError> {
-        self.state
-            .apply_replication_log(block_number, replication_log)
-            .map_err(|err| StorageError::RocksError { err })
-            .inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to apply replication log in RocksPermanent");
-            })?;
-
-        self.set_mined_block_number(block_number);
-
-        Ok(())
     }
 
     pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
@@ -215,11 +191,6 @@ impl RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to save accounts in RocksPermanent");
             })
-    }
-
-    #[cfg(feature = "replication")]
-    pub fn rocksdb_replication_enabled(&self) -> bool {
-        self.state.use_rocksdb_replication
     }
 
     #[cfg(feature = "dev")]

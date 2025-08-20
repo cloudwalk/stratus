@@ -48,6 +48,10 @@ pub struct ImporterConfig {
 
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms", required = false)]
     pub sync_interval: Duration,
+
+    /// Enable replication of block changes
+    #[arg(long = "enable-block-changes-replication", env = "ENABLE_BLOCK_CHANGES_REPLICATION", default_value = "false")]
+    pub enable_block_changes_replication: bool,
 }
 
 impl ImporterConfig {
@@ -61,8 +65,18 @@ impl ImporterConfig {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
             NodeMode::Follower =>
-                self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::NormalFollower)
-                    .await,
+                self.init_follower(
+                    executor,
+                    miner,
+                    storage,
+                    kafka_connector,
+                    if self.enable_block_changes_replication {
+                        ImporterMode::BlockWithChanges
+                    } else {
+                        ImporterMode::NormalFollower
+                    },
+                )
+                .await,
             NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader).await,
         }
     }
@@ -77,13 +91,6 @@ impl ImporterConfig {
     ) -> anyhow::Result<Option<Arc<Importer>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
-
-        #[cfg(feature = "replication")]
-        let importer_mode = if storage.rocksdb_replication_enabled() {
-            ImporterMode::RocksDbReplication
-        } else {
-            importer_mode
-        };
 
         let chain = Arc::new(
             BlockchainClient::new_http_ws(

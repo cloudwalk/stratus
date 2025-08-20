@@ -1,15 +1,9 @@
 use parking_lot::RwLockReadGuard;
-#[cfg(feature = "replication")]
-use rocksdb::WriteBatch;
 use tracing::Span;
 
 use super::InMemoryTemporaryStorage;
 use super::RocksPermanentStorage;
 use super::StorageCache;
-#[cfg(feature = "dev")]
-use crate::GlobalState;
-#[cfg(feature = "dev")]
-use crate::NodeMode;
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
 use crate::eth::primitives::Account;
@@ -57,7 +51,7 @@ mod label {
 pub struct StratusStorage {
     temp: InMemoryTemporaryStorage,
     cache: StorageCache,
-    perm: RocksPermanentStorage,
+    pub perm: RocksPermanentStorage,
     // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block
     transient_state_lock: parking_lot::RwLock<()>,
     #[cfg(feature = "dev")]
@@ -83,20 +77,11 @@ impl StratusStorage {
 
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
-        if (GlobalState::get_node_mode() == NodeMode::Leader || !this.rocksdb_replication_enabled()) && !this.has_genesis()? {
+        if !this.has_genesis()? {
             this.reset_to_genesis()?;
         }
 
         Ok(this)
-    }
-
-    /// Returns whether RocksDB replication is enabled
-    pub fn rocksdb_replication_enabled(&self) -> bool {
-        #[cfg(not(feature = "replication"))]
-        let replication_enabled = false;
-        #[cfg(feature = "replication")]
-        let replication_enabled = self.perm.rocksdb_replication_enabled();
-        replication_enabled
     }
 
     /// Returns whether the genesis block exists
@@ -122,16 +107,8 @@ impl StratusStorage {
         let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
         let rocks_path_prefix = rocks_dir.path().to_str().unwrap().to_string();
 
-        let perm = RocksPermanentStorage::new(
-            Some(rocks_path_prefix.clone()),
-            std::time::Duration::from_secs(240),
-            None,
-            true,
-            #[cfg(feature = "replication")]
-            false,
-            None,
-        )
-        .expect("Failed to create RocksPermanentStorage for tests");
+        let perm = RocksPermanentStorage::new(Some(rocks_path_prefix.clone()), std::time::Duration::from_secs(240), None, true, None)
+            .expect("Failed to create RocksPermanentStorage for tests");
 
         let cache = CacheConfig {
             slot_cache_capacity: 100000,
@@ -153,8 +130,6 @@ impl StratusStorage {
                 rocks_disable_sync_write: false,
                 rocks_cf_size_metrics_interval: None,
                 genesis_file: crate::config::GenesisFileConfig::default(),
-                #[cfg(feature = "replication")]
-                use_rocksdb_replication: false,
             },
         )
     }
@@ -164,14 +139,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_block_number_to_resume_import").entered();
 
         let number = self.read_pending_block_header().0.number;
-
-        #[cfg(feature = "dev")]
-        if number == BlockNumber::ONE && self.rocksdb_replication_enabled() {
-            tracing::info!("starting importer from genesis block");
-            self.set_mined_block_number(BlockNumber::ZERO);
-            self.temp.set_pending_block_header(BlockNumber::ZERO)?;
-            return Ok(BlockNumber::ZERO);
-        }
+        tracing::info!(?number, "got block number to resume import");
 
         Ok(number)
     }
@@ -205,40 +173,6 @@ impl StratusStorage {
         timed(|| self.perm.set_mined_block_number(block_number)).with(|m| {
             metrics::inc_storage_set_mined_block_number(m.elapsed, label::PERM, true);
         });
-    }
-
-    #[cfg(feature = "replication")]
-    pub fn read_replication_log(&self, block_number: BlockNumber) -> Result<Option<WriteBatch>, StorageError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::read_replication_log", %block_number).entered();
-        tracing::debug!(storage = %label::PERM, %block_number, "reading replication log");
-
-        timed(|| self.perm.read_replication_log(block_number)).with(|m| {
-            metrics::inc_storage_read_replication_log(m.elapsed, label::PERM, m.result.is_ok());
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read replication log");
-            }
-        })
-    }
-
-    #[cfg(feature = "replication")]
-    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> Result<(), StorageError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::apply_replication_log", %block_number).entered();
-
-        tracing::debug!(storage = %label::TEMP, "finishing pending block");
-        self.finish_pending_block()?;
-
-        tracing::debug!(storage = %label::PERM, %block_number, "applying replication log");
-        timed(|| self.perm.apply_replication_log(block_number, replication_log)).with(|m| {
-            metrics::inc_storage_apply_replication_log(m.elapsed, label::PERM, m.result.is_ok());
-            metrics::inc_storage_save_block(m.elapsed, label::PERM, "replication", "replication", m.result.is_ok());
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to apply replication log");
-            }
-        })?;
-
-        Ok(())
     }
 
     // -------------------------------------------------------------------------
@@ -276,7 +210,6 @@ impl StratusStorage {
         })
     }
 
-    #[cfg(not(feature = "replication"))]
     fn _read_account_latest_cache(&self, address: Address) -> Option<Account> {
         timed(|| self.cache.get_account_latest(address)).with(|m| {
             if m.result.is_some() {
@@ -356,7 +289,6 @@ impl StratusStorage {
 
             let (is_valid, guard) = self._latest_is_valid(point_in_time, kind);
             if is_valid {
-                #[cfg(not(feature = "replication"))]
                 if let Some(account) = self._read_account_latest_cache(address) {
                     return Ok(account);
                 }
@@ -376,7 +308,6 @@ impl StratusStorage {
 
         match (point_in_time, found_in_perm) {
             // Pending accounts found in the permanent storage (or not found in any storage) are always mined already
-            #[cfg(not(feature = "replication"))]
             (PointInTime::Pending, true) => {
                 self.cache.cache_account_if_missing(account.clone());
                 self.cache.cache_account_latest_if_missing(address, account.clone());
@@ -384,7 +315,6 @@ impl StratusStorage {
             (PointInTime::Pending, false) => {
                 self.cache.cache_account_if_missing(account.clone());
             }
-            #[cfg(not(feature = "replication"))]
             (PointInTime::Mined, _) => {
                 self.cache.cache_account_latest_if_missing(address, account.clone());
             }
@@ -402,7 +332,6 @@ impl StratusStorage {
         })
     }
 
-    #[cfg(not(feature = "replication"))]
     fn _read_slot_latest_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         timed(|| self.cache.get_slot_latest(address, index)).with(|m| {
             if m.result.is_some() {
@@ -467,7 +396,6 @@ impl StratusStorage {
 
             let (is_valid, guard) = self._latest_is_valid(point_in_time, kind);
             if is_valid {
-                #[cfg(not(feature = "replication"))]
                 if let Some(slot) = self._read_slot_latest_cache(address, index) {
                     return Ok(slot);
                 }
@@ -486,7 +414,6 @@ impl StratusStorage {
         };
 
         match (point_in_time, found_in_perm) {
-            #[cfg(not(feature = "replication"))]
             // Pending slots found in the permanent storage (or not found in any storage) are always mined already
             (PointInTime::Pending, true) => {
                 self.cache.cache_slot_if_missing(address, slot);
@@ -495,7 +422,6 @@ impl StratusStorage {
             (PointInTime::Pending, false) => {
                 self.cache.cache_slot_if_missing(address, slot);
             }
-            #[cfg(not(feature = "replication"))]
             (PointInTime::Mined, _) => {
                 self.cache.cache_slot_latest_if_missing(address, slot);
             }
@@ -606,10 +532,8 @@ impl StratusStorage {
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| {
             let guard = self.transient_state_lock.write();
-            #[cfg(not(feature = "replication"))]
             let changes = block.compact_account_changes();
             self.perm.save_block(block)?;
-            #[cfg(not(feature = "replication"))]
             self.cache.cache_account_and_slots_latest_from_changes(changes);
             drop(guard);
             Ok(())
@@ -635,6 +559,19 @@ impl StratusStorage {
             metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read block");
+            }
+        })
+    }
+
+    pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<Block>, StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_block_with_changes", %filter).entered();
+        tracing::debug!(storage = %label::PERM, ?filter, "reading block");
+
+        timed(|| self.perm.read_block(filter)).with(|m| {
+            metrics::inc_storage_read_block_with_changes(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read block with changes");
             }
         })
     }
@@ -752,13 +689,11 @@ impl StratusStorage {
 
         self.cache.clear();
 
-        tracing::info!("reseting storage to genesis state");
-
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::reset").entered();
 
         // reset perm
-        tracing::debug!(storage = %label::PERM, "reseting permanent storage");
+        tracing::debug!(storage = %label::PERM, "resetting permanent storage");
         timed(|| self.perm.reset()).with(|m| {
             metrics::inc_storage_reset(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
@@ -874,19 +809,7 @@ impl StratusStorage {
     /// Translates a block filter to a specific storage point-in-time indicator.
     pub fn translate_to_point_in_time(&self, block_filter: BlockFilter) -> Result<PointInTime, StorageError> {
         match block_filter {
-            BlockFilter::Pending => {
-                // For follower nodes with RocksDB replication, redirect pending queries to mined state
-                // since transactions are only executed on the leader node
-                #[cfg(feature = "dev")]
-                if GlobalState::get_node_mode() == NodeMode::Follower && self.rocksdb_replication_enabled() {
-                    Ok(PointInTime::Mined)
-                } else {
-                    Ok(PointInTime::Pending)
-                }
-
-                #[cfg(not(feature = "dev"))]
-                Ok(PointInTime::Pending)
-            }
+            BlockFilter::Pending => Ok(PointInTime::Pending),
             BlockFilter::Latest => Ok(PointInTime::Mined),
             BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
             BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),
