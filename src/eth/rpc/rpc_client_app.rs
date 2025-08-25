@@ -110,6 +110,28 @@ mod tests {
         assert_eq!(RpcClientApp::parse("user-service").to_string(), "user::service");
         assert_eq!(RpcClientApp::parse("insomnia").to_string(), "user::insomnia");
         
+        // Test exact match edge cases - these should fall through to "other" scope
+        // Names similar to exact matches but with extra information
+        assert_eq!(RpcClientApp::parse("authorizer-v2").to_string(), "other::authorizer-v2");
+        assert_eq!(RpcClientApp::parse("authorizer.staging").to_string(), "other::authorizer.staging");
+        assert_eq!(RpcClientApp::parse("super-authorizer").to_string(), "other::super-authorizer");
+        
+        assert_eq!(RpcClientApp::parse("blockscout-api").to_string(), "other::blockscout-api");
+        assert_eq!(RpcClientApp::parse("blockscout-staging").to_string(), "other::blockscout-staging");
+        assert_eq!(RpcClientApp::parse("mini-blockscout").to_string(), "other::mini-blockscout");
+        
+        assert_eq!(RpcClientApp::parse("golani-dev").to_string(), "other::golani-dev");
+        assert_eq!(RpcClientApp::parse("golani.local").to_string(), "other::golani.local");
+        assert_eq!(RpcClientApp::parse("pre-golani").to_string(), "other::pre-golani");
+        
+        assert_eq!(RpcClientApp::parse("tx-replayer-v3").to_string(), "other::tx-replayer-v3");
+        assert_eq!(RpcClientApp::parse("tx-replayer.backup").to_string(), "other::tx-replayer.backup");
+        assert_eq!(RpcClientApp::parse("new-tx-replayer").to_string(), "other::new-tx-replayer");
+        
+        assert_eq!(RpcClientApp::parse("insomnia-client").to_string(), "other::insomnia-client");
+        assert_eq!(RpcClientApp::parse("insomnia.v8").to_string(), "other::insomnia.v8");
+        assert_eq!(RpcClientApp::parse("custom-insomnia").to_string(), "other::custom-insomnia");
+        
         // Test other scope (fallback)
         assert_eq!(RpcClientApp::parse("random-service").to_string(), "other::random-service");
     }
