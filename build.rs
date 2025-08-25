@@ -342,7 +342,7 @@ fn generate_client_scopes_matcher() {
 }
 
 fn generate_client_scopes_content() -> String {
-    let scopes_file = fs::read_to_string("src/eth/rpc/client_scopes.txt")
+    let scopes_file = fs::read_to_string("static/client_scopes/client_scopes.txt")
         .expect("Failed to read client_scopes.txt");
     
     let mut match_arms = Vec::new();
