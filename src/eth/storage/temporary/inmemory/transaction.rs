@@ -83,12 +83,9 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
         // save account changes
-        let changes = tx.result.execution.changes.values();
-        for change in changes {
-            let account = pending_block
-                .accounts
-                .entry(change.address)
-                .or_insert_with(|| AccountWithSlots::new(change.address));
+        let changes = tx.result.execution.changes.iter();
+        for (address, change) in changes {
+            let account = pending_block.accounts.entry(*address).or_insert_with(|| AccountWithSlots::new(*address));
 
             // account basic info
             if let Some(nonce) = change.nonce.take_ref() {
