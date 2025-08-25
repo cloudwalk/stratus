@@ -1,6 +1,5 @@
 //! In-memory storage implementations.
 
-
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;

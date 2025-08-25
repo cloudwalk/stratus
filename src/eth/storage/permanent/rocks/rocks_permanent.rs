@@ -7,7 +7,6 @@ use std::time::Duration;
 use anyhow::bail;
 
 use super::rocks_state::RocksStorageState;
-use crate::eth::primitives::ExecutionChanges;
 use crate::GlobalState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -16,6 +15,7 @@ use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;

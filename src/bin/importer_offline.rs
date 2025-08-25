@@ -16,7 +16,6 @@ use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::StreamExt;
 use itertools::Itertools;
-use stratus::eth::primitives::ExecutionChanges;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use stratus::config::ImporterOfflineConfig;
@@ -29,6 +28,7 @@ use stratus::eth::miner::MinerMode;
 use stratus::eth::miner::miner::CommitItem;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
+use stratus::eth::primitives::ExecutionChanges;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::ext::spawn;
 use stratus::ext::spawn_thread;
@@ -91,7 +91,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     if block_start.is_zero() && !storage.has_genesis()? {
         let genesis_block = Block::genesis();
-        storage.save_genesis_block(genesis_block, initial_accounts, Default::default())?;
+        storage.save_genesis_block(genesis_block, initial_accounts, ExecutionChanges::default())?;
         storage.finish_pending_block()?;
         block_start = BlockNumber::from(1);
     }

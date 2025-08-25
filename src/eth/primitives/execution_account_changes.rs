@@ -110,7 +110,7 @@ impl ExecutionAccountChanges {
             address,
             nonce: self.nonce.take().unwrap_or_default(),
             balance: self.balance.take().unwrap_or_default(),
-            bytecode: self.bytecode.take().unwrap_or_default()
+            bytecode: self.bytecode.take().unwrap_or_default(),
         }
     }
 }
