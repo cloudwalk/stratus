@@ -33,6 +33,7 @@ fn main() {
     generate_build_info();
     generate_contracts_structs();
     generate_signatures_structs();
+    generate_client_scopes_matcher();
 }
 
 // -----------------------------------------------------------------------------
@@ -45,6 +46,8 @@ fn print_build_directives() {
     println!("cargo:rerun-if-changed=static/");
     // retrigger database compile-time checks
     println!("cargo:rerun-if-changed=.sqlx/");
+    // client scopes configuration
+    println!("cargo:rerun-if-changed=src/eth/rpc/client_scopes.txt");
 }
 
 // -----------------------------------------------------------------------------
@@ -328,6 +331,73 @@ fn parse_signature(input: &str) -> (SolidityId, &SoliditySignature) {
         const_hex::encode_prefixed(&id),
         id.len()
     );
+}
+
+// -----------------------------------------------------------------------------
+// Code generation: Client Scopes Matcher
+// -----------------------------------------------------------------------------
+
+fn generate_client_scopes_matcher() {
+    write_module("client_scopes.rs", generate_client_scopes_content());
+}
+
+fn generate_client_scopes_content() -> String {
+    let scopes_file = fs::read_to_string("src/eth/rpc/client_scopes.txt")
+        .expect("Failed to read client_scopes.txt");
+    
+    let mut match_arms = Vec::new();
+    
+    for line in scopes_file.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        
+        if let Some((scope, patterns_str)) = line.split_once(':') {
+            let scope = scope.trim();
+            let patterns_str = patterns_str.trim();
+            
+            for pattern in patterns_str.split_whitespace() {
+                if pattern.ends_with('/') {
+                    // Pattern like "stratus/" - prefix match and trim suffix
+                    let prefix = &pattern[..pattern.len() - 1];
+                    match_arms.push(format!(
+                        r#"        n if n.starts_with("{}") => ("{}", name.trim_start_matches("{}")),
+"#,
+                        prefix, scope, prefix
+                    ));
+                } else if pattern.ends_with('*') {
+                    // Pattern like "balance*" - prefix match
+                    let prefix = &pattern[..pattern.len() - 1];
+                    match_arms.push(format!(
+                        r#"        n if n.starts_with("{}") => ("{}", name),
+"#,
+                        prefix, scope
+                    ));
+                } else {
+                    // Exact match
+                    match_arms.push(format!(
+                        r#"        "{}" => ("{}", name),
+"#,
+                        pattern, scope
+                    ));
+                }
+            }
+        }
+    }
+    
+    format!(
+        r#"// Auto-generated from client_scopes.txt
+pub fn create_client_scope(name: &str) -> String {{
+    let (scope, name) = match name {{
+{}
+        _ => ("other", name),
+    }};
+    format!("{{scope}}::{{name}}")
+}}
+"#,
+        match_arms.join("")
+    )
 }
 
 // -----------------------------------------------------------------------------

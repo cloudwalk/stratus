@@ -3,8 +3,8 @@ use std::fmt::Display;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics::MetricLabelValue;
 
-// Hardcoded scope configuration
-const CLIENT_SCOPES_CONFIG: &str = include_str!("client_scopes.txt");
+// Include the build-time generated client scopes matcher
+include!(concat!(env!("OUT_DIR"), "/client_scopes.rs"));
 
 #[derive(Debug, Clone, strum::EnumIs, PartialEq, Eq, Hash)]
 pub enum RpcClientApp {
@@ -25,80 +25,14 @@ impl Display for RpcClientApp {
 }
 
 impl RpcClientApp {
-    /// Parse scope configuration and return matching scope and trim info for a given name.
-    fn find_scope_for_name(name: &str) -> (String, Option<String>) {
-        for line in CLIENT_SCOPES_CONFIG.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            
-            let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() != 2 {
-                continue;
-            }
-            
-            let scope = parts[0].trim();
-            let patterns = parts[1].trim();
-            
-            // Check if name matches any pattern for this scope
-            if let Some(matched_pattern) = Self::find_matching_pattern(name, patterns) {
-                return (scope.to_string(), Some(matched_pattern));
-            }
-        }
-        
-        // Default fallback
-        ("other".to_string(), None)
-    }
-    
-    /// Find the specific pattern that matches the name and return it.
-    fn find_matching_pattern(name: &str, patterns: &str) -> Option<String> {
-        let pattern_parts: Vec<&str> = patterns.split_whitespace().collect();
-        
-        for pattern in pattern_parts {
-            if pattern.ends_with("/") {
-                let prefix = &pattern[..pattern.len() - 1];
-                if name.starts_with(prefix) {
-                    return Some(pattern.to_string());
-                }
-            } else if pattern.ends_with('*') {
-                let prefix = &pattern[..pattern.len() - 1];
-                if name.starts_with(prefix) {
-                    return Some(pattern.to_string());
-                }
-            } else {
-                // Exact match with pattern
-                if name == pattern {
-                    return Some(pattern.to_string());
-                }
-            }
-        }
-        
-        None
-    }
-
-
     /// Parse known client application name to groups.
     pub fn parse(name: &str) -> RpcClientApp {
         let name = name.trim().trim_start_matches('/').trim_end_matches('/').to_ascii_lowercase().replace('_', "-");
         if name.is_empty() {
             return RpcClientApp::Unknown;
         }
-        let (scope, matched_pattern) = Self::find_scope_for_name(&name);
-        
-        let formatted_name = if let Some(pattern) = matched_pattern {
-            if pattern.ends_with("/") {
-                let prefix = &pattern[..pattern.len() - 1];
-                let suffix = name.trim_start_matches(prefix);
-                format!("{}::{}", scope, suffix)
-            } else {
-                format!("{}::{}", scope, name)
-            }
-        } else {
-            format!("{}::{}", scope, name)
-        };
-        
-        RpcClientApp::Identified(formatted_name)
+                
+        RpcClientApp::Identified(create_client_scope(&name))
     }
 }
 
