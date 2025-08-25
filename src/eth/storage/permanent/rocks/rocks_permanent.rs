@@ -7,6 +7,7 @@ use std::time::Duration;
 use anyhow::bail;
 
 use super::rocks_state::RocksStorageState;
+use crate::eth::primitives::ExecutionChanges;
 use crate::GlobalState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -156,7 +157,7 @@ impl RocksPermanentStorage {
         })
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
@@ -165,23 +166,26 @@ impl RocksPermanentStorage {
         }
 
         self.state
-            .save_genesis_block(block, accounts)
+            .save_genesis_block(block, accounts, account_changes)
             .map_err(|err| StorageError::RocksError { err })
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to save genesis block in RocksPermanent");
             })
     }
 
-    pub fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, account_changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to export metrics in RocksPermanent");
             })?;
         }
-        self.state.save_block(block).map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
-            tracing::error!(reason = ?e, "failed to save block in RocksPermanent");
-        })
+        self.state
+            .save_block(block, account_changes)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to save block in RocksPermanent");
+            })
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {

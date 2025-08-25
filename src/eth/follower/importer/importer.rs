@@ -22,6 +22,7 @@ use crate::eth::miner::miner::CommitItem;
 use crate::eth::miner::miner::interval_miner::mine_and_commit;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
@@ -286,10 +287,10 @@ impl Importer {
                 );
             }
 
-            let mined_block = match miner.mine_external(block) {
-                Ok(mined_block) => {
+            let (mined_block, changes) = match miner.mine_external(block) {
+                Ok((mined_block, changes)) => {
                     tracing::info!(number = %mined_block.number(), "mined external block");
-                    mined_block
+                    (mined_block, changes)
                 }
                 Err(e) => {
                     let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
@@ -306,7 +307,7 @@ impl Importer {
                 kafka_conn.send_buffered(events, 50).await?;
             }
 
-            match miner.commit(CommitItem::Block(mined_block)) {
+            match miner.commit(CommitItem::Block(mined_block), changes) {
                 Ok(_) => {
                     tracing::info!("committed external block");
                 }
@@ -327,7 +328,11 @@ impl Importer {
         Ok(())
     }
 
-    async fn start_block_saver(miner: Arc<Miner>, mut backlog_rx: mpsc::Receiver<Block>, kafka_connector: Option<Arc<KafkaConnector>>) -> anyhow::Result<()> {
+    async fn start_block_saver(
+        miner: Arc<Miner>,
+        mut backlog_rx: mpsc::Receiver<(Block, ExecutionChanges)>,
+        kafka_connector: Option<Arc<KafkaConnector>>,
+    ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "block-saver";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
 
@@ -336,7 +341,7 @@ impl Importer {
                 return Ok(());
             }
 
-            let block = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
+            let (block, changes) = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
                 Ok(Some(inner)) => inner,
                 Ok(None) => break, // channel closed
                 Err(_timed_out) => {
@@ -359,7 +364,7 @@ impl Importer {
                 kafka_conn.send_buffered(events, 50).await?;
             }
 
-            miner.commit(CommitItem::ReplicationBlock(block))?;
+            miner.commit(CommitItem::ReplicationBlock(block), changes)?;
 
             #[cfg(feature = "metrics")]
             {
@@ -417,18 +422,21 @@ impl Importer {
                         set_external_rpc_current_block(block.number());
                         continue;
                     }
-                    Ok(None) =>
+                    Ok(None) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
-                        },
-                    Ok(Some(Err(e))) =>
+                        }
+                    }
+                    Ok(Some(Err(e))) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
-                        },
-                    Err(_) =>
+                        }
+                    }
+                    Err(_) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
-                        },
+                        }
+                    }
                 }
 
                 if Self::should_shutdown(TASK_NAME) {
@@ -444,10 +452,11 @@ impl Importer {
                             tracing::info!("{} resubscribed to newHeads event", TASK_NAME);
                             sub_new_heads = Some(sub);
                         }
-                        Err(e) =>
+                        Err(e) => {
                             if !Self::should_shutdown(TASK_NAME) {
                                 tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
-                            },
+                            }
+                        }
                     }
                 }
             }
@@ -468,10 +477,11 @@ impl Importer {
                     set_external_rpc_current_block(block_number);
                     traced_sleep(sync_interval, SleepReason::SyncData).await;
                 }
-                Err(e) =>
+                Err(e) => {
                     if !Self::should_shutdown(TASK_NAME) {
                         tracing::error!(reason = ?e, "failed to retrieve block number. retrying now.");
-                    },
+                    }
+                }
             }
         }
     }
@@ -561,7 +571,7 @@ impl Importer {
     /// Retrieves blocks with changes.
     async fn start_block_with_changes_fetcher(
         chain: Arc<BlockchainClient>,
-        backlog_tx: mpsc::Sender<Block>,
+        backlog_tx: mpsc::Sender<(Block, ExecutionChanges)>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
         const TASK_NAME: &str = "block-with-changes-fetcher";
@@ -629,7 +639,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     }
 }
 
-async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> Block {
+async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (Block, ExecutionChanges) {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
@@ -639,7 +649,14 @@ async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: Bl
         tracing::info!(%block_number, "fetching block and changes");
 
         match chain.fetch_block_with_changes(block_number).await {
-            Ok(Some(response)) => return response,
+            Ok(Some(mut response)) => {
+                let changes = response
+                    .transactions
+                    .first_mut()
+                    .map(|tx| std::mem::take(&mut tx.execution.changes))
+                    .unwrap_or_default();
+                return (response, changes);
+            }
             Ok(None) => {
                 tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block and receipts not available yet, retrying with delay.");
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;

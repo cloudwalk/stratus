@@ -400,12 +400,13 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
+                }
+            }
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
@@ -434,18 +435,9 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
-    pub fn save_block_batch(&self, block_batch: Vec<Block>) -> Result<()> {
-        let mut batch = WriteBatch::default();
-        for block in block_batch {
-            self.prepare_block_insertion(block, &mut batch)?;
-        }
-        self.write_in_batch_for_multiple_cfs(batch)
-    }
-
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> Result<()> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: ExecutionChanges) -> Result<()> {
         let mut batch = WriteBatch::default();
 
-        let account_changes = block.compact_account_changes();
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
             txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
@@ -490,15 +482,13 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn save_block(&self, block: Block) -> Result<()> {
+    pub fn save_block(&self, block: Block, account_changes: ExecutionChanges) -> Result<()> {
         let mut batch = WriteBatch::default();
-        self.prepare_block_insertion(block, &mut batch)?;
+        self.prepare_block_insertion(block, account_changes, &mut batch)?;
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn prepare_block_insertion(&self, block: Block, batch: &mut WriteBatch) -> Result<()> {
-        let account_changes = block.compact_account_changes();
-
+    pub fn prepare_block_insertion(&self, block: Block, account_changes: ExecutionChanges, batch: &mut WriteBatch) -> Result<()> {
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
             txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
@@ -864,7 +854,7 @@ mod tests {
                 }],
             };
 
-            state.save_block(block).unwrap();
+            state.save_block(block, ExecutionChanges::default()).unwrap();
         }
 
         let filter = LogFilter {
