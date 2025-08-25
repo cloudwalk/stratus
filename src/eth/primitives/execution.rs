@@ -58,6 +58,7 @@ impl EvmExecution {
         }
 
         // generate sender changes incrementing the nonce
+        let addr = sender.address;
         let mut sender_changes = ExecutionAccountChanges::from_original_values(sender); // NOTE: don't change from_original_values without updating .expect() below
         let sender_next_nonce = sender_changes
             .nonce
@@ -73,7 +74,7 @@ impl EvmExecution {
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
             gas: Gas::from(receipt.gas_used),
-            changes: BTreeMap::from([(sender_changes.address, sender_changes)]),
+            changes: BTreeMap::from([(addr, sender_changes)]),
             deployed_contract_address: None,
         };
         execution.apply_receipt(receipt)?;
@@ -247,7 +248,6 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::eth::primitives::CodeHash;
     use crate::eth::primitives::Nonce;
 
     #[test]
@@ -259,7 +259,6 @@ mod tests {
             nonce: Nonce::from(1u64),
             balance: Wei::from(1000u64),
             bytecode: None,
-            code_hash: CodeHash::default(),
         };
 
         // Create a mock failed receipt
@@ -293,7 +292,6 @@ mod tests {
 
         // Verify sender changes
         let sender_changes = execution.changes.get(&sender_address).unwrap();
-        assert_eq!(sender_changes.address, sender_address);
 
         // Nonce should be incremented
         let modified_nonce = sender_changes.nonce.take_modified_ref().unwrap();
@@ -528,7 +526,6 @@ mod tests {
             nonce: Nonce::from(1u64),
             balance: Wei::from(1000u64),
             bytecode: None,
-            code_hash: CodeHash::default(),
         };
 
         // Create a mock execution

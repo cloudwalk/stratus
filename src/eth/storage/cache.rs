@@ -12,7 +12,6 @@ use rustc_hash::FxBuildHasher;
 use super::AccountWithSlots;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -100,14 +99,14 @@ impl StorageCache {
     }
 
     pub fn cache_account_and_slots_from_changes(&self, changes: ExecutionChanges) {
-        for change in changes.into_values() {
+        for (address, change) in changes {
             // cache slots
             for slot in change.slots.into_values().flat_map(|slot| slot.take()) {
-                self.slot_cache.insert((change.address, slot.index), slot.value);
+                self.slot_cache.insert((address, slot.index), slot.value);
             }
 
             // cache account
-            let mut account = AccountWithSlots::new(change.address);
+            let mut account = AccountWithSlots::new(address);
             if let Some(nonce) = change.nonce.take_ref() {
                 account.info.nonce = *nonce;
             }
@@ -117,19 +116,19 @@ impl StorageCache {
             if let Some(Some(bytecode)) = change.bytecode.take_ref() {
                 account.info.bytecode = Some(bytecode.clone());
             }
-            self.account_cache.insert(change.address, account.info);
+            self.account_cache.insert(address, account.info);
         }
     }
 
-    pub fn cache_account_and_slots_latest_from_changes(&self, changes: Vec<ExecutionAccountChanges>) {
-        for change in changes {
+    pub fn cache_account_and_slots_latest_from_changes(&self, changes: ExecutionChanges) {
+        for (address, change) in changes {
             // cache slots
             for slot in change.slots.into_values().flat_map(|slot| slot.take()) {
-                self.slot_latest_cache.insert((change.address, slot.index), slot.value);
+                self.slot_latest_cache.insert((address, slot.index), slot.value);
             }
 
             // cache account
-            let mut account = AccountWithSlots::new(change.address);
+            let mut account = AccountWithSlots::new(address);
             if let Some(nonce) = change.nonce.take_ref() {
                 account.info.nonce = *nonce;
             }
@@ -139,7 +138,7 @@ impl StorageCache {
             if let Some(Some(bytecode)) = change.bytecode.take_ref() {
                 account.info.bytecode = Some(bytecode.clone());
             }
-            self.account_latest_cache.insert(change.address, account.info);
+            self.account_latest_cache.insert(address, account.info);
         }
     }
 
