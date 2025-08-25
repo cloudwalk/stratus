@@ -16,7 +16,6 @@ use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
@@ -92,38 +91,6 @@ impl Block {
     /// Returns the block hash.
     pub fn hash(&self) -> Hash {
         self.header.hash
-    }
-
-    /// Compact accounts changes removing intermediate values, keeping only the last modified nonce, balance, bytecode and slots.
-    // TODO: We need to rework the block structure so that this can consume the block.
-    pub fn compact_account_changes(&self) -> ExecutionChanges {
-        let mut block_compacted_changes = ExecutionChanges::new();
-        for transaction in &self.transactions {
-            for (address, transaction_changes) in transaction.execution.changes.iter() {
-                let account_compacted_changes = block_compacted_changes.entry(*address).or_insert(transaction_changes.clone());
-
-                if let Some(&nonce) = transaction_changes.nonce.take_modified_ref() {
-                    account_compacted_changes.nonce.set_modified(nonce);
-                }
-
-                if let Some(balance) = transaction_changes.balance.take_modified_ref() {
-                    account_compacted_changes.balance.set_modified(*balance);
-                }
-
-                if let Some(bytecode) = transaction_changes.bytecode.take_modified_ref() {
-                    account_compacted_changes.bytecode.set_modified(bytecode.clone());
-                }
-
-                for (&slot_index, slot) in &transaction_changes.slots {
-                    let slot_compacted_changes = account_compacted_changes.slots.entry(slot_index).or_insert(slot.clone());
-                    if let Some(&slot_value) = slot.take_modified_ref() {
-                        slot_compacted_changes.set_modified(slot_value);
-                    }
-                }
-            }
-        }
-
-        block_compacted_changes
     }
 
     fn mine_transaction(&mut self, tx: TransactionExecution, transaction_index: Index, log_index: &mut Index) -> TransactionMined {

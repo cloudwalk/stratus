@@ -17,6 +17,7 @@ use tracing::Span;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
@@ -228,7 +229,7 @@ impl Miner {
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
-    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<Block> {
+    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<(Block, ExecutionChanges)> {
         // track
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
@@ -237,12 +238,14 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let mut block: Block = self.storage.finish_pending_block()?.into();
+        let (pending_block, changes) = self.storage.finish_pending_block()?;
+        let mut block: Block = pending_block.into();
+
         Span::with(|s| s.rec_str("block_number", &block.header.number));
         block.apply_external(&external_block);
 
         match external_block == block {
-            true => Ok(block),
+            true => Ok((block, changes)),
             false => Err(anyhow!(
                 "mismatching block info:\n\tlocal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}\n\texternal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}",
                 block.number(),
@@ -260,14 +263,14 @@ impl Miner {
     pub fn mine_local_and_commit(&self) -> anyhow::Result<(), StorageError> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
 
-        let block = self.mine_local()?;
-        self.commit(CommitItem::Block(block))
+        let (block, changes) = self.mine_local()?;
+        self.commit(CommitItem::Block(block), changes)
     }
 
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
-    pub fn mine_local(&self) -> anyhow::Result<Block, StorageError> {
+    pub fn mine_local(&self) -> anyhow::Result<(Block, ExecutionChanges), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
 
@@ -275,24 +278,24 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let block = self.storage.finish_pending_block()?;
+        let (block, changes) = self.storage.finish_pending_block()?;
         Span::with(|s| s.rec_str("block_number", &block.header.number));
 
-        Ok(block.into())
+        Ok((block.into(), changes))
     }
 
-    pub fn commit(&self, item: CommitItem) -> anyhow::Result<(), StorageError> {
+    pub fn commit(&self, item: CommitItem, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
         match item {
-            CommitItem::Block(block) => self.commit_block(block),
+            CommitItem::Block(block) => self.commit_block(block, changes),
             CommitItem::ReplicationBlock(block) => {
                 self.storage.finish_pending_block()?;
-                self.commit_block(block)
+                self.commit_block(block, changes)
             }
         }
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub fn commit_block(&self, block: Block, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -318,7 +321,7 @@ impl Miner {
         };
 
         // save storage
-        self.storage.save_block(block)?;
+        self.storage.save_block(block, changes)?;
 
         // Send notifications after saving the block
         self.send_log_notifications(&block_logs);
@@ -422,7 +425,7 @@ pub mod interval_miner {
         let _mine_and_commit_lock = miner.locks.mine_and_commit.lock();
 
         // mine
-        let block = loop {
+        let (block, changes) = loop {
             match miner.mine_local() {
                 Ok(block) => break block,
                 Err(e) => {
@@ -433,7 +436,7 @@ pub mod interval_miner {
 
         // commit
         loop {
-            match miner.commit(CommitItem::Block(block.clone())) {
+            match miner.commit(CommitItem::Block(block.clone()), changes.clone()) {
                 Ok(_) => break,
                 Err(e) => {
                     tracing::error!(reason = ?e, "failed to commit block");

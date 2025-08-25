@@ -22,6 +22,25 @@ use crate::log_and_err;
 
 pub type ExecutionChanges = BTreeMap<Address, ExecutionAccountChanges>;
 
+pub trait ExecutionChangesExt {
+    fn merge(&mut self, other: ExecutionChanges);
+}
+
+impl ExecutionChangesExt for ExecutionChanges {
+    fn merge(&mut self, other: ExecutionChanges) {
+        for (address, changes) in other {
+            match self.entry(address) {
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    entry.get_mut().merge(changes);
+                }
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(changes);
+                }
+            }
+        }
+    }
+}
+
 /// Output of a transaction executed in the EVM.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct EvmExecution {
