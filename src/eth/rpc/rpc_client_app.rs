@@ -3,6 +3,9 @@ use std::fmt::Display;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics::MetricLabelValue;
 
+// Hardcoded scope configuration
+const CLIENT_SCOPES_CONFIG: &str = include_str!("client_scopes.txt");
+
 #[derive(Debug, Clone, strum::EnumIs, PartialEq, Eq, Hash)]
 pub enum RpcClientApp {
     /// Client application identified itself.
@@ -22,45 +25,80 @@ impl Display for RpcClientApp {
 }
 
 impl RpcClientApp {
+    /// Parse scope configuration and return matching scope and trim info for a given name.
+    fn find_scope_for_name(name: &str) -> (String, Option<String>) {
+        for line in CLIENT_SCOPES_CONFIG.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() != 2 {
+                continue;
+            }
+            
+            let scope = parts[0].trim();
+            let patterns = parts[1].trim();
+            
+            // Check if name matches any pattern for this scope
+            if let Some(matched_pattern) = Self::find_matching_pattern(name, patterns) {
+                return (scope.to_string(), Some(matched_pattern));
+            }
+        }
+        
+        // Default fallback
+        ("other".to_string(), None)
+    }
+    
+    /// Find the specific pattern that matches the name and return it.
+    fn find_matching_pattern(name: &str, patterns: &str) -> Option<String> {
+        let pattern_parts: Vec<&str> = patterns.split_whitespace().collect();
+        
+        for pattern in pattern_parts {
+            if pattern.ends_with("/") {
+                let prefix = &pattern[..pattern.len() - 1];
+                if name.starts_with(prefix) {
+                    return Some(pattern.to_string());
+                }
+            } else if pattern.ends_with('*') {
+                let prefix = &pattern[..pattern.len() - 1];
+                if name.starts_with(prefix) {
+                    return Some(pattern.to_string());
+                }
+            } else {
+                // Exact match with pattern
+                if name == pattern {
+                    return Some(pattern.to_string());
+                }
+            }
+        }
+        
+        None
+    }
+
+
     /// Parse known client application name to groups.
     pub fn parse(name: &str) -> RpcClientApp {
         let name = name.trim().trim_start_matches('/').trim_end_matches('/').to_ascii_lowercase().replace('_', "-");
         if name.is_empty() {
             return RpcClientApp::Unknown;
         }
-        let name = match name {
-            // Stratus
-            v if v.starts_with("stratus") => {
-                let v = v.trim_start_matches("stratus");
-                format!("stratus::{v}")
+        let (scope, matched_pattern) = Self::find_scope_for_name(&name);
+        
+        let formatted_name = if let Some(pattern) = matched_pattern {
+            if pattern.ends_with("/") {
+                let prefix = &pattern[..pattern.len() - 1];
+                let suffix = name.trim_start_matches(prefix);
+                format!("{}::{}", scope, suffix)
+            } else {
+                format!("{}::{}", scope, name)
             }
-
-            // Acquiring
-            v if v == "authorizer" => format!("acquiring::{v}"),
-
-            // Banking
-            v if v.starts_with("banking") || v.starts_with("balance") => format!("banking::{v}"),
-
-            // Issuing
-            v if v.starts_with("issuing") || v.starts_with("infinitecard") => format!("issuing::{v}"),
-
-            // Lending
-            v if v.starts_with("lending") => format!("lending::{v}"),
-
-            // Infra
-            v if v == "blockscout" || v == "golani" || v == "tx-replayer" => format!("infra::{v}"),
-
-            // User
-            v if v.starts_with("user-") => {
-                let v = v.trim_start_matches("user-");
-                format!("user::{v}")
-            }
-            v if v == "insomnia" => format!("user::{v}"),
-
-            // Other
-            v => format!("other::{v}"),
+        } else {
+            format!("{}::{}", scope, name)
         };
-        RpcClientApp::Identified(name)
+        
+        RpcClientApp::Identified(formatted_name)
     }
 }
 
@@ -102,5 +140,43 @@ impl From<&RpcClientApp> for MetricLabelValue {
             RpcClientApp::Identified(name) => Self::Some(name.to_string()),
             RpcClientApp::Unknown => Self::Some("unknown".to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scope_parsing() {
+        // Test stratus scope (stratus*/ - prefix trimmed)
+        assert_eq!(RpcClientApp::parse("stratus-node").to_string(), "stratus::-node");
+        assert_eq!(RpcClientApp::parse("stratus").to_string(), "stratus::");
+        
+        // Test acquiring scope (exact match: authorizer)
+        assert_eq!(RpcClientApp::parse("authorizer").to_string(), "acquiring::authorizer");
+        
+        // Test banking scope (balance* and banking* - prefix NOT trimmed)
+        assert_eq!(RpcClientApp::parse("banking-service").to_string(), "banking::banking-service");
+        assert_eq!(RpcClientApp::parse("balance-checker").to_string(), "banking::balance-checker");
+        
+        // Test issuing scope (issuing* and infinitecard* - prefix NOT trimmed)
+        assert_eq!(RpcClientApp::parse("issuing-api").to_string(), "issuing::issuing-api");
+        assert_eq!(RpcClientApp::parse("infinitecard-service").to_string(), "issuing::infinitecard-service");
+        
+        // Test lending scope (lending* - prefix NOT trimmed)
+        assert_eq!(RpcClientApp::parse("lending-core").to_string(), "lending::lending-core");
+        
+        // Test infra scope (exact matches: blockscout, golani, tx-replayer)
+        assert_eq!(RpcClientApp::parse("blockscout").to_string(), "infra::blockscout");
+        assert_eq!(RpcClientApp::parse("golani").to_string(), "infra::golani");
+        assert_eq!(RpcClientApp::parse("tx-replayer").to_string(), "infra::tx-replayer");
+        
+        // Test user scope (user-*/ - prefix trimmed, OR exact match: insomnia)
+        assert_eq!(RpcClientApp::parse("user-service").to_string(), "user::service");
+        assert_eq!(RpcClientApp::parse("insomnia").to_string(), "user::insomnia");
+        
+        // Test other scope (fallback)
+        assert_eq!(RpcClientApp::parse("random-service").to_string(), "other::random-service");
     }
 }

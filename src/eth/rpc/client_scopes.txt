@@ -1,0 +1,7 @@
+stratus: stratus/
+acquiring: authorizer
+banking: balance* banking*
+issuing: issuing* infinitecard*
+lending: lending*
+infra: blockscout golani tx-replayer
+user: user-/ insomnia
