@@ -349,7 +349,7 @@ fn generate_client_scopes_content() -> String {
     
     for line in scopes_file.lines() {
         let line = line.trim();
-        if line.is_empty() {
+        if line.is_empty() || line.starts_with('#') {
             continue;
         }
         

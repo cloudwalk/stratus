@@ -1,3 +1,10 @@
+# Client scope configuration: scope_name: pattern1 pattern2 ...
+# 
+# Pattern types:
+# exact match:    `infra: blockscout` → `blockscout` becomes `infra::blockscout`
+# prefix match:   `issuing: issuing*` → `issuing-api` becomes `issuing::issuing-api`  
+# prefix trim:    `user: user-/` → `user-alice` becomes `user::alice`
+
 stratus: stratus/
 acquiring: authorizer
 banking: balance* banking*
