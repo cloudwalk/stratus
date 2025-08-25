@@ -55,8 +55,10 @@ jobs:
           cache-provider: "github"
           cache-directories: "~/.cargo/bin/"
 
-      - name: Install libsasl2-dev libssl-dev
-        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Set up Just
         uses: extractions/setup-just@v2
