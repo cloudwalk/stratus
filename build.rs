@@ -47,7 +47,7 @@ fn print_build_directives() {
     // retrigger database compile-time checks
     println!("cargo:rerun-if-changed=.sqlx/");
     // client scopes configuration
-    println!("cargo:rerun-if-changed=src/eth/rpc/client_scopes.txt");
+    println!("cargo:rerun-if-changed=static/client_scopes/client_scopes.txt");
 }
 
 // -----------------------------------------------------------------------------
