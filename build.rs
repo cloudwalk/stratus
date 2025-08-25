@@ -342,33 +342,30 @@ fn generate_client_scopes_matcher() {
 }
 
 fn generate_client_scopes_content() -> String {
-    let scopes_file = fs::read_to_string("static/client_scopes/client_scopes.txt")
-        .expect("Failed to read client_scopes.txt");
-    
+    let scopes_file = fs::read_to_string("static/client_scopes/client_scopes.txt").expect("Failed to read client_scopes.txt");
+
     let mut match_arms = Vec::new();
-    
+
     for line in scopes_file.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        
+
         if let Some((scope, patterns_str)) = line.split_once(':') {
             let scope = scope.trim();
             let patterns_str = patterns_str.trim();
-            
+
             for pattern in patterns_str.split_whitespace() {
-                if pattern.ends_with('/') {
+                if let Some(prefix) = pattern.strip_suffix('/') {
                     // Pattern like "stratus/" - prefix match and trim suffix
-                    let prefix = &pattern[..pattern.len() - 1];
                     match_arms.push(format!(
                         r#"        n if n.starts_with("{}") => ("{}", name.trim_start_matches("{}")),
 "#,
                         prefix, scope, prefix
                     ));
-                } else if pattern.ends_with('*') {
+                } else if let Some(prefix) = pattern.strip_suffix('*') {
                     // Pattern like "balance*" - prefix match
-                    let prefix = &pattern[..pattern.len() - 1];
                     match_arms.push(format!(
                         r#"        n if n.starts_with("{}") => ("{}", name),
 "#,
@@ -385,7 +382,7 @@ fn generate_client_scopes_content() -> String {
             }
         }
     }
-    
+
     format!(
         r#"// Auto-generated from client_scopes.txt
 pub fn create_client_scope(name: &str) -> String {{
