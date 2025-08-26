@@ -13,6 +13,7 @@ use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -460,7 +461,7 @@ impl StratusStorage {
         self.temp.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self) -> Result<PendingBlock, StorageError> {
+    pub fn finish_pending_block(&self) -> Result<(PendingBlock, ExecutionChanges), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::finish_pending_block", block_number = tracing::field::Empty).entered();
         tracing::debug!(storage = %label::TEMP, "finishing pending block");
@@ -472,21 +473,21 @@ impl StratusStorage {
             }
         });
 
-        if let Ok(ref block) = result {
+        if let Ok((ref block, _)) = result {
             Span::with(|s| s.rec_str("block_number", &block.header.number));
         }
 
         result
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> Result<(), StorageError> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, changes: ExecutionChanges) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_genesis_block", block_number = %block_number).entered();
         tracing::debug!(storage = %label::PERM, "saving genesis block");
 
-        timed(|| self.perm.save_genesis_block(block, accounts)).with(|m| {
+        timed(|| self.perm.save_genesis_block(block, accounts, changes)).with(|m| {
             metrics::inc_storage_save_block(m.elapsed, label::PERM, "genesis", "genesis", m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to save genesis block");
@@ -494,7 +495,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn save_block(&self, block: Block) -> Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, changes: ExecutionChanges) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
@@ -532,8 +533,7 @@ impl StratusStorage {
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
         timed(|| {
             let guard = self.transient_state_lock.write();
-            let changes = block.compact_account_changes();
-            self.perm.save_block(block)?;
+            self.perm.save_block(block, changes.clone())?;
             self.cache.cache_account_and_slots_latest_from_changes(changes);
             drop(guard);
             Ok(())
@@ -783,7 +783,7 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
-        self.save_block(genesis_block)?;
+        self.save_block(genesis_block, ExecutionChanges::default())?;
 
         // accounts
         self.save_accounts(genesis_accounts)?;
