@@ -45,8 +45,13 @@ impl RocksPermanentStorage {
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
         cf_size_metrics_interval: Option<Duration>,
+        min_file_descriptors: u64,
+        strict_ulimit_check: bool,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
+
+        // Check file descriptor limit before proceeding with RocksDB initialization
+        Self::check_file_descriptor_limit(min_file_descriptors, strict_ulimit_check)?;
 
         let path = if let Some(prefix) = db_path_prefix {
             // run some checks on the given prefix
@@ -81,6 +86,56 @@ impl RocksPermanentStorage {
         };
 
         Ok(Self { state, block_number })
+    }
+
+    /// Checks the current file descriptor limit and validates it meets the minimum requirement.
+    /// 
+    /// This prevents RocksDB from misbehaving or corrupting data due to insufficient file descriptors.
+    fn check_file_descriptor_limit(min_required: u64, strict_check: bool) -> anyhow::Result<()> {
+        // Get the current file descriptor limit using getrlimit
+        let mut rlimit = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+
+        let result = unsafe {
+            libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlimit as *mut libc::rlimit)
+        };
+
+        if result != 0 {
+            let err = std::io::Error::last_os_error();
+            bail!("Failed to get file descriptor limit: {}", err);
+        }
+
+        let current_limit = rlimit.rlim_cur;
+        
+        tracing::info!(
+            current_limit = current_limit,
+            min_required = min_required,
+            "checking file descriptor limit for RocksDB"
+        );
+
+        if current_limit < min_required {
+            let message = format!(
+                "File descriptor limit ({}) is below the recommended minimum ({}) for RocksDB. \
+                This may cause database corruption or unexpected behavior. \
+                Increase the limit with: ulimit -n {} or configure it in /etc/security/limits.conf",
+                current_limit, min_required, min_required
+            );
+
+            if strict_check {
+                bail!("{}", message);
+            } else {
+                tracing::warn!("{}", message);
+            }
+        } else {
+            tracing::info!(
+                "File descriptor limit check passed: {} >= {}",
+                current_limit, min_required
+            );
+        }
+
+        Ok(())
     }
 
     // -------------------------------------------------------------------------
@@ -261,5 +316,39 @@ impl RocksPermanentStorage {
         self.state.reset().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to reset in RocksPermanent");
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ulimit_check_function_exists() {
+        // Test that the ulimit check function can be called
+        // This test will pass on systems with adequate file descriptor limits
+        let result = RocksPermanentStorage::check_file_descriptor_limit(1024, false);
+        
+        // The function should not fail with a reasonable low limit in non-strict mode
+        assert!(result.is_ok(), "ulimit check should succeed in non-strict mode with low limit");
+    }
+
+    #[test]
+    fn test_ulimit_check_with_very_high_requirement() {
+        // Test with an unreasonably high requirement in non-strict mode
+        let result = RocksPermanentStorage::check_file_descriptor_limit(1_000_000, false);
+        
+        // Should succeed (just warn) in non-strict mode even with high requirement
+        assert!(result.is_ok(), "ulimit check should succeed in non-strict mode even with high requirement");
+    }
+
+    #[test]
+    fn test_ulimit_check_strict_mode_with_very_high_requirement() {
+        // Test with an unreasonably high requirement in strict mode
+        // Use u64::MAX to ensure it's always higher than any system limit
+        let result = RocksPermanentStorage::check_file_descriptor_limit(u64::MAX, true);
+        
+        // Should fail in strict mode with unreasonably high requirement
+        assert!(result.is_err(), "ulimit check should fail in strict mode with unreasonably high requirement");
     }
 }
