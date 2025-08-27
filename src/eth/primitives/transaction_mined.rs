@@ -16,8 +16,8 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::ext::OptionExt;
 use crate::ext::RuintExt;
 

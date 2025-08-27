@@ -8,8 +8,8 @@ use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::storage::permanent::rocks::types::execution_result::ExecutionResultBuilder;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::types::execution_result::ExecutionResultBuilder;
 use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
