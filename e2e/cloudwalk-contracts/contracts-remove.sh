@@ -34,6 +34,8 @@ multisig=0
 compound=0
 yield=0
 pix=0
+capybara_finance=0
+credit_agent=0
 
 # Help function
 print_help() {
@@ -45,6 +47,8 @@ print_help() {
     echo "  -c, --compound    for compound-periphery"
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
+    echo "  -f, --capybara-finance  for brlc-capybara-finance"
+    echo "  -a, --credit-agent      for brlc-credit-agent"
     echo "  -h, --help        display this help and exit"
 }
 
@@ -55,6 +59,8 @@ if [ "$#" == 0 ]; then
     compound=1
     yield=1
     pix=1
+    capybara_finance=1
+    credit_agent=1
 fi
 
 # Process arguments
@@ -86,6 +92,14 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     -x | --pix)
         pix=1
+        shift
+        ;;
+    -f | --capybara-finance)
+        capybara_finance=1
+        shift
+        ;;
+    -a | --credit-agent)
+        credit_agent=1
         shift
         ;;
     *)
@@ -123,4 +137,12 @@ fi
 
 if [ "$compound" == 1 ]; then
     remove compound-periphery
+fi
+
+if [ "$capybara_finance" == 1 ]; then
+    remove brlc-capybara-finance
+fi
+
+if [ "$credit_agent" == 1 ]; then
+    remove brlc-credit-agent
 fi

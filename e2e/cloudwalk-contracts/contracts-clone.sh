@@ -88,6 +88,8 @@ compound=0
 yield=0
 pix=0
 cppv2=0
+capybara_finance=0
+credit_agent=0
 
 # Help function
 print_help() {
@@ -100,6 +102,8 @@ print_help() {
     echo "  -i, --yield       for brlc-yield-streamer"
     echo "  -x, --pix         for brlc-pix-cashier"
     echo "  -2, --cppv2       for brlc-periphery-v2"
+    echo "  -f, --capybara-finance  for brlc-capybara-finance"
+    echo "  -a, --credit-agent      for brlc-credit-agent"
     echo "  -h, --help        display this help and exit"
 }
 
@@ -111,6 +115,8 @@ if [ "$#" == 0 ]; then
     yield=1
     pix=1
     cppv2=1
+    capybara_finance=1
+    credit_agent=1
 fi
 
 # Process arguments
@@ -146,6 +152,14 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     -2 | --cppv2)
         cppv2=1
+        shift
+        ;;
+    -f | --capybara-finance)
+        capybara_finance=1
+        shift
+        ;;
+    -a | --credit-agent)
+        credit_agent=1
         shift
         ;;
     *)
@@ -193,6 +207,14 @@ fi
 
 if [ "$compound" == 1 ]; then
     clone compound-periphery
+fi
+
+if [ "$capybara_finance" == 1 ]; then
+    clone brlc-capybara-finance
+fi
+
+if [ "$credit_agent" == 1 ]; then
+    clone brlc-credit-agent
 fi
 
 # Alternative versions
