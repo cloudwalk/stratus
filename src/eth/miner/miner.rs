@@ -16,11 +16,8 @@ use tracing::Span;
 
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
-#[cfg(feature = "replication")]
-use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockHeader;
-#[cfg(feature = "replication")]
-use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
@@ -28,8 +25,6 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::StratusStorage;
-#[cfg(feature = "replication")]
-use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::not;
 use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
@@ -47,9 +42,8 @@ cfg_if::cfg_if! {
 pub enum CommitItem {
     /// A block
     Block(Block),
-    /// A replication log from RocksDB
-    #[cfg(feature = "replication")]
-    ReplicationLog(ReplicationLogRocksdb),
+    /// A block that wasn't executed in this node and instead contains all changes already pre-computed
+    ReplicationBlock(Block),
 }
 
 pub struct Miner {
@@ -190,7 +184,7 @@ impl Miner {
             return;
         };
 
-        tracing::warn!("Shutting down interval miner to switch to external mode");
+        tracing::warn!("shutting down interval miner to switch to external mode");
 
         self.shutdown_signal.lock().cancel();
 
@@ -203,7 +197,7 @@ impl Miner {
     }
 
     /// Persists a transaction execution.
-    pub fn save_execution(&self, tx_execution: TransactionExecution, check_conflicts: bool, is_local: bool) -> Result<(), StratusError> {
+    pub fn save_execution(&self, tx_execution: TransactionExecution, is_local: bool) -> Result<(), StratusError> {
         let tx_hash = tx_execution.input.hash;
 
         // track
@@ -217,7 +211,7 @@ impl Miner {
         let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         // save execution to temporary storage
-        self.storage.save_execution(tx_execution, check_conflicts, is_local)?;
+        self.storage.save_execution(tx_execution, is_local)?;
 
         // notify
         if self.has_pending_tx_subscribers() {
@@ -235,7 +229,7 @@ impl Miner {
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
-    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<Block> {
+    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<(Block, ExecutionChanges)> {
         // track
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
@@ -244,12 +238,14 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let mut block: Block = self.storage.finish_pending_block()?.into();
+        let (pending_block, changes) = self.storage.finish_pending_block()?;
+        let mut block: Block = pending_block.into();
+
         Span::with(|s| s.rec_str("block_number", &block.header.number));
         block.apply_external(&external_block);
 
         match external_block == block {
-            true => Ok(block),
+            true => Ok((block, changes)),
             false => Err(anyhow!(
                 "mismatching block info:\n\tlocal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}\n\texternal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}",
                 block.number(),
@@ -267,14 +263,14 @@ impl Miner {
     pub fn mine_local_and_commit(&self) -> anyhow::Result<(), StorageError> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
 
-        let block = self.mine_local()?;
-        self.commit(CommitItem::Block(block))
+        let (block, changes) = self.mine_local()?;
+        self.commit(CommitItem::Block(block), changes)
     }
 
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
-    pub fn mine_local(&self) -> anyhow::Result<Block, StorageError> {
+    pub fn mine_local(&self) -> anyhow::Result<(Block, ExecutionChanges), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
 
@@ -282,22 +278,24 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let block = self.storage.finish_pending_block()?;
+        let (block, changes) = self.storage.finish_pending_block()?;
         Span::with(|s| s.rec_str("block_number", &block.header.number));
 
-        Ok(block.into())
+        Ok((block.into(), changes))
     }
 
-    pub fn commit(&self, item: CommitItem) -> anyhow::Result<(), StorageError> {
+    pub fn commit(&self, item: CommitItem, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
         match item {
-            CommitItem::Block(block) => self.commit_block(block),
-            #[cfg(feature = "replication")]
-            CommitItem::ReplicationLog(replication_log) => self.commit_log(replication_log),
+            CommitItem::Block(block) => self.commit_block(block, changes),
+            CommitItem::ReplicationBlock(block) => {
+                self.storage.finish_pending_block()?;
+                self.commit_block(block, changes)
+            }
         }
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub fn commit_block(&self, block: Block, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -323,76 +321,13 @@ impl Miner {
         };
 
         // save storage
-        self.storage.save_block(block)?;
-        self.storage.set_mined_block_number(block_number)?;
+        self.storage.save_block(block, changes)?;
 
         // Send notifications after saving the block
         self.send_log_notifications(&block_logs);
         self.send_block_header_notification(&block_header);
 
         Ok(())
-    }
-
-    #[cfg(feature = "replication")]
-    fn commit_log(&self, replication_log: ReplicationLogRocksdb) -> anyhow::Result<(), StorageError> {
-        let block_number: BlockNumber = replication_log.block_number.into();
-
-        // track
-        #[cfg(feature = "tracing")]
-        let _span = info_span!("miner::commit_log", %block_number).entered();
-        tracing::info!(block_number = %block_number, "committing replication log");
-
-        // lock
-        let _commit_lock = self.locks.commit.lock();
-
-        // Read current block for notifications
-        if let Ok(current_block_number) = self.storage.read_mined_block_number() {
-            match self.storage.read_block(BlockFilter::Number(current_block_number)) {
-                Ok(Some(current_block)) => {
-                    // Send notifications for the current block
-                    if self.has_block_header_subscribers() {
-                        self.send_block_header_notification(&Some(current_block.header.clone()));
-                    }
-                    if self.has_log_subscribers() {
-                        let logs = current_block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec();
-                        self.send_log_notifications(&Some(logs));
-                    }
-                    if self.has_pending_tx_subscribers() {
-                        let tx_hashes = current_block.transactions.iter().map(|tx| tx.input.hash).collect_vec();
-                        for tx_hash in tx_hashes {
-                            self.send_pending_tx_notification(&Some(tx_hash));
-                        }
-                    }
-                }
-                Ok(None) => {
-                    tracing::info!(
-                        %current_block_number,
-                        "no block found for current block number"
-                    );
-                }
-                Err(e) => {
-                    tracing::error!(
-                        %current_block_number,
-                        error = ?e,
-                        "failed to read current block"
-                    );
-                }
-            }
-        }
-
-        // Apply replication log
-        tracing::info!(block_number = %block_number, "applying replication log");
-        let write_batch = replication_log.to_write_batch();
-        match self.storage.apply_replication_log(block_number, write_batch) {
-            Ok(_) => {
-                tracing::info!(block_number = %replication_log.block_number, "successfully applied replication log");
-                Ok(())
-            }
-            Err(e) => {
-                tracing::error!(reason = ?e, "failed to apply replication log");
-                Err(e)
-            }
-        }
     }
 
     // -----------------------------------------------------------------------------
@@ -490,7 +425,7 @@ pub mod interval_miner {
         let _mine_and_commit_lock = miner.locks.mine_and_commit.lock();
 
         // mine
-        let block = loop {
+        let (block, changes) = loop {
             match miner.mine_local() {
                 Ok(block) => break block,
                 Err(e) => {
@@ -501,7 +436,7 @@ pub mod interval_miner {
 
         // commit
         loop {
-            match miner.commit(CommitItem::Block(block.clone())) {
+            match miner.commit(CommitItem::Block(block.clone()), changes.clone()) {
                 Ok(_) => break,
                 Err(e) => {
                     tracing::error!(reason = ?e, "failed to commit block");

@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use display_json::DebugAsJson;
+pub use temporary::compute_pending_block_number;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -25,7 +26,6 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
-
 #[derive(Debug, Clone)]
 pub struct AccountWithSlots {
     pub info: Account,

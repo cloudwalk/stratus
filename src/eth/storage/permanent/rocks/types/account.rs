@@ -1,7 +1,5 @@
 use std::fmt::Debug;
 
-use revm::primitives::KECCAK_EMPTY;
-
 use super::address::AddressRocksdb;
 use super::bytecode::BytecodeRocksdb;
 use super::nonce::NonceRocksdb;
@@ -11,7 +9,7 @@ use crate::eth::primitives::Address;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct AccountRocksdb {
     pub balance: WeiRocksdb,
     pub nonce: NonceRocksdb,
@@ -25,7 +23,6 @@ impl AccountRocksdb {
             nonce: self.nonce.clone().into(),
             balance: self.balance.clone().into(),
             bytecode: self.bytecode.clone().map_into(),
-            code_hash: KECCAK_EMPTY.into(),
         }
     }
 }

@@ -343,15 +343,14 @@ impl Future for RpcResponse<'_> {
                 );
             };
 
-            sentry::with_scope(
-                |scope| {
-                    scope.set_user(Some(sentry::User {
-                        username: Some(resp.client.to_string()),
-                        ..Default::default()
-                    }));
-                },
-                log_tracing_event,
-            );
+            sentry::configure_scope(|scope| {
+                scope.set_user(Some(sentry::User {
+                    username: Some(resp.client.to_string()),
+                    ..Default::default()
+                }));
+            });
+
+            log_tracing_event();
 
             // track metrics
             #[cfg(feature = "metrics")]

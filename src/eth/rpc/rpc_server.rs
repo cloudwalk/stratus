@@ -8,8 +8,6 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use alloy_primitives::U256;
-#[cfg(feature = "replication")]
-use alloy_primitives::hex;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
@@ -324,9 +322,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
-
-    #[cfg(feature = "replication")]
-    module.register_blocking_method("stratus_getReplicationLog", stratus_get_replication_log)?;
+    module.register_blocking_method("stratus_getBlockWithChanges", stratus_get_block_with_changes)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -606,6 +602,9 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         external_rpc_timeout,
         sync_interval,
         external_rpc_max_response_size_bytes,
+        enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
+            .ok()
+            .is_some_and(|val| val == "1" || val == "true"),
     };
 
     importer_config.init_follower_importer(ctx).await
@@ -822,7 +821,7 @@ fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     let _method_enter = info_span!("rpc::eth_blockNumber", block_number = field::Empty).entered();
 
     // execute
-    let block_number = ctx.server.storage.read_mined_block_number()?;
+    let block_number = ctx.server.storage.read_mined_block_number();
     Span::with(|s| s.rec_str("block_number", &block_number));
 
     Ok(to_json_value(block_number))
@@ -853,48 +852,25 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     }))
 }
 
-#[cfg(feature = "replication")]
-fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::stratus_getReplicationLog", filter = field::Empty).entered();
+    let _method_enter = info_span!("rpc::stratus_getBlockWithChanges").entered();
 
     // parse params
     let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
 
     // track
-    Span::with(|s| s.rec_str("filter", &filter));
-    tracing::info!(%filter, "reading replication log");
+    tracing::info!(%filter, "reading block and receipts");
 
-    // Resolve the block filter to a specific block number
-    let block_number = match ctx.server.storage.read_block(filter)? {
-        Some(block) => block.number(),
-        None => {
-            tracing::info!(%filter, "block not found");
-            return Ok(JsonValue::Null);
-        }
+    let Some(block) = ctx.server.storage.read_block_with_changes(filter)? else {
+        tracing::info!(%filter, "block not found");
+        return Ok(JsonValue::Null);
     };
 
-    // execute
-    let replication_log = ctx.server.storage.read_replication_log(block_number)?;
+    tracing::info!(%filter, "block with transactions found");
 
-    match replication_log {
-        Some(log) => {
-            let log_data = log.data();
-            let encoded = hex::encode(log_data);
-
-            tracing::info!(%block_number, log_size = log_data.len(), "replication log found");
-
-            Ok(json!({
-                "block_number": block_number,
-                "replication_log": encoded
-            }))
-        }
-        None => {
-            tracing::info!(%block_number, "replication log not found");
-            Ok(JsonValue::Null)
-        }
-    }
+    Ok(json!(block))
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
@@ -1267,7 +1243,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     let to_block = match filter.to_block {
         Some(block) => block,
         None => {
-            let block = ctx.server.storage.read_mined_block_number()?;
+            let block = ctx.server.storage.read_mined_block_number();
             filter.to_block = Some(block);
             block
         }

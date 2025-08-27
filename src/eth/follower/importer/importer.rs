@@ -20,17 +20,15 @@ use crate::eth::follower::consensus::Consensus;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::CommitItem;
 use crate::eth::miner::miner::interval_miner::mine_and_commit;
-#[cfg(feature = "replication")]
-use crate::eth::primitives::BlockFilter;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::storage::StratusStorage;
-#[cfg(feature = "replication")]
-use crate::eth::storage::permanent::rocks::types::ReplicationLogRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::ext::spawn;
@@ -55,9 +53,8 @@ pub enum ImporterMode {
     NormalFollower,
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     FakeLeader,
-    /// Import blocks using RocksDB replication logs.
-    #[cfg(feature = "replication")]
-    RocksDbReplication,
+    /// Fetch a block with pre-computed changes
+    BlockWithChanges,
 }
 
 // -----------------------------------------------------------------------------
@@ -146,34 +143,7 @@ impl Importer {
         let number: BlockNumber = storage.read_block_number_to_resume_import()?;
 
         match self.importer_mode {
-            #[cfg(feature = "replication")]
-            ImporterMode::RocksDbReplication => {
-                // Use RocksDB replication approach
-                let (log_tx, log_rx) = mpsc::channel(10_000);
-
-                // Spawn log applier
-                let task_applier = spawn(
-                    "importer::log-applier",
-                    Importer::start_log_applier(Arc::clone(storage), log_rx, self.kafka_connector.clone(), Arc::clone(&self.miner)),
-                );
-
-                // Spawn block number fetcher
-                let number_fetcher_chain = Arc::clone(&self.chain);
-                let task_number_fetcher = spawn(
-                    "importer::number-fetcher",
-                    Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
-                );
-
-                // Spawn log fetcher
-                let log_fetcher_chain = Arc::clone(&self.chain);
-                let task_log_fetcher = spawn("importer::log-fetcher", Importer::start_log_fetcher(log_fetcher_chain, log_tx, number));
-
-                // Await all tasks
-                if let Err(e) = try_join!(task_applier, task_log_fetcher, task_number_fetcher) {
-                    tracing::error!(reason = ?e, "importer-online failed");
-                }
-            }
-            _ => {
+            ImporterMode::NormalFollower | ImporterMode::FakeLeader => {
                 // Use existing block fetcher and executor approach
                 let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
 
@@ -204,9 +174,39 @@ impl Importer {
                 );
 
                 // Await all tasks
-                if let Err(e) = try_join!(task_executor, task_block_fetcher, task_number_fetcher) {
-                    tracing::error!(reason = ?e, "importer-online failed");
-                }
+                let results = try_join!(task_executor, task_block_fetcher, task_number_fetcher)?;
+                results.0?;
+                results.1?;
+                results.2?;
+            }
+            ImporterMode::BlockWithChanges => {
+                // Use existing block fetcher and executor approach
+                let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
+
+                // Spawn block executor
+                let task_saver = spawn(
+                    "importer::executor",
+                    Importer::start_block_saver(Arc::clone(&self.miner), backlog_rx, self.kafka_connector.clone()),
+                );
+
+                // Spawn block number fetcher
+                let number_fetcher_chain = Arc::clone(&self.chain);
+                let task_number_fetcher = spawn(
+                    "importer::number-fetcher",
+                    Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
+                );
+
+                // Spawn block fetcher
+                let block_fetcher_chain = Arc::clone(&self.chain);
+                let task_block_fetcher = spawn(
+                    "importer::block-with-changes-fetcher",
+                    Importer::start_block_with_changes_fetcher(block_fetcher_chain, backlog_tx, number),
+                );
+
+                let results = try_join!(task_saver, task_block_fetcher, task_number_fetcher)?;
+                results.0?;
+                results.1?;
+                results.2?;
             }
         }
 
@@ -287,10 +287,10 @@ impl Importer {
                 );
             }
 
-            let mined_block = match miner.mine_external(block) {
-                Ok(mined_block) => {
+            let (mined_block, changes) = match miner.mine_external(block) {
+                Ok((mined_block, changes)) => {
                     tracing::info!(number = %mined_block.number(), "mined external block");
-                    mined_block
+                    (mined_block, changes)
                 }
                 Err(e) => {
                     let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
@@ -307,7 +307,7 @@ impl Importer {
                 kafka_conn.send_buffered(events, 50).await?;
             }
 
-            match miner.commit(CommitItem::Block(mined_block)) {
+            match miner.commit(CommitItem::Block(mined_block), changes) {
                 Ok(_) => {
                     tracing::info!("committed external block");
                 }
@@ -320,6 +320,55 @@ impl Importer {
             #[cfg(feature = "metrics")]
             {
                 metrics::inc_n_importer_online_transactions_total(receipts_len as u64);
+                metrics::inc_import_online_mined_block(start.elapsed());
+            }
+        }
+
+        warn_task_tx_closed(TASK_NAME);
+        Ok(())
+    }
+
+    async fn start_block_saver(
+        miner: Arc<Miner>,
+        mut backlog_rx: mpsc::Receiver<(Block, ExecutionChanges)>,
+        kafka_connector: Option<Arc<KafkaConnector>>,
+    ) -> anyhow::Result<()> {
+        const TASK_NAME: &str = "block-saver";
+        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
+
+        loop {
+            if Self::should_shutdown(TASK_NAME) {
+                return Ok(());
+            }
+
+            let (block, changes) = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
+                Ok(Some(inner)) => inner,
+                Ok(None) => break, // channel closed
+                Err(_timed_out) => {
+                    tracing::warn!(timeout = "2s", "timeout reading block executor channel, expected around 1 block per second");
+                    continue;
+                }
+            };
+
+            tracing::info!(block_number = %block.number(), "received block with changes");
+
+            #[cfg(feature = "metrics")]
+            let (start, block_tx_len) = (metrics::now(), block.transactions.len());
+
+            if let Some(ref kafka_conn) = kafka_connector {
+                let events = block
+                    .transactions
+                    .iter()
+                    .flat_map(|tx| transaction_to_events(block.header.timestamp, Cow::Borrowed(tx)));
+
+                kafka_conn.send_buffered(events, 50).await?;
+            }
+
+            miner.commit(CommitItem::ReplicationBlock(block), changes)?;
+
+            #[cfg(feature = "metrics")]
+            {
+                metrics::inc_n_importer_online_transactions_total(block_tx_len as u64);
                 metrics::inc_import_online_mined_block(start.elapsed());
             }
         }
@@ -514,103 +563,13 @@ impl Importer {
         }
     }
 
-    // -----------------------------------------------------------------------------
-    // Replication Log Applier
-    // -----------------------------------------------------------------------------
-
-    // Applies replication logs to storage
-    #[cfg(feature = "replication")]
-    async fn start_log_applier(
-        storage: Arc<StratusStorage>,
-        mut log_rx: mpsc::Receiver<ReplicationLogRocksdb>,
-        kafka_connector: Option<Arc<KafkaConnector>>,
-        miner: Arc<Miner>,
-    ) -> anyhow::Result<()> {
-        const TASK_NAME: &str = "log-applier";
-        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
-
-        loop {
-            if Self::should_shutdown(TASK_NAME) {
-                return Ok(());
-            }
-
-            let replication_log = match timeout(Duration::from_secs(2), log_rx.recv()).await {
-                Ok(Some(inner)) => inner,
-                Ok(None) => break,
-                Err(_timed_out) => {
-                    tracing::warn!(timeout = "2s", "timeout reading log applier channel");
-                    continue;
-                }
-            };
-
-            #[cfg(feature = "metrics")]
-            let start = metrics::now();
-
-            // Send Kafka events if enabled
-            if let Ok(current_block_number) = storage.read_mined_block_number() {
-                match storage.read_block(BlockFilter::Number(current_block_number)) {
-                    Ok(Some(current_block)) =>
-                        if let Some(ref kafka_conn) = kafka_connector {
-                            let events = current_block
-                                .transactions
-                                .iter()
-                                .flat_map(|tx| transaction_to_events(current_block.header.timestamp, Cow::Borrowed(tx)));
-
-                            if let Err(e) = kafka_conn.send_buffered(events, 50).await {
-                                let message = GlobalState::shutdown_from(TASK_NAME, "failed to send Kafka events");
-                                return log_and_err!(reason = e, message);
-                            }
-                        },
-                    Ok(None) => {
-                        tracing::info!(
-                            %current_block_number,
-                            external_rpc_current_block = %EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed),
-                            "no block found for current block number"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            %current_block_number,
-                            error = ?e,
-                            "failed to read current block"
-                        );
-                    }
-                }
-            }
-
-            // Commit the replication log to the miner
-            if let Err(e) = miner.commit(CommitItem::ReplicationLog(replication_log)) {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to commit replication log");
-                return log_and_err!(reason = e, message);
-            }
-
-            #[cfg(feature = "metrics")]
-            {
-                let duration = start.elapsed();
-                tracing::info!(
-                    duration = %duration.to_string_ext(),
-                    "processed replication log",
-                );
-                metrics::inc_import_online_mined_block(duration);
-            }
-        }
-
-        warn_task_tx_closed(TASK_NAME);
-        Ok(())
-    }
-
-    // -----------------------------------------------------------------------------
-    // Replication Log Fetcher
-    // -----------------------------------------------------------------------------
-
-    /// Retrieves replication logs.
-    #[cfg(feature = "replication")]
-    async fn start_log_fetcher(
+    /// Retrieves blocks with changes.
+    async fn start_block_with_changes_fetcher(
         chain: Arc<BlockchainClient>,
-        log_tx: mpsc::Sender<ReplicationLogRocksdb>,
+        backlog_tx: mpsc::Sender<(Block, ExecutionChanges)>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
-        const TASK_NAME: &str = "log-fetcher";
+        const TASK_NAME: &str = "block-with-changes-fetcher";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
 
         loop {
@@ -625,28 +584,22 @@ impl Importer {
                 continue;
             }
 
-            // we are behind current, so we will fetch multiple logs in parallel to catch up
-            let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1;
-            let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks
-            tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with replication logs");
+            // we are behind current, so we will fetch multiple blocks in parallel to catch up
+            let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1; // TODO: use count_to from BlockNumber
+            let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
+            tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with blocks");
 
             let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
             while blocks_to_fetch > 0 {
                 blocks_to_fetch -= 1;
-                tasks.push(fetch_replication_log(Arc::clone(&chain), importer_block_number));
+                tasks.push(fetch_block_with_changes(Arc::clone(&chain), importer_block_number));
                 importer_block_number = importer_block_number.next_block_number();
             }
 
+            // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
-
-            while let Some(replication_log) = tasks.next().await {
-                tracing::info!(
-                    block_number = %replication_log.block_number,
-                    "fetched replication log"
-                );
-
-                // send the log to the applier
-                if log_tx.send(replication_log).await.is_err() {
+            while let Some(block) = tasks.next().await {
+                if backlog_tx.send(block).await.is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
                 }
@@ -681,32 +634,26 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     }
 }
 
-#[cfg(feature = "replication")]
-async fn fetch_replication_log(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> ReplicationLogRocksdb {
-    const REPLICATION_RETRY_DELAY: Duration = Duration::from_millis(10);
+async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (Block, ExecutionChanges) {
+    const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
     });
 
     loop {
-        tracing::info!(%block_number, "fetching replication log");
+        tracing::info!(%block_number, "fetching block and changes");
 
-        match chain.fetch_replication_log(block_number).await {
-            Ok(Some(replication_log)) => {
-                tracing::info!(
-                    %block_number,
-                    log_block_number = %replication_log.block_number,
-                    "successfully fetched replication log"
-                );
-                return replication_log;
+        match chain.fetch_block_with_changes(block_number).await {
+            Ok(Some(response)) => {
+                return response;
             }
             Ok(None) => {
-                tracing::warn!(%block_number, delay_ms = %REPLICATION_RETRY_DELAY.as_millis(), "replication log not available yet, retrying with delay.");
-                traced_sleep(REPLICATION_RETRY_DELAY, SleepReason::RetryBackoff).await;
+                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block and receipts not available yet, retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
             }
             Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, delay_ms = %REPLICATION_RETRY_DELAY.as_millis(), "failed to fetch replication log, retrying with delay.");
-                traced_sleep(REPLICATION_RETRY_DELAY, SleepReason::RetryBackoff).await;
+                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch block and receipts, retrying with delay.");
+                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
             }
         };
     }
@@ -721,7 +668,7 @@ impl Consensus for Importer {
                 elapsed
             ))
         } else {
-            Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number()?.as_u64())
+            Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number().as_u64())
         }
     }
 

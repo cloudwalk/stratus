@@ -12,7 +12,7 @@ use crate::eth::primitives::Log;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionRocksdb {
     pub block_timestamp: UnixTimeRocksdb,
     pub result: ExecutionResultRocksdb,
