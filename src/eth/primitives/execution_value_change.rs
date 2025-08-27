@@ -18,6 +18,17 @@ where
     modified: ValueState<T>,
 }
 
+impl<T> Copy for ExecutionValueChange<T> where T: Copy + PartialEq + serde::Serialize {}
+
+impl<T> From<T> for ExecutionValueChange<T>
+where
+    T: PartialEq + serde::Serialize,
+{
+    fn from(value: T) -> Self {
+        Self::from_modified(value)
+    }
+}
+
 impl<T> Debug for ExecutionValueChange<T>
 where
     T: PartialEq + serde::Serialize,
@@ -110,6 +121,8 @@ pub enum ValueState<T> {
     #[default]
     NotSet,
 }
+
+impl<T> Copy for ValueState<T> where T: Copy {}
 
 impl<T> ValueState<T> {
     pub fn is_set(&self) -> bool {

@@ -10,7 +10,7 @@ mod chain_id;
 mod difficulty;
 mod ecdsa_rs;
 mod ecdsa_v;
-mod execution;
+pub mod execution;
 mod execution_account_changes;
 mod execution_metrics;
 mod execution_result;
