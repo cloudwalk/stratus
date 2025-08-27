@@ -61,15 +61,15 @@ credit_agent=0
 print_help() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -t, --token       for brlc-token"
-    echo "  -p, --periphery   for brlc-periphery"
-    echo "  -m, --multisig    for brlc-multisig"
-    echo "  -c, --compound    for compound-periphery"
-    echo "  -i, --yield       for brlc-yield-streamer"
-    echo "  -x, --pix         for brlc-pix-cashier"
+    echo "  -t, --token             for brlc-token"
+    echo "  -p, --periphery         for brlc-periphery"
+    echo "  -m, --multisig          for brlc-multisig"
+    echo "  -c, --compound          for compound-periphery"
+    echo "  -i, --yield             for brlc-yield-streamer"
+    echo "  -x, --pix               for brlc-pix-cashier"
     echo "  -f, --capybara-finance  for brlc-capybara-finance"
     echo "  -a, --credit-agent      for brlc-credit-agent"
-    echo "  -h, --help        display this help and exit"
+    echo "  -h, --help              display this help and exit"
 }
 
 if [ "$#" == 0 ]; then
