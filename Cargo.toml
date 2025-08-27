@@ -36,7 +36,7 @@ rustc-hash = "=2.1.1"
 smallvec = "=1.15.1"
 static_assertions = "=1.1.0"
 strum = { version = "=0.27.2", features = ["derive"] }
-quick_cache = "=0.6.9"
+quick_cache = "=0.6.16"
 sugars = "=3.0.1"
 thiserror = "=2.0.15"
 uuid = { version = "=1.17.0", features = ["v7"]}
@@ -58,7 +58,7 @@ dotenvy = "=0.15.7"
 bincode = { version = "=2.0.1", features = ["derive"] }
 display_json = "=0.2.1"
 serde = "=1.0.219"
-serde_json = "=1.0.142"
+serde_json = "=1.0.143"
 serde_urlencoded = "=0.7.1"
 serde_with = "=3.14.0"
 
@@ -123,11 +123,11 @@ sqlx = { version = "=0.8.6", features = [
 
 # test
 fake = { version = "=4.4.0", features = ["chrono", "derive"] }
-rdkafka = {version = "=0.36.2", features = ["ssl", "sasl"] }
+rdkafka = {version = "=0.38.0", features = ["ssl", "sasl"] }
 sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
 # Historic events processor
-indicatif = "=0.17.8"
+indicatif = "=0.18.0"
 dashmap = "6.1.0"
 
 # ------------------------------------------------------------------------------
@@ -135,10 +135,10 @@ dashmap = "6.1.0"
 # ------------------------------------------------------------------------------
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
-revm = { version = "=27.1.0", features = ["asm-keccak", "serde"] }
+revm = { version = "=27.1.0", features = ["asm-keccak", "serde", "optional_eip3607"] }
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
-revm = { version = "=27.1.0", features = ["serde"]}
+revm = { version = "=27.1.0", features = ["serde", "optional_eip3607"]}
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { version = "=0.6", optional = true }
@@ -149,7 +149,7 @@ tikv-jemallocator = { version = "=0.6", optional = true }
 
 [dev-dependencies]
 serde_plain = "=1.0.2"
-tempfile = "=3.20.0"
+tempfile = "=3.21.0"
 glob = "=0.3.3"
 
 # ------------------------------------------------------------------------------
