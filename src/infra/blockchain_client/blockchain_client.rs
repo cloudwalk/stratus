@@ -12,6 +12,7 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
+use crate::eth::primitives::ExecutionChanges;
 use crate::GlobalState;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
@@ -171,11 +172,11 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number with changes.
-    pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<Block>> {
-        tracing::debug!(%block_number, "fetching block");
+    pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(Block, ExecutionChanges)>> {
+        tracing::debug!(%block_number, "fetching block with changes");
 
         let number = to_json_value(block_number);
-        let result = self.http.request::<Option<Block>, _>("stratus_getBlockWithChanges", [number]).await;
+        let result = self.http.request::<Option<(Block, ExecutionChanges)>, _>("stratus_getBlockWithChanges", [number]).await;
 
         match result {
             Ok(block) => Ok(block),

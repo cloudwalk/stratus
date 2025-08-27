@@ -23,6 +23,12 @@ pub enum ExecutionResult {
     Halted { reason: String },
 }
 
+impl ExecutionResult {
+    pub fn is_success(&self) -> bool {
+        matches!(self, ExecutionResult::Success)
+    }
+}
+
 #[derive(Debug, thiserror::Error, serde::Serialize, serde::Deserialize, Default, Clone, PartialEq, Eq)]
 pub struct RevertReason(pub Cow<'static, str>);
 
