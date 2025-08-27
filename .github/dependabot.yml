@@ -3,18 +3,15 @@ updates:
 
   - package-ecosystem: "cargo"
     directory: "/"
+
+    pull-request-branch-name:
+      separator: "-"
     
     schedule:
       interval: "weekly"
       day: "monday"
       time: "09:00"
-      timezone: "UTC"
-
-    groups:
-      alloy-revm-updates:
-        patterns:
-          - "alloy-*"
-          - "revm*"
+      timezone: "America/Sao_Paulo"
     
     labels:
       - "dependencies"

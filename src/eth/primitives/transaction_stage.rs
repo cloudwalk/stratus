@@ -49,14 +49,14 @@ impl TransactionStage {
     pub fn deployed_contract_address(&self) -> Option<Address> {
         match self {
             Self::Executed(tx) => tx.result.execution.deployed_contract_address,
-            Self::Mined(tx) => tx.execution.deployed_contract_address,
+            Self::Mined(tx) => tx.deployed_contract_address,
         }
     }
 
     pub fn result(&self) -> &ExecutionResult {
         match self {
             Self::Executed(tx) => &tx.result.execution.result,
-            Self::Mined(tx) => &tx.execution.result,
+            Self::Mined(tx) => &tx.result,
         }
     }
 

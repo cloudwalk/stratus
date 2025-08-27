@@ -385,7 +385,7 @@ describe("JSON-RPC", () => {
                 expect(error).to.be.an("object");
                 expect(error.code).to.equal(2002);
                 expect(error.message).to.equal(
-                    `Transaction nonce ${tooHighNonce} does not match account nonce ${currentNonce}.`,
+                    `transaction nonce ${tooHighNonce} does not match account nonce ${currentNonce}.`,
                 );
             });
 
@@ -402,7 +402,7 @@ describe("JSON-RPC", () => {
                 expect(error).to.be.an("object");
                 expect(error.code).to.equal(2002);
                 expect(error.message).to.equal(
-                    `Transaction nonce ${tooLowNonce} does not match account nonce ${currentNonce}.`,
+                    `transaction nonce ${tooLowNonce} does not match account nonce ${currentNonce}.`,
                 );
             });
         });
