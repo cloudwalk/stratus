@@ -102,7 +102,7 @@ impl EvmExecution {
 
     /// Checks if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
-        matches!(self.result, ExecutionResult::Success)
+        self.result.is_success()
     }
 
     /// Checks if the current transaction was completed with a failure (reverted or halted).

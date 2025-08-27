@@ -563,12 +563,12 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<Block>, StorageError> {
+    pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(Block, ExecutionChanges)>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_with_changes", %filter).entered();
-        tracing::debug!(storage = %label::PERM, ?filter, "reading block");
+        tracing::debug!(storage = %label::PERM, ?filter, "reading block with changes");
 
-        timed(|| self.perm.read_block(filter)).with(|m| {
+        timed(|| self.perm.read_block_with_changes(filter)).with(|m| {
             metrics::inc_storage_read_block_with_changes(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read block with changes");

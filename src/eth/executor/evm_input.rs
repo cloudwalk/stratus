@@ -195,7 +195,7 @@ impl From<TransactionMined> for EvmInput {
             gas_limit: value.input.gas_limit,
             gas_price: value.input.gas_price,
             block_number: value.block_number,
-            block_timestamp: value.execution.block_timestamp,
+            block_timestamp: value.block_timestamp,
             point_in_time: PointInTime::MinedPast(value.block_number),
             chain_id: value.input.chain_id,
             kind: ReadKind::Transaction,

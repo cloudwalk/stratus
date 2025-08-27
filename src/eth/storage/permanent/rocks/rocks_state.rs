@@ -446,15 +446,7 @@ impl RocksStorageState {
         let number = block.number();
         let block_hash = block.hash();
 
-        let block_without_changes = {
-            let mut block_mut = block;
-            block_mut.transactions.iter_mut().for_each(|transaction| {
-                transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
-            });
-            block_mut
-        };
-
-        let block_by_number = (number.into(), block_without_changes.into());
+        let block_by_number = (number.into(), block.into());
         self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
@@ -498,20 +490,7 @@ impl RocksStorageState {
         let number = block.number();
         let block_hash = block.hash();
 
-        // this is an optimization, instead of saving the entire block into the database,
-        // remove all discardable account changes, this seems uneeded ever since we isolated the types,
-        // BlockRocksdb doesnt even contain a field for the changes
-        let block_without_changes = {
-            let mut block_mut = block;
-            // mutate it
-            block_mut.transactions.iter_mut().for_each(|transaction| {
-                // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
-                transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
-            });
-            block_mut
-        };
-
-        let block_by_number = (number.into(), block_without_changes.into());
+        let block_by_number = (number.into(), block.into());
         self.blocks_by_number.prepare_batch_insertion([block_by_number], batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
@@ -626,13 +605,12 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<Block>> {
-        let Some(mut block_wo_changes) = self.read_block(selection)? else {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, ExecutionChanges)>> {
+        let Some(block_wo_changes) = self.read_block(selection)? else {
             return Ok(None);
         };
         let changes = self.block_changes.get(&block_wo_changes.number().into())?;
-        block_wo_changes.transactions[0].execution.changes = changes.map(|changes| changes.into_inner().into()).unwrap_or_default();
-        Ok(Some(block_wo_changes))
+        Ok(Some((block_wo_changes, changes.map(|changes| changes.into_inner().into()).unwrap_or_default())))
     }
 }
 

@@ -7,12 +7,16 @@ use itertools::Itertools;
 
 use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ExecutionResult;
+use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::ext::OptionExt;
 use crate::ext::RuintExt;
@@ -23,8 +27,20 @@ pub struct TransactionMined {
     /// Transaction input received through RPC.
     pub input: TransactionInput,
 
-    /// Transaction EVM execution result.
-    pub execution: EvmExecution,
+    /// Assumed block timestamp during the execution.
+    pub block_timestamp: UnixTime,
+
+    /// Status of the execution.
+    pub result: ExecutionResult,
+
+    /// Output returned by the function execution (can be the function output or an exception).
+    pub output: Bytes,
+
+    /// Consumed gas.
+    pub gas: Gas,
+
+    /// The contract address if the executed transaction deploys a contract.
+    pub deployed_contract_address: Option<Address>,
 
     /// TODO: either remove logs from EvmExecution or remove them here
     /// Logs added to the block.
@@ -55,7 +71,7 @@ impl Ord for TransactionMined {
 impl TransactionMined {
     /// Check if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
-        self.execution.is_success()
+        self.result.is_success()
     }
 
     fn compute_bloom(&self) -> LogsBloom {
@@ -64,6 +80,14 @@ impl TransactionMined {
             bloom.accrue_log(&(log_mined.log));
         }
         bloom
+    }
+
+    pub fn contract_address(&self) -> Option<Address> {
+        if let Some(contract_address) = &self.deployed_contract_address {
+            return Some(contract_address.to_owned());
+        }
+
+        None
     }
 }
 
@@ -90,7 +114,7 @@ impl From<TransactionMined> for AlloyReceipt {
     fn from(value: TransactionMined) -> Self {
         let receipt = Receipt {
             status: Eip658Value::Eip658(value.is_success()),
-            cumulative_gas_used: value.execution.gas.into(), // TODO: implement cumulative gas used correctly
+            cumulative_gas_used: value.gas.into(), // TODO: implement cumulative gas used correctly
             logs: value.logs.clone().into_iter().map_into().collect(),
         };
 
@@ -113,13 +137,13 @@ impl From<TransactionMined> for AlloyReceipt {
             transaction_index: Some(value.transaction_index.into()),
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
-            gas_used: value.execution.gas.into(),
+            gas_used: value.gas.into(),
             effective_gas_price: value.input.gas_price,
             blob_gas_used: None,
             blob_gas_price: None,
             from: value.input.signer.into(),
             to: value.input.to.map_into(),
-            contract_address: value.execution.contract_address().map_into(),
+            contract_address: value.contract_address().map_into(),
         }
     }
 }
@@ -134,12 +158,11 @@ mod tests {
 
     fn create_tx(transaction_index: u64, block_number: u64) -> TransactionMined {
         TransactionMined {
-            input: Faker.fake(),
-            execution: Faker.fake(),
             logs: vec![],
             transaction_index: transaction_index.into(),
             block_number: block_number.into(),
             block_hash: Hash::default(),
+            ..Faker.fake()
         }
     }
 

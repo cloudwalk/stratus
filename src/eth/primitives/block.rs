@@ -98,7 +98,11 @@ impl Block {
 
         TransactionMined {
             input: tx.input,
-            execution: tx.result.execution,
+            block_timestamp: tx.result.execution.block_timestamp,
+            result: tx.result.execution.result,
+            output: tx.result.execution.output,
+            gas: tx.result.execution.gas,
+            deployed_contract_address: tx.result.execution.deployed_contract_address,
             transaction_index,
             block_number: self.header.number,
             block_hash: self.header.hash,
@@ -140,7 +144,7 @@ impl Block {
         self.header.hash = external_block.hash();
         self.header.timestamp = external_block.timestamp();
         for transaction in self.transactions.iter_mut() {
-            assert!(transaction.execution.block_timestamp == self.header.timestamp);
+            assert!(transaction.block_timestamp == self.header.timestamp);
             transaction.block_hash = external_block.hash();
             for log in transaction.logs.iter_mut() {
                 log.block_hash = external_block.hash();

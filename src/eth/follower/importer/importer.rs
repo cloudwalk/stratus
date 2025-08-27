@@ -644,13 +644,8 @@ async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: Bl
         tracing::info!(%block_number, "fetching block and changes");
 
         match chain.fetch_block_with_changes(block_number).await {
-            Ok(Some(mut response)) => {
-                let changes = response
-                    .transactions
-                    .first_mut()
-                    .map(|tx| std::mem::take(&mut tx.execution.changes))
-                    .unwrap_or_default();
-                return (response, changes);
+            Ok(Some(response)) => {
+                return response;
             }
             Ok(None) => {
                 tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block and receipts not available yet, retrying with delay.");

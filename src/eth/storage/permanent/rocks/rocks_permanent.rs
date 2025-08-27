@@ -132,14 +132,14 @@ impl RocksPermanentStorage {
         block.map_err(|err| StorageError::RocksError { err })
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<Block>, StorageError> {
-        let block = self.state.read_block_with_changes(selection).inspect_err(|e| {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(Block, ExecutionChanges)>, StorageError> {
+        let result = self.state.read_block_with_changes(selection).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read block with changes in RocksPermanent");
         });
-        if let Ok(Some(block)) = &block {
+        if let Ok(Some(block)) = &result {
             tracing::trace!(?selection, ?block, "block found");
         }
-        block.map_err(|err| StorageError::RocksError { err })
+        result.map_err(|err| StorageError::RocksError { err })
     }
 
     pub fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError> {
