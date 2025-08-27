@@ -41,12 +41,8 @@ pub struct PermanentStorageConfig {
     pub rocks_cf_size_metrics_interval: Option<Duration>,
 
     /// Minimum number of file descriptors required for RocksDB initialization.
-    #[arg(long = "rocks-min-file-descriptors", env = "ROCKS_MIN_FILE_DESCRIPTORS", default_value = "4096")]
+    #[arg(long = "rocks-min-file-descriptors", env = "ROCKS_MIN_FILE_DESCRIPTORS", default_value = "1048576")]
     pub rocks_min_file_descriptors: u64,
-
-    /// Whether to fail initialization if file descriptor limit is below minimum (true) or just warn (false).
-    #[arg(long = "rocks-strict-ulimit-check", env = "ROCKS_STRICT_ULIMIT_CHECK", default_value = "true")]
-    pub rocks_strict_ulimit_check: bool,
 
     /// Genesis file configuration
     #[clap(flatten)]
@@ -66,7 +62,6 @@ impl PermanentStorageConfig {
             !self.rocks_disable_sync_write,
             self.rocks_cf_size_metrics_interval,
             self.rocks_min_file_descriptors,
-            self.rocks_strict_ulimit_check,
         )
     }
 }

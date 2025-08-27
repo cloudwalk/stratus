@@ -108,16 +108,8 @@ impl StratusStorage {
         let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
         let rocks_path_prefix = rocks_dir.path().to_str().unwrap().to_string();
 
-        let perm = RocksPermanentStorage::new(
-            Some(rocks_path_prefix.clone()),
-            std::time::Duration::from_secs(240),
-            None,
-            true,
-            None,
-            1024,
-            false,
-        )
-        .expect("Failed to create RocksPermanentStorage for tests");
+        let perm = RocksPermanentStorage::new(Some(rocks_path_prefix.clone()), std::time::Duration::from_secs(240), None, true, None, 1024)
+            .expect("Failed to create RocksPermanentStorage for tests");
 
         let cache = CacheConfig {
             slot_cache_capacity: 100000,
