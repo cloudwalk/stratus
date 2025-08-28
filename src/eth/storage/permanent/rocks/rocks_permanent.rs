@@ -99,12 +99,12 @@ impl RocksPermanentStorage {
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
         cf_size_metrics_interval: Option<Duration>,
-        min_file_descriptors: u64,
+        file_descriptors_limit: u64,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
 
         // Check file descriptor limit before proceeding with RocksDB initialization
-        Self::check_file_descriptor_limit(min_file_descriptors)?;
+        Self::check_file_descriptor_limit(file_descriptors_limit)?;
 
         let path = if let Some(prefix) = db_path_prefix {
             // run some checks on the given prefix
@@ -144,29 +144,29 @@ impl RocksPermanentStorage {
     /// Checks the current file descriptor limit and validates it meets the minimum requirement.
     ///
     /// This prevents RocksDB from misbehaving or corrupting data due to insufficient file descriptors.
-    fn check_file_descriptor_limit(min_required: u64) -> anyhow::Result<()> {
-        let current_limit = get_current_file_descriptor_limit(min_required)?;
+    fn check_file_descriptor_limit(limit_required: u64) -> anyhow::Result<()> {
+        let current_limit = get_current_file_descriptor_limit(limit_required)?;
 
         tracing::info!(
             current_limit = current_limit.rlim_cur,
-            min_required = min_required,
+            min_required = limit_required,
             "checking file descriptor limit for RocksDB"
         );
 
-        if current_limit.rlim_cur < min_required {
+        if current_limit.rlim_cur < limit_required {
             tracing::warn!(
                 current_limit = current_limit.rlim_cur,
-                min_required = min_required,
+                min_required = limit_required,
                 "File descriptor limit is below minimum, attempting to increase it"
             );
 
-            let new_rlimit = set_file_descriptor_limit(min_required, current_limit, min_required)?;
+            let new_rlimit = set_file_descriptor_limit(limit_required, current_limit, limit_required)?;
 
-            if new_rlimit.rlim_cur < min_required {
+            if new_rlimit.rlim_cur < limit_required {
                 let message = create_file_descriptor_error_message(
                     current_limit.rlim_cur,
                     current_limit.rlim_max,
-                    min_required,
+                    limit_required,
                     "Attempted to increase the limit but verification shows it's still insufficient",
                     Some(&format!(" ({}).", new_rlimit.rlim_cur)),
                 );
@@ -176,10 +176,10 @@ impl RocksPermanentStorage {
             tracing::info!(
                 "Successfully increased file descriptor limit to {} (required: {})",
                 new_rlimit.rlim_cur,
-                min_required
+                limit_required
             );
         } else {
-            tracing::info!("File descriptor limit check passed: {} >= {}", current_limit.rlim_cur, min_required);
+            tracing::info!("File descriptor limit check passed: {} >= {}", current_limit.rlim_cur, limit_required);
         }
 
         Ok(())
