@@ -49,3 +49,11 @@ compile_contract brlc-multisig MultiSigWallet 0.8.24
 compile_contract brlc-balance-tracker BalanceTracker 0.8.16
 
 compile_contract brlc-yield-streamer YieldStreamer 0.8.16
+
+# Capybara Finance contracts
+compile_contract brlc-capybara-finance LendingMarket 0.8.24
+compile_contract brlc-capybara-finance LiquidityPool 0.8.24
+compile_contract brlc-capybara-finance CreditLine 0.8.24
+
+# Credit Agent contracts
+compile_contract brlc-credit-agent CreditAgent 0.8.24
