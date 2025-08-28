@@ -54,7 +54,7 @@ fn create_file_descriptor_error_message(
     )
 }
 
-fn get_current_file_descriptor_limit(min_required: u64) -> anyhow::Result<libc::rlimit> {
+fn get_current_file_descriptor_limit(min_required: u64) -> Result<libc::rlimit, StorageError> {
     let mut rlimit = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
     let result = unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlimit as *mut libc::rlimit) };
     if result != 0 {
@@ -66,12 +66,12 @@ fn get_current_file_descriptor_limit(min_required: u64) -> anyhow::Result<libc::
             &format!("Failed to get current file descriptor limit (error: {err})."),
             None,
         );
-        bail!("{}", message);
+        return Err(StorageError::Unexpected { msg: message });
     }
     Ok(rlimit)
 }
 
-fn set_file_descriptor_limit(new_rlimit: u64, current_limit: libc::rlimit, min_required: u64) -> anyhow::Result<libc::rlimit> {
+fn set_file_descriptor_limit(new_rlimit: u64, current_limit: libc::rlimit, min_required: u64) -> Result<libc::rlimit, StorageError> {
     let rlimit = libc::rlimit {
         rlim_cur: new_rlimit.min(current_limit.rlim_max),
         rlim_max: current_limit.rlim_max,
@@ -86,7 +86,7 @@ fn set_file_descriptor_limit(new_rlimit: u64, current_limit: libc::rlimit, min_r
             &format!("Failed to automatically increase the limit (error: {err})."),
             None,
         );
-        bail!("{}", message);
+        return Err(StorageError::Unexpected { msg: message });
     }
     let current_limit = get_current_file_descriptor_limit(min_required)?;
     Ok(current_limit)
@@ -104,7 +104,7 @@ impl RocksPermanentStorage {
         tracing::info!("setting up rocksdb storage");
 
         // Check file descriptor limit before proceeding with RocksDB initialization
-        Self::check_file_descriptor_limit(file_descriptors_limit)?;
+        Self::check_file_descriptor_limit(file_descriptors_limit).map_err(|err| anyhow::anyhow!("{}", err))?;
 
         let path = if let Some(prefix) = db_path_prefix {
             // run some checks on the given prefix
@@ -144,7 +144,7 @@ impl RocksPermanentStorage {
     /// Checks the current file descriptor limit and validates it meets the minimum requirement.
     ///
     /// This prevents RocksDB from misbehaving or corrupting data due to insufficient file descriptors.
-    fn check_file_descriptor_limit(limit_required: u64) -> anyhow::Result<()> {
+    fn check_file_descriptor_limit(limit_required: u64) -> Result<(), StorageError> {
         let current_limit = get_current_file_descriptor_limit(limit_required)?;
 
         tracing::info!(
@@ -170,7 +170,7 @@ impl RocksPermanentStorage {
                     "Attempted to increase the limit but verification shows it's still insufficient",
                     Some(&format!(" ({}).", new_rlimit.rlim_cur)),
                 );
-                bail!("{}", message);
+                return Err(StorageError::Unexpected { msg: message });
             }
 
             tracing::info!(
@@ -371,7 +371,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_ulimit_check_function_exists() {
+    fn test_ulimit_check_with_no_change() {
         let result = RocksPermanentStorage::check_file_descriptor_limit(1024);
         assert!(result.is_ok(), "ulimit check should succeed with reasonable low limit");
     }
