@@ -131,6 +131,7 @@ impl StratusStorage {
                 rocks_disable_sync_write: false,
                 rocks_cf_size_metrics_interval: None,
                 genesis_file: crate::config::GenesisFileConfig::default(),
+                rocks_min_file_descriptors: 1024,
             },
         )
     }

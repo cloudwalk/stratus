@@ -41,7 +41,7 @@ pub struct PermanentStorageConfig {
     pub rocks_cf_size_metrics_interval: Option<Duration>,
 
     /// Minimum number of file descriptors required for RocksDB initialization.
-    #[arg(long = "rocks-min-file-descriptors", env = "ROCKS_MIN_FILE_DESCRIPTORS", default_value = "1048576")]
+    #[arg(long = "rocks-min-file-descriptors", env = "ROCKS_MIN_FILE_DESCRIPTORS", default_value = "65536")]
     pub rocks_min_file_descriptors: u64,
 
     /// Genesis file configuration
