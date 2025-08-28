@@ -156,7 +156,7 @@ importer-offline-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
     cargo build
-    cargo run --bin importer-offline -- {{args}} > importer-offline.log
+    cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
 
 # ------------------------------------------------------------------------------
 # Test tasks
