@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use parking_lot::RwLockReadGuard;
 use tracing::Span;
 
@@ -131,7 +132,7 @@ impl StratusStorage {
                 rocks_disable_sync_write: false,
                 rocks_cf_size_metrics_interval: None,
                 genesis_file: crate::config::GenesisFileConfig::default(),
-                rocks_min_file_descriptors: 1024,
+                rocks_file_descriptors_limit: 1024,
             },
         )
     }
@@ -496,7 +497,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn save_block(&self, block: Block, changes: ExecutionChanges) -> Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, mut changes: ExecutionChanges, complete_changes: bool) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
@@ -532,6 +533,19 @@ impl StratusStorage {
 
         // save block
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
+        if complete_changes {
+            let addresses = changes.keys().copied().collect_vec();
+            let accounts = self.perm.read_accounts(addresses)?;
+            for (addr, acc) in accounts {
+                match changes.entry(addr) {
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        entry.get_mut().update_empty_values(acc);
+                    }
+                    std::collections::btree_map::Entry::Vacant(_) => unreachable!("we got the addresses from the changes"),
+                }
+            }
+        }
+
         timed(|| {
             let guard = self.transient_state_lock.write();
             self.perm.save_block(block, changes.clone())?;
@@ -784,7 +798,7 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
-        self.save_block(genesis_block, ExecutionChanges::default())?;
+        self.save_block(genesis_block, ExecutionChanges::default(), false)?;
 
         // accounts
         self.save_accounts(genesis_accounts)?;

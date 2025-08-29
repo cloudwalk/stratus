@@ -63,6 +63,10 @@ where
         self.modified = ValueState::Set(value);
     }
 
+    pub fn set_original(&mut self, value: T) {
+        self.original = ValueState::Set(value);
+    }
+
     /// Takes the original value as reference if it is set.
     pub fn take_original_ref(&self) -> Option<&T> {
         self.original.take_ref()
@@ -91,6 +95,10 @@ where
     /// Check if the value was modified.
     pub fn is_modified(&self) -> bool {
         self.modified.is_set() && (self.original != self.modified)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        !self.modified.is_set() && !self.original.is_set()
     }
 }
 
