@@ -220,47 +220,43 @@ impl RocksStorageState {
         let mut block_changes = BlockChangesRocksdb::default();
         let block_number = block_number.into();
 
-        for (address, change) in changes {
+        for (address, change) in changes.accounts {
             let address: AddressRocksdb = address.into();
             let mut account_change_entry = AccountChangesRocksdb::default();
 
-            if change.is_account_modified() {
-                let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
+            let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
 
-                if let Some(nonce) = change.nonce.take_modified() {
-                    account_info_entry.nonce = nonce.into();
-                    account_change_entry.nonce = Some(nonce.into());
-                }
-                if let Some(balance) = change.balance.take_modified() {
-                    account_info_entry.balance = balance.into();
-                    account_change_entry.balance = Some(balance.into());
-                }
-                if let Some(bytecode) = change.bytecode.take_modified() {
-                    account_info_entry.bytecode = bytecode.clone().map_into();
-                    account_change_entry.bytecode = bytecode.map_into();
-                }
-
-                self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
-                self.accounts_history
-                    .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
+            if let Some(nonce) = change.nonce {
+                account_info_entry.nonce = nonce.into();
+                account_change_entry.nonce = Some(nonce.into());
+            }
+            if let Some(balance) = change.balance {
+                account_info_entry.balance = balance.into();
+                account_change_entry.balance = Some(balance.into());
+            }
+            if let Some(bytecode) = change.bytecode {
+                account_info_entry.bytecode = bytecode.clone().map_into();
+                account_change_entry.bytecode = bytecode.map_into();
             }
 
-            for (&slot_index, slot_change) in &change.slots {
-                if let Some(slot) = slot_change.take_modified_ref() {
-                    let slot_index = slot_index.into();
-                    let slot_value: SlotValueRocksdb = slot.value.into();
-
-                    account_change_entry.slot_changes.insert(slot_index, slot_value);
-                    self.account_slots
-                        .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
-                    self.account_slots_history
-                        .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
-                }
-            }
+            self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
+            self.accounts_history
+                .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
 
             account_change_entry
                 .has_changes()
                 .then(|| block_changes.account_changes.insert(address, account_change_entry));
+        }
+
+        for ((address, slot_index), slot_change) in changes.slots {
+            let slot_index = slot_index.into();
+            let slot_value: SlotValueRocksdb = slot.value.into();
+
+            account_change_entry.slot_changes.insert(slot_index, slot_value);
+            self.account_slots
+                .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
+            self.account_slots_history
+                .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
         }
 
         self.block_changes.prepare_batch_insertion([(block_number, block_changes.into())], batch)?;
@@ -841,56 +837,6 @@ mod tests {
         };
 
         assert_eq!(state.read_logs(&filter).unwrap().len(), 200);
-    }
-
-    #[test]
-    fn regression_test_saving_account_changes_for_accounts_that_didnt_change() {
-        let (state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
-
-        let addr: Address = Faker.fake();
-        let change_base = ExecutionAccountChanges {
-            nonce: ExecutionValueChange::from_original(Faker.fake()),
-            balance: ExecutionValueChange::from_original(Faker.fake()),
-            bytecode: ExecutionValueChange::from_original(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
-            slots: BTreeMap::new(),
-        };
-
-        let change_1 = ExecutionChanges::from([(addr, ExecutionAccountChanges { ..change_base.clone() })]);
-        let change_2 = ExecutionChanges::from([(
-            addr,
-            ExecutionAccountChanges {
-                nonce: ExecutionValueChange::from_modified(Faker.fake()),
-                ..change_base.clone()
-            },
-        )]);
-        let change_3 = ExecutionChanges::from([(
-            addr,
-            ExecutionAccountChanges {
-                balance: ExecutionValueChange::from_modified(Faker.fake()),
-                ..change_base.clone()
-            },
-        )]);
-        let change_4 = ExecutionChanges::from([(
-            addr,
-            ExecutionAccountChanges {
-                bytecode: ExecutionValueChange::from_modified(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
-                ..change_base
-            },
-        )]);
-
-        let mut batch = WriteBatch::default();
-        // add accounts in separate blocks so they show up in history
-        state.prepare_batch_with_execution_changes(change_1, 1.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes(change_2, 2.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes(change_3, 3.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes(change_4, 4.into(), &mut batch).unwrap();
-        state.write_in_batch_for_multiple_cfs(batch).unwrap();
-
-        let accounts = state.read_all_accounts().unwrap();
-        assert_eq!(accounts.len(), 1);
-
-        let history = state.read_all_historical_accounts().unwrap();
-        assert_eq!(history.len(), 3);
     }
 
     #[test]

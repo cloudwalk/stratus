@@ -1,18 +1,14 @@
 use std::collections::BTreeMap;
 
-use crate::alias::RevmBytecode;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExecutionValueChange;
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
 use crate::eth::storage::permanent::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::permanent::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::permanent::rocks::types::bytecode::BytecodeRocksdb;
 use crate::eth::storage::permanent::rocks::types::nonce::NonceRocksdb;
 use crate::eth::storage::permanent::rocks::types::wei::WeiRocksdb;
+use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, PartialEq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
 pub struct AccountChangesRocksdb {
@@ -30,25 +26,22 @@ impl AccountChangesRocksdb {
 
 impl From<BlockChangesRocksdb> for ExecutionChanges {
     fn from(value: BlockChangesRocksdb) -> Self {
-        value
-            .account_changes
-            .into_iter()
-            .map(|(address, changes)| {
-                (
-                    address.into(),
-                    ExecutionAccountChanges {
-                        nonce: changes.nonce.map(Nonce::from).into(),
-                        balance: changes.balance.map(Wei::from).into(),
-                        bytecode: changes.bytecode.map(|inner| Some(RevmBytecode::from(inner))).into(),
-                        slots: changes
-                            .slot_changes
-                            .into_iter()
-                            .map(|(idx, value)| (idx.into(), ExecutionValueChange::from_modified(Slot::new(idx.into(), value.into()))))
-                            .collect(),
-                    },
-                )
-            })
-            .collect()
+        let mut changes = ExecutionChanges::default();
+        for (address, acc_changes) in value.account_changes {
+            let addr = address.into();
+            changes.accounts.insert(
+                addr,
+                ExecutionAccountChanges {
+                    nonce: acc_changes.nonce.map_into(),
+                    balance: acc_changes.balance.map_into(),
+                    bytecode: Some(acc_changes.bytecode.map_into()),
+                },
+            );
+            changes
+                .slots
+                .extend(acc_changes.slot_changes.into_iter().map(|(idx, val)| ((addr, idx.into()), val.into())));
+        }
+        changes
     }
 }
 

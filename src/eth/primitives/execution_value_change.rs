@@ -14,8 +14,8 @@ pub struct ExecutionValueChange<T>
 where
     T: PartialEq + serde::Serialize,
 {
-    original: ValueState<T>,
-    modified: ValueState<T>,
+    value: T,
+    modified: bool,
 }
 
 impl<T> Copy for ExecutionValueChange<T> where T: Copy + PartialEq + serde::Serialize {}
@@ -45,70 +45,56 @@ where
     /// Creates a new [`ExecutionValueChange`] only with original value.
     pub fn from_original(value: T) -> Self {
         Self {
-            original: ValueState::Set(value),
-            modified: ValueState::NotSet,
+            value,
+            modified: false,
         }
     }
 
     /// Creates a new [`ExecutionValueChange`] only with modified value.
     pub fn from_modified(value: T) -> Self {
         Self {
-            original: ValueState::NotSet,
-            modified: ValueState::Set(value),
+            value,
+            modified: false,
         }
     }
 
     /// Sets the modified value of an original value.
     pub fn set_modified(&mut self, value: T) {
-        self.modified = ValueState::Set(value);
+        self.value = value;
+        self.modified = true;
     }
 
     /// Takes the original value as reference if it is set.
     pub fn take_original_ref(&self) -> Option<&T> {
-        self.original.take_ref()
+        (!self.modified).then(|| &self.value)
     }
 
     /// Takes the modified value if it is set.
     pub fn take_modified(self) -> Option<T> {
-        self.modified.take()
+        self.modified.then(|| self.value)
     }
 
     /// Takes the modified value as reference if it is set.
     pub fn take_modified_ref(&self) -> Option<&T> {
-        self.modified.take_ref()
+        self.modified.then(|| &self.value)
     }
 
     /// Takes any value that is set, giving preference to the modified value, but using the original value as fallback.
-    pub fn take(self) -> Option<T> {
-        self.modified.take().or_else(|| self.original.take())
+    pub fn take(self) -> T {
+        self.value
     }
 
     /// Takes any value that is set as reference, giving preference to the modified value, but using the original value as fallback.
-    pub fn take_ref(&self) -> Option<&T> {
-        self.modified.take_ref().or_else(|| self.original.take_ref())
+    pub fn take_ref(&self) -> &T {
+        &self.value
     }
 
     /// Check if the value was modified.
     pub fn is_modified(&self) -> bool {
-        self.modified.is_set() && (self.original != self.modified)
+        self.modified
     }
 }
 
-impl<T> From<Option<T>> for ExecutionValueChange<T>
-where
-    T: PartialEq + serde::Serialize,
-{
-    fn from(value: Option<T>) -> Self {
-        let modified = match value {
-            None => ValueState::NotSet,
-            Some(value) => ValueState::Set(value),
-        };
-        ExecutionValueChange {
-            original: ValueState::NotSet,
-            modified,
-        }
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Value State
