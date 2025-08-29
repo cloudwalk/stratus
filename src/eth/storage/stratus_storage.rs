@@ -132,7 +132,7 @@ impl StratusStorage {
                 rocks_disable_sync_write: false,
                 rocks_cf_size_metrics_interval: None,
                 genesis_file: crate::config::GenesisFileConfig::default(),
-                rocks_min_file_descriptors: 1024,
+                rocks_file_descriptors_limit: 1024,
             },
         )
     }
@@ -798,7 +798,7 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
-        self.save_block(genesis_block, ExecutionChanges::default())?;
+        self.save_block(genesis_block, ExecutionChanges::default(), false)?;
 
         // accounts
         self.save_accounts(genesis_accounts)?;
