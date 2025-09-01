@@ -390,9 +390,9 @@ describe("Leader & Follower BRLC integration test", function () {
                 const balanceData = await sendWithRetry("eth_call", [
                     {
                         to: await brlcToken.getAddress(),
-                        data: brlcToken.interface.encodeFunctionData("balanceOf", [testWallets[i].address])
+                        data: brlcToken.interface.encodeFunctionData("balanceOf", [testWallets[i].address]),
                     },
-                    "latest"
+                    "latest",
                 ]);
                 const followerBalance = BigInt(balanceData);
                 expect(followerBalance).to.equal(
@@ -408,9 +408,9 @@ describe("Leader & Follower BRLC integration test", function () {
             const readBalanceData = await sendWithRetry("eth_call", [
                 {
                     to: await brlcToken.getAddress(),
-                    data: brlcToken.interface.encodeFunctionData("balanceOf", [testReadWallet.address])
+                    data: brlcToken.interface.encodeFunctionData("balanceOf", [testReadWallet.address]),
                 },
-                "latest"
+                "latest",
             ]);
             const readBalance = BigInt(readBalanceData);
             expect(readBalance).to.be.a("bigint");
