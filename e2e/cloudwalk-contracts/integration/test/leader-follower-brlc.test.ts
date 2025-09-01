@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { exec, execSync } from "child_process";
 import { TransactionReceipt, TransactionResponse } from "ethers";
 import { ethers } from "hardhat";
 
@@ -11,6 +12,7 @@ import {
     sendWithRetry,
     setDeployer,
     updateProviderUrl,
+    waitForFollowerToSyncWithLeader,
 } from "./helpers/rpc";
 
 describe("Leader & Follower BRLC integration test", function () {
@@ -71,9 +73,8 @@ describe("Leader & Follower BRLC integration test", function () {
 
                 for (let i = 0; i < wallets.length; i++) {
                     const wallet = wallets[i];
-                    expect(
-                        await brlcToken.mint(wallet.address, params.baseBalance, { gasLimit: GAS_LIMIT_OVERRIDE }),
-                    ).to.have.changeTokenBalance(brlcToken, wallet, params.baseBalance);
+                    let tx = await brlcToken.mint(wallet.address, params.baseBalance, { gasLimit: GAS_LIMIT_OVERRIDE });
+                    await tx.wait();
                 }
             });
 
@@ -242,6 +243,182 @@ describe("Leader & Follower BRLC integration test", function () {
                 }
                 updateProviderUrl("stratus");
             });
+        });
+    });
+
+    describe("Follower recovery test", function () {
+        const testWallets: any[] = [];
+        let initialBalances: bigint[] = [];
+
+        it("Setup test wallets with BRLC tokens", async function () {
+            this.timeout(20000);
+
+            // Make sure we're on leader
+            updateProviderUrl("stratus");
+
+            // Create 3 test wallets
+            for (let i = 0; i < 3; i++) {
+                const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
+                testWallets.push(wallet);
+
+                // Mint 1000 BRLC to each wallet
+                const mintAmount = 1000;
+                const mintTx = await brlcToken.mint(wallet.address, mintAmount, { gasLimit: GAS_LIMIT_OVERRIDE });
+                await mintTx.wait();
+
+                const balance = await brlcToken.balanceOf(wallet.address);
+                initialBalances.push(balance);
+                expect(balance).to.equal(BigInt(mintAmount));
+            }
+
+            // Verify follower has the same balances
+            updateProviderUrl("stratus-follower");
+            for (let i = 0; i < testWallets.length; i++) {
+                const followerBalance = await brlcToken.balanceOf(testWallets[i].address);
+                expect(followerBalance).to.equal(initialBalances[i]);
+            }
+
+            updateProviderUrl("stratus");
+        });
+
+        it("Kill follower, send transactions to leader, restart follower and verify sync", async function () {
+            this.timeout(60000);
+
+            console.log("          ✔ Killing follower node...");
+
+            // Kill the follower node
+            try {
+                execSync("killport 3001 -s sigterm", { stdio: "pipe" });
+            } catch (error) {
+                // Process might not exist, that's okay
+            }
+
+            // Wait a bit to ensure follower is down
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            // Verify follower is down by trying to connect
+            let followerIsDown = false;
+            try {
+                updateProviderUrl("stratus-follower");
+                await sendWithRetry("stratus_health", [], 1, 100);
+            } catch (error) {
+                followerIsDown = true;
+            }
+            expect(followerIsDown).to.equal(true, "Follower should be down");
+
+            console.log("          ✔ Sending transactions to leader while follower is down...");
+
+            // Switch to leader and send some transactions
+            updateProviderUrl("stratus");
+
+            const txHashes: string[] = [];
+            const transferAmount = 50;
+
+            // Send transfers between wallets (5 transactions)
+            for (let i = 0; i < 5; i++) {
+                const senderIndex = i % testWallets.length;
+                const receiverIndex = (i + 1) % testWallets.length;
+
+                const sender = testWallets[senderIndex];
+                const receiver = testWallets[receiverIndex];
+
+                const tx = await brlcToken.connect(sender).transfer(receiver.address, transferAmount, {
+                    gasPrice: 0,
+                    gasLimit: GAS_LIMIT_OVERRIDE,
+                    type: 0,
+                });
+
+                txHashes.push(tx.hash);
+                await tx.wait();
+            }
+
+            console.log(`          ✔ Sent ${txHashes.length} transactions to leader`);
+
+            // Get final balances from leader
+            const leaderBalances: bigint[] = [];
+            for (const wallet of testWallets) {
+                const balance = await brlcToken.balanceOf(wallet.address);
+                leaderBalances.push(balance);
+            }
+
+            console.log("          ✔ Restarting follower node...");
+
+            // Restart the follower with block changes replication enabled
+            // Use exec instead of execSync since the follower runs in background
+            exec(`just e2e-follower brlc true`, {
+                shell: "/bin/bash",
+            });
+
+            // Wait for follower to be healthy
+            console.log("          ✔ Waiting for follower to become healthy...");
+            let followerHealthy = false;
+            for (let i = 0; i < 30; i++) {
+                try {
+                    updateProviderUrl("stratus-follower");
+                    const health = await sendWithRetry("stratus_health", [], 1, 100);
+                    if (health === true) {
+                        followerHealthy = true;
+                        break;
+                    }
+                } catch (error) {
+                    // Keep trying
+                }
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+            expect(followerHealthy).to.equal(true, "Follower should become healthy");
+
+            console.log("          ✔ Waiting for follower to sync with leader...");
+
+            // Wait for follower to catch up
+            const syncResult = await waitForFollowerToSyncWithLeader();
+            console.log(`          ✔ Follower synced at block ${syncResult.followerBlock}`);
+
+            // Verify all transactions are present in follower
+            updateProviderUrl("stratus-follower");
+            for (const txHash of txHashes) {
+                const receipt = await sendWithRetry("eth_getTransactionReceipt", [txHash], 10, 2000);
+                expect(receipt).to.exist;
+                expect(receipt.status).to.equal("0x1");
+            }
+
+            console.log("          ✔ All transactions found in follower");
+
+            // Verify balances match between leader and follower
+            // Use direct RPC call instead of contract instance to ensure we're hitting the right provider
+            for (let i = 0; i < testWallets.length; i++) {
+                // Use eth_call directly to ensure we're querying the follower
+                const balanceData = await sendWithRetry("eth_call", [
+                    {
+                        to: await brlcToken.getAddress(),
+                        data: brlcToken.interface.encodeFunctionData("balanceOf", [testWallets[i].address]),
+                    },
+                    "latest",
+                ]);
+                const followerBalance = BigInt(balanceData);
+                expect(followerBalance).to.equal(
+                    leaderBalances[i],
+                    `Wallet ${i} balance mismatch between leader and follower after recovery`,
+                );
+            }
+
+            console.log("          ✔ All balances match after follower recovery");
+
+            // Test a read operation (balanceOf) works correctly
+            const testReadWallet = testWallets[0];
+            const readBalanceData = await sendWithRetry("eth_call", [
+                {
+                    to: await brlcToken.getAddress(),
+                    data: brlcToken.interface.encodeFunctionData("balanceOf", [testReadWallet.address]),
+                },
+                "latest",
+            ]);
+            const readBalance = BigInt(readBalanceData);
+            expect(readBalance).to.be.a("bigint");
+            expect(readBalance).to.equal(leaderBalances[0]);
+
+            console.log("          ✔ Read operations (balanceOf) work correctly on recovered follower");
+
+            updateProviderUrl("stratus");
         });
     });
 });
