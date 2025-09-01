@@ -97,7 +97,6 @@ pub enum EvmKind {
 
 impl Evm {
     /// Creates a new instance of the Evm.
-    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig, kind: EvmKind) -> Self {
         tracing::info!(?config, "creating revm");
 
