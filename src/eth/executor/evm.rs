@@ -649,10 +649,10 @@ fn enhance_trace_with_decoded_errors(trace: &mut GethTrace) {
 
 /// Enhances a single CallFrame and recursively enhances all nested calls.
 fn enhance_call_frame_errors(frame: &mut CallFrame) {
-    if let Some(error) = frame.error.as_mut()
+    if let Some(error) = frame.error.as_ref()
         && let Some(decoded_error) = frame.output.as_ref().and_then(|output| codegen::error_sig_opt(output))
     {
-        *error = format!("{error}: {decoded_error}");
+        frame.revert_reason = Some(format!("{error}: {decoded_error}"));
     }
 
     for nested_call in frame.calls.iter_mut() {
