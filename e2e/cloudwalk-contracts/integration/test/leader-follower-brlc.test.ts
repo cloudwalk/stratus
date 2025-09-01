@@ -22,15 +22,15 @@ describe("Leader & Follower BRLC integration test", function () {
         const balanceData = await sendWithRetry("eth_call", [
             {
                 to: tokenAddress,
-                data: brlcToken.interface.encodeFunctionData("balanceOf", [walletAddress])
+                data: brlcToken.interface.encodeFunctionData("balanceOf", [walletAddress]),
             },
-            "latest"
+            "latest",
         ]);
-        
+
         if (!balanceData || balanceData === null) {
             throw new Error(`eth_call returned null/undefined for wallet ${walletAddress}. Contract may not exist.`);
         }
-        
+
         return BigInt(balanceData);
     }
 
