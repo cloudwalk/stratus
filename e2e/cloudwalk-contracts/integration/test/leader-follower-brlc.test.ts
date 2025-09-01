@@ -16,6 +16,24 @@ import {
 } from "./helpers/rpc";
 
 describe("Leader & Follower BRLC integration test", function () {
+    // Helper function to get balance using direct RPC call
+    // This ensures we're hitting the correct provider after updateProviderUrl
+    async function getBalanceViaRPC(tokenAddress: string, walletAddress: string): Promise<bigint> {
+        const balanceData = await sendWithRetry("eth_call", [
+            {
+                to: tokenAddress,
+                data: brlcToken.interface.encodeFunctionData("balanceOf", [walletAddress]),
+            },
+            "latest",
+        ]);
+
+        if (!balanceData || balanceData === null) {
+            throw new Error(`eth_call returned null/undefined for wallet ${walletAddress}. Contract may not exist.`);
+        }
+
+        return BigInt(balanceData);
+    }
+
     it("Validate node modes for leader and follower", async function () {
         // Check Stratus Leader node mode
         updateProviderUrl("stratus");
@@ -229,11 +247,11 @@ describe("Leader & Follower BRLC integration test", function () {
                 for (let i = 0; i < wallets.length; i++) {
                     // Get Stratus Leader balance
                     updateProviderUrl("stratus");
-                    const leaderBalance = await brlcToken.balanceOf(wallets[i].address);
+                    const leaderBalance = await getBalanceViaRPC(await brlcToken.getAddress(), wallets[i].address);
 
                     // Get Stratus Follower balance
                     updateProviderUrl("stratus-follower");
-                    const followerBalance = await brlcToken.balanceOf(wallets[i].address);
+                    const followerBalance = await getBalanceViaRPC(await brlcToken.getAddress(), wallets[i].address);
 
                     // Assert that the balances are equal
                     expect(leaderBalance).to.equal(
@@ -273,8 +291,9 @@ describe("Leader & Follower BRLC integration test", function () {
 
             // Verify follower has the same balances
             updateProviderUrl("stratus-follower");
+            const tokenAddress = await brlcToken.getAddress();
             for (let i = 0; i < testWallets.length; i++) {
-                const followerBalance = await brlcToken.balanceOf(testWallets[i].address);
+                const followerBalance = await getBalanceViaRPC(tokenAddress, testWallets[i].address);
                 expect(followerBalance).to.equal(initialBalances[i]);
             }
 
@@ -384,17 +403,9 @@ describe("Leader & Follower BRLC integration test", function () {
             console.log("          ✔ All transactions found in follower");
 
             // Verify balances match between leader and follower
-            // Use direct RPC call instead of contract instance to ensure we're hitting the right provider
+            const tokenAddress = await brlcToken.getAddress();
             for (let i = 0; i < testWallets.length; i++) {
-                // Use eth_call directly to ensure we're querying the follower
-                const balanceData = await sendWithRetry("eth_call", [
-                    {
-                        to: await brlcToken.getAddress(),
-                        data: brlcToken.interface.encodeFunctionData("balanceOf", [testWallets[i].address]),
-                    },
-                    "latest",
-                ]);
-                const followerBalance = BigInt(balanceData);
+                const followerBalance = await getBalanceViaRPC(tokenAddress, testWallets[i].address);
                 expect(followerBalance).to.equal(
                     leaderBalances[i],
                     `Wallet ${i} balance mismatch between leader and follower after recovery`,
@@ -405,14 +416,7 @@ describe("Leader & Follower BRLC integration test", function () {
 
             // Test a read operation (balanceOf) works correctly
             const testReadWallet = testWallets[0];
-            const readBalanceData = await sendWithRetry("eth_call", [
-                {
-                    to: await brlcToken.getAddress(),
-                    data: brlcToken.interface.encodeFunctionData("balanceOf", [testReadWallet.address]),
-                },
-                "latest",
-            ]);
-            const readBalance = BigInt(readBalanceData);
+            const readBalance = await getBalanceViaRPC(tokenAddress, testReadWallet.address);
             expect(readBalance).to.be.a("bigint");
             expect(readBalance).to.equal(leaderBalances[0]);
 
