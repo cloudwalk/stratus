@@ -437,6 +437,17 @@ impl Importer {
                 return Ok(());
             }
 
+            // Stop importing when we reach the specified block number
+            const STOP_BLOCK_NUMBER: u64 = 104297271;
+            if importer_block_number.as_u64() >= STOP_BLOCK_NUMBER {
+                tracing::info!(
+                    current_block = %importer_block_number,
+                    stop_block = STOP_BLOCK_NUMBER,
+                    "reached stop block number, stopping block fetcher"
+                );
+                return Ok(());
+            }
+
             // if we are ahead of current block number, await until we are behind again
             let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
             if importer_block_number.as_u64() > external_rpc_current_block {
@@ -599,6 +610,17 @@ impl Importer {
 
         loop {
             if Self::should_shutdown(TASK_NAME) {
+                return Ok(());
+            }
+
+            // Stop importing when we reach the specified block number
+            const STOP_BLOCK_NUMBER: u64 = 104297271;
+            if importer_block_number.as_u64() >= STOP_BLOCK_NUMBER {
+                tracing::info!(
+                    current_block = %importer_block_number,
+                    stop_block = STOP_BLOCK_NUMBER,
+                    "reached stop block number, stopping log fetcher"
+                );
                 return Ok(());
             }
 
