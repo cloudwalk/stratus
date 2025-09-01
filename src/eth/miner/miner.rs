@@ -286,16 +286,16 @@ impl Miner {
 
     pub fn commit(&self, item: CommitItem, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
         match item {
-            CommitItem::Block(block) => self.commit_block(block, changes),
+            CommitItem::Block(block) => self.commit_block(block, changes, false),
             CommitItem::ReplicationBlock(block) => {
                 self.storage.finish_pending_block()?;
-                self.commit_block(block, changes)
+                self.commit_block(block, changes, true)
             }
         }
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit_block(&self, block: Block, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
+    pub fn commit_block(&self, block: Block, changes: ExecutionChanges, complete_changes: bool) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -321,7 +321,7 @@ impl Miner {
         };
 
         // save storage
-        self.storage.save_block(block, changes)?;
+        self.storage.save_block(block, changes, complete_changes)?;
 
         // Send notifications after saving the block
         self.send_log_notifications(&block_logs);

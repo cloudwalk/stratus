@@ -37,6 +37,18 @@ impl ExecutionAccountChanges {
         }
     }
 
+    pub fn update_empty_values(&mut self, other: Account) {
+        if self.nonce.is_empty() {
+            self.nonce.set_original(other.nonce);
+        }
+        if self.balance.is_empty() {
+            self.balance.set_original(other.balance);
+        }
+        if self.bytecode.is_empty() {
+            self.bytecode.set_original(other.bytecode);
+        }
+    }
+
     /// Creates a new [`ExecutionAccountChanges`] from Account original values.
     pub fn from_original_values(account: impl Into<Account>) -> Self {
         let account: Account = account.into();

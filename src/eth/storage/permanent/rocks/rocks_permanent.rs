@@ -215,6 +215,10 @@ impl RocksPermanentStorage {
             })
     }
 
+    pub fn read_accounts(&self, addresses: Vec<Address>) -> anyhow::Result<Vec<(Address, Account)>, StorageError> {
+        self.state.read_accounts(addresses).map_err(|err| StorageError::RocksError { err })
+    }
+
     pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError> {
         self.state
             .read_slot(address, index, point_in_time)
