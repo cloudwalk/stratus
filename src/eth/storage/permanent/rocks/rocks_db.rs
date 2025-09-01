@@ -9,8 +9,67 @@ use rocksdb::Options;
 
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
+use super::rocks_state::generate_cf_options_map;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+
+/// Drop a specific column family if it exists in the database.
+/// This is used for database migrations when we need to remove obsolete column families.
+fn drop_column_family_if_exists(path: impl AsRef<Path>, cf_name: &str) -> anyhow::Result<()> {
+    let path = path.as_ref();
+    
+    if !path.exists() {
+        tracing::debug!("Database path doesn't exist, skipping column family drop");
+        return Ok(());
+    }
+
+    tracing::info!(cf_name = cf_name, "Checking if column family exists to drop");
+    
+    // First, try to open the database to check existing column families
+    let db_opts = DbConfig::Default.to_options(CacheSetting::Disabled);
+    
+    // List existing column families
+    let existing_cfs = match DB::list_cf(&db_opts, path) {
+        Ok(cfs) => cfs,
+        Err(e) => {
+            tracing::warn!(error = ?e, "Failed to list column families, database might be corrupted or new");
+            return Ok(());
+        }
+    };
+    
+    if !existing_cfs.contains(&cf_name.to_string()) {
+        tracing::debug!(cf_name = cf_name, "Column family doesn't exist, nothing to drop");
+        return Ok(());
+    }
+    
+    tracing::info!(cf_name = cf_name, "Column family exists, proceeding to drop it");
+    
+    // Generate the proper column family configurations for existing CFs
+    let cf_options_map = generate_cf_options_map(None);
+    
+    // Create options for all existing column families, using proper configs for known ones
+    let mut cf_opts_vec = Vec::new();
+    for cf_name_existing in &existing_cfs {
+        let opts = if let Some(configured_opts) = cf_options_map.get(cf_name_existing.as_str()) {
+            configured_opts.clone()
+        } else {
+            // For unknown column families (like block_changes), use default options
+            DbConfig::Default.to_options(CacheSetting::Disabled)
+        };
+        cf_opts_vec.push((cf_name_existing.as_str(), opts));
+    }
+    
+    // Open database with all existing column families using their proper configurations
+    let db = DB::open_cf_with_opts(&db_opts, path, cf_opts_vec)
+        .with_context(|| format!("Failed to open database to drop column family '{}'", cf_name))?;
+    
+    // Drop the specific column family
+    db.drop_cf(cf_name)
+        .with_context(|| format!("Failed to drop column family '{}'", cf_name))?;
+    
+    tracing::info!(cf_name = cf_name, "Successfully dropped column family");
+    Ok(())
+}
 
 /// Open (or create) the Database with the configs applied to all column families.
 ///
@@ -20,6 +79,10 @@ use crate::infra::metrics;
 #[tracing::instrument(skip_all, fields(path = ?path.as_ref()))]
 pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static str, Options>) -> anyhow::Result<(&'static Arc<DB>, Options)> {
     let path = path.as_ref();
+
+    // Drop the obsolete block_changes column family if it exists
+    drop_column_family_if_exists(path, "block_changes")
+        .context("Failed to drop obsolete block_changes column family")?;
 
     tracing::debug!("creating settings for each column family");
     let cf_config_iter = cf_configs.iter().map(|(name, opts)| (*name, opts.clone()));
