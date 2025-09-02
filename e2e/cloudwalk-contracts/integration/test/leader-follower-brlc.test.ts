@@ -244,6 +244,7 @@ describe("Leader & Follower BRLC integration test", function () {
             });
 
             it(`${params.name}: Validate balances between Stratus Leader and Follower`, async function () {
+                await new Promise((resolve) => setTimeout(resolve, 10000));
                 for (let i = 0; i < wallets.length; i++) {
                     // Get Stratus Leader balance
                     updateProviderUrl("stratus");
