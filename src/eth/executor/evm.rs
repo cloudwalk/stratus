@@ -20,9 +20,10 @@ use revm::DatabaseRef;
 use revm::ExecuteCommitEvm;
 use revm::ExecuteEvm;
 use revm::InspectEvm;
-use revm::Journal;
+use revm::Inspector;
 use revm::context::BlockEnv;
 use revm::context::CfgEnv;
+use revm::context::ContextTr;
 use revm::context::Evm as RevmEvm;
 use revm::context::TransactTo;
 use revm::context::TxEnv;
@@ -34,6 +35,7 @@ use revm::database::CacheDB;
 use revm::handler::EthFrame;
 use revm::handler::EthPrecompiles;
 use revm::handler::instructions::EthInstructions;
+use revm::inspector::JournalExt;
 use revm::interpreter::interpreter::EthInterpreter;
 use revm::primitives::B256;
 use revm::primitives::U256;
@@ -80,13 +82,12 @@ use crate::infra::metrics;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
 const GAS_MAX_LIMIT: u64 = 1_000_000_000;
-type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
 type GeneralRevm<DB> =
-    RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, (), EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles, EthFrame>;
+    RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, DebugInspector, EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles, EthFrame>;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm {
-    evm: RevmEvm<ContextWithDB, (), EthInstructions<EthInterpreter, ContextWithDB>, EthPrecompiles, EthFrame>,
+    evm: GeneralRevm<RevmSession>,
     kind: EvmKind,
 }
 
@@ -117,7 +118,6 @@ impl Evm {
 
         // configure session
         self.evm.journaled_state.database.reset(input.clone());
-
         self.evm.fill_env(input);
 
         if log_enabled!(log::Level::Debug) {
@@ -196,7 +196,8 @@ impl Evm {
                 tx_env.gas_priority_fee = None;
             });
 
-        RevmEvm::new(ctx, EthInstructions::new_mainnet(), EthPrecompiles::default())
+        let inspector = DebugInspector {};
+        RevmEvm::new_with_inspector(ctx, inspector, EthInstructions::new_mainnet(), EthPrecompiles::default())
     }
 
     /// Execute a transaction using a tracer.
@@ -656,5 +657,31 @@ fn enhance_call_frame_errors(frame: &mut CallFrame) {
 
     for nested_call in frame.calls.iter_mut() {
         enhance_call_frame_errors(nested_call);
+    }
+}
+
+struct DebugInspector {}
+
+impl<CTX> Inspector<CTX> for DebugInspector
+where
+    CTX: ContextTr<Journal: JournalExt>,
+{
+    fn initialize_interp(&mut self, interp: &mut revm::interpreter::Interpreter<EthInterpreter>, context: &mut CTX) {
+        let block_number = context.block_number();
+        let timestamp = context.timestamp();
+        tracing::debug!(?interp, ?block_number, ?timestamp, "initializing revm interpreter");
+    }
+
+    fn call_end(&mut self, _: &mut CTX, inputs: &revm::interpreter::CallInputs, outcome: &mut revm::interpreter::CallOutcome) {
+        tracing::debug!(?inputs, ?outcome);
+    }
+
+    fn call(&mut self, _: &mut CTX, inputs: &mut revm::interpreter::CallInputs) -> Option<revm::interpreter::CallOutcome> {
+        tracing::debug!(?inputs);
+        None
+    }
+
+    fn step(&mut self, interp: &mut revm::interpreter::Interpreter<EthInterpreter>, _: &mut CTX) {
+        tracing::debug!(?interp);
     }
 }

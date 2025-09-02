@@ -76,7 +76,7 @@ impl InMemoryTemporaryStorage {
     pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ReadKind) -> anyhow::Result<Option<Slot>, StorageError> {
         match kind {
             ReadKind::Call((block_number, tx_count)) => Ok(self.call_storage.read_slot(block_number, tx_count, address, index)),
-            _ => self.transaction_storage.read_slot(address, index),
+            ReadKind::Transaction | ReadKind::RPC => self.transaction_storage.read_slot(address, index),
         }
     }
 
