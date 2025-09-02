@@ -1,9 +1,8 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use display_json::DebugAsJson;
-use revm::primitives::Bytecode;
 
-use super::CodeHash;
+use crate::alias::RevmBytecode;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::ExecutionValueChange;
@@ -11,37 +10,53 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
-#[cfg(test)]
-use crate::ext::ordered_map;
 
 /// Changes that happened to an account during a transaction.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionAccountChanges {
-    pub new_account: bool,
-    pub address: Address,
     pub nonce: ExecutionValueChange<Nonce>,
     pub balance: ExecutionValueChange<Wei>,
 
     // TODO: bytecode related information should be grouped in a Bytecode struct
     #[dummy(default)]
-    pub bytecode: ExecutionValueChange<Option<Bytecode>>,
-    pub code_hash: CodeHash, // TODO: should be wrapped in a ExecutionValueChange
-    #[cfg_attr(test, serde(serialize_with = "ordered_map"))]
-    pub slots: HashMap<SlotIndex, ExecutionValueChange<Slot>>,
+    pub bytecode: ExecutionValueChange<Option<RevmBytecode>>,
+    pub slots: BTreeMap<SlotIndex, ExecutionValueChange<Slot>>, // TODO: should map idx to slotvalue
 }
 
 impl ExecutionAccountChanges {
+    /// Merges another [`ExecutionAccountChanges`] into this one, replacing self values with values from other.
+    /// For slots, performs a union of the BTrees, giving preference to values from other.
+    pub fn merge(&mut self, other: ExecutionAccountChanges) {
+        self.nonce = other.nonce;
+        self.balance = other.balance;
+        self.bytecode = other.bytecode;
+
+        // Merge slots, giving preference to values from other
+        for (slot_index, slot_change) in other.slots {
+            self.slots.insert(slot_index, slot_change);
+        }
+    }
+
+    pub fn update_empty_values(&mut self, other: Account) {
+        if self.nonce.is_empty() {
+            self.nonce.set_original(other.nonce);
+        }
+        if self.balance.is_empty() {
+            self.balance.set_original(other.balance);
+        }
+        if self.bytecode.is_empty() {
+            self.bytecode.set_original(other.bytecode);
+        }
+    }
+
     /// Creates a new [`ExecutionAccountChanges`] from Account original values.
     pub fn from_original_values(account: impl Into<Account>) -> Self {
         let account: Account = account.into();
         Self {
-            new_account: false,
-            address: account.address,
             nonce: ExecutionValueChange::from_original(account.nonce),
             balance: ExecutionValueChange::from_original(account.balance),
             bytecode: ExecutionValueChange::from_original(account.bytecode),
-            slots: HashMap::new(),
-            code_hash: account.code_hash,
+            slots: BTreeMap::new(),
         }
     }
 
@@ -49,16 +64,12 @@ impl ExecutionAccountChanges {
     pub fn from_modified_values(account: impl Into<Account>, modified_slots: Vec<Slot>) -> Self {
         let account: Account = account.into();
         let mut changes = Self {
-            new_account: true,
-            address: account.address,
             nonce: ExecutionValueChange::from_modified(account.nonce),
             balance: ExecutionValueChange::from_modified(account.balance),
 
             // bytecode
             bytecode: ExecutionValueChange::from_modified(account.bytecode),
-            code_hash: account.code_hash,
-
-            slots: HashMap::new(),
+            slots: BTreeMap::new(),
         };
 
         for slot in modified_slots {
@@ -104,5 +115,14 @@ impl ExecutionAccountChanges {
     /// Checks if account nonce, balance or bytecode were modified.
     pub fn is_account_modified(&self) -> bool {
         self.nonce.is_modified() || self.balance.is_modified() || self.bytecode.is_modified()
+    }
+
+    pub fn to_account(self, address: Address) -> Account {
+        Account {
+            address,
+            nonce: self.nonce.take().unwrap_or_default(),
+            balance: self.balance.take().unwrap_or_default(),
+            bytecode: self.bytecode.take().unwrap_or_default(),
+        }
     }
 }

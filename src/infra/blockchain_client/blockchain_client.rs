@@ -1,10 +1,10 @@
 use std::time::Duration;
 
 use anyhow::Context;
+use jsonrpsee::core::ClientError;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::client::Subscription;
 use jsonrpsee::core::client::SubscriptionClientT;
-use jsonrpsee::core::ClientError;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::http_client::HttpClientBuilder;
 use jsonrpsee::ws_client::WsClient;
@@ -12,11 +12,14 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use tokio::sync::RwLock;
 use tokio::sync::RwLockReadGuard;
 
+use crate::GlobalState;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalBlockWithReceipts;
 use crate::eth::primitives::ExternalReceipt;
@@ -25,11 +28,10 @@ use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::RpcClientApp;
-use crate::ext::to_json_value;
 use crate::ext::DisplayExt;
+use crate::ext::to_json_value;
 use crate::infra::tracing::TracingExt;
 use crate::log_and_err;
-use crate::GlobalState;
 
 #[derive(Debug)]
 pub struct BlockchainClient {
@@ -166,6 +168,22 @@ impl BlockchainClient {
         match result {
             Ok(block) => Ok(block),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with receipts"),
+        }
+    }
+
+    /// Fetches a block by number with changes.
+    pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(Block, ExecutionChanges)>> {
+        tracing::debug!(%block_number, "fetching block with changes");
+
+        let number = to_json_value(block_number);
+        let result = self
+            .http
+            .request::<Option<(Block, ExecutionChanges)>, _>("stratus_getBlockWithChanges", [number])
+            .await;
+
+        match result {
+            Ok(block) => Ok(block),
+            Err(e) => log_and_err!(reason = e, "failed to fetch block with changes"),
         }
     }
 

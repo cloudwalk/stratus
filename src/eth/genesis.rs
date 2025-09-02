@@ -4,14 +4,16 @@ use std::io::BufReader;
 use std::path::Path;
 use std::str::FromStr;
 
-use alloy_primitives::hex;
+use alloy_primitives::B64;
 use alloy_primitives::FixedBytes;
+use alloy_primitives::U256;
+use alloy_primitives::hex;
 use anyhow::Result;
 use const_hex::FromHex;
-use ethereum_types::U256 as EthereumU256;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::alias::RevmBytecode;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
@@ -126,7 +128,7 @@ impl GenesisConfig {
             } else {
                 // For decimal strings
                 let value = genesis_account.balance.parse::<u64>().unwrap_or(0);
-                Wei::from(EthereumU256::from(value))
+                Wei::from(U256::from(value))
             };
 
             account.balance = balance;
@@ -145,10 +147,10 @@ impl GenesisConfig {
             // Add code if it exists
             if let Some(code) = &genesis_account.code {
                 let code_str = code.trim_start_matches("0x");
-                if let Ok(code_bytes) = hex::decode(code_str) {
-                    if !code_bytes.is_empty() {
-                        account.bytecode = Some(revm::primitives::Bytecode::new_raw(code_bytes.into()));
-                    }
+                if let Ok(code_bytes) = hex::decode(code_str)
+                    && !code_bytes.is_empty()
+                {
+                    account.bytecode = Some(RevmBytecode::new_raw(code_bytes.into()));
                 }
             }
 
@@ -288,9 +290,9 @@ impl GenesisConfig {
         header.parent_hash = parent_hash;
         header.difficulty = difficulty.into();
 
-        // For nonce, we need to convert to H64 first
-        let nonce_h64 = ethereum_types::H64::from_slice(&nonce_bytes);
-        header.nonce = nonce_h64.into();
+        // For nonce, we need to convert to B64 first
+        let nonce_b64 = B64::from_slice(&nonce_bytes);
+        header.nonce = nonce_b64.into();
 
         // Create the block
         let block = Block {
@@ -311,7 +313,7 @@ impl Default for GenesisConfig {
         // Add test accounts
         let test_accounts = crate::eth::primitives::test_accounts();
         for account in test_accounts {
-            let address_str = format!("0x{}", hex::encode(account.address.as_bytes()));
+            let address_str = format!("0x{}", hex::encode(account.address.as_slice()));
             let balance_hex = format!("0x{:x}", account.balance.0);
 
             let mut genesis_account = GenesisAccount {
@@ -322,10 +324,10 @@ impl Default for GenesisConfig {
             };
 
             // Add code if not empty
-            if let Some(ref bytecode) = account.bytecode {
-                if !bytecode.is_empty() {
-                    genesis_account.code = Some(format!("0x{}", hex::encode(bytecode.bytes())));
-                }
+            if let Some(ref bytecode) = account.bytecode
+                && !bytecode.is_empty()
+            {
+                genesis_account.code = Some(format!("0x{}", hex::encode(bytecode.bytes())));
             }
 
             alloc.insert(address_str, genesis_account);
@@ -451,7 +453,7 @@ mod tests {
         let account = &accounts[0];
         assert_eq!(account.address, addr);
         assert_eq!(account.nonce, Nonce::from(1u64));
-        assert_eq!(account.balance, Wei::from(EthereumU256::from(4096))); // 0x1000 in decimal
+        assert_eq!(account.balance, Wei::from(U256::from(4096))); // 0x1000 in decimal
 
         // Clean up
         std::fs::remove_file(file_path).unwrap();
@@ -533,7 +535,9 @@ mod tests {
         assert_eq!(genesis_from_clap.config.chainId, 2008);
 
         // Test 3: Clap integration - environment variables
-        env::set_var("GENESIS_JSON_PATH", file_path);
+        unsafe {
+            env::set_var("GENESIS_JSON_PATH", file_path);
+        }
         let args = vec!["program"]; // No command line arguments
         let config = GenesisFileConfig::parse_from(args);
         assert_eq!(config.genesis_path, Some(file_path.to_string()));
@@ -545,6 +549,8 @@ mod tests {
         assert_eq!(genesis_from_env.config.chainId, 2008);
 
         // Clean up
-        env::remove_var("GENESIS_JSON_PATH");
+        unsafe {
+            env::remove_var("GENESIS_JSON_PATH");
+        }
     }
 }

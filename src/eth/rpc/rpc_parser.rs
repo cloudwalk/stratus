@@ -1,7 +1,7 @@
 //! Helper functions for parsing RPC requests and responses.
 
-use jsonrpsee::types::ParamsSequence;
 use jsonrpsee::Extensions;
+use jsonrpsee::types::ParamsSequence;
 use rlp::Decodable;
 use tracing::Span;
 

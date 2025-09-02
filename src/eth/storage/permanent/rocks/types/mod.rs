@@ -1,6 +1,7 @@
 mod account;
 mod address;
 mod block;
+mod block_changes;
 mod block_header;
 mod block_number;
 mod bytecode;
@@ -23,21 +24,23 @@ mod transaction_input;
 mod transaction_mined;
 mod unix_time;
 mod wei;
-
 pub use account::AccountRocksdb;
 pub use address::AddressRocksdb;
 pub use block::BlockRocksdb;
+pub use block_changes::AccountChangesRocksdb;
+pub use block_changes::BlockChangesRocksdb;
 pub use block_number::BlockNumberRocksdb;
+pub use bytes::BytesRocksdb;
 pub use hash::HashRocksdb;
 pub use index::IndexRocksdb;
 pub use slot::SlotIndexRocksdb;
 pub use slot::SlotValueRocksdb;
 pub use transaction_mined::TransactionMinedRocksdb;
 pub use unix_time::UnixTimeRocksdb;
-
 #[cfg(test)]
 mod tests {
     use block_header::BlockHeaderRocksdb;
+    use bytecode::BytecodeRocksdb;
     use chain_id::ChainIdRocksdb;
     use difficulty::DifficultyRocksdb;
     use execution::ExecutionRocksdb;
@@ -63,6 +66,7 @@ mod tests {
     gen_test_bincode!(BlockHeaderRocksdb);
     gen_test_bincode!(BlockNumberRocksdb);
     gen_test_bincode!(BlockRocksdb);
+    gen_test_bincode!(BytecodeRocksdb);
     gen_test_bincode!(BytesRocksdb);
     gen_test_bincode!(ChainIdRocksdb);
     gen_test_bincode!(DifficultyRocksdb);

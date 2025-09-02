@@ -2,13 +2,14 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::str::FromStr;
 
+use alloy_primitives::Bloom;
 use anyhow::anyhow;
-use ethereum_types::Bloom;
 
 use crate::eth::primitives::logs_bloom::LogsBloom;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde_with::DeserializeFromStr, serde_with::SerializeDisplay, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde_with::DeserializeFromStr, serde_with::SerializeDisplay)]
 pub struct LogsBloomRocksdb([u8; 256]);
 
 gen_newtype_from!(self = LogsBloomRocksdb, other = Bloom, LogsBloom);
@@ -34,3 +35,5 @@ impl FromStr for LogsBloomRocksdb {
         Ok(Self(bytes))
     }
 }
+
+impl SerializeDeserializeWithContext for LogsBloomRocksdb {}

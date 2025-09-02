@@ -23,11 +23,17 @@ pub enum ExecutionResult {
     Halted { reason: String },
 }
 
+impl ExecutionResult {
+    pub fn is_success(&self) -> bool {
+        matches!(self, ExecutionResult::Success)
+    }
+}
+
 #[derive(Debug, thiserror::Error, serde::Serialize, serde::Deserialize, Default, Clone, PartialEq, Eq)]
 pub struct RevertReason(pub Cow<'static, str>);
 
 impl fake::Dummy<Faker> for RevertReason {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, _rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, _rng: &mut R) -> Self {
         RevertReason(Cow::Borrowed("reverted"))
     }
 }

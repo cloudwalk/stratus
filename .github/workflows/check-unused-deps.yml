@@ -1,0 +1,56 @@
+name: Check Unused Dependencies
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches:
+      - "*"
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+jobs:
+  check_unused_deps:
+    name: Check for unused dependencies
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust Nightly
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2025-05-22
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        id: cache-cargo
+        with:
+          prefix-key: ${{ runner.os }}-v3-cargo
+          shared-key: nightly-debug
+          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
+          cache-provider: "github"
+          cache-directories: "~/.cargo/bin/"
+
+      - name: Install libsasl2-dev libssl-dev
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+
+      - name: Set up Just
+        uses: extractions/setup-just@v2
+
+      - name: Check for unused dependencies
+        run: just check-unused-deps -2025-05-22

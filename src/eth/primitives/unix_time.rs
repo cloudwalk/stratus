@@ -1,13 +1,12 @@
 use std::ops::Deref;
 
+use alloy_primitives::U256;
 use chrono::DateTime;
 use chrono::Utc;
 use display_json::DebugAsJson;
-use ethereum_types::U256;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::alias::RevmU256;
 use crate::ext::InfallibleExt;
 
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -46,7 +45,7 @@ impl Deref for UnixTime {
 }
 
 impl Dummy<Faker> for UnixTime {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
     }
 }
@@ -61,17 +60,11 @@ impl From<u64> for UnixTime {
     }
 }
 
-impl From<U256> for UnixTime {
-    fn from(value: U256) -> Self {
-        value.low_u64().into()
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl From<UnixTime> for RevmU256 {
+impl From<UnixTime> for U256 {
     fn from(value: UnixTime) -> Self {
         Self::from_limbs([value.0, 0, 0, 0])
     }

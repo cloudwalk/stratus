@@ -34,7 +34,7 @@ describe("Leader & Follower importer integration test", function () {
         updateProviderUrl("stratus");
         const responseLeader = await sendAndGetFullResponse("stratus_shutdownImporter", []);
         expect(responseLeader.data.error.code).eq(7003);
-        expect(responseLeader.data.error.message).eq("Stratus node is not a follower.");
+        expect(responseLeader.data.error.message).eq("stratus node is not a follower.");
     });
 
     it("Shutdown command to Follower should succeed", async function () {
@@ -47,7 +47,7 @@ describe("Leader & Follower importer integration test", function () {
         updateProviderUrl("stratus-follower");
         const responseFollower = await sendAndGetFullResponse("stratus_shutdownImporter", []);
         expect(responseFollower.data.error.code).to.equal(4002);
-        expect(responseFollower.data.error.message).to.equal("Importer is already shutdown.");
+        expect(responseFollower.data.error.message).to.equal("importer is already shutdown.");
     });
 
     it("Validate Follower state and health after shutdown", async function () {
@@ -57,7 +57,7 @@ describe("Leader & Follower importer integration test", function () {
         expect(followerNode.is_importer_shutdown).to.equal(true);
         const followerHealth = await sendAndGetFullResponse("stratus_health", []);
         expect(followerHealth.data.error.code).eq(7001);
-        expect(followerHealth.data.error.message).eq("Stratus is not ready to start servicing requests.");
+        expect(followerHealth.data.error.message).eq("stratus is not ready to start servicing requests.");
     });
 
     it("Validate Leader state and health after Follower shutdown", async function () {
@@ -98,7 +98,7 @@ describe("Leader & Follower importer integration test", function () {
         const signedTx = await BOB.signWeiTransfer(ALICE.address, 1, nonce);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(txResponse.data.error.code).to.equal(5001);
-        expect(txResponse.data.error.message).to.equal("Consensus is temporarily unavailable for follower node.");
+        expect(txResponse.data.error.message).to.equal("consensus is temporarily unavailable for follower node.");
     });
 
     it("Init command to Leader should fail", async function () {
@@ -111,14 +111,14 @@ describe("Leader & Follower importer integration test", function () {
             "10485760",
         ]);
         expect(responseLeader.data.error.code).to.equal(7003);
-        expect(responseLeader.data.error.message).to.equal("Stratus node is not a follower.");
+        expect(responseLeader.data.error.message).to.equal("stratus node is not a follower.");
     });
 
     it("Init command to Follower without addresses should fail", async function () {
         updateProviderUrl("stratus-follower");
         const responseInvalidFollower = await sendAndGetFullResponse("stratus_initImporter", []);
         expect(responseInvalidFollower.data.error.code).to.equal(1005);
-        expect(responseInvalidFollower.data.error.message).to.equal("Expected String parameter, but received nothing.");
+        expect(responseInvalidFollower.data.error.message).to.equal("expected String parameter, but received nothing.");
     });
 
     it("Init command to Follower with invalid addresses should fail", async function () {
@@ -130,7 +130,7 @@ describe("Leader & Follower importer integration test", function () {
             "10485760",
         ]);
         expect(responseInvalidAddressFollower.data.error.code).to.equal(4004);
-        expect(responseInvalidAddressFollower.data.error.message).to.equal("Failed to initialize importer.");
+        expect(responseInvalidAddressFollower.data.error.message).to.equal("failed to initialize importer.");
     });
 
     it("Init command to Follower with valid params should succeed", async function () {
@@ -153,7 +153,7 @@ describe("Leader & Follower importer integration test", function () {
             "10485760",
         ]);
         expect(responseSecondInitFollower.data.error.code).to.equal(4001);
-        expect(responseSecondInitFollower.data.error.message).to.equal("Importer is already running.");
+        expect(responseSecondInitFollower.data.error.message).to.equal("importer is already running.");
     });
 
     it("Wait until Follower is in sync with Leader", async function () {

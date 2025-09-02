@@ -1,11 +1,10 @@
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use ethereum_types::Bloom;
+use alloy_primitives::Bloom;
+use alloy_primitives::BloomInput;
 
-use crate::alias::AlloyBloom;
 use crate::eth::primitives::Log;
-use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[serde(transparent)]
@@ -13,9 +12,9 @@ pub struct LogsBloom(pub Bloom);
 
 impl LogsBloom {
     pub fn accrue_log(&mut self, log: &Log) {
-        self.accrue(ethereum_types::BloomInput::Raw(log.address.as_ref()));
+        self.accrue(BloomInput::Raw(log.address.as_ref()));
         for topic in log.topics_non_empty() {
-            self.accrue(ethereum_types::BloomInput::Raw(topic.as_ref()));
+            self.accrue(BloomInput::Raw(topic.as_ref()));
         }
     }
 }
@@ -37,10 +36,15 @@ impl DerefMut for LogsBloom {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = LogsBloom, other = [u8; 256], Bloom);
 
-impl From<AlloyBloom> for LogsBloom {
-    fn from(value: AlloyBloom) -> Self {
+impl From<[u8; 256]> for LogsBloom {
+    fn from(value: [u8; 256]) -> Self {
+        Self(Bloom::from(value))
+    }
+}
+
+impl From<Bloom> for LogsBloom {
+    fn from(value: Bloom) -> Self {
         let bytes: [u8; 256] = *value.0;
         Self(Bloom::from(bytes))
     }
@@ -58,13 +62,7 @@ impl From<LogsBloom> for Bloom {
 
 impl From<LogsBloom> for [u8; 256] {
     fn from(value: LogsBloom) -> Self {
-        value.0 .0
-    }
-}
-
-impl From<LogsBloom> for AlloyBloom {
-    fn from(value: LogsBloom) -> Self {
-        AlloyBloom::from(value.0 .0)
+        value.0.into_array()
     }
 }
 

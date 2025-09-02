@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::time::Duration;
 
+use alloy_primitives::U64;
+use alloy_primitives::U256;
 use anyhow::anyhow;
 use chrono::DateTime;
 use chrono::Utc;
@@ -11,12 +13,13 @@ use jsonrpsee::types::SubscriptionId;
 use serde::Serialize;
 use serde::Serializer;
 use tokio::select;
-use tokio::signal::unix::signal;
 use tokio::signal::unix::SignalKind;
+use tokio::signal::unix::signal;
+use tokio::sync::watch::error::RecvError;
 
+use crate::GlobalState;
 use crate::infra::tracing::info_task_spawn;
 use crate::log_and_err;
-use crate::GlobalState;
 
 // -----------------------------------------------------------------------------
 // Language constructs
@@ -26,11 +29,7 @@ use crate::GlobalState;
 #[macro_export]
 macro_rules! if_else {
     ($condition: expr, $_true: expr, $_false: expr) => {
-        if $condition {
-            $_true
-        } else {
-            $_false
-        }
+        if $condition { $_true } else { $_false }
     };
 }
 
@@ -49,6 +48,22 @@ pub fn type_basename<T>() -> &'static str {
 // -----------------------------------------------------------------------------
 // From / TryFrom
 // -----------------------------------------------------------------------------
+
+pub trait RuintExt {
+    fn as_u64(&self) -> u64;
+}
+
+impl RuintExt for U256 {
+    fn as_u64(&self) -> u64 {
+        self.as_limbs()[0]
+    }
+}
+
+impl RuintExt for U64 {
+    fn as_u64(&self) -> u64 {
+        self.as_limbs()[0]
+    }
+}
 
 /// Generates [`From`] implementation for a [newtype](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) that delegates to the inner type [`From`].
 #[macro_export]
@@ -217,16 +232,12 @@ pub async fn traced_sleep(duration: Duration, _: SleepReason) {
 /// Spawns an async Tokio task with a name to be displayed in tokio-console.
 #[track_caller]
 #[allow(clippy::expect_used)]
-pub fn spawn_named<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
+pub fn spawn<T>(name: &str, task: impl std::future::Future<Output = T> + Send + 'static) -> tokio::task::JoinHandle<T>
 where
     T: Send + 'static,
 {
     info_task_spawn(name);
-
-    tokio::task::Builder::new()
-        .name(name)
-        .spawn(task)
-        .expect("spawning named async task should not fail")
+    tokio::task::spawn(task)
 }
 
 /// Spawns a thread with the given name. Thread has access to Tokio current runtime.
@@ -261,7 +272,7 @@ pub async fn spawn_signal_handler() -> anyhow::Result<()> {
         Err(e) => return log_and_err!(reason = e, "failed to init SIGINT watcher"),
     };
 
-    spawn_named("sys::signal_handler", async move {
+    spawn("sys::signal_handler", async move {
         select! {
             _ = sigterm.recv() => {
                 GlobalState::shutdown_from(TASK_NAME, "received SIGTERM");
@@ -400,10 +411,33 @@ macro_rules! gen_test_bincode {
         paste::paste! {
             #[test]
             pub fn [<bincode_ $type:snake>]() {
+                use $crate::rocks_bincode_config;
                 let value = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
-                let binary = bincode::serialize(&value).unwrap();
-                assert_eq!(bincode::deserialize::<$type>(&binary).unwrap(), value);
+                let binary = bincode::encode_to_vec(&value, rocks_bincode_config()).unwrap();
+                let (decoded, _): ($type, _) = bincode::decode_from_slice(&binary, rocks_bincode_config()).unwrap();
+                assert_eq!(decoded, value);
             }
         }
     };
+}
+
+/// Custom bincode configuration for RocksDB that preserves lexicographical ordering.
+pub fn rocks_bincode_config() -> impl bincode::config::Config {
+    bincode::config::standard().with_big_endian()
+}
+
+pub trait WatchReceiverExt<T> {
+    #[allow(async_fn_in_trait)]
+    async fn wait_for_change(&mut self, f: impl Fn(&T) -> bool) -> Result<(), RecvError>;
+}
+
+impl<T> WatchReceiverExt<T> for tokio::sync::watch::Receiver<T> {
+    async fn wait_for_change(&mut self, f: impl Fn(&T) -> bool) -> Result<(), RecvError> {
+        loop {
+            self.changed().await?;
+            if f(&self.borrow()) {
+                return Ok(());
+            }
+        }
+    }
 }

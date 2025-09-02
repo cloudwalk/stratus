@@ -1,11 +1,10 @@
 use display_json::DebugAsJson;
-use revm::interpreter::analysis::to_analysed;
-use revm::primitives::Bytecode;
+use revm::primitives::KECCAK_EMPTY;
+use revm::state::Bytecode;
 
 use crate::alias::RevmAccountInfo;
 use crate::alias::RevmAddress;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
 
@@ -26,9 +25,6 @@ pub struct Account {
     /// Contract bytecode. Present only if the account is a contract.
     #[dummy(default)]
     pub bytecode: Option<Bytecode>,
-
-    /// Keccak256 Hash of the bytecode. If bytecode is null, then the hash of empty string.
-    pub code_hash: CodeHash,
 }
 
 impl Account {
@@ -44,7 +40,6 @@ impl Account {
             nonce: Nonce::ZERO,
             balance,
             bytecode: None,
-            code_hash: CodeHash::default(),
         }
     }
 }
@@ -56,13 +51,11 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
     fn from(value: (RevmAddress, RevmAccountInfo)) -> Self {
         let (address, info) = value;
 
-        let code = info.code.map(to_analysed);
         Self {
             address: address.into(),
             nonce: info.nonce.into(),
             balance: info.balance.into(),
-            bytecode: code,
-            code_hash: info.code_hash.into(),
+            bytecode: info.code,
         }
     }
 }
@@ -76,7 +69,7 @@ impl From<&Account> for RevmAccountInfo {
         Self {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
-            code_hash: value.code_hash.0 .0.into(),
+            code_hash: KECCAK_EMPTY,
             code: value.bytecode.as_ref().cloned(),
         }
     }

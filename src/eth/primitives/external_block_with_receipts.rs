@@ -15,7 +15,7 @@ pub struct ExternalBlockWithReceipts {
 }
 
 impl Dummy<Faker> for ExternalBlockWithReceipts {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let block = ExternalBlock::dummy_with_rng(faker, rng);
 
         let receipts = match &block.transactions {

@@ -56,6 +56,8 @@ coverage brlc-balance-tracker || log "Balance Tracker is not isolated yet. Skipp
 coverage brlc-yield-streamer
 coverage brlc-multisig
 coverage compound-periphery
+coverage brlc-capybara-finance
+coverage brlc-credit-agent
 
 if [ -n "$1" ] && [ "$1" = "--html" ]; then
     log "Opening coverage reports in your web browser..."

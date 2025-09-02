@@ -1,8 +1,11 @@
 use std::fmt::Debug;
 
 use crate::eth::primitives::Address;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, PartialOrd, Ord,
+)]
 pub struct AddressRocksdb(pub [u8; 20]);
 
 impl From<Address> for AddressRocksdb {
@@ -16,3 +19,5 @@ impl From<AddressRocksdb> for Address {
         item.0.into()
     }
 }
+
+impl SerializeDeserializeWithContext for AddressRocksdb {}

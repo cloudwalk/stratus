@@ -43,8 +43,8 @@ pub mod test_utils {
     use fake::Fake;
     use fake::Faker;
     use glob::glob;
-    use rand::rngs::SmallRng;
     use rand::SeedableRng;
+    use rand::rngs::SmallRng;
 
     fn deterministic_rng() -> SmallRng {
         SeedableRng::seed_from_u64(0)

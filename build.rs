@@ -2,6 +2,7 @@
 #![allow(clippy::expect_used)]
 #![allow(clippy::panic)]
 
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -9,19 +10,30 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use glob::glob;
+use nom::IResult;
+use nom::Parser;
 use nom::bytes::complete::tag;
 use nom::character::complete::hex_digit1;
 use nom::combinator::rest;
 use nom::sequence::preceded;
 use nom::sequence::separated_pair;
-use nom::IResult;
-use vergen::EmitBuilder;
+use vergen_gitcl::AddCustomEntries;
+use vergen_gitcl::BuildBuilder;
+use vergen_gitcl::CargoBuilder;
+use vergen_gitcl::CargoRerunIfChanged;
+use vergen_gitcl::CargoWarning;
+use vergen_gitcl::DefaultConfig;
+use vergen_gitcl::Emitter;
+use vergen_gitcl::GitclBuilder;
+use vergen_gitcl::RustcBuilder;
+use vergen_gitcl::SysinfoBuilder;
 
 fn main() {
     print_build_directives();
     generate_build_info();
     generate_contracts_structs();
     generate_signatures_structs();
+    generate_client_scopes_matcher();
 }
 
 // -----------------------------------------------------------------------------
@@ -34,17 +46,62 @@ fn print_build_directives() {
     println!("cargo:rerun-if-changed=static/");
     // retrigger database compile-time checks
     println!("cargo:rerun-if-changed=.sqlx/");
+    // client scopes configuration
+    println!("cargo:rerun-if-changed=static/client_scopes/client_scopes.txt");
 }
 
 // -----------------------------------------------------------------------------
 // Code generation: Build Info
 // -----------------------------------------------------------------------------
+
+#[derive(Default)]
+struct Custom {}
+
+impl AddCustomEntries<&str, &str> for Custom {
+    fn add_calculated_entries(
+        &self,
+        _idempotent: bool,
+        cargo_rustc_env_map: &mut BTreeMap<&str, &str>,
+        _cargo_rerun_if_changed: &mut CargoRerunIfChanged,
+        _cargo_warning: &mut CargoWarning,
+    ) -> anyhow::Result<()> {
+        // Get git remote URL using git command
+        let git_repo_url = Command::new("git")
+            .args(["remote", "get-url", "origin"])
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8(output.stdout).ok()
+                } else {
+                    None
+                }
+            })
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let git_url_static = Box::leak(git_repo_url.into_boxed_str());
+        cargo_rustc_env_map.insert("VERGEN_GIT_REPO_URL", git_url_static);
+        Ok(())
+    }
+
+    fn add_default_entries(
+        &self,
+        _config: &DefaultConfig,
+        _cargo_rustc_env_map: &mut BTreeMap<&str, &str>,
+        _cargo_rerun_if_changed: &mut CargoRerunIfChanged,
+        _cargo_warning: &mut CargoWarning,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
 fn generate_build_info() {
     // Capture the hostname of the machine where the binary is being built
     let build_hostname = hostname::get().unwrap_or_default().to_string_lossy().into_owned();
 
     // Export BUILD_HOSTNAME as a compile-time environment variable
-    println!("cargo:rustc-env=BUILD_HOSTNAME={}", build_hostname);
+    println!("cargo:rustc-env=BUILD_HOSTNAME={build_hostname}");
 
     // Capture OpenSSL version
     let openssl_version = Command::new("openssl")
@@ -76,19 +133,29 @@ fn generate_build_info() {
     println!("cargo:rustc-env=BUILD_OPENSSL_VERSION={}", openssl_version.trim());
     println!("cargo:rustc-env=BUILD_GLIBC_VERSION={}", glibc_version.trim());
 
-    if let Err(e) = EmitBuilder::builder()
-        .build_timestamp()
-        .git_branch()
-        .git_describe(false, true, None)
-        .git_sha(true)
-        .git_commit_timestamp()
-        .git_commit_message()
-        .git_commit_author_name()
-        .cargo_debug()
-        .cargo_features()
-        .rustc_semver()
-        .rustc_channel()
-        .rustc_host_triple()
+    if let Err(e) = Emitter::default()
+        .add_instructions(&BuildBuilder::default().build_timestamp(true).build().unwrap())
+        .unwrap()
+        .add_instructions(&CargoBuilder::default().debug(true).features(true).build().unwrap())
+        .unwrap()
+        .add_instructions(
+            &GitclBuilder::default()
+                .branch(true)
+                .describe(false, true, None)
+                .sha(true)
+                .commit_timestamp(true)
+                .commit_message(true)
+                .commit_author_name(true)
+                .build()
+                .unwrap(),
+        )
+        .unwrap()
+        .add_instructions(&RustcBuilder::default().semver(true).channel(true).host_triple(true).build().unwrap())
+        .unwrap()
+        .add_instructions(&SysinfoBuilder::default().os_version(true).user(true).build().unwrap())
+        .unwrap()
+        .add_custom_instructions(&Custom::default())
+        .unwrap()
         .emit()
     {
         panic!("Failed to emit build information | reason={e:?}");
@@ -133,20 +200,20 @@ fn populate_contracts_map(file_content: &str, seen: &mut HashSet<ContractAddress
         seen.insert(address);
 
         let name = format!("\"{name}\"");
-        contracts.entry(address, &name);
+        contracts.entry(address, name);
     }
 }
 
 fn parse_contract(input: &str) -> (ContractAddress, &ContractName) {
     fn parse(input: &str) -> IResult<&str, (&str, &str)> {
-        separated_pair(preceded(tag("0x"), hex_digit1), tag(","), rest)(input)
+        separated_pair(preceded(tag("0x"), hex_digit1), tag(","), rest).parse(input)
     }
 
     let (_, (address, name)) = parse(input).expect("Contract deployment line should match the expected pattern | pattern=[0x<hex_address>,<name>]\n");
 
     let address = match const_hex::decode(address) {
         Ok(address) => address,
-        Err(e) => panic!("Failed to parse contract address as hexadecimal | value={} reason={:?}", address, e),
+        Err(e) => panic!("Failed to parse contract address as hexadecimal | value={address} reason={e:?}"),
     };
 
     let address: [u8; 20] = match address.try_into() {
@@ -224,13 +291,13 @@ fn populate_signature_maps(
 
         // track
         seen.insert(id);
-        let signature = format!("\"{}\"", signature);
+        let signature = format!("\"{signature}\"");
         match id {
             SolidityId::FunctionOrError(id) => {
-                signatures_4_bytes.entry(id, &signature);
+                signatures_4_bytes.entry(id, signature.clone());
             }
             SolidityId::Event(id) => {
-                signatures_32_bytes.entry(id, &signature);
+                signatures_32_bytes.entry(id, signature);
             }
         }
     }
@@ -238,12 +305,12 @@ fn populate_signature_maps(
 
 fn parse_signature(input: &str) -> (SolidityId, &SoliditySignature) {
     fn parse(input: &str) -> IResult<&str, (&str, &str)> {
-        separated_pair(hex_digit1, tag(": "), rest)(input)
+        separated_pair(hex_digit1, tag(": "), rest).parse(input)
     }
     let (_, (id, signature)) = parse(input).expect("Solidity signature line should match the expected pattern | pattern=[0x<hex_id>: <signature>]\n");
     let id = match const_hex::decode(id) {
         Ok(id) => id,
-        Err(e) => panic!("Failed to parse Solidity ID as hexadecimal | value={} reason={:?}", id, e),
+        Err(e) => panic!("Failed to parse Solidity ID as hexadecimal | value={id} reason={e:?}"),
     };
 
     // try to parse 32 bytes
@@ -267,6 +334,67 @@ fn parse_signature(input: &str) -> (SolidityId, &SoliditySignature) {
 }
 
 // -----------------------------------------------------------------------------
+// Code generation: Client Scopes Matcher
+// -----------------------------------------------------------------------------
+
+fn generate_client_scopes_matcher() {
+    write_module("client_scopes.rs", generate_client_scopes_content());
+}
+
+fn generate_client_scopes_content() -> String {
+    let scopes_file = fs::read_to_string("static/client_scopes/client_scopes.txt").expect("Failed to read client_scopes.txt");
+
+    let mut match_arms = Vec::new();
+
+    for line in scopes_file.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        if let Some((scope, patterns_str)) = line.split_once(':') {
+            let scope = scope.trim();
+            let patterns_str = patterns_str.trim();
+
+            for pattern in patterns_str.split_whitespace() {
+                if let Some(prefix) = pattern.strip_suffix('/') {
+                    // Pattern like "stratus/" - prefix match and trim suffix
+                    match_arms.push(format!(
+                        r#"        n if n.starts_with("{prefix}") => ("{scope}", name.trim_start_matches("{prefix}")),
+"#,
+                    ));
+                } else if let Some(prefix) = pattern.strip_suffix('*') {
+                    // Pattern like "balance*" - prefix match
+                    match_arms.push(format!(
+                        r#"        n if n.starts_with("{prefix}") => ("{scope}", name),
+"#,
+                    ));
+                } else {
+                    // Exact match
+                    match_arms.push(format!(
+                        r#"        "{pattern}" => ("{scope}", name),
+"#,
+                    ));
+                }
+            }
+        }
+    }
+
+    format!(
+        r#"// Auto-generated from client_scopes.txt
+pub fn create_client_scope(name: &str) -> String {{
+    let (scope, name) = match name {{
+{}
+        _ => ("other", name),
+    }};
+    format!("{{scope}}::{{name}}")
+}}
+"#,
+        match_arms.join("")
+    )
+}
+
+// -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
 
@@ -285,7 +413,7 @@ fn list_files(pattern: &'static str) -> Vec<InputFile> {
 
     // ensure at least one exists
     if filenames.is_empty() {
-        panic!("No files found in \"{}\"", pattern);
+        panic!("No files found in \"{pattern}\"");
     }
 
     // read file contents

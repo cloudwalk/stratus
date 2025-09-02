@@ -9,13 +9,15 @@
 //! arrive.
 
 use std::cmp::min;
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::mpsc;
 
 use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::StreamExt;
 use itertools::Itertools;
+use stratus::GlobalServices;
+use stratus::GlobalState;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
 use stratus::eth::external_rpc::ExternalBlockWithReceipts;
@@ -23,16 +25,16 @@ use stratus::eth::external_rpc::ExternalRpc;
 use stratus::eth::external_rpc::PostgresExternalRpc;
 use stratus::eth::miner::Miner;
 use stratus::eth::miner::MinerMode;
+use stratus::eth::miner::miner::CommitItem;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
+use stratus::eth::primitives::ExecutionChanges;
 use stratus::eth::primitives::ExternalReceipts;
-use stratus::ext::spawn_named;
+use stratus::ext::spawn;
 use stratus::ext::spawn_thread;
 use stratus::log_and_err;
-use stratus::utils::calculate_tps_and_bpm;
 use stratus::utils::DropTimer;
-use stratus::GlobalServices;
-use stratus::GlobalState;
+use stratus::utils::calculate_tps_and_bpm;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 use tikv_jemallocator::Jemalloc;
 use tokio::sync::mpsc as async_mpsc;
@@ -46,7 +48,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 const RPC_FETCHER_CHANNEL_CAPACITY: usize = 10;
 
 type BlocksToExecute = Vec<ExternalBlockWithReceipts>;
-type BlocksToSave = Vec<Block>;
+type BlocksToSave = Vec<(Block, ExecutionChanges)>;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<ImporterOfflineConfig>::init();
@@ -63,7 +65,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // init block range
-    let block_start = match config.block_start {
+    let mut block_start = match config.block_start {
         Some(start) => BlockNumber::from(start),
         None =>
             if storage.has_genesis()? {
@@ -86,7 +88,13 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     // load genesis accounts
     let initial_accounts = rpc_storage.read_initial_accounts().await?;
-    storage.save_accounts(initial_accounts.clone())?;
+
+    if block_start.is_zero() && !storage.has_genesis()? {
+        let genesis_block = Block::genesis();
+        storage.save_genesis_block(genesis_block, initial_accounts, ExecutionChanges::default())?;
+        storage.finish_pending_block()?;
+        block_start = BlockNumber::from(1);
+    }
 
     let block_fetcher_fut = run_rpc_block_fetcher(
         rpc_storage,
@@ -96,7 +104,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         block_end,
         fetch_to_execute_tx,
     );
-    spawn_named("block_fetcher", async {
+    spawn("block_fetcher", async {
         if let Err(e) = block_fetcher_fut.await {
             tracing::error!(reason = ?e, "'block-fetcher' task failed");
         }
@@ -269,8 +277,8 @@ fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToS
             return Ok(());
         };
 
-        for block in blocks_batch {
-            miner.commit(block)?;
+        for (block, changes) in blocks_batch {
+            miner.commit(CommitItem::Block(block), changes)?;
         }
     }
 }
@@ -304,9 +312,7 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_
             let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
             assert!(
                 tx_index + 1 == next_tx_index,
-                "two consecutive transactions must have consecutive indices: {} and {}",
-                tx_index,
-                next_tx_index,
+                "two consecutive transactions must have consecutive indices: {tx_index} and {next_tx_index}"
             );
         }
         for window in receipts.windows(2) {
@@ -314,9 +320,7 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_
             let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
             assert!(
                 tx_index + 1 == next_tx_index,
-                "two consecutive receipts must have consecutive indices: {} and {}",
-                tx_index,
-                next_tx_index,
+                "two consecutive receipts must have consecutive indices: {tx_index} and {next_tx_index}"
             );
         }
     }

@@ -1,4 +1,5 @@
 Function signatures:
+4e1e9a4e: $__VERSION()
 904e2a82: INITIALIZATION_DAY()
 20af2412: NEGATIVE_TIME_SHIFT()
 82bfefc8: TOKEN()

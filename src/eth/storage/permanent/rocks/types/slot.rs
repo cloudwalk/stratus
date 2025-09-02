@@ -2,13 +2,14 @@ use std::fmt::Debug;
 
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Clone, Debug, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Clone, Debug, Copy, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct SlotValueRocksdb([u64; 4]);
 
 impl From<SlotValue> for SlotValueRocksdb {
     fn from(item: SlotValue) -> Self {
-        SlotValueRocksdb(item.0 .0)
+        SlotValueRocksdb(item.0.into_limbs())
     }
 }
 
@@ -18,12 +19,14 @@ impl From<SlotValueRocksdb> for SlotValue {
     }
 }
 
-#[derive(Clone, Debug, Copy, Default, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(
+    Clone, Debug, Copy, Default, Hash, PartialEq, Eq, PartialOrd, Ord, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize,
+)]
 pub struct SlotIndexRocksdb([u64; 4]);
 
 impl From<SlotIndex> for SlotIndexRocksdb {
     fn from(item: SlotIndex) -> Self {
-        SlotIndexRocksdb(item.0 .0)
+        SlotIndexRocksdb(item.0.into_limbs())
     }
 }
 
@@ -32,3 +35,6 @@ impl From<SlotIndexRocksdb> for SlotIndex {
         SlotIndex::from(item.0)
     }
 }
+
+impl SerializeDeserializeWithContext for SlotValueRocksdb {}
+impl SerializeDeserializeWithContext for SlotIndexRocksdb {}

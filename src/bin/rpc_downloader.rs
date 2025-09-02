@@ -1,16 +1,18 @@
 use std::cmp::min;
+use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 use alloy_rpc_types_eth::BlockTransactions;
-use anyhow::anyhow;
 use anyhow::Context;
-use futures::stream;
+use anyhow::anyhow;
 use futures::StreamExt;
+use futures::stream;
 use itertools::Itertools;
+use stratus::GlobalServices;
+use stratus::GlobalState;
 use stratus::config::RpcDownloaderConfig;
 use stratus::eth::external_rpc::ExternalRpc;
 use stratus::eth::external_rpc::PostgresExternalRpc;
@@ -19,8 +21,6 @@ use stratus::eth::primitives::BlockNumber;
 use stratus::ext::not;
 use stratus::infra::BlockchainClient;
 use stratus::utils::DropTimer;
-use stratus::GlobalServices;
-use stratus::GlobalState;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 use tikv_jemallocator::Jemalloc;
 

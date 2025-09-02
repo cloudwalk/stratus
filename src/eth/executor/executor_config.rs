@@ -1,12 +1,12 @@
 use std::cmp::max;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use clap::Parser;
 use display_json::DebugAsJson;
-use revm::primitives::SpecId;
+use revm::primitives::hardfork::SpecId;
 
 use crate::eth::executor::Executor;
-use crate::eth::executor::ExecutorStrategy;
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
 
@@ -29,10 +29,6 @@ pub struct ExecutorConfig {
     #[arg(long = "executor-inspector-evms", env = "EXECUTOR_INSPECTOR_EVMS")]
     pub executor_inspector_evms: Option<usize>,
 
-    /// EVM execution strategy.
-    #[arg(long = "executor-strategy", alias = "strategy", env = "EXECUTOR_STRATEGY", default_value = "serial")]
-    pub executor_strategy: ExecutorStrategy,
-
     /// Should reject contract transactions and calls to accounts that are not contracts?
     #[arg(
         long = "executor-reject-not-contract",
@@ -47,7 +43,7 @@ pub struct ExecutorConfig {
 }
 
 fn parse_evm_spec(input: &str) -> anyhow::Result<SpecId> {
-    Ok(SpecId::from(input))
+    SpecId::from_str(input).map_err(|err| anyhow::anyhow!("unknown hard fork: {:?}", err))
 }
 
 impl ExecutorConfig {

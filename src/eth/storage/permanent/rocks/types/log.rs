@@ -3,11 +3,12 @@ use std::fmt::Debug;
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
 use crate::eth::primitives::Log;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 
 type LogTopic = [u8; 32];
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct LogRocksdb {
     pub address: AddressRocksdb,
     pub topics: (Option<LogTopic>, Option<LogTopic>, Option<LogTopic>, Option<LogTopic>),
@@ -36,3 +37,5 @@ impl From<LogRocksdb> for Log {
         }
     }
 }
+
+impl SerializeDeserializeWithContext for LogRocksdb {}

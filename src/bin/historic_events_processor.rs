@@ -8,15 +8,15 @@ use chrono::Timelike;
 use indicatif::ProgressBar;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
 use stratus::eth::primitives::TransactionMined;
+use stratus::eth::storage::permanent::rocks::RocksStorageState;
 use stratus::eth::storage::permanent::rocks::types::BlockNumberRocksdb;
 use stratus::eth::storage::permanent::rocks::types::BlockRocksdb;
 use stratus::eth::storage::permanent::rocks::types::HashRocksdb;
 use stratus::eth::storage::permanent::rocks::types::TransactionMinedRocksdb;
 use stratus::eth::storage::permanent::rocks::types::UnixTimeRocksdb;
-use stratus::eth::storage::permanent::rocks::RocksStorageState;
-use stratus::ledger::events::transaction_to_events;
 use stratus::ledger::events::AccountTransfers;
 use stratus::ledger::events::Event;
+use stratus::ledger::events::transaction_to_events;
 
 /// Database timeout duration in seconds
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -36,7 +36,7 @@ fn transaction_mined_rocks_db_to_events(
 fn get_total_blocks_and_transactions(state: &RocksStorageState) -> (u64, u64) {
     let total_blocks = state
         .db
-        .property_value_cf(&state.blocks_by_number.handle(), ESTIMATE_NUM_KEYS)
+        .property_value_cf(&state.blocks_by_number.column_family, ESTIMATE_NUM_KEYS)
         .unwrap()
         .unwrap()
         .parse::<u64>()
@@ -44,7 +44,7 @@ fn get_total_blocks_and_transactions(state: &RocksStorageState) -> (u64, u64) {
 
     let total_transactions = state
         .db
-        .property_value_cf(&state.transactions.handle(), ESTIMATE_NUM_KEYS)
+        .property_value_cf(&state.transactions.column_family, ESTIMATE_NUM_KEYS)
         .unwrap()
         .unwrap()
         .parse::<u64>()
@@ -145,10 +145,7 @@ fn main() -> Result<(), anyhow::Error> {
                 if !std::path::Path::new(&folder_path).exists() {
                     std::fs::create_dir_all(&folder_path)?;
                 }
-                std::fs::write(
-                    format!("{}/ledger_wallet_events+backfill+{:010}.json", folder_path, offset),
-                    event_batch.join("\n"),
-                )?;
+                std::fs::write(format!("{folder_path}/ledger_wallet_events+backfill+{offset:010}.json"), event_batch.join("\n"))?;
                 offset += event_batch.len();
             }
             std::fs::write("last_processed_block", number.to_string())?;

@@ -5,12 +5,12 @@ use std::time::Duration;
 use clap::Parser;
 use display_json::DebugAsJson;
 
+use crate::GlobalState;
+use crate::NodeMode;
 use crate::eth::miner::Miner;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
-use crate::GlobalState;
-use crate::NodeMode;
 
 // -----------------------------------------------------------------------------
 // Config

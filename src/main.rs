@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use stratus::config::StratusConfig;
-use stratus::eth::rpc::serve_rpc;
+use parking_lot::RwLock;
 use stratus::GlobalServices;
 use stratus::GlobalState;
+use stratus::config::StratusConfig;
+use stratus::eth::rpc::Server;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 use tikv_jemallocator::Jemalloc;
 
@@ -28,7 +29,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     let executor = config.executor.init(Arc::clone(&storage), Arc::clone(&miner));
 
     // Init importer
-    let consensus = if let Some(importer_config) = &config.importer {
+    let consensus = Arc::new(RwLock::new(if let Some(importer_config) = &config.importer {
         tracing::info!(?importer_config, "creating importer");
         let kafka_connector = config.kafka_config.as_ref().map(|inner| inner.init()).transpose()?;
         importer_config
@@ -37,10 +38,10 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
     } else {
         tracing::info!("no importer config, skipping importer");
         None
-    };
+    }));
 
     // Init RPC server
-    serve_rpc(
+    Server::new(
         // Services
         Arc::clone(&storage),
         executor,
@@ -51,6 +52,7 @@ async fn run(config: StratusConfig) -> anyhow::Result<()> {
         config.rpc_server,
         config.executor.executor_chain_id.into(),
     )
+    .serve()
     .await?;
 
     // Explicitly block the `main` thread to drop the storage.

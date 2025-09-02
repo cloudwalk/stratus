@@ -9,5 +9,4 @@ pub use evm::Evm;
 pub use evm_input::EvmInput;
 pub use evm_result::EvmExecutionResult;
 pub use executor::Executor;
-pub use executor::ExecutorStrategy;
 pub use executor_config::ExecutorConfig;

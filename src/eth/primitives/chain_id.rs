@@ -1,18 +1,17 @@
+use alloy_primitives::U64;
+use alloy_primitives::U256;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
-use ethereum_types::U256;
-use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::gen_newtype_from;
-use crate::gen_newtype_try_from;
+use crate::ext::RuintExt;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(pub U64);
 
 impl Dummy<Faker> for ChainId {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()
     }
 }
@@ -20,14 +19,29 @@ impl Dummy<Faker> for ChainId {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = ChainId, other = u8, u16, u32, u64);
-gen_newtype_try_from!(self = ChainId, other = i32);
+
+impl TryFrom<i32> for ChainId {
+    type Error = anyhow::Error;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        if value < 0 {
+            return Err(anyhow::anyhow!("ChainId cannot be negative"));
+        }
+        Ok(Self(U64::from(value as u32)))
+    }
+}
 
 impl TryFrom<U256> for ChainId {
     type Error = anyhow::Error;
 
     fn try_from(value: U256) -> Result<Self, Self::Error> {
-        Ok(ChainId(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
+        Ok(ChainId(U64::from(u64::try_from(value).map_err(|err| anyhow!(err))?)))
+    }
+}
+
+impl From<u64> for ChainId {
+    fn from(value: u64) -> Self {
+        Self(U64::from(value))
     }
 }
 
@@ -42,6 +56,6 @@ impl From<ChainId> for u64 {
 
 impl From<ChainId> for U256 {
     fn from(value: ChainId) -> Self {
-        value.0.as_u64().into()
+        U256::from(u64::from(value))
     }
 }

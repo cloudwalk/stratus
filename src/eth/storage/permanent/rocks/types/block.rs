@@ -11,8 +11,9 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct BlockRocksdb {
     pub header: BlockHeaderRocksdb,
     pub transactions: Vec<TransactionMinedRocksdb>,
@@ -76,3 +77,5 @@ impl From<BlockRocksdb> for Block {
         Block { header, transactions }
     }
 }
+
+impl SerializeDeserializeWithContext for BlockRocksdb {}

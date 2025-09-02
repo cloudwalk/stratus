@@ -6,7 +6,6 @@ use display_json::DebugAsJson;
 
 use crate::alias::RevmBytes;
 use crate::alias::RevmOutput;
-use crate::gen_newtype_from;
 
 #[derive(DebugAsJson, Clone, Default, Eq, PartialEq, fake::Dummy)]
 pub struct Bytes(pub Vec<u8>);
@@ -52,7 +51,24 @@ impl<'de> serde::Deserialize<'de> for Bytes {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Bytes, other = Vec<u8>, &[u8], [u8; 32]);
+
+impl From<Vec<u8>> for Bytes {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&[u8]> for Bytes {
+    fn from(value: &[u8]) -> Self {
+        Self(value.to_vec())
+    }
+}
+
+impl From<[u8; 32]> for Bytes {
+    fn from(value: [u8; 32]) -> Self {
+        Self(value.to_vec())
+    }
+}
 
 impl From<RevmBytes> for Bytes {
     fn from(value: RevmBytes) -> Self {

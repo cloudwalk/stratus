@@ -6,6 +6,8 @@ use display_json::DebugAsJson;
 use serde_json::json;
 
 use super::importer::ImporterMode;
+use crate::GlobalState;
+use crate::NodeMode;
 use crate::eth::executor::Executor;
 use crate::eth::follower::importer::Importer;
 use crate::eth::miner::Miner;
@@ -17,11 +19,9 @@ use crate::eth::rpc::RpcContext;
 use crate::eth::storage::StratusStorage;
 use crate::ext::not;
 use crate::ext::parse_duration;
-use crate::ext::spawn_named;
-use crate::infra::kafka::KafkaConnector;
+use crate::ext::spawn;
 use crate::infra::BlockchainClient;
-use crate::GlobalState;
-use crate::NodeMode;
+use crate::infra::kafka::KafkaConnector;
 
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
 #[group(requires_all = ["external_rpc", "follower"])]
@@ -48,6 +48,10 @@ pub struct ImporterConfig {
 
     #[arg(long = "sync-interval", value_parser=parse_duration, env = "SYNC_INTERVAL", default_value = "100ms", required = false)]
     pub sync_interval: Duration,
+
+    /// Enable replication of block changes
+    #[arg(long = "enable-block-changes-replication", env = "ENABLE_BLOCK_CHANGES_REPLICATION", default_value = "false")]
+    pub enable_block_changes_replication: bool,
 }
 
 impl ImporterConfig {
@@ -61,8 +65,18 @@ impl ImporterConfig {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
             NodeMode::Follower =>
-                self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::NormalFollower)
-                    .await,
+                self.init_follower(
+                    executor,
+                    miner,
+                    storage,
+                    kafka_connector,
+                    if self.enable_block_changes_replication {
+                        ImporterMode::BlockWithChanges
+                    } else {
+                        ImporterMode::NormalFollower
+                    },
+                )
+                .await,
             NodeMode::FakeLeader => self.init_follower(executor, miner, storage, kafka_connector, ImporterMode::FakeLeader).await,
         }
     }
@@ -99,7 +113,7 @@ impl ImporterConfig {
         );
         let importer = Arc::new(importer);
 
-        spawn_named(TASK_NAME, {
+        spawn(TASK_NAME, {
             let importer = Arc::clone(&importer);
             async move {
                 if let Err(e) = importer.run_importer_online().await {
@@ -125,7 +139,12 @@ impl ImporterConfig {
         GlobalState::set_importer_shutdown(false);
 
         let consensus = match self
-            .init(Arc::clone(&ctx.executor), Arc::clone(&ctx.miner), Arc::clone(&ctx.storage), None)
+            .init(
+                Arc::clone(&ctx.server.executor),
+                Arc::clone(&ctx.server.miner),
+                Arc::clone(&ctx.server.storage),
+                None,
+            )
             .await
         {
             Ok(consensus) => consensus,
@@ -138,7 +157,7 @@ impl ImporterConfig {
 
         match consensus {
             Some(consensus) => {
-                ctx.set_consensus(Some(consensus));
+                ctx.server.set_importer(Some(consensus));
             }
             None => {
                 tracing::error!("failed to update consensus: Consensus is not set.");

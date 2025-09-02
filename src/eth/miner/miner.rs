@@ -1,15 +1,15 @@
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
 use itertools::Itertools;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
-use tokio::sync::broadcast;
 use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::Span;
@@ -17,6 +17,7 @@ use tracing::Span;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMined;
@@ -24,8 +25,8 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::StratusStorage;
-use crate::ext::not;
 use crate::ext::DisplayExt;
+use crate::ext::not;
 use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
 use crate::infra::tracing::SpanExt;
 
@@ -34,6 +35,15 @@ cfg_if::cfg_if! {
         use tracing::field;
         use tracing::info_span;
     }
+}
+
+/// Represents different types of items that can be committed to storage
+#[allow(clippy::large_enum_variant)]
+pub enum CommitItem {
+    /// A block
+    Block(Block),
+    /// A block that wasn't executed in this node and instead contains all changes already pre-computed
+    ReplicationBlock(Block),
 }
 
 pub struct Miner {
@@ -174,7 +184,7 @@ impl Miner {
             return;
         };
 
-        tracing::warn!("Shutting down interval miner to switch to external mode");
+        tracing::warn!("shutting down interval miner to switch to external mode");
 
         self.shutdown_signal.lock().cancel();
 
@@ -187,7 +197,7 @@ impl Miner {
     }
 
     /// Persists a transaction execution.
-    pub fn save_execution(&self, tx_execution: TransactionExecution, check_conflicts: bool, is_local: bool) -> Result<(), StratusError> {
+    pub fn save_execution(&self, tx_execution: TransactionExecution, is_local: bool) -> Result<(), StratusError> {
         let tx_hash = tx_execution.input.hash;
 
         // track
@@ -201,10 +211,12 @@ impl Miner {
         let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         // save execution to temporary storage
-        self.storage.save_execution(tx_execution, check_conflicts, is_local)?;
+        self.storage.save_execution(tx_execution, is_local)?;
 
         // notify
-        let _ = self.notifier_pending_txs.send(tx_hash);
+        if self.has_pending_tx_subscribers() {
+            self.send_pending_tx_notification(&Some(tx_hash));
+        }
 
         // if automine is enabled, automatically mines a block
         if is_automine {
@@ -217,7 +229,7 @@ impl Miner {
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
-    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<Block> {
+    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<(Block, ExecutionChanges)> {
         // track
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
@@ -226,12 +238,14 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let mut block: Block = self.storage.finish_pending_block()?.into();
+        let (pending_block, changes) = self.storage.finish_pending_block()?;
+        let mut block: Block = pending_block.into();
+
         Span::with(|s| s.rec_str("block_number", &block.header.number));
         block.apply_external(&external_block);
 
         match external_block == block {
-            true => Ok(block),
+            true => Ok((block, changes)),
             false => Err(anyhow!(
                 "mismatching block info:\n\tlocal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}\n\texternal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}",
                 block.number(),
@@ -249,14 +263,14 @@ impl Miner {
     pub fn mine_local_and_commit(&self) -> anyhow::Result<(), StorageError> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
 
-        let block = self.mine_local()?;
-        self.commit(block)
+        let (block, changes) = self.mine_local()?;
+        self.commit(CommitItem::Block(block), changes)
     }
 
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
-    pub fn mine_local(&self) -> anyhow::Result<Block, StorageError> {
+    pub fn mine_local(&self) -> anyhow::Result<(Block, ExecutionChanges), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
 
@@ -264,14 +278,24 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let block = self.storage.finish_pending_block()?;
+        let (block, changes) = self.storage.finish_pending_block()?;
         Span::with(|s| s.rec_str("block_number", &block.header.number));
 
-        Ok(block.into())
+        Ok((block.into(), changes))
+    }
+
+    pub fn commit(&self, item: CommitItem, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
+        match item {
+            CommitItem::Block(block) => self.commit_block(block, changes, false),
+            CommitItem::ReplicationBlock(block) => {
+                self.storage.finish_pending_block()?;
+                self.commit_block(block, changes, true)
+            }
+        }
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub fn commit_block(&self, block: Block, changes: ExecutionChanges, complete_changes: bool) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -285,32 +309,67 @@ impl Miner {
         tracing::debug!(%block_number, "miner acquired commit lock");
 
         // extract fields to use in notifications if have subscribers
-        let block_header = if self.notifier_blocks.receiver_count() > 0 {
+        let block_header = if self.has_block_header_subscribers() {
             Some(block.header.clone())
         } else {
             None
         };
-        let block_logs = if self.notifier_logs.receiver_count() > 0 {
+        let block_logs = if self.has_log_subscribers() {
             Some(block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec())
         } else {
             None
         };
 
         // save storage
-        self.storage.save_block(block)?;
-        self.storage.set_mined_block_number(block_number)?;
+        self.storage.save_block(block, changes, complete_changes)?;
 
-        // notify
-        if let Some(block_logs) = block_logs {
-            for log in block_logs {
-                let _ = self.notifier_logs.send(log);
-            }
-        }
-        if let Some(block_header) = block_header {
-            let _ = self.notifier_blocks.send(block_header);
-        }
+        // Send notifications after saving the block
+        self.send_log_notifications(&block_logs);
+        self.send_block_header_notification(&block_header);
 
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------------
+    // Notification methods
+    // -----------------------------------------------------------------------------
+
+    /// Checks if there are any subscribers for block header notifications
+    fn has_block_header_subscribers(&self) -> bool {
+        self.notifier_blocks.receiver_count() > 0
+    }
+
+    /// Checks if there are any subscribers for log notifications
+    fn has_log_subscribers(&self) -> bool {
+        self.notifier_logs.receiver_count() > 0
+    }
+
+    /// Checks if there are any subscribers for pending transaction notifications
+    fn has_pending_tx_subscribers(&self) -> bool {
+        self.notifier_pending_txs.receiver_count() > 0
+    }
+
+    /// Sends a notification for a block header
+    fn send_block_header_notification(&self, block_header: &Option<BlockHeader>) {
+        if let Some(block_header) = block_header {
+            let _ = self.notifier_blocks.send(block_header.clone());
+        }
+    }
+
+    /// Sends notifications for logs
+    fn send_log_notifications(&self, logs: &Option<Vec<LogMined>>) {
+        if let Some(logs) = logs {
+            for log in logs {
+                let _ = self.notifier_logs.send(log.clone());
+            }
+        }
+    }
+
+    /// Sends notifications for pending transactions
+    fn send_pending_tx_notification(&self, tx_hash: &Option<Hash>) {
+        if let Some(tx_hash) = tx_hash {
+            let _ = self.notifier_pending_txs.send(*tx_hash);
+        }
     }
 }
 
@@ -318,15 +377,16 @@ impl Miner {
 // Miner
 // -----------------------------------------------------------------------------
 pub mod interval_miner {
+    use std::sync::Arc;
     use std::sync::mpsc;
     use std::sync::mpsc::RecvTimeoutError;
-    use std::sync::Arc;
     use std::time::Duration;
 
     use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
     use crate::eth::miner::Miner;
+    use crate::eth::miner::miner::CommitItem;
     use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
 
@@ -365,7 +425,7 @@ pub mod interval_miner {
         let _mine_and_commit_lock = miner.locks.mine_and_commit.lock();
 
         // mine
-        let block = loop {
+        let (block, changes) = loop {
             match miner.mine_local() {
                 Ok(block) => break block,
                 Err(e) => {
@@ -376,7 +436,7 @@ pub mod interval_miner {
 
         // commit
         loop {
-            match miner.commit(block.clone()) {
+            match miner.commit(CommitItem::Block(block.clone()), changes.clone()) {
                 Ok(_) => break,
                 Err(e) => {
                     tracing::error!(reason = ?e, "failed to commit block");
