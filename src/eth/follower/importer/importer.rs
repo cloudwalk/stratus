@@ -248,6 +248,8 @@ impl Importer {
             let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
 
             if let ImporterMode::FakeLeader = importer_mode {
+                let block_number = block.number().as_u64();
+                
                 for tx in block.0.transactions.into_transactions() {
                     tracing::info!(?tx, "executing tx as fake miner");
                     if let Err(e) = executor.execute_local_transaction(tx.try_into()?) {
@@ -264,6 +266,14 @@ impl Importer {
                     }
                 }
                 mine_and_commit(&miner);
+                
+                if block_number == 104297271 {
+                    tracing::info!("Block 104297271 successfully imported by fake leader, sleeping indefinitely");
+                    loop {
+                        traced_sleep(Duration::from_secs(u64::MAX), SleepReason::SyncData).await;
+                    }
+                }
+                
                 continue;
             }
 
@@ -298,6 +308,8 @@ impl Importer {
                 }
             };
 
+            let mined_block_number = mined_block.number().as_u64();
+
             if let Some(ref kafka_conn) = kafka_connector {
                 let events = mined_block
                     .transactions
@@ -314,6 +326,13 @@ impl Importer {
                 Err(e) => {
                     let message = GlobalState::shutdown_from(TASK_NAME, "failed to commit external block");
                     return log_and_err!(reason = e, message);
+                }
+            }
+
+            if mined_block_number == 104297271 {
+                tracing::info!("Block 104297271 successfully imported by follower, sleeping indefinitely");
+                loop {
+                    traced_sleep(Duration::from_secs(u64::MAX), SleepReason::SyncData).await;
                 }
             }
 
