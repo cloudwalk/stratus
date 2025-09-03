@@ -28,6 +28,10 @@ pub struct RpcServerConfig {
     #[arg(long = "health-check-interval", env = "HEALTH_CHECK_INTERVAL_MS", default_value = "100")]
     pub health_check_interval_ms: u64,
 
+    /// JSON-RPC server max batch request limit
+    #[arg(long = "batch-request-limit", env = "BATCH_REQUEST_LIMIT", default_value = "500")]
+    pub batch_request_limit: u32,
+
     #[arg(long = "rpc-debug-trace-unsuccessful-only", value_parser=Self::parse_rpc_client_app_hashset ,env = "RPC_DEBUG_TRACE_UNSUCCESSFUL_ONLY")]
     pub rpc_debug_trace_unsuccessful_only: Option<HashSet<RpcClientApp>>,
 }
