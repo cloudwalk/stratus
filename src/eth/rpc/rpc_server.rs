@@ -201,7 +201,7 @@ impl Server {
             .set_id_provider(RandomStringIdProvider::new(8))
             .max_connections(this.rpc_config.rpc_max_connections)
             .max_response_body_size(this.rpc_config.rpc_max_response_size_bytes)
-            .set_batch_request_config(BatchRequestConfig::Limit(500))
+            .set_batch_request_config(BatchRequestConfig::Limit(this.rpc_config.batch_request_limit))
             .build();
 
         // serve module
