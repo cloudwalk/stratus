@@ -18,7 +18,6 @@ use revm::Context;
 use revm::Database;
 use revm::DatabaseRef;
 use revm::ExecuteCommitEvm;
-use revm::ExecuteEvm;
 use revm::InspectEvm;
 use revm::Inspector;
 use revm::context::BlockEnv;
@@ -128,7 +127,7 @@ impl Evm {
         }
 
         let tx = std::mem::take(&mut self.evm.tx);
-        let evm_result = self.evm.transact(tx);
+        let evm_result = self.evm.inspect_tx(tx);
 
         // extract results
         let session = &mut self.evm.journaled_state.database;
@@ -673,15 +672,15 @@ where
     }
 
     fn call_end(&mut self, _: &mut CTX, inputs: &revm::interpreter::CallInputs, outcome: &mut revm::interpreter::CallOutcome) {
-        tracing::debug!(?inputs, ?outcome);
+        tracing::debug!(?inputs, ?outcome, "call ended");
     }
 
     fn call(&mut self, _: &mut CTX, inputs: &mut revm::interpreter::CallInputs) -> Option<revm::interpreter::CallOutcome> {
-        tracing::debug!(?inputs);
+        tracing::debug!(?inputs, "call started");
         None
     }
 
     fn step(&mut self, interp: &mut revm::interpreter::Interpreter<EthInterpreter>, _: &mut CTX) {
-        tracing::debug!(?interp);
+        tracing::debug!(?interp, "step executed");
     }
 }
