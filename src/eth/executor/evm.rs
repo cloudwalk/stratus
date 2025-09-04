@@ -260,7 +260,8 @@ impl Evm {
             if tx.input.hash == tx_hash {
                 break;
             }
-            let tx_input = tx.into();
+            let mut tx_input: EvmInput = tx.into();
+            tx_input.gas_price = 0;
 
             // Configure EVM state
             evm.fill_env(tx_input);
