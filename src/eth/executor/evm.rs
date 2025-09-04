@@ -220,7 +220,8 @@ impl Evm {
             .read_transaction(tx_hash)?
             .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
 
-        if trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
+        // CREATE transactions need to be traced for blockscout to work correctly
+        if tx.deployed_contract_address().is_none() && trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
             return Ok(default_trace(tracer_type, tx));
         }
 
@@ -259,7 +260,8 @@ impl Evm {
             if tx.input.hash == tx_hash {
                 break;
             }
-            let tx_input = tx.into();
+            let mut tx_input: EvmInput = tx.into();
+            tx_input.gas_price = 0;
 
             // Configure EVM state
             evm.fill_env(tx_input);
