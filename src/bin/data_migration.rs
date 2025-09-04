@@ -20,6 +20,7 @@ use rocksdb::Options;
 use rocksdb::ReadOptions;
 use rocksdb::SliceTransform;
 use rocksdb::WriteBatch;
+use stratus::eth::storage::permanent::RocksCfCacheConfig;
 use stratus::eth::storage::permanent::RocksStorageState;
 
 const ESTIMATE_NUM_KEYS: &str = "rocksdb.estimate-num-keys";
@@ -250,7 +251,12 @@ fn main() -> Result<()> {
     let source_db = open_db(&args.source, &source_cf_options)?;
 
     // Create destination database
-    let state = RocksStorageState::new(args.destination, std::time::Duration::from_secs(240), Some(0.0), false)?;
+    let state = RocksStorageState::new(
+        args.destination,
+        std::time::Duration::from_secs(240),
+        RocksCfCacheConfig::default_with_multiplier(0.0),
+        false,
+    )?;
     let dest_db = Arc::clone(&state.db);
 
     // Get list of column families
