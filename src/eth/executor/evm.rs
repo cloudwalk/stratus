@@ -679,8 +679,4 @@ where
         tracing::debug!(?inputs, "call started");
         None
     }
-
-    fn step(&mut self, interp: &mut revm::interpreter::Interpreter<EthInterpreter>, _: &mut CTX) {
-        tracing::debug!(?interp, "step executed");
-    }
 }
