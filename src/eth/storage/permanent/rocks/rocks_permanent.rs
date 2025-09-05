@@ -38,6 +38,17 @@ pub struct RocksPermanentStorage {
     block_number: AtomicU32,
 }
 
+fn get_current_file_descriptor_limit() -> Result<libc::rlimit, StorageError> {
+    let mut rlimit = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+    let result = unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlimit as *mut libc::rlimit) };
+    if result != 0 {
+        let err = std::io::Error::last_os_error();
+        let msg = format!("Failed to get current file descriptor limit (error: {err}).");
+        return Err(StorageError::Unexpected { msg });
+    }
+    Ok(rlimit)
+}
+
 impl RocksPermanentStorage {
     pub fn new(
         db_path_prefix: Option<String>,
@@ -45,8 +56,12 @@ impl RocksPermanentStorage {
         cache_size_multiplier: Option<f32>,
         enable_sync_write: bool,
         cf_size_metrics_interval: Option<Duration>,
+        file_descriptors_limit: u64,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
+
+        // Check file descriptor limit before proceeding with RocksDB initialization
+        Self::check_file_descriptor_limit(file_descriptors_limit).map_err(|err| anyhow::anyhow!("{}", err))?;
 
         let path = if let Some(prefix) = db_path_prefix {
             // run some checks on the given prefix
@@ -83,6 +98,38 @@ impl RocksPermanentStorage {
         Ok(Self { state, block_number })
     }
 
+    /// Checks the current file descriptor limit and validates it meets the minimum requirement.
+    ///
+    /// This prevents RocksDB from misbehaving or corrupting data due to insufficient file descriptors.
+    fn check_file_descriptor_limit(limit_required: u64) -> Result<(), StorageError> {
+        let current_limit = get_current_file_descriptor_limit()?;
+
+        tracing::info!(
+            current_limit = current_limit.rlim_cur,
+            min_required = limit_required,
+            "checking file descriptor limit for RocksDB"
+        );
+
+        if current_limit.rlim_cur < limit_required {
+            tracing::warn!(
+                current_limit = current_limit.rlim_cur,
+                min_required = limit_required,
+                "File descriptor limit is below minimum."
+            );
+
+            let msg = format!(
+                "File descriptor limit (current: {}, max: {}) is below the recommended minimum ({limit_required}) for RocksDB.",
+                current_limit.rlim_cur, current_limit.rlim_max
+            );
+
+            return Err(StorageError::Unexpected { msg });
+        } else {
+            tracing::info!("File descriptor limit check passed: {} >= {}", current_limit.rlim_cur, limit_required);
+        }
+
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
@@ -111,6 +158,10 @@ impl RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to read account in RocksPermanent");
             })
+    }
+
+    pub fn read_accounts(&self, addresses: Vec<Address>) -> anyhow::Result<Vec<(Address, Account)>, StorageError> {
+        self.state.read_accounts(addresses).map_err(|err| StorageError::RocksError { err })
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError> {
@@ -261,5 +312,25 @@ impl RocksPermanentStorage {
         self.state.reset().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to reset in RocksPermanent");
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ulimit_check_with_no_change() {
+        let result = RocksPermanentStorage::check_file_descriptor_limit(1024);
+        assert!(result.is_ok(), "ulimit check should succeed with reasonable low limit");
+    }
+
+    #[test]
+    fn test_ulimit_check_with_max_requirement() {
+        let result = RocksPermanentStorage::check_file_descriptor_limit(u64::MAX);
+        assert!(
+            result.is_err(),
+            "ulimit check should fail because the required limit is above the system maximum"
+        );
     }
 }

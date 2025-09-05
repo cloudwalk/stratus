@@ -9,6 +9,7 @@ use std::time::Instant;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
+use itertools::Itertools;
 use rocksdb::DB;
 use rocksdb::Direction;
 use rocksdb::Options;
@@ -391,6 +392,12 @@ impl RocksStorageState {
                 Ok(None)
             }
         }
+    }
+
+    pub fn read_accounts(&self, addresses: Vec<Address>) -> Result<Vec<(Address, Account)>> {
+        self.accounts
+            .multi_get(addresses.into_iter().map_into())
+            .map(|vec| vec.into_iter().map(|(addr, acc)| (addr.into(), acc.to_account(addr.into()))).collect_vec())
     }
 
     pub fn read_block(&self, selection: BlockFilter) -> Result<Option<Block>> {

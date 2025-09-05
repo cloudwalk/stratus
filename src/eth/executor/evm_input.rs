@@ -193,7 +193,8 @@ impl From<TransactionMined> for EvmInput {
             data: value.input.input,
             nonce: Some(value.input.nonce),
             gas_limit: value.input.gas_limit,
-            gas_price: value.input.gas_price,
+            // We don't charge for transactions
+            gas_price: 0,
             block_number: value.block_number,
             block_timestamp: value.block_timestamp,
             point_in_time: PointInTime::MinedPast(value.block_number),

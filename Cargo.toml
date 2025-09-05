@@ -41,6 +41,7 @@ sugars = "=3.0.1"
 thiserror = "=2.0.15"
 uuid = { version = "=1.17.0", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
+libc = "=0.2.175"
 
 # async
 tokio = { version = "=1.47.1", features = [
@@ -113,7 +114,7 @@ tracing-subscriber = { version = "=0.3.19", features = ["env-filter", "json"] }
 tracing-serde = "=0.2.0"
 
 # storage
-rocksdb = { version = "=0.24.0", features = ["multi-threaded-cf"] }
+rocksdb = { version = "=0.24.0", features = ["multi-threaded-cf", "jemalloc"] }
 sqlx = { version = "=0.8.6", features = [
     "runtime-tokio",
     "postgres",
