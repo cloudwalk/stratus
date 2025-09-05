@@ -13,7 +13,6 @@ use alloy_rpc_types_trace::geth::call::FlatCallFrame;
 use alloy_rpc_types_trace::geth::mux::MuxFrame;
 use anyhow::anyhow;
 use itertools::Itertools;
-use log::log_enabled;
 use revm::Context;
 use revm::Database;
 use revm::DatabaseRef;
@@ -120,13 +119,11 @@ impl Evm {
 
         self.evm.fill_env(input);
 
-        if log_enabled!(log::Level::Debug) {
-            let block_env_log = self.evm.block.clone();
-            let tx_env_log = self.evm.tx.clone();
-            // execute transaction
-            tracing::debug!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
-        }
+        let block_env_log = &self.evm.block;
+        let tx_env_log = &self.evm.tx;
 
+        // execute transaction
+        tracing::info!(block_env = ?block_env_log, tx_env = ?tx_env_log, "executing transaction in revm");
         let tx = std::mem::take(&mut self.evm.tx);
         let evm_result = self.evm.transact(tx);
 
