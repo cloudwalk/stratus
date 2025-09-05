@@ -1,4 +1,5 @@
 pub mod codegen;
+pub mod decode;
 pub mod executor;
 pub mod external_rpc;
 pub mod follower;
