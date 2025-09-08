@@ -90,6 +90,11 @@ impl StorageCache {
         self.slot_latest_cache.clear();
     }
 
+    pub fn clear_pending(&self) {
+        self.slot_cache.clear();
+        self.account_cache.clear();
+    }
+
     pub fn cache_slot_if_missing(&self, address: Address, slot: Slot) {
         self.slot_cache.insert_if_missing((address, slot.index), slot.value);
     }
