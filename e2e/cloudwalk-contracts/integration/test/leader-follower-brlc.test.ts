@@ -131,7 +131,7 @@ describe("Leader & Follower BRLC integration test", function () {
                         txList.push(tx);
                         txHashList.push(tx.hash);
                     } catch (error) {
-                      console.log(error);
+                        console.log(error);
                     }
 
                     nonces[senderIndex]++;
@@ -141,7 +141,7 @@ describe("Leader & Follower BRLC integration test", function () {
 
                 // Wait for all transactions to be mined
                 console.log(`          ✔ Waiting for ${txList.length} transactions to be mined...`);
-                const receipts = await Promise.all(txList.map(tx => tx.wait()));
+                const receipts = await Promise.all(txList.map((tx) => tx.wait()));
                 console.log(`          ✔ All ${receipts.length} transactions have been mined`);
             });
 
