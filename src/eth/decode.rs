@@ -37,14 +37,12 @@ fn parse_to_param_types(signature: &str) -> Result<Vec<ParamType>, DecodeInputEr
     if params_str.is_empty() {
         return Ok(Vec::new());
     }
-    let param_tokens = tokenize_parameters(params_str)?;
-    let param_types = param_tokens.iter().map(parse_solidity_type).collect::<Result<Vec<_>, _>>()?;
-    Ok(param_types)
+    tokenize_parameters(params_str)
 }
 
 /// Tokenizes parameter string while respecting nested parentheses for tuples.
 /// Example: "address,(uint32,uint32,uint64),bool" -> ["address", "(uint32,uint32,uint64)", "bool"]
-fn tokenize_parameters(params_str: &str) -> Result<Vec<String>, DecodeInputError> {
+fn tokenize_parameters(params_str: &str) -> Result<Vec<ParamType>, DecodeInputError> {
     let mut tokens = Vec::new();
     let mut current_token = String::new();
     let mut paren_depth = 0;
@@ -86,7 +84,7 @@ fn tokenize_parameters(params_str: &str) -> Result<Vec<String>, DecodeInputError
             ',' => {
                 if paren_depth == 0 && !bracket_open {
                     // We're at the top level, this comma separates parameters
-                    tokens.push(current_token.trim().to_string());
+                    tokens.push(parse_solidity_type(current_token.trim())?);
                     current_token.clear();
                 } else {
                     // We're inside parentheses or brackets, this comma is part of the current token
@@ -101,7 +99,7 @@ fn tokenize_parameters(params_str: &str) -> Result<Vec<String>, DecodeInputError
 
     // Add the last token
     if !current_token.trim().is_empty() {
-        tokens.push(current_token.trim().to_string());
+        tokens.push(parse_solidity_type(current_token.trim())?);
     }
 
     // Check for unmatched parentheses/brackets
@@ -143,10 +141,7 @@ fn parse_solidity_type(type_str: impl AsRef<str>) -> Result<ParamType, DecodeInp
                 return Ok(ParamType::Tuple(Vec::new()));
             }
 
-            // Tokenize the tuple elements while respecting nested structures
-            let element_tokens = tokenize_parameters(inner_str)?;
-            let tuple_types = element_tokens.iter().map(parse_solidity_type).collect::<Result<Vec<_>, _>>()?;
-            Ok(ParamType::Tuple(tuple_types))
+            Ok(ParamType::Tuple(tokenize_parameters(inner_str)?))
         }
         "address" => Ok(ParamType::Address),
         "bool" => Ok(ParamType::Bool),
