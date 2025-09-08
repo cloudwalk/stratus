@@ -103,11 +103,15 @@ impl StorageCache {
         self.account_cache.insert_if_missing(account.address, account);
     }
 
-    pub fn cache_account_and_slots_from_changes(&self, changes: ExecutionChanges) {
+    pub fn _cache_changes_impl(
+        slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
+        account_cache: &Cache<Address, Account, UnitWeighter, FxBuildHasher>,
+        changes: ExecutionChanges,
+    ) {
         for (address, change) in changes {
             // cache slots
             for slot in change.slots.into_values().flat_map(|slot| slot.take()) {
-                self.slot_cache.insert((address, slot.index), slot.value);
+                slot_cache.insert((address, slot.index), slot.value);
             }
 
             // cache account
@@ -121,30 +125,16 @@ impl StorageCache {
             if let Some(Some(bytecode)) = change.bytecode.take_ref() {
                 account.info.bytecode = Some(bytecode.clone());
             }
-            self.account_cache.insert(address, account.info);
+            account_cache.insert(address, account.info);
         }
     }
 
-    pub fn cache_account_and_slots_latest_from_changes(&self, changes: ExecutionChanges) {
-        for (address, change) in changes {
-            // cache slots
-            for slot in change.slots.into_values().flat_map(|slot| slot.take()) {
-                self.slot_latest_cache.insert((address, slot.index), slot.value);
-            }
+    pub fn cache_account_and_slots_from_changes(&self, changes: ExecutionChanges) {
+        Self::_cache_changes_impl(&self.slot_cache, &self.account_cache, changes);
+    }
 
-            // cache account
-            let mut account = AccountWithSlots::new(address);
-            if let Some(nonce) = change.nonce.take_ref() {
-                account.info.nonce = *nonce;
-            }
-            if let Some(balance) = change.balance.take_ref() {
-                account.info.balance = *balance;
-            }
-            if let Some(Some(bytecode)) = change.bytecode.take_ref() {
-                account.info.bytecode = Some(bytecode.clone());
-            }
-            self.account_latest_cache.insert(address, account.info);
-        }
+    pub fn cache_account_and_slots_latest_from_changes(&self, changes: ExecutionChanges) {
+        Self::_cache_changes_impl(&self.slot_latest_cache, &self.account_latest_cache, changes);
     }
 
     pub fn get_slot(&self, address: Address, index: SlotIndex) -> Option<Slot> {

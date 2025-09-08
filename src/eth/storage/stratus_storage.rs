@@ -551,7 +551,7 @@ impl StratusStorage {
             self.perm.save_block(block, changes.clone())?;
             // This implies that the execution changes were not added to the pending cache and therefore it will be outdated once latest is updated
             if complete_changes {
-                self.cache.clear_pending();
+                self.cache.cache_account_and_slots_from_changes(changes.clone());
             }
             self.cache.cache_account_and_slots_latest_from_changes(changes);
             drop(guard);
