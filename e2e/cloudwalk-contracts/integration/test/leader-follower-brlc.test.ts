@@ -97,6 +97,7 @@ describe("Leader & Follower BRLC integration test", function () {
             });
 
             let txHashList: string[] = [];
+            let txList: TransactionResponse[] = [];
             it(`${params.name}: Transfer BRLC between wallets at a configurable TPS`, async function () {
                 this.timeout(params.duration * 1000 + 10000);
 
@@ -127,13 +128,21 @@ describe("Leader & Follower BRLC integration test", function () {
                             type: 0,
                             nonce: nonces[senderIndex],
                         });
+                        txList.push(tx);
                         txHashList.push(tx.hash);
-                    } catch (error) {}
+                    } catch (error) {
+                      console.log(error);
+                    }
 
                     nonces[senderIndex]++;
 
                     await new Promise((resolve) => setTimeout(resolve, transactionInterval));
                 }
+
+                // Wait for all transactions to be mined
+                console.log(`          ✔ Waiting for ${txList.length} transactions to be mined...`);
+                const receipts = await Promise.all(txList.map(tx => tx.wait()));
+                console.log(`          ✔ All ${receipts.length} transactions have been mined`);
             });
 
             it(`${params.name}: Validate transaction mined delay between Stratus Leader & Follower`, async function () {
