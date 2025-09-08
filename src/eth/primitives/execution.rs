@@ -17,6 +17,7 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
+use crate::eth::primitives::LogTopic;
 use crate::ext::not;
 use crate::log_and_err;
 
@@ -141,6 +142,21 @@ impl EvmExecution {
         }
 
         let receipt_logs = receipt.inner.logs();
+
+        // Detect when address 0xba587c1d62940b26bbd7860814133758b84ec006 gets blocklisted
+        for log in &self.logs {
+            if log.address == Address::from(hex!("a9a55a81a4c085ec0c31585aed4cfb09d78dfd53"))
+                && log.topic0 == Some(LogTopic(B256::from(hex!("917c251bb231c4b997a420bebe47edad5c20e70715da16c38e9b2e172e44ab92"))))
+                && log.topic1 == Some(LogTopic(B256::from(hex!("000000000000000000000000ba587c1d62940b26bbd7860814133758b84ec006")))) {
+                return log_and_err!(format!(
+                    "BLOCKLIST: Address blocklisted at block {} tx {}",
+                    receipt.block_number(), 
+                    receipt.hash()
+                ));
+            }
+        }
+
+
 
         // compare logs length
         if self.logs.len() != receipt_logs.len() {
