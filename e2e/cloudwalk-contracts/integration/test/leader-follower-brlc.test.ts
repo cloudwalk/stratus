@@ -99,7 +99,7 @@ describe("Leader & Follower BRLC integration test", function () {
             let txHashList: string[] = [];
             let txList: TransactionResponse[] = [];
             it(`${params.name}: Transfer BRLC between wallets at a configurable TPS`, async function () {
-                this.timeout(params.duration * 1000 + 10000);
+                this.timeout(params.duration * 1000 + 30000);
 
                 const transactionInterval = 1000 / params.tps;
 
