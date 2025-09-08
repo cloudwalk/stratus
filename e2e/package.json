@@ -12,5 +12,14 @@
         "undici": "^6.21.1",
         "web3-types": "^1.3.1",
         "ws": "^8.16.0"
+    },
+    "overrides": {
+        "chalk": "4.1.2",
+        "debug": "4.3.4",
+        "ansi-styles": "4.3.0",
+        "supports-color": "8.1.1",
+        "strip-ansi": "6.0.1",
+        "ansi-regex": "5.0.1",
+        "wrap-ansi": "7.0.0"
     }
 }
