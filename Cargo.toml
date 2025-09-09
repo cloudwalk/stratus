@@ -110,7 +110,7 @@ sentry = "=0.42.0"
 sentry-tracing = "=0.42.0"
 tracing = { version = "=0.1.41", features = ["attributes"] }
 tracing-opentelemetry = "=0.31.0"
-tracing-subscriber = { version = "=0.3.19", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "=0.3.20", features = ["env-filter", "json"] }
 tracing-serde = "=0.2.0"
 
 # storage
