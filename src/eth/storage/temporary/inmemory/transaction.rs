@@ -161,12 +161,12 @@ impl InmemoryTransactionTemporaryStorage {
     pub fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError> {
         Ok(
             match self.pending_block.read().accounts.get(&address).and_then(|account| account.slots.get(&index)) {
-                Some(pending_slot) => (*pending_slot).take(),
+                Some(value) => Some(Slot { index, value: *value }),
                 None => self.latest_block.read().as_ref().and_then(|latest| {
                     latest
                         .accounts
                         .get(&address)
-                        .and_then(|account| account.slots.get(&index).and_then(|slot| (*slot).take()))
+                        .and_then(|account| account.slots.get(&index).and_then(|value| Some(Slot { index, value: *value })))
                 }),
             },
         )
@@ -182,7 +182,7 @@ impl InmemoryTransactionTemporaryStorage {
 
         // Only update if the account exists
         if let Some(account) = pending_block.accounts.get_mut(&address) {
-            account.slots.insert(slot.index, slot.into());
+            account.slots.insert(slot.index, slot.value);
         }
 
         Ok(())

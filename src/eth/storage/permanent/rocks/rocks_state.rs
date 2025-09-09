@@ -246,17 +246,15 @@ impl RocksStorageState {
                     .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
             }
 
-            for (&slot_index, slot_change) in &change.slots {
-                if let Some(slot) = slot_change.take_modified_ref() {
-                    let slot_index = slot_index.into();
-                    let slot_value: SlotValueRocksdb = slot.value.into();
+            for (&slot_index, slot_value) in &change.slots {
+                let slot_index = slot_index.into();
+                let slot_value: SlotValueRocksdb = (*slot_value).into();
 
-                    account_change_entry.slot_changes.insert(slot_index, slot_value);
-                    self.account_slots
-                        .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
-                    self.account_slots_history
-                        .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
-                }
+                account_change_entry.slot_changes.insert(slot_index, slot_value);
+                self.account_slots
+                    .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
+                self.account_slots_history
+                    .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
             }
 
             account_change_entry
@@ -407,12 +405,13 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
+                }
+            }
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }

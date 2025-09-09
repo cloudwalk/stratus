@@ -29,12 +29,14 @@ pub trait ExecutionChangesExt {
 impl ExecutionChangesExt for ExecutionChanges {
     fn merge(&mut self, other: ExecutionChanges) {
         for (address, changes) in other {
-            match self.entry(address) {
-                std::collections::btree_map::Entry::Occupied(mut entry) => {
-                    entry.get_mut().merge(changes);
-                }
-                std::collections::btree_map::Entry::Vacant(entry) => {
-                    entry.insert(changes);
+            if changes.is_account_modified() || !changes.slots.is_empty() {
+                match self.entry(address) {
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        entry.get_mut().merge(changes);
+                    }
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(changes);
+                    }
                 }
             }
         }

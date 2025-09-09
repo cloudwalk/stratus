@@ -3,9 +3,7 @@ use std::collections::BTreeMap;
 use crate::alias::RevmBytecode;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Slot;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
 use crate::eth::storage::permanent::rocks::types::SlotIndexRocksdb;
@@ -43,7 +41,7 @@ impl From<BlockChangesRocksdb> for ExecutionChanges {
                         slots: changes
                             .slot_changes
                             .into_iter()
-                            .map(|(idx, value)| (idx.into(), ExecutionValueChange::from_modified(Slot::new(idx.into(), value.into()))))
+                            .map(|(idx, value)| (idx.into(), value.into()))
                             .collect(),
                     },
                 )

@@ -61,7 +61,6 @@ use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
-use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::PointInTime;
@@ -461,19 +460,6 @@ impl Database for RevmSession {
 
         // load slot from storage
         let slot = self.storage.read_slot(address, index, self.input.point_in_time, self.input.kind)?;
-
-        // track original value, except if ignored address
-        if not(address.is_ignored()) {
-            match self.storage_changes.get_mut(&address) {
-                Some(account) => {
-                    account.slots.insert(index, ExecutionValueChange::from_original(slot));
-                }
-                None => {
-                    tracing::error!(reason = "reading slot without account loaded", %address, %index);
-                    return Err(UnexpectedError::Unexpected(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address)).into());
-                }
-            };
-        }
 
         Ok(slot.value.into())
     }

@@ -103,14 +103,12 @@ impl InMemoryCallTemporaryStorage {
             }
 
             // Add slot changes
-            for (slot_index, slot_change) in &change.slots {
-                if let Some(slot) = slot_change.take_modified_ref() {
-                    block_state
-                        .slots
-                        .entry((*address, *slot_index))
-                        .or_default()
-                        .push((slot.value, current_tx_count));
-                }
+            for (slot_index, slot_value) in &change.slots {
+                block_state
+                    .slots
+                    .entry((*address, *slot_index))
+                    .or_default()
+                    .push((*slot_value, current_tx_count));
             }
         }
     }

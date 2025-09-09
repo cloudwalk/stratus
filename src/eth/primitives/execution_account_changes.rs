@@ -9,6 +9,7 @@ use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::Wei;
 
 /// Changes that happened to an account during a transaction.
@@ -20,7 +21,7 @@ pub struct ExecutionAccountChanges {
     // TODO: bytecode related information should be grouped in a Bytecode struct
     #[dummy(default)]
     pub bytecode: ExecutionValueChange<Option<RevmBytecode>>,
-    pub slots: BTreeMap<SlotIndex, ExecutionValueChange<Slot>>, // TODO: should map idx to slotvalue
+    pub slots: BTreeMap<SlotIndex, SlotValue>, // TODO: should map idx to slotvalue
 }
 
 impl ExecutionAccountChanges {
@@ -73,7 +74,7 @@ impl ExecutionAccountChanges {
         };
 
         for slot in modified_slots {
-            changes.slots.insert(slot.index, ExecutionValueChange::from_modified(slot));
+            changes.slots.insert(slot.index, slot.value);
         }
 
         changes
@@ -101,14 +102,7 @@ impl ExecutionAccountChanges {
 
         // update all slots because all of them are modified
         for slot in modified_slots {
-            match self.slots.get_mut(&slot.index) {
-                Some(ref mut entry) => {
-                    entry.set_modified(slot);
-                }
-                None => {
-                    self.slots.insert(slot.index, ExecutionValueChange::from_modified(slot));
-                }
-            };
+            self.slots.insert(slot.index, slot.value);
         }
     }
 
