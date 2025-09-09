@@ -21,7 +21,7 @@ pub struct ExecutionAccountChanges {
     // TODO: bytecode related information should be grouped in a Bytecode struct
     #[dummy(default)]
     pub bytecode: ExecutionValueChange<Option<RevmBytecode>>,
-    pub slots: BTreeMap<SlotIndex, SlotValue>, // TODO: should map idx to slotvalue
+    pub slots: BTreeMap<SlotIndex, SlotValue>,
 }
 
 impl ExecutionAccountChanges {
