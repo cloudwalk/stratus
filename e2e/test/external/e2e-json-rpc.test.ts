@@ -613,7 +613,6 @@ describe("JSON-RPC", () => {
             });
 
             it("JS tracer for LOG opcodes", async function () {
-                this.timeout(120000); // Increase timeout to 2 minutes
                 const { deployTestContractBalances } = await import("../helpers/rpc");
                 const contract = await deployTestContractBalances();
                 await sendEvmMine();
