@@ -98,14 +98,14 @@ pub enum EvmKind {
 
 impl Evm {
     /// Creates a new instance of the Evm.
-    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig, kind: EvmKind) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, config: Arc<ExecutorConfig>, kind: EvmKind) -> Self {
         tracing::info!(?config, "creating revm");
 
         // configure revm
         let chain_id = config.executor_chain_id;
 
         Self {
-            evm: Self::create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage, config.clone()), kind),
+            evm: Self::create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage, config), kind),
             kind,
         }
     }
@@ -379,7 +379,7 @@ impl BlockEnvExt for BlockEnv {
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 struct RevmSession {
     /// Executor configuration.
-    config: ExecutorConfig,
+    config: Arc<ExecutorConfig>,
 
     /// Service to communicate with the storage.
     storage: Arc<StratusStorage>,
@@ -396,7 +396,7 @@ struct RevmSession {
 
 impl RevmSession {
     /// Creates the base session to be used with REVM.
-    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, config: Arc<ExecutorConfig>) -> Self {
         Self {
             config,
             storage,

@@ -113,16 +113,17 @@ struct Evms {
 
 impl Evms {
     /// Spawns EVM tasks in background.
-    fn spawn(storage: Arc<StratusStorage>, config: &ExecutorConfig) -> Self {
+    fn spawn(storage: Arc<StratusStorage>, config: Arc<ExecutorConfig>) -> Self {
         // function executed by evm threads
-        fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<EvmTask>, kind: EvmKind) {
-            let mut evm = Evm::new(storage, config, kind);
-
+        fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, config: Arc<ExecutorConfig>, task_rx: crossbeam_channel::Receiver<EvmTask>, kind: EvmKind) {
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
                 if GlobalState::is_shutdown_warn(task_name) {
                     return;
                 }
+
+                // create a new evm for each transaction
+                let mut evm = Evm::new(Arc::clone(&storage), Arc::clone(&config), kind);
 
                 // execute
                 let _enter = task.span.enter();
@@ -141,7 +142,7 @@ impl Evms {
             for evm_index in 1..=num_evms {
                 let evm_task_name = format!("{task_name}-{evm_index}");
                 let evm_storage = Arc::clone(&storage);
-                let evm_config = config.clone();
+                let evm_config = Arc::clone(&config);
                 let evm_rx = evm_rx.clone();
                 let thread_name = evm_task_name.clone();
                 spawn_thread(&thread_name, move || {
@@ -151,14 +152,15 @@ impl Evms {
             evm_tx
         };
 
-        fn inspector_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<InspectorTask>) {
-            let mut evm = Evm::new(storage, config, EvmKind::Call);
-
+        fn inspector_loop(task_name: &str, storage: Arc<StratusStorage>, config: Arc<ExecutorConfig>, task_rx: crossbeam_channel::Receiver<InspectorTask>) {
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
                 if GlobalState::is_shutdown_warn(task_name) {
                     return;
                 }
+
+                // create a new evm for each transaction
+                let mut evm = Evm::new(Arc::clone(&storage), Arc::clone(&config), EvmKind::Call);
 
                 // execute
                 let _enter = task.span.enter();
@@ -177,7 +179,7 @@ impl Evms {
             for index in 1..=num_evms {
                 let task_name = format!("{task_name}-{index}");
                 let storage = Arc::clone(&storage);
-                let config = config.clone();
+                let config = Arc::clone(&config);
                 let rx = rx.clone();
                 let thread_name = task_name.clone();
                 spawn_thread(&thread_name, move || {
@@ -281,7 +283,7 @@ pub struct Executor {
 impl Executor {
     pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating executor");
-        let evms = Evms::spawn(Arc::clone(&storage), &config);
+        let evms = Evms::spawn(Arc::clone(&storage), Arc::new(config));
         Self {
             locks: ExecutorLocks::default(),
             evms,
