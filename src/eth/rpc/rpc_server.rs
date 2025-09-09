@@ -46,6 +46,7 @@ use crate::alias::JsonValue;
 use crate::config::StratusConfig;
 use crate::eth::codegen;
 use crate::eth::codegen::CONTRACTS;
+use crate::eth::decode;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::Importer;
@@ -58,6 +59,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::ConsensusError;
+use crate::eth::primitives::DecodeInputError;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::ImporterError;
@@ -1491,22 +1493,37 @@ fn enhance_serialized_call_frame(json: &mut JsonValue) {
             .and_then(|v| v.as_str())
             .and_then(|s| s.parse::<Address>().ok())
             .and_then(|addr| CONTRACTS.get(addr.as_slice()).map(|s| s.to_string()))
-            .and_then(|s| json_obj.insert("decoded_from_contract".to_string(), json!(s)));
+            .and_then(|s| json_obj.insert("decodedFromContract".to_string(), json!(s)));
 
         json_obj
             .get("to")
             .and_then(|v| if v.is_null() { None } else { v.as_str() })
             .and_then(|s| s.parse::<Address>().ok())
             .and_then(|addr| CONTRACTS.get(addr.as_slice()).map(|s| s.to_string()))
-            .and_then(|s| json_obj.insert("decoded_to_contract".to_string(), json!(s)));
+            .and_then(|s| json_obj.insert("decodedToContract".to_string(), json!(s)));
 
         json_obj
             .get("input")
             .and_then(|v| v.as_str())
             .and_then(|s| const_hex::decode(s.trim_start_matches("0x")).ok())
-            .and_then(|input| codegen::function_sig_opt(input))
-            .and_then(|s| json_obj.insert("decoded_function_signature".to_string(), json!(s)));
+            .inspect(|input| {
+                if let Some(signature) = codegen::function_sig_opt(input) {
+                    json_obj.insert("decodedFunctionSignature".to_string(), json!(signature));
+                }
 
+                match decode::decode_input_arguments(input) {
+                    Ok(args) => {
+                        json_obj.insert("decodedFunctionArguments".to_string(), json!(args));
+                    }
+                    Err(DecodeInputError::InvalidAbi { message }) => {
+                        tracing::warn!(
+                            message = %message,
+                            "Invalid ABI stored"
+                        );
+                    }
+                    _ => (),
+                }
+            });
         if let Some(calls) = json_obj.get_mut("calls").and_then(|v| v.as_array_mut()) {
             for call in calls {
                 enhance_serialized_call_frame(call);
