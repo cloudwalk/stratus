@@ -1,3 +1,4 @@
+pub use self::rocks::RocksCfCacheConfig;
 pub use self::rocks::RocksPermanentStorage;
 pub use self::rocks::RocksStorageState;
 
@@ -28,11 +29,11 @@ pub struct PermanentStorageConfig {
     #[arg(long = "rocks-shutdown-timeout", env = "ROCKS_SHUTDOWN_TIMEOUT", value_parser=parse_duration, default_value = "4m")]
     pub rocks_shutdown_timeout: Duration,
 
-    /// Augments or decreases the size of Column Family caches based on a multiplier.
-    #[arg(long = "rocks-cache-size-multiplier", env = "ROCKS_CACHE_SIZE_MULTIPLIER")]
-    pub rocks_cache_size_multiplier: Option<f32>,
+    /// Individual cache size configuration for each RocksDB Column Family.
+    #[clap(flatten)]
+    pub rocks_cf_cache: RocksCfCacheConfig,
 
-    /// Augments or decreases the size of Column Family caches based on a multiplier.
+    /// Disables sync write for RocksDB (improves performance but reduces durability).
     #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
     pub rocks_disable_sync_write: bool,
 
@@ -59,7 +60,7 @@ impl PermanentStorageConfig {
         RocksPermanentStorage::new(
             self.rocks_path_prefix.clone(),
             self.rocks_shutdown_timeout,
-            self.rocks_cache_size_multiplier,
+            self.rocks_cf_cache.clone(),
             !self.rocks_disable_sync_write,
             self.rocks_cf_size_metrics_interval,
             self.rocks_file_descriptors_limit,

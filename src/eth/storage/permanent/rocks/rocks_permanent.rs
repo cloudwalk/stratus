@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::bail;
 
+use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
 use crate::GlobalState;
 use crate::eth::primitives::Account;
@@ -53,7 +54,7 @@ impl RocksPermanentStorage {
     pub fn new(
         db_path_prefix: Option<String>,
         shutdown_timeout: Duration,
-        cache_size_multiplier: Option<f32>,
+        cf_cache_config: RocksCfCacheConfig,
         enable_sync_write: bool,
         cf_size_metrics_interval: Option<Duration>,
         file_descriptors_limit: u64,
@@ -81,7 +82,7 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = Arc::new(RocksStorageState::new(path, shutdown_timeout, cache_size_multiplier, enable_sync_write)?);
+        let state = Arc::new(RocksStorageState::new(path, shutdown_timeout, cf_cache_config, enable_sync_write)?);
 
         let block_number = state.preload_block_number()?;
 
