@@ -546,8 +546,6 @@ impl StratusStorage {
             }
         }
 
-        dbg!(complete_changes, block.clone());
-        dbg!(complete_changes, changes.clone());
         timed(|| {
             let guard = self.transient_state_lock.write();
             self.perm.save_block(block, changes.clone())?;

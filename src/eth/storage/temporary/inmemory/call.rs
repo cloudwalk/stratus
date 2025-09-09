@@ -52,11 +52,17 @@ impl InMemoryCallTemporaryStorage {
             && let Some(slot_values) = block_state.slots.get(&(address, slot))
         {
             let vec_index = match slot_values.binary_search_by_key(&&tx, |(_, tx_count)| tx_count) {
-                Ok(index) => index,
-                Err(index) => index - 1,
+                Ok(index) => Some(index),
+                Err(index) => {
+                    if index == 0 {
+                        None
+                    } else {
+                        Some(index - 1)
+                    }
+                }
             };
 
-            return slot_values.get(vec_index).map(|(value, _)| Slot { index: slot, value: *value });
+            return vec_index.and_then(|idx| slot_values.get(idx).map(|(value, _)| Slot { index: slot, value: *value }));
         }
         None
     }
