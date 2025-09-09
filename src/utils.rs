@@ -45,6 +45,7 @@ pub mod test_utils {
     use glob::glob;
     use rand::SeedableRng;
     use rand::rngs::SmallRng;
+    use strum::VariantNames;
 
     fn deterministic_rng() -> SmallRng {
         SeedableRng::seed_from_u64(0)
@@ -64,6 +65,37 @@ pub mod test_utils {
     pub fn fake_first<T: fake::Dummy<Faker>>() -> T {
         let mut rng = deterministic_rng();
         Faker.fake_with_rng::<T, _>(&mut rng)
+    }
+
+    /// Trait to detect if a type has multiple enum variants.
+    pub trait IsMultiVariantEnum {
+        fn variant_names() -> &'static [&'static str];
+    }
+
+    /// Implementation for types that implement VariantNames with multiple variants.
+    impl<T> IsMultiVariantEnum for T
+    where
+        T: VariantNames,
+    {
+        fn variant_names() -> &'static [&'static str] {
+            T::VARIANTS
+        }
+    }
+
+    /// Trait to generate all enum variants for specific types.
+    pub trait GenerateAllVariants {
+        fn generate_all_variants() -> Vec<(String, Self)>
+        where
+            Self: Sized;
+    }
+
+    /// Generate fake values for all variants of an enum.
+    /// Returns a vector of (variant_name, fake_value) pairs.
+    pub fn fake_all_enum_variants<T>() -> Vec<(String, T)>
+    where
+        T: GenerateAllVariants,
+    {
+        T::generate_all_variants()
     }
 
     pub fn glob_to_string_paths(pattern: impl AsRef<str>) -> anyhow::Result<Vec<String>> {

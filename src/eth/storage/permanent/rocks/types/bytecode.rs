@@ -8,7 +8,7 @@ use super::bytes::BytesRocksdb;
 use crate::alias::RevmBytecode;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, strum::VariantNames)]
 pub enum BytecodeRocksdb {
     LegacyRaw(BytesRocksdb),
     LegacyAnalyzed(LegacyAnalyzedBytecodeRocksdb),
@@ -67,3 +67,11 @@ impl From<BytecodeRocksdb> for RevmBytecode {
 impl SerializeDeserializeWithContext for BytecodeRocksdb {}
 impl SerializeDeserializeWithContext for LegacyAnalyzedBytecodeRocksdb {}
 impl SerializeDeserializeWithContext for Eip7702BytecodeRocksdb {}
+
+crate::gen_enum_test_values! {
+    BytecodeRocksdb => {
+        LegacyRaw => BytecodeRocksdb::LegacyRaw(crate::utils::test_utils::fake_first()),
+        LegacyAnalyzed => BytecodeRocksdb::LegacyAnalyzed(crate::utils::test_utils::fake_first()),
+        Eip7702 => BytecodeRocksdb::Eip7702(crate::utils::test_utils::fake_first()),
+    }
+}

@@ -404,6 +404,171 @@ macro_rules! gen_test_json {
     };
 }
 
+/// Generates JSON test snapshots for all variants of an enum that implements GenerateAllVariants.
+///
+/// This macro is designed to solve the issue where enum types with multiple variants only get
+/// a single fixture generated through the standard `fake_first()` approach. Instead, this macro
+/// generates a separate JSON fixture file for each variant of the enum.
+///
+/// # Usage
+///
+/// 1. First, add `strum::VariantNames` to the enum's derive macro:
+///    ```ignore
+///    #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode,
+///             fake::Dummy, serde::Serialize, serde::Deserialize, strum::VariantNames)]
+///    pub enum MyEnum {
+///        Variant1,
+///        Variant2(SomeType),
+///        Variant3 { field: String },
+///    }
+///    ```
+///
+/// 2. Implement the `GenerateAllVariants` trait for your enum:
+///    This could be done manually, but gen_enum_test_values macro will do it for you.
+/// ```ignore
+/// gen_enum_test_values! {
+///     MyEnum => {
+///         Variant1 => MyEnum::Variant1,
+///         Variant2 => MyEnum::Variant2(fake_first()),
+///         Variant3 => MyEnum::Variant3 { field: "test".to_string() },
+///     }
+/// }
+/// ```
+///
+/// 3. Use this macro in your test module:
+///    ```ignore
+///    gen_test_json_enum_variants!(MyEnum);
+///    ```
+///
+/// # Generated Files
+///
+/// This will generate separate JSON fixture files for each variant:
+/// - `tests/fixtures/primitives/MyEnum_Variant1.json`
+/// - `tests/fixtures/primitives/MyEnum_Variant2.json`
+/// - `tests/fixtures/primitives/MyEnum_Variant3.json`
+///
+/// # Environment Variables
+///
+/// Set `DANGEROUS_UPDATE_SNAPSHOTS=1` to generate new fixture files.
+#[macro_export]
+macro_rules! gen_test_json_enum_variants {
+    ($type:ty) => {
+        paste::paste! {
+            #[test]
+            fn [<test_ $type:snake _json_enum_variants_snapshot>]() -> anyhow::Result<()> {
+                use anyhow::bail;
+                use std::path::Path;
+                use std::{env, fs};
+                use $crate::utils::test_utils::fake_all_enum_variants;
+
+                let variants = fake_all_enum_variants::<$type>();
+                let snapshot_parent_path = "tests/fixtures/primitives";
+
+                for (variant_name, expected_value) in variants {
+                    let snapshot_name = format!("{}_{}.json", stringify!($type), variant_name);
+                    let snapshot_path = format!("{}/{}", snapshot_parent_path, snapshot_name);
+                    let expected_json = serde_json::to_string_pretty(&expected_value)?;
+
+                    // WARNING: If you need to update snapshots (DANGEROUS_UPDATE_SNAPSHOTS=1), you have likely
+                    // broken backwards compatibility! Make sure this is intentional.
+                    if !Path::new(&snapshot_path).exists() {
+                        if env::var("DANGEROUS_UPDATE_SNAPSHOTS").is_ok() {
+                            fs::create_dir_all(snapshot_parent_path)?;
+                            fs::write(&snapshot_path, &expected_json)?;
+                        } else {
+                            bail!("snapshot file at '{snapshot_path}' doesn't exist and DANGEROUS_UPDATE_SNAPSHOTS is not set");
+                        }
+                    }
+
+                    // Read and attempt to deserialize the snapshot
+                    let snapshot_content = fs::read_to_string(&snapshot_path)?;
+                    let deserialized = match serde_json::from_str::<$type>(&snapshot_content) {
+                        Ok(value) => value,
+                        Err(e) => {
+                            bail!("Failed to deserialize snapshot for variant '{}':\nError: {}\n\nExpected JSON:\n{}\n\nActual JSON from snapshot:\n{}",
+                                variant_name, e, expected_json, snapshot_content);
+                        }
+                    };
+
+                    // Compare the values
+                    assert_eq!(
+                        expected_value, deserialized,
+                        "\nDeserialized value doesn't match expected for variant '{}':\n\nExpected JSON:\n{}\n\nDeserialized JSON:\n{}",
+                        variant_name,
+                        expected_json,
+                        serde_json::to_string_pretty(&deserialized)?
+                    );
+                }
+
+                Ok(())
+            }
+        }
+    };
+}
+
+/// Generates an implementation of GenerateAllVariants for an enum.
+/// # Usage
+///
+/// ```ignore
+/// // Your enum must derive VariantNames
+/// #[derive(strum::VariantNames)]
+/// pub enum MyEnum {
+///     Unit,
+///     Tuple(SomeType),
+///     Struct { field: String },
+/// }
+///
+/// // Generate implementation with validation
+/// gen_enum_test_values! {
+///     MyEnum => {
+///         Unit => MyEnum::Unit,
+///         Tuple => MyEnum::Tuple(fake_first()),
+///         Struct => MyEnum::Struct { field: "test".to_string() },
+///     }
+/// }
+/// ```
+#[macro_export]
+macro_rules! gen_enum_test_values {
+    ($enum_type:ty => {
+        $($variant_name:ident => $variant_expr:expr),+ $(,)?
+    }) => {
+        #[cfg(test)]
+        impl $crate::utils::test_utils::GenerateAllVariants for $enum_type {
+            fn generate_all_variants() -> Vec<(String, Self)> {
+                use $crate::utils::test_utils::IsMultiVariantEnum;
+
+                // Get variant names from strum::VariantNames automatically
+                let variant_names = <$enum_type as IsMultiVariantEnum>::variant_names();
+
+                // Create the variants based on the patterns provided
+                let generated_variants = vec![
+                    $(
+                        (stringify!($variant_name).to_string(), $variant_expr),
+                    )+
+                ];
+
+                // Validate that all variants from VariantNames are covered
+                for &expected_variant in variant_names {
+                    if !generated_variants.iter().any(|(name, _)| name == expected_variant) {
+                        panic!("Missing variant '{}' in generate_enum_variants! macro for {}",
+                               expected_variant, stringify!($enum_type));
+                    }
+                }
+
+                // Also validate that no extra variants were provided
+                for (provided_variant, _) in &generated_variants {
+                    if !variant_names.iter().any(|&name| name == provided_variant) {
+                        panic!("Unknown variant '{}' in generate_enum_variants! macro for {}",
+                               provided_variant, stringify!($enum_type));
+                    }
+                }
+
+                generated_variants
+            }
+        }
+    };
+}
+
 /// Generates unit test that checks that bincode's serialization and deserialization are compatible
 #[macro_export]
 macro_rules! gen_test_bincode {
