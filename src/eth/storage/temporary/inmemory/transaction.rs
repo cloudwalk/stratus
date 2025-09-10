@@ -175,12 +175,7 @@ impl InmemoryTransactionTemporaryStorage {
     #[cfg(feature = "dev")]
     pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
-
-        // Only update if the account exists
-        if let Some(account) = pending_block.accounts.get_mut(&address) {
-            account.slots.insert(slot.index, slot.into());
-        }
-
+        pending_block.block_changes.slots.insert((address, slot.index), slot.value);
         Ok(())
     }
 
@@ -189,8 +184,8 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = self.pending_block.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.accounts.get_mut(&address) {
-            account.nonce.set_modified(nonce);
+        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+            account.nonce.apply(nonce);
         }
 
         Ok(())
@@ -201,8 +196,8 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = self.pending_block.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.accounts.get_mut(&address) {
-            account.balance.set_modified(balance);
+        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+            account.balance.apply(balance);
         }
 
         Ok(())
@@ -215,8 +210,8 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = self.pending_block.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.accounts.get_mut(&address) {
-            account.bytecode.set_modified(if code.0.is_empty() {
+        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+            account.bytecode.apply(if code.0.is_empty() {
                 None
             } else {
                 Some(RevmBytecode::new_raw(code.0.into()))
