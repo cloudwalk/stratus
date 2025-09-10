@@ -442,10 +442,10 @@ impl Database for RevmSession {
             }
         }
 
-        if !address.is_ignored() {
-            if let std::collections::hash_map::Entry::Vacant(entry) = self.storage_changes.accounts.entry(address) {
-                entry.insert(ExecutionAccountChanges::from_unchanged(account.clone()));
-            }
+        if !address.is_ignored()
+            && let std::collections::hash_map::Entry::Vacant(entry) = self.storage_changes.accounts.entry(address)
+        {
+            entry.insert(ExecutionAccountChanges::from_unchanged(account.clone()));
         }
 
         Ok(Some(account.into()))

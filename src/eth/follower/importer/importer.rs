@@ -9,12 +9,12 @@ use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
 use futures::StreamExt;
 use futures::try_join;
+use itertools::Itertools;
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::timeout;
 use tracing::Span;
 
-use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::GlobalState;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
@@ -30,6 +30,7 @@ use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::storage::StratusStorage;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::ext::spawn;
@@ -201,7 +202,7 @@ impl Importer {
                 let block_fetcher_chain = Arc::clone(&self.chain);
                 let task_block_fetcher = spawn(
                     "importer::block-with-changes-fetcher",
-                    Importer::start_block_with_changes_fetcher(block_fetcher_chain, backlog_tx, number),
+                    Importer::start_block_with_changes_fetcher(block_fetcher_chain, Arc::clone(storage), backlog_tx, number),
                 );
 
                 let results = try_join!(task_saver, task_block_fetcher, task_number_fetcher)?;
@@ -600,14 +601,31 @@ impl Importer {
 
             // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
-            while let Some(block) = tasks.next().await {
-                if backlog_tx.send(block).await.is_err() {
+            while let Some((block, changes)) = tasks.next().await {
+                let changes = create_execution_changes(&storage, changes)?;
+                if backlog_tx.send((block, changes)).await.is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
                 }
             }
         }
     }
+}
+
+fn create_execution_changes(storage: &Arc<StratusStorage>, changes: BlockChangesRocksdb) -> anyhow::Result<ExecutionChanges> {
+    let addresses = changes.account_changes.keys().copied().map_into().collect_vec();
+    let accounts = storage.perm.read_accounts(addresses)?;
+    let mut exec_changes = changes.to_incomplete_execution_changes();
+    for (addr, acc) in accounts {
+        match exec_changes.accounts.entry(addr) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                let item = entry.get_mut();
+                item.apply_original(acc);
+            }
+            std::collections::hash_map::Entry::Vacant(_) => unreachable!("we got the addresses from the changes"),
+        }
+    }
+    Ok(exec_changes)
 }
 
 // -----------------------------------------------------------------------------

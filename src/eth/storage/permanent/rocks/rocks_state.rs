@@ -234,7 +234,7 @@ impl RocksStorageState {
                 if change.bytecode.changed {
                     let bytecode = change.bytecode.value.clone().map_into();
                     account_info_entry.bytecode = bytecode.clone();
-                    account_change_entry.bytecode = bytecode;
+                    account_change_entry.bytecode = Some(bytecode);
                 }
 
                 self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
@@ -400,13 +400,12 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) => {
+            BlockFilter::Hash(block_hash) =>
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                }
-            }
+                },
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }

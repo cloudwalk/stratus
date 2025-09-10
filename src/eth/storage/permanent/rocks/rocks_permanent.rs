@@ -8,7 +8,6 @@ use anyhow::bail;
 
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
-use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::GlobalState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -30,6 +29,7 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::SleepReason;
 use crate::ext::spawn;
 use crate::ext::traced_sleep;
