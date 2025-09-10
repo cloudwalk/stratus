@@ -166,7 +166,7 @@ impl InmemoryTransactionTemporaryStorage {
                     latest
                         .accounts
                         .get(&address)
-                        .and_then(|account| account.slots.get(&index).and_then(|value| Some(Slot { index, value: *value })))
+                        .and_then(|account| account.slots.get(&index).map(|value| Slot { index, value: *value }))
                 }),
             },
         )

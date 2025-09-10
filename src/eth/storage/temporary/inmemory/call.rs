@@ -53,13 +53,12 @@ impl InMemoryCallTemporaryStorage {
         {
             let vec_index = match slot_values.binary_search_by_key(&&tx, |(_, tx_count)| tx_count) {
                 Ok(index) => Some(index),
-                Err(index) => {
+                Err(index) =>
                     if index == 0 {
                         None
                     } else {
                         Some(index - 1)
-                    }
-                }
+                    },
             };
 
             return vec_index.and_then(|idx| slot_values.get(idx).map(|(value, _)| Slot { index: slot, value: *value }));
@@ -81,12 +80,7 @@ impl InMemoryCallTemporaryStorage {
 
         // Process each account change from the transaction execution
         for (address, change) in &tx.result.execution.changes {
-            // Check if any account info changed
-            let updated_nonce = change.nonce.is_modified();
-            let updated_balance = change.balance.is_modified();
-            let updated_bytecode = change.bytecode.is_modified();
-
-            if updated_nonce || updated_balance || updated_bytecode {
+            if change.is_account_modified() {
                 // Build the account from the changes
                 let mut account = Account {
                     address: *address,

@@ -38,11 +38,7 @@ impl From<BlockChangesRocksdb> for ExecutionChanges {
                         nonce: changes.nonce.map(Nonce::from).into(),
                         balance: changes.balance.map(Wei::from).into(),
                         bytecode: changes.bytecode.map(|inner| Some(RevmBytecode::from(inner))).into(),
-                        slots: changes
-                            .slot_changes
-                            .into_iter()
-                            .map(|(idx, value)| (idx.into(), value.into()))
-                            .collect(),
+                        slots: changes.slot_changes.into_iter().map(|(idx, value)| (idx.into(), value.into())).collect(),
                     },
                 )
             })
