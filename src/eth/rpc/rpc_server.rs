@@ -865,14 +865,14 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
 
     // track
-    tracing::info!(%filter, "reading block and receipts");
+    tracing::info!(%filter, "reading block and changes");
 
     let Some(block) = ctx.server.storage.read_block_with_changes(filter)? else {
         tracing::info!(%filter, "block not found");
         return Ok(JsonValue::Null);
     };
 
-    tracing::info!(%filter, "block with transactions found");
+    tracing::info!(%filter, "block with changes found");
 
     Ok(json!(block))
 }
