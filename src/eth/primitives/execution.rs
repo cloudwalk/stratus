@@ -89,10 +89,13 @@ impl EvmExecution {
         }
 
         // generate sender changes incrementing the nonce
+        let address = sender.address;
         let mut sender_changes = ExecutionAccountChanges::from_unchanged(sender);
         let sender_next_nonce = sender_changes.nonce.next_nonce();
 
         sender_changes.nonce.apply(sender_next_nonce);
+        let mut changes = ExecutionChanges::default();
+        changes.accounts.insert(address, sender_changes);
 
         // crete execution and apply costs
         let mut execution = Self {
@@ -101,7 +104,7 @@ impl EvmExecution {
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
             gas: Gas::from(receipt.gas_used),
-            changes: ExecutionChanges::default(),
+            changes,
             deployed_contract_address: None,
         };
         execution.apply_receipt(receipt)?;

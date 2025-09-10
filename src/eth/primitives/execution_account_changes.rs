@@ -25,9 +25,9 @@ where
     ///
     /// This method will only update the internal value and set the `changed` flag to `true`
     /// if the provided value is different from the current value.
-    pub fn apply(&mut self, value: T) {
-        if self.value != value {
-            self.value = value;
+    pub fn apply(&mut self, changed_value: T) {
+        if self.value != changed_value {
+            self.value = changed_value;
             self.changed = true;
         }
     }
