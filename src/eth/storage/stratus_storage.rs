@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use parking_lot::RwLockReadGuard;
 use tracing::Span;
 
@@ -109,8 +110,15 @@ impl StratusStorage {
         let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
         let rocks_path_prefix = rocks_dir.path().to_str().unwrap().to_string();
 
-        let perm = RocksPermanentStorage::new(Some(rocks_path_prefix.clone()), std::time::Duration::from_secs(240), None, true, None)
-            .expect("Failed to create RocksPermanentStorage for tests");
+        let perm = RocksPermanentStorage::new(
+            Some(rocks_path_prefix.clone()),
+            std::time::Duration::from_secs(240),
+            super::permanent::RocksCfCacheConfig::default(),
+            true,
+            None,
+            1024,
+        )
+        .expect("Failed to create RocksPermanentStorage for tests");
 
         let cache = CacheConfig {
             slot_cache_capacity: 100000,
@@ -128,10 +136,11 @@ impl StratusStorage {
             super::permanent::PermanentStorageConfig {
                 rocks_path_prefix: Some(rocks_path_prefix),
                 rocks_shutdown_timeout: std::time::Duration::from_secs(240),
-                rocks_cache_size_multiplier: None,
+                rocks_cf_cache: super::permanent::RocksCfCacheConfig::default(),
                 rocks_disable_sync_write: false,
                 rocks_cf_size_metrics_interval: None,
                 genesis_file: crate::config::GenesisFileConfig::default(),
+                rocks_file_descriptors_limit: 1024,
             },
         )
     }
@@ -496,7 +505,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn save_block(&self, block: Block, changes: ExecutionChanges) -> Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, mut changes: ExecutionChanges, complete_changes: bool) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
@@ -532,6 +541,19 @@ impl StratusStorage {
 
         // save block
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
+        if complete_changes {
+            let addresses = changes.keys().copied().collect_vec();
+            let accounts = self.perm.read_accounts(addresses)?;
+            for (addr, acc) in accounts {
+                match changes.entry(addr) {
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        entry.get_mut().update_empty_values(acc);
+                    }
+                    std::collections::btree_map::Entry::Vacant(_) => unreachable!("we got the addresses from the changes"),
+                }
+            }
+        }
+
         timed(|| {
             let guard = self.transient_state_lock.write();
             self.perm.save_block(block, changes.clone())?;
@@ -784,7 +806,7 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
-        self.save_block(genesis_block, ExecutionChanges::default())?;
+        self.save_block(genesis_block, ExecutionChanges::default(), false)?;
 
         // accounts
         self.save_accounts(genesis_accounts)?;

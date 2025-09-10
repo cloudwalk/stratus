@@ -90,6 +90,7 @@ pub use slot::Slot;
 pub use slot_index::SlotIndex;
 pub use slot_value::SlotValue;
 pub use stratus_error::ConsensusError;
+pub use stratus_error::DecodeInputError;
 pub use stratus_error::ErrorCode;
 pub use stratus_error::ImporterError;
 pub use stratus_error::RpcError;

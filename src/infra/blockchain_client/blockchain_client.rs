@@ -20,6 +20,7 @@ use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalBlockWithReceipts;
 use crate::eth::primitives::ExternalReceipt;

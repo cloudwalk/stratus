@@ -9,6 +9,7 @@ use std::time::Instant;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
+use itertools::Itertools;
 use rocksdb::DB;
 use rocksdb::Direction;
 use rocksdb::Options;
@@ -27,6 +28,7 @@ use super::cf_versions::CfBlocksByHashValue;
 use super::cf_versions::CfBlocksByNumberValue;
 use super::cf_versions::CfTransactionsValue;
 use super::rocks_cf::RocksCfRef;
+use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
 use super::rocks_db::create_or_open_db;
@@ -63,7 +65,6 @@ use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::log_and_err;
-use crate::utils::GIGABYTE;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "rocks_metrics")] {
@@ -78,25 +79,19 @@ cfg_if::cfg_if! {
     }
 }
 
-pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'static str, Options> {
-    let cache_multiplier = cache_multiplier.unwrap_or(1.0);
-
-    // multiplies the given size in GBs by the cache multiplier
-    let cached_in_gigs_and_multiplied = |size_in_gbs: u64| -> CacheSetting {
-        let size = (size_in_gbs as f32) * cache_multiplier;
-        let size = GIGABYTE * size as usize;
-        CacheSetting::Enabled(size)
-    };
+pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap<&'static str, Options> {
+    // Helper function to create cache setting from size
+    let cache_setting_from_size = |size: usize| -> CacheSetting { CacheSetting::Enabled(size) };
 
     btmap! {
-        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(10)),
-        "accounts_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
-        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(30)),
-        "account_slots_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
-        "transactions" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
-        "blocks_by_number" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
-        "blocks_by_hash" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
-        "block_changes" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
+        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cache_setting_from_size(cf_cache_config.accounts)),
+        "accounts_history" => DbConfig::HistoricalData.to_options(cache_setting_from_size(cf_cache_config.accounts_history)),
+        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cache_setting_from_size(cf_cache_config.account_slots)),
+        "account_slots_history" => DbConfig::HistoricalData.to_options(cache_setting_from_size(cf_cache_config.account_slots_history)),
+        "transactions" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.transactions)),
+        "blocks_by_number" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_number)),
+        "blocks_by_hash" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_hash)),
+        "block_changes" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.block_changes)),
     }
 }
 
@@ -144,10 +139,10 @@ pub struct RocksStorageState {
 }
 
 impl RocksStorageState {
-    pub fn new(path: String, shutdown_timeout: Duration, cache_multiplier: Option<f32>, enable_sync_write: bool) -> Result<Self> {
+    pub fn new(path: String, shutdown_timeout: Duration, cf_cache_config: RocksCfCacheConfig, enable_sync_write: bool) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
 
-        let cf_options_map = generate_cf_options_map(cache_multiplier);
+        let cf_options_map = generate_cf_options_map(&cf_cache_config);
 
         #[cfg_attr(not(feature = "rocks_metrics"), allow(unused_variables))]
         let (db, db_options) = create_or_open_db(&path, &cf_options_map).context("when trying to create (or open) rocksdb")?;
@@ -187,7 +182,7 @@ impl RocksStorageState {
     pub fn new_in_testdir() -> anyhow::Result<(Self, tempfile::TempDir)> {
         let test_dir = tempfile::tempdir()?;
         let path = test_dir.as_ref().display().to_string();
-        let state = Self::new(path, Duration::ZERO, None, true)?;
+        let state = Self::new(path, Duration::ZERO, RocksCfCacheConfig::default(), true)?;
         Ok((state, test_dir))
     }
 
@@ -390,6 +385,12 @@ impl RocksStorageState {
                 Ok(None)
             }
         }
+    }
+
+    pub fn read_accounts(&self, addresses: Vec<Address>) -> Result<Vec<(Address, Account)>> {
+        self.accounts
+            .multi_get(addresses.into_iter().map_into())
+            .map(|vec| vec.into_iter().map(|(addr, acc)| (addr.into(), acc.to_account(addr.into()))).collect_vec())
     }
 
     pub fn read_block(&self, selection: BlockFilter) -> Result<Option<Block>> {
@@ -850,7 +851,7 @@ mod tests {
             let path = test_dir.as_ref().display().to_string();
 
             // Create the database with the column families
-            let cf_options_map = generate_cf_options_map(None);
+            let cf_options_map = generate_cf_options_map(&RocksCfCacheConfig::default());
             let (_db, _) = create_or_open_db(&path, &cf_options_map).unwrap();
 
             // Get the actual CF order from RocksDB

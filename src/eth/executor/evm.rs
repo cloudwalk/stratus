@@ -43,10 +43,12 @@ use revm_inspectors::tracing::FourByteInspector;
 use revm_inspectors::tracing::MuxInspector;
 use revm_inspectors::tracing::TracingInspector;
 use revm_inspectors::tracing::TracingInspectorConfig;
+use revm_inspectors::tracing::js::JsInspector;
 
 use super::evm_input::InspectorInput;
 use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
+use crate::eth::codegen;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
@@ -93,7 +95,6 @@ pub enum EvmKind {
 
 impl Evm {
     /// Creates a new instance of the Evm.
-    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig, kind: EvmKind) -> Self {
         tracing::info!(?config, "creating revm");
 
@@ -216,7 +217,8 @@ impl Evm {
             .read_transaction(tx_hash)?
             .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
 
-        if trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
+        // CREATE transactions need to be traced for blockscout to work correctly
+        if tx.deployed_contract_address().is_none() && trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
             return Ok(default_trace(tracer_type, tx));
         }
 
@@ -255,7 +257,7 @@ impl Evm {
             if tx.input.hash == tx_hash {
                 break;
             }
-            let tx_input = tx.into();
+            let tx_input: EvmInput = tx.into();
 
             // Configure EVM state
             evm.fill_env(tx_input);
@@ -279,7 +281,9 @@ impl Evm {
                 evm_with_inspector.fill_env(inspect_input);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
                 let res = evm_with_inspector.inspect_tx(tx)?;
-                inspector.geth_builder().geth_call_traces(call_config, res.result.gas_used()).into()
+                let mut trace = inspector.geth_builder().geth_call_traces(call_config, res.result.gas_used()).into();
+                enhance_trace_with_decoded_errors(&mut trace);
+                trace
             }
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::PreStateTracer) => {
                 let prestate_config = opts.tracer_config.into_pre_state_config()?;
@@ -314,7 +318,15 @@ impl Evm {
                     .into_localized_transaction_traces(tx_info)
                     .into()
             }
-            _ => return Err(anyhow!("tracer not implemented").into()),
+            GethDebugTracerType::JsTracer(code) => {
+                let mut inspector = JsInspector::new(code, opts.tracer_config.into_json()).map_err(|e| anyhow!(e.to_string()))?;
+                let mut evm_with_inspector = evm.with_inspector(&mut inspector);
+                evm_with_inspector.fill_env(inspect_input);
+                let tx = std::mem::take(&mut evm_with_inspector.tx);
+                let block = std::mem::take(&mut evm_with_inspector.block);
+                let res = evm_with_inspector.inspect_tx(tx.clone())?;
+                GethTrace::JS(inspector.json_result(res, &tx, &block, &cache_db).map_err(|e| anyhow!(e.to_string()))?)
+            }
         };
 
         Ok(trace_result)
@@ -601,5 +613,30 @@ pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionStage) -> 
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => MuxFrame::default().into(),
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => FlatCallFrame::default().into(),
         _ => NoopFrame::default().into(),
+    }
+}
+
+/// Enhances a GethTrace with decoded error information.
+fn enhance_trace_with_decoded_errors(trace: &mut GethTrace) {
+    match trace {
+        GethTrace::CallTracer(call_frame) => {
+            enhance_call_frame_errors(call_frame);
+        }
+        _ => {
+            // Other trace types don't have call frames with errors to decode
+        }
+    }
+}
+
+/// Enhances a single CallFrame and recursively enhances all nested calls.
+fn enhance_call_frame_errors(frame: &mut CallFrame) {
+    if let Some(error) = frame.error.as_ref()
+        && let Some(decoded_error) = frame.output.as_ref().and_then(|output| codegen::error_sig_opt(output))
+    {
+        frame.revert_reason = Some(format!("{error}: {decoded_error}"));
+    }
+
+    for nested_call in frame.calls.iter_mut() {
+        enhance_call_frame_errors(nested_call);
     }
 }
