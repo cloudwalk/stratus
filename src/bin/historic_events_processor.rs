@@ -8,6 +8,7 @@ use chrono::Timelike;
 use indicatif::ProgressBar;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
 use stratus::eth::primitives::TransactionMined;
+use stratus::eth::storage::permanent::RocksCfCacheConfig;
 use stratus::eth::storage::permanent::rocks::RocksStorageState;
 use stratus::eth::storage::permanent::rocks::types::BlockNumberRocksdb;
 use stratus::eth::storage::permanent::rocks::types::BlockRocksdb;
@@ -90,7 +91,8 @@ fn process_block_events(block: BlockRocksdb) -> Vec<String> {
 /// Main function that processes blockchain data and generates events
 fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt::init();
-    let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, Some(0.1), false).context("failed to create rocksdb state")?;
+    let state = RocksStorageState::new("data/rocksdb".to_string(), TIMEOUT, RocksCfCacheConfig::default_with_multiplier(0.1), false)
+        .context("failed to create rocksdb state")?;
 
     let (b_pb, tx_pb) = create_progress_bar(&state);
 

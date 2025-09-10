@@ -44,6 +44,7 @@ use revm_inspectors::tracing::FourByteInspector;
 use revm_inspectors::tracing::MuxInspector;
 use revm_inspectors::tracing::TracingInspector;
 use revm_inspectors::tracing::TracingInspectorConfig;
+use revm_inspectors::tracing::js::JsInspector;
 
 use super::evm_input::InspectorInput;
 use crate::alias::RevmAddress;
@@ -320,7 +321,15 @@ impl Evm {
                     .into_localized_transaction_traces(tx_info)
                     .into()
             }
-            _ => return Err(anyhow!("tracer not implemented").into()),
+            GethDebugTracerType::JsTracer(code) => {
+                let mut inspector = JsInspector::new(code, opts.tracer_config.into_json()).map_err(|e| anyhow!(e.to_string()))?;
+                let mut evm_with_inspector = evm.with_inspector(&mut inspector);
+                evm_with_inspector.fill_env(inspect_input);
+                let tx = std::mem::take(&mut evm_with_inspector.tx);
+                let block = std::mem::take(&mut evm_with_inspector.block);
+                let res = evm_with_inspector.inspect_tx(tx.clone())?;
+                GethTrace::JS(inspector.json_result(res, &tx, &block, &cache_db).map_err(|e| anyhow!(e.to_string()))?)
+            }
         };
 
         Ok(trace_result)
