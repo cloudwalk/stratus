@@ -568,7 +568,7 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
 
         let (account_created, account_touched) = (revm_account.is_created(), revm_account.is_touched());
 
-        if !(account_created && account_touched) {
+        if !(account_created || account_touched) {
             continue;
         }
 
