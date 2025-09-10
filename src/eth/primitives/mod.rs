@@ -14,7 +14,6 @@ pub mod execution;
 mod execution_account_changes;
 mod execution_metrics;
 mod execution_result;
-mod execution_value_change;
 mod external_block;
 mod external_block_with_receipts;
 mod external_receipt;
@@ -66,7 +65,6 @@ pub use execution::ExecutionChanges;
 pub use execution_account_changes::ExecutionAccountChanges;
 pub use execution_metrics::EvmExecutionMetrics;
 pub use execution_result::ExecutionResult;
-pub use execution_value_change::ExecutionValueChange;
 pub use external_block::ExternalBlock;
 pub use external_block_with_receipts::ExternalBlockWithReceipts;
 pub use external_receipt::ExternalReceipt;
@@ -116,12 +114,6 @@ mod tests {
     use super::*;
     use crate::gen_test_json;
     use crate::gen_test_serde;
-
-    type TransactionExecutionValueChangeBytes = ExecutionValueChange<Bytes>;
-    type TransactionExecutionValueChangeNonce = ExecutionValueChange<Nonce>;
-    type TransactionExecutionValueChangeOptionString = ExecutionValueChange<Option<String>>;
-    type TransactionExecutionValueChangeSlot = ExecutionValueChange<Slot>;
-    type TransactionExecutionValueChangeWei = ExecutionValueChange<Wei>;
 
     // TODO: Test external structs and internal structs that contain external strtucts that do no implement faker::Dummy
     // gen_test_serde!(ExecutionConflicts);
@@ -173,11 +165,6 @@ mod tests {
     gen_test_serde!(Slot);
     gen_test_serde!(SlotIndex);
     gen_test_serde!(SlotValue);
-    gen_test_serde!(TransactionExecutionValueChangeBytes);
-    gen_test_serde!(TransactionExecutionValueChangeNonce);
-    gen_test_serde!(TransactionExecutionValueChangeOptionString);
-    gen_test_serde!(TransactionExecutionValueChangeSlot);
-    gen_test_serde!(TransactionExecutionValueChangeWei);
     gen_test_serde!(TransactionInput);
     gen_test_serde!(TransactionMined);
     gen_test_serde!(UnixTime);

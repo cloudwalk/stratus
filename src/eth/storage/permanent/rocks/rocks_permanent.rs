@@ -7,6 +7,7 @@ use std::time::Duration;
 use anyhow::bail;
 
 use super::rocks_state::RocksStorageState;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::GlobalState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -132,7 +133,7 @@ impl RocksPermanentStorage {
         block.map_err(|err| StorageError::RocksError { err })
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(Block, ExecutionChanges)>, StorageError> {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(Block, BlockChangesRocksdb)>, StorageError> {
         let result = self.state.read_block_with_changes(selection).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read block with changes in RocksPermanent");
         });

@@ -50,13 +50,13 @@ use crate::alias::RevmBytecode;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
-use crate::eth::primitives::execution::ExecutionChangesExt;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
+use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
@@ -430,6 +430,12 @@ impl Database for RevmSession {
             }
         }
 
+        if !address.is_ignored() {
+            if let std::collections::hash_map::Entry::Vacant(entry) = self.storage_changes.accounts.entry(address) {
+                entry.insert(ExecutionAccountChanges::from_unchanged(account.clone()));
+            }
+        }
+
         Ok(Some(account.into()))
     }
 
@@ -548,7 +554,6 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
             "evm account"
         );
 
-
         let (account_created, account_touched) = (revm_account.is_created(), revm_account.is_touched());
 
         if !(account_created && account_touched) {
@@ -570,7 +575,7 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
             deployed_contract_address = Some(account.address);
         }
 
-        execution_changes.merge((account, account_modified_slots).into());
+        execution_changes.insert(account, account_modified_slots);
     }
     Ok((execution_changes, deployed_contract_address))
 }

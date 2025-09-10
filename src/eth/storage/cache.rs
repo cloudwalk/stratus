@@ -102,13 +102,9 @@ impl StorageCache {
         account_cache: &Cache<Address, Account, UnitWeighter, FxBuildHasher>,
         slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
     ) {
+        // cache accounts
         for (address, change) in changes.accounts {
-            // cache account
-            let mut account = Account::new_empty(address);
-            account.balance = change.balance.unwrap_or_default();
-            account.bytecode = change.bytecode.unwrap_or_default();
-            account.nonce = change.nonce.unwrap_or_default();
-
+            let account = (address, change).into();
             account_cache.insert(address, account);
         }
 

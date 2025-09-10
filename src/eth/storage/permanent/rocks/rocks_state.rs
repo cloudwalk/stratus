@@ -217,46 +217,49 @@ impl RocksStorageState {
 
     /// Updates the in-memory state with changes from transaction execution
     fn prepare_batch_with_execution_changes(&self, changes: ExecutionChanges, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
-        let mut block_changes = BlockChangesRocksdb::default();
+        let mut block_changes = BlockChangesRocksdb::with_capacity(changes.accounts.len());
         let block_number = block_number.into();
 
         for (address, change) in changes.accounts {
             let address: AddressRocksdb = address.into();
-            let mut account_change_entry = AccountChangesRocksdb::default();
+            if change.is_modified() {
+                let mut account_change_entry = AccountChangesRocksdb::default();
+                let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
 
-            let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
+                if change.nonce.changed {
+                    let nonce = change.nonce.value.into();
+                    account_info_entry.nonce = nonce;
+                    account_change_entry.nonce = Some(nonce);
+                }
+                if change.balance.changed {
+                    let balance = change.balance.value.into();
+                    account_info_entry.balance = balance;
+                    account_change_entry.balance = Some(balance);
+                }
+                if change.bytecode.changed {
+                    let bytecode = change.bytecode.value.clone().map_into();
+                    account_info_entry.bytecode = bytecode.clone();
+                    account_change_entry.bytecode = bytecode;
+                }
 
-            if let Some(nonce) = change.nonce {
-                account_info_entry.nonce = nonce.into();
-                account_change_entry.nonce = Some(nonce.into());
+                self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
+                self.accounts_history
+                    .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
+                block_changes.account_changes.insert(address, account_change_entry);
             }
-            if let Some(balance) = change.balance {
-                account_info_entry.balance = balance.into();
-                account_change_entry.balance = Some(balance.into());
-            }
-            if let Some(bytecode) = change.bytecode {
-                account_info_entry.bytecode = bytecode.clone().map_into();
-                account_change_entry.bytecode = bytecode.map_into();
-            }
-
-            self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
-            self.accounts_history
-                .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
-
-            account_change_entry
-                .has_changes()
-                .then(|| block_changes.account_changes.insert(address, account_change_entry));
         }
 
-        for ((address, slot_index), slot_change) in changes.slots {
+        for ((address, slot_index), slot_value) in changes.slots {
+            let address = address.into();
             let slot_index = slot_index.into();
-            let slot_value: SlotValueRocksdb = slot.value.into();
+            let slot_value: SlotValueRocksdb = slot_value.into();
 
-            account_change_entry.slot_changes.insert(slot_index, slot_value);
             self.account_slots
                 .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
             self.account_slots_history
                 .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
+
+            block_changes.slot_changes.insert((address, slot_index), slot_value);
         }
 
         self.block_changes.prepare_batch_insertion([(block_number, block_changes.into())], batch)?;
@@ -396,12 +399,13 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
+                }
+            }
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
@@ -601,12 +605,12 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, ExecutionChanges)>> {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>> {
         let Some(block_wo_changes) = self.read_block(selection)? else {
             return Ok(None);
         };
         let changes = self.block_changes.get(&block_wo_changes.number().into())?;
-        Ok(Some((block_wo_changes, changes.map(|changes| changes.into_inner().into()).unwrap_or_default())))
+        Ok(Some((block_wo_changes, changes.map(|changes| changes.into_inner()).unwrap_or_default())))
     }
 }
 
@@ -759,10 +763,7 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::alias::RevmBytecode;
     use crate::eth::primitives::BlockHeader;
-    use crate::eth::primitives::ExecutionAccountChanges;
-    use crate::eth::primitives::ExecutionValueChange;
 
     #[test]
     #[cfg(feature = "dev")]

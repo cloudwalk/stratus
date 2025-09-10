@@ -27,7 +27,6 @@ use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::UnixTimeNow;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
-use crate::eth::primitives::execution::ExecutionChangesExt;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
 
@@ -42,7 +41,7 @@ impl InmemoryTransactionTemporaryStorage {
         Self {
             pending_block: RwLock::new(InMemoryTemporaryStorageState {
                 block: PendingBlock::new_at_now(block_number),
-                accounts: ExecutionChanges::new(),
+                block_changes: ExecutionChanges::default(),
             }),
             latest_block: RwLock::new(None),
         }
@@ -81,7 +80,7 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        pending_block.accounts.merge(tx.result.execution.changes.clone()); // TODO: This clone can be removed by reworking the primitives
+        pending_block.block_changes.merge(tx.result.execution.changes.clone()); // TODO: This clone can be removed by reworking the primitives
 
         // save execution
         pending_block.block.push_transaction(tx);
@@ -100,7 +99,7 @@ impl InmemoryTransactionTemporaryStorage {
 
     pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
         let pending_block = self.pending_block.upgradable_read();
-        let changes = pending_block.accounts.clone();
+        let changes = pending_block.block_changes.clone();
 
         // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
         #[cfg(feature = "dev")]
@@ -147,29 +146,26 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
 
     pub fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>, StorageError> {
-        Ok(match self.pending_block.read().accounts.get(&address) {
+        Ok(match self.pending_block.read().block_changes.accounts.get(&address) {
             Some(pending_account) => Some(pending_account.clone().to_account(address)),
             None => self
                 .latest_block
                 .read()
                 .as_ref()
-                .and_then(|latest| latest.accounts.get(&address))
+                .and_then(|latest| latest.block_changes.accounts.get(&address))
                 .map(|account| account.clone().to_account(address)),
         })
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError> {
-        Ok(
-            match self.pending_block.read().accounts.get(&address).and_then(|account| account.slots.get(&index)) {
-                Some(pending_slot) => (*pending_slot).take(),
-                None => self.latest_block.read().as_ref().and_then(|latest| {
-                    latest
-                        .accounts
-                        .get(&address)
-                        .and_then(|account| account.slots.get(&index).and_then(|slot| (*slot).take()))
-                }),
-            },
-        )
+        Ok(match self.pending_block.read().block_changes.slots.get(&(address, index)) {
+            Some(pending_value) => Some(Slot::new(index, *pending_value)),
+            None => self
+                .latest_block
+                .read()
+                .as_ref()
+                .and_then(|latest| latest.block_changes.slots.get(&(address, index)).map(|value| Slot::new(index, *value))),
+        })
     }
 
     // -------------------------------------------------------------------------

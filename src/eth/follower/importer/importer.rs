@@ -14,6 +14,7 @@ use tokio::task::yield_now;
 use tokio::time::timeout;
 use tracing::Span;
 
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::GlobalState;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
@@ -566,6 +567,7 @@ impl Importer {
     /// Retrieves blocks with changes.
     async fn start_block_with_changes_fetcher(
         chain: Arc<BlockchainClient>,
+        storage: Arc<StratusStorage>,
         backlog_tx: mpsc::Sender<(Block, ExecutionChanges)>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
@@ -634,7 +636,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     }
 }
 
-async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (Block, ExecutionChanges) {
+async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (Block, BlockChangesRocksdb) {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("block_number", &block_number);

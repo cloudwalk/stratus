@@ -33,6 +33,7 @@ use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::TxCount;
 use crate::ext::not;
@@ -563,7 +564,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(Block, ExecutionChanges)>, StorageError> {
+    pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_with_changes", %filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading block with changes");

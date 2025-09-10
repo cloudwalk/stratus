@@ -74,44 +74,21 @@ impl InMemoryCallTemporaryStorage {
         let current_tx_count = block_state.current_tx_count;
 
         // Process each account change from the transaction execution
-        for (address, change) in &tx.result.execution.changes {
-            // Check if any account info changed
-            let updated_nonce = change.nonce.is_modified();
-            let updated_balance = change.balance.is_modified();
-            let updated_bytecode = change.bytecode.is_modified();
-
-            if updated_nonce || updated_balance || updated_bytecode {
+        for (address, change) in &tx.result.execution.changes.accounts {
+            if change.is_modified() {
                 // Build the account from the changes
-                let mut account = Account {
-                    address: *address,
-                    ..Default::default()
-                };
-
-                if let Some(nonce) = change.nonce.take_ref() {
-                    account.nonce = *nonce;
-                }
-
-                if let Some(balance) = change.balance.take_ref() {
-                    account.balance = *balance;
-                }
-
-                if let Some(Some(bytecode)) = change.bytecode.take_ref() {
-                    account.bytecode = Some(bytecode.clone());
-                }
-
+                let account = (*address, change.clone()).into();
                 block_state.accounts.entry(*address).or_default().push((account, current_tx_count));
             }
+        }
 
-            // Add slot changes
-            for (slot_index, slot_change) in &change.slots {
-                if let Some(slot) = slot_change.take_modified_ref() {
-                    block_state
-                        .slots
-                        .entry((*address, *slot_index))
-                        .or_default()
-                        .push((slot.value, current_tx_count));
-                }
-            }
+        // Add slot changes
+        for ((address, slot_index), slot_value) in &tx.result.execution.changes.slots {
+            block_state
+                .slots
+                .entry((*address, *slot_index))
+                .or_default()
+                .push((*slot_value, current_tx_count));
         }
     }
 
