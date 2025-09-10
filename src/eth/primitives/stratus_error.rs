@@ -355,6 +355,24 @@ impl From<StratusError> for ErrorObjectOwned {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum DecodeInputError {
+    #[error("Input too short: {message}")]
+    InputTooShort { message: String },
+
+    #[error("Function unknown: {message}")]
+    FunctionUnknown { message: String },
+
+    #[error("Invalid input: {message}")]
+    InvalidAbi { message: String },
+
+    #[error("Invalid ABI: {source}")]
+    InvalidInput {
+        #[from]
+        source: ethabi::Error,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
