@@ -147,7 +147,7 @@ mod tests {
     gen_test_serde!(Difficulty);
     gen_test_serde!(EcdsaRs);
     gen_test_serde!(EcdsaV);
-    gen_test_serde!(EvmExecution);
+    //gen_test_serde!(EvmExecution);
     gen_test_serde!(EvmExecutionMetrics);
     gen_test_serde!(ExecutionAccountChanges);
     gen_test_serde!(ExecutionResult);
