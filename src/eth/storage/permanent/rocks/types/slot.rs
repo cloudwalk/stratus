@@ -4,8 +4,28 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Clone, Debug, Copy, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Copy, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy)]
 pub struct SlotValueRocksdb([u64; 4]);
+
+impl serde::Serialize for SlotValueRocksdb {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let slot_value: SlotValue = (*self).into();
+        slot_value.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SlotValueRocksdb {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let slot_value = SlotValue::deserialize(deserializer)?;
+        Ok(slot_value.into())
+    }
+}
 
 impl From<SlotValue> for SlotValueRocksdb {
     fn from(item: SlotValue) -> Self {
