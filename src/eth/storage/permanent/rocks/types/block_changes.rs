@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use serde_with::serde_as;
+
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
@@ -23,9 +25,11 @@ impl AccountChangesRocksdb {
     }
 }
 
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
 pub struct BlockChangesRocksdb {
     pub account_changes: HashMap<AddressRocksdb, AccountChangesRocksdb>,
+    #[serde_as(as = "Vec<(_, _)>")]
     pub slot_changes: HashMap<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
 }
 
