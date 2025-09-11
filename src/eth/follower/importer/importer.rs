@@ -682,9 +682,9 @@ async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: Bl
 impl Consensus for Importer {
     async fn lag(&self) -> anyhow::Result<u64> {
         let last_fetched_time = LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
-        // If we haven't fetched any blocks yet (timestamp is 0), don't report an error
+
         if last_fetched_time == 0 {
-            return Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number().as_u64());
+            return Err(anyhow::anyhow!("stratus has not been able to connect to the leader yet"));
         }
 
         let elapsed = chrono::Utc::now().timestamp() as u64 - last_fetched_time;
