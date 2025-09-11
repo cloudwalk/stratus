@@ -455,7 +455,7 @@ impl StratusStorage {
         if !tx.result.execution.result.is_success() {
             let total_slot_changes: usize = changes
                 .values()
-                .map(|account_changes| account_changes.slots.iter().filter(|(_, change)| change.is_modified()).len())
+                .map(|account_changes| account_changes.slots.iter().filter(|(_, change)| change.is_modified()).count())
                 .sum();
 
             if total_slot_changes > 0 {
