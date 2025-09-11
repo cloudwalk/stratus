@@ -451,6 +451,21 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.input.hash).entered();
         tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.hash, "saving execution");
 
+        // Log warning if a failed transaction has slot changes
+        if !tx.result.execution.result.is_success() {
+            let total_slot_changes: usize = changes.values()
+                .map(|account_changes| account_changes.slots.len())
+                .sum();
+
+            if total_slot_changes > 0 {
+                tracing::warn!(
+                    ?tx,
+                    "Failed transaction contains {} slot change(s)",
+                    total_slot_changes
+                );
+            }
+        }
+
         timed(|| self.temp.save_pending_execution(tx, is_local))
             .with(|m| {
                 metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
