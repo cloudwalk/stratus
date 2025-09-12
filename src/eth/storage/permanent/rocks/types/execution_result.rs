@@ -3,7 +3,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, strum::VariantNames)]
 pub enum ExecutionResultRocksdb {
     Success,
     Reverted,
@@ -41,3 +41,11 @@ impl From<ExecutionResultBuilder> for (ExecutionResult, Bytes) {
 }
 
 impl SerializeDeserializeWithContext for ExecutionResultRocksdb {}
+
+crate::gen_enum_test_values! {
+    ExecutionResultRocksdb => {
+        Success => ExecutionResultRocksdb::Success,
+        Reverted => ExecutionResultRocksdb::Reverted,
+        Halted => ExecutionResultRocksdb::Halted { reason: "test halt reason".to_string() },
+    }
+}
