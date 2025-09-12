@@ -364,7 +364,7 @@ describe("Leader & Follower BRLC integration test", function () {
 
             // Restart the follower with block changes replication enabled
             // Use exec instead of execSync since the follower runs in background
-            exec(`just e2e-follower brlc true`, {
+            exec(`just e2e-follower brlc false`, {
                 shell: "/bin/bash",
             });
 

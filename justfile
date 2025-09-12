@@ -320,7 +320,7 @@ e2e-follower test="brlc" use_block_changes_replication="false":
     #!/bin/bash
     BLOCK_CHANGES_FLAG=""
     if [ "{{use_block_changes_replication}}" = "true" ]; then
-        BLOCK_CHANGES_FLAG="--enable-block-changes-replication"
+        export ENABLE_BLOCK_CHANGES_REPLICATION=true
     fi
     if [ "{{test}}" = "kafka" ]; then
     # Start Kafka using Docker Compose
@@ -329,9 +329,9 @@ e2e-follower test="brlc" use_block_changes_replication="false":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 ${BLOCK_CHANGES_FLAG} -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 ${BLOCK_CHANGES_FLAG} -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
     fi
 
 

@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
 use super::execution_result::ExecutionResultBuilder;
@@ -8,6 +6,7 @@ use super::gas::GasRocksdb;
 use super::log::LogRocksdb;
 use super::unix_time::UnixTimeRocksdb;
 use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Log;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
@@ -44,7 +43,7 @@ impl From<ExecutionRocksdb> for EvmExecution {
             output,
             logs: item.logs.into_iter().map(Log::from).collect(),
             gas: item.gas.into(),
-            changes: BTreeMap::default(),
+            changes: ExecutionChanges::default(),
             deployed_contract_address: item.deployed_contract_address.map_into(),
         }
     }
