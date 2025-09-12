@@ -453,10 +453,7 @@ impl StratusStorage {
 
         // Log warning if a failed transaction has slot changes
         if !tx.result.execution.result.is_success() {
-            let total_slot_changes: usize = changes
-                .values()
-                .map(|account_changes| account_changes.slots.iter().filter(|(_, change)| change.is_modified()).count())
-                .sum();
+            let total_slot_changes: usize = changes.slots.len();
 
             if total_slot_changes > 0 {
                 tracing::warn!(?tx, "Failed transaction contains {} slot change(s)", total_slot_changes);
