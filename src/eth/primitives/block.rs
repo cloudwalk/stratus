@@ -142,7 +142,7 @@ impl Block {
 
     pub fn apply_external(&mut self, external_block: &ExternalBlock) {
         self.header.hash = external_block.hash();
-        self.header.timestamp = external_block.timestamp();
+        assert!(*self.header.timestamp == external_block.header.timestamp);
         for transaction in self.transactions.iter_mut() {
             assert!(transaction.block_timestamp == self.header.timestamp);
             transaction.block_hash = external_block.hash();
