@@ -122,6 +122,6 @@ impl Default for InMemoryCallTemporaryStorage {
 #[derive(Debug, Default)]
 pub struct InMemoryCallTemporaryStorageState {
     pub current_tx_count: TxCount,
-    pub accounts: HashMap<Address, Vec<(Account, TxCount)>>,
-    pub slots: HashMap<(Address, SlotIndex), Vec<(SlotValue, TxCount)>>,
+    pub accounts: HashMap<Address, Vec<(Account, TxCount)>, hash_hasher::HashBuildHasher>,
+    pub slots: HashMap<(Address, SlotIndex), Vec<(SlotValue, TxCount)>, hash_hasher::HashBuildHasher>,
 }

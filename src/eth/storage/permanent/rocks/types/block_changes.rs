@@ -28,15 +28,15 @@ impl AccountChangesRocksdb {
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
 pub struct BlockChangesRocksdb {
-    pub account_changes: HashMap<AddressRocksdb, AccountChangesRocksdb>,
+    pub account_changes: HashMap<AddressRocksdb, AccountChangesRocksdb, hash_hasher::HashBuildHasher>,
     #[serde_as(as = "Vec<(_, _)>")]
-    pub slot_changes: HashMap<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb>,
+    pub slot_changes: HashMap<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb, hash_hasher::HashBuildHasher>,
 }
 
 impl BlockChangesRocksdb {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            account_changes: HashMap::with_capacity(capacity),
+            account_changes: HashMap::with_capacity_and_hasher(capacity, hash_hasher::HashBuildHasher::default()),
             slot_changes: HashMap::default(),
         }
     }

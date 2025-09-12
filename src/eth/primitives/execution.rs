@@ -25,8 +25,8 @@ use crate::log_and_err;
 
 #[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
 pub struct ExecutionChanges {
-    pub accounts: HashMap<Address, ExecutionAccountChanges>,
-    pub slots: HashMap<(Address, SlotIndex), SlotValue>,
+    pub accounts: HashMap<Address, ExecutionAccountChanges, hash_hasher::HashBuildHasher>,
+    pub slots: HashMap<(Address, SlotIndex), SlotValue, hash_hasher::HashBuildHasher>,
 }
 
 impl ExecutionChanges {
@@ -563,8 +563,10 @@ mod tests {
 
         // Set up execution with sender account
         let sender_changes = ExecutionAccountChanges::from_unchanged(sender);
+        let mut accounts = HashMap::with_hasher(hash_hasher::HashBuildHasher::default());
+        accounts.insert(sender_address, sender_changes);
         execution.changes = ExecutionChanges {
-            accounts: HashMap::from([(sender_address, sender_changes)]),
+            accounts,
             ..Default::default()
         };
         execution.gas = Gas::from(100u64);
