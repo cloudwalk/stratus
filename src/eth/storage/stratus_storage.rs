@@ -336,7 +336,7 @@ impl StratusStorage {
     fn _read_slot_pending_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         timed(|| self.cache.get_slot(address, index)).with(|m| {
             if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, %index, "slot found in cache");
+                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
                 metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Pending);
             }
         })
@@ -345,7 +345,7 @@ impl StratusStorage {
     fn _read_slot_latest_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         timed(|| self.cache.get_slot_latest(address, index)).with(|m| {
             if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, %index, "slot found in cache");
+                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
                 metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Mined);
             }
         })
@@ -375,7 +375,7 @@ impl StratusStorage {
         })?;
         Ok(match slot {
             Some(slot) => {
-                tracing::debug!(storage = %label::PERM, %address, %index, value = %slot.value, "slot found in permanent storage");
+                tracing::debug!(storage = %label::PERM, %address, %index, ?slot, "slot found in permanent storage");
                 slot
             }
             None => {
@@ -449,7 +449,7 @@ impl StratusStorage {
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.input.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.hash, "saving execution");
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.hash, changes = ?tx.result.execution.changes, "saving execution");
 
         timed(|| self.temp.save_pending_execution(tx, is_local))
             .with(|m| {
@@ -509,7 +509,7 @@ impl StratusStorage {
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
-        tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), "saving block");
+        tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), ?changes, "saving block");
 
         // check mined number
         let mined_number = self.read_mined_block_number();
