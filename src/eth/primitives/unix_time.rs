@@ -1,16 +1,15 @@
-use std::ops::Deref;
-
 use alloy_primitives::U256;
 use chrono::DateTime;
 use chrono::Utc;
+use derive_more::Deref;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
 
 use crate::ext::InfallibleExt;
 
-#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct UnixTime(u64);
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Deref)]
+pub struct UnixTime(#[deref] u64);
 
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
@@ -33,14 +32,6 @@ impl UnixTime {
     #[cfg(feature = "dev")]
     pub fn evm_set_next_block_timestamp_was_called() -> bool {
         offset::evm_set_next_block_timestamp_was_called()
-    }
-}
-
-impl Deref for UnixTime {
-    type Target = u64;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 
