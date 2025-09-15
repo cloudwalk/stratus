@@ -5,7 +5,6 @@ use tracing::Span;
 use super::InMemoryTemporaryStorage;
 use super::RocksPermanentStorage;
 use super::StorageCache;
-#[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -56,31 +55,24 @@ pub struct StratusStorage {
     pub perm: RocksPermanentStorage,
     // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block
     transient_state_lock: parking_lot::RwLock<()>,
-    #[cfg(feature = "dev")]
-    perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
 }
 
 impl StratusStorage {
     /// Creates a new storage with the specified temporary and permanent implementations.
-    pub fn new(
-        temp: InMemoryTemporaryStorage,
-        perm: RocksPermanentStorage,
-        cache: StorageCache,
-        #[cfg(feature = "dev")] perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
-    ) -> Result<Self, StorageError> {
+    pub fn new(temp: InMemoryTemporaryStorage, perm: RocksPermanentStorage, cache: StorageCache, genesis_config: GenesisConfig) -> Result<Self, StorageError> {
         let this = Self {
             temp,
             cache,
             perm,
             transient_state_lock: parking_lot::RwLock::new(()),
-            #[cfg(feature = "dev")]
-            perm_config,
         };
 
         // create genesis block and accounts if necessary
-        #[cfg(feature = "dev")]
         if !this.has_genesis()? {
+            #[cfg(feature = "dev")]
             this.reset_to_genesis()?;
+            #[cfg(not(feature = "dev"))]
+            this.create_genesis(genesis_config)?;
         }
 
         Ok(this)
@@ -127,21 +119,7 @@ impl StratusStorage {
         }
         .init();
 
-        Self::new(
-            temp,
-            perm,
-            cache,
-            #[cfg(feature = "dev")]
-            super::permanent::PermanentStorageConfig {
-                rocks_path_prefix: Some(rocks_path_prefix),
-                rocks_shutdown_timeout: std::time::Duration::from_secs(240),
-                rocks_cf_cache: super::permanent::RocksCfCacheConfig::default(),
-                rocks_disable_sync_write: false,
-                rocks_cf_size_metrics_interval: None,
-                genesis_file: crate::config::GenesisFileConfig::default(),
-                rocks_file_descriptors_limit: 1024,
-            },
-        )
+        Self::new(temp, perm, cache, GenesisConfig::default())
     }
 
     pub fn read_block_number_to_resume_import(&self) -> Result<BlockNumber, StorageError> {
@@ -570,7 +548,7 @@ impl StratusStorage {
             self.perm.save_block(block, changes.clone())?;
             self.cache.cache_account_and_slots_latest_from_changes(changes);
             drop(guard);
-            Ok(())
+            Ok::<(), StorageError>(())
         })
         .with(|m| {
             metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
@@ -713,6 +691,23 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
     // General state
     // -------------------------------------------------------------------------
+
+    fn create_genesis(&self, genesis_config: GenesisConfig) -> Result<(), StorageError> {
+        tracing::info!("creating genesis block");
+
+        let genesis_block = genesis_config.to_genesis_block()?;
+        let genesis_accounts = genesis_config.to_stratus_accounts()?;
+
+        // Save the genesis block
+        self.save_block(genesis_block, ExecutionChanges::default(), false)?;
+
+        // accounts
+        self.save_accounts(genesis_accounts)?;
+
+        // block number
+        self.set_mined_block_number(BlockNumber::ZERO);
+        Ok(())
+    }
 
     #[cfg(feature = "dev")]
     /// Resets the storage to the genesis state.

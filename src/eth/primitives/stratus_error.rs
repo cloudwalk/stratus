@@ -316,6 +316,12 @@ impl From<anyhow::Error> for StratusError {
     }
 }
 
+impl From<anyhow::Error> for StorageError {
+    fn from(value: anyhow::Error) -> Self {
+        Self::Unexpected { msg: value.to_string() }
+    }
+}
+
 impl From<serde_json::Error> for StratusError {
     fn from(value: serde_json::Error) -> Self {
         Self::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(value)))

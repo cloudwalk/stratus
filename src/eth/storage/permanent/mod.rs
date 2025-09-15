@@ -10,8 +10,6 @@ use clap::Parser;
 use display_json::DebugAsJson;
 
 /// Genesis file configuration
-#[cfg(feature = "dev")]
-use crate::config::GenesisFileConfig;
 use crate::ext::parse_duration;
 
 // -----------------------------------------------------------------------------
@@ -45,10 +43,9 @@ pub struct PermanentStorageConfig {
     #[arg(long = "rocks-file-descriptors-limit", env = "ROCKS_FILE_DESCRIPTORS_LIMIT", default_value = Self::DEFAULT_FILE_DESCRIPTORS_LIMIT)]
     pub rocks_file_descriptors_limit: u64,
 
-    /// Genesis file configuration
-    #[clap(flatten)]
-    #[cfg(feature = "dev")]
-    pub genesis_file: GenesisFileConfig,
+    /// Path to the genesis.json file
+    #[arg(long = "genesis-path", env = "GENESIS_JSON_PATH")]
+    pub genesis_path: Option<String>,
 }
 
 impl PermanentStorageConfig {

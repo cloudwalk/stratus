@@ -20,6 +20,7 @@ use clap::Parser;
 use display_json::DebugAsJson;
 pub use temporary::compute_pending_block_number;
 
+use crate::eth::genesis::GenesisConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -65,14 +66,13 @@ impl StorageConfig {
         let perm_storage = self.perm_storage.init()?;
         let temp_storage = self.temp_storage.init(&perm_storage)?;
         let cache = self.cache.init();
+        let genesis_config = if let Some(path) = &self.perm_storage.genesis_path {
+            GenesisConfig::load_from_file(path)?
+        } else {
+            GenesisConfig::default()
+        };
 
-        let storage = StratusStorage::new(
-            temp_storage,
-            perm_storage,
-            cache,
-            #[cfg(feature = "dev")]
-            self.perm_storage.clone(),
-        )?;
+        let storage = StratusStorage::new(temp_storage, perm_storage, cache, genesis_config)?;
 
         Ok(Arc::new(storage))
     }
