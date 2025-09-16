@@ -8,7 +8,7 @@ export CARGO_COMMAND := env("CARGO_COMMAND", "")
 # Global arguments that can be passed to receipts.
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
-database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
+database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus)
 
 # Project: Show available tasks
 default:
