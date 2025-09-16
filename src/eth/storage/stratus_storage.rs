@@ -109,8 +109,15 @@ impl StratusStorage {
         let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
         let rocks_path_prefix = rocks_dir.path().to_str().unwrap().to_string();
 
-        let perm = RocksPermanentStorage::new(Some(rocks_path_prefix.clone()), std::time::Duration::from_secs(240), None, true, None, 1024)
-            .expect("Failed to create RocksPermanentStorage for tests");
+        let perm = RocksPermanentStorage::new(
+            Some(rocks_path_prefix.clone()),
+            std::time::Duration::from_secs(240),
+            super::permanent::RocksCfCacheConfig::default(),
+            true,
+            None,
+            1024,
+        )
+        .expect("Failed to create RocksPermanentStorage for tests");
 
         let cache = CacheConfig {
             slot_cache_capacity: 100000,
@@ -128,7 +135,7 @@ impl StratusStorage {
             super::permanent::PermanentStorageConfig {
                 rocks_path_prefix: Some(rocks_path_prefix),
                 rocks_shutdown_timeout: std::time::Duration::from_secs(240),
-                rocks_cache_size_multiplier: None,
+                rocks_cf_cache: super::permanent::RocksCfCacheConfig::default(),
                 rocks_disable_sync_write: false,
                 rocks_cf_size_metrics_interval: None,
                 genesis_file: crate::config::GenesisFileConfig::default(),
@@ -443,6 +450,18 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.input.hash).entered();
         tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.hash, "saving execution");
+
+        // Log warning if a failed transaction has slot changes
+        if !tx.result.execution.result.is_success() {
+            let total_slot_changes: usize = changes
+                .values()
+                .map(|account_changes| account_changes.slots.iter().filter(|(_, change)| change.is_modified()).count())
+                .sum();
+
+            if total_slot_changes > 0 {
+                tracing::warn!(?tx, "Failed transaction contains {} slot change(s)", total_slot_changes);
+            }
+        }
 
         timed(|| self.temp.save_pending_execution(tx, is_local))
             .with(|m| {

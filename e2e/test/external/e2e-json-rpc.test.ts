@@ -576,6 +576,105 @@ describe("JSON-RPC", () => {
                 expect(result.transactionPosition).to.eq(0);
                 expect(result.type).to.eq("call");
             });
+
+            it("simple JS tracer", async () => {
+                const contract = await deployTestRevertReason();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                const signedTx = await prepareSignedTx({
+                    contract,
+                    account: ALICE,
+                    methodName: "revertWithKnownError",
+                    methodParameters: [],
+                });
+
+                const txHash = await sendRawTransaction(signedTx);
+                await sendEvmMine();
+
+                const txReceipt = await ETHERJS.getTransactionReceipt(txHash);
+
+                // Simple JS tracer that counts opcodes
+                const jsTracer = `{
+                    count: 0,
+                    step: function(log, db) { this.count++ },
+                    fault: function(log, db) {},
+                    result: function(ctx, db) { return this.count }
+                }`;
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: jsTracer },
+                ]);
+
+                // Should have executed some opcodes
+                expect(trace.data.result).to.be.a("number");
+                expect(trace.data.result).to.be.greaterThan(0);
+            });
+
+            it("JS tracer for LOG opcodes", async function () {
+                const { deployTestContractBalances } = await import("../helpers/rpc");
+                const contract = await deployTestContractBalances();
+                await sendEvmMine();
+                await contract.waitForDeployment();
+
+                // Call add() which emits an Add event without heavy computation
+                const tx = await contract.add(ALICE.address, 100);
+                await sendEvmMine();
+
+                const txReceipt = await ETHERJS.getTransactionReceipt(tx.hash);
+
+                // JS tracer that captures LOG opcodes
+                const logTracer = `{
+                    logs: [],
+                    step: function(log, db) {
+                        const opcode = log.op.toNumber();
+                        // LOG0 = 0xa0, LOG1 = 0xa1, LOG2 = 0xa2, LOG3 = 0xa3, LOG4 = 0xa4
+                        if (opcode >= 0xa0 && opcode <= 0xa4) {
+                            const topicCount = opcode - 0xa0;
+                            const offset = log.stack.peek(0);
+                            const size = log.stack.peek(1);
+
+                            const topics = [];
+                            for (let i = 0; i < topicCount; i++) {
+                                topics.push(log.stack.peek(2 + i).toString(16));
+                            }
+
+                            // Convert address object to hex string
+                            const addrObj = log.contract.getAddress();
+                            let address = '0x';
+                            for (let i = 0; i < 20; i++) {
+                                const byte = addrObj[i.toString()];
+                                address += byte.toString(16).padStart(2, '0');
+                            }
+
+                            this.logs.push({
+                                address: address,
+                                topics: topics,
+                                topicCount: topicCount,
+                                dataSize: size.toString()
+                            });
+                        }
+                    },
+                    fault: function(log, db) {},
+                    result: function(ctx, db) { return this.logs }
+                }`;
+
+                const trace = await sendAndGetFullResponse("debug_traceTransaction", [
+                    txReceipt?.hash,
+                    { tracer: logTracer },
+                ]);
+
+                // Should have captured at least one LOG opcode (Add event)
+                expect(trace.data.result).to.be.an("array");
+                expect(trace.data.result.length).to.be.greaterThan(0);
+                const logEntry = trace.data.result[0];
+
+                expect(logEntry.address).to.equal((await contract.getAddress()).toLowerCase());
+                expect(logEntry.topicCount).to.equal(2); // LOG2 for Add event (event signature + 1 indexed parameter)
+                expect(logEntry.topics).to.be.an("array");
+                expect(logEntry.topics.length).to.equal(2);
+            });
         });
     });
 
