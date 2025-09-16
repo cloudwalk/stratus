@@ -14,6 +14,7 @@ use alloy_primitives::Signature;
 use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
+use alloy_primitives::normalize_v;
 use alloy_rpc_types_eth::AccessList;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
@@ -31,7 +32,6 @@ use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
-use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::ext::RuintExt;
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -153,7 +153,13 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
     let signature = value.inner.signature();
     let r = signature.r();
     let s = signature.s();
-    let v = if signature.v() { U64::ONE } else { U64::ZERO };
+    let v = match value.inner.inner() {
+        TxEnvelope::Legacy(signed) => U64::from(signed.signature().v()),
+        TxEnvelope::Eip2930(signed) => U64::from(signed.signature().v()),
+        TxEnvelope::Eip1559(signed) => U64::from(signed.signature().v()),
+        TxEnvelope::Eip4844(signed) => U64::from(signed.signature().v()),
+        TxEnvelope::Eip7702(signed) => U64::from(signed.signature().v()),
+    };
 
     Ok(TransactionInput {
         tx_type: Some(U64::from(value.inner.tx_type() as u8)),
@@ -182,9 +188,17 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
 
 impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
-        let signature = Signature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v == U64::ONE);
-
         let tx_type = value.tx_type.map(|t| t.as_u64()).unwrap_or(0);
+
+        let signature = match tx_type {
+            // Legacy transactions: EIP-155 handling
+            0 => {
+                let parity = normalize_v(value.v.as_u64()).expect(&format!("Invalid V value for legacy transaction: {}", value.v.as_u64()));
+                Signature::from_scalars_and_parity(value.r.into(), value.s.into(), parity)
+            }
+            // Typed transactions: V is recovery ID (0 or 1)
+            _ => Signature::from_scalars_and_parity(value.r.into(), value.s.into(), value.v.as_u64() == 1),
+        };
 
         let inner = match tx_type {
             // EIP-2930
