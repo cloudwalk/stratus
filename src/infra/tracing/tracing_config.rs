@@ -1,32 +1,29 @@
 use std::collections::HashMap;
-use std::io::stdout;
 use std::io::IsTerminal;
-use std::net::SocketAddr;
+use std::io::stdout;
 use std::str::FromStr;
 
 use anyhow::anyhow;
 use clap::Parser;
-use console_subscriber::ConsoleLayer;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::Protocol;
 use opentelemetry_otlp::SpanExporterBuilder;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::Resource as SdkResource;
 use opentelemetry_sdk::runtime;
 use opentelemetry_sdk::trace;
 use opentelemetry_sdk::trace::BatchConfigBuilder;
 use opentelemetry_sdk::trace::Tracer as SdkTracer;
-use opentelemetry_sdk::Resource as SdkResource;
 use tonic::metadata::MetadataKey;
 use tonic::metadata::MetadataMap;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
 use tracing_subscriber::fmt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::Layer;
 
-use crate::ext::spawn_named;
 use crate::infra::build_info;
 use crate::infra::sentry::SentryConfig;
 use crate::infra::tracing::TracingContextLayer;
@@ -54,10 +51,6 @@ pub struct TracingConfig {
     /// How tracing events will be formatted when displayed in stdout.
     #[arg(long = "tracing-log-format", env = "TRACING_LOG_FORMAT", default_value = "normal")]
     pub tracing_log_format: TracingLogFormat,
-
-    // Tokio Console GRPC server binding address.
-    #[arg(long = "tokio-console-address", env = "TRACING_TOKIO_CONSOLE_ADDRESS")]
-    pub tracing_tokio_console_address: Option<SocketAddr>,
 }
 
 impl TracingConfig {
@@ -68,7 +61,7 @@ impl TracingConfig {
         match self.create_subscriber(sentry_config).try_init() {
             Ok(()) => Ok(()),
             Err(e) => {
-                println!("failed to create tracing registry | reason={:?}", e);
+                println!("failed to create tracing registry | reason={e:?}");
                 Err(e.into())
             }
         }
@@ -138,31 +131,11 @@ impl TracingConfig {
             }
         };
 
-        // configure tokio-console layer
-        let tokio_console_layer = match self.tracing_tokio_console_address {
-            Some(tokio_console_address) => {
-                println!("tracing registry: enabling tokio console exporter | address={}", tokio_console_address);
-
-                let (console_layer, console_server) = ConsoleLayer::builder().with_default_env().server_addr(tokio_console_address).build();
-                spawn_named("console::grpc-server", async move {
-                    if let Err(e) = console_server.serve().await {
-                        tracing::error!(reason = ?e, address = %tokio_console_address, "failed to create tokio-console server");
-                    };
-                });
-                Some(console_layer)
-            }
-            None => {
-                println!("tracing registry: skipping tokio-console exporter");
-                None
-            }
-        };
-
         tracing_subscriber::registry()
             .with(tracing_context_layer)
             .with(stdout_layer)
             .with(opentelemetry_layer)
             .with(sentry_layer)
-            .with(tokio_console_layer)
     }
 }
 
@@ -324,7 +297,6 @@ mod tests {
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
             tracing_log_format: TracingLogFormat::Json,
-            tracing_tokio_console_address: None,
         };
         config.create_subscriber(&None);
     }
@@ -336,7 +308,6 @@ mod tests {
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
             tracing_log_format: TracingLogFormat::Minimal,
-            tracing_tokio_console_address: None,
         };
         config.create_subscriber(&None);
     }
@@ -348,7 +319,6 @@ mod tests {
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
             tracing_log_format: TracingLogFormat::Normal,
-            tracing_tokio_console_address: None,
         };
         config.create_subscriber(&None);
     }
@@ -360,7 +330,6 @@ mod tests {
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
             tracing_log_format: TracingLogFormat::Verbose,
-            tracing_tokio_console_address: None,
         };
         config.create_subscriber(&None);
     }
@@ -372,7 +341,6 @@ mod tests {
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
             tracing_log_format: TracingLogFormat::Normal,
-            tracing_tokio_console_address: None,
         };
         config.create_subscriber(&None);
     }
@@ -387,7 +355,6 @@ mod tests {
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
             tracing_log_format: TracingLogFormat::Normal,
-            tracing_tokio_console_address: None,
         };
         config.create_subscriber(&Some(sentry_config));
     }
@@ -399,7 +366,6 @@ mod tests {
             tracing_protocol: TracingProtocol::Grpc,
             tracing_headers: vec![],
             tracing_log_format: TracingLogFormat::Normal,
-            tracing_tokio_console_address: Some("127.0.0.1:6669".parse().unwrap()),
         };
         config.create_subscriber(&None);
     }

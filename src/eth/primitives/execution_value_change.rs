@@ -101,18 +101,10 @@ impl<T> ValueState<T> {
     }
 
     pub fn take(self) -> Option<T> {
-        if let Self::Set(value) = self {
-            Some(value)
-        } else {
-            None
-        }
+        if let Self::Set(value) = self { Some(value) } else { None }
     }
 
     pub fn take_ref(&self) -> Option<&T> {
-        if let Self::Set(value) = self {
-            Some(value)
-        } else {
-            None
-        }
+        if let Self::Set(value) = self { Some(value) } else { None }
     }
 }

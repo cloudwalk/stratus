@@ -1,6 +1,5 @@
 //! Ethereum JSON-RPC server.
 
-pub mod proxy_get_request;
 mod rpc_client_app;
 mod rpc_config;
 mod rpc_context;
@@ -18,5 +17,5 @@ use rpc_middleware::RpcMiddleware;
 use rpc_parser::next_rpc_param;
 use rpc_parser::next_rpc_param_or_default;
 use rpc_parser::parse_rpc_rlp;
-pub use rpc_server::serve_rpc;
+pub use rpc_server::Server;
 pub use rpc_subscriptions::RpcSubscriptions;

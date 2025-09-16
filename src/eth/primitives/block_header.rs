@@ -1,6 +1,9 @@
 use alloy_consensus::constants::EMPTY_OMMER_ROOT_HASH;
 use alloy_consensus::constants::EMPTY_ROOT_HASH;
+use alloy_primitives::B64;
+use alloy_primitives::B256;
 use alloy_primitives::FixedBytes;
+use alloy_primitives::U256;
 use alloy_rpc_types_eth::Block as AlloyBlock;
 use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
@@ -11,15 +14,11 @@ use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
 
 use crate::alias::AlloyAddress;
-use crate::alias::AlloyB256;
-use crate::alias::AlloyB64;
 use crate::alias::AlloyBlockVoid;
 use crate::alias::AlloyBloom;
 use crate::alias::AlloyBytes;
 use crate::alias::AlloyConsensusHeader;
 use crate::alias::AlloyHeader;
-use crate::alias::AlloyUint256;
-use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
@@ -30,6 +29,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::MinerNonce;
 use crate::eth::primitives::Size;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::ext::InfallibleExt;
 
 /// Special hash used in block mining to indicate no uncle blocks.
@@ -87,7 +87,7 @@ impl BlockHeader {
 }
 
 impl Dummy<Faker> for BlockHeader {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         Self {
             number: faker.fake_with_rng(rng),
             hash: faker.fake_with_rng(rng),
@@ -124,40 +124,40 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
 
             // block: relation with other blocks
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
-            parent_hash: AlloyB256::from(header.parent_hash),
+            parent_hash: B256::from(header.parent_hash),
             parent_beacon_block_root: None,
 
             // mining: identifiers
             timestamp: *header.timestamp,
-            beneficiary: AlloyAddress::from(Address::COINBASE),
+            beneficiary: AlloyAddress::from(header.author),
 
             // mining: difficulty
-            difficulty: AlloyUint256::ZERO,
-            nonce: AlloyB64::ZERO,
+            difficulty: U256::ZERO,
+            nonce: B64::ZERO,
 
             // mining: gas
-            gas_limit: 100_000_000u64,
+            gas_limit: header.gas_limit.as_u64(),
             gas_used: header.gas_used.as_u64(),
             base_fee_per_gas: Some(0u64),
             blob_gas_used: None,
             excess_blob_gas: None,
 
             // transactions
-            transactions_root: AlloyB256::from(header.transactions_root),
+            transactions_root: B256::from(header.transactions_root),
             receipts_root: EMPTY_ROOT_HASH,
             withdrawals_root: None,
 
             // data
             logs_bloom: AlloyBloom::from(header.bloom),
             extra_data: AlloyBytes::default(),
-            state_root: AlloyB256::from(header.state_root),
+            state_root: B256::from(header.state_root),
             requests_hash: None,
         };
 
         let rpc_header = AlloyHeader {
             hash: header.hash.into(),
             inner,
-            total_difficulty: Some(AlloyUint256::ZERO),
+            total_difficulty: Some(U256::ZERO),
             size: Some(header.size.into()),
         };
 
@@ -192,7 +192,7 @@ impl TryFrom<&ExternalBlock> for BlockHeader {
             difficulty: Difficulty::from(value.0.header.inner.difficulty),
             receipts_root: Hash::from(value.0.header.inner.receipts_root),
             uncle_hash: Hash::from(value.0.header.inner.ommers_hash),
-            size: Size::from(value.0.header.size.unwrap_or_default()),
+            size: Size::try_from(value.0.header.size.unwrap_or_default())?,
             state_root: Hash::from(value.0.header.inner.state_root),
             total_difficulty: Difficulty::from(value.0.header.total_difficulty.unwrap_or_default()),
             nonce: MinerNonce::from(value.0.header.inner.nonce.0),
@@ -202,8 +202,9 @@ impl TryFrom<&ExternalBlock> for BlockHeader {
 
 impl From<BlockHeader> for SubscriptionMessage {
     fn from(value: BlockHeader) -> Self {
-        let alloy_block = AlloyBlockVoid::from(value);
-        Self::from_json(&alloy_block).expect_infallible()
+        serde_json::value::RawValue::from_string(serde_json::to_string(&AlloyBlockVoid::from(value)).expect_infallible())
+            .expect_infallible()
+            .into()
     }
 }
 

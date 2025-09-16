@@ -3,10 +3,12 @@ use std::fmt::Display;
 use std::ops::Deref;
 
 use revm::primitives::Bytes as RevmBytes;
+use rocksdb::WriteBatch;
 
 use crate::eth::primitives::Bytes;
+use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, fake::Dummy)]
+#[derive(Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct BytesRocksdb(pub Vec<u8>);
 
 impl Deref for BytesRocksdb {
@@ -62,3 +64,17 @@ impl From<BytesRocksdb> for RevmBytes {
         value.to_vec().into()
     }
 }
+
+impl From<WriteBatch> for BytesRocksdb {
+    fn from(batch: WriteBatch) -> Self {
+        Self(batch.data().to_vec())
+    }
+}
+
+impl BytesRocksdb {
+    pub fn to_write_batch(&self) -> WriteBatch {
+        WriteBatch::from_data(&self.0)
+    }
+}
+
+impl SerializeDeserializeWithContext for BytesRocksdb {}

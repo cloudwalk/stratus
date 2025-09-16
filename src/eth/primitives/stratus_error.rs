@@ -1,10 +1,11 @@
 use futures::future::BoxFuture;
-use jsonrpsee::server::middleware::rpc::layer::ResponseFuture;
-use jsonrpsee::types::ErrorObjectOwned;
-use jsonrpsee::types::Id;
 use jsonrpsee::MethodResponse;
 use jsonrpsee::ResponsePayload;
-use revm::primitives::EVMError;
+use jsonrpsee::core::middleware::ResponseFuture;
+use jsonrpsee::types::ErrorObjectOwned;
+use jsonrpsee::types::Id;
+use revm::context::DBErrorMarker;
+use revm::context::result::EVMError;
 use stratus_macros::ErrorCode;
 
 use super::execution_result::RevertReason;
@@ -257,7 +258,7 @@ impl ErrorCode for StratusError {
     }
 
     fn str_repr_from_err_code(code: i32) -> Option<&'static str> {
-        let major = code % 1000;
+        let major = code / 1000;
         match major {
             1 => RpcError::str_repr_from_err_code(code),
             2 => TransactionError::str_repr_from_err_code(code),
@@ -270,6 +271,8 @@ impl ErrorCode for StratusError {
         }
     }
 }
+
+impl DBErrorMarker for StratusError {}
 
 impl StratusError {
     /// Error message to be used in JSON-RPC response.
@@ -297,7 +300,7 @@ impl StratusError {
         }
     }
 
-    pub fn to_response_future<'a>(self, id: Id<'_>) -> ResponseFuture<BoxFuture<'a, MethodResponse>> {
+    pub fn to_response_future<'a>(self, id: Id<'_>) -> ResponseFuture<BoxFuture<'a, MethodResponse>, MethodResponse> {
         let response = ResponsePayload::<()>::error(StratusError::RPC(RpcError::ClientMissing));
         let method_response = MethodResponse::response(id, response, u32::MAX as usize);
         ResponseFuture::ready(method_response)
@@ -323,10 +326,10 @@ impl From<serde_json::Error> for StratusError {
 impl From<EVMError<StratusError>> for StratusError {
     fn from(value: EVMError<StratusError>) -> Self {
         match value {
-            EVMError::Transaction(err) => StratusError::Transaction(TransactionError::EvmFailed(err.to_string())),
-            EVMError::Header(err) => StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(err.to_string()))),
-            EVMError::Custom(err) | EVMError::Precompile(err) => StratusError::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(err.to_string()))),
             EVMError::Database(err) => err,
+            EVMError::Custom(err) => Self::Transaction(TransactionError::EvmFailed(err)),
+            EVMError::Header(err) => Self::Transaction(TransactionError::EvmFailed(err.to_string())),
+            EVMError::Transaction(err) => Self::Transaction(TransactionError::EvmFailed(err.to_string())),
         }
     }
 }
@@ -350,5 +353,37 @@ impl From<StratusError> for ErrorObjectOwned {
         };
 
         Self::owned(value.error_code(), value.rpc_message(), Some(data))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_str_repr_from_err_code() {
+        // RPC error
+        assert_eq!(StratusError::str_repr_from_err_code(1001), Some("BlockFilterInvalid"));
+
+        // Transaction error
+        assert_eq!(StratusError::str_repr_from_err_code(2001), Some("AccountNotContract"));
+
+        // Storage error
+        assert_eq!(StratusError::str_repr_from_err_code(3001), Some("BlockConflict"));
+
+        // Importer error
+        assert_eq!(StratusError::str_repr_from_err_code(4001), Some("AlreadyRunning"));
+
+        // Consensus error
+        assert_eq!(StratusError::str_repr_from_err_code(5001), Some("Unavailable"));
+
+        // Unexpected error
+        assert_eq!(StratusError::str_repr_from_err_code(6001), Some("ChannelClosed"));
+
+        // State error
+        assert_eq!(StratusError::str_repr_from_err_code(7003), Some("StratusNotFollower"));
+
+        // Invalid error code
+        assert_eq!(StratusError::str_repr_from_err_code(9999), None);
     }
 }

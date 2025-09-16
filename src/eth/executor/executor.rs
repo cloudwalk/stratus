@@ -3,23 +3,27 @@ use std::mem;
 use std::str::FromStr;
 use std::sync::Arc;
 
+#[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
-use tracing::debug_span;
-use tracing::info_span;
 use tracing::Span;
+use tracing::debug_span;
+#[cfg(feature = "tracing")]
+use tracing::info_span;
 
 use super::evm_input::InspectorInput;
+use crate::GlobalState;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
 use crate::eth::executor::Evm;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::executor::evm::EvmKind;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
@@ -40,16 +44,16 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::primitives::UnixTime;
+use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
-use crate::ext::spawn_thread;
-use crate::ext::to_json_string;
 #[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
+use crate::ext::spawn_thread;
+use crate::ext::to_json_string;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
-use crate::infra::tracing::warn_task_tx_closed;
 use crate::infra::tracing::SpanExt;
-use crate::GlobalState;
+use crate::infra::tracing::warn_task_tx_closed;
 
 // -----------------------------------------------------------------------------
 // Evm task
@@ -116,8 +120,8 @@ impl Evms {
     /// Spawns EVM tasks in background.
     fn spawn(storage: Arc<StratusStorage>, config: &ExecutorConfig) -> Self {
         // function executed by evm threads
-        fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<EvmTask>) {
-            let mut evm = Evm::new(storage, config);
+        fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<EvmTask>, kind: EvmKind) {
+            let mut evm = Evm::new(storage, config, kind);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
@@ -136,24 +140,24 @@ impl Evms {
         }
 
         // function that spawn evm threads
-        let spawn_evms = |task_name: &str, num_evms: usize| {
+        let spawn_evms = |task_name: &str, num_evms: usize, kind: EvmKind| {
             let (evm_tx, evm_rx) = crossbeam_channel::unbounded::<EvmTask>();
 
             for evm_index in 1..=num_evms {
-                let evm_task_name = format!("{}-{}", task_name, evm_index);
+                let evm_task_name = format!("{task_name}-{evm_index}");
                 let evm_storage = Arc::clone(&storage);
                 let evm_config = config.clone();
                 let evm_rx = evm_rx.clone();
                 let thread_name = evm_task_name.clone();
                 spawn_thread(&thread_name, move || {
-                    evm_loop(&evm_task_name, evm_storage, evm_config, evm_rx);
+                    evm_loop(&evm_task_name, evm_storage, evm_config, evm_rx, kind);
                 });
             }
             evm_tx
         };
 
         fn inspector_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<InspectorTask>) {
-            let mut evm = Evm::new(storage, config);
+            let mut evm = Evm::new(storage, config, EvmKind::Call);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
@@ -176,7 +180,7 @@ impl Evms {
             let (tx, rx) = crossbeam_channel::unbounded::<InspectorTask>();
 
             for index in 1..=num_evms {
-                let task_name = format!("{}-{}", task_name, index);
+                let task_name = format!("{task_name}-{index}");
                 let storage = Arc::clone(&storage);
                 let config = config.clone();
                 let rx = rx.clone();
@@ -189,16 +193,21 @@ impl Evms {
         };
 
         let tx_parallel = match config.executor_strategy {
-            ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1), // should not really be used if strategy is serial, but keep 1 for fallback
-            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.executor_evms),
+            ExecutorStrategy::Serial => spawn_evms("evm-tx-unused", 1, EvmKind::Transaction), // should not really be used if strategy is serial, but keep 1 for fallback
+            ExecutorStrategy::Paralell => spawn_evms("evm-tx-parallel", config.executor_evms, EvmKind::Transaction),
         };
-        let tx_serial = spawn_evms("evm-tx-serial", 1);
-        let tx_external = spawn_evms("evm-tx-external", 1);
+        let tx_serial = spawn_evms("evm-tx-serial", 1, EvmKind::Transaction);
+        let tx_external = spawn_evms("evm-tx-external", 1, EvmKind::Transaction);
         let call_present = spawn_evms(
             "evm-call-present",
             max(config.executor_call_present_evms.unwrap_or(config.executor_evms / 2), 1),
+            EvmKind::Call,
         );
-        let call_past = spawn_evms("evm-call-past", max(config.executor_call_past_evms.unwrap_or(config.executor_evms / 4), 1));
+        let call_past = spawn_evms(
+            "evm-call-past",
+            max(config.executor_call_past_evms.unwrap_or(config.executor_evms / 4), 1),
+            EvmKind::Call,
+        );
         let inspector = spawn_inspectors("inspector", max(config.executor_inspector_evms.unwrap_or(config.executor_evms / 4), 1));
 
         Evms {
@@ -405,7 +414,7 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending)?;
+                let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending, ReadKind::Transaction)?;
                 let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
                 let evm_result = EvmExecutionResult {
                     execution,
@@ -529,7 +538,7 @@ impl Executor {
             });
 
             // prepare evm input
-            let pending_header = self.storage.read_pending_block_header();
+            let (pending_header, _) = self.storage.read_pending_block_header();
             let evm_input = EvmInput::from_eth_transaction(&tx_input, &pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
@@ -620,14 +629,14 @@ impl Executor {
         // execute
         let evm_input = match point_in_time {
             PointInTime::Pending => {
-                let pending_header = self.storage.read_pending_block_header();
-                EvmInput::from_pending_block(call_input.clone(), pending_header)
+                let (pending_header, tx_count) = self.storage.read_pending_block_header();
+                EvmInput::from_pending_block(call_input.clone(), pending_header, tx_count)
             }
             point_in_time => {
                 let Some(block) = self.storage.read_block(point_in_time.into())? else {
                     return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
                 };
-                EvmInput::from_mined_block(call_input.clone(), block)
+                EvmInput::from_mined_block(call_input.clone(), block, point_in_time)
             }
         };
 

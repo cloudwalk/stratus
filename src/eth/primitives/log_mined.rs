@@ -113,7 +113,7 @@ impl From<LogMined> for AlloyLog {
                 data: AlloyLogData::new_unchecked(value.topics_non_empty().into_iter().map(Into::into).collect(), value.log.data.into()),
             },
             block_hash: Some(value.block_hash.into()),
-            block_number: Some(value.block_number.0.as_u64()),
+            block_number: Some(value.block_number.as_u64()),
             block_timestamp: None,
             transaction_hash: Some(value.transaction_hash.into()),
             transaction_index: Some(value.transaction_index.into()),
@@ -127,7 +127,6 @@ impl TryFrom<LogMined> for SubscriptionMessage {
     type Error = serde_json::Error;
 
     fn try_from(value: LogMined) -> Result<Self, Self::Error> {
-        let alloy_log = Into::<AlloyLog>::into(value);
-        Self::from_json(&alloy_log)
+        Ok(serde_json::value::RawValue::from_string(serde_json::to_string(&Into::<AlloyLog>::into(value))?)?.into())
     }
 }

@@ -8,22 +8,22 @@ use std::thread::Thread;
 use chrono::DateTime;
 use chrono::Local;
 use chrono::Utc;
-use serde::ser::SerializeStruct;
 use serde::Serialize;
-use tracing::span;
-use tracing::span::Attributes;
+use serde::ser::SerializeStruct;
 use tracing::Span;
 use tracing::Subscriber;
-use tracing_serde::fields::AsMap;
-use tracing_serde::fields::SerializeFieldMap;
+use tracing::span;
+use tracing::span::Attributes;
 use tracing_serde::AsSerde;
 use tracing_serde::SerializeLevel;
+use tracing_serde::fields::AsMap;
+use tracing_serde::fields::SerializeFieldMap;
+use tracing_subscriber::Layer;
 use tracing_subscriber::fmt;
+use tracing_subscriber::fmt::FormatEvent;
 use tracing_subscriber::fmt::format::DefaultFields;
 use tracing_subscriber::fmt::time::FormatTime;
-use tracing_subscriber::fmt::FormatEvent;
 use tracing_subscriber::registry::LookupSpan;
-use tracing_subscriber::Layer;
 
 use crate::alias::JsonValue;
 use crate::ext::not;
@@ -231,7 +231,7 @@ impl SpanExt for Span {
     where
         T: ToString,
     {
-        if let Some(ref value) = value {
+        if let Some(value) = value {
             self.record(field, value.to_string().as_str());
         }
     }
@@ -342,7 +342,7 @@ pub fn info_task_spawn(name: &str) {
 /// Returns the formatted tracing message.
 #[track_caller]
 pub fn warn_task_cancellation(task: &str) -> String {
-    let message = format!("exiting {} because it received a cancellation signal", task);
+    let message = format!("exiting {task} because it received a cancellation signal");
     tracing::warn!(%message);
     message
 }
@@ -352,7 +352,7 @@ pub fn warn_task_cancellation(task: &str) -> String {
 /// Returns the formatted tracing message.
 #[track_caller]
 pub fn warn_task_tx_closed(task: &str) -> String {
-    let message = format!("exiting {} because the tx channel on the receiver side was closed", task);
+    let message = format!("exiting {task} because the tx channel on the receiver side was closed");
     tracing::warn!(%message);
     message
 }
@@ -362,7 +362,7 @@ pub fn warn_task_tx_closed(task: &str) -> String {
 /// Returns the formatted tracing message.
 #[track_caller]
 pub fn warn_task_rx_closed(task: &str) -> String {
-    let message = format!("exiting {} because the rx channel on the sender side was closed", task);
+    let message = format!("exiting {task} because the rx channel on the sender side was closed");
     tracing::warn!(%message);
     message
 }

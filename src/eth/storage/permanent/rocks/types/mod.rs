@@ -17,27 +17,32 @@ mod log_mined;
 mod logs_bloom;
 mod miner_nonce;
 mod nonce;
+pub mod old_types_hotfix;
+#[cfg(feature = "replication")]
+mod replication_log;
 mod size;
 mod slot;
 mod transaction_input;
 mod transaction_mined;
 mod unix_time;
 mod wei;
-
 pub use account::AccountRocksdb;
 pub use address::AddressRocksdb;
 pub use block::BlockRocksdb;
 pub use block_number::BlockNumberRocksdb;
+pub use bytes::BytesRocksdb;
 pub use hash::HashRocksdb;
 pub use index::IndexRocksdb;
+#[cfg(feature = "replication")]
+pub use replication_log::ReplicationLogRocksdb;
 pub use slot::SlotIndexRocksdb;
 pub use slot::SlotValueRocksdb;
 pub use transaction_mined::TransactionMinedRocksdb;
 pub use unix_time::UnixTimeRocksdb;
-
 #[cfg(test)]
 mod tests {
     use block_header::BlockHeaderRocksdb;
+    use bytecode::BytecodeRocksdb;
     use chain_id::ChainIdRocksdb;
     use difficulty::DifficultyRocksdb;
     use execution::ExecutionRocksdb;
@@ -63,6 +68,7 @@ mod tests {
     gen_test_bincode!(BlockHeaderRocksdb);
     gen_test_bincode!(BlockNumberRocksdb);
     gen_test_bincode!(BlockRocksdb);
+    gen_test_bincode!(BytecodeRocksdb);
     gen_test_bincode!(BytesRocksdb);
     gen_test_bincode!(ChainIdRocksdb);
     gen_test_bincode!(DifficultyRocksdb);
@@ -76,6 +82,8 @@ mod tests {
     gen_test_bincode!(LogsBloomRocksdb);
     gen_test_bincode!(MinerNonceRocksdb);
     gen_test_bincode!(NonceRocksdb);
+    #[cfg(feature = "replication")]
+    gen_test_bincode!(ReplicationLogRocksdb);
     gen_test_bincode!(SizeRocksdb);
     gen_test_bincode!(SlotIndexRocksdb);
     gen_test_bincode!(SlotValueRocksdb);

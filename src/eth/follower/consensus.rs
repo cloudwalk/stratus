@@ -4,9 +4,9 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::StratusError;
 use crate::eth::rpc::RpcClientApp;
+use crate::infra::BlockchainClient;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
-use crate::infra::BlockchainClient;
 
 #[allow(async_fn_in_trait)]
 pub trait Consensus: Send + Sync {
@@ -23,7 +23,7 @@ pub trait Consensus: Send + Sync {
         let should_serve = lag <= 3;
 
         if !should_serve {
-            tracing::info!(?lag, "validator and replica are too far apart");
+            tracing::warn!(?lag, "validator and replica are too far apart");
         }
 
         should_serve

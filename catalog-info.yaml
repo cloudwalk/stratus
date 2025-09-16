@@ -7,6 +7,10 @@ metadata:
     github.com/project-slug: cloudwalk/stratus
     backstage.io/techdocs-ref: dir:.
     sentry/application-name: stratus
+    opentelemetry/application-name: stratus
+    prometheus/application-name: stratus
+    grafana/dashboard-selector: stratus
+    grafana/alert-label-selector: service=stratus
   labels:
     cloudwalk.io/regulation-scope: none
     cloudwalk.io/critical-level: high
@@ -14,6 +18,7 @@ metadata:
     - rust
     - blockchain
     - evm
+    - virtual-machine-deploy
   links:
     - url: https://github.com/cloudwalk/stratus
       title: Repository

@@ -7,14 +7,15 @@ use itertools::Itertools;
 
 use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
-use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::LogMined;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::ext::OptionExt;
+use crate::ext::RuintExt;
 
 /// Transaction that was executed by the EVM and added to a block.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -72,9 +73,7 @@ impl TransactionMined {
 
 impl From<TransactionMined> for AlloyTransaction {
     fn from(value: TransactionMined) -> Self {
-        let signer = value.input.signer;
         let gas_price = value.input.gas_price;
-
         let tx = AlloyTransaction::from(value.input);
 
         Self {
@@ -82,8 +81,7 @@ impl From<TransactionMined> for AlloyTransaction {
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             transaction_index: Some(value.transaction_index.into()),
-            from: signer.into(),
-            effective_gas_price: Some(gas_price.into()),
+            effective_gas_price: Some(gas_price),
         }
     }
 }
@@ -116,13 +114,12 @@ impl From<TransactionMined> for AlloyReceipt {
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             gas_used: value.execution.gas.into(),
-            effective_gas_price: value.input.gas_price.as_u128(), // TODO: implement effective gas price used correctly
+            effective_gas_price: value.input.gas_price,
             blob_gas_used: None,
             blob_gas_price: None,
             from: value.input.signer.into(),
             to: value.input.to.map_into(),
             contract_address: value.execution.contract_address().map_into(),
-            authorization_list: None,
         }
     }
 }
@@ -152,9 +149,9 @@ mod tests {
 
     #[test]
     fn sort_transactions() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let v = (0..1000)
-            .map(|_| create_tx(rng.gen_range(0..100), rng.gen_range(0..100)))
+            .map(|_| create_tx(rng.random_range(0..100), rng.random_range(0..100)))
             .sorted()
             .map(|tx| (tx.block_number.as_u64(), tx.transaction_index.0))
             .collect_vec();

@@ -1,8 +1,8 @@
 use alloy_consensus::ReceiptEnvelope;
+use alloy_primitives::B256;
 use alloy_primitives::Bloom;
 use alloy_primitives::Bytes;
-use alloy_primitives::B256;
-use ethereum_types::U256;
+use alloy_primitives::U256;
 use fake::Dummy;
 use fake::Faker;
 use serde::Deserialize;
@@ -50,7 +50,7 @@ impl ExternalReceipt {
 }
 
 impl Dummy<Faker> for ExternalReceipt {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_faker: &Faker, rng: &mut R) -> Self {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_faker: &Faker, rng: &mut R) -> Self {
         let mut addr_bytes = [0u8; 20];
         let mut hash_bytes = [0u8; 32];
         rng.fill_bytes(&mut addr_bytes);
@@ -94,7 +94,6 @@ impl Dummy<Faker> for ExternalReceipt {
             effective_gas_price: rng.next_u64() as u128,
             blob_gas_used: None,
             blob_gas_price: None,
-            authorization_list: None,
         };
 
         ExternalReceipt(receipt)
@@ -126,7 +125,7 @@ impl<'de> serde::Deserialize<'de> for ExternalReceipt {
             return Err(serde::de::Error::custom("ExternalReceipt must be a JSON object, received invalid type"));
         }
 
-        let receipt = serde_json::from_value(value).map_err(|e| serde::de::Error::custom(format!("Failed to deserialize ExternalReceipt: {}", e)))?;
+        let receipt = serde_json::from_value(value).map_err(|e| serde::de::Error::custom(format!("Failed to deserialize ExternalReceipt: {e}")))?;
 
         Ok(ExternalReceipt(receipt))
     }

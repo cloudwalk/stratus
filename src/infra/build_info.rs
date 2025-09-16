@@ -53,11 +53,7 @@ pub fn binary_name() -> String {
 
 /// Returns the version derived from the build information.
 pub fn version() -> &'static str {
-    if GIT_BRANCH == "HEAD" {
-        VERSION_WITH_DESCRIBE
-    } else {
-        VERSION_WITH_BRANCH
-    }
+    if GIT_BRANCH == "HEAD" { VERSION_WITH_DESCRIBE } else { VERSION_WITH_BRANCH }
 }
 
 /// Returns build info as JSON.

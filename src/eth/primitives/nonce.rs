@@ -1,42 +1,51 @@
-use anyhow::anyhow;
+use alloy_primitives::U64;
+use alloy_primitives::U256;
 use display_json::DebugAsJson;
-use ethereum_types::U256;
-use ethereum_types::U64;
 use fake::Dummy;
 use fake::Faker;
 
-use crate::gen_newtype_from;
-use crate::gen_newtype_try_from;
+use crate::ext::RuintExt;
 
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Nonce(U64);
 
 impl Nonce {
-    pub const ZERO: Nonce = Nonce(U64::zero());
+    pub const ZERO: Nonce = Nonce(U64::ZERO);
+
+    pub fn as_u64(&self) -> u64 {
+        self.0.as_u64()
+    }
 
     /// Returns the next nonce.
     pub fn next_nonce(&self) -> Self {
-        Self(self.0 + 1)
+        Self(self.0 + U64::ONE)
     }
 }
 
 impl Dummy<Faker> for Nonce {
-    fn dummy_with_rng<R: rand_core::RngCore + ?Sized>(_: &Faker, rng: &mut R) -> Self {
-        rng.next_u64().into()
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
+        Self(U64::random_with(rng))
     }
 }
 
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-gen_newtype_from!(self = Nonce, other = u8, u16, u32, u64);
-gen_newtype_try_from!(self = Nonce, other = i32);
 
-impl TryFrom<U256> for Nonce {
+impl TryFrom<i32> for Nonce {
     type Error = anyhow::Error;
 
-    fn try_from(value: U256) -> Result<Self, Self::Error> {
-        Ok(Nonce(u64::try_from(value).map_err(|err| anyhow!(err))?.into()))
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        if value < 0 {
+            return Err(anyhow::anyhow!("Nonce cannot be negative"));
+        }
+        Ok(Self(U64::from(value as u32)))
+    }
+}
+
+impl From<u64> for Nonce {
+    fn from(value: u64) -> Self {
+        Self(U64::from(value))
     }
 }
 
@@ -45,12 +54,12 @@ impl TryFrom<U256> for Nonce {
 // -----------------------------------------------------------------------------
 impl From<Nonce> for u64 {
     fn from(value: Nonce) -> Self {
-        value.0.as_u64()
+        value.as_u64()
     }
 }
 
 impl From<Nonce> for U256 {
     fn from(value: Nonce) -> Self {
-        U256::from(value.0.as_u64())
+        U256::from(value.as_u64())
     }
 }
