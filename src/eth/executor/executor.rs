@@ -347,6 +347,7 @@ impl Executor {
         block_timestamp: UnixTime,
         #[cfg(feature = "metrics")] block_metrics: &mut EvmExecutionMetrics,
     ) -> anyhow::Result<()> {
+        tracing::error!(?tx);
         // track
         #[cfg(feature = "metrics")]
         let (start, tx_function, tx_contract) = (
