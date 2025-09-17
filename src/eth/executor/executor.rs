@@ -375,17 +375,18 @@ impl Executor {
 
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
-        tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
-
+        tracing::info!(%block_number, tx_hash = %tx.hash(), ?tx, ?receipt, "reexecuting external transaction");
+        let tx_input = TransactionInput::try_from(tx.clone());
+        tracing::info!(?tx_input);
         let evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
-
+        tracing::info!(?evm_input);
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
                 let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
-
+                tracing::info!(?evm_execution);
                 // handle re-execution result
                 let mut evm_execution = match evm_execution {
                     Ok(inner) => inner,
@@ -423,7 +424,6 @@ impl Executor {
                 TransactionExecution::new(tx.try_into()?, evm_input, evm_result)
             }
         };
-
         // keep metrics info to avoid cloning when saving
         cfg_if! {
             if #[cfg(feature = "metrics")] {
