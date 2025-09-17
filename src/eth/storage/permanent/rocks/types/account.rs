@@ -20,8 +20,8 @@ impl AccountRocksdb {
     pub fn to_account(&self, address: Address) -> Account {
         Account {
             address,
-            nonce: self.nonce.clone().into(),
-            balance: self.balance.clone().into(),
+            nonce: self.nonce.into(),
+            balance: self.balance.into(),
             bytecode: self.bytecode.clone().map_into(),
         }
     }
