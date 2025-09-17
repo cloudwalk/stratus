@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { TransactionReceipt, keccak256 } from "ethers";
+import { TransactionReceipt, keccak256, Transaction, encodeRlp, decodeRlp, getBytes } from "ethers";
 import { JsonRpcProvider } from "ethers";
 import { Block, Bytes } from "web3-types";
 
@@ -28,6 +28,7 @@ import {
     sendAndGetFullResponseBatch,
     sendEvmMine,
     sendExpect,
+    sendGetNonce,
     sendRawTransaction,
     sendReset,
     subscribeAndGetEvent,
@@ -382,6 +383,58 @@ describe("JSON-RPC", () => {
                 // Validate via eth_getTransactionReceipt
                 const receipt = await send("eth_getTransactionReceipt", [txHash]);
                 expect(receipt.type).to.equal("0x3");
+            });
+
+            it("should reject duplicate signature transactions", async () => {
+                await sendReset();
+                
+                const mutatedRecipient = "0x0000000000000000000000000000000000000001";
+                const txRequest = {
+                    type: 2,
+                    to: ALICE.address,
+                    value: 0n,
+                    data: "0x",
+                    nonce: await sendGetNonce(ALICE),
+                    gasLimit: 0x5208,
+                    maxFeePerGas: 0,
+                    maxPriorityFeePerGas: 0,
+                    chainId: parseInt(CHAIN_ID, 16),
+                };
+
+                const firstRaw = await ALICE.signer().signTransaction(txRequest);                
+                const payload = `0x${firstRaw.slice(4)}`;
+                const decoded = decodeRlp(payload) as any[];
+
+                // Create second transaction with different recipient but same signature
+                const mutated = decoded.slice();
+                mutated[5] = mutatedRecipient;
+                mutated[6] = decoded[6];
+                mutated[7] = decoded[7];
+
+                const secondPayload = encodeRlp(mutated as any);
+                const secondRaw = `0x02${secondPayload.slice(2)}`;
+
+                // Send first transaction - should succeed
+                const firstTxHash = await sendRawTransaction(firstRaw);
+                const firstReceipt = await send("eth_getTransactionReceipt", [firstTxHash]);
+                expect(firstReceipt.status).to.equal("0x1");
+
+                // Send second transaction with duplicate signature - should be rejected
+                const secondTxHash = await sendRawTransaction(secondRaw);
+                const secondReceipt = await send("eth_getTransactionReceipt", [secondTxHash]);
+                
+                const firstTx = await send("eth_getTransactionByHash", [firstTxHash]);
+                const secondTx = await send("eth_getTransactionByHash", [secondTxHash]);
+                
+                expect(firstTx.r).to.equal(secondTx.r, "Both transactions should have same r value");
+                expect(firstTx.s).to.equal(secondTx.s, "Both transactions should have same s value");
+                expect(firstTx.v || firstTx.yParity).to.equal(secondTx.v || secondTx.yParity, "Both transactions should have same v/yParity value");
+
+                if (secondReceipt.status === "0x1") {
+                    throw new Error("Both transactions with same signatures succeeded, expected the second to be rejected");
+                }
+
+                expect(secondReceipt.status).to.equal("0x0", "Second transaction with duplicate signature should be rejected");
             });
         });
     });
