@@ -431,7 +431,7 @@ impl Executor {
                 let tx_gas = tx_execution.result.execution.gas;
             }
         }
-
+        tracing::info!(?tx_execution);
         // persist state
         self.miner.save_execution(tx_execution, false, false)?;
 
