@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { TransactionReceipt, keccak256, Transaction, encodeRlp, decodeRlp, getBytes } from "ethers";
+import { Transaction, TransactionReceipt, decodeRlp, encodeRlp, getBytes, keccak256 } from "ethers";
 import { JsonRpcProvider } from "ethers";
 import { Block, Bytes } from "web3-types";
 
@@ -387,7 +387,7 @@ describe("JSON-RPC", () => {
 
             it("should reject duplicate signature transactions", async () => {
                 await sendReset();
-                
+
                 const mutatedRecipient = "0x0000000000000000000000000000000000000001";
                 const txRequest = {
                     type: 2,
@@ -401,7 +401,7 @@ describe("JSON-RPC", () => {
                     chainId: parseInt(CHAIN_ID, 16),
                 };
 
-                const firstRaw = await ALICE.signer().signTransaction(txRequest);                
+                const firstRaw = await ALICE.signer().signTransaction(txRequest);
                 const payload = `0x${firstRaw.slice(4)}`;
                 const decoded = decodeRlp(payload) as any[];
 
@@ -422,19 +422,27 @@ describe("JSON-RPC", () => {
                 // Send second transaction with duplicate signature - should be rejected
                 const secondTxHash = await sendRawTransaction(secondRaw);
                 const secondReceipt = await send("eth_getTransactionReceipt", [secondTxHash]);
-                
+
                 const firstTx = await send("eth_getTransactionByHash", [firstTxHash]);
                 const secondTx = await send("eth_getTransactionByHash", [secondTxHash]);
-                
+
                 expect(firstTx.r).to.equal(secondTx.r, "Both transactions should have same r value");
                 expect(firstTx.s).to.equal(secondTx.s, "Both transactions should have same s value");
-                expect(firstTx.v || firstTx.yParity).to.equal(secondTx.v || secondTx.yParity, "Both transactions should have same v/yParity value");
+                expect(firstTx.v || firstTx.yParity).to.equal(
+                    secondTx.v || secondTx.yParity,
+                    "Both transactions should have same v/yParity value",
+                );
 
                 if (secondReceipt.status === "0x1") {
-                    throw new Error("Both transactions with same signatures succeeded, expected the second to be rejected");
+                    throw new Error(
+                        "Both transactions with same signatures succeeded, expected the second to be rejected",
+                    );
                 }
 
-                expect(secondReceipt.status).to.equal("0x0", "Second transaction with duplicate signature should be rejected");
+                expect(secondReceipt.status).to.equal(
+                    "0x0",
+                    "Second transaction with duplicate signature should be rejected",
+                );
             });
         });
     });
