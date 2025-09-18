@@ -169,7 +169,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         value: Wei::from(value.inner.value()),
         input: Bytes::from(value.inner.input().clone()),
         gas_limit: Gas::from(value.inner.gas_limit()),
-        gas_price: value.inner.gas_price().or(value.effective_gas_price).unwrap_or_default(),
+        gas_price: value.inner.max_fee_per_gas(),
         v,
         r,
         s,

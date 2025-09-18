@@ -45,12 +45,15 @@ impl<'de> serde::Deserialize<'de> for ExternalTransaction {
             if let Some(Value::String(type_value)) = map.get("type")
                 && type_value == "0x2"
             {
+                let gas_price = map.get("gasPrice").cloned().unwrap_or(Value::String("0x0".to_string()));
                 // For EIP-1559 transactions, ensure max_fee_per_gas and max_priority_fee_per_gas are present
                 if !map.contains_key("maxFeePerGas") {
                     map.insert("maxFeePerGas".to_string(), Value::String("0x0".to_string()));
+                    map.insert("maxFeePerGas".to_string(), gas_price.clone());
                 }
                 if !map.contains_key("maxPriorityFeePerGas") {
                     map.insert("maxPriorityFeePerGas".to_string(), Value::String("0x0".to_string()));
+                    map.insert("maxPriorityFeePerGas".to_string(), gas_price);
                 }
                 if !map.contains_key("accessList") {
                     map.insert("accessList".to_string(), Value::Array(Vec::new()));
