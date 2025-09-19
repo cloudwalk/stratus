@@ -1,7 +1,7 @@
 [![codecov](https://codecov.io/github/cloudwalk/stratus/graph/badge.svg?token=D1795GHLG6)](https://codecov.io/github/cloudwalk/stratus)
 
 # Stratus ☁️
-
+A
 Welcome to Stratus, the cutting-edge EVM executor and JSON-RPC server with custom storage that scales horizontally. Built in Rust 🦀 for speed and reliability, Stratus is here to take your blockchain projects to the next level!
 
 ## Current storage implementations
