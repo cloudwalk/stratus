@@ -443,7 +443,7 @@ impl<T> WatchReceiverExt<T> for tokio::sync::watch::Receiver<T> {
 }
 
 #[macro_export]
-macro_rules! gen_enum_variants_bincode {
+macro_rules! gen_enum_variant_snapshot_tests {
     ($type:ty) => {
         paste::paste! {
             #[test]

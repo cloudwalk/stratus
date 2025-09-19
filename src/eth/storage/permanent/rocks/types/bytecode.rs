@@ -86,8 +86,8 @@ impl SerializeDeserializeWithContext for Eip7702BytecodeRocksdb {}
 #[cfg(test)]
 mod cf_names {
     use super::*;
-    use crate::eth::storage::permanent::rocks::test_utils::ToCfName;
-    use crate::impl_to_cf_name;
+    use crate::eth::storage::permanent::rocks::test_utils::ToFileName;
+    use crate::impl_to_file_name;
 
-    impl_to_cf_name!(BytecodeRocksdb, "bytecode");
+    impl_to_file_name!(BytecodeRocksdb, "bytecode");
 }

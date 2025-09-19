@@ -105,17 +105,17 @@ impl SerializeDeserializeWithContext for CfBlocksByNumberValue {}
 #[cfg(test)]
 mod cf_names {
     use super::*;
-    use crate::eth::storage::permanent::rocks::test_utils::ToCfName;
-    use crate::impl_to_cf_name;
+    use crate::eth::storage::permanent::rocks::test_utils::ToFileName;
+    use crate::impl_to_file_name;
 
-    impl_to_cf_name!(CfAccountsValue, "accounts");
-    impl_to_cf_name!(CfAccountsHistoryValue, "accounts_history");
-    impl_to_cf_name!(CfAccountSlotsValue, "account_slots");
-    impl_to_cf_name!(CfAccountSlotsHistoryValue, "account_slots_history");
-    impl_to_cf_name!(CfTransactionsValue, "transactions");
-    impl_to_cf_name!(CfBlocksByNumberValue, "blocks_by_number");
-    impl_to_cf_name!(CfBlocksByHashValue, "blocks_by_hash");
-    impl_to_cf_name!(CfBlockChangesValue, "block_changes");
+    impl_to_file_name!(CfAccountsValue, "accounts");
+    impl_to_file_name!(CfAccountsHistoryValue, "accounts_history");
+    impl_to_file_name!(CfAccountSlotsValue, "account_slots");
+    impl_to_file_name!(CfAccountSlotsHistoryValue, "account_slots_history");
+    impl_to_file_name!(CfTransactionsValue, "transactions");
+    impl_to_file_name!(CfBlocksByNumberValue, "blocks_by_number");
+    impl_to_file_name!(CfBlocksByHashValue, "blocks_by_hash");
+    impl_to_file_name!(CfBlockChangesValue, "block_changes");
 }
 
 /// Test that deserialization works for each variant of the enum.

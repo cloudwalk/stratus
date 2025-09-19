@@ -22,15 +22,15 @@ pub trait FakeEnum {
     fn fake(arm: &str) -> Self;
 }
 
-pub trait ToCfName {
-    const CF_NAME: &'static str;
+pub trait ToFileName {
+    const FILE_NAME: &'static str;
 }
 
 #[macro_export]
-macro_rules! impl_to_cf_name {
+macro_rules! impl_to_file_name {
     ($type:ident, $cf_name:expr) => {
-        impl ToCfName for $type {
-            const CF_NAME: &'static str = $cf_name;
+        impl ToFileName for $type {
+            const FILE_NAME: &'static str = $cf_name;
         }
     };
 }
@@ -125,7 +125,7 @@ pub fn verify_fixtures<CfValue>(checker: &mut EnumCoverageDropBombChecker<CfValu
 where
     CfValue: for<'de> Deserialize<'de>
         + Debug
-        + ToCfName
+        + ToFileName
         + PartialEq
         + Serialize
         + fake::Dummy<fake::Faker>
@@ -135,7 +135,7 @@ where
         + VariantNames,
 {
     use crate::rocks_bincode_config;
-    let cf_name = CfValue::CF_NAME;
+    let cf_name = CfValue::FILE_NAME;
     let parent_path = Path::new(SNAPSHOT_FOLDER).join(group).join(cf_name);
     for variant_name in CfValue::VARIANTS {
         let expected: CfValue = load_or_generate_json_fixture(parent_path.as_path(), cf_name, variant_name)?;
