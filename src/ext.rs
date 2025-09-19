@@ -441,3 +441,22 @@ impl<T> WatchReceiverExt<T> for tokio::sync::watch::Receiver<T> {
         }
     }
 }
+
+#[macro_export]
+macro_rules! gen_enum_variants_bincode {
+    ($type:ty) => {
+        paste::paste! {
+            #[test]
+            fn [<test_ $type:snake _bincode>]() -> anyhow::Result<()> {
+                use anyhow::Context;
+
+                use $crate::eth::storage::permanent::rocks::test_utils::EnumCoverageDropBombChecker;
+                use $crate::eth::storage::permanent::rocks::test_utils::{self};
+
+                let mut checker = EnumCoverageDropBombChecker::<$type>::new();
+                test_utils::verify_fixtures(&mut checker, "primitives").context("Failed verifying fixtures for $type")?;
+                Ok(())
+            }
+        }
+    };
+}

@@ -37,6 +37,7 @@ pub use slot::SlotIndexRocksdb;
 pub use slot::SlotValueRocksdb;
 pub use transaction_mined::TransactionMinedRocksdb;
 pub use unix_time::UnixTimeRocksdb;
+
 #[cfg(test)]
 mod tests {
     use block_header::BlockHeaderRocksdb;
@@ -59,6 +60,7 @@ mod tests {
     use self::bytes::BytesRocksdb;
     use super::log::LogRocksdb;
     use super::*;
+    use crate::gen_enum_variants_bincode;
     use crate::gen_test_bincode;
 
     gen_test_bincode!(AccountRocksdb);
@@ -87,4 +89,7 @@ mod tests {
     gen_test_bincode!(TransactionMinedRocksdb);
     gen_test_bincode!(UnixTimeRocksdb);
     gen_test_bincode!(WeiRocksdb);
+
+    gen_enum_variants_bincode!(BytecodeRocksdb);
+    gen_enum_variants_bincode!(ExecutionResultRocksdb);
 }
