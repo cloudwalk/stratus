@@ -2,8 +2,24 @@ use super::bytes::BytesRocksdb;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+#[cfg(test)]
+use crate::eth::storage::permanent::rocks::test_utils::FakeEnum;
 
-#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    bincode::Encode,
+    bincode::Decode,
+    fake::Dummy,
+    serde::Serialize,
+    serde::Deserialize,
+    strum::VariantNames,
+    stratus_macros::FakeEnum,
+)]
+#[fake_enum(generate = "crate::utils::test_utils::fake_first")]
+// #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, strum::VariantNames)]
 pub enum ExecutionResultRocksdb {
     Success,
     Reverted,
@@ -41,3 +57,12 @@ impl From<ExecutionResultBuilder> for (ExecutionResult, Bytes) {
 }
 
 impl SerializeDeserializeWithContext for ExecutionResultRocksdb {}
+
+#[cfg(test)]
+mod cf_names {
+    use super::*;
+    use crate::eth::storage::permanent::rocks::test_utils::ToFileName;
+    use crate::impl_to_file_name;
+
+    impl_to_file_name!(ExecutionResultRocksdb, "execution_result");
+}

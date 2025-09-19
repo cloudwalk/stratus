@@ -6,8 +6,17 @@ use syn::DeriveInput;
 use syn::Expr;
 use syn::ExprLit;
 use syn::Fields;
+use syn::ItemEnum;
 use syn::Lit;
 use syn::Meta;
+
+mod fake_enum_variants;
+
+#[proc_macro_derive(FakeEnum, attributes(fake_enum))]
+pub fn derive_fake_enum(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as ItemEnum);
+    fake_enum_variants::derive_fake_enum_impl(input).into()
+}
 
 #[proc_macro_derive(ErrorCode, attributes(error_code, major_error_code))]
 pub fn derive_error_code(input: TokenStream) -> TokenStream {
