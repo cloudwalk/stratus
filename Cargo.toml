@@ -61,7 +61,7 @@ display_json = "=0.2.1"
 serde = "=1.0.219"
 serde_json = "=1.0.143"
 serde_urlencoded = "=0.7.1"
-serde_with = "=3.14.0"
+serde_with = "=3.14.1"
 
 # parallelism
 crossbeam-channel = "=0.5.15"
