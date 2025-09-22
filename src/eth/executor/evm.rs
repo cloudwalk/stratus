@@ -219,7 +219,7 @@ impl Evm {
             .database
             .storage
             .read_transaction(tx_hash)?
-            .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
+            .ok_or_else(|| anyhow!("transaction not found: {tx_hash}"))?;
 
         // CREATE transactions need to be traced for blockscout to work correctly
         if tx.deployed_contract_address().is_none() && trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
@@ -479,7 +479,7 @@ impl Database for RevmSession {
                 }
                 None => {
                     tracing::error!(reason = "reading slot without account loaded", %address, %index);
-                    return Err(UnexpectedError::Unexpected(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address)).into());
+                    return Err(UnexpectedError::Unexpected(anyhow!("Account '{address}' was expected to be loaded by EVM, but it was not")).into());
                 }
             };
         }
@@ -612,7 +612,7 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
         } else if account_touched {
             let Some(account_changes) = execution_changes.get_mut(&address) else {
                 tracing::error!(keys = ?execution_changes.keys(), %address, "account touched, but not loaded by evm");
-                return Err(UnexpectedError::Unexpected(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address)).into());
+                return Err(UnexpectedError::Unexpected(anyhow!("Account '{address}' was expected to be loaded by EVM, but it was not")).into());
             };
             account_changes.apply_modifications(account, account_modified_slots);
         }

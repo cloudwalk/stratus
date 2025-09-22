@@ -160,7 +160,7 @@ async fn download(rpc_storage: Arc<PostgresExternalRpc>, chain: Arc<BlockchainCl
                 BlockTransactions::Full(txs) => txs.iter().map(|tx| tx.hash()).collect_vec(),
                 other => {
                     tracing::error!(%current, ?other, "unsupported transaction format");
-                    return Err(anyhow!("unsupported transaction format in block {}", current));
+                    return Err(anyhow!("unsupported transaction format in block {current}"));
                 }
             };
 
@@ -185,7 +185,7 @@ async fn download(rpc_storage: Arc<PostgresExternalRpc>, chain: Arc<BlockchainCl
                         }
                         None => {
                             tracing::error!(%tx_hash, payload = ?receipt, "receipt is null");
-                            return Err(anyhow!(format!("transaction receipt is null for hash {}", tx_hash)));
+                            return Err(anyhow!(format!("transaction receipt is null for hash {tx_hash}")));
                         }
                     }
                 }

@@ -185,7 +185,7 @@ pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
     }
 
     // error
-    Err(anyhow!("invalid duration format: {}", s))
+    Err(anyhow!("invalid duration format: {s}"))
 }
 
 // -----------------------------------------------------------------------------
