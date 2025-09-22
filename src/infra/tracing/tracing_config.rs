@@ -244,7 +244,7 @@ impl FromStr for TracingProtocol {
             "grpc" => Ok(Self::Grpc),
             "http-binary" => Ok(Self::HttpBinary),
             "http-json" => Ok(Self::HttpJson),
-            s => Err(anyhow!("unknown tracing protocol: {}", s)),
+            s => Err(anyhow!("unknown tracing protocol: {s}")),
         }
     }
 }
@@ -296,7 +296,7 @@ impl FromStr for TracingLogFormat {
             "minimal" => Ok(Self::Minimal),
             "normal" => Ok(Self::Normal),
             "verbose" | "full" => Ok(Self::Verbose),
-            s => Err(anyhow!("unknown log format: {}", s)),
+            s => Err(anyhow!("unknown log format: {s}")),
         }
     }
 }

@@ -43,7 +43,7 @@ pub struct ExecutorConfig {
 }
 
 fn parse_evm_spec(input: &str) -> anyhow::Result<SpecId> {
-    SpecId::from_str(input).map_err(|err| anyhow::anyhow!("unknown hard fork: {:?}", err))
+    SpecId::from_str(input).map_err(|err| anyhow::anyhow!("unknown hard fork: {err:?}"))
 }
 
 impl ExecutorConfig {
