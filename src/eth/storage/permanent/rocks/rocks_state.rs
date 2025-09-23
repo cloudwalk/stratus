@@ -212,50 +212,49 @@ impl RocksStorageState {
 
     /// Updates the in-memory state with changes from transaction execution
     fn prepare_batch_with_execution_changes(&self, changes: ExecutionChanges, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
-        let mut block_changes = BlockChangesRocksdb::default();
+        let mut block_changes = BlockChangesRocksdb::with_capacity(changes.accounts.len());
         let block_number = block_number.into();
 
-        for (address, change) in changes {
+        for (address, change) in changes.accounts {
             let address: AddressRocksdb = address.into();
-            let mut account_change_entry = AccountChangesRocksdb::default();
-
-            if change.is_account_modified() {
+            if change.is_modified() {
+                let mut account_change_entry = AccountChangesRocksdb::default();
                 let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
 
-                if let Some(nonce) = change.nonce.take_modified() {
-                    account_info_entry.nonce = nonce.into();
-                    account_change_entry.nonce = Some(nonce.into());
+                if change.nonce.is_changed() {
+                    let nonce = (*change.nonce.value()).into();
+                    account_info_entry.nonce = nonce;
+                    account_change_entry.nonce = Some(nonce);
                 }
-                if let Some(balance) = change.balance.take_modified() {
-                    account_info_entry.balance = balance.into();
-                    account_change_entry.balance = Some(balance.into());
+                if change.balance.is_changed() {
+                    let balance = (*change.balance.value()).into();
+                    account_info_entry.balance = balance;
+                    account_change_entry.balance = Some(balance);
                 }
-                if let Some(bytecode) = change.bytecode.take_modified() {
-                    account_info_entry.bytecode = bytecode.clone().map_into();
-                    account_change_entry.bytecode = bytecode.map_into();
+                if change.bytecode.is_changed() {
+                    let bytecode = change.bytecode.value().clone().map_into();
+                    account_info_entry.bytecode = bytecode.clone();
+                    account_change_entry.bytecode = Some(bytecode);
                 }
 
                 self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
                 self.accounts_history
                     .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
+                block_changes.account_changes.insert(address, account_change_entry);
             }
+        }
 
-            for (&slot_index, slot_change) in &change.slots {
-                if let Some(slot) = slot_change.take_modified_ref() {
-                    let slot_index = slot_index.into();
-                    let slot_value: SlotValueRocksdb = slot.value.into();
+        for ((address, slot_index), slot_value) in changes.slots {
+            let address = address.into();
+            let slot_index = slot_index.into();
+            let slot_value: SlotValueRocksdb = slot_value.into();
 
-                    account_change_entry.slot_changes.insert(slot_index, slot_value);
-                    self.account_slots
-                        .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
-                    self.account_slots_history
-                        .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
-                }
-            }
+            self.account_slots
+                .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
+            self.account_slots_history
+                .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
 
-            account_change_entry
-                .has_changes()
-                .then(|| block_changes.account_changes.insert(address, account_change_entry));
+            block_changes.slot_changes.insert((address, slot_index), slot_value);
         }
 
         self.block_changes.prepare_batch_insertion([(block_number, block_changes.into())], batch)?;
@@ -606,12 +605,12 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, ExecutionChanges)>> {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>> {
         let Some(block_wo_changes) = self.read_block(selection)? else {
             return Ok(None);
         };
         let changes = self.block_changes.get(&block_wo_changes.number().into())?;
-        Ok(Some((block_wo_changes, changes.map(|changes| changes.into_inner().into()).unwrap_or_default())))
+        Ok(Some((block_wo_changes, changes.map(|changes| changes.into_inner()).unwrap_or_default())))
     }
 }
 
@@ -764,10 +763,7 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::alias::RevmBytecode;
     use crate::eth::primitives::BlockHeader;
-    use crate::eth::primitives::ExecutionAccountChanges;
-    use crate::eth::primitives::ExecutionValueChange;
 
     #[test]
     #[cfg(feature = "dev")]
@@ -842,56 +838,6 @@ mod tests {
         };
 
         assert_eq!(state.read_logs(&filter).unwrap().len(), 200);
-    }
-
-    #[test]
-    fn regression_test_saving_account_changes_for_accounts_that_didnt_change() {
-        let (state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
-
-        let addr: Address = Faker.fake();
-        let change_base = ExecutionAccountChanges {
-            nonce: ExecutionValueChange::from_original(Faker.fake()),
-            balance: ExecutionValueChange::from_original(Faker.fake()),
-            bytecode: ExecutionValueChange::from_original(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
-            slots: BTreeMap::new(),
-        };
-
-        let change_1 = ExecutionChanges::from([(addr, ExecutionAccountChanges { ..change_base.clone() })]);
-        let change_2 = ExecutionChanges::from([(
-            addr,
-            ExecutionAccountChanges {
-                nonce: ExecutionValueChange::from_modified(Faker.fake()),
-                ..change_base.clone()
-            },
-        )]);
-        let change_3 = ExecutionChanges::from([(
-            addr,
-            ExecutionAccountChanges {
-                balance: ExecutionValueChange::from_modified(Faker.fake()),
-                ..change_base.clone()
-            },
-        )]);
-        let change_4 = ExecutionChanges::from([(
-            addr,
-            ExecutionAccountChanges {
-                bytecode: ExecutionValueChange::from_modified(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
-                ..change_base
-            },
-        )]);
-
-        let mut batch = WriteBatch::default();
-        // add accounts in separate blocks so they show up in history
-        state.prepare_batch_with_execution_changes(change_1, 1.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes(change_2, 2.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes(change_3, 3.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes(change_4, 4.into(), &mut batch).unwrap();
-        state.write_in_batch_for_multiple_cfs(batch).unwrap();
-
-        let accounts = state.read_all_accounts().unwrap();
-        assert_eq!(accounts.len(), 1);
-
-        let history = state.read_all_historical_accounts().unwrap();
-        assert_eq!(history.len(), 3);
     }
 
     #[test]

@@ -29,6 +29,7 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::SleepReason;
 use crate::ext::spawn;
 use crate::ext::traced_sleep;
@@ -184,7 +185,7 @@ impl RocksPermanentStorage {
         block.map_err(|err| StorageError::RocksError { err })
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(Block, ExecutionChanges)>, StorageError> {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(Block, BlockChangesRocksdb)>, StorageError> {
         let result = self.state.read_block_with_changes(selection).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read block with changes in RocksPermanent");
         });
