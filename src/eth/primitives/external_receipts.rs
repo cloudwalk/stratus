@@ -18,7 +18,7 @@ impl ExternalReceipts {
             Some(receipt) => Ok(receipt),
             None => {
                 tracing::error!(%tx_hash, "receipt is missing for hash");
-                Err(anyhow!("receipt missing for hash {}", tx_hash))
+                Err(anyhow!("receipt missing for hash {tx_hash}"))
             }
         }
     }
