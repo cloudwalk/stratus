@@ -6,6 +6,7 @@ use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
@@ -46,6 +47,10 @@ impl InMemoryTemporaryStorage {
     #[cfg(feature = "dev")]
     pub fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
         self.transaction_storage.set_pending_block_header(block_number)
+    }
+
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
+        self.transaction_storage.set_pending_from_external(block);
     }
 
     pub fn save_pending_execution(&self, tx: TransactionExecution, is_local: bool) -> Result<(), StorageError> {

@@ -15,6 +15,7 @@ use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -174,7 +175,10 @@ impl StratusStorage {
         })
     }
 
-    // TODO: make this infallible
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
+        self.temp.set_pending_from_external(block);
+    }
+
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::set_mined_block_number", %block_number).entered();
