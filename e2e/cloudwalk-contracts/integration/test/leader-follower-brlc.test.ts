@@ -362,9 +362,8 @@ describe("Leader & Follower BRLC integration test", function () {
 
             console.log("          ✔ Restarting follower node...");
 
-            // Restart the follower with block changes replication enabled
-            // Use exec instead of execSync since the follower runs in background
-            exec(`just e2e-follower brlc false`, {
+            const enableBlockChangesReplication = process.env.ENABLE_BLOCK_CHANGES_REPLICATION === "true";
+            exec(`just e2e-follower brlc ${enableBlockChangesReplication}`, {
                 shell: "/bin/bash",
             });
 

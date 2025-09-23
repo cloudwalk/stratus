@@ -318,10 +318,12 @@ e2e-leader:
 
 e2e-follower test="brlc" use_block_changes_replication="false":
     #!/bin/bash
-    BLOCK_CHANGES_FLAG=""
     if [ "{{use_block_changes_replication}}" = "true" ]; then
         export ENABLE_BLOCK_CHANGES_REPLICATION=true
+    else
+        export ENABLE_BLOCK_CHANGES_REPLICATION=false
     fi
+
     if [ "{{test}}" = "kafka" ]; then
     # Start Kafka using Docker Compose
         just _log "Starting Kafka"
@@ -336,6 +338,12 @@ e2e-follower test="brlc" use_block_changes_replication="false":
 
 
 _e2e-leader-follower-up-impl test="brlc" use_block_changes_replication="false":
+    if [ "{{use_block_changes_replication}}" = "true" ]; then
+        export ENABLE_BLOCK_CHANGES_REPLICATION=true
+    else
+        export ENABLE_BLOCK_CHANGES_REPLICATION=false
+    fi
+
     #!/bin/bash
     mkdir e2e_logs
 
