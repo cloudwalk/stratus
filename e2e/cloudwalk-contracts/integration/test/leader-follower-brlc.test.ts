@@ -313,7 +313,7 @@ describe("Leader & Follower BRLC integration test", function () {
             }
 
             // Wait a bit to ensure follower is down
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 5000));
 
             // Verify follower is down by trying to connect
             let followerIsDown = false;
