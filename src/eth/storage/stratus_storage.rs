@@ -15,6 +15,7 @@ use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -174,7 +175,10 @@ impl StratusStorage {
         })
     }
 
-    // TODO: make this infallible
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
+        self.temp.set_pending_from_external(block);
+    }
+
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::set_mined_block_number", %block_number).entered();
@@ -336,7 +340,7 @@ impl StratusStorage {
     fn _read_slot_pending_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         timed(|| self.cache.get_slot(address, index)).with(|m| {
             if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, %index, "slot found in cache");
+                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
                 metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Pending);
             }
         })
@@ -345,7 +349,7 @@ impl StratusStorage {
     fn _read_slot_latest_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         timed(|| self.cache.get_slot_latest(address, index)).with(|m| {
             if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, %index, "slot found in cache");
+                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
                 metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Mined);
             }
         })
@@ -375,7 +379,7 @@ impl StratusStorage {
         })?;
         Ok(match slot {
             Some(slot) => {
-                tracing::debug!(storage = %label::PERM, %address, %index, value = %slot.value, "slot found in permanent storage");
+                tracing::debug!(storage = %label::PERM, %address, %index, ?slot, "slot found in permanent storage");
                 slot
             }
             None => {
@@ -449,7 +453,7 @@ impl StratusStorage {
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.input.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.hash, "saving execution");
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.hash, changes = ?tx.result.execution.changes, "saving execution");
 
         // Log warning if a failed transaction has slot changes
         if !tx.result.execution.result.is_success() {
@@ -521,7 +525,7 @@ impl StratusStorage {
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
-        tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), "saving block");
+        tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), ?changes, "saving block");
 
         // check mined number
         let mined_number = self.read_mined_block_number();
