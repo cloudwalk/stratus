@@ -221,7 +221,7 @@ impl EvmExecution {
             };
 
             // subtract execution cost from sender balance
-            let sender_balance = sender_changes.balance.value;
+            let sender_balance = *sender_changes.balance.value();
 
             let sender_new_balance = if sender_balance > execution_cost {
                 sender_balance - execution_cost
@@ -324,12 +324,12 @@ mod tests {
         let sender_changes = execution.changes.accounts.get(&sender_address).unwrap();
 
         // Nonce should be incremented
-        let modified_nonce = sender_changes.nonce.value;
+        let modified_nonce = *sender_changes.nonce.value();
         assert_eq!(modified_nonce, Nonce::from(2u64));
 
         // Balance should be reduced by execution cost
         if receipt.execution_cost() > Wei::ZERO {
-            let modified_balance = sender_changes.balance.value;
+            let modified_balance = *sender_changes.balance.value();
             assert!(sender.balance >= modified_balance);
         }
     }
@@ -585,7 +585,7 @@ mod tests {
 
         // Verify sender balance was reduced by execution cost
         let sender_changes = execution.changes.accounts.get(&sender_address).unwrap();
-        let modified_balance = sender_changes.balance.value;
+        let modified_balance = *sender_changes.balance.value();
         assert_eq!(modified_balance, Wei::from(900u64)); // 1000 - 100
     }
 }

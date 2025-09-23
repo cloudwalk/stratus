@@ -221,18 +221,18 @@ impl RocksStorageState {
                 let mut account_change_entry = AccountChangesRocksdb::default();
                 let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
 
-                if change.nonce.changed {
-                    let nonce = change.nonce.value.into();
+                if change.nonce.is_changed() {
+                    let nonce = (*change.nonce.value()).into();
                     account_info_entry.nonce = nonce;
                     account_change_entry.nonce = Some(nonce);
                 }
-                if change.balance.changed {
-                    let balance = change.balance.value.into();
+                if change.balance.is_changed() {
+                    let balance = (*change.balance.value()).into();
                     account_info_entry.balance = balance;
                     account_change_entry.balance = Some(balance);
                 }
-                if change.bytecode.changed {
-                    let bytecode = change.bytecode.value.clone().map_into();
+                if change.bytecode.is_changed() {
+                    let bytecode = change.bytecode.value().clone().map_into();
                     account_info_entry.bytecode = bytecode.clone();
                     account_change_entry.bytecode = Some(bytecode);
                 }

@@ -13,8 +13,8 @@ where
     T: PartialEq + Eq + Default,
 {
     #[deref]
-    pub value: T,
-    pub changed: bool,
+    value: T,
+    changed: bool,
 }
 
 impl<T> Change<T>
@@ -40,6 +40,16 @@ where
         if !self.changed {
             self.value = value;
         }
+    }
+
+    /// Returns whether the value has been changed.
+    pub fn is_changed(&self) -> bool {
+        self.changed
+    }
+
+    /// Returns a reference to the current value.
+    pub fn value(&self) -> &T {
+        &self.value
     }
 }
 
