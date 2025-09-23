@@ -140,7 +140,7 @@ fn generate_cf_options_map() -> BTreeMap<&'static str, Options> {
 fn open_db(path: &str, cf_options_map: &BTreeMap<&'static str, Options>) -> Result<Arc<DB>> {
     let db_path = Path::new(path);
     if !db_path.exists() {
-        bail!("Database path does not exist: {}", path);
+        bail!("Database path does not exist: {path}");
     }
 
     let cf_names = cf_options_map.keys().copied().collect::<Vec<_>>();
