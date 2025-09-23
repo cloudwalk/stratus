@@ -12,6 +12,7 @@ use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
@@ -45,6 +46,12 @@ impl InmemoryTransactionTemporaryStorage {
             }),
             latest_block: RwLock::new(None),
         }
+    }
+
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
+        let mut pending_block = self.pending_block.write();
+        pending_block.block.header.number = block.number();
+        pending_block.block.header.timestamp = block.timestamp().into();
     }
 
     // -------------------------------------------------------------------------
