@@ -314,6 +314,7 @@ e2e-leader:
     #!/bin/bash
     echo "starting e2e-leader"
     # Leader doesn't need block changes flag, only follower does
+    unset ENABLE_BLOCK_CHANGES_REPLICATION
     RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000
 
 e2e-follower test="brlc" use_block_changes_replication="false":
