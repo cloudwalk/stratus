@@ -690,8 +690,7 @@ impl Consensus for Importer {
         let elapsed = chrono::Utc::now().timestamp() as u64 - last_fetched_time;
         if elapsed > 4 {
             Err(anyhow::anyhow!(
-                "too much time elapsed without communicating with the leader. elapsed: {}s",
-                elapsed
+                "too much time elapsed without communicating with the leader. elapsed: {elapsed}s"
             ))
         } else {
             Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number().as_u64())

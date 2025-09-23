@@ -37,6 +37,10 @@ pub mod rocks_db;
 /// All types to be serialized and desserialized in the db.
 pub mod types;
 
+/// Utilities for testing.
+#[cfg(test)]
+pub mod test_utils;
+
 // Tuple implementations for composite keys
 impl SerializeDeserializeWithContext for (AddressRocksdb, BlockNumberRocksdb) {}
 impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb) {}

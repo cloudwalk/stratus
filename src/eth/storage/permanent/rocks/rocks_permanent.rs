@@ -63,7 +63,7 @@ impl RocksPermanentStorage {
         tracing::info!("setting up rocksdb storage");
 
         // Check file descriptor limit before proceeding with RocksDB initialization
-        Self::check_file_descriptor_limit(file_descriptors_limit).map_err(|err| anyhow::anyhow!("{}", err))?;
+        Self::check_file_descriptor_limit(file_descriptors_limit).map_err(|err| anyhow::anyhow!("{err}"))?;
 
         let path = if let Some(prefix) = db_path_prefix {
             // run some checks on the given prefix

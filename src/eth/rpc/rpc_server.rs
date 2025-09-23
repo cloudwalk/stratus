@@ -180,7 +180,6 @@ impl Server {
         let ctx = RpcContext {
             server: Arc::new(this.clone()),
             client_version: "stratus",
-            gas_price: 0,
             subs: Arc::clone(&subs.connected),
         };
 

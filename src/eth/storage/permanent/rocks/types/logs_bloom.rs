@@ -31,7 +31,7 @@ impl FromStr for LogsBloomRocksdb {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let bytes: [u8; 256] = const_hex::decode(s)?
             .try_into()
-            .map_err(|err| anyhow!("conversion from Vec<u8> to [u8; 256] failed. {:?}", err))?;
+            .map_err(|err| anyhow!("conversion from Vec<u8> to [u8; 256] failed. {err:?}"))?;
         Ok(Self(bytes))
     }
 }
