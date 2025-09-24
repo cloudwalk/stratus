@@ -313,7 +313,7 @@ describe("Leader & Follower BRLC integration test", function () {
             }
 
             // Wait a bit to ensure follower is down
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 5000));
 
             // Verify follower is down by trying to connect
             let followerIsDown = false;
@@ -362,9 +362,8 @@ describe("Leader & Follower BRLC integration test", function () {
 
             console.log("          ✔ Restarting follower node...");
 
-            // Restart the follower with block changes replication enabled
-            // Use exec instead of execSync since the follower runs in background
-            exec(`just e2e-follower brlc true`, {
+            const enableBlockChangesReplication = process.env.ENABLE_BLOCK_CHANGES_REPLICATION === "true";
+            exec(`just e2e-follower brlc ${enableBlockChangesReplication}`, {
                 shell: "/bin/bash",
             });
 

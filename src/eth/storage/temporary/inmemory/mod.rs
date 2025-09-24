@@ -121,19 +121,19 @@ pub struct InMemoryTemporaryStorageState {
     pub block: PendingBlock,
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
-    pub accounts: ExecutionChanges,
+    pub block_changes: ExecutionChanges,
 }
 
 impl InMemoryTemporaryStorageState {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
             block: PendingBlock::new_at_now(block_number),
-            accounts: ExecutionChanges::new(),
+            block_changes: ExecutionChanges::default(),
         }
     }
 
     pub fn reset(&mut self) {
         self.block = PendingBlock::new_at_now(1.into());
-        self.accounts.clear();
+        self.block_changes = ExecutionChanges::default();
     }
 }
