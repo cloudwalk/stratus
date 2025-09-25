@@ -32,20 +32,21 @@ jobs:
     env:
       CARGO_VET_VERSION: 0.10.0
     steps:
-    - uses: actions/checkout@master
-    - name: Install Rust
-      run: rustup update stable && rustup default stable
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - uses: actions/cache@v2
+    - name: Set up Rust
+      run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
+
+    - uses: actions/cache@v4
       with:
         path: ${{ runner.tool_cache }}/cargo-vet
         key: cargo-vet-bin-${{ env.CARGO_VET_VERSION }}
 
     - name: Add the tool cache directory to the search path
       run: echo "${{ runner.tool_cache }}/cargo-vet/bin" >> $GITHUB_PATH
-
+      
     - name: Ensure that the tool cache is populated with the cargo-vet binary
       run: cargo install --root ${{ runner.tool_cache }}/cargo-vet --version ${{ env.CARGO_VET_VERSION }} cargo-vet
-      
     - name: Invoke cargo-vet
       run: cargo vet --locked
