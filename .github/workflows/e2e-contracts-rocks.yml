@@ -66,6 +66,9 @@ jobs:
       - name: Debug cache key
         run: echo "CACHE_KEY=$CACHE_KEY"
 
+      - name: Install libsasl2-dev libssl-dev
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+
       - name: Build all dependencies to prime the cache
         run: cargo build --release --locked
       
