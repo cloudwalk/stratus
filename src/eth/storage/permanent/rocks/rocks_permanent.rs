@@ -5,9 +5,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
-#[cfg(feature = "replication")]
-use rocksdb::WriteBatch;
 
+use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
 use crate::GlobalState;
 use crate::eth::primitives::Account;
@@ -17,6 +16,7 @@ use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -29,6 +29,7 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::SleepReason;
 use crate::ext::spawn;
 use crate::ext::traced_sleep;
@@ -39,16 +40,30 @@ pub struct RocksPermanentStorage {
     block_number: AtomicU32,
 }
 
+fn get_current_file_descriptor_limit() -> Result<libc::rlimit, StorageError> {
+    let mut rlimit = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+    let result = unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlimit as *mut libc::rlimit) };
+    if result != 0 {
+        let err = std::io::Error::last_os_error();
+        let msg = format!("Failed to get current file descriptor limit (error: {err}).");
+        return Err(StorageError::Unexpected { msg });
+    }
+    Ok(rlimit)
+}
+
 impl RocksPermanentStorage {
     pub fn new(
         db_path_prefix: Option<String>,
         shutdown_timeout: Duration,
-        cache_size_multiplier: Option<f32>,
+        cf_cache_config: RocksCfCacheConfig,
         enable_sync_write: bool,
-        #[cfg(feature = "replication")] use_rocksdb_replication: bool,
         cf_size_metrics_interval: Option<Duration>,
+        file_descriptors_limit: u64,
     ) -> anyhow::Result<Self> {
         tracing::info!("setting up rocksdb storage");
+
+        // Check file descriptor limit before proceeding with RocksDB initialization
+        Self::check_file_descriptor_limit(file_descriptors_limit).map_err(|err| anyhow::anyhow!("{err}"))?;
 
         let path = if let Some(prefix) = db_path_prefix {
             // run some checks on the given prefix
@@ -68,14 +83,7 @@ impl RocksPermanentStorage {
             "data/rocksdb".to_string()
         };
 
-        let state = Arc::new(RocksStorageState::new(
-            path,
-            shutdown_timeout,
-            cache_size_multiplier,
-            enable_sync_write,
-            #[cfg(feature = "replication")]
-            use_rocksdb_replication,
-        )?);
+        let state = Arc::new(RocksStorageState::new(path, shutdown_timeout, cf_cache_config, enable_sync_write)?);
 
         let block_number = state.preload_block_number()?;
 
@@ -92,17 +100,48 @@ impl RocksPermanentStorage {
         Ok(Self { state, block_number })
     }
 
+    /// Checks the current file descriptor limit and validates it meets the minimum requirement.
+    ///
+    /// This prevents RocksDB from misbehaving or corrupting data due to insufficient file descriptors.
+    fn check_file_descriptor_limit(limit_required: u64) -> Result<(), StorageError> {
+        let current_limit = get_current_file_descriptor_limit()?;
+
+        tracing::info!(
+            current_limit = current_limit.rlim_cur,
+            min_required = limit_required,
+            "checking file descriptor limit for RocksDB"
+        );
+
+        if current_limit.rlim_cur < limit_required {
+            tracing::warn!(
+                current_limit = current_limit.rlim_cur,
+                min_required = limit_required,
+                "File descriptor limit is below minimum."
+            );
+
+            let msg = format!(
+                "File descriptor limit (current: {}, max: {}) is below the recommended minimum ({limit_required}) for RocksDB.",
+                current_limit.rlim_cur, current_limit.rlim_max
+            );
+
+            return Err(StorageError::Unexpected { msg });
+        } else {
+            tracing::info!("File descriptor limit check passed: {} >= {}", current_limit.rlim_cur, limit_required);
+        }
+
+        Ok(())
+    }
+
     // -------------------------------------------------------------------------
     // Block number operations
     // -------------------------------------------------------------------------
 
-    pub fn read_mined_block_number(&self) -> anyhow::Result<BlockNumber, StorageError> {
-        Ok(self.block_number.load(Ordering::SeqCst).into())
+    pub fn read_mined_block_number(&self) -> BlockNumber {
+        self.block_number.load(Ordering::SeqCst).into()
     }
 
-    pub fn set_mined_block_number(&self, number: BlockNumber) -> anyhow::Result<(), StorageError> {
+    pub fn set_mined_block_number(&self, number: BlockNumber) {
         self.block_number.store(number.as_u32(), Ordering::SeqCst);
-        Ok(())
     }
 
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
@@ -121,6 +160,10 @@ impl RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to read account in RocksPermanent");
             })
+    }
+
+    pub fn read_accounts(&self, addresses: Vec<Address>) -> anyhow::Result<Vec<(Address, Account)>, StorageError> {
+        self.state.read_accounts(addresses).map_err(|err| StorageError::RocksError { err })
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError> {
@@ -142,6 +185,16 @@ impl RocksPermanentStorage {
         block.map_err(|err| StorageError::RocksError { err })
     }
 
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(Block, BlockChangesRocksdb)>, StorageError> {
+        let result = self.state.read_block_with_changes(selection).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to read block with changes in RocksPermanent");
+        });
+        if let Ok(Some(block)) = &result {
+            tracing::trace!(?selection, ?block, "block found");
+        }
+        result.map_err(|err| StorageError::RocksError { err })
+    }
+
     pub fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError> {
         self.state
             .read_transaction(hash)
@@ -157,31 +210,7 @@ impl RocksPermanentStorage {
         })
     }
 
-    #[cfg(feature = "replication")]
-    pub fn read_replication_log(&self, block_number: BlockNumber) -> anyhow::Result<Option<WriteBatch>, StorageError> {
-        self.state
-            .read_replication_log(block_number)
-            .map_err(|err| StorageError::RocksError { err })
-            .inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to read replication log in RocksPermanent");
-            })
-    }
-
-    #[cfg(feature = "replication")]
-    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> anyhow::Result<(), StorageError> {
-        self.state
-            .apply_replication_log(block_number, replication_log)
-            .map_err(|err| StorageError::RocksError { err })
-            .inspect_err(|e| {
-                tracing::error!(reason = ?e, "failed to apply replication log in RocksPermanent");
-            })?;
-
-        self.set_mined_block_number(block_number)?;
-
-        Ok(())
-    }
-
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
@@ -190,23 +219,26 @@ impl RocksPermanentStorage {
         }
 
         self.state
-            .save_genesis_block(block, accounts)
+            .save_genesis_block(block, accounts, account_changes)
             .map_err(|err| StorageError::RocksError { err })
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to save genesis block in RocksPermanent");
             })
     }
 
-    pub fn save_block(&self, block: Block) -> anyhow::Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, account_changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to export metrics in RocksPermanent");
             })?;
         }
-        self.state.save_block(block).map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
-            tracing::error!(reason = ?e, "failed to save block in RocksPermanent");
-        })
+        self.state
+            .save_block(block, account_changes)
+            .map_err(|err| StorageError::RocksError { err })
+            .inspect_err(|e| {
+                tracing::error!(reason = ?e, "failed to save block in RocksPermanent");
+            })
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> anyhow::Result<(), StorageError> {
@@ -216,11 +248,6 @@ impl RocksPermanentStorage {
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to save accounts in RocksPermanent");
             })
-    }
-
-    #[cfg(feature = "replication")]
-    pub fn rocksdb_replication_enabled(&self) -> bool {
-        self.state.use_rocksdb_replication
     }
 
     #[cfg(feature = "dev")]
@@ -287,5 +314,25 @@ impl RocksPermanentStorage {
         self.state.reset().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to reset in RocksPermanent");
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ulimit_check_with_no_change() {
+        let result = RocksPermanentStorage::check_file_descriptor_limit(1024);
+        assert!(result.is_ok(), "ulimit check should succeed with reasonable low limit");
+    }
+
+    #[test]
+    fn test_ulimit_check_with_max_requirement() {
+        let result = RocksPermanentStorage::check_file_descriptor_limit(u64::MAX);
+        assert!(
+            result.is_err(),
+            "ulimit check should fail because the required limit is above the system maximum"
+        );
     }
 }

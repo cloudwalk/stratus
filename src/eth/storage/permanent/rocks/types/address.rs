@@ -3,8 +3,10 @@ use std::fmt::Debug;
 use crate::eth::primitives::Address;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
-pub struct AddressRocksdb(pub [u8; 20]);
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, PartialOrd, Ord,
+)]
+pub struct AddressRocksdb(#[serde(with = "const_hex")] pub [u8; 20]);
 
 impl From<Address> for AddressRocksdb {
     fn from(item: Address) -> Self {

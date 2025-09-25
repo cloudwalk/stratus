@@ -9,11 +9,8 @@ use quick_cache::sync::DefaultLifecycle;
 use quick_cache::sync::GuardResult;
 use rustc_hash::FxBuildHasher;
 
-use super::AccountWithSlots;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-#[cfg(not(feature = "replication"))]
-use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -22,9 +19,7 @@ use crate::eth::primitives::SlotValue;
 pub struct StorageCache {
     slot_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
     account_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
-    #[cfg(not(feature = "replication"))]
     account_latest_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
-    #[cfg(not(feature = "replication"))]
     slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
 }
 
@@ -70,7 +65,6 @@ impl StorageCache {
                 FxBuildHasher,
                 DefaultLifecycle::default(),
             ),
-            #[cfg(not(feature = "replication"))]
             account_latest_cache: Cache::with(
                 config.account_history_cache_capacity,
                 config.account_history_cache_capacity as u64,
@@ -78,7 +72,6 @@ impl StorageCache {
                 FxBuildHasher,
                 DefaultLifecycle::default(),
             ),
-            #[cfg(not(feature = "replication"))]
             slot_latest_cache: Cache::with(
                 config.slot_history_cache_capacity,
                 config.slot_history_cache_capacity as u64,
@@ -92,9 +85,7 @@ impl StorageCache {
     pub fn clear(&self) {
         self.slot_cache.clear();
         self.account_cache.clear();
-        #[cfg(not(feature = "replication"))]
         self.account_latest_cache.clear();
-        #[cfg(not(feature = "replication"))]
         self.slot_latest_cache.clear();
     }
 
@@ -106,49 +97,29 @@ impl StorageCache {
         self.account_cache.insert_if_missing(account.address, account);
     }
 
-    pub fn cache_account_and_slots_from_changes(&self, changes: ExecutionChanges) {
-        for change in changes.into_values() {
-            // cache slots
-            for slot in change.slots.into_values().flat_map(|slot| slot.take()) {
-                self.slot_cache.insert((change.address, slot.index), slot.value);
-            }
+    fn _cache_account_and_slots_from_changes_impl(
+        changes: ExecutionChanges,
+        account_cache: &Cache<Address, Account, UnitWeighter, FxBuildHasher>,
+        slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
+    ) {
+        // cache accounts
+        for (address, change) in changes.accounts {
+            let account = (address, change).into();
+            account_cache.insert(address, account);
+        }
 
-            // cache account
-            let mut account = AccountWithSlots::new(change.address);
-            if let Some(nonce) = change.nonce.take_ref() {
-                account.info.nonce = *nonce;
-            }
-            if let Some(balance) = change.balance.take_ref() {
-                account.info.balance = *balance;
-            }
-            if let Some(Some(bytecode)) = change.bytecode.take_ref() {
-                account.info.bytecode = Some(bytecode.clone());
-            }
-            self.account_cache.insert(change.address, account.info);
+        // cache slots
+        for ((address, index), value) in changes.slots {
+            slot_cache.insert((address, index), value);
         }
     }
 
-    #[cfg(not(feature = "replication"))]
-    pub fn cache_account_and_slots_latest_from_changes(&self, changes: Vec<ExecutionAccountChanges>) {
-        for change in changes {
-            // cache slots
-            for slot in change.slots.into_values().flat_map(|slot| slot.take()) {
-                self.slot_latest_cache.insert((change.address, slot.index), slot.value);
-            }
+    pub fn cache_account_and_slots_from_changes(&self, changes: ExecutionChanges) {
+        Self::_cache_account_and_slots_from_changes_impl(changes, &self.account_cache, &self.slot_cache);
+    }
 
-            // cache account
-            let mut account = AccountWithSlots::new(change.address);
-            if let Some(nonce) = change.nonce.take_ref() {
-                account.info.nonce = *nonce;
-            }
-            if let Some(balance) = change.balance.take_ref() {
-                account.info.balance = *balance;
-            }
-            if let Some(Some(bytecode)) = change.bytecode.take_ref() {
-                account.info.bytecode = Some(bytecode.clone());
-            }
-            self.account_latest_cache.insert(change.address, account.info);
-        }
+    pub fn cache_account_and_slots_latest_from_changes(&self, changes: ExecutionChanges) {
+        Self::_cache_account_and_slots_from_changes_impl(changes, &self.account_latest_cache, &self.slot_latest_cache);
     }
 
     pub fn get_slot(&self, address: Address, index: SlotIndex) -> Option<Slot> {
@@ -159,22 +130,18 @@ impl StorageCache {
         self.account_cache.get(&address)
     }
 
-    #[cfg(not(feature = "replication"))]
     pub fn cache_account_latest_if_missing(&self, address: Address, account: Account) {
         self.account_latest_cache.insert_if_missing(address, account);
     }
 
-    #[cfg(not(feature = "replication"))]
     pub fn cache_slot_latest_if_missing(&self, address: Address, slot: Slot) {
         self.slot_latest_cache.insert_if_missing((address, slot.index), slot.value);
     }
 
-    #[cfg(not(feature = "replication"))]
     pub fn get_account_latest(&self, address: Address) -> Option<Account> {
         self.account_latest_cache.get(&address)
     }
 
-    #[cfg(not(feature = "replication"))]
     pub fn get_slot_latest(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         self.slot_latest_cache.get(&(address, index)).map(|value| Slot { value, index })
     }

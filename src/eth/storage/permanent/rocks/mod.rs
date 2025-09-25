@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 
 use anyhow::Context;
+pub use rocks_cf_cache_config::RocksCfCacheConfig;
 pub use rocks_permanent::RocksPermanentStorage;
 pub use rocks_state::RocksStorageState;
 use serde::Deserialize;
@@ -27,11 +28,18 @@ mod rocks_cf;
 /// Settings and tweaks for the database and column families.
 pub mod rocks_config;
 
+/// Column Family cache configuration.
+pub mod rocks_cf_cache_config;
+
 /// Functionalities related to the whole database.
 pub mod rocks_db;
 
 /// All types to be serialized and desserialized in the db.
 pub mod types;
+
+/// Utilities for testing.
+#[cfg(test)]
+pub mod test_utils;
 
 // Tuple implementations for composite keys
 impl SerializeDeserializeWithContext for (AddressRocksdb, BlockNumberRocksdb) {}

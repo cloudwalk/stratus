@@ -11,18 +11,18 @@ default-run = "stratus"
 [dependencies]
 
 # general
-anyhow = "=1.0.98"
-cfg-if = "=1.0.1"
-chrono = { version = "=0.4.41", features = ["serde"] }
+anyhow = "=1.0.100"
+cfg-if = "=1.0.3"
+chrono = { version = "=0.4.42", features = ["serde"] }
 const_format = "=0.2.34"
-const-hex = "=1.14.1"
+const-hex = "=1.15.0"
 derive_more = "=2.0.1"
-derive-new = "=0.6.0"
+derive-new = "=0.7.0"
 hash_hasher = "=2.0.4"
 hex_fmt = "=0.3.0"
 hex-literal = "=1.0.0"
 humantime = "=2.2.0"
-indexmap = { version = "=2.10.0", features = ["serde"] }
+indexmap = { version = "=2.11.1", features = ["serde"] }
 itertools = "=0.14.0"
 nanoid = "=0.4.0"
 oneshot = "=0.1.11"
@@ -36,31 +36,32 @@ rustc-hash = "=2.1.1"
 smallvec = "=1.15.1"
 static_assertions = "=1.1.0"
 strum = { version = "=0.27.2", features = ["derive"] }
-quick_cache = "=0.6.9"
+quick_cache = "=0.6.16"
 sugars = "=3.0.1"
-thiserror = "=2.0.12"
-uuid = { version = "=1.17.0", features = ["v7"]}
+thiserror = "=2.0.16"
+uuid = { version = "=1.18.1", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
+libc = "=0.2.175"
 
 # async
-tokio = { version = "=1.47.0", features = [
+tokio = { version = "=1.47.1", features = [
     "rt-multi-thread",
     "macros",
     "signal"
 ] }
-tokio-util = "=0.7.15"
+tokio-util = "=0.7.16"
 
 # config
-clap = { version = "=4.5.45", features = ["derive", "env"] }
+clap = { version = "=4.5.47", features = ["derive", "env"] }
 dotenvy = "=0.15.7"
 
 # serialization
 bincode = { version = "=2.0.1", features = ["derive"] }
 display_json = "=0.2.1"
 serde = "=1.0.219"
-serde_json = "=1.0.142"
+serde_json = "=1.0.143"
 serde_urlencoded = "=0.7.1"
-serde_with = "=3.14.0"
+serde_with = "=3.14.1"
 
 # parallelism
 crossbeam-channel = "=0.5.15"
@@ -72,18 +73,17 @@ futures-channel = "=0.3.31"
 # ethereum / rpc
 ethabi = "=18.0.0"
 rlp = "=0.6.1"
-alloy-trie = "=0.9.0"
-revm-inspectors = "=0.27.1"
+alloy-trie = "=0.9.1"
+revm-inspectors = { version = "=0.27.1", features = ["js-tracer"] }
 alloy-rpc-types-trace = "=1.0.24"
 alloy-rpc-types-eth = "=1.0.24"
 alloy-consensus = { version = "=1.0.24", features = ["k256"] }
-alloy-primitives = { version = "=1.3.0", features = ["rand"] }
+alloy-primitives = { version = "=1.3.1", features = ["rand"] }
 alloy-eips = "=1.0.24"
 
 # network
-jsonrpsee = { version = "=0.25.1", features = ["server", "client"] }
-reqwest = { version = "=0.12.22", features = ["json"] }
-tonic = "=0.13.1"
+jsonrpsee = { version = "=0.26.0", features = ["server", "client"] }
+reqwest = { version = "=0.12.23", features = ["json"] }
 tower = "=0.5.2"
 tower-http = { version = "=0.6.6", features = ["cors"] }
 http = "=1.3.1"
@@ -109,11 +109,11 @@ sentry = "=0.42.0"
 sentry-tracing = "=0.42.0"
 tracing = { version = "=0.1.41", features = ["attributes"] }
 tracing-opentelemetry = "=0.31.0"
-tracing-subscriber = { version = "=0.3.19", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "=0.3.20", features = ["env-filter", "json"] }
 tracing-serde = "=0.2.0"
 
 # storage
-rocksdb = { version = "=0.24.0", features = ["multi-threaded-cf"] }
+rocksdb = { version = "=0.24.0", features = ["multi-threaded-cf", "jemalloc"] }
 sqlx = { version = "=0.8.6", features = [
     "runtime-tokio",
     "postgres",
@@ -123,11 +123,11 @@ sqlx = { version = "=0.8.6", features = [
 
 # test
 fake = { version = "=4.4.0", features = ["chrono", "derive"] }
-rdkafka = {version = "=0.36.2", features = ["ssl", "sasl"] }
+rdkafka = {version = "=0.38.0", features = ["ssl", "sasl"] }
 sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
 # Historic events processor
-indicatif = "=0.17.8"
+indicatif = "=0.18.0"
 dashmap = "6.1.0"
 
 # ------------------------------------------------------------------------------
@@ -135,10 +135,10 @@ dashmap = "6.1.0"
 # ------------------------------------------------------------------------------
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
-revm = { version = "=27.1.0", features = ["asm-keccak", "serde"] }
+revm = { version = "=27.1.0", features = ["asm-keccak", "serde", "optional_eip3607"] }
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
-revm = { version = "=27.1.0", features = ["serde"]}
+revm = { version = "=27.1.0", features = ["serde", "optional_eip3607"]}
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { version = "=0.6", optional = true }
@@ -149,20 +149,20 @@ tikv-jemallocator = { version = "=0.6", optional = true }
 
 [dev-dependencies]
 serde_plain = "=1.0.2"
-tempfile = "=3.20.0"
-glob = "=0.3.2"
+tempfile = "=3.21.0"
+glob = "=0.3.3"
 
 # ------------------------------------------------------------------------------
 # Build dependencies
 # ------------------------------------------------------------------------------
 
 [build-dependencies]
-anyhow = "=1.0.98"
-const-hex = "=1.14.1"
-glob = "=0.3.2"
+anyhow = "=1.0.100"
+const-hex = "=1.15.0"
+glob = "=0.3.3"
 hostname = "=0.4.1"
 nom = "=8.0.0"
-phf_codegen = "=0.12.1"
+phf_codegen = "=0.13.1"
 vergen-gitcl = { version = "=1.0.8", features = ["build", "cargo", "rustc", "si"] }
 
 # ------------------------------------------------------------------------------
@@ -212,9 +212,6 @@ jemalloc = ["dep:tikv-jemallocator"]
 
 # Use Jemalloc as the global allocator with profiling enabled
 jeprof = ["tikv-jemallocator/profiling"]
-
-# Enable replication CF (does not work with the latest cache)
-replication = []
 
 # ------------------------------------------------------------------------------
 # Lints

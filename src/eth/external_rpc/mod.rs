@@ -94,7 +94,7 @@ impl FromStr for ExternalRpcKind {
     fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
         match s {
             s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
-            s => Err(anyhow!("unknown external rpc storage: {}", s)),
+            s => Err(anyhow!("unknown external rpc storage: {s}")),
         }
     }
 }

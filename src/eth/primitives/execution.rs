@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use alloy_primitives::B256;
 use anyhow::Ok;
@@ -15,12 +15,43 @@ use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
+use crate::eth::primitives::Slot;
+use crate::eth::primitives::SlotIndex;
+use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::log_and_err;
 
-pub type ExecutionChanges = BTreeMap<Address, ExecutionAccountChanges>;
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+pub struct ExecutionChanges {
+    pub accounts: HashMap<Address, ExecutionAccountChanges, hash_hasher::HashBuildHasher>,
+    pub slots: HashMap<(Address, SlotIndex), SlotValue, hash_hasher::HashBuildHasher>,
+}
+
+impl ExecutionChanges {
+    pub fn insert(&mut self, account: Account, slots: Vec<Slot>) {
+        let address = account.address;
+        match self.accounts.entry(address) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                let changes = entry.get_mut();
+                changes.apply_modifications(account);
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(ExecutionAccountChanges::from_changed(account));
+            }
+        }
+
+        for slot in slots {
+            self.slots.insert((address, slot.index), slot.value);
+        }
+    }
+
+    pub fn merge(&mut self, other: ExecutionChanges) {
+        self.accounts.extend(other.accounts);
+        self.slots.extend(other.slots);
+    }
+}
 
 /// Output of a transaction executed in the EVM.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -58,13 +89,13 @@ impl EvmExecution {
         }
 
         // generate sender changes incrementing the nonce
-        let mut sender_changes = ExecutionAccountChanges::from_original_values(sender); // NOTE: don't change from_original_values without updating .expect() below
-        let sender_next_nonce = sender_changes
-            .nonce
-            .take_original_ref()
-            .ok_or_else(|| anyhow!("original nonce value not found when it should have been populated by from_original_values"))?
-            .next_nonce();
-        sender_changes.nonce.set_modified(sender_next_nonce);
+        let address = sender.address;
+        let mut sender_changes = ExecutionAccountChanges::from_unchanged(sender);
+        let sender_next_nonce = sender_changes.nonce.next_nonce();
+
+        sender_changes.nonce.apply(sender_next_nonce);
+        let mut changes = ExecutionChanges::default();
+        changes.accounts.insert(address, sender_changes);
 
         // crete execution and apply costs
         let mut execution = Self {
@@ -73,7 +104,7 @@ impl EvmExecution {
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
             gas: Gas::from(receipt.gas_used),
-            changes: BTreeMap::from([(sender_changes.address, sender_changes)]),
+            changes,
             deployed_contract_address: None,
         };
         execution.apply_receipt(receipt)?;
@@ -82,7 +113,7 @@ impl EvmExecution {
 
     /// Checks if the current transaction was completed normally.
     pub fn is_success(&self) -> bool {
-        matches!(self.result, ExecutionResult::Success)
+        self.result.is_success()
     }
 
     /// Checks if the current transaction was completed with a failure (reverted or halted).
@@ -185,19 +216,19 @@ impl EvmExecution {
         if execution_cost > Wei::ZERO {
             // find sender changes
             let sender_address: Address = receipt.0.from.into();
-            let Some(sender_changes) = self.changes.get_mut(&sender_address) else {
+            let Some(sender_changes) = self.changes.accounts.get_mut(&sender_address) else {
                 return log_and_err!("sender changes not present in execution when applying execution costs");
             };
 
             // subtract execution cost from sender balance
-            let sender_balance = *sender_changes.balance.take_ref().ok_or(anyhow!("sender balance was None"))?;
+            let sender_balance = *sender_changes.balance.value();
 
             let sender_new_balance = if sender_balance > execution_cost {
                 sender_balance - execution_cost
             } else {
                 Wei::ZERO
             };
-            sender_changes.balance.set_modified(sender_new_balance);
+            sender_changes.balance.apply(sender_new_balance);
         }
 
         Ok(())
@@ -247,7 +278,6 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::eth::primitives::CodeHash;
     use crate::eth::primitives::Nonce;
 
     #[test]
@@ -259,7 +289,6 @@ mod tests {
             nonce: Nonce::from(1u64),
             balance: Wei::from(1000u64),
             bytecode: None,
-            code_hash: CodeHash::default(),
         };
 
         // Create a mock failed receipt
@@ -292,17 +321,16 @@ mod tests {
         assert_eq!(execution.gas, Gas::from(receipt.gas_used));
 
         // Verify sender changes
-        let sender_changes = execution.changes.get(&sender_address).unwrap();
-        assert_eq!(sender_changes.address, sender_address);
+        let sender_changes = execution.changes.accounts.get(&sender_address).unwrap();
 
         // Nonce should be incremented
-        let modified_nonce = sender_changes.nonce.take_modified_ref().unwrap();
-        assert_eq!(*modified_nonce, Nonce::from(2u64));
+        let modified_nonce = *sender_changes.nonce.value();
+        assert_eq!(modified_nonce, Nonce::from(2u64));
 
         // Balance should be reduced by execution cost
         if receipt.execution_cost() > Wei::ZERO {
-            let modified_balance = sender_changes.balance.take_modified_ref().unwrap();
-            assert!(sender.balance >= *modified_balance);
+            let modified_balance = *sender_changes.balance.value();
+            assert!(sender.balance >= modified_balance);
         }
     }
 
@@ -528,15 +556,19 @@ mod tests {
             nonce: Nonce::from(1u64),
             balance: Wei::from(1000u64),
             bytecode: None,
-            code_hash: CodeHash::default(),
         };
 
         // Create a mock execution
         let mut execution: EvmExecution = Faker.fake();
 
         // Set up execution with sender account
-        let sender_changes = ExecutionAccountChanges::from_original_values(sender);
-        execution.changes = BTreeMap::from([(sender_address, sender_changes)]);
+        let sender_changes = ExecutionAccountChanges::from_unchanged(sender);
+        let mut accounts = HashMap::with_hasher(hash_hasher::HashBuildHasher::default());
+        accounts.insert(sender_address, sender_changes);
+        execution.changes = ExecutionChanges {
+            accounts,
+            ..Default::default()
+        };
         execution.gas = Gas::from(100u64);
 
         // Create a receipt with higher gas used and execution cost
@@ -552,8 +584,8 @@ mod tests {
         execution.apply_receipt(&receipt).unwrap();
 
         // Verify sender balance was reduced by execution cost
-        let sender_changes = execution.changes.get(&sender_address).unwrap();
-        let modified_balance = sender_changes.balance.take_modified_ref().unwrap();
-        assert_eq!(*modified_balance, Wei::from(900u64)); // 1000 - 100
+        let sender_changes = execution.changes.accounts.get(&sender_address).unwrap();
+        let modified_balance = *sender_changes.balance.value();
+        assert_eq!(modified_balance, Wei::from(900u64)); // 1000 - 100
     }
 }

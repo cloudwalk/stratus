@@ -1,3 +1,4 @@
+pub use self::rocks::RocksCfCacheConfig;
 pub use self::rocks::RocksPermanentStorage;
 pub use self::rocks::RocksStorageState;
 
@@ -28,22 +29,21 @@ pub struct PermanentStorageConfig {
     #[arg(long = "rocks-shutdown-timeout", env = "ROCKS_SHUTDOWN_TIMEOUT", value_parser=parse_duration, default_value = "4m")]
     pub rocks_shutdown_timeout: Duration,
 
-    /// Augments or decreases the size of Column Family caches based on a multiplier.
-    #[arg(long = "rocks-cache-size-multiplier", env = "ROCKS_CACHE_SIZE_MULTIPLIER")]
-    pub rocks_cache_size_multiplier: Option<f32>,
+    /// Individual cache size configuration for each RocksDB Column Family.
+    #[clap(flatten)]
+    pub rocks_cf_cache: RocksCfCacheConfig,
 
-    /// Augments or decreases the size of Column Family caches based on a multiplier.
+    /// Disables sync write for RocksDB (improves performance but reduces durability).
     #[arg(long = "rocks-disable-sync-write", env = "ROCKS_DISABLE_SYNC_WRITE")]
     pub rocks_disable_sync_write: bool,
-
-    /// Use RocksDB replication logs for importing data without re-executing transactions.
-    #[cfg(feature = "replication")]
-    #[arg(long = "use-rocksdb-replication", env = "USE_ROCKSDB_REPLICATION")]
-    pub use_rocksdb_replication: bool,
 
     /// Interval for collecting RocksDB column family size metrics.
     #[arg(long = "rocks-cf-size-metrics-interval", env = "ROCKS_CF_SIZE_METRICS_INTERVAL", value_parser=parse_duration)]
     pub rocks_cf_size_metrics_interval: Option<Duration>,
+
+    /// Minimum number of file descriptors required for RocksDB initialization.
+    #[arg(long = "rocks-file-descriptors-limit", env = "ROCKS_FILE_DESCRIPTORS_LIMIT", default_value = Self::DEFAULT_FILE_DESCRIPTORS_LIMIT)]
+    pub rocks_file_descriptors_limit: u64,
 
     /// Genesis file configuration
     #[clap(flatten)]
@@ -52,6 +52,7 @@ pub struct PermanentStorageConfig {
 }
 
 impl PermanentStorageConfig {
+    const DEFAULT_FILE_DESCRIPTORS_LIMIT: &'static str = if cfg!(feature = "dev") { "65536" } else { "1048576" };
     /// Initializes permanent storage implementation.
     pub fn init(&self) -> anyhow::Result<RocksPermanentStorage> {
         tracing::info!(config = ?self, "creating permanent storage");
@@ -59,11 +60,10 @@ impl PermanentStorageConfig {
         RocksPermanentStorage::new(
             self.rocks_path_prefix.clone(),
             self.rocks_shutdown_timeout,
-            self.rocks_cache_size_multiplier,
+            self.rocks_cf_cache.clone(),
             !self.rocks_disable_sync_write,
-            #[cfg(feature = "replication")]
-            self.use_rocksdb_replication,
             self.rocks_cf_size_metrics_interval,
+            self.rocks_file_descriptors_limit,
         )
     }
 }

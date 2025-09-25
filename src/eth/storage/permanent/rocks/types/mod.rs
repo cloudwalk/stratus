@@ -1,6 +1,7 @@
 mod account;
 mod address;
 mod block;
+mod block_changes;
 mod block_header;
 mod block_number;
 mod bytecode;
@@ -17,9 +18,6 @@ mod log_mined;
 mod logs_bloom;
 mod miner_nonce;
 mod nonce;
-pub mod old_types_hotfix;
-#[cfg(feature = "replication")]
-mod replication_log;
 mod size;
 mod slot;
 mod transaction_input;
@@ -29,16 +27,17 @@ mod wei;
 pub use account::AccountRocksdb;
 pub use address::AddressRocksdb;
 pub use block::BlockRocksdb;
+pub use block_changes::AccountChangesRocksdb;
+pub use block_changes::BlockChangesRocksdb;
 pub use block_number::BlockNumberRocksdb;
 pub use bytes::BytesRocksdb;
 pub use hash::HashRocksdb;
 pub use index::IndexRocksdb;
-#[cfg(feature = "replication")]
-pub use replication_log::ReplicationLogRocksdb;
 pub use slot::SlotIndexRocksdb;
 pub use slot::SlotValueRocksdb;
 pub use transaction_mined::TransactionMinedRocksdb;
 pub use unix_time::UnixTimeRocksdb;
+
 #[cfg(test)]
 mod tests {
     use block_header::BlockHeaderRocksdb;
@@ -61,6 +60,7 @@ mod tests {
     use self::bytes::BytesRocksdb;
     use super::log::LogRocksdb;
     use super::*;
+    use crate::gen_enum_variant_snapshot_tests;
     use crate::gen_test_bincode;
 
     gen_test_bincode!(AccountRocksdb);
@@ -82,8 +82,6 @@ mod tests {
     gen_test_bincode!(LogsBloomRocksdb);
     gen_test_bincode!(MinerNonceRocksdb);
     gen_test_bincode!(NonceRocksdb);
-    #[cfg(feature = "replication")]
-    gen_test_bincode!(ReplicationLogRocksdb);
     gen_test_bincode!(SizeRocksdb);
     gen_test_bincode!(SlotIndexRocksdb);
     gen_test_bincode!(SlotValueRocksdb);
@@ -91,4 +89,7 @@ mod tests {
     gen_test_bincode!(TransactionMinedRocksdb);
     gen_test_bincode!(UnixTimeRocksdb);
     gen_test_bincode!(WeiRocksdb);
+
+    gen_enum_variant_snapshot_tests!(BytecodeRocksdb);
+    gen_enum_variant_snapshot_tests!(ExecutionResultRocksdb);
 }

@@ -20,6 +20,7 @@ use rocksdb::Options;
 use rocksdb::ReadOptions;
 use rocksdb::SliceTransform;
 use rocksdb::WriteBatch;
+use stratus::eth::storage::permanent::RocksCfCacheConfig;
 use stratus::eth::storage::permanent::RocksStorageState;
 
 const ESTIMATE_NUM_KEYS: &str = "rocksdb.estimate-num-keys";
@@ -139,7 +140,7 @@ fn generate_cf_options_map() -> BTreeMap<&'static str, Options> {
 fn open_db(path: &str, cf_options_map: &BTreeMap<&'static str, Options>) -> Result<Arc<DB>> {
     let db_path = Path::new(path);
     if !db_path.exists() {
-        bail!("Database path does not exist: {}", path);
+        bail!("Database path does not exist: {path}");
     }
 
     let cf_names = cf_options_map.keys().copied().collect::<Vec<_>>();
@@ -253,9 +254,7 @@ fn main() -> Result<()> {
     let state = RocksStorageState::new(
         args.destination,
         std::time::Duration::from_secs(240),
-        Some(0.0),
-        false,
-        #[cfg(feature = "replication")]
+        RocksCfCacheConfig::default_with_multiplier(0.0),
         false,
     )?;
     let dest_db = Arc::clone(&state.db);

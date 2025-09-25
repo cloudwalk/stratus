@@ -49,8 +49,7 @@ where
     pub fn new(db: &'a Arc<DB>, column_family: &str) -> Result<Self> {
         let Some(cf) = db.cf_handle(column_family) else {
             return Err(anyhow!(
-                "can't find column family '{}' in database! check if CFs are configured properly when creating/opening the DB",
-                column_family,
+                "can't find column family '{column_family}' in database! check if CFs are configured properly when creating/opening the DB",
             ));
         };
 

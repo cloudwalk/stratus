@@ -13,34 +13,14 @@ pub mod permanent;
 mod stratus_storage;
 mod temporary;
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use clap::Parser;
 use display_json::DebugAsJson;
+pub use temporary::compute_pending_block_number;
 
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
-
-#[derive(Debug, Clone)]
-pub struct AccountWithSlots {
-    pub info: Account,
-    pub slots: HashMap<SlotIndex, Slot, hash_hasher::HashBuildHasher>,
-}
-
-impl AccountWithSlots {
-    /// Creates a new temporary account.
-    fn new(address: Address) -> Self {
-        Self {
-            info: Account::new_empty(address),
-            slots: HashMap::default(),
-        }
-    }
-}
 
 // -----------------------------------------------------------------------------
 // Config

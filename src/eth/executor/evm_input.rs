@@ -1,4 +1,3 @@
-use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use display_json::DebugAsJson;
 
@@ -8,8 +7,6 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
-use crate::eth::primitives::ExternalReceipt;
-use crate::eth::primitives::ExternalTransaction;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
@@ -24,7 +21,6 @@ use crate::eth::storage::ReadKind;
 use crate::eth::storage::TxCount;
 use crate::ext::OptionExt;
 use crate::ext::not;
-use crate::if_else;
 
 /// EVM input data. Usually derived from a transaction or call.
 #[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, fake::Dummy, PartialEq)]
@@ -89,7 +85,7 @@ pub struct EvmInput {
 }
 
 impl EvmInput {
-    /// Creates from a transaction that was sent directly to Stratus with `eth_sendRawTransaction`.
+    /// Creates from a transaction that was sent to Stratus with `eth_sendRawTransaction` or during Importing.
     pub fn from_eth_transaction(input: &TransactionInput, pending_header: &PendingBlockHeader) -> Self {
         Self {
             from: input.signer,
@@ -143,26 +139,6 @@ impl EvmInput {
         }
     }
 
-    /// Creates a transaction that was executed in an external blockchain and imported to Stratus.
-    ///
-    /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
-    pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block_number: BlockNumber, block_timestamp: UnixTime) -> anyhow::Result<Self> {
-        Ok(Self {
-            from: tx.inner.signer().into(),
-            to: tx.inner.to().map_into(),
-            value: tx.inner.value().into(),
-            data: tx.inner.input().clone().into(),
-            nonce: Some(tx.inner.nonce().into()),
-            gas_limit: if_else!(receipt.is_success(), Gas::MAX, tx.inner.gas_limit().into()),
-            gas_price: if_else!(receipt.is_success(), 0, tx.inner.gas_price().map_into().unwrap_or(0)),
-            point_in_time: PointInTime::Pending,
-            block_number,
-            block_timestamp,
-            chain_id: tx.inner.chain_id().map(Into::into),
-            kind: ReadKind::Transaction,
-        })
-    }
-
     /// Checks if the input is a contract call.
     ///
     /// It is when there is a `to` address and the `data` field is also populated.
@@ -193,9 +169,10 @@ impl From<TransactionMined> for EvmInput {
             data: value.input.input,
             nonce: Some(value.input.nonce),
             gas_limit: value.input.gas_limit,
-            gas_price: value.input.gas_price,
+            // We don't charge for transactions
+            gas_price: 0,
             block_number: value.block_number,
-            block_timestamp: value.execution.block_timestamp,
+            block_timestamp: value.block_timestamp,
             point_in_time: PointInTime::MinedPast(value.block_number),
             chain_id: value.input.chain_id,
             kind: ReadKind::Transaction,

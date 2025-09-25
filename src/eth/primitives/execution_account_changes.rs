@@ -1,105 +1,156 @@
-use std::collections::BTreeMap;
-
+use derive_more::Deref;
 use display_json::DebugAsJson;
 
-use super::CodeHash;
 use crate::alias::RevmBytecode;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::Wei;
 
-/// Changes that happened to an account during a transaction.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
-pub struct ExecutionAccountChanges {
-    pub new_account: bool,
-    pub address: Address,
-    pub nonce: ExecutionValueChange<Nonce>,
-    pub balance: ExecutionValueChange<Wei>,
+#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default, Deref)]
+pub struct Change<T>
+where
+    T: PartialEq + Eq + Default,
+{
+    #[deref]
+    value: T,
+    changed: bool,
+}
 
-    // TODO: bytecode related information should be grouped in a Bytecode struct
+impl<T> Change<T>
+where
+    T: PartialEq + Eq + Default,
+{
+    /// Updates the value and marks it as changed if the new value differs from the current one.
+    ///
+    /// This method will only update the internal value and set the `changed` flag to `true`
+    /// if the provided value is different from the current value.
+    pub fn apply(&mut self, changed_value: T) {
+        if self.value != changed_value {
+            self.value = changed_value;
+            self.changed = true;
+        }
+    }
+
+    /// Sets the original value only if no changes have been applied yet.
+    ///
+    /// This method will update the internal value only if the `changed` flag is `false`,
+    /// preserving any modifications that may have been made.
+    fn apply_original(&mut self, value: T) {
+        if !self.changed {
+            self.value = value;
+        }
+    }
+
+    /// Returns whether the value has been changed.
+    pub fn is_changed(&self) -> bool {
+        self.changed
+    }
+
+    /// Returns a reference to the current value.
+    pub fn value(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T, U> From<Option<U>> for Change<T>
+where
+    T: PartialEq + Eq + Default,
+    U: Into<T>,
+{
+    fn from(value: Option<U>) -> Self {
+        match value {
+            Some(value) => Self {
+                value: value.into(),
+                changed: true,
+            },
+            None => Self {
+                changed: false,
+                ..Default::default()
+            },
+        }
+    }
+}
+
+/// Changes that happened to an account during a transaction.
+#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+pub struct ExecutionAccountChanges {
+    pub nonce: Change<Nonce>,
+    pub balance: Change<Wei>,
     #[dummy(default)]
-    pub bytecode: ExecutionValueChange<Option<RevmBytecode>>,
-    pub code_hash: CodeHash, // TODO: should be wrapped in a ExecutionValueChange
-    pub slots: BTreeMap<SlotIndex, ExecutionValueChange<Slot>>,
+    pub bytecode: Change<Option<RevmBytecode>>,
 }
 
 impl ExecutionAccountChanges {
-    /// Creates a new [`ExecutionAccountChanges`] from Account original values.
-    pub fn from_original_values(account: impl Into<Account>) -> Self {
-        let account: Account = account.into();
-        Self {
-            new_account: false,
-            address: account.address,
-            nonce: ExecutionValueChange::from_original(account.nonce),
-            balance: ExecutionValueChange::from_original(account.balance),
-            bytecode: ExecutionValueChange::from_original(account.bytecode),
-            slots: BTreeMap::new(),
-            code_hash: account.code_hash,
-        }
-    }
-
-    /// Creates a new [`ExecutionAccountChanges`] from Account modified values.
-    pub fn from_modified_values(account: impl Into<Account>, modified_slots: Vec<Slot>) -> Self {
-        let account: Account = account.into();
-        let mut changes = Self {
-            new_account: true,
-            address: account.address,
-            nonce: ExecutionValueChange::from_modified(account.nonce),
-            balance: ExecutionValueChange::from_modified(account.balance),
-
-            // bytecode
-            bytecode: ExecutionValueChange::from_modified(account.bytecode),
-            code_hash: account.code_hash,
-
-            slots: BTreeMap::new(),
-        };
-
-        for slot in modified_slots {
-            changes.slots.insert(slot.index, ExecutionValueChange::from_modified(slot));
-        }
-
-        changes
-    }
-
     /// Updates an existing account state with changes that happened during the transaction.
-    pub fn apply_modifications(&mut self, modified_account: Account, modified_slots: Vec<Slot>) {
-        // update nonce if modified
-        let is_nonce_modified = match self.nonce.take_original_ref() {
-            Some(original_nonce) => *original_nonce != modified_account.nonce,
-            None => true,
-        };
-        if is_nonce_modified {
-            self.nonce.set_modified(modified_account.nonce);
-        }
+    pub fn apply_modifications(&mut self, modified_account: Account) {
+        self.nonce.apply(modified_account.nonce);
+        self.balance.apply(modified_account.balance);
+        self.bytecode.apply(modified_account.bytecode);
+    }
 
-        // update balance if modified
-        let is_balance_modified = match self.balance.take_original_ref() {
-            Some(original_balance) => *original_balance != modified_account.balance,
-            None => true,
-        };
-        if is_balance_modified {
-            self.balance.set_modified(modified_account.balance);
-        }
-
-        // update all slots because all of them are modified
-        for slot in modified_slots {
-            match self.slots.get_mut(&slot.index) {
-                Some(ref mut entry) => {
-                    entry.set_modified(slot);
-                }
-                None => {
-                    self.slots.insert(slot.index, ExecutionValueChange::from_modified(slot));
-                }
-            };
-        }
+    pub fn apply_original(&mut self, original_account: Account) {
+        self.nonce.apply_original(original_account.nonce);
+        self.balance.apply_original(original_account.balance);
+        self.bytecode.apply_original(original_account.bytecode);
     }
 
     /// Checks if account nonce, balance or bytecode were modified.
-    pub fn is_account_modified(&self) -> bool {
-        self.nonce.is_modified() || self.balance.is_modified() || self.bytecode.is_modified()
+    pub fn is_modified(&self) -> bool {
+        self.nonce.changed || self.balance.changed || self.bytecode.changed
+    }
+
+    pub fn to_account(self, address: Address) -> Account {
+        Account {
+            address,
+            nonce: self.nonce.value,
+            balance: self.balance.value,
+            bytecode: self.bytecode.value,
+        }
+    }
+
+    pub fn from_changed(account: Account) -> Self {
+        Self {
+            nonce: Change {
+                value: account.nonce,
+                changed: true,
+            },
+            balance: Change {
+                value: account.balance,
+                changed: true,
+            },
+            bytecode: Change {
+                value: account.bytecode,
+                changed: true,
+            },
+        }
+    }
+
+    pub fn from_unchanged(account: Account) -> Self {
+        Self {
+            nonce: Change {
+                value: account.nonce,
+                changed: false,
+            },
+            balance: Change {
+                value: account.balance,
+                changed: false,
+            },
+            bytecode: Change {
+                value: account.bytecode,
+                changed: false,
+            },
+        }
+    }
+}
+
+impl From<(Address, ExecutionAccountChanges)> for Account {
+    fn from((address, change): (Address, ExecutionAccountChanges)) -> Self {
+        Self {
+            address,
+            nonce: change.nonce.value,
+            balance: change.balance.value,
+            bytecode: change.bytecode.value,
+        }
     }
 }

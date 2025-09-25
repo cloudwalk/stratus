@@ -32,6 +32,23 @@ export class Account implements Addressable {
         });
     }
 
+    async signWeiTransferLegacy(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            gasPrice: 2000000000, // 2 gwei
+            gasLimit: gasLimit,
+            nonce,
+            type: 0, // Explicitly set type 0 for legacy transaction
+        });
+    }
+
     async signWeiTransferEIP1559(
         counterParty: string,
         amount: BigNumberish,
@@ -42,10 +59,28 @@ export class Account implements Addressable {
             to: counterParty,
             value: amount,
             chainId: CHAIN_ID_DEC,
-            maxFeePerGas: 0,
-            maxPriorityFeePerGas: 0,
+            maxFeePerGas: 2000000000, // 2 gwei
+            maxPriorityFeePerGas: 2000000000, // 2 gwei
             gasLimit,
             nonce,
+        });
+    }
+
+    async signWeiTransferEIP2930(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            gasPrice: 2000000000, // 2 gwei
+            gasLimit,
+            nonce,
+            type: 1,
+            accessList: [],
         });
     }
 }
