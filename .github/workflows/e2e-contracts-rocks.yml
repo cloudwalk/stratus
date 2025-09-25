@@ -29,13 +29,43 @@ on:
       - "Cargo.toml"
       - "rust-toolchain.toml"
 
+env:
+  CACHE_KEY_PREFIX: ${{ runner.os }}-v4-cargo-contracts-tests
+  CACHE_SHARED_KEY: stable-release
+  CACHE_KEY: ${{ hashFiles('**/Cargo.lock') }}
+
+
 jobs:
+  setup_cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88      
+      - name: Rust Cache - Restore shared key
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ env.CACHE_SHARED_KEY }}
+          save: false
+      - name: Rust Cache - Restore and save key
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ env.CACHE_KEY_PREFIX }}
+          key: ${{ env.CACHE_KEY }}
+          save: true
+      - name: Build all dependencies to prime the cache
+        run: cargo build --release --locked
+  
   contract_test_rocks:
     strategy:
       fail-fast: false
       matrix:
         contract: [token, pix, periphery, compound, yield, multisig, cppv2, capybara-finance, credit-agent]
     name: E2E Rocks on ${{ matrix.contract }}
+    needs: setup_cache
     runs-on: ubuntu-22.04
     timeout-minutes: 45
 
@@ -52,13 +82,10 @@ jobs:
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
-        id: cache-cargo
         with:
-          prefix-key: ${{ runner.os }}-v3-cargo
-          shared-key: stable-release
-          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
-          cache-provider: "github"
-          cache-directories: "~/.cargo/bin/"
+          prefix-key: ${{ env.CACHE_KEY_PREFIX }}
+          key: ${{ env.CACHE_KEY }}
+          save: false
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
