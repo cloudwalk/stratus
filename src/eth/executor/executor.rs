@@ -3,9 +3,10 @@ use std::mem;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use alloy_consensus::transaction::SignerRecoverable;
 #[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
+use alloy_consensus::transaction::SignerRecoverable;
+use alloy_primitives::U64;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
@@ -18,6 +19,7 @@ use tracing::info_span;
 
 use super::evm_input::InspectorInput;
 use crate::GlobalState;
+use crate::alias::AlloyTransaction;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
 use crate::eth::executor::Evm;
@@ -360,7 +362,7 @@ impl Executor {
     /// to facilitate re-execution of parallel transactions that failed
     fn execute_external_transaction(
         &self,
-        tx: ExternalTransaction,
+        mut tx: ExternalTransaction,
         receipt: ExternalReceipt,
         block_number: BlockNumber,
         block_timestamp: UnixTime,
@@ -387,14 +389,26 @@ impl Executor {
                 // re-execute transaction
                 let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
 
+                if evm_execution.is_err() {
+                    let mut tx_input: TransactionInput = tx.try_into()?;
+                    tx_input.v += U64::ONE;
+                    tx = ExternalTransaction(tx_input.into())
+                }
+
                 // handle re-execution result
                 let mut evm_execution = match evm_execution {
                     Ok(inner) => inner,
                     Err(e) => {
-                        let json_tx = to_json_string(&tx);
-                        let json_receipt = to_json_string(&receipt);
-                        tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction");
-                        return Err(e.into());
+                        let evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
+                        let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
+                        if let Ok(exec) = evm_execution {
+                            exec
+                        } else {
+                            let json_tx = to_json_string(&tx);
+                            let json_receipt = to_json_string(&receipt);
+                            tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction");
+                            return Err(e.into());
+                        }
                     }
                 };
 
@@ -496,12 +510,13 @@ impl Executor {
                 let parallel_attempt = self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Parallel, 1);
                 match parallel_attempt {
                     Ok(tx_execution) => Ok(tx_execution),
-                    Err(e) =>
+                    Err(e) => {
                         if let StratusError::Storage(StorageError::TransactionConflict(_)) = e {
                             self.execute_local_transaction_attempts(tx.clone(), EvmRoute::Serial, INFINITE_ATTEMPTS)
                         } else {
                             Err(e)
-                        },
+                        }
+                    }
                 }
             }
         };
