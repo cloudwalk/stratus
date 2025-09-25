@@ -390,6 +390,7 @@ impl Executor {
                 let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
 
                 if evm_execution.is_err() {
+                    tracing::error!(?evm_execution, from=?evm_input.from, "first attempt failed");
                     let mut tx_input: TransactionInput = tx.try_into()?;
                     tx_input.v = U64::ZERO;
                     tx = ExternalTransaction(tx_input.into())
@@ -404,6 +405,8 @@ impl Executor {
                         if let Ok(exec) = evm_execution {
                             exec
                         } else {
+                            tracing::error!(?evm_execution, from=?evm_input.from, "second attempt failed");
+
                             let mut tx_input: TransactionInput = tx.try_into()?;
                             tx_input.v = U64::ONE;
                             tx = ExternalTransaction(tx_input.into());
@@ -414,7 +417,7 @@ impl Executor {
                             } else {
                                 let json_tx = to_json_string(&tx);
                                 let json_receipt = to_json_string(&receipt);
-                                tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction");
+                                tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, from=?evm_input.from, "failed to reexecute external transaction");
                                 return Err(e.into());
                             }
                         }
