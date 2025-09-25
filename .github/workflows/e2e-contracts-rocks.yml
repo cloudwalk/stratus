@@ -43,14 +43,18 @@ env:
 jobs:
   setup_cache:
     runs-on: ubuntu-latest
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Calculate and set cache key
+        id: cache-key
         run: |
           CACHE_KEY="${{ runner.os }}-${{ env.CACHE_KEY_CONTEXT }}-${{ hashFiles('**/Cargo.lock') }}"
           echo "CACHE_KEY=$CACHE_KEY" >> $GITHUB_ENV
+          echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -102,7 +106,7 @@ jobs:
       - name: Rust Restore Cache
         uses: actions/cache/restore@v4
         with:
-          key: ${{ env.CACHE_KEY }}
+          key: ${{ needs.setup_cache.outputs.cache-key }}
           path: ${{ env.CACHE_PATH }}
 
       - name: Install libsasl2-dev libssl-dev
