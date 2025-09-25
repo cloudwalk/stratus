@@ -11,3 +11,9 @@ impl Default for UnixTimeNow {
         Self(UnixTime::now())
     }
 }
+
+impl From<UnixTime> for UnixTimeNow {
+    fn from(value: UnixTime) -> Self {
+        Self(value)
+    }
+}
