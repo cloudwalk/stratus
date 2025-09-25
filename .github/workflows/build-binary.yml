@@ -53,7 +53,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ env.CACHE_SHARED_KEY }}
-          save: true
+          save-if: true
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev

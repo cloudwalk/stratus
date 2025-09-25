@@ -51,13 +51,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ env.CACHE_SHARED_KEY }}
-          save: false
+          save-if: false
       - name: Rust Cache - Restore and save key
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: ${{ env.CACHE_KEY_PREFIX }}
           key: ${{ env.CACHE_KEY }}
-          save: true
+          save-if: true
       - name: Build all dependencies to prime the cache
         run: cargo build --release --locked
 
@@ -91,7 +91,7 @@ jobs:
         with:
           prefix-key: ${{ env.CACHE_KEY_PREFIX }}
           key: ${{ env.CACHE_KEY }}
-          save: false
+          save-if: false
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
