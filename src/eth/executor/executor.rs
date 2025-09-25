@@ -306,6 +306,8 @@ impl Executor {
         let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
         tracing::info!(block_number = %block.number(), "reexecuting external block");
 
+        self.storage.set_pending_from_external(&block);
+
         // track pending block
         let block_number = block.number();
         let block_timestamp = block.timestamp();
@@ -359,7 +361,8 @@ impl Executor {
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
-        let evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
+        let tx_input = tx.try_into()?;
+        let mut evm_input = EvmInput::from_eth_transaction(&tx_input, &self.storage.read_pending_block_header().0);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
@@ -372,9 +375,9 @@ impl Executor {
                 let mut evm_execution = match evm_execution {
                     Ok(inner) => inner,
                     Err(e) => {
-                        let json_tx = to_json_string(&tx);
+                        let json_tx = to_json_string(&tx_input);
                         let json_receipt = to_json_string(&receipt);
-                        tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, "failed to reexecute external transaction");
+                        tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.hash, %json_tx, %json_receipt, "failed to reexecute external transaction");
                         return Err(e.into());
                     }
                 };
@@ -384,14 +387,14 @@ impl Executor {
 
                 // ensure it matches receipt before saving
                 if let Err(e) = evm_execution.execution.compare_with_receipt(&receipt) {
-                    let json_tx = to_json_string(&tx);
+                    let json_tx = to_json_string(&tx_input);
                     let json_receipt = to_json_string(&receipt);
                     let json_execution_logs = to_json_string(&evm_execution.execution.logs);
-                    tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
+                    tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.hash, %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
                     return Err(e);
                 };
 
-                TransactionExecution::new(tx.try_into()?, evm_input, evm_execution)
+                TransactionExecution::new(tx_input, evm_input, evm_execution)
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -402,7 +405,11 @@ impl Executor {
                     execution,
                     metrics: EvmExecutionMetrics::default(),
                 };
-                TransactionExecution::new(tx.try_into()?, evm_input, evm_result)
+
+                evm_input.gas_limit = tx_input.gas_limit;
+                evm_input.gas_price = tx_input.gas_price;
+
+                TransactionExecution::new(tx_input, evm_input, evm_result)
             }
         };
 

@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use parking_lot::RwLockReadGuard;
 use tracing::Span;
 
@@ -15,6 +14,7 @@ use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -36,6 +36,7 @@ use crate::eth::primitives::Wei;
 use crate::eth::primitives::test_accounts;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::TxCount;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
@@ -174,7 +175,10 @@ impl StratusStorage {
         })
     }
 
-    // TODO: make this infallible
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
+        self.temp.set_pending_from_external(block);
+    }
+
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::set_mined_block_number", %block_number).entered();
@@ -336,7 +340,7 @@ impl StratusStorage {
     fn _read_slot_pending_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         timed(|| self.cache.get_slot(address, index)).with(|m| {
             if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, %index, "slot found in cache");
+                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
                 metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Pending);
             }
         })
@@ -345,7 +349,7 @@ impl StratusStorage {
     fn _read_slot_latest_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         timed(|| self.cache.get_slot_latest(address, index)).with(|m| {
             if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, %index, "slot found in cache");
+                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
                 metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Mined);
             }
         })
@@ -375,7 +379,7 @@ impl StratusStorage {
         })?;
         Ok(match slot {
             Some(slot) => {
-                tracing::debug!(storage = %label::PERM, %address, %index, value = %slot.value, "slot found in permanent storage");
+                tracing::debug!(storage = %label::PERM, %address, %index, ?slot, "slot found in permanent storage");
                 slot
             }
             None => {
@@ -449,14 +453,11 @@ impl StratusStorage {
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.input.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.hash, "saving execution");
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.hash, changes = ?tx.result.execution.changes, "saving execution");
 
         // Log warning if a failed transaction has slot changes
         if !tx.result.execution.result.is_success() {
-            let total_slot_changes: usize = changes
-                .values()
-                .map(|account_changes| account_changes.slots.iter().filter(|(_, change)| change.is_modified()).count())
-                .sum();
+            let total_slot_changes: usize = changes.slots.len();
 
             if total_slot_changes > 0 {
                 tracing::warn!(?tx, "Failed transaction contains {} slot change(s)", total_slot_changes);
@@ -516,12 +517,12 @@ impl StratusStorage {
         })
     }
 
-    pub fn save_block(&self, block: Block, mut changes: ExecutionChanges, complete_changes: bool) -> Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, changes: ExecutionChanges) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
-        tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), "saving block");
+        tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), ?changes, "saving block");
 
         // check mined number
         let mined_number = self.read_mined_block_number();
@@ -552,18 +553,6 @@ impl StratusStorage {
 
         // save block
         let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
-        if complete_changes {
-            let addresses = changes.keys().copied().collect_vec();
-            let accounts = self.perm.read_accounts(addresses)?;
-            for (addr, acc) in accounts {
-                match changes.entry(addr) {
-                    std::collections::btree_map::Entry::Occupied(mut entry) => {
-                        entry.get_mut().update_empty_values(acc);
-                    }
-                    std::collections::btree_map::Entry::Vacant(_) => unreachable!("we got the addresses from the changes"),
-                }
-            }
-        }
 
         timed(|| {
             let guard = self.transient_state_lock.write();
@@ -597,7 +586,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(Block, ExecutionChanges)>, StorageError> {
+    pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_with_changes", %filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading block with changes");
@@ -817,7 +806,7 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
-        self.save_block(genesis_block, ExecutionChanges::default(), false)?;
+        self.save_block(genesis_block, ExecutionChanges::default())?;
 
         // accounts
         self.save_accounts(genesis_accounts)?;
