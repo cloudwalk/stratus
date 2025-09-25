@@ -1,3 +1,4 @@
+use alloy_consensus::transaction::SignerRecoverable;
 use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use display_json::DebugAsJson;
@@ -148,7 +149,7 @@ impl EvmInput {
     /// Successful external transactions executes with max gas and zero gas price to ensure we will have the same execution result.
     pub fn from_external(tx: &ExternalTransaction, receipt: &ExternalReceipt, block_number: BlockNumber, block_timestamp: UnixTime) -> anyhow::Result<Self> {
         Ok(Self {
-            from: tx.inner.signer().into(),
+            from: tx.inner.recover_signer()?.into(),
             to: tx.inner.to().map_into(),
             value: tx.inner.value().into(),
             data: tx.inner.input().clone().into(),
