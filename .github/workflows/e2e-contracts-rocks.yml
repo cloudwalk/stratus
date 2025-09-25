@@ -30,9 +30,14 @@ on:
       - "rust-toolchain.toml"
 
 env:
-  CACHE_KEY_PREFIX: ${{ runner.os }}-v4-cargo-contracts-tests
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY: ${{ hashFiles('**/Cargo.lock') }}
+  CACHE_KEY_CONTEXT: v4-cargo-contracts-tests
+  CACHE_PATH: |
+    ~/.cargo/registry/index/
+    ~/.cargo/registry/cache/
+    ~/.cargo/git/db/
+    target/
+  CACHE_KEY: tests
 
 
 jobs:
@@ -41,28 +46,34 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Calculate and set cache key
+        run: |
+          CACHE_KEY="${{ runner.os }}-${{ env.CACHE_KEY_CONTEXT }}-${{ hashFiles('**/Cargo.lock') }}"
+          echo "CACHE_KEY=$CACHE_KEY" >> $GITHUB_ENV
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88      
-      - name: Rust Cache - Restore shared key
-        uses: actions/cache@v4
+
+      - name: Rust Cache - Restore workflow cache
+        uses: actions/cache/restore@v4
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ env.CACHE_SHARED_KEY }}
-          restore-keys: ${{ env.CACHE_SHARED_KEY }}
-          save-if: false
-      - name: Rust Cache - Restore and save key
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ env.CACHE_KEY_PREFIX }}
+          path: ${{ env.CACHE_PATH }}
           key: ${{ env.CACHE_KEY }}
+          restore-keys: ${{ env.CACHE_SHARED_KEY }}
+      - name: Debug cache key
+        run: echo "CACHE_KEY=$CACHE_KEY"
+
       - name: Build all dependencies to prime the cache
         run: cargo build --release --locked
+      
+      - name: Rust Cache - Save workflow cache
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ env.CACHE_KEY }}
+          path: ${{ env.CACHE_PATH }}
   
   contract_test_rocks:
     strategy:
@@ -85,11 +96,11 @@ jobs:
       - name: Set up Rust
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Rust Restore Cache
+        uses: actions/cache/restore@v4
         with:
-          prefix-key: ${{ env.CACHE_KEY_PREFIX }}
           key: ${{ env.CACHE_KEY }}
+          path: ${{ env.CACHE_PATH }}
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
