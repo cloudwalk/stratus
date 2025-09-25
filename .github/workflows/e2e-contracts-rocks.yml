@@ -148,11 +148,9 @@ jobs:
         run: cargo install killport@1.1.0 wait-service@0.3.1
 
       - name: Set up dependencies
-        # if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         uses: taiki-e/install-action@v2
         with:
-          tool: |
-            cargo-llvm-cov@0.6.14
+          tool: cargo-llvm-cov@0.6.14
 
       - name: Clone ${{ matrix.contract }} repository
         run: just contracts-clone --${{ matrix.contract }}

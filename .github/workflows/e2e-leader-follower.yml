@@ -159,8 +159,7 @@ jobs:
         # if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         uses: taiki-e/install-action@v2
         with:
-          tool: |
-            cargo-llvm-cov@0.6.14
+          tool: cargo-llvm-cov@0.6.14
 
       - name: Install Python 3.12
         uses: actions/setup-python@v4
