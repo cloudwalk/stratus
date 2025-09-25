@@ -26,20 +26,14 @@ on:
         required: true
 
 env:
-  CACHE_KEY_PREFIX: ${{ runner.os }}-v4-cargo-contracts-tests
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY: ${{ hashFiles('**/Cargo.lock') }}
-
+  CACHE_PATH: |
+    ~/.cargo/registry/index/
+    ~/.cargo/registry/cache/
+    ~/.cargo/git/db/
+    target/
 
 jobs:
-  setup_cache:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Build all dependencies to prime the cache
-        run: cargo build --release --locked
-
   setup_and_test:
     name: Setup and Run E2E
     runs-on: ubuntu-22.04
@@ -54,22 +48,10 @@ jobs:
           toolchain: 1.88
 
       - name: Rust Cache - Restore shared key
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ inputs.cache_key || env.CACHE_SHARED_KEY }}
-          restore-keys: ${{ inputs.cache_key || env.CACHE_SHARED_KEY }}
-          save-if: false
-
-      - name: Rust Cache - Restore and save key
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ env.CACHE_KEY_PREFIX }}
-          key: ${{ env.CACHE_KEY }}
+          path: ${{ env.CACHE_PATH }}
+          key: ${{ env.CACHE_SHARED_KEY }}
   
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
@@ -94,11 +76,14 @@ jobs:
       - name: Install docker docker-compose
         run: sudo apt-get install docker-compose -y
 
-      - name: Set up Test Dependencies
-        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
-        run: |
-          cargo install killport || true
-          cargo install wait-service || true
+      - name: Set up dependencies
+        # if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        uses: taiki-e/install-action@v2
+        with:
+          tool: |
+            cargo-llvm-cov@0.6.14
+            killport
+            wait-service
 
       - name: Install Python 3.12
         uses: actions/setup-python@v4
@@ -107,10 +92,6 @@ jobs:
 
       - name: Install Poetry
         run: curl -sSL https://install.python-poetry.org | python3 -
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov@0.6.14
 
       - name: Run e2e tests
         run: ${{ inputs.justfile_env }} just run-test ${{ inputs.justfile_recipe }} ${{ inputs.justfile_args }}

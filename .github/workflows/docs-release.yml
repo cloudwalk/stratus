@@ -19,6 +19,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  CACHE_SHARED_KEY: stable-release
+  CACHE_PATH: |
+    ~/.cargo/registry/index/
+    ~/.cargo/registry/cache/
+    ~/.cargo/git/db/
+    target/
+
 jobs:
   # Build the documentation and upload as an artifact
   docs-build:
@@ -33,16 +41,12 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly-2025-05-22
           rustup component add rust-docs
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        id: cache-cargo
+      - name: Rust Cache - Restore shared key
+        uses: actions/cache/restore@v4
         with:
-          prefix-key: ${{ runner.os }}-v3-cargo
-          shared-key: nightly-debug
-          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
-          cache-provider: "github"
-          cache-directories: "~/.cargo/bin/"
-
+          path: ${{ env.CACHE_PATH }}
+          key: ${{ env.CACHE_SHARED_KEY }}
+  
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 

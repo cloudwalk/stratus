@@ -25,9 +25,12 @@ on:
 
 env:
   RETENTION_DAYS: 90
-  CACHE_KEY_PREFIX: ${{ runner.os }}-v4-cargo-contracts-tests
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY: ${{ hashFiles('**/Cargo.lock') }}
+  CACHE_PATH: |
+    ~/.cargo/registry/index/
+    ~/.cargo/registry/cache/
+    ~/.cargo/git/db/
+    target/
 
 
 jobs:
@@ -49,22 +52,10 @@ jobs:
         with:
           toolchain: 1.88
 
-      - name: Rust Cache - Restore shared key
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ env.CACHE_SHARED_KEY }}
-          restore-keys: ${{ env.CACHE_SHARED_KEY }}
-          save-if: false
-
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      - name: Build binaries
+      - name: Build Release binaries
         run: |
           cargo build --release \
             --bin stratus \
@@ -101,3 +92,14 @@ jobs:
         run: |
           echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
           echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
+
+      - name: Build Debug binaries for cache
+        run: |
+          cargo build
+
+      - name: Rust Cache - Save shared key
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CACHE_PATH }}
+          key: ${{ env.CACHE_SHARED_KEY }}
+  

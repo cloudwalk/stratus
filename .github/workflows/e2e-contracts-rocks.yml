@@ -37,11 +37,11 @@ env:
     ~/.cargo/registry/cache/
     ~/.cargo/git/db/
     target/
-  CACHE_KEY: tests
-
+  CACHE_KEY: ${ CACHE_KEY_CONTEXT }
 
 jobs:
   setup_cache:
+    name: Setup Cache for E2E Rocks tests
     runs-on: ubuntu-latest
     outputs:
       cache-key: ${{ steps.cache-key.outputs.key }}
@@ -67,6 +67,7 @@ jobs:
           path: ${{ env.CACHE_PATH }}
           key: ${{ env.CACHE_KEY }}
           restore-keys: ${{ env.CACHE_SHARED_KEY }}
+
       - name: Debug cache key
         run: echo "CACHE_KEY=$CACHE_KEY"
 
@@ -81,7 +82,7 @@ jobs:
         with:
           key: ${{ env.CACHE_KEY }}
           path: ${{ env.CACHE_PATH }}
-  
+
   contract_test_rocks:
     strategy:
       fail-fast: false
@@ -104,6 +105,7 @@ jobs:
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
 
       - name: Rust Restore Cache
+        id: cache-cargo
         uses: actions/cache/restore@v4
         with:
           key: ${{ needs.setup_cache.outputs.cache-key }}
@@ -124,14 +126,13 @@ jobs:
         run: npm install -g npm@10.8.2
 
       - name: Set up dependencies
-        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
-        run: |
-          cargo install killport || true
-          cargo install wait-service || true
-
-      - uses: taiki-e/install-action@v2
+        # if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        uses: taiki-e/install-action@v2
         with:
-          tool: cargo-llvm-cov@0.6.14
+          tool: |
+            cargo-llvm-cov@0.6.14
+            killport
+            wait-service
 
       - name: Clone ${{ matrix.contract }} repository
         run: just contracts-clone --${{ matrix.contract }}

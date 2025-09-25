@@ -23,9 +23,12 @@ on:
   workflow_dispatch:
 
 env:
-  CACHE_KEY_PREFIX: ${{ runner.os }}-v4-cargo-check-features
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY: ${{ hashFiles('**/Cargo.lock') }}
+  CACHE_PATH: |
+    ~/.cargo/registry/index/
+    ~/.cargo/registry/cache/
+    ~/.cargo/git/db/
+    target/
 
 jobs:
   check_features:
@@ -47,36 +50,25 @@ jobs:
           toolchain: 1.88
 
       - name: Rust Cache - Restore shared key
-        uses: actions/cache@v4
-        id: cache-cargo
+        uses: actions/cache/restore@v4
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
+          path: ${{ env.CACHE_PATH }}
           key: ${{ env.CACHE_SHARED_KEY }}
-          restore-keys: ${{ env.CACHE_SHARED_KEY }}
-          save-if: false
-
-      - name: Rust Cache - Restore and save key
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ${{ env.CACHE_KEY_PREFIX }}
-          key: ${{ env.CACHE_KEY }}
-
+  
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Set up Just
         uses: extractions/setup-just@v2
 
-      - name: Set up Test Dependencies
-        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
-        run: |
-          cargo install killport || true
-          cargo install wait-service || true
-          cargo install cargo-hack || true
+      - name: Set up dependencies
+        # if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        uses: taiki-e/install-action@v2
+        with:
+          tool: |
+            cargo-hack
+            killport
+            wait-service
 
       - name: Run cargo checks
         run: just check-features
