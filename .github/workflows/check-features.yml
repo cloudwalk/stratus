@@ -61,14 +61,8 @@ jobs:
       - name: Set up Just
         uses: extractions/setup-just@v2
 
-      - name: Set up dependencies
-        # if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
-        uses: taiki-e/install-action@v2
-        with:
-          tool: |
-            cargo-hack
-            killport
-            wait-service
+      - name: Install cargo tools
+        run: cargo install killport@1.1.0 wait-service@0.3.1 cargo-hack@0.6.39
 
       - name: Run cargo checks
         run: just check-features

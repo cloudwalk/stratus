@@ -34,6 +34,8 @@ on:
 env:
   CACHE_SHARED_KEY: stable-release
   CACHE_KEY_CONTEXT: v4-cargo-leader-follower-tests
+  CARGO_TOOLS_CACHE_KEY: cargo-tools-v4
+  CARGO_TOOLS_CACHE_PATH: ~/.cargo/bin
   CACHE_PATH: |
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
@@ -86,6 +88,16 @@ jobs:
           key: ${{ env.CACHE_KEY }}
           path: ${{ env.CACHE_PATH }}
 
+
+      - name: Install cargo tools
+        run: cargo install killport@1.1.0 wait-service@0.3.1
+
+      - name: Rust Cache - Save cargo tools cache
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ env.CARGO_TOOLS_CACHE_KEY }}
+          path: ${{ env.CARGO_TOOLS_CACHE_PATH }}
+
   leader_follower_test:
     strategy:
       fail-fast: false
@@ -132,14 +144,23 @@ jobs:
       - name: Install npm
         run: npm install -g npm@10.8.2
 
+      - name: Restore cargo tools cache
+        id: cache-cargo-tools
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CARGO_TOOLS_CACHE_PATH }}
+          key: ${{ env.CARGO_TOOLS_CACHE_KEY }}
+
+      - name: Install cargo tools
+        if: steps.cache-cargo-tools.outputs.cache-hit != 'true'
+        run: cargo install killport@1.1.0 wait-service@0.3.1
+
       - name: Set up dependencies
         # if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         uses: taiki-e/install-action@v2
         with:
           tool: |
             cargo-llvm-cov@0.6.14
-            killport
-            wait-service
 
       - name: Install Python 3.12
         uses: actions/setup-python@v4
