@@ -3,6 +3,7 @@ use std::mem;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use alloy_consensus::transaction::SignerRecoverable;
 #[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
@@ -392,7 +393,7 @@ impl Executor {
                     Err(e) => {
                         let json_tx = to_json_string(&tx);
                         let json_receipt = to_json_string(&receipt);
-                        tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, "failed to reexecute external transaction");
+                        tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction");
                         return Err(e.into());
                     }
                 };
