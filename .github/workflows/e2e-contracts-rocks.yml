@@ -110,8 +110,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # - name: Set up Rust
+      #   run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
+
       - name: Set up Rust
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
