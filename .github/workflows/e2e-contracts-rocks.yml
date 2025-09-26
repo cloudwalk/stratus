@@ -129,31 +129,31 @@ jobs:
       - name: Install npm
         run: npm install -g npm@10.8.2
 
-      - name: Restore cargo tools cache
-        id: cache-cargo-tools
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.CARGO_TOOLS_CACHE_PATH }}
-          key: ${{ env.CARGO_TOOLS_CACHE_KEY }}
+      # - name: Restore cargo tools cache
+      #   id: cache-cargo-tools
+      #   uses: actions/cache/restore@v4
+      #   with:
+      #     path: ${{ env.CARGO_TOOLS_CACHE_PATH }}
+      #     key: ${{ env.CARGO_TOOLS_CACHE_KEY }}
 
-      - name: Install cargo tools
-        if: steps.cache-cargo-tools.outputs.cache-hit != 'true'
-        run: cargo install killport@1.1.0 wait-service@0.3.1
+      # - name: Install cargo tools
+      #   if: steps.cache-cargo-tools.outputs.cache-hit != 'true'
+      #   run: cargo install killport@1.1.0 wait-service@0.3.1
 
-      - name: Set up dependencies
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov@0.6.14
+      # - name: Set up dependencies
+      #   uses: taiki-e/install-action@v2
+      #   with:
+      #     tool: cargo-llvm-cov@0.6.14
   
       - name: Clone ${{ matrix.contract }} repository
         run: just contracts-clone --${{ matrix.contract }}
 
-      - name: Rust Restore Cache
-        id: cache-cargo
-        uses: actions/cache/restore@v4
-        with:
-          key: ${{ needs.setup_cache.outputs.cache-key }}
-          path: ${{ env.CACHE_PATH }}
+      # - name: Rust Restore Cache
+      #   id: cache-cargo
+      #   uses: actions/cache/restore@v4
+      #   with:
+      #     key: ${{ needs.setup_cache.outputs.cache-key }}
+      #     path: ${{ env.CACHE_PATH }}
 
       - name: Build
         run: cargo build --features dev
