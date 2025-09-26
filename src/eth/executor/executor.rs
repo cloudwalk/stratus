@@ -403,7 +403,7 @@ impl Executor {
                 let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending, ReadKind::Transaction)?;
                 if tx_input.nonce != sender.nonce {
                     bail!(
-                        "external failed transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
+                        "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
                         tx_input.signer,
                         tx_input.nonce,
                         sender.nonce
