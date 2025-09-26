@@ -155,6 +155,9 @@ jobs:
           key: ${{ needs.setup_cache.outputs.cache-key }}
           path: ${{ env.CACHE_PATH }}
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Run e2e tests
         run: just run-test contracts-test-stratus --${{ matrix.contract }}
         env:
