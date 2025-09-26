@@ -578,7 +578,7 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::read_block", %filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading block");
 
-        timed(|| self.perm.read_block(filter)).with(|m| {
+        timed(|| self.perm.read_block(`filter)).with(|m| {
             metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read block");
