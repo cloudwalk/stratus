@@ -6,6 +6,7 @@ use std::sync::Arc;
 use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
+use anyhow::bail;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
 use tracing::Span;
@@ -400,6 +401,14 @@ impl Executor {
             // failed external transaction, re-create from receipt without re-executing
             false => {
                 let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending, ReadKind::Transaction)?;
+                if tx_input.nonce != sender.nonce {
+                    bail!(
+                        "external failed transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
+                        tx_input.signer,
+                        tx_input.nonce,
+                        sender.nonce
+                    );
+                }
                 let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
                 let evm_result = EvmExecutionResult {
                     execution,
