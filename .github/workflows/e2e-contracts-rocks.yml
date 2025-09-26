@@ -121,16 +121,16 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      - name: Set up Just
-        uses: extractions/setup-just@v2
+      # - name: Set up Just
+      #   uses: extractions/setup-just@v2
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .tool-versions
+      # - name: Install Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version-file: .tool-versions
 
-      - name: Install npm
-        run: npm install -g npm@10.8.2
+      # - name: Install npm
+      #   run: npm install -g npm@10.8.2
 
       # - name: Restore cargo tools cache
       #   id: cache-cargo-tools
@@ -148,8 +148,8 @@ jobs:
       #   with:
       #     tool: cargo-llvm-cov@0.6.14
   
-      - name: Clone ${{ matrix.contract }} repository
-        run: just contracts-clone --${{ matrix.contract }}
+      # - name: Clone ${{ matrix.contract }} repository
+      #   run: just contracts-clone --${{ matrix.contract }}
 
       - name: Rust Restore Cache
         id: cache-cargo
