@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
+use anyhow::bail;
 use futures::StreamExt;
 use futures::try_join;
 use itertools::Itertools;
@@ -260,7 +261,7 @@ impl Importer {
                             _ => {
                                 tracing::error!(reason = ?e, "transaction failed");
                                 GlobalState::shutdown_from("Importer (FakeMiner)", "Transaction Failed");
-                                return Err(anyhow!(e));
+                                bail!(e);
                             }
                         }
                     }
@@ -525,16 +526,16 @@ impl Importer {
             while let Some((mut block, mut receipts)) = tasks.next().await {
                 let block_number = block.number();
                 let BlockTransactions::Full(transactions) = &mut block.transactions else {
-                    return Err(anyhow!("expected full transactions, got hashes or uncle"));
+                    bail!("expected full transactions, got hashes or uncle");
                 };
 
                 if transactions.len() != receipts.len() {
-                    return Err(anyhow!(
+                    bail!(
                         "block {} has mismatched transaction and receipt length: {} transactions but {} receipts",
                         block_number,
                         transactions.len(),
                         receipts.len()
-                    ));
+                    );
                 }
 
                 // Stably sort transactions and receipts by transaction_index
@@ -684,7 +685,7 @@ impl Consensus for Importer {
         let last_fetched_time = LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
 
         if last_fetched_time == 0 {
-            return Err(anyhow::anyhow!("stratus has not been able to connect to the leader yet"));
+            bail!("stratus has not been able to connect to the leader yet");
         }
 
         let elapsed = chrono::Utc::now().timestamp() as u64 - last_fetched_time;

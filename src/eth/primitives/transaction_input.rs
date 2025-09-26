@@ -15,7 +15,7 @@ use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
-use anyhow::anyhow;
+use anyhow::bail;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Fake;
@@ -145,7 +145,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         Ok(signer) => Address::from(signer),
         Err(e) => {
             tracing::warn!(reason = ?e, "failed to recover transaction signer");
-            return Err(anyhow!("Transaction signer cannot be recovered. Check the transaction signature is valid."));
+            bail!("Transaction signer cannot be recovered. Check the transaction signature is valid.");
         }
     };
 
