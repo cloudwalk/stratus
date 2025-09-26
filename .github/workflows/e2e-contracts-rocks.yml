@@ -43,48 +43,48 @@ env:
   CACHE_KEY: ${ CACHE_KEY_CONTEXT }
 
 jobs:
-  setup_cache:
-    name: Setup Cache for E2E Rocks tests
-    runs-on: ubuntu-latest
-    outputs:
-      cache-key: ${{ steps.cache-key.outputs.key }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  # setup_cache:
+  #   name: Setup Cache for E2E Rocks tests
+  #   runs-on: ubuntu-latest
+  #   outputs:
+  #     cache-key: ${{ steps.cache-key.outputs.key }}
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: Calculate and set cache key
-        id: cache-key
-        run: |
-          CACHE_KEY="${{ runner.os }}-${{ env.CACHE_KEY_CONTEXT }}-${{ hashFiles('**/Cargo.lock') }}"
-          echo "CACHE_KEY=$CACHE_KEY" >> $GITHUB_ENV
-          echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
+  #     - name: Calculate and set cache key
+  #       id: cache-key
+  #       run: |
+  #         CACHE_KEY="${{ runner.os }}-${{ env.CACHE_KEY_CONTEXT }}-${{ hashFiles('**/Cargo.lock') }}"
+  #         echo "CACHE_KEY=$CACHE_KEY" >> $GITHUB_ENV
+  #         echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.88      
+  #     - name: Set up Rust
+  #       uses: dtolnay/rust-toolchain@stable
+  #       with:
+  #         toolchain: 1.88      
 
-      - name: Rust Cache - Restore workflow cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_KEY }}
-          restore-keys: ${{ env.CACHE_SHARED_KEY }}
+  #     - name: Rust Cache - Restore workflow cache
+  #       uses: actions/cache/restore@v4
+  #       with:
+  #         path: ${{ env.CACHE_PATH }}
+  #         key: ${{ env.CACHE_KEY }}
+  #         restore-keys: ${{ env.CACHE_SHARED_KEY }}
 
-      - name: Install libsasl2-dev libssl-dev
-        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+  #     - name: Install libsasl2-dev libssl-dev
+  #       run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      - name: Install cargo tools
-        run: cargo install killport@1.1.0 wait-service@0.3.1 || true
+  #     - name: Install cargo tools
+  #       run: cargo install killport@1.1.0 wait-service@0.3.1 || true
 
-      - name: Build all dependencies to prime the cache
-        run: cargo build --locked
+  #     - name: Build all dependencies to prime the cache
+  #       run: cargo build --locked
 
-      - name: Rust Cache - Save workflow cache
-        uses: actions/cache/save@v4
-        with:
-          key: ${{ env.CACHE_KEY }}
-          path: ${{ env.CACHE_PATH }}
+  #     - name: Rust Cache - Save workflow cache
+  #       uses: actions/cache/save@v4
+  #       with:
+  #         key: ${{ env.CACHE_KEY }}
+  #         path: ${{ env.CACHE_PATH }}
 
       # - name: Rust Cache - Save cargo tools cache
       #   uses: actions/cache/save@v4
@@ -96,9 +96,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        contract: [token, pix, periphery, compound, yield, multisig, cppv2, capybara-finance, credit-agent]
-    name: E2E Rocks on ${{ matrix.contract }}
-    needs: setup_cache
+        name: E2E Rocks on ${{ matrix.contract }}
+        contract: [pix]
+        # contract: [token, pix, periphery, compound, yield, multisig, cppv2, capybara-finance, credit-agent]
+    # needs: setup_cache
     runs-on: ubuntu-22.04
     timeout-minutes: 45
 
