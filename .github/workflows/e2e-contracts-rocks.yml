@@ -31,7 +31,7 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY_CONTEXT: v4-cargo-contracts-tests
+  CACHE_KEY_CONTEXT: v5-cargo-contracts-tests
   CARGO_TOOLS_CACHE_KEY: cargo-tools-v4
   CARGO_TOOLS_CACHE_PATH: ~/.cargo/bin
   CACHE_PATH: |
