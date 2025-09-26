@@ -31,7 +31,7 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY_CONTEXT: v5-cargo-contracts-tests
+  CACHE_KEY_CONTEXT: v6-cargo-contracts-tests
   CARGO_TOOLS_CACHE_KEY: cargo-tools-v4
   CARGO_TOOLS_CACHE_PATH: ~/.cargo/bin
   CACHE_PATH: |
@@ -77,7 +77,10 @@ jobs:
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Build all dependencies to prime the cache
-        run: cargo build --locked
+        run: |
+          rustc --version
+          cargo --version
+          cargo build --locked
       
       - name: Rust Cache - Save workflow cache
         uses: actions/cache/save@v4

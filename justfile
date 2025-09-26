@@ -110,6 +110,8 @@ stratus-test *args="":
         FEATURES="dev,replication"
     fi
     echo "leader features: " $FEATURES
+    echo "cargo version: " $(cargo --version)
+    echo "rustc version: " $(rustc --version)
     cargo build --features $FEATURES
     cargo run --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
