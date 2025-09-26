@@ -177,7 +177,7 @@ run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
     source <(cargo llvm-cov show-env --export-prefix)
-    cargo llvm-cov clean --workspace
+    # cargo llvm-cov clean --workspace
     just {{recipe}} {{args}}
     result_code=$?
     echo "Killing stratus"

@@ -33,7 +33,7 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY_CONTEXT: v6-cargo-leader-follower-tests
+  CACHE_KEY_CONTEXT: v7-cargo-leader-follower-tests
   CARGO_TOOLS_CACHE_KEY: cargo-tools-v4
   CARGO_TOOLS_CACHE_PATH: ~/.cargo/bin
   CACHE_PATH: |
