@@ -434,13 +434,26 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending, ReadKind::Transaction)?;
+                let mut tx_input: TransactionInput = tx.try_into()?;
+                let mut sender = self.storage.read_account(tx_input.from, PointInTime::Pending, ReadKind::Transaction)?;
+                if sender.nonce != tx_input.nonce {
+                    tracing::warn!(?sender, ?tx_input, "sender and input nonce differ, attempting to increment v");
+
+                    tx_input.v += U64::ONE;
+                    tx = ExternalTransaction(tx_input.into());
+                    tx_input = tx.try_into()?;
+                    sender = self.storage.read_account(tx_input.from, PointInTime::Pending, ReadKind::Transaction)?;
+                    if sender.nonce != tx_input.nonce {
+                        tracing::error!(?sender, ?tx_input, "sender and input nonce differ");
+                        return Err(anyhow!("sender and input nonce differ"))
+                    }
+                }
                 let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
                 let evm_result = EvmExecutionResult {
                     execution,
                     metrics: EvmExecutionMetrics::default(),
                 };
-                TransactionExecution::new(tx.try_into()?, evm_input, evm_result)
+                TransactionExecution::new(tx_input, evm_input, evm_result)
             }
         };
 
