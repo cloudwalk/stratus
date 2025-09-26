@@ -148,12 +148,12 @@ jobs:
       - name: Clone ${{ matrix.contract }} repository
         run: just contracts-clone --${{ matrix.contract }}
 
-      # - name: Rust Restore Cache
-      #   id: cache-cargo
-      #   uses: actions/cache/restore@v4
-      #   with:
-      #     key: ${{ needs.setup_cache.outputs.cache-key }}
-      #     path: ${{ env.CACHE_PATH }}
+      - name: Rust Restore Cache
+        id: cache-cargo
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ needs.setup_cache.outputs.cache-key }}
+          path: ${{ env.CACHE_PATH }}
 
       - name: Build
         run: cargo build --features dev
