@@ -33,7 +33,7 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY_CONTEXT: v7-cargo-leader-follower-tests
+  CACHE_KEY_CONTEXT: v8-cargo-leader-follower-tests
   CARGO_TOOLS_CACHE_KEY: cargo-tools-v4
   CARGO_TOOLS_CACHE_PATH: ~/.cargo/bin
   CACHE_PATH: |
@@ -79,21 +79,17 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
+      - name: Install cargo tools
+        run: cargo install killport@1.1.0 wait-service@0.3.1
+
       - name: Build all dependencies to prime the cache
-        run: |
-          rustc --version
-          cargo --version
-          cargo build --locked
+        run: cargo build --locked
       
       - name: Rust Cache - Save workflow cache
         uses: actions/cache/save@v4
         with:
           key: ${{ env.CACHE_KEY }}
           path: ${{ env.CACHE_PATH }}
-
-
-      - name: Install cargo tools
-        run: cargo install killport@1.1.0 wait-service@0.3.1
 
       - name: Rust Cache - Save cargo tools cache
         uses: actions/cache/save@v4
