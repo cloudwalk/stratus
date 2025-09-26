@@ -1,5 +1,6 @@
 use alloy_primitives::U64;
 use alloy_primitives::U256;
+use anyhow::bail;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
@@ -37,7 +38,7 @@ impl TryFrom<i32> for Nonce {
 
     fn try_from(value: i32) -> Result<Self, Self::Error> {
         if value < 0 {
-            return Err(anyhow::anyhow!("Nonce cannot be negative"));
+            bail!("Nonce cannot be negative");
         }
         Ok(Self(U64::from(value as u32)))
     }

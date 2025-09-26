@@ -1,6 +1,7 @@
 use alloy_primitives::U64;
 use alloy_primitives::U256;
 use anyhow::anyhow;
+use anyhow::bail;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
@@ -25,7 +26,7 @@ impl TryFrom<i32> for ChainId {
 
     fn try_from(value: i32) -> Result<Self, Self::Error> {
         if value < 0 {
-            return Err(anyhow::anyhow!("ChainId cannot be negative"));
+            bail!("ChainId cannot be negative");
         }
         Ok(Self(U64::from(value as u32)))
     }
