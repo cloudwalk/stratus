@@ -115,13 +115,6 @@ jobs:
       - name: Set up Rust
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
 
-      - name: Rust Restore Cache
-        id: cache-cargo
-        uses: actions/cache/restore@v4
-        with:
-          key: ${{ needs.setup_cache.outputs.cache-key }}
-          path: ${{ env.CACHE_PATH }}
-
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
@@ -151,9 +144,16 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov@0.6.14
-
+  
       - name: Clone ${{ matrix.contract }} repository
         run: just contracts-clone --${{ matrix.contract }}
+
+      - name: Rust Restore Cache
+        id: cache-cargo
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ needs.setup_cache.outputs.cache-key }}
+          path: ${{ env.CACHE_PATH }}
 
       - name: Run e2e tests
         run: just run-test contracts-test-stratus --${{ matrix.contract }}
