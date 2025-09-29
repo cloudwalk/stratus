@@ -59,17 +59,17 @@ jobs:
           echo "CACHE_KEY=$CACHE_KEY" >> $GITHUB_ENV
           echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
 
-  #     - name: Set up Rust
-  #       uses: dtolnay/rust-toolchain@stable
-  #       with:
-  #         toolchain: 1.88      
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88      
 
-  #     - name: Rust Cache - Restore workflow cache
-  #       uses: actions/cache/restore@v4
-  #       with:
-  #         path: ${{ env.CACHE_PATH }}
-  #         key: ${{ env.CACHE_KEY }}
-  #         restore-keys: ${{ env.CACHE_SHARED_KEY }}
+      - name: Rust Cache - Restore workflow cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CACHE_PATH }}
+          key: ${{ env.CACHE_KEY }}
+          restore-keys: ${{ env.CACHE_SHARED_KEY }}
 
   #     - name: Install libsasl2-dev libssl-dev
   #       run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
