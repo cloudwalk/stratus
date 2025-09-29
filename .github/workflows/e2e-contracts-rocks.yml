@@ -71,20 +71,20 @@ jobs:
           key: ${{ env.CACHE_KEY }}
           restore-keys: ${{ env.CACHE_SHARED_KEY }}
 
-      - name: Install libsasl2-dev libssl-dev
-        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+      # - name: Install libsasl2-dev libssl-dev
+      #   run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      - name: Install cargo tools
-        run: cargo install killport@1.1.0 wait-service@0.3.1 || true
+      # - name: Install cargo tools
+      #   run: cargo install killport@1.1.0 wait-service@0.3.1 || true
 
-      - name: Build all dependencies to prime the cache
-        run: cargo build
+      # - name: Build all dependencies to prime the cache
+      #   run: cargo build
 
-      - name: Rust Cache - Save workflow cache
-        uses: actions/cache/save@v4
-        with:
-          key: ${{ env.CACHE_KEY }}
-          path: ${{ env.CACHE_PATH }}
+      # - name: Rust Cache - Save workflow cache
+      #   uses: actions/cache/save@v4
+      #   with:
+      #     key: ${{ env.CACHE_KEY }}
+      #     path: ${{ env.CACHE_PATH }}
 
       # - name: Rust Cache - Save cargo tools cache
       #   uses: actions/cache/save@v4
@@ -122,6 +122,35 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
+      - name: Rust Restore Cache
+        id: cache-cargo
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ needs.setup_cache.outputs.cache-key }}
+          path: ${{ env.CACHE_PATH }}
+
+      - name: List restored cache contents
+        run: |
+          set -eo pipefail
+          while IFS= read -r raw_path; do
+            if [ -z "$raw_path" ]; then
+              continue
+            fi
+
+            path="${raw_path/#\~/$HOME}"
+
+            if [ ! -e "$path" ]; then
+              echo "Skipping $raw_path (resolved to $path): path does not exist"
+              continue
+            fi
+
+            echo "::group::Listing $raw_path (resolved: $path)"
+            find "$path" -print
+            echo "::endgroup::"
+          done <<< "${CACHE_PATH}"
+
+      
+
       # - name: Set up Just
       #   uses: extractions/setup-just@v2
 
@@ -140,24 +169,17 @@ jobs:
       #     path: ${{ env.CARGO_TOOLS_CACHE_PATH }}
       #     key: ${{ env.CARGO_TOOLS_CACHE_KEY }}
 
-      # - name: Install cargo tools
+      - name: Install cargo tools
       #   if: steps.cache-cargo-tools.outputs.cache-hit != 'true'
-      #   run: cargo install killport@1.1.0 wait-service@0.3.1
+        run: cargo install killport@1.1.0 wait-service@0.3.1
 
-      # - name: Set up dependencies
-      #   uses: taiki-e/install-action@v2
-      #   with:
-      #     tool: cargo-llvm-cov@0.6.14
+      - name: Set up dependencies
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.6.14
   
       # - name: Clone ${{ matrix.contract }} repository
       #   run: just contracts-clone --${{ matrix.contract }}
-
-      - name: Rust Restore Cache
-        id: cache-cargo
-        uses: actions/cache/restore@v4
-        with:
-          key: ${{ needs.setup_cache.outputs.cache-key }}
-          path: ${{ env.CACHE_PATH }}
 
       - name: Build
         run: cargo build --features dev
