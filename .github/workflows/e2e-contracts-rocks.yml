@@ -49,8 +49,8 @@ jobs:
     outputs:
       cache-key: ${{ steps.cache-key.outputs.key }}
     steps:
-      # - name: Checkout code
-      #   uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Calculate and set cache key
         id: cache-key
@@ -170,11 +170,11 @@ jobs:
           RELEASE: 1
           RUST_BACKTRACE: 1
 
-      - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          fail_ci_if_error: true
-          files: target/llvm-cov/codecov/contracts-test-stratus.info
-          token: ${{ secrets.CODECOV_TOKEN }}
-          flags: contracts-rocks-${{ matrix.group }}
-          name: contracts-rocks-${{ matrix.group }}
+      # - name: Upload coverage report to Codecov
+      #   uses: codecov/codecov-action@v5
+      #   with:
+      #     fail_ci_if_error: true
+      #     files: target/llvm-cov/codecov/contracts-test-stratus.info
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #     flags: contracts-rocks-${{ matrix.group }}
+      #     name: contracts-rocks-${{ matrix.group }}
