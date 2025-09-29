@@ -380,7 +380,8 @@ impl Executor {
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
-        let evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
+        let mut evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
+        let mut old_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
@@ -402,17 +403,23 @@ impl Executor {
                 let mut evm_execution = match evm_execution {
                     Ok(inner) => inner,
                     Err(e) => {
-                        let evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
+                        evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
                         let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
                         if let Ok(exec) = evm_execution {
                             exec
                         } else {
-                            let account = self.storage.read_account(evm_input.from, PointInTime::Pending, ReadKind::Transaction)?;
-
-                            let json_tx = to_json_string(&tx);
-                            let json_receipt = to_json_string(&receipt);
-                            tracing::error!(?account, from=?evm_input.from, reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction");
-                            return Err(e.into());
+                            old_input.from = tx.inner.signer().into();
+                            evm_input = old_input;
+                            let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
+                            if let Ok(exec) = evm_execution {
+                                exec
+                            } else {
+                                let account = self.storage.read_account(evm_input.from, PointInTime::Pending, ReadKind::Transaction)?;
+                                let json_tx = to_json_string(&tx);
+                                let json_receipt = to_json_string(&receipt);
+                                tracing::error!(?account, from=?evm_input.from, reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction");
+                                return Err(e.into());
+                            }
                         }
                     }
                 };
@@ -428,8 +435,9 @@ impl Executor {
                     tracing::error!(reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
                     return Err(e);
                 };
-
-                TransactionExecution::new(tx.try_into()?, evm_input, evm_execution)
+                let mut tx: TransactionInput = tx.try_into()?;
+                tx.from = evm_input.from;
+                TransactionExecution::new(tx, evm_input, evm_execution)
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -445,7 +453,7 @@ impl Executor {
                     sender = self.storage.read_account(tx_input.from, PointInTime::Pending, ReadKind::Transaction)?;
                     if sender.nonce != tx_input.nonce {
                         tracing::error!(?sender, ?tx_input, "sender and input nonce differ");
-                        return Err(anyhow!("sender and input nonce differ"))
+                        return Err(anyhow!("sender and input nonce differ"));
                     }
                 }
                 let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
