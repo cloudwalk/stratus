@@ -149,11 +149,11 @@ jobs:
       - name: Set up Just
         uses: extractions/setup-just@v2
 
-      - name: Clone ${{ matrix.contract }} repository
-        run: just contracts-clone --${{ matrix.contract }}
+      # - name: Clone ${{ matrix.contract }} repository
+      #   run: just contracts-clone --${{ matrix.contract }}
 
-      # - name: Build
-      #   run: cargo build --features dev
+      - name: Build
+        run: cargo build --features dev
 
       - name: Run e2e tests
         run: just run-test contracts-test-stratus --${{ matrix.contract }}
