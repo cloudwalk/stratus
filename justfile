@@ -230,7 +230,7 @@ e2e-admin-password:
     for test in "enabled|test123" "disabled|"; do
         IFS="|" read -r type pass <<< "$test"
         just _log "Running admin password tests with password $type"
-        ADMIN_PASSWORD=$pass just stratus-test -a 0.0.0.0:3000 > /dev/null &
+        ADMIN_PASSWORD=$pass just stratus-test -a 0.0.0.0:3000
         just _wait_for_stratus
 
         npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
@@ -289,7 +289,7 @@ e2e-stratus block-mode="automine" test="":
 e2e-clock-stratus:
     #!/bin/bash
     just _log "Starting Stratus"
-    just stratus-test --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
+    just stratus-test --block-mode 1s -a 0.0.0.0:3000
 
     just _wait_for_stratus
 
