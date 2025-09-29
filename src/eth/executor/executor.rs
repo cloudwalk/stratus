@@ -451,8 +451,12 @@ impl Executor {
                     tx_input = tx.try_into()?;
                     sender = self.storage.read_account(tx_input.from, PointInTime::Pending, ReadKind::Transaction)?;
                     if sender.nonce != tx_input.nonce {
-                        tracing::error!(?sender, ?tx_input, "sender and input nonce differ");
-                        return Err(anyhow!("sender and input nonce differ"));
+                        tx_input.from = old_input.from;
+                        sender = self.storage.read_account(tx_input.from, PointInTime::Pending, ReadKind::Transaction)?;
+                        if sender.nonce != tx_input.nonce {
+                            tracing::error!(?sender, ?tx_input, "sender and input nonce differ");
+                            return Err(anyhow!("sender and input nonce differ"));
+                        }
                     }
                 }
                 let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
