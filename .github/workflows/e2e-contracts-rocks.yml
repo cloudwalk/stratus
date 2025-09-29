@@ -71,20 +71,20 @@ jobs:
           key: ${{ env.CACHE_KEY }}
           restore-keys: ${{ env.CACHE_SHARED_KEY }}
 
-      # - name: Install libsasl2-dev libssl-dev
-      #   run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+      - name: Install libsasl2-dev libssl-dev
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      # - name: Install cargo tools
-      #   run: cargo install killport@1.1.0 wait-service@0.3.1 || true
+      - name: Install cargo tools
+        run: cargo install killport@1.1.0 wait-service@0.3.1 || true
 
-      # - name: Build all dependencies to prime the cache
-      #   run: cargo build
+      - name: Build all dependencies to prime the cache
+        run: cargo build
 
-      # - name: Rust Cache - Save workflow cache
-      #   uses: actions/cache/save@v4
-      #   with:
-      #     key: ${{ env.CACHE_KEY }}
-      #     path: ${{ env.CACHE_PATH }}
+      - name: Rust Cache - Save workflow cache
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ env.CACHE_KEY }}
+          path: ${{ env.CACHE_PATH }}
 
       # - name: Rust Cache - Save cargo tools cache
       #   uses: actions/cache/save@v4
