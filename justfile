@@ -231,7 +231,6 @@ e2e-admin-password:
         IFS="|" read -r type pass <<< "$test"
         just _log "Running admin password tests with password $type"
         ADMIN_PASSWORD=$pass just stratus-test -a 0.0.0.0:3000
-        just _wait_for_stratus
 
         npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
         exit_code=$?
@@ -290,8 +289,6 @@ e2e-clock-stratus:
     #!/bin/bash
     just _log "Starting Stratus"
     just stratus-test --block-mode 1s -a 0.0.0.0:3000
-
-    just _wait_for_stratus
 
     just _log "Validating block time"
     ./utils/block-time-check.sh
