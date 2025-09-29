@@ -31,7 +31,7 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY_CONTEXT: v10-cargo-contracts-tests
+  CACHE_KEY_CONTEXT: v4-cargo-contracts-tests
   CARGO_TOOLS_CACHE_KEY: cargo-tools-v4
   CARGO_TOOLS_CACHE_PATH: ~/.cargo/bin
   CACHE_PATH: |
@@ -55,7 +55,7 @@ jobs:
       - name: Calculate and set cache key
         id: cache-key
         run: |
-          CACHE_KEY="${{ runner.os }}-${{ env.CACHE_KEY_CONTEXT }}-${{ hashFiles('**/Cargo.lock') }}"
+          CACHE_KEY="${ImageOS:-${{ runner.os }}}-${{ env.CACHE_KEY_CONTEXT }}-${{ hashFiles('**/Cargo.lock') }}"
           echo "CACHE_KEY=$CACHE_KEY" >> $GITHUB_ENV
           echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
 
@@ -130,39 +130,6 @@ jobs:
           restore-keys: ${{ env.CACHE_SHARED_KEY }}
           path: ${{ env.CACHE_PATH }}
 
-      - name: List restored cache contents
-        run: |
-          set -eo pipefail
-          while IFS= read -r raw_path; do
-            if [ -z "$raw_path" ]; then
-              continue
-            fi
-
-            path="${raw_path/#\~/$HOME}"
-
-            if [ ! -e "$path" ]; then
-              echo "Skipping $raw_path (resolved to $path): path does not exist"
-              continue
-            fi
-
-            echo "::group::Listing $raw_path (resolved: $path)"
-            find "$path" -print
-            echo "::endgroup::"
-          done <<< "${CACHE_PATH}"
-
-      
-
-      # - name: Set up Just
-      #   uses: extractions/setup-just@v2
-
-      # - name: Install Node.js
-      #   uses: actions/setup-node@v4
-      #   with:
-      #     node-version-file: .tool-versions
-
-      # - name: Install npm
-      #   run: npm install -g npm@10.8.2
-
       # - name: Restore cargo tools cache
       #   id: cache-cargo-tools
       #   uses: actions/cache/restore@v4
@@ -179,11 +146,11 @@ jobs:
         with:
           tool: cargo-llvm-cov@0.6.14
   
-      # - name: Clone ${{ matrix.contract }} repository
-      #   run: just contracts-clone --${{ matrix.contract }}
+      - name: Clone ${{ matrix.contract }} repository
+        run: just contracts-clone --${{ matrix.contract }}
 
-      - name: Build
-        run: cargo build --features dev
+      # - name: Build
+      #   run: cargo build --features dev
 
       - name: Run e2e tests
         run: just run-test contracts-test-stratus --${{ matrix.contract }}
