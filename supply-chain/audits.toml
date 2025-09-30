@@ -10,3 +10,10 @@ delta = "1.0.24 -> 1.0.30"
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.30"
+
+
+[[trusted.phf]]
+criteria = "safe-to-deploy"
+user-id = 51017 # Yuki Okushi (JohnTitor)
+start = "2021-06-17"
+end = "2026-09-30"
