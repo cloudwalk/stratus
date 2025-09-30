@@ -105,6 +105,7 @@ stratus *args="":
 stratus-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
+    echo "RUSTFLAGS=${RUSTFLAGS}"
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
@@ -130,6 +131,7 @@ stratus-follower *args="":
 stratus-follower-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
+    echo "RUSTFLAGS=${RUSTFLAGS}"
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
@@ -179,7 +181,8 @@ run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
     source <(cargo llvm-cov show-env --export-prefix)
-    # cargo llvm-cov clean --workspace
+    echo "RUSTFLAGS=${RUSTFLAGS}"
+    cargo llvm-cov clean --workspace
     just {{recipe}} {{args}}
     result_code=$?
     echo "Killing stratus"
