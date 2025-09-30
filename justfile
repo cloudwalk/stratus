@@ -572,6 +572,8 @@ e2e-genesis:
     npx hardhat test test/genesis/genesis.test.ts --network stratus
     killport 3000 -s sigterm
 
+set shell := ["bash", "-c"]
+
 coverage-env:
     export LLVM_COV_FLAGS=$(cargo llvm-cov show-env | grep "export RUSTFLAGS" | cut -d"'" -f2)
     if ! (echo "$RUSTFLAGS" | grep -qF -- "$LLVM_COV_FLAGS"); then
