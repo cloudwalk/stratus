@@ -83,7 +83,7 @@ jobs:
       - name: Build all dependencies to prime the cache
         shell: bash
         run: |
-          source <(cargo llvm-cov show-env --export-prefix)
+          # source <(cargo llvm-cov show-env --export-prefix)
           cargo build --features dev
 
       - name: Rust Cache - Save workflow cache
