@@ -573,11 +573,10 @@ e2e-genesis:
     killport 3000 -s sigterm
 
 coverage-env:
-    #!/bin/bash
-    @export LLVM_COV_FLAGS=$(cargo llvm-cov show-env | grep "export RUSTFLAGS" | cut -d"'" -f2)
-    @if ! (echo "$RUSTFLAGS" | grep -qF "$LLVM_COV_FLAGS"); then \
-        echo "Coverage flags not found. Sourcing llvm-cov environment..."; \
-        source <(cargo llvm-cov show-env --export-prefix); \
-    else \
-        echo "Coverage flags already set. Skipping."; \
+    export LLVM_COV_FLAGS=$(cargo llvm-cov show-env | grep "export RUSTFLAGS" | cut -d"'" -f2)
+    if ! (echo "$RUSTFLAGS" | grep -qF -- "$LLVM_COV_FLAGS"); then
+        echo "Coverage flags not found. Sourcing llvm-cov environment..."
+        source <(cargo llvm-cov show-env --export-prefix)
+    else
+        echo "Coverage flags already set. Skipping."
     fi
