@@ -128,7 +128,7 @@ stratus-follower *args="":
 # Bin: Stratus main service as follower
 stratus-follower-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    # source <(cargo llvm-cov show-env --export-prefix)
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
