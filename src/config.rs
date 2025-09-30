@@ -14,6 +14,7 @@ use strum::VariantNames;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
 
+use crate::eth::blockscout::BlockscoutConfig;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::external_rpc::ExternalRpcConfig;
 use crate::eth::follower::importer::ImporterConfig;
@@ -320,6 +321,9 @@ pub struct ImporterOfflineConfig {
 
     #[clap(flatten)]
     pub rpc_storage: ExternalRpcConfig,
+
+    #[clap(flatten)]
+    pub blockscout: Option<BlockscoutConfig>,
 
     #[deref]
     #[clap(flatten)]

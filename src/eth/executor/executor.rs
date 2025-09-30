@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 #[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
-use alloy_consensus::transaction::SignerRecoverable;
 use alloy_primitives::U64;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
@@ -19,7 +18,6 @@ use tracing::info_span;
 
 use super::evm_input::InspectorInput;
 use crate::GlobalState;
-use crate::alias::AlloyTransaction;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
 use crate::eth::executor::Evm;
@@ -296,6 +294,9 @@ pub struct Executor {
 
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
+
+    /// Optional blockscout connection for fetching transaction data.
+    blockscout: Option<Arc<crate::eth::blockscout::PostgresBlockscout>>,
 }
 
 impl Executor {
@@ -308,6 +309,25 @@ impl Executor {
             evms,
             miner,
             storage,
+            blockscout: None,
+        }
+    }
+
+    pub fn new_with_blockscout(
+        storage: Arc<StratusStorage>,
+        miner: Arc<Miner>,
+        config: ExecutorConfig,
+        blockscout: Option<Arc<crate::eth::blockscout::PostgresBlockscout>>,
+    ) -> Self {
+        tracing::info!(?config, "creating executor with blockscout");
+        let evms = Evms::spawn(Arc::clone(&storage), &config);
+        Self {
+            locks: ExecutorLocks::default(),
+            config,
+            evms,
+            miner,
+            storage,
+            blockscout,
         }
     }
 
@@ -416,11 +436,48 @@ impl Executor {
                             if let Ok(exec) = evm_execution {
                                 exec
                             } else {
-                                let account = self.storage.read_account(evm_input.from, PointInTime::Pending, ReadKind::Transaction)?;
-                                let json_tx = to_json_string(&tx);
-                                let json_receipt = to_json_string(&receipt);
-                                tracing::error!(?account, from=?evm_input.from, reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction");
-                                return Err(e.into());
+                                // Third attempt: fetch 'from' address from blockscout if available
+                                if let Some(blockscout) = &self.blockscout {
+                                    tracing::warn!(%block_number, tx_hash = %tx.hash(), "second execution attempt failed, trying blockscout fallback");
+                                    let blockscout_result = tokio::runtime::Handle::current().block_on(blockscout.read_transaction_from(tx.hash()));
+                                    match blockscout_result {
+                                        Ok(Some(from_address)) => {
+                                            tracing::info!(%block_number, tx_hash = %tx.hash(), %from_address, "fetched 'from' address from blockscout, retrying execution");
+                                            evm_input.from = from_address;
+                                            let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
+                                            if let Ok(exec) = evm_execution {
+                                                tracing::info!(%block_number, tx_hash = %tx.hash(), "execution succeeded with blockscout 'from' address");
+                                                exec
+                                            } else {
+                                                let account = self.storage.read_account(evm_input.from, PointInTime::Pending, ReadKind::Transaction)?;
+                                                let json_tx = to_json_string(&tx);
+                                                let json_receipt = to_json_string(&receipt);
+                                                tracing::error!(?account, from=?evm_input.from, reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction even with blockscout 'from' address");
+                                                return Err(e.into());
+                                            }
+                                        }
+                                        Ok(None) => {
+                                            let account = self.storage.read_account(evm_input.from, PointInTime::Pending, ReadKind::Transaction)?;
+                                            let json_tx = to_json_string(&tx);
+                                            let json_receipt = to_json_string(&receipt);
+                                            tracing::error!(?account, from=?evm_input.from, reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction, transaction not found in blockscout");
+                                            return Err(e.into());
+                                        }
+                                        Err(blockscout_err) => {
+                                            let account = self.storage.read_account(evm_input.from, PointInTime::Pending, ReadKind::Transaction)?;
+                                            let json_tx = to_json_string(&tx);
+                                            let json_receipt = to_json_string(&receipt);
+                                            tracing::error!(?account, from=?evm_input.from, reason = ?e, blockscout_error = ?blockscout_err, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction, blockscout query failed");
+                                            return Err(e.into());
+                                        }
+                                    }
+                                } else {
+                                    let account = self.storage.read_account(evm_input.from, PointInTime::Pending, ReadKind::Transaction)?;
+                                    let json_tx = to_json_string(&tx);
+                                    let json_receipt = to_json_string(&receipt);
+                                    tracing::error!(?account, from=?evm_input.from, reason = ?e, %block_number, tx_hash = %tx.hash(), %json_tx, %json_receipt, ?evm_input, "failed to reexecute external transaction");
+                                    return Err(e.into());
+                                }
                             }
                         }
                     }
