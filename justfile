@@ -104,7 +104,7 @@ stratus *args="":
 # Bin: Stratus main service as leader
 stratus-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    just coverage-env
     echo "RUSTFLAGS=${RUSTFLAGS}"
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
@@ -130,7 +130,7 @@ stratus-follower *args="":
 # Bin: Stratus main service as follower
 stratus-follower-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    just coverage-env
     echo "RUSTFLAGS=${RUSTFLAGS}"
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
@@ -148,7 +148,7 @@ rpc-downloader *args="":
 
 rpc-downloader-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    just coverage-env
     echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo build
     cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
@@ -159,7 +159,7 @@ importer-offline *args="":
 
 importer-offline-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    just coverage-env
     echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo build
     cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
@@ -180,9 +180,9 @@ test-doc name="":
 run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
-    source <(cargo llvm-cov show-env --export-prefix)
-    echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo llvm-cov clean --workspace
+    just coverage-env
+    echo "RUSTFLAGS=${RUSTFLAGS}"
     just {{recipe}} {{args}}
     result_code=$?
     echo "Killing stratus"
@@ -571,3 +571,12 @@ e2e-genesis:
     npm install
     npx hardhat test test/genesis/genesis.test.ts --network stratus
     killport 3000 -s sigterm
+
+coverage-env:
+    LLVM_COV_FLAGS := `cargo llvm-cov show-env | grep "export RUSTFLAGS" | cut -d"'" -f2`
+    @if ! (echo "$RUSTFLAGS" | grep -qF "$LLVM_COV_FLAGS"); then \
+        echo "Coverage flags not found. Sourcing llvm-cov environment..."; \
+        source <(cargo llvm-cov show-env --export-prefix); \
+    else \
+        echo "Coverage flags already set. Skipping."; \
+    fi
