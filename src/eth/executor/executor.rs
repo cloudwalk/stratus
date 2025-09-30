@@ -383,6 +383,9 @@ impl Executor {
         let mut evm_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
         let mut old_input = EvmInput::from_external(&tx, &receipt, block_number, block_timestamp)?;
         old_input.from = tx.inner.signer().into();
+        if receipt.block_number.unwrap() <= 73144361 {
+            evm_input = old_input.clone()
+        }
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
             // successful external transaction, re-execute locally
