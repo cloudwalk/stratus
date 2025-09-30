@@ -104,7 +104,7 @@ stratus *args="":
 # Bin: Stratus main service as leader
 stratus-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    # source <(cargo llvm-cov show-env --export-prefix)
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
