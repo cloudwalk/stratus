@@ -104,7 +104,7 @@ stratus *args="":
 # Bin: Stratus main service as leader
 stratus-test *args="":
     #!/bin/bash
-    just coverage-env
+    source <(just coverage-env)
     echo "RUSTFLAGS=${RUSTFLAGS}"
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
@@ -130,7 +130,7 @@ stratus-follower *args="":
 # Bin: Stratus main service as follower
 stratus-follower-test *args="":
     #!/bin/bash
-    just coverage-env
+    source <(just coverage-env)
     echo "RUSTFLAGS=${RUSTFLAGS}"
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
@@ -148,7 +148,7 @@ rpc-downloader *args="":
 
 rpc-downloader-test *args="":
     #!/bin/bash
-    just coverage-env
+    source <(just coverage-env)
     echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo build
     cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
@@ -159,7 +159,7 @@ importer-offline *args="":
 
 importer-offline-test *args="":
     #!/bin/bash
-    just coverage-env
+    source <(just coverage-env)
     echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo build
     cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
@@ -181,7 +181,7 @@ run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
     cargo llvm-cov clean --workspace
-    just coverage-env
+    source <(just coverage-env)
     echo "RUSTFLAGS=${RUSTFLAGS}"
     just {{recipe}} {{args}}
     result_code=$?
