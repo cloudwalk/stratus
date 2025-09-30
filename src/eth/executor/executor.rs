@@ -406,6 +406,23 @@ impl Executor {
         if receipt.block_number.unwrap() <= 73144361 {
             evm_input = old_input.clone()
         }
+
+        // Fetch 'from' address from blockscout if available
+        if let Some(blockscout) = &self.blockscout {
+            match tokio::runtime::Handle::current().block_on(blockscout.read_transaction_from(tx.hash())) {
+                Ok(Some(from_address)) => {
+                    tracing::debug!(%block_number, tx_hash = %tx.hash(), original_from=?evm_input.from, blockscout_from=%from_address, "using 'from' address from blockscout");
+                    evm_input.from = from_address;
+                }
+                Ok(None) => {
+                    tracing::warn!(%block_number, tx_hash = %tx.hash(), "transaction not found in blockscout, using original 'from' address");
+                }
+                Err(e) => {
+                    tracing::warn!(%block_number, tx_hash = %tx.hash(), error = ?e, "failed to fetch 'from' from blockscout, using original 'from' address");
+                }
+            }
+        }
+
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
             // successful external transaction, re-execute locally
