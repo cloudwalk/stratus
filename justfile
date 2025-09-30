@@ -575,10 +575,9 @@ e2e-genesis:
 set shell := ["bash", "-c"]
 
 coverage-env:
-    export LLVM_COV_FLAGS=$(cargo llvm-cov show-env | grep "^RUSTFLAGS=" | cut -d"'" -f2)
-    if ! (echo "$RUSTFLAGS" | grep -qF -- "$LLVM_COV_FLAGS"); then \
-        echo "Coverage flags not found. Sourcing llvm-cov environment..."; \
-        source <(cargo llvm-cov show-env --export-prefix); \
-    else \
-        echo "Coverage flags already set. Skipping."; \
+    #!/usr/bin/env bash
+    COVERAGE_FLAGS=$(env -u RUSTFLAGS cargo llvm-cov show-env 2>/dev/null | grep "^RUSTFLAGS=" | cut -d"'" -f2)
+    CURRENT_RUSTFLAGS="${RUSTFLAGS:-}"
+    if ! echo "$CURRENT_RUSTFLAGS" | grep -F -- "$COVERAGE_FLAGS" > /dev/null; then \
+        cargo llvm-cov show-env --export-prefix 2>/dev/null | grep '^export '; \
     fi
