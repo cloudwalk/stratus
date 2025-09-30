@@ -106,6 +106,20 @@ user-id = 56903
 user-login = "robjtede"
 user-name = "Rob Ede"
 
+[[publisher.phf]]
+version = "0.11.3"
+when = "2025-01-06"
+user-id = 51017
+user-login = "JohnTitor"
+user-name = "Yuki Okushi"
+
+[[publisher.phf]]
+version = "0.13.1"
+when = "2025-08-23"
+user-id = 51017
+user-login = "JohnTitor"
+user-name = "Yuki Okushi"
+
 [[publisher.unicode-normalization]]
 version = "0.1.24"
 when = "2024-09-17"
