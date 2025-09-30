@@ -577,8 +577,8 @@ set shell := ["bash", "-c"]
 coverage-env:
     export LLVM_COV_FLAGS=$(cargo llvm-cov show-env | grep "export RUSTFLAGS" | cut -d"'" -f2)
     if ! (echo "$RUSTFLAGS" | grep -qF -- "$LLVM_COV_FLAGS"); then
-        echo "Coverage flags not found. Sourcing llvm-cov environment..."
-        source <(cargo llvm-cov show-env --export-prefix)
+    echo "Coverage flags not found. Sourcing llvm-cov environment..."
+    source <(cargo llvm-cov show-env --export-prefix)
     else
-        echo "Coverage flags already set. Skipping."
+    echo "Coverage flags already set. Skipping."
     fi
