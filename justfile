@@ -110,6 +110,7 @@ stratus-test *args="":
         FEATURES="dev,replication"
     fi
     echo "leader features: " $FEATURES
+    echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo build --features $FEATURES -vv
     cargo run --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
@@ -134,6 +135,7 @@ stratus-follower-test *args="":
         FEATURES="dev,replication"
     fi
     echo "follower features: " $FEATURES
+    echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo build --features $FEATURES -vv
     LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features $FEATURES -- --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
@@ -145,6 +147,7 @@ rpc-downloader *args="":
 rpc-downloader-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
+    echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo build
     cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
 
@@ -155,6 +158,7 @@ importer-offline *args="":
 importer-offline-test *args="":
     #!/bin/bash
     source <(cargo llvm-cov show-env --export-prefix)
+    echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo build
     cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
 
