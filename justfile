@@ -144,7 +144,7 @@ rpc-downloader *args="":
 
 rpc-downloader-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    # source <(cargo llvm-cov show-env --export-prefix)
     cargo build
     cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
 
@@ -154,7 +154,7 @@ importer-offline *args="":
 
 importer-offline-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    # source <(cargo llvm-cov show-env --export-prefix)
     cargo build
     cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
 
@@ -174,7 +174,7 @@ test-doc name="":
 run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
-    source <(cargo llvm-cov show-env --export-prefix)
+    # source <(cargo llvm-cov show-env --export-prefix)
     # cargo llvm-cov clean --workspace
     just {{recipe}} {{args}}
     result_code=$?
