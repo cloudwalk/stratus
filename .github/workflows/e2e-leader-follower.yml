@@ -87,7 +87,7 @@ jobs:
         shell: bash
         run: |
           # source <(cargo llvm-cov show-env --export-prefix)
-          cargo build --locked
+          cargo build --features dev
       
       - name: Rust Cache - Save workflow cache
         uses: actions/cache/save@v4
