@@ -1184,14 +1184,6 @@ criteria = "safe-to-deploy"
 version = "2.8.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.phf]]
-version = "0.11.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.phf]]
-version = "0.12.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.phf_codegen]]
 version = "0.13.1"
 criteria = "safe-to-deploy"
