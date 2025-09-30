@@ -63,11 +63,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let miner = config.miner.init_with_mode(MinerMode::External, Arc::clone(&storage)).await?;
 
     // init blockscout if configured
-    let blockscout = if let Some(ref blockscout_config) = config.blockscout {
-        Some(blockscout_config.init().await?)
-    } else {
-        None
-    };
+    let blockscout = config.blockscout.init().await?;
 
     let executor = Arc::new(stratus::eth::executor::Executor::new_with_blockscout(
         Arc::clone(&storage),

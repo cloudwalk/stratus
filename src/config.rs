@@ -323,7 +323,7 @@ pub struct ImporterOfflineConfig {
     pub rpc_storage: ExternalRpcConfig,
 
     #[clap(flatten)]
-    pub blockscout: Option<BlockscoutConfig>,
+    pub blockscout: BlockscoutConfig,
 
     #[deref]
     #[clap(flatten)]

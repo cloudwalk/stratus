@@ -3,11 +3,9 @@ pub use postgres::PostgresBlockscoutConfig;
 
 mod postgres;
 
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
 
@@ -28,9 +26,9 @@ pub trait Blockscout: Send + Sync {
 /// Blockscout storage configuration.
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
 pub struct BlockscoutConfig {
-    /// Blockscout storage implementation.
+    /// Blockscout storage URL (postgres://...).
     #[arg(long = "blockscout-storage", env = "BLOCKSCOUT_STORAGE")]
-    pub blockscout_storage_kind: BlockscoutKind,
+    pub blockscout_storage_url: Option<String>,
 
     /// Blockscout storage number of parallel open connections.
     #[arg(long = "blockscout-storage-connections", env = "BLOCKSCOUT_STORAGE_CONNECTIONS", default_value = "2")]
@@ -45,17 +43,14 @@ pub struct BlockscoutConfig {
     pub blockscout_slow_query_warn_threshold: Duration,
 }
 
-#[derive(DebugAsJson, Clone, serde::Serialize)]
-pub enum BlockscoutKind {
-    Postgres { url: String },
-}
-
 impl BlockscoutConfig {
-    /// Initializes blockscout storage implementation.
-    pub async fn init(&self) -> anyhow::Result<Arc<PostgresBlockscout>> {
-        tracing::info!(config = ?self, "creating blockscout storage");
+    /// Initializes blockscout storage implementation if configured.
+    pub async fn init(&self) -> anyhow::Result<Option<Arc<PostgresBlockscout>>> {
+        let Some(url) = &self.blockscout_storage_url else {
+            return Ok(None);
+        };
 
-        let BlockscoutKind::Postgres { url } = &self.blockscout_storage_kind;
+        tracing::info!(config = ?self, "creating blockscout storage");
 
         let config = PostgresBlockscoutConfig {
             url: url.to_owned(),
@@ -64,18 +59,7 @@ impl BlockscoutConfig {
             slow_query_warn_threshold: self.blockscout_slow_query_warn_threshold,
         };
 
-        Ok(Arc::new(PostgresBlockscout::new(config).await?))
-    }
-}
-
-impl FromStr for BlockscoutKind {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> anyhow::Result<Self, Self::Err> {
-        match s {
-            s if s.starts_with("postgres://") => Ok(Self::Postgres { url: s.to_string() }),
-            s => Err(anyhow!("unknown blockscout storage: {}", s)),
-        }
+        Ok(Some(Arc::new(PostgresBlockscout::new(config).await?)))
     }
 }
 
