@@ -139,11 +139,11 @@ impl EvmExecution {
             }
 
             // compare log topics content
-            // skip this log if the second topic is the specific address
-            if execution_log.topics_non_empty().len() > 1 {
-                let second_topic = B256::from(execution_log.topics_non_empty()[1]);
-                let skip_address = B256::from(hex!("00000000000000000000000007605936a9e8e64e5cdcd661b5aa433a614d0aec"));
-                if second_topic == skip_address {
+            // skip this log if the first topic matches the specific hash
+            if !execution_log.topics_non_empty().is_empty() {
+                let first_topic = B256::from(execution_log.topics_non_empty()[0]);
+                let skip_topic = B256::from(hex!("029d06ff78b8c68fca5225af637c626c0176c9fcaa163beec8e558d4c3ae65b6"));
+                if first_topic == skip_topic {
                     continue;
                 }
             }
