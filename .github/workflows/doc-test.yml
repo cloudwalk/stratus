@@ -52,8 +52,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.CACHE_PATH }}
+          restore-keys: ${{ env.CACHE_SHARED_KEY }}
           key: ${{ env.CACHE_SHARED_KEY }}
-  
+
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 

@@ -51,8 +51,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.CACHE_PATH }}
+          restore-keys: ${{ env.CACHE_SHARED_KEY }}
           key: ${{ env.CACHE_SHARED_KEY }}
-  
+
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
@@ -80,7 +81,6 @@ jobs:
           cargo install wait-service
 
       - name: Set up dependencies
-        # if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov@0.6.14

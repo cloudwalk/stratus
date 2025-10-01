@@ -84,7 +84,6 @@ jobs:
         shell: bash
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
-          echo "RUSTFLAGS=${RUSTFLAGS}"
           cargo build --features dev
 
       - name: Rust Cache - Save workflow cache

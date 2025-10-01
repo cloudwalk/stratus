@@ -105,14 +105,12 @@ stratus *args="":
 stratus-test *args="":
     #!/bin/bash
     source <(just coverage-env)
-    echo "RUSTFLAGS=${RUSTFLAGS}"
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
     fi
     echo "leader features: " $FEATURES
-    echo "RUSTFLAGS=${RUSTFLAGS}"
-    cargo build --features $FEATURES -vv
+    cargo build --features $FEATURES
     cargo run --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
 
@@ -131,14 +129,12 @@ stratus-follower *args="":
 stratus-follower-test *args="":
     #!/bin/bash
     source <(just coverage-env)
-    echo "RUSTFLAGS=${RUSTFLAGS}"
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
     fi
     echo "follower features: " $FEATURES
-    echo "RUSTFLAGS=${RUSTFLAGS}"
-    cargo build --features $FEATURES -vv
+    cargo build --features $FEATURES
     LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features $FEATURES -- --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
@@ -149,7 +145,6 @@ rpc-downloader *args="":
 rpc-downloader-test *args="":
     #!/bin/bash
     source <(just coverage-env)
-    echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo build
     cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
 
@@ -160,7 +155,6 @@ importer-offline *args="":
 importer-offline-test *args="":
     #!/bin/bash
     source <(just coverage-env)
-    echo "RUSTFLAGS=${RUSTFLAGS}"
     cargo build
     cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
 
@@ -182,7 +176,6 @@ run-test recipe="" *args="":
     echo "Running test {{recipe}}"
     cargo llvm-cov clean --workspace
     source <(just coverage-env)
-    echo "RUSTFLAGS=${RUSTFLAGS}"
     just {{recipe}} {{args}}
     result_code=$?
     echo "Killing stratus"
@@ -571,8 +564,6 @@ e2e-genesis:
     npm install
     npx hardhat test test/genesis/genesis.test.ts --network stratus
     killport 3000 -s sigterm
-
-set shell := ["bash", "-c"]
 
 coverage-env:
     #!/usr/bin/env bash

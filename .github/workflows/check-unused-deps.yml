@@ -19,6 +19,14 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
 
+env:
+  CACHE_SHARED_KEY: stable-release
+  CACHE_PATH: |
+    ~/.cargo/registry/index/
+    ~/.cargo/registry/cache/
+    ~/.cargo/git/db/
+    target/
+
 jobs:
   check_unused_deps:
     name: Check for unused dependencies
@@ -38,6 +46,13 @@ jobs:
         with:
           toolchain: nightly-2025-05-22
           components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CACHE_PATH }}
+          restore-keys: ${{ env.CACHE_SHARED_KEY }}
+          key: ${{ env.CACHE_SHARED_KEY }}
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
