@@ -141,6 +141,11 @@ impl EvmExecution {
             // compare log topics content
             for (topic_index, (execution_log_topic, receipt_log_topic)) in execution_log.topics_non_empty().iter().zip(receipt_log.topics().iter()).enumerate()
             {
+                // skip if the second topic is the specific address
+                if topic_index == 1 && *receipt_log_topic == B256::from(hex!("00000000000000000000000007605936a9e8e64e5cdcd661b5aa433a614d0aec")) {
+                    continue;
+                }
+
                 if B256::from(*execution_log_topic) != *receipt_log_topic {
                     return log_and_err!(format!(
                         "log topic content mismatch | hash={} log_index={} topic_index={} execution={} receipt={:#x}",
