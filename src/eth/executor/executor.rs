@@ -518,20 +518,21 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
+                let tx_hash = tx.hash();
                 let mut tx_input: TransactionInput = tx.try_into()?;
 
                 // Fetch 'from' address from blockscout if available
                 if let Some(blockscout) = &self.blockscout {
-                    match tokio::runtime::Handle::current().block_on(blockscout.read_transaction_from(tx.hash())) {
+                    match tokio::runtime::Handle::current().block_on(blockscout.read_transaction_from(tx_hash)) {
                         Ok(Some(from_address)) => {
-                            tracing::debug!(%block_number, tx_hash = %tx.hash(), original_from=?tx_input.from, blockscout_from=%from_address, "using 'from' address from blockscout for failed transaction");
+                            tracing::debug!(%block_number, %tx_hash, original_from=?tx_input.from, blockscout_from=%from_address, "using 'from' address from blockscout for failed transaction");
                             tx_input.from = from_address;
                         }
                         Ok(None) => {
-                            tracing::warn!(%block_number, tx_hash = %tx.hash(), "transaction not found in blockscout for failed transaction, using original 'from' address");
+                            tracing::warn!(%block_number, %tx_hash, "transaction not found in blockscout for failed transaction, using original 'from' address");
                         }
                         Err(e) => {
-                            tracing::warn!(%block_number, tx_hash = %tx.hash(), error = ?e, "failed to fetch 'from' from blockscout for failed transaction, using original 'from' address");
+                            tracing::warn!(%block_number, %tx_hash, error = ?e, "failed to fetch 'from' from blockscout for failed transaction, using original 'from' address");
                         }
                     }
                 }
