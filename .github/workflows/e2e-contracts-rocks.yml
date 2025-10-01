@@ -129,14 +129,23 @@ jobs:
 
       - name: Install cargo tools
         run: cargo install killport@1.1.0 wait-service@0.3.1 || true
-
-      - name: Set up dependencies
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov@0.6.14
   
       - name: Set up Just
         uses: extractions/setup-just@v2
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+
+      - name: Install npm
+        run: npm install -g npm@10.8.2
+
+      - name: Set up dependencies
+        uses: taiki-e/install-action@v2
+        if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
+        with:
+          tool: cargo-llvm-cov@0.6.14
 
       - name: Clone ${{ matrix.contract }} repository
         run: just contracts-clone --${{ matrix.contract }}
