@@ -117,7 +117,8 @@ impl EvmExecution {
         const SKIP_VALIDATION_TOPIC: [u8; 32] = hex!("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c");
         for receipt_log in receipt_logs.iter() {
             if let Some(first_topic) = receipt_log.topics().first() {
-                if first_topic.as_ref() == SKIP_VALIDATION_TOPIC {
+                let skip_topic = B256::from(SKIP_VALIDATION_TOPIC);
+                if *first_topic == skip_topic {
                     return Ok(());
                 }
             }
