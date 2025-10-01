@@ -9,7 +9,7 @@ use crate::eth::primitives::Hash;
 
 /// A collection of [`ExternalReceipt`].
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ExternalReceipts(HashMap<Hash, ExternalReceipt>);
+pub struct ExternalReceipts(HashMap<Hash, ExternalReceipt, hash_hasher::HashBuildHasher>);
 
 impl ExternalReceipts {
     /// Tries to remove a receipt by its hash.
@@ -18,7 +18,7 @@ impl ExternalReceipts {
             Some(receipt) => Ok(receipt),
             None => {
                 tracing::error!(%tx_hash, "receipt is missing for hash");
-                Err(anyhow!("receipt missing for hash {}", tx_hash))
+                Err(anyhow!("receipt missing for hash {tx_hash}"))
             }
         }
     }
@@ -39,7 +39,7 @@ impl Dummy<Faker> for ExternalReceipts {
 
 impl From<Vec<ExternalReceipt>> for ExternalReceipts {
     fn from(receipts: Vec<ExternalReceipt>) -> Self {
-        let mut receipts_by_hash = HashMap::with_capacity(receipts.len());
+        let mut receipts_by_hash = HashMap::with_capacity_and_hasher(receipts.len(), hash_hasher::HashBuildHasher::default());
         for receipt in receipts {
             receipts_by_hash.insert(receipt.hash(), receipt);
         }

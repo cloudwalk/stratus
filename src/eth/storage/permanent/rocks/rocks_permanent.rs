@@ -29,6 +29,7 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::SleepReason;
 use crate::ext::spawn;
 use crate::ext::traced_sleep;
@@ -62,7 +63,7 @@ impl RocksPermanentStorage {
         tracing::info!("setting up rocksdb storage");
 
         // Check file descriptor limit before proceeding with RocksDB initialization
-        Self::check_file_descriptor_limit(file_descriptors_limit).map_err(|err| anyhow::anyhow!("{}", err))?;
+        Self::check_file_descriptor_limit(file_descriptors_limit).map_err(|err| anyhow::anyhow!("{err}"))?;
 
         let path = if let Some(prefix) = db_path_prefix {
             // run some checks on the given prefix
@@ -184,7 +185,7 @@ impl RocksPermanentStorage {
         block.map_err(|err| StorageError::RocksError { err })
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(Block, ExecutionChanges)>, StorageError> {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(Block, BlockChangesRocksdb)>, StorageError> {
         let result = self.state.read_block_with_changes(selection).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read block with changes in RocksPermanent");
         });

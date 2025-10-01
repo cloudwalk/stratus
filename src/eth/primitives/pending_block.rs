@@ -2,7 +2,6 @@ use display_json::DebugAsJson;
 use indexmap::IndexMap;
 
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::TransactionExecution;
@@ -13,7 +12,6 @@ pub struct PendingBlock {
     pub header: PendingBlockHeader,
     // TODO: review why we use an indexmap here but not everywhere else
     pub transactions: IndexMap<Hash, TransactionExecution>,
-    pub external_block: Option<ExternalBlock>,
 }
 
 impl PendingBlock {
@@ -22,7 +20,6 @@ impl PendingBlock {
         Self {
             header: PendingBlockHeader::new_at_now(number),
             transactions: IndexMap::new(),
-            external_block: None,
         }
     }
 

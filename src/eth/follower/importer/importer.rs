@@ -7,8 +7,10 @@ use std::time::Duration;
 
 use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
+use anyhow::bail;
 use futures::StreamExt;
 use futures::try_join;
+use itertools::Itertools;
 use tokio::sync::mpsc;
 use tokio::task::yield_now;
 use tokio::time::timeout;
@@ -29,6 +31,7 @@ use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::storage::StratusStorage;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::ext::spawn;
@@ -200,7 +203,7 @@ impl Importer {
                 let block_fetcher_chain = Arc::clone(&self.chain);
                 let task_block_fetcher = spawn(
                     "importer::block-with-changes-fetcher",
-                    Importer::start_block_with_changes_fetcher(block_fetcher_chain, backlog_tx, number),
+                    Importer::start_block_with_changes_fetcher(block_fetcher_chain, Arc::clone(storage), backlog_tx, number),
                 );
 
                 let results = try_join!(task_saver, task_block_fetcher, task_number_fetcher)?;
@@ -258,7 +261,7 @@ impl Importer {
                             _ => {
                                 tracing::error!(reason = ?e, "transaction failed");
                                 GlobalState::shutdown_from("Importer (FakeMiner)", "Transaction Failed");
-                                return Err(anyhow!(e));
+                                bail!(e);
                             }
                         }
                     }
@@ -523,16 +526,16 @@ impl Importer {
             while let Some((mut block, mut receipts)) = tasks.next().await {
                 let block_number = block.number();
                 let BlockTransactions::Full(transactions) = &mut block.transactions else {
-                    return Err(anyhow!("expected full transactions, got hashes or uncle"));
+                    bail!("expected full transactions, got hashes or uncle");
                 };
 
                 if transactions.len() != receipts.len() {
-                    return Err(anyhow!(
+                    bail!(
                         "block {} has mismatched transaction and receipt length: {} transactions but {} receipts",
                         block_number,
                         transactions.len(),
                         receipts.len()
-                    ));
+                    );
                 }
 
                 // Stably sort transactions and receipts by transaction_index
@@ -566,6 +569,7 @@ impl Importer {
     /// Retrieves blocks with changes.
     async fn start_block_with_changes_fetcher(
         chain: Arc<BlockchainClient>,
+        storage: Arc<StratusStorage>,
         backlog_tx: mpsc::Sender<(Block, ExecutionChanges)>,
         mut importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
@@ -598,14 +602,31 @@ impl Importer {
 
             // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
-            while let Some(block) = tasks.next().await {
-                if backlog_tx.send(block).await.is_err() {
+            while let Some((block, changes)) = tasks.next().await {
+                let changes = create_execution_changes(&storage, changes)?;
+                if backlog_tx.send((block, changes)).await.is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());
                 }
             }
         }
     }
+}
+
+fn create_execution_changes(storage: &Arc<StratusStorage>, changes: BlockChangesRocksdb) -> anyhow::Result<ExecutionChanges> {
+    let addresses = changes.account_changes.keys().copied().map_into().collect_vec();
+    let accounts = storage.perm.read_accounts(addresses)?;
+    let mut exec_changes = changes.to_incomplete_execution_changes();
+    for (addr, acc) in accounts {
+        match exec_changes.accounts.entry(addr) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                let item = entry.get_mut();
+                item.apply_original(acc);
+            }
+            std::collections::hash_map::Entry::Vacant(_) => unreachable!("we got the addresses from the changes"),
+        }
+    }
+    Ok(exec_changes)
 }
 
 // -----------------------------------------------------------------------------
@@ -634,7 +655,7 @@ async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: Bl
     }
 }
 
-async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (Block, ExecutionChanges) {
+async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (Block, BlockChangesRocksdb) {
     const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
@@ -661,11 +682,16 @@ async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: Bl
 
 impl Consensus for Importer {
     async fn lag(&self) -> anyhow::Result<u64> {
-        let elapsed = chrono::Utc::now().timestamp() as u64 - LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
+        let last_fetched_time = LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
+
+        if last_fetched_time == 0 {
+            bail!("stratus has not been able to connect to the leader yet");
+        }
+
+        let elapsed = chrono::Utc::now().timestamp() as u64 - last_fetched_time;
         if elapsed > 4 {
             Err(anyhow::anyhow!(
-                "too much time elapsed without communicating with the leader. elapsed: {}s",
-                elapsed
+                "too much time elapsed without communicating with the leader. elapsed: {elapsed}s"
             ))
         } else {
             Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number().as_u64())

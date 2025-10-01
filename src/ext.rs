@@ -185,7 +185,7 @@ pub fn parse_duration(s: &str) -> anyhow::Result<Duration> {
     }
 
     // error
-    Err(anyhow!("invalid duration format: {}", s))
+    Err(anyhow!("invalid duration format: {s}"))
 }
 
 // -----------------------------------------------------------------------------
@@ -440,4 +440,23 @@ impl<T> WatchReceiverExt<T> for tokio::sync::watch::Receiver<T> {
             }
         }
     }
+}
+
+#[macro_export]
+macro_rules! gen_enum_variant_snapshot_tests {
+    ($type:ty) => {
+        paste::paste! {
+            #[test]
+            fn [<test_ $type:snake _bincode>]() -> anyhow::Result<()> {
+                use anyhow::Context;
+
+                use $crate::eth::storage::permanent::rocks::test_utils::EnumCoverageDropBombChecker;
+                use $crate::eth::storage::permanent::rocks::test_utils::{self};
+
+                let mut checker = EnumCoverageDropBombChecker::<$type>::new();
+                test_utils::verify_fixtures(&mut checker, "primitives").context("Failed verifying fixtures for $type")?;
+                Ok(())
+            }
+        }
+    };
 }

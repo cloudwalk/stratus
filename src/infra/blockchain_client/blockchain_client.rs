@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Context;
+use anyhow::bail;
 use jsonrpsee::core::ClientError;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::client::Subscription;
@@ -19,7 +20,6 @@ use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalBlockWithReceipts;
 use crate::eth::primitives::ExternalReceipt;
@@ -28,6 +28,7 @@ use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::RpcClientApp;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::to_json_value;
 use crate::infra::tracing::TracingExt;
@@ -172,13 +173,13 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number with changes.
-    pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(Block, ExecutionChanges)>> {
+    pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(Block, BlockChangesRocksdb)>> {
         tracing::debug!(%block_number, "fetching block with changes");
 
         let number = to_json_value(block_number);
         let result = self
             .http
-            .request::<Option<(Block, ExecutionChanges)>, _>("stratus_getBlockWithChanges", [number])
+            .request::<Option<(Block, BlockChangesRocksdb)>, _>("stratus_getBlockWithChanges", [number])
             .await;
 
         match result {
@@ -276,7 +277,7 @@ impl BlockchainClient {
         let mut first_attempt = true;
         loop {
             if GlobalState::is_shutdown_warn(TASK_NAME) {
-                return Err(anyhow::anyhow!("shutdown warning"));
+                bail!("shutdown warning");
             };
 
             let ws_read = self.require_ws().await?;

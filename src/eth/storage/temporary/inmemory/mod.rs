@@ -6,6 +6,7 @@ use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
@@ -46,6 +47,10 @@ impl InMemoryTemporaryStorage {
     #[cfg(feature = "dev")]
     pub fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
         self.transaction_storage.set_pending_block_header(block_number)
+    }
+
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
+        self.transaction_storage.set_pending_from_external(block);
     }
 
     pub fn save_pending_execution(&self, tx: TransactionExecution, is_local: bool) -> Result<(), StorageError> {
@@ -116,19 +121,19 @@ pub struct InMemoryTemporaryStorageState {
     pub block: PendingBlock,
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
-    pub accounts: ExecutionChanges,
+    pub block_changes: ExecutionChanges,
 }
 
 impl InMemoryTemporaryStorageState {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
             block: PendingBlock::new_at_now(block_number),
-            accounts: ExecutionChanges::new(),
+            block_changes: ExecutionChanges::default(),
         }
     }
 
     pub fn reset(&mut self) {
         self.block = PendingBlock::new_at_now(1.into());
-        self.accounts.clear();
+        self.block_changes = ExecutionChanges::default();
     }
 }

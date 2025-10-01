@@ -1,4 +1,5 @@
 use alloy_primitives::U64;
+use anyhow::bail;
 use display_json::DebugAsJson;
 use fake::Dummy;
 use fake::Faker;
@@ -57,7 +58,7 @@ impl TryFrom<i32> for Gas {
 
     fn try_from(value: i32) -> Result<Self, Self::Error> {
         if value < 0 {
-            return Err(anyhow::anyhow!("Gas cannot be negative"));
+            bail!("Gas cannot be negative");
         }
         Ok(Self(U64::from(value as u32)))
     }

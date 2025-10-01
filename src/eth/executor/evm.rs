@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
@@ -62,7 +61,6 @@ use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
-use crate::eth::primitives::ExecutionValueChange;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::PointInTime;
@@ -72,10 +70,8 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::TransactionStage;
-use crate::eth::primitives::UnexpectedError;
 use crate::eth::storage::StratusStorage;
 use crate::ext::OptionExt;
-use crate::ext::not;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
@@ -219,7 +215,7 @@ impl Evm {
             .database
             .storage
             .read_transaction(tx_hash)?
-            .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
+            .ok_or_else(|| anyhow!("transaction not found: {tx_hash}"))?;
 
         // CREATE transactions need to be traced for blockscout to work correctly
         if tx.deployed_contract_address().is_none() && trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
@@ -410,7 +406,7 @@ impl RevmSession {
             config,
             storage,
             input: EvmInput::default(),
-            storage_changes: BTreeMap::default(),
+            storage_changes: ExecutionChanges::default(),
             metrics: EvmExecutionMetrics::default(),
         }
     }
@@ -418,7 +414,7 @@ impl RevmSession {
     /// Resets the session to be used with a new transaction.
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
-        self.storage_changes = BTreeMap::default();
+        self.storage_changes = ExecutionChanges::default();
         self.metrics = EvmExecutionMetrics::default();
     }
 }
@@ -446,15 +442,13 @@ impl Database for RevmSession {
             }
         }
 
-        // early convert response because account will be moved
-        let revm_account: AccountInfo = (&account).into();
-        // track original value, except if ignored address
-        if not(account.address.is_ignored()) {
-            self.storage_changes
-                .insert(account.address, ExecutionAccountChanges::from_original_values(account));
+        if !address.is_ignored()
+            && let std::collections::hash_map::Entry::Vacant(entry) = self.storage_changes.accounts.entry(address)
+        {
+            entry.insert(ExecutionAccountChanges::from_unchanged(account.clone()));
         }
 
-        Ok(Some(revm_account))
+        Ok(Some(account.into()))
     }
 
     fn code_by_hash(&mut self, _: B256) -> Result<RevmBytecode, StratusError> {
@@ -471,19 +465,6 @@ impl Database for RevmSession {
         // load slot from storage
         let slot = self.storage.read_slot(address, index, self.input.point_in_time, self.input.kind)?;
 
-        // track original value, except if ignored address
-        if not(address.is_ignored()) {
-            match self.storage_changes.get_mut(&address) {
-                Some(account) => {
-                    account.slots.insert(index, ExecutionValueChange::from_original(slot));
-                }
-                None => {
-                    tracing::error!(reason = "reading slot without account loaded", %address, %index);
-                    return Err(UnexpectedError::Unexpected(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address)).into());
-                }
-            };
-        }
-
         Ok(slot.value.into())
     }
 
@@ -499,9 +480,7 @@ impl DatabaseRef for RevmSession {
         // retrieve account
         let address: Address = address.into();
         let account = self.storage.read_account(address, self.input.point_in_time, self.input.kind)?;
-        let revm_account: AccountInfo = (&account).into();
-
-        Ok(Some(revm_account))
+        Ok(Some(account.into()))
     }
 
     fn storage_ref(&self, address: revm::primitives::Address, index: U256) -> Result<U256, Self::Error> {
@@ -530,15 +509,8 @@ impl DatabaseRef for RevmSession {
 
 fn parse_revm_execution(revm_result: ResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> Result<EvmExecution, StratusError> {
     let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
-    let changes = parse_revm_state(revm_result.state, execution_changes)?;
-
+    let (changes, deployed_contract_address) = parse_revm_state(revm_result.state, execution_changes)?;
     tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
-    let mut deployed_contract_address = None;
-    for (address, changes) in changes.iter() {
-        if changes.bytecode.is_modified() {
-            deployed_contract_address = Some(*address);
-        }
-    }
 
     Ok(EvmExecution {
         block_timestamp: input.block_timestamp,
@@ -575,7 +547,9 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
     }
 }
 
-fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChanges) -> Result<ExecutionChanges, StratusError> {
+fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChanges) -> Result<(ExecutionChanges, Option<Address>), StratusError> {
+    let mut deployed_contract_address = None;
+
     for (revm_address, revm_account) in revm_state {
         let address: Address = revm_address.into();
         if address.is_ignored() {
@@ -591,7 +565,12 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
             slots = %revm_account.storage.len(),
             "evm account"
         );
+
         let (account_created, account_touched) = (revm_account.is_created(), revm_account.is_touched());
+
+        if !(account_created || account_touched) {
+            continue;
+        }
 
         // parse revm types to stratus primitives
         let account: Account = (revm_address, revm_account.info).into();
@@ -604,20 +583,13 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
             })
             .collect();
 
-        // handle account created (contracts) or touched (everything else)
-        if account_created {
-            let addr = account.address;
-            let account_changes = ExecutionAccountChanges::from_modified_values(account, account_modified_slots);
-            execution_changes.insert(addr, account_changes);
-        } else if account_touched {
-            let Some(account_changes) = execution_changes.get_mut(&address) else {
-                tracing::error!(keys = ?execution_changes.keys(), %address, "account touched, but not loaded by evm");
-                return Err(UnexpectedError::Unexpected(anyhow!("Account '{}' was expected to be loaded by EVM, but it was not", address)).into());
-            };
-            account_changes.apply_modifications(account, account_modified_slots);
+        if account_created && account.bytecode.is_some() {
+            deployed_contract_address = Some(account.address);
         }
+
+        execution_changes.insert(account, account_modified_slots);
     }
-    Ok(execution_changes)
+    Ok((execution_changes, deployed_contract_address))
 }
 
 pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionStage) -> GethTrace {
