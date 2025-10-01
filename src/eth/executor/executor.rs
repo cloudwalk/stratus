@@ -427,12 +427,12 @@ impl Executor {
         let tx_execution = match receipt.is_success() {
             // successful external transaction, re-execute locally
             true => {
-                // re-execute transaction
+                // re-execute transaction (first attempt with blockscout 'from' if available)
                 let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
 
                 if evm_execution.is_err() {
                     let account = self.storage.read_account(evm_input.from, PointInTime::Pending, ReadKind::Transaction)?;
-                    tracing::error!(?account, from=?evm_input.from, "failed to reexecute external transaction (first attempt)");
+                    tracing::error!(?account, from=?evm_input.from, "failed to reexecute external transaction (first attempt with blockscout from)");
 
                     let mut tx_input: TransactionInput = tx.try_into()?;
                     tx_input.v += U64::ONE;
@@ -519,6 +519,23 @@ impl Executor {
             // failed external transaction, re-create from receipt without re-executing
             false => {
                 let mut tx_input: TransactionInput = tx.try_into()?;
+
+                // Fetch 'from' address from blockscout if available
+                if let Some(blockscout) = &self.blockscout {
+                    match tokio::runtime::Handle::current().block_on(blockscout.read_transaction_from(tx.hash())) {
+                        Ok(Some(from_address)) => {
+                            tracing::debug!(%block_number, tx_hash = %tx.hash(), original_from=?tx_input.from, blockscout_from=%from_address, "using 'from' address from blockscout for failed transaction");
+                            tx_input.from = from_address;
+                        }
+                        Ok(None) => {
+                            tracing::warn!(%block_number, tx_hash = %tx.hash(), "transaction not found in blockscout for failed transaction, using original 'from' address");
+                        }
+                        Err(e) => {
+                            tracing::warn!(%block_number, tx_hash = %tx.hash(), error = ?e, "failed to fetch 'from' from blockscout for failed transaction, using original 'from' address");
+                        }
+                    }
+                }
+
                 let mut sender = self.storage.read_account(tx_input.from, PointInTime::Pending, ReadKind::Transaction)?;
                 if sender.nonce != tx_input.nonce {
                     tracing::warn!(?sender, ?tx_input, "sender and input nonce differ, attempting to increment v");
