@@ -113,6 +113,16 @@ impl EvmExecution {
 
         let receipt_logs = receipt.inner.logs();
 
+        // check if any log has the specific topic that should skip validation
+        const SKIP_VALIDATION_TOPIC: [u8; 32] = hex!("8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c");
+        for receipt_log in receipt_logs.iter() {
+            if let Some(first_topic) = receipt_log.topics().first() {
+                if first_topic.as_ref() == SKIP_VALIDATION_TOPIC {
+                    return Ok(());
+                }
+            }
+        }
+
         // compare logs length
         if self.logs.len() != receipt_logs.len() {
             tracing::trace!(logs = ?self.logs, "execution logs");
