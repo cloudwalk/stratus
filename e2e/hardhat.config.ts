@@ -1,9 +1,30 @@
+import { HardhatUserConfig } from "hardhat/config";
+import chai, { expect } from "chai";
 import "@nomicfoundation/hardhat-toolbox";
 import "@openzeppelin/hardhat-upgrades";
-import { HardhatUserConfig } from "hardhat/config";
+import "@typechain/hardhat";
 
 const ACCOUNTS_MNEMONIC = "test test test test test test test test test test test junk";
 const MINING_INTERVAL_PATTERN = /^(\d+)s$/;
+
+// we need that because "@cloudwalk/chainshot" is an optional dependency
+// and we want to avoid errors if it's not installed
+function getMochaHooks() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { mochaHooks: mochaHooksPlugin } = require("@cloudwalk/chainshot") as typeof import("@cloudwalk/chainshot");
+    return mochaHooksPlugin({ chai });
+  } catch (error) {
+    console.error(error);
+    console.error("Init of chainshot plugin failed");
+    async function noop() {
+      return;
+    }
+    expect.startChainshot = noop;
+    expect.stopChainshot = noop;
+    return {};
+  }
+}
 
 export function defineBlockMiningIntervalInMs(blockMintingModeTitle?: string): number | undefined {
     if (blockMintingModeTitle === "external") {
@@ -63,6 +84,9 @@ const config: HardhatUserConfig = {
             },
             timeout: 40000,
         },
+    },
+    mocha: {
+        rootHooks: getMochaHooks(),
     },
 };
 
