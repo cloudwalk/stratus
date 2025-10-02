@@ -77,8 +77,8 @@ impl InmemoryTransactionTemporaryStorage {
     pub fn save_pending_execution(&self, tx: TransactionExecution, is_local: bool) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
-        if is_local && tx.evm_input != (&tx.input, &pending_block.block.header) {
-            let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
+        if is_local && tx.evm_input != (&tx.input.execution_info, &pending_block.block.header) {
+            let expected_input = EvmInput::from_eth_transaction(&tx.input.execution_info, &pending_block.block.header);
             return Err(StorageError::EvmInputMismatch {
                 expected: Box::new(expected_input),
                 actual: Box::new(tx.evm_input.clone()),

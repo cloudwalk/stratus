@@ -97,7 +97,7 @@ impl TransactionMined {
 
 impl From<TransactionMined> for AlloyTransaction {
     fn from(value: TransactionMined) -> Self {
-        let gas_price = value.input.gas_price;
+        let gas_price = value.input.execution_info.gas_price;
         let tx = AlloyTransaction::from(value.input);
 
         Self {
@@ -123,7 +123,7 @@ impl From<TransactionMined> for AlloyReceipt {
             logs_bloom: value.compute_bloom().into(),
         };
 
-        let inner = match value.input.tx_type.map(|tx| tx.as_u64()) {
+        let inner = match value.input.transaction_info.tx_type.map(|tx| tx.as_u64()) {
             Some(1) => ReceiptEnvelope::Eip2930(receipt_with_bloom),
             Some(2) => ReceiptEnvelope::Eip1559(receipt_with_bloom),
             Some(3) => ReceiptEnvelope::Eip4844(receipt_with_bloom),
@@ -133,16 +133,16 @@ impl From<TransactionMined> for AlloyReceipt {
 
         Self {
             inner,
-            transaction_hash: value.input.hash.into(),
+            transaction_hash: value.input.transaction_info.hash.into(),
             transaction_index: Some(value.transaction_index.into()),
             block_hash: Some(value.block_hash.into()),
             block_number: Some(value.block_number.as_u64()),
             gas_used: value.gas.into(),
-            effective_gas_price: value.input.gas_price,
+            effective_gas_price: value.input.execution_info.gas_price,
             blob_gas_used: None,
             blob_gas_price: None,
-            from: value.input.signer.into(),
-            to: value.input.to.map_into(),
+            from: value.input.execution_info.signer.into(),
+            to: value.input.execution_info.to.map_into(),
             contract_address: value.contract_address().map_into(),
         }
     }

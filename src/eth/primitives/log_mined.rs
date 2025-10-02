@@ -63,7 +63,7 @@ impl LogMined {
     ) -> Self {
         LogMined {
             log: mined_log,
-            transaction_hash: tx.input.hash,
+            transaction_hash: tx.input.transaction_info.hash,
             transaction_index,
             log_index,
             block_number,

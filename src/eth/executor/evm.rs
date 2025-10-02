@@ -254,7 +254,7 @@ impl Evm {
 
         // Execute all transactions before target tx_hash
         for tx in block.transactions.into_iter().sorted_by_key(|item| item.transaction_index) {
-            if tx.input.hash == tx_hash {
+            if tx.input.transaction_info.hash == tx_hash {
                 break;
             }
             let tx_input: EvmInput = tx.into();

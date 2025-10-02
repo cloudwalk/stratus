@@ -126,7 +126,7 @@ impl Block {
 
     fn calculate_transaction_root(&mut self) {
         if !self.transactions.is_empty() {
-            let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.input.hash).map(B256::from).collect();
+            let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.input.transaction_info.hash).map(B256::from).collect();
             self.header.transactions_root = ordered_trie_root(&transactions_hashes).into();
         }
     }
@@ -192,7 +192,7 @@ impl From<Block> for AlloyBlockAlloyTransaction {
 impl From<Block> for AlloyBlockB256 {
     fn from(block: Block) -> Self {
         let alloy_block: AlloyBlockB256 = block.header.into();
-        let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.hash).map(B256::from).collect();
+        let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.transaction_info.hash).map(B256::from).collect();
 
         Self {
             transactions: BlockTransactions::Hashes(transaction_hashes),
