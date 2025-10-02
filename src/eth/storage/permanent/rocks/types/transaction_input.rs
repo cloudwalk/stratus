@@ -41,7 +41,7 @@ impl From<TransactionInput> for TransactionInputRocksdb {
             hash: HashRocksdb::from(item.hash),
             nonce: NonceRocksdb::from(item.nonce),
             signer: AddressRocksdb::from(item.signer),
-            from: AddressRocksdb::from(item.from),
+            from: AddressRocksdb::from(item.signer), // TODO: remove redundant field (requires reprocessing)
             to: item.to.map(AddressRocksdb::from),
             value: WeiRocksdb::from(item.value),
             input: BytesRocksdb::from(item.input),
@@ -61,7 +61,6 @@ impl From<TransactionInputRocksdb> for TransactionInput {
             hash: item.hash.into(),
             nonce: item.nonce.into(),
             signer: item.signer.into(),
-            from: item.from.into(),
             to: item.to.map(Into::into),
             value: item.value.into(),
             input: item.input.into(),
