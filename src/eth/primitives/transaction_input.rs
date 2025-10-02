@@ -47,7 +47,6 @@ pub struct TransactionInput {
     pub hash: Hash,
     pub nonce: Nonce,
     pub signer: Address,
-    pub from: Address,
     pub to: Option<Address>,
     pub value: Wei,
     pub input: Bytes,
@@ -67,7 +66,6 @@ impl Dummy<Faker> for TransactionInput {
             hash: faker.fake_with_rng(rng),
             nonce: faker.fake_with_rng(rng),
             signer: faker.fake_with_rng(rng),
-            from: faker.fake_with_rng(rng),
             to: Some(faker.fake_with_rng(rng)),
             value: faker.fake_with_rng(rng),
             input: faker.fake_with_rng(rng),
@@ -161,7 +159,6 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         hash: Hash::from(*value.inner.tx_hash()),
         nonce: Nonce::from(value.inner.nonce()),
         signer,
-        from: signer,
         to: match value.inner.kind() {
             TxKind::Call(addr) => Some(Address::from(addr)),
             TxKind::Create => None,

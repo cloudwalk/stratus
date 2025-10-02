@@ -523,7 +523,6 @@ impl Executor {
                 %attempt,
                 tx_hash = %tx_input.hash,
                 tx_nonce = %tx_input.nonce,
-                tx_from = %tx_input.from,
                 tx_signer = %tx_input.signer,
                 tx_to = ?tx_input.to,
                 tx_data_len = %tx_input.input.len(),
