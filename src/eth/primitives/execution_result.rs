@@ -7,11 +7,12 @@ use crate::eth::codegen::error_sig_opt;
 use crate::eth::primitives::Bytes;
 
 /// Indicates how a transaction execution was finished.
-#[derive(DebugAsJson, strum::Display, Clone, PartialEq, Eq, fake::Dummy, derive_new::new, serde::Serialize, serde::Deserialize, strum::EnumString)]
+#[derive(DebugAsJson, strum::Display, Clone, PartialEq, Eq, fake::Dummy, derive_new::new, serde::Serialize, serde::Deserialize, strum::EnumString, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionResult {
     /// Finished normally (RETURN opcode).
     #[strum(to_string = "success")]
+    #[default]
     Success,
 
     /// Transaction execution finished with a reversion (REVERT opcode).

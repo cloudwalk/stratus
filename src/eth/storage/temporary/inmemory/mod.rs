@@ -53,9 +53,9 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.set_pending_from_external(block);
     }
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, is_local: bool) -> Result<(), StorageError> {
+    pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
         self.call_storage.update_state_with_transaction(&tx);
-        self.transaction_storage.save_pending_execution(tx, is_local)
+        self.transaction_storage.save_pending_execution(tx)
     }
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {

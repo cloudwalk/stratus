@@ -197,8 +197,8 @@ impl Miner {
     }
 
     /// Persists a transaction execution.
-    pub fn save_execution(&self, tx_execution: TransactionExecution, is_local: bool) -> Result<(), StratusError> {
-        let tx_hash = tx_execution.input.transaction_info.hash;
+    pub fn save_execution(&self, tx_execution: TransactionExecution) -> Result<(), StratusError> {
+        let tx_hash = tx_execution.info.hash;
 
         // track
         #[cfg(feature = "tracing")]
@@ -211,7 +211,7 @@ impl Miner {
         let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         // save execution to temporary storage
-        self.storage.save_execution(tx_execution, is_local)?;
+        self.storage.save_execution(tx_execution)?;
 
         // notify
         if self.has_pending_tx_subscribers() {
