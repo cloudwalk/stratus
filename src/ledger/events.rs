@@ -258,14 +258,14 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined
             publication_id: Uuid::now_v7(),
             publication_datetime: Utc::now(),
             account_address: *account,
-            transaction_hash: tx.input.hash,
+            transaction_hash: tx.input.transaction_info.hash,
             transaction_index: tx.transaction_index.0,
-            contract_address: tx.input.to.unwrap_or_else(|| {
-                tracing::error!(?tx.input.hash, "bug: transaction emitting transfers must have the contract address");
+            contract_address: tx.input.execution_info.to.unwrap_or_else(|| {
+                tracing::error!(?tx.input.transaction_info.hash, "bug: transaction emitting transfers must have the contract address");
                 Address::ZERO
             }),
-            function_id: tx.input.input[0..4].try_into().unwrap_or_else(|_| {
-                tracing::error!(?tx.input.hash, "bug: transaction emitting transfers must have the 4-byte signature");
+            function_id: tx.input.execution_info.input[0..4].try_into().unwrap_or_else(|_| {
+                tracing::error!(?tx.input.transaction_info.hash, "bug: transaction emitting transfers must have the 4-byte signature");
                 [0; 4]
             }),
             block_number: tx.block_number,
@@ -393,7 +393,7 @@ mod tests {
 
         // 2. generate fake tx data
         let mut tx: TransactionMined = Fake::fake(&Faker);
-        tx.input.input = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        tx.input.execution_info.input = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         let mut log_transfer1: LogMined = Fake::fake(&Faker);
         log_transfer1.log.address = token_address;
@@ -421,9 +421,9 @@ mod tests {
         // 4. assert events
         assert_eq!(events.len(), 3); // number of accounts involved in all transactions
         for event in events {
-            assert_eq!(&event.transaction_hash, &tx.input.hash);
-            assert_eq!(&event.contract_address, &tx.input.to.unwrap());
-            assert_eq!(&event.function_id[0..], &tx.input.input.0[0..4]);
+            assert_eq!(&event.transaction_hash, &tx.input.transaction_info.hash);
+            assert_eq!(&event.contract_address, &tx.input.execution_info.to.unwrap());
+            assert_eq!(&event.function_id[0..], &tx.input.execution_info.input.0[0..4]);
             assert_eq!(&event.block_number, &tx.block_number);
             assert_eq!(&event.block_datetime, &DateTime::<Utc>::from(block_timestamp));
 

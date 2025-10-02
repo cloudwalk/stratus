@@ -439,7 +439,7 @@ impl RocksStorageState {
 
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
+            txs_batch.push((transaction.input.transaction_info.hash.into(), transaction.block_number.into()));
         }
         self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
 
@@ -482,7 +482,7 @@ impl RocksStorageState {
     pub fn prepare_block_insertion(&self, block: Block, account_changes: ExecutionChanges, batch: &mut WriteBatch) -> Result<()> {
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
+            txs_batch.push((transaction.input.transaction_info.hash.into(), transaction.block_number.into()));
         }
 
         self.transactions.prepare_batch_insertion(txs_batch, batch)?;

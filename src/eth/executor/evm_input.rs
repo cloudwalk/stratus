@@ -7,12 +7,12 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
+use crate::eth::primitives::ExecutionInfo;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnixTime;
@@ -86,7 +86,7 @@ pub struct EvmInput {
 
 impl EvmInput {
     /// Creates from a transaction that was sent to Stratus with `eth_sendRawTransaction` or during Importing.
-    pub fn from_eth_transaction(input: &TransactionInput, pending_header: &PendingBlockHeader) -> Self {
+    pub fn from_eth_transaction(input: &ExecutionInfo, pending_header: &PendingBlockHeader) -> Self {
         Self {
             from: input.signer,
             to: input.to,
@@ -147,8 +147,8 @@ impl EvmInput {
     }
 }
 
-impl PartialEq<(&TransactionInput, &PendingBlockHeader)> for EvmInput {
-    fn eq(&self, other: &(&TransactionInput, &PendingBlockHeader)) -> bool {
+impl PartialEq<(&ExecutionInfo, &PendingBlockHeader)> for EvmInput {
+    fn eq(&self, other: &(&ExecutionInfo, &PendingBlockHeader)) -> bool {
         self.block_number == other.1.number
             && self.block_timestamp == *other.1.timestamp
             && self.chain_id == other.0.chain_id
@@ -163,18 +163,18 @@ impl PartialEq<(&TransactionInput, &PendingBlockHeader)> for EvmInput {
 impl From<TransactionMined> for EvmInput {
     fn from(value: TransactionMined) -> Self {
         Self {
-            from: value.input.signer,
-            to: value.input.to,
-            value: value.input.value,
-            data: value.input.input,
-            nonce: Some(value.input.nonce),
-            gas_limit: value.input.gas_limit,
+            from: value.input.execution_info.signer,
+            to: value.input.execution_info.to,
+            value: value.input.execution_info.value,
+            data: value.input.execution_info.input,
+            nonce: Some(value.input.execution_info.nonce),
+            gas_limit: value.input.execution_info.gas_limit,
             // We don't charge for transactions
             gas_price: 0,
             block_number: value.block_number,
             block_timestamp: value.block_timestamp,
             point_in_time: PointInTime::MinedPast(value.block_number),
-            chain_id: value.input.chain_id,
+            chain_id: value.input.execution_info.chain_id,
             kind: ReadKind::Transaction,
         }
     }
