@@ -36,11 +36,13 @@ use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::ext::RuintExt;
 
 fn generate_rng() -> rand::rngs::SmallRng {
+    use std::time::SystemTime;
+    use std::time::UNIX_EPOCH;
+
     use rand::SeedableRng;
-    use std::time::{SystemTime, UNIX_EPOCH};
     let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Failed to get system time").as_secs();
     rand::rngs::SmallRng::seed_from_u64(now)
-}x
+}
 
 fn fake_option<T: Dummy<Faker>>() -> Option<T> {
     let mut rng = generate_rng();
@@ -318,9 +320,9 @@ mod tests {
     #[test]
     fn test_dummy() {
         let execution_info: ExecutionInfo = Fake::fake(&Faker);
-        assert!(!execution_info.chain_id.is_none());
-        assert!(!execution_info.to.is_none());
+        assert!(execution_info.chain_id.is_some());
+        assert!(execution_info.to.is_some());
         let transaction_info: TransactionInfo = Fake::fake(&Faker);
-        assert!(!transaction_info.tx_type.is_none());
+        assert!(transaction_info.tx_type.is_some());
     }
 }
