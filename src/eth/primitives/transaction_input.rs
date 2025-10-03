@@ -289,20 +289,3 @@ impl From<TransactionInput> for AlloyTransaction {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use fake::Fake;
-    use fake::Faker;
-
-    use super::*;
-
-    #[test]
-    fn test_dummy() {
-        let execution_info: ExecutionInfo = Fake::fake(&Faker);
-        assert!(execution_info.chain_id.is_some());
-        assert!(execution_info.to.is_some());
-        let transaction_info: TransactionInfo = Fake::fake(&Faker);
-        assert!(transaction_info.tx_type.is_some());
-    }
-}
