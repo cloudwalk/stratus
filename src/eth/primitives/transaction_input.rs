@@ -17,8 +17,11 @@ use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
 use anyhow::bail;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Fake;
+#[cfg(test)]
 use fake::Faker;
 use rlp::Decodable;
 
@@ -40,6 +43,7 @@ pub struct TransactionInfo {
     pub hash: Hash,
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for TransactionInfo {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         Self {
@@ -49,7 +53,8 @@ impl Dummy<Faker> for TransactionInfo {
     }
 }
 
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Dummy)]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionInfo {
     pub chain_id: Option<ChainId>,
     pub nonce: Nonce,
@@ -74,6 +79,7 @@ impl From<Signature> for AlloySignature {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for Signature {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_faker: &Faker, rng: &mut R) -> Self {
         Self {
@@ -84,7 +90,8 @@ impl Dummy<Faker> for Signature {
     }
 }
 
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Dummy)]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct TransactionInput {
     pub transaction_info: TransactionInfo,
     pub execution_info: ExecutionInfo,

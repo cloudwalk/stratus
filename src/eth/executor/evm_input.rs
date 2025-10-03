@@ -23,7 +23,8 @@ use crate::ext::OptionExt;
 use crate::ext::not;
 
 /// EVM input data. Usually derived from a transaction or call.
-#[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, fake::Dummy, PartialEq)]
+#[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct EvmInput {
     /// Operation party address.
     ///

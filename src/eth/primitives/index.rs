@@ -6,9 +6,8 @@ use display_json::DebugAsJson;
 use crate::ext::RuintExt;
 
 /// Represents a transaction index or log index.
-#[derive(
-    DebugAsJson, derive_more::Display, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Hash, PartialOrd, Ord,
-)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_more::Add, Hash, PartialOrd, Ord)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Index(pub u64);
 
 impl Index {
