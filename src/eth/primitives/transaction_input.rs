@@ -14,12 +14,10 @@ use alloy_primitives::Signature as AlloySignature;
 use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
-use alloy_primitives::Uint;
 use alloy_rpc_types_eth::AccessList;
 use anyhow::bail;
 use display_json::DebugAsJson;
 use fake::Dummy;
-use fake::Fake;
 use fake::Faker;
 use rlp::Decodable;
 
@@ -35,39 +33,20 @@ use crate::eth::primitives::Wei;
 use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::ext::RuintExt;
 
-fn generate_rng() -> rand::rngs::SmallRng {
-    use std::time::SystemTime;
-    use std::time::UNIX_EPOCH;
-
-    use rand::SeedableRng;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Failed to get system time").as_secs();
-    rand::rngs::SmallRng::seed_from_u64(now)
-}
-
-fn fake_option<T: Dummy<Faker>>() -> Option<T> {
-    let mut rng = generate_rng();
-    Some(Faker.fake_with_rng::<T, _>(&mut rng))
-}
-
-fn fake_uint<const N: usize, const L: usize>() -> Option<Uint<N, L>> {
-    let mut rng = generate_rng();
-    Some(Uint::random_with(&mut rng))
-}
-
 #[derive(DebugAsJson, Dummy, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInfo {
-    #[dummy(expr = "fake_uint::<64, 1>()")]
+    #[dummy(expr = "crate::utils::fake_option_uint()")]
     pub tx_type: Option<U64>,
     pub hash: Hash,
 }
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Dummy)]
 pub struct ExecutionInfo {
-    #[dummy(expr = "fake_option::<ChainId>()")]
+    #[dummy(expr = "crate::utils::fake_option::<ChainId>()")]
     pub chain_id: Option<ChainId>,
     pub nonce: Nonce,
     pub signer: Address,
-    #[dummy(expr = "fake_option::<Address>()")]
+    #[dummy(expr = "crate::utils::fake_option::<Address>()")]
     pub to: Option<Address>,
     pub value: Wei,
     pub input: Bytes,
@@ -313,6 +292,7 @@ impl From<TransactionInput> for AlloyTransaction {
 
 #[cfg(test)]
 mod tests {
+    use fake::Fake;
     use fake::Faker;
 
     use super::*;
