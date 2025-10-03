@@ -14,6 +14,7 @@ use alloy_primitives::Signature as AlloySignature;
 use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
+use alloy_primitives::Uint;
 use alloy_rpc_types_eth::AccessList;
 use anyhow::bail;
 use display_json::DebugAsJson;
@@ -34,26 +35,37 @@ use crate::eth::primitives::Wei;
 use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::ext::RuintExt;
 
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+fn generate_rng() -> rand::rngs::SmallRng {
+    use rand::SeedableRng;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Failed to get system time").as_secs();
+    rand::rngs::SmallRng::seed_from_u64(now)
+}x
+
+fn fake_option<T: Dummy<Faker>>() -> Option<T> {
+    let mut rng = generate_rng();
+    Some(Faker.fake_with_rng::<T, _>(&mut rng))
+}
+
+fn fake_uint<const N: usize, const L: usize>() -> Option<Uint<N, L>> {
+    let mut rng = generate_rng();
+    Some(Uint::random_with(&mut rng))
+}
+
+#[derive(DebugAsJson, Dummy, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInfo {
+    #[dummy(expr = "fake_uint::<64, 1>()")]
     pub tx_type: Option<U64>,
     pub hash: Hash,
 }
 
-impl Dummy<Faker> for TransactionInfo {
-    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
-        Self {
-            tx_type: Some(U64::random_with(rng)),
-            hash: faker.fake_with_rng(rng),
-        }
-    }
-}
-
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Dummy)]
 pub struct ExecutionInfo {
+    #[dummy(expr = "fake_option::<ChainId>()")]
     pub chain_id: Option<ChainId>,
     pub nonce: Nonce,
     pub signer: Address,
+    #[dummy(expr = "fake_option::<Address>()")]
     pub to: Option<Address>,
     pub value: Wei,
     pub input: Bytes,
@@ -294,5 +306,21 @@ impl From<TransactionInput> for AlloyTransaction {
             transaction_index: None,
             effective_gas_price: Some(value.execution_info.gas_price),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fake::Faker;
+
+    use super::*;
+
+    #[test]
+    fn test_dummy() {
+        let execution_info: ExecutionInfo = Fake::fake(&Faker);
+        assert!(!execution_info.chain_id.is_none());
+        assert!(!execution_info.to.is_none());
+        let transaction_info: TransactionInfo = Fake::fake(&Faker);
+        assert!(!transaction_info.tx_type.is_none());
     }
 }
