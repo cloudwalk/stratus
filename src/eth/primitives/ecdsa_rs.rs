@@ -1,12 +1,15 @@
 use alloy_primitives::U256;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 // Type representing `r` and `s` variables from the ECDSA signature.
 #[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EcdsaRs(U256);
 
+#[cfg(test)]
 impl Dummy<Faker> for EcdsaRs {
     fn dummy_with_rng<R: rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(U256::random_with(rng))

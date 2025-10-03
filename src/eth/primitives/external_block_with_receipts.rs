@@ -1,4 +1,6 @@
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 use serde::Deserialize;
 use serde::Serialize;
@@ -14,6 +16,7 @@ pub struct ExternalBlockWithReceipts {
     pub receipts: Vec<ExternalReceipt>,
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for ExternalBlockWithReceipts {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let block = ExternalBlock::dummy_with_rng(faker, rng);

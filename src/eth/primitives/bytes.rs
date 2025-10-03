@@ -7,7 +7,8 @@ use display_json::DebugAsJson;
 use crate::alias::RevmBytes;
 use crate::alias::RevmOutput;
 
-#[derive(DebugAsJson, Clone, Default, Eq, PartialEq, fake::Dummy)]
+#[derive(DebugAsJson, Clone, Default, Eq, PartialEq)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Bytes(pub Vec<u8>);
 
 impl Display for Bytes {

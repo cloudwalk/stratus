@@ -3,7 +3,9 @@ use std::str::FromStr;
 use alloy_primitives::U256;
 use anyhow::Context;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 use sqlx::types::BigDecimal;
 
@@ -50,6 +52,7 @@ impl Wei {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for Wei {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()

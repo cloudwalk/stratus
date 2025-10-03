@@ -1,7 +1,9 @@
 use alloy_primitives::U64;
 use anyhow::bail;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::ext::RuintExt;
@@ -19,6 +21,7 @@ impl Gas {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for Gas {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()

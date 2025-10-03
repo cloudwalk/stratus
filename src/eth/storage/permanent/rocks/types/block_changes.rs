@@ -12,7 +12,8 @@ use crate::eth::storage::permanent::rocks::types::nonce::NonceRocksdb;
 use crate::eth::storage::permanent::rocks::types::wei::WeiRocksdb;
 use crate::ext::OptionExt;
 
-#[derive(Debug, Clone, PartialEq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct AccountChangesRocksdb {
     pub balance: Option<WeiRocksdb>,
     pub nonce: Option<NonceRocksdb>,
@@ -26,7 +27,8 @@ impl AccountChangesRocksdb {
 }
 
 #[serde_as]
-#[derive(Debug, Clone, PartialEq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct BlockChangesRocksdb {
     pub account_changes: HashMap<AddressRocksdb, AccountChangesRocksdb, hash_hasher::HashBuildHasher>,
     #[serde_as(as = "Vec<(_, _)>")]

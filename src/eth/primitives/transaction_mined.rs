@@ -22,7 +22,8 @@ use crate::ext::OptionExt;
 use crate::ext::RuintExt;
 
 /// Transaction that was executed by the EVM and added to a block.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct TransactionMined {
     /// Transaction input received through RPC.
     pub input: TransactionInput,

@@ -9,7 +9,8 @@ use display_json::DebugAsJson;
 use crate::ext::to_json_string;
 
 /// Changes that happened to an account value during a transaction.
-#[derive(Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionValueChange<T>
 where
     T: PartialEq + serde::Serialize,
@@ -122,7 +123,8 @@ where
 // Value State
 // -----------------------------------------------------------------------------
 
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 #[serde(rename_all = "snake_case")]
 pub enum ValueState<T> {
     Set(T),

@@ -3,7 +3,9 @@ use chrono::DateTime;
 use chrono::Utc;
 use derive_more::Deref;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::ext::InfallibleExt;
@@ -35,6 +37,7 @@ impl UnixTime {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for UnixTime {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()

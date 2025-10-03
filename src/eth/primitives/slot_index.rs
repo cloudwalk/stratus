@@ -5,7 +5,9 @@ use alloy_primitives::FixedBytes;
 use alloy_primitives::U256;
 use alloy_primitives::keccak256;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 #[derive(DebugAsJson, Clone, Copy, Default, Hash, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
@@ -34,6 +36,7 @@ impl SlotIndex {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for SlotIndex {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(U256::random_with(rng))

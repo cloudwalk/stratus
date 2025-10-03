@@ -2,7 +2,9 @@ use alloy_primitives::U64;
 use alloy_primitives::U256;
 use anyhow::bail;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::ext::RuintExt;
@@ -23,6 +25,7 @@ impl Nonce {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for Nonce {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(U64::random_with(rng))

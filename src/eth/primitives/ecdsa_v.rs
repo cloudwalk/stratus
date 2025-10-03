@@ -1,12 +1,15 @@
 use alloy_primitives::U64;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 // Type representing `v` variable from the ECDSA signature.
 #[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EcdsaV(U64);
 
+#[cfg(test)]
 impl Dummy<Faker> for EcdsaV {
     fn dummy_with_rng<R: rand::prelude::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self::from(rng.next_u64())

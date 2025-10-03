@@ -7,7 +7,9 @@ use alloy_primitives::U256;
 use alloy_primitives::keccak256;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::eth::primitives::Hash;
@@ -61,6 +63,7 @@ impl BlockNumber {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for BlockNumber {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()

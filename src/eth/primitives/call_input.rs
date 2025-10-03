@@ -5,7 +5,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Wei;
 
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct CallInput {
     #[serde(rename = "from")]
     pub from: Option<Address>,

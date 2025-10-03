@@ -2,7 +2,9 @@ use std::fmt::Display;
 
 use alloy_primitives::U256;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -21,6 +23,7 @@ impl Display for SlotValue {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for SlotValue {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(U256::random_with(rng))

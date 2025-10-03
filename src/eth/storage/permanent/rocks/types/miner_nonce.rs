@@ -6,7 +6,8 @@ use crate::eth::primitives::MinerNonce;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct MinerNonceRocksdb([u8; 8]);
 
 gen_newtype_from!(self = MinerNonceRocksdb, other = B64, [u8; 8], MinerNonce);

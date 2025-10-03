@@ -3,7 +3,9 @@ use alloy_primitives::U256;
 use anyhow::anyhow;
 use anyhow::bail;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::ext::RuintExt;
@@ -11,6 +13,7 @@ use crate::ext::RuintExt;
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId(pub U64);
 
+#[cfg(test)]
 impl Dummy<Faker> for ChainId {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()

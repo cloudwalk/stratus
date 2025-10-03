@@ -5,7 +5,9 @@ use std::str::FromStr;
 use alloy_primitives::FixedBytes;
 use anyhow::bail;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 use hex_literal::hex;
 
@@ -54,6 +56,7 @@ impl Display for Address {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for Address {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Address(FixedBytes::random_with(rng))

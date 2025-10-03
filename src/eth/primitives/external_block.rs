@@ -1,11 +1,20 @@
+#[cfg(test)]
 use alloy_eips::eip4895::Withdrawals;
+#[cfg(test)]
 use alloy_primitives::B64;
+#[cfg(test)]
 use alloy_primitives::B256;
+#[cfg(test)]
 use alloy_primitives::Bloom;
+#[cfg(test)]
 use alloy_primitives::Bytes;
+#[cfg(test)]
 use alloy_primitives::U256;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Fake;
+#[cfg(test)]
 use fake::Faker;
 use serde::Deserialize;
 
@@ -16,6 +25,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTime;
+#[cfg(test)]
 use crate::eth::primitives::external_transaction::ExternalTransaction;
 use crate::log_and_err;
 
@@ -53,6 +63,7 @@ impl PartialEq<Block> for ExternalBlock {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for ExternalBlock {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let mut addr_bytes = [0u8; 20];

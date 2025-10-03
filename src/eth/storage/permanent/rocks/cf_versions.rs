@@ -30,9 +30,8 @@ use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 
 macro_rules! impl_single_version_cf_value {
     ($name:ident, $inner_type:ty, $non_rocks_equivalent: ty) => {
-        #[derive(
-            Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount, VariantNames, IntoStaticStr, fake::Dummy, bincode::Encode, bincode::Decode, FakeEnum,
-        )]
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount, VariantNames, IntoStaticStr, bincode::Encode, bincode::Decode, FakeEnum)]
+        #[cfg_attr(test, derive(fake::Dummy))]
         #[fake_enum(generate = "crate::utils::test_utils::fake_first")]
         pub enum $name {
             V1($inner_type),
