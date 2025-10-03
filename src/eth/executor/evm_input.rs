@@ -92,7 +92,7 @@ impl EvmInput {
             to: input.to,
             value: input.value,
             data: input.input.clone(),
-            gas_limit: Gas::MAX,
+            gas_limit: input.gas_limit,
             gas_price: 0,
             nonce: Some(input.nonce),
             block_number: pending_header.number,
