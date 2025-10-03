@@ -6,6 +6,9 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
+use http::HeaderMap;
+use http::header::HeaderName;
+use http::header::HeaderValue;
 use itertools::Itertools;
 use opentelemetry::KeyValue;
 use opentelemetry::trace::TracerProvider;
@@ -18,7 +21,6 @@ use opentelemetry_sdk::Resource as SdkResource;
 use opentelemetry_sdk::trace::BatchConfigBuilder;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::trace::Tracer as SdkTracer;
-use tonic::metadata::MetadataKey;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 use tracing_subscriber::fmt;
@@ -167,10 +169,14 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
     // configure tracer
     match protocol {
         TracingProtocol::Grpc => {
-            let mut protocol_metadata = MetadataMap::new();
+            let mut http_metadata = HeaderMap::new();
             for (key, value) in headers {
-                protocol_metadata.insert(MetadataKey::from_str(key).unwrap(), value.parse().unwrap());
+                let header_name = HeaderName::from_str(key).unwrap();
+                let header_value = HeaderValue::from_str(value).unwrap();
+                http_metadata.insert(header_name, header_value);
             }
+
+            let protocol_metadata = MetadataMap::from_headers(http_metadata);
 
             let exporter = opentelemetry_otlp::SpanExporter::builder()
                 .with_tonic()

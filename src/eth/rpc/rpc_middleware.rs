@@ -401,12 +401,12 @@ impl TransactionTracingIdentifiers {
     fn from_raw_transaction(decoded_tx: &TransactionInput) -> anyhow::Result<Self> {
         Ok(Self {
             client: None,
-            hash: Some(decoded_tx.hash),
-            contract: codegen::contract_name(&decoded_tx.to),
-            function: codegen::function_sig(&decoded_tx.input),
-            from: Some(decoded_tx.signer),
-            to: decoded_tx.to,
-            nonce: Some(decoded_tx.nonce),
+            hash: Some(decoded_tx.transaction_info.hash),
+            contract: codegen::contract_name(&decoded_tx.execution_info.to),
+            function: codegen::function_sig(&decoded_tx.execution_info.input),
+            from: Some(decoded_tx.execution_info.signer),
+            to: decoded_tx.execution_info.to,
+            nonce: Some(decoded_tx.execution_info.nonce),
         })
     }
 

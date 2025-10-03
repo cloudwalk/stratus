@@ -198,7 +198,7 @@ impl Miner {
 
     /// Persists a transaction execution.
     pub fn save_execution(&self, tx_execution: TransactionExecution, is_local: bool) -> Result<(), StratusError> {
-        let tx_hash = tx_execution.input.hash;
+        let tx_hash = tx_execution.input.transaction_info.hash;
 
         // track
         #[cfg(feature = "tracing")]

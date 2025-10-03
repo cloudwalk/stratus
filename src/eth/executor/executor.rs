@@ -6,6 +6,7 @@ use std::sync::Arc;
 use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
+use anyhow::bail;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
 use tracing::Span;
@@ -361,8 +362,8 @@ impl Executor {
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
-        let tx_input = tx.try_into()?;
-        let mut evm_input = EvmInput::from_eth_transaction(&tx_input, &self.storage.read_pending_block_header().0);
+        let tx_input: TransactionInput = tx.try_into()?;
+        let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &self.storage.read_pending_block_header().0);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
@@ -377,7 +378,7 @@ impl Executor {
                     Err(e) => {
                         let json_tx = to_json_string(&tx_input);
                         let json_receipt = to_json_string(&receipt);
-                        tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.hash, %json_tx, %json_receipt, "failed to reexecute external transaction");
+                        tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.transaction_info.hash, %json_tx, %json_receipt, "failed to reexecute external transaction");
                         return Err(e.into());
                     }
                 };
@@ -390,7 +391,7 @@ impl Executor {
                     let json_tx = to_json_string(&tx_input);
                     let json_receipt = to_json_string(&receipt);
                     let json_execution_logs = to_json_string(&evm_execution.execution.logs);
-                    tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.hash, %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
+                    tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.transaction_info.hash, %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
                     return Err(e);
                 };
 
@@ -400,14 +401,22 @@ impl Executor {
             // failed external transaction, re-create from receipt without re-executing
             false => {
                 let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending, ReadKind::Transaction)?;
+                if tx_input.execution_info.nonce != sender.nonce {
+                    bail!(
+                        "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
+                        tx_input.execution_info.signer,
+                        tx_input.execution_info.nonce,
+                        sender.nonce
+                    );
+                }
                 let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
                 let evm_result = EvmExecutionResult {
                     execution,
                     metrics: EvmExecutionMetrics::default(),
                 };
 
-                evm_input.gas_limit = tx_input.gas_limit;
-                evm_input.gas_price = tx_input.gas_price;
+                evm_input.gas_limit = tx_input.execution_info.gas_limit;
+                evm_input.gas_price = tx_input.execution_info.gas_price;
 
                 TransactionExecution::new(tx_input, evm_input, evm_result)
             }
@@ -446,20 +455,20 @@ impl Executor {
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]
     pub fn execute_local_transaction(&self, tx: TransactionInput) -> Result<(), StratusError> {
         #[cfg(feature = "metrics")]
-        let function = codegen::function_sig(&tx.input);
+        let function = codegen::function_sig(&tx.execution_info.input);
         #[cfg(feature = "metrics")]
-        let contract = codegen::contract_name(&tx.to);
+        let contract = codegen::contract_name(&tx.execution_info.to);
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
-        tracing::debug!(tx_hash = %tx.hash, "executing local transaction");
+        tracing::debug!(tx_hash = %tx.transaction_info.hash, "executing local transaction");
 
         // track
         Span::with(|s| {
-            s.rec_str("tx_hash", &tx.hash);
-            s.rec_str("tx_from", &tx.signer);
-            s.rec_opt("tx_to", &tx.to);
-            s.rec_str("tx_nonce", &tx.nonce);
+            s.rec_str("tx_hash", &tx.transaction_info.hash);
+            s.rec_str("tx_from", &tx.execution_info.signer);
+            s.rec_opt("tx_to", &tx.execution_info.to);
+            s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
 
         // execute according to the strategy
@@ -482,7 +491,7 @@ impl Executor {
     /// Executes a transaction until it reaches the max number of attempts.
     fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, max_attempts: usize) -> Result<(), StratusError> {
         // validate
-        if tx_input.signer.is_zero() {
+        if tx_input.execution_info.signer.is_zero() {
             return Err(TransactionError::FromZeroAddress.into());
         }
 
@@ -495,30 +504,29 @@ impl Executor {
             let _span = debug_span!(
                 "executor::local_transaction_attempt",
                 %attempt,
-                tx_hash = %tx_input.hash,
-                tx_from = %tx_input.signer,
+                tx_hash = %tx_input.transaction_info.hash,
+                tx_from = %tx_input.execution_info.signer,
                 tx_to = tracing::field::Empty,
-                tx_nonce = %tx_input.nonce
+                tx_nonce = %tx_input.execution_info.nonce
             )
             .entered();
             Span::with(|s| {
-                s.rec_opt("tx_to", &tx_input.to);
+                s.rec_opt("tx_to", &tx_input.execution_info.to);
             });
 
             // prepare evm input
             let (pending_header, _) = self.storage.read_pending_block_header();
-            let evm_input = EvmInput::from_eth_transaction(&tx_input, &pending_header);
+            let evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &pending_header);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::debug!(
                 %attempt,
-                tx_hash = %tx_input.hash,
-                tx_nonce = %tx_input.nonce,
-                tx_from = %tx_input.from,
-                tx_signer = %tx_input.signer,
-                tx_to = ?tx_input.to,
-                tx_data_len = %tx_input.input.len(),
-                tx_data = %tx_input.input,
+                tx_hash = %tx_input.transaction_info.hash,
+                tx_nonce = %tx_input.execution_info.nonce,
+                tx_signer = %tx_input.execution_info.signer,
+                tx_to = ?tx_input.execution_info.to,
+                tx_data_len = %tx_input.execution_info.input.len(),
+                tx_data = %tx_input.execution_info.input,
                 ?evm_input,
                 "executing local transaction attempt"
             );
@@ -533,9 +541,9 @@ impl Executor {
             #[cfg(feature = "metrics")]
             let gas_used = tx_execution.result.execution.gas;
             #[cfg(feature = "metrics")]
-            let function = codegen::function_sig(&tx_input.input);
+            let function = codegen::function_sig(&tx_input.execution_info.input);
             #[cfg(feature = "metrics")]
-            let contract = codegen::contract_name(&tx_input.to);
+            let contract = codegen::contract_name(&tx_input.execution_info.to);
 
             if let ExecutionResult::Reverted { reason } = &tx_execution.result.execution.result {
                 tracing::info!(?reason, "local transaction execution reverted");

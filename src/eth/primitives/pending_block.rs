@@ -25,6 +25,6 @@ impl PendingBlock {
 
     /// Adds a transaction execution to the block.
     pub fn push_transaction(&mut self, tx: TransactionExecution) {
-        self.transactions.insert(tx.input.hash, tx);
+        self.transactions.insert(tx.input.transaction_info.hash, tx);
     }
 }

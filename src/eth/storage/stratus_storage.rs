@@ -452,8 +452,8 @@ impl StratusStorage {
         let changes = tx.result.execution.changes.clone();
 
         #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.input.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.hash, changes = ?tx.result.execution.changes, "saving execution");
+        let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.input.transaction_info.hash).entered();
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.transaction_info.hash, changes = ?tx.result.execution.changes, "saving execution");
 
         // Log warning if a failed transaction has slot changes
         if !tx.result.execution.result.is_success() {

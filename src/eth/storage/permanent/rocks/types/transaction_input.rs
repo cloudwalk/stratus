@@ -10,6 +10,9 @@ use super::gas::GasRocksdb;
 use super::hash::HashRocksdb;
 use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
+use crate::eth::primitives::ExecutionInfo;
+use crate::eth::primitives::Signature;
+use crate::eth::primitives::TransactionInfo;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
@@ -36,20 +39,20 @@ pub struct TransactionInputRocksdb {
 impl From<TransactionInput> for TransactionInputRocksdb {
     fn from(item: TransactionInput) -> Self {
         Self {
-            tx_type: item.tx_type.map(|inner| inner.as_u64() as u8),
-            chain_id: item.chain_id.map_into(),
-            hash: HashRocksdb::from(item.hash),
-            nonce: NonceRocksdb::from(item.nonce),
-            signer: AddressRocksdb::from(item.signer),
-            from: AddressRocksdb::from(item.from),
-            to: item.to.map(AddressRocksdb::from),
-            value: WeiRocksdb::from(item.value),
-            input: BytesRocksdb::from(item.input),
-            gas_limit: GasRocksdb::from(item.gas_limit),
-            gas_price: WeiRocksdb::from(item.gas_price),
-            v: item.v.as_u64(),
-            r: item.r.into_limbs(),
-            s: item.s.into_limbs(),
+            tx_type: item.transaction_info.tx_type.map(|inner| inner.as_u64() as u8),
+            chain_id: item.execution_info.chain_id.map_into(),
+            hash: HashRocksdb::from(item.transaction_info.hash),
+            nonce: NonceRocksdb::from(item.execution_info.nonce),
+            signer: AddressRocksdb::from(item.execution_info.signer),
+            from: AddressRocksdb::from(item.execution_info.signer), // TODO: remove redundant field (requires reprocessing)
+            to: item.execution_info.to.map(AddressRocksdb::from),
+            value: WeiRocksdb::from(item.execution_info.value),
+            input: BytesRocksdb::from(item.execution_info.input),
+            gas_limit: GasRocksdb::from(item.execution_info.gas_limit),
+            gas_price: WeiRocksdb::from(item.execution_info.gas_price),
+            v: item.signature.v.as_u64(),
+            r: item.signature.r.into_limbs(),
+            s: item.signature.s.into_limbs(),
         }
     }
 }
@@ -57,20 +60,25 @@ impl From<TransactionInput> for TransactionInputRocksdb {
 impl From<TransactionInputRocksdb> for TransactionInput {
     fn from(item: TransactionInputRocksdb) -> Self {
         Self {
-            chain_id: item.chain_id.map_into(),
-            hash: item.hash.into(),
-            nonce: item.nonce.into(),
-            signer: item.signer.into(),
-            from: item.from.into(),
-            to: item.to.map(Into::into),
-            value: item.value.into(),
-            input: item.input.into(),
-            gas_limit: item.gas_limit.into(),
-            gas_price: item.gas_price.into(),
-            v: U64::from(item.v),
-            r: U256::from_limbs(item.r),
-            s: U256::from_limbs(item.s),
-            tx_type: item.tx_type.map(|typ| U64::from(typ)),
+            transaction_info: TransactionInfo {
+                tx_type: item.tx_type.map(|typ| U64::from(typ)),
+                hash: item.hash.into(),
+            },
+            execution_info: ExecutionInfo {
+                chain_id: item.chain_id.map_into(),
+                nonce: item.nonce.into(),
+                signer: item.signer.into(),
+                to: item.to.map(Into::into),
+                value: item.value.into(),
+                input: item.input.into(),
+                gas_limit: item.gas_limit.into(),
+                gas_price: item.gas_price.into(),
+            },
+            signature: Signature {
+                v: U64::from(item.v),
+                r: U256::from_limbs(item.r),
+                s: U256::from_limbs(item.s),
+            },
         }
     }
 }

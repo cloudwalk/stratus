@@ -77,14 +77,14 @@ impl TransactionStage {
     pub fn from(&self) -> Address {
         match self {
             Self::Executed(tx) => tx.evm_input.from,
-            Self::Mined(tx) => tx.input.signer,
+            Self::Mined(tx) => tx.input.execution_info.signer,
         }
     }
 
     pub fn to(&self) -> Option<Address> {
         match self {
             Self::Executed(tx) => tx.evm_input.to,
-            Self::Mined(tx) => tx.input.to,
+            Self::Mined(tx) => tx.input.execution_info.to,
         }
     }
 }

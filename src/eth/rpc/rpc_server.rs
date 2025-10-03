@@ -1187,14 +1187,14 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             .into());
         }
     };
-    let tx_hash = tx.hash;
+    let tx_hash = tx.transaction_info.hash;
 
     // track
     Span::with(|s| {
         s.rec_str("tx_hash", &tx_hash);
-        s.rec_str("tx_from", &tx.signer);
-        s.rec_opt("tx_to", &tx.to);
-        s.rec_str("tx_nonce", &tx.nonce);
+        s.rec_str("tx_from", &tx.execution_info.signer);
+        s.rec_opt("tx_to", &tx.execution_info.to);
+        s.rec_str("tx_nonce", &tx.execution_info.nonce);
     });
 
     if not(GlobalState::is_transactions_enabled()) {
