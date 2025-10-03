@@ -18,7 +18,6 @@ use alloy_rpc_types_eth::AccessList;
 use anyhow::bail;
 use display_json::DebugAsJson;
 use fake::Dummy;
-use fake::Fake;
 use fake::Faker;
 use rlp::Decodable;
 
@@ -34,26 +33,20 @@ use crate::eth::primitives::Wei;
 use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::ext::RuintExt;
 
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Dummy, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInfo {
+    #[dummy(expr = "crate::utils::fake_option_uint()")]
     pub tx_type: Option<U64>,
     pub hash: Hash,
 }
 
-impl Dummy<Faker> for TransactionInfo {
-    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
-        Self {
-            tx_type: Some(U64::random_with(rng)),
-            hash: faker.fake_with_rng(rng),
-        }
-    }
-}
-
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Dummy)]
 pub struct ExecutionInfo {
+    #[dummy(expr = "crate::utils::fake_option::<ChainId>()")]
     pub chain_id: Option<ChainId>,
     pub nonce: Nonce,
     pub signer: Address,
+    #[dummy(expr = "crate::utils::fake_option::<Address>()")]
     pub to: Option<Address>,
     pub value: Wei,
     pub input: Bytes,

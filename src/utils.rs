@@ -1,5 +1,9 @@
 use std::time::Duration;
 
+use alloy_primitives::Uint;
+use fake::Dummy;
+use fake::Fake;
+use fake::Faker;
 use tokio::time::Instant;
 
 /// Amount of bytes in one GB (technically, GiB).
@@ -35,6 +39,25 @@ impl Drop for DropTimer {
     fn drop(&mut self) {
         tracing::info!(ran_for = ?self.instant.elapsed(), "Timer: '{}' finished", self.scope_name);
     }
+}
+
+fn generate_rng() -> rand::rngs::SmallRng {
+    use std::time::SystemTime;
+    use std::time::UNIX_EPOCH;
+
+    use rand::SeedableRng;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Failed to get system time").as_secs();
+    rand::rngs::SmallRng::seed_from_u64(now)
+}
+
+pub fn fake_option<T: Dummy<Faker>>() -> Option<T> {
+    let mut rng = generate_rng();
+    Some(Faker.fake_with_rng::<T, _>(&mut rng))
+}
+
+pub fn fake_option_uint<const N: usize, const L: usize>() -> Option<Uint<N, L>> {
+    let mut rng = generate_rng();
+    Some(Uint::random_with(&mut rng))
 }
 
 #[cfg(test)]
