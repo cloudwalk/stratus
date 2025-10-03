@@ -26,7 +26,6 @@ flatten() {
         log "$repo folder does not exist"
         return 1
     fi
-    cp ../../../hardhat.config.ts .
 
     # Flatten
     npx hardhat flatten contracts/"$contract".sol >../../integration/contracts/"$contract".flattened.sol
