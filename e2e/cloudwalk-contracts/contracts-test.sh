@@ -20,7 +20,6 @@ test() {
         return 1
     fi
     git restore .
-    cp ../../../hardhat.config.ts .
     rm -rf .openzeppelin/
 
     # apply git patch
