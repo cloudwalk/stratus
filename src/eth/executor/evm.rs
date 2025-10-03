@@ -355,7 +355,7 @@ impl TxEnvExt for TxEnv {
             None => TransactTo::Create,
         };
         self.gas_limit = GAS_MAX_LIMIT;
-        self.gas_price = input.gas_price;
+        self.gas_price = 0;
         self.chain_id = input.chain_id.map_into();
         self.nonce = input.nonce.map_into().unwrap_or_default();
         self.data = input.data.into();
