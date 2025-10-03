@@ -17,14 +17,13 @@ use crate::alias::JsonValue;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
 
 #[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     pub header: BlockHeader,
-    pub transactions: Vec<TransactionMined>,
+    pub transactions: Vec<TransactionExecution>,
 }
 
 impl Block {
