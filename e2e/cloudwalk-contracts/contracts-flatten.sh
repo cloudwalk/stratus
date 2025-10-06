@@ -28,7 +28,7 @@ flatten() {
     fi
 
     # Flatten
-    npx hardhat flatten contracts/"$contract".sol >../../integration/contracts/"$contract".flattened.sol
+    DOTENV_CONFIG_QUIET=true npx hardhat flatten contracts/"$contract".sol >../../integration/contracts/"$contract".flattened.sol
 
     # Leave the repository folder
     cd ../../
