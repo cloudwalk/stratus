@@ -37,28 +37,22 @@ use crate::eth::primitives::Wei;
 use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::ext::RuintExt;
 
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Dummy, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TransactionInfo {
+    #[dummy(expr = "crate::utils::fake_option_uint()")]
     pub tx_type: Option<U64>,
     pub hash: Hash,
 }
 
-#[cfg(test)]
-impl Dummy<Faker> for TransactionInfo {
-    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
-        Self {
-            tx_type: Some(U64::random_with(rng)),
-            hash: faker.fake_with_rng(rng),
-        }
-    }
-}
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionInfo {
+    #[dummy(expr = "crate::utils::fake_option::<ChainId>()")]
     pub chain_id: Option<ChainId>,
     pub nonce: Nonce,
     pub signer: Address,
+    #[dummy(expr = "crate::utils::fake_option::<Address>()")]
     pub to: Option<Address>,
     pub value: Wei,
     pub input: Bytes,
