@@ -122,7 +122,7 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 # configure tools
-asdf local solidity 0.8.16 || echo "asdf, solidity plugin or solidity version not found"
+asdf set --home solidity 0.8.16 || echo "asdf, solidity plugin or solidity version not found"
 
 log "Flattening repositories"
 
