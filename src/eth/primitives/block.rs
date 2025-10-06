@@ -21,7 +21,8 @@ use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
 
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<TransactionMined>,
@@ -93,16 +94,17 @@ impl Block {
         self.header.hash
     }
 
-    fn mine_transaction(&mut self, tx: TransactionExecution, transaction_index: Index, log_index: &mut Index) -> TransactionMined {
+    fn mine_transaction(&mut self, mut tx: TransactionExecution, transaction_index: Index, log_index: &mut Index) -> TransactionMined {
         let mined_logs = Self::mine_logs(self, &tx, transaction_index, log_index);
-
+        let deployed_contract_address = tx.result.execution.deployed_contract_address;
+        let result = std::mem::take(&mut tx.result);
         TransactionMined {
-            input: tx.input,
-            block_timestamp: tx.result.execution.block_timestamp,
-            result: tx.result.execution.result,
-            output: tx.result.execution.output,
-            gas: tx.result.execution.gas,
-            deployed_contract_address: tx.result.execution.deployed_contract_address,
+            input: tx.into(),
+            block_timestamp: result.execution.block_timestamp,
+            result: result.execution.result,
+            output: result.execution.output,
+            gas: result.execution.gas,
+            deployed_contract_address,
             transaction_index,
             block_number: self.header.number,
             block_hash: self.header.hash,

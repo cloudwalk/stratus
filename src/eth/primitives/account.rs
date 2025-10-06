@@ -11,7 +11,8 @@ use crate::eth::primitives::Wei;
 /// Ethereum account (wallet or contract).
 ///
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Deserialize, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Account {
     /// Immutable address of the account.
     pub address: Address,
@@ -23,7 +24,7 @@ pub struct Account {
     pub balance: Wei,
 
     /// Contract bytecode. Present only if the account is a contract.
-    #[dummy(default)]
+    #[cfg_attr(test, dummy(default))]
     pub bytecode: Option<Bytecode>,
 }
 

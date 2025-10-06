@@ -25,7 +25,7 @@ impl TransactionStage {
     pub fn to_json_rpc_transaction(self) -> JsonValue {
         match self {
             TransactionStage::Executed(tx) => {
-                let json_rpc_payload: AlloyTransaction = tx.input.into();
+                let json_rpc_payload: AlloyTransaction = tx.into();
                 to_json_value(json_rpc_payload)
             }
             TransactionStage::Mined(tx) => {
