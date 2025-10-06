@@ -1,9 +1,15 @@
+#[cfg(test)]
 use alloy_consensus::ReceiptEnvelope;
+#[cfg(test)]
 use alloy_primitives::B256;
+#[cfg(test)]
 use alloy_primitives::Bloom;
+#[cfg(test)]
 use alloy_primitives::Bytes;
 use alloy_primitives::U256;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 use serde::Deserialize;
 
@@ -49,6 +55,7 @@ impl ExternalReceipt {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for ExternalReceipt {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_faker: &Faker, rng: &mut R) -> Self {
         let mut addr_bytes = [0u8; 20];

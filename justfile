@@ -104,7 +104,7 @@ stratus *args="":
 # Bin: Stratus main service as leader
 stratus-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    source <(just coverage-env)
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
@@ -128,7 +128,7 @@ stratus-follower *args="":
 # Bin: Stratus main service as follower
 stratus-follower-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    source <(just coverage-env)
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
@@ -144,7 +144,7 @@ rpc-downloader *args="":
 
 rpc-downloader-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    source <(just coverage-env)
     cargo build
     cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
 
@@ -154,7 +154,7 @@ importer-offline *args="":
 
 importer-offline-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    source <(just coverage-env)
     cargo build
     cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
 
@@ -174,8 +174,8 @@ test-doc name="":
 run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
-    source <(cargo llvm-cov show-env --export-prefix)
     cargo llvm-cov clean --workspace
+    source <(just coverage-env)
     just {{recipe}} {{args}}
     result_code=$?
     echo "Killing stratus"
@@ -561,3 +561,11 @@ e2e-genesis:
     npm install
     npx hardhat test test/genesis/genesis.test.ts --network stratus
     killport 3000 -s sigterm
+
+coverage-env:
+    #!/usr/bin/env bash
+    COVERAGE_FLAGS=$(env -u RUSTFLAGS cargo llvm-cov show-env 2>/dev/null | grep "^RUSTFLAGS=" | cut -d"'" -f2)
+    CURRENT_RUSTFLAGS="${RUSTFLAGS:-}"
+    if ! echo "$CURRENT_RUSTFLAGS" | grep -F -- "$COVERAGE_FLAGS" > /dev/null; then \
+        cargo llvm-cov show-env --export-prefix 2>/dev/null | grep '^export '; \
+    fi
