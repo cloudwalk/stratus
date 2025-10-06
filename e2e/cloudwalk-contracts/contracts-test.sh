@@ -159,7 +159,7 @@ if [ "$yield" == 1 ]; then
     # BalanceTracker Transition: test BalanceTracker, regardless of repository
     test brlc-balance-tracker BalanceTracker "$@" || test brlc-net-yield-distributor BalanceTracker "$@"
 
-    test brlc-net-yield-distributor YieldStreamer "$@"
+    test brlc-net-yield-distributor NetYieldDistributor "$@"
 fi
 
 if [ "$periphery" == 1 ]; then
