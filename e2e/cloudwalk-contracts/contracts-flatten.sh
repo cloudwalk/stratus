@@ -26,10 +26,9 @@ flatten() {
         log "$repo folder does not exist"
         return 1
     fi
-    cp ../../../hardhat.config.ts .
 
     # Flatten
-    npx hardhat flatten contracts/"$contract".sol >../../integration/contracts/"$contract".flattened.sol
+    DOTENV_CONFIG_QUIET=true npx hardhat flatten contracts/"$contract".sol >../../integration/contracts/"$contract".flattened.sol
 
     # Leave the repository folder
     cd ../../
@@ -51,7 +50,6 @@ flatten() {
 token=0
 periphery=0
 multisig=0
-compound=0
 yield=0
 pix=0
 capybara_finance=0
@@ -64,9 +62,8 @@ print_help() {
     echo "  -t, --token             for brlc-token"
     echo "  -p, --periphery         for brlc-periphery"
     echo "  -m, --multisig          for brlc-multisig"
-    echo "  -c, --compound          for compound-periphery"
-    echo "  -i, --yield             for brlc-yield-streamer"
-    echo "  -x, --pix               for brlc-pix-cashier"
+    echo "  -i, --yield             for brlc-net-yield-distributor"
+    echo "  -x, --pix               for brlc-cashier"
     echo "  -f, --capybara-finance  for brlc-capybara-finance"
     echo "  -a, --credit-agent      for brlc-credit-agent"
     echo "  -h, --help              display this help and exit"
@@ -76,7 +73,6 @@ if [ "$#" == 0 ]; then
     token=1
     periphery=1
     multisig=1
-    compound=1
     yield=1
     pix=1
     capybara_finance=1
@@ -100,10 +96,6 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     -m | --multisig)
         multisig=1
-        shift
-        ;;
-    -c | --compound)
-        compound=1
         shift
         ;;
     -i | --yield)
@@ -140,14 +132,14 @@ fi
 
 if [ "$pix" == 1 ]; then
     # Cashier Transition: flatten Cashier regardless if the repo was renamed or not
-    flatten brlc-cashier Cashier || flatten brlc-pix-cashier Cashier
-    flatten brlc-cashier CashierShard || flatten brlc-pix-cashier CashierShard
+    flatten brlc-cashier Cashier
+    flatten brlc-cashier CashierShard
 fi
 
 if [ "$yield" == 1 ]; then
     # BalanceTracker Transition: flatten BalanceTracker regardless if the repo is isolated or not
-    flatten brlc-balance-tracker BalanceTracker || flatten brlc-yield-streamer BalanceTracker
-    flatten brlc-yield-streamer YieldStreamer
+    flatten brlc-balance-tracker BalanceTracker || flatten brlc-net-yield-distributor BalanceTracker
+    flatten brlc-net-yield-distributor NetYieldDistributor
 fi
 
 if [ "$periphery" == 1 ]; then
@@ -158,10 +150,6 @@ fi
 
 if [ "$multisig" == 1 ]; then
     flatten brlc-multisig MultiSigWallet
-fi
-
-if [ "$compound" == 1 ]; then
-    flatten compound-periphery CompoundAgent
 fi
 
 if [ "$capybara_finance" == 1 ]; then

@@ -7,8 +7,11 @@ use alloy_primitives::U256;
 use alloy_rpc_types_eth::Block as AlloyBlock;
 use alloy_rpc_types_eth::BlockTransactions;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Fake;
+#[cfg(test)]
 use fake::Faker;
 use hex_literal::hex;
 use jsonrpsee::SubscriptionMessage;
@@ -86,6 +89,7 @@ impl BlockHeader {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for BlockHeader {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         Self {

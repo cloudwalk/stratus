@@ -1,4 +1,3 @@
-use std::cmp::min;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
@@ -76,7 +75,7 @@ use crate::ext::OptionExt;
 use crate::infra::metrics;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
-const GAS_MAX_LIMIT: u64 = 1_000_000_000;
+const GAS_MAX_LIMIT: u64 = 1_000_000_000; // XXX: lol
 type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
 type GeneralRevm<DB> =
     RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, (), EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles, EthFrame>;
@@ -355,8 +354,8 @@ impl TxEnvExt for TxEnv {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create,
         };
-        self.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
-        self.gas_price = input.gas_price;
+        self.gas_limit = GAS_MAX_LIMIT;
+        self.gas_price = 0;
         self.chain_id = input.chain_id.map_into();
         self.nonce = input.nonce.map_into().unwrap_or_default();
         self.data = input.data.into();

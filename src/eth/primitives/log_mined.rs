@@ -15,7 +15,8 @@ use crate::eth::primitives::LogTopic;
 use crate::ext::to_json_value;
 
 /// Log that was emitted by the EVM and added to a block.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct LogMined {
     /// Original log emitted by the EVM.
     pub log: Log,
@@ -63,7 +64,7 @@ impl LogMined {
     ) -> Self {
         LogMined {
             log: mined_log,
-            transaction_hash: tx.input.transaction_info.hash,
+            transaction_hash: tx.info.hash,
             transaction_index,
             log_index,
             block_number,

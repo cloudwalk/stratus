@@ -96,7 +96,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        contract: [token, pix, periphery, compound, yield, multisig, cppv2, capybara-finance, credit-agent]
+        contract: [token, pix, periphery, yield, multisig, cppv2, capybara-finance, credit-agent]
     name: E2E Rocks on ${{ matrix.contract }}
     needs: setup_cache
     runs-on: ubuntu-22.04

@@ -22,6 +22,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionInput;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
@@ -74,14 +75,16 @@ impl InmemoryTransactionTemporaryStorage {
     // Block and executions
     // -------------------------------------------------------------------------
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, is_local: bool) -> Result<(), StorageError> {
+    pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
-        if is_local && tx.evm_input != (&tx.input.execution_info, &pending_block.block.header) {
-            let expected_input = EvmInput::from_eth_transaction(&tx.input.execution_info, &pending_block.block.header);
+        if tx.evm_input != &pending_block.block.header {
+            let actual_input = tx.evm_input.clone();
+            let tx_input: TransactionInput = tx.into();
+            let expected_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &pending_block.block.header);
             return Err(StorageError::EvmInputMismatch {
                 expected: Box::new(expected_input),
-                actual: Box::new(tx.evm_input.clone()),
+                actual: Box::new(actual_input),
             });
         }
 

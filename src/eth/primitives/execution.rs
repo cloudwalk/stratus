@@ -23,7 +23,8 @@ use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionChanges {
     pub accounts: HashMap<Address, ExecutionAccountChanges, hash_hasher::HashBuildHasher>,
     pub slots: HashMap<(Address, SlotIndex), SlotValue, hash_hasher::HashBuildHasher>,
@@ -54,10 +55,11 @@ impl ExecutionChanges {
 }
 
 /// Output of a transaction executed in the EVM.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct EvmExecution {
     /// Assumed block timestamp during the execution.
-    pub block_timestamp: UnixTime,
+    pub block_timestamp: UnixTime, // TODO: remove this
 
     /// Status of the execution.
     pub result: ExecutionResult,
