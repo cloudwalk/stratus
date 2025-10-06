@@ -75,7 +75,11 @@ use crate::ext::OptionExt;
 use crate::infra::metrics;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
+#[cfg(feature = "dev")]
+const GAS_MAX_LIMIT: u64 = 1_000_000_000;
+#[cfg(not(feature = "dev"))]
 const GAS_MAX_LIMIT: u64 = 100_000_000;
+
 type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
 type GeneralRevm<DB> =
     RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, (), EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles, EthFrame>;
