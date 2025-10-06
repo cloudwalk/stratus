@@ -54,10 +54,10 @@ impl ExecutionChanges {
 }
 
 /// Output of a transaction executed in the EVM.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
 pub struct EvmExecution {
     /// Assumed block timestamp during the execution.
-    pub block_timestamp: UnixTime,
+    pub block_timestamp: UnixTime, // TODO: remove this
 
     /// Status of the execution.
     pub result: ExecutionResult,

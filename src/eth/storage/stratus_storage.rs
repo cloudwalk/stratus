@@ -448,12 +448,12 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
-    pub fn save_execution(&self, tx: TransactionExecution, is_local: bool) -> Result<(), StorageError> {
+    pub fn save_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
         let changes = tx.result.execution.changes.clone();
 
         #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.input.transaction_info.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.transaction_info.hash, changes = ?tx.result.execution.changes, "saving execution");
+        let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.info.hash).entered();
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?tx.result.execution.changes, "saving execution");
 
         // Log warning if a failed transaction has slot changes
         if !tx.result.execution.result.is_success() {
@@ -464,7 +464,7 @@ impl StratusStorage {
             }
         }
 
-        timed(|| self.temp.save_pending_execution(tx, is_local))
+        timed(|| self.temp.save_pending_execution(tx))
             .with(|m| {
                 metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
                 match &m.result {
