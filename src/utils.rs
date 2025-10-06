@@ -1,9 +1,5 @@
 use std::time::Duration;
 
-use alloy_primitives::Uint;
-use fake::Dummy;
-use fake::Fake;
-use fake::Faker;
 use tokio::time::Instant;
 
 /// Amount of bytes in one GB (technically, GiB).
@@ -41,33 +37,25 @@ impl Drop for DropTimer {
     }
 }
 
-fn generate_rng() -> rand::rngs::SmallRng {
-    use std::time::SystemTime;
-    use std::time::UNIX_EPOCH;
-
-    use rand::SeedableRng;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Failed to get system time").as_secs();
-    rand::rngs::SmallRng::seed_from_u64(now)
-}
-
-pub fn fake_option<T: Dummy<Faker>>() -> Option<T> {
-    let mut rng = generate_rng();
-    Some(Faker.fake_with_rng::<T, _>(&mut rng))
-}
-
-pub fn fake_option_uint<const N: usize, const L: usize>() -> Option<Uint<N, L>> {
-    let mut rng = generate_rng();
-    Some(Uint::random_with(&mut rng))
-}
-
 #[cfg(test)]
 pub mod test_utils {
+    use alloy_primitives::Uint;
     use anyhow::Context;
+    use fake::Dummy;
     use fake::Fake;
     use fake::Faker;
     use glob::glob;
     use rand::SeedableRng;
     use rand::rngs::SmallRng;
+
+    fn generate_rng() -> rand::rngs::SmallRng {
+        use std::time::SystemTime;
+        use std::time::UNIX_EPOCH;
+
+        use rand::SeedableRng;
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Failed to get system time").as_secs();
+        rand::rngs::SmallRng::seed_from_u64(now)
+    }
 
     fn deterministic_rng() -> SmallRng {
         SeedableRng::seed_from_u64(0)
@@ -102,5 +90,20 @@ pub mod test_utils {
         }
 
         Ok(paths)
+    }
+
+    pub fn fake_option<T: Dummy<Faker>>() -> Option<T> {
+        let mut rng = generate_rng();
+        Some(Faker.fake_with_rng::<T, _>(&mut rng))
+    }
+
+    pub fn fake_option_uint<const N: usize, const L: usize>() -> Option<Uint<N, L>> {
+        let mut rng = generate_rng();
+        Some(Uint::random_with(&mut rng))
+    }
+
+    pub fn fake_uint<const N: usize, const L: usize>() -> Uint<N, L> {
+        let mut rng = generate_rng();
+        Uint::random_with(&mut rng)
     }
 }
