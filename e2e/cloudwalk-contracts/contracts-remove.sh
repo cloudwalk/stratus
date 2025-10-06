@@ -31,7 +31,6 @@ remove() {
 token=0
 periphery=0
 multisig=0
-compound=0
 yield=0
 pix=0
 capybara_finance=0
@@ -44,9 +43,8 @@ print_help() {
     echo "  -t, --token             for brlc-token"
     echo "  -p, --periphery         for brlc-periphery"
     echo "  -m, --multisig          for brlc-multisig"
-    echo "  -c, --compound          for compound-periphery"
-    echo "  -i, --yield             for brlc-yield-streamer"
-    echo "  -x, --pix               for brlc-pix-cashier"
+    echo "  -i, --yield             for brlc-net-yield-distributor"
+    echo "  -x, --pix               for brlc-cashier"
     echo "  -f, --capybara-finance  for brlc-capybara-finance"
     echo "  -a, --credit-agent      for brlc-credit-agent"
     echo "  -h, --help              display this help and exit"
@@ -56,7 +54,6 @@ if [ "$#" == 0 ]; then
     token=1
     periphery=1
     multisig=1
-    compound=1
     yield=1
     pix=1
     capybara_finance=1
@@ -80,10 +77,6 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     -m | --multisig)
         multisig=1
-        shift
-        ;;
-    -c | --compound)
-        compound=1
         shift
         ;;
     -i | --yield)
@@ -118,12 +111,12 @@ fi
 
 if [ "$pix" == 1 ]; then
     # Cashier Transition: remove regardless of the repository name at the moment
-    remove brlc-cashier && remove brlc-pix-cashier
+    remove brlc-cashier
 fi
 
 if [ "$yield" == 1 ]; then
     remove brlc-balance-tracker
-    remove brlc-yield-streamer
+    remove brlc-net-yield-distributor
 fi
 
 if [ "$periphery" == 1 ]; then
@@ -133,10 +126,6 @@ fi
 
 if [ "$multisig" == 1 ]; then
     remove brlc-multisig
-fi
-
-if [ "$compound" == 1 ]; then
-    remove compound-periphery
 fi
 
 if [ "$capybara_finance" == 1 ]; then
