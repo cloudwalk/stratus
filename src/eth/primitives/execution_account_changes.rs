@@ -7,7 +7,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
 
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default, Deref)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default, Deref)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Change<T>
 where
     T: PartialEq + Eq + Default,
@@ -73,11 +74,12 @@ where
 }
 
 /// Changes that happened to an account during a transaction.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionAccountChanges {
     pub nonce: Change<Nonce>,
     pub balance: Change<Wei>,
-    #[dummy(default)]
+    #[cfg_attr(test, dummy(default))]
     pub bytecode: Change<Option<RevmBytecode>>,
 }
 

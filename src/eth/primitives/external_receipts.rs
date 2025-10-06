@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use anyhow::anyhow;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::eth::primitives::ExternalReceipt;
@@ -24,6 +26,7 @@ impl ExternalReceipts {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for ExternalReceipts {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let count = (rng.next_u32() % 5 + 1) as usize;
