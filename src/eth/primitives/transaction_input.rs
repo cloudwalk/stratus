@@ -17,12 +17,6 @@ use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
 use anyhow::bail;
 use display_json::DebugAsJson;
-#[cfg(test)]
-use fake::Dummy;
-#[cfg(test)]
-use fake::Fake;
-#[cfg(test)]
-use fake::Faker;
 use rlp::Decodable;
 
 use crate::alias::AlloyTransaction;
@@ -37,22 +31,22 @@ use crate::eth::primitives::Wei;
 use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::ext::RuintExt;
 
-#[derive(DebugAsJson, Dummy, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct TransactionInfo {
-    #[dummy(expr = "crate::utils::fake_option_uint()")]
+    #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_option_uint()"))]
     pub tx_type: Option<U64>,
     pub hash: Hash,
 }
 
-
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionInfo {
-    #[dummy(expr = "crate::utils::fake_option::<ChainId>()")]
+    #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_option::<ChainId>()"))]
     pub chain_id: Option<ChainId>,
     pub nonce: Nonce,
     pub signer: Address,
-    #[dummy(expr = "crate::utils::fake_option::<Address>()")]
+    #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_option::<Address>()"))]
     pub to: Option<Address>,
     pub value: Wei,
     pub input: Bytes,
@@ -61,26 +55,19 @@ pub struct ExecutionInfo {
 }
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Signature {
+    #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_uint()"))]
     pub v: U64,
+    #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_uint()"))]
     pub r: U256,
+    #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_uint()"))]
     pub s: U256,
 }
 
 impl From<Signature> for AlloySignature {
     fn from(value: Signature) -> Self {
         AlloySignature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v == U64::ONE)
-    }
-}
-
-#[cfg(test)]
-impl Dummy<Faker> for Signature {
-    fn dummy_with_rng<R: rand::Rng + ?Sized>(_faker: &Faker, rng: &mut R) -> Self {
-        Self {
-            v: U64::random_with(rng),
-            r: U256::random_with(rng),
-            s: U256::random_with(rng),
-        }
     }
 }
 
