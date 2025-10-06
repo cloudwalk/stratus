@@ -31,7 +31,6 @@ remove() {
 token=0
 periphery=0
 multisig=0
-compound=0
 yield=0
 pix=0
 capybara_finance=0
@@ -55,7 +54,6 @@ if [ "$#" == 0 ]; then
     token=1
     periphery=1
     multisig=1
-    compound=1
     yield=1
     pix=1
     capybara_finance=1
@@ -79,10 +77,6 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     -m | --multisig)
         multisig=1
-        shift
-        ;;
-    -c | --compound)
-        compound=1
         shift
         ;;
     -i | --yield)

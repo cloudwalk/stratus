@@ -84,7 +84,6 @@ clone_alternative() {
 token=0
 periphery=0
 multisig=0
-compound=0
 yield=0
 pix=0
 cppv2=0
