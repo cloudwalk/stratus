@@ -139,7 +139,7 @@ fi
 if [ "$yield" == 1 ]; then
     # BalanceTracker Transition: flatten BalanceTracker regardless if the repo is isolated or not
     flatten brlc-balance-tracker BalanceTracker || flatten brlc-net-yield-distributor BalanceTracker
-    flatten brlc-net-yield-distributor YieldStreamer
+    flatten brlc-net-yield-distributor NetYieldDistributor
 fi
 
 if [ "$periphery" == 1 ]; then
