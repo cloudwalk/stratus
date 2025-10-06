@@ -6,7 +6,6 @@ use itertools::Itertools;
 
 use super::ExternalBlock;
 use super::Index;
-use super::LogMined;
 use super::PendingBlock;
 use super::Size;
 use super::TransactionExecution;
@@ -17,10 +16,12 @@ use crate::alias::JsonValue;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+use crate::eth::primitives::LogMessage;
 use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
 
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<TransactionExecution>,
@@ -92,51 +93,29 @@ impl Block {
         self.header.hash
     }
 
-    fn mine_transaction(&mut self, mut tx: TransactionExecution, transaction_index: Index, log_index: &mut Index) -> TransactionMined {
-        let mined_logs = Self::mine_logs(self, &tx, transaction_index, log_index);
-        let deployed_contract_address = tx.result.execution.deployed_contract_address;
-        let result = std::mem::take(&mut tx.result);
-        TransactionMined {
-            input: tx.into(),
-            block_timestamp: result.execution.block_timestamp,
-            result: result.execution.result,
-            output: result.execution.output,
-            gas: result.execution.gas,
-            deployed_contract_address,
-            transaction_index,
-            block_number: self.header.number,
-            block_hash: self.header.hash,
-            logs: mined_logs,
+    pub fn create_log_messages(&self) -> Vec<LogMessage> {
+        let mut log_messages = vec![];
+        let mut log_idx = Index::ZERO;
+        for (transaction_index, tx) in self.transactions.iter().enumerate() {
+            for log in tx.logs() {
+                log_messages.push(LogMessage {
+                    log: log.clone(),
+                    transaction_hash: tx.info.hash,
+                    transaction_index: (transaction_index as u64).into(),
+                    block_hash: self.hash(),
+                    block_number: self.number(),
+                    log_index: log_idx,
+                });
+                log_idx += Index::ONE;
+            }
         }
-    }
-
-    fn mine_logs(&mut self, tx: &TransactionExecution, transaction_index: Index, log_index: &mut Index) -> Vec<LogMined> {
-        tx.result
-            .execution
-            .logs
-            .iter()
-            .map(|mined_log| {
-                self.header.bloom.accrue_log(mined_log);
-                let log = LogMined::mine_log(mined_log.clone(), self.number(), self.hash(), tx, *log_index, transaction_index);
-                *log_index = *log_index + Index::ONE;
-                log
-            })
-            .collect()
+        log_messages
     }
 
     fn calculate_transaction_root(&mut self) {
         if !self.transactions.is_empty() {
-            let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.input.transaction_info.hash).map(B256::from).collect();
+            let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.info.hash).map(B256::from).collect();
             self.header.transactions_root = ordered_trie_root(&transactions_hashes).into();
-        }
-    }
-
-    fn update_block_hash(&mut self) {
-        for transaction in self.transactions.iter_mut() {
-            transaction.block_hash = self.header.hash;
-            for log in transaction.logs.iter_mut() {
-                log.block_hash = self.header.hash;
-            }
         }
     }
 
@@ -144,11 +123,7 @@ impl Block {
         self.header.hash = external_block.hash();
         assert!(*self.header.timestamp == external_block.header.timestamp);
         for transaction in self.transactions.iter_mut() {
-            assert!(transaction.block_timestamp == self.header.timestamp);
-            transaction.block_hash = external_block.hash();
-            for log in transaction.logs.iter_mut() {
-                log.block_hash = external_block.hash();
-            }
+            assert!(transaction.evm_input.block_timestamp == self.header.timestamp);
         }
     }
 }
@@ -161,14 +136,11 @@ impl From<PendingBlock> for Block {
         block.header.size = Size::from(txs.len() as u64);
 
         let mut log_index = Index::ZERO;
-        for (tx_idx, tx) in txs.into_iter().enumerate() {
-            let transaction_index = Index::new(tx_idx as u64);
-            let mined_transaction = Self::mine_transaction(&mut block, tx, transaction_index, &mut log_index);
-            block.transactions.push(mined_transaction);
+        for (_tx_idx, tx) in txs.into_iter().enumerate() {
+            block.transactions.push(tx);
         }
 
         Self::calculate_transaction_root(&mut block);
-        Self::update_block_hash(&mut block);
 
         block
     }
@@ -192,7 +164,7 @@ impl From<Block> for AlloyBlockAlloyTransaction {
 impl From<Block> for AlloyBlockB256 {
     fn from(block: Block) -> Self {
         let alloy_block: AlloyBlockB256 = block.header.into();
-        let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.transaction_info.hash).map(B256::from).collect();
+        let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.info.hash).map(B256::from).collect();
 
         Self {
             transactions: BlockTransactions::Hashes(transaction_hashes),

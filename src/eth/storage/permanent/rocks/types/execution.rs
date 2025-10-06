@@ -28,7 +28,7 @@ impl From<EvmExecution> for ExecutionRocksdb {
             result: item.result.into(),
             output: BytesRocksdb::from(item.output),
             logs: item.logs.into_iter().map(LogRocksdb::from).collect(),
-            gas: GasRocksdb::from(item.gas),
+            gas: GasRocksdb::from(item.gas_used),
             deployed_contract_address: item.deployed_contract_address.map_into(),
         }
     }
@@ -42,7 +42,7 @@ impl From<ExecutionRocksdb> for EvmExecution {
             result,
             output,
             logs: item.logs.into_iter().map(Log::from).collect(),
-            gas: item.gas.into(),
+            gas_used: item.gas.into(),
             changes: ExecutionChanges::default(),
             deployed_contract_address: item.deployed_contract_address.map_into(),
         }

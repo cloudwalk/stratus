@@ -6,67 +6,88 @@ use super::hash::HashRocksdb;
 use super::index::IndexRocksdb;
 use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
-use crate::eth::primitives::LogMined;
-use crate::eth::primitives::TransactionMined;
+use crate::eth::executor::EvmExecutionResult;
+use crate::eth::executor::EvmInput;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::EvmExecutionMetrics;
+use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::types::execution_result::ExecutionResultBuilder;
 use crate::ext::OptionExt;
+use crate::ext::RuintExt;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
 pub struct TransactionMinedRocksdb {
     pub input: TransactionInputRocksdb,
     pub execution: ExecutionRocksdb,
-    pub logs: Vec<LogMinedRocksdb>,
+    #[deprecated(
+        note = "Use logs in execution instead"
+    )]
+    logs: Vec<LogMinedRocksdb>,
     pub transaction_index: IndexRocksdb,
 }
 
-impl From<TransactionMined> for TransactionMinedRocksdb {
-    fn from(item: TransactionMined) -> Self {
+impl From<(usize, TransactionExecution)> for TransactionMinedRocksdb {
+    fn from((idx, item): (usize, TransactionExecution)) -> Self {
         Self {
-            input: item.input.into(),
-            execution: ExecutionRocksdb {
-                block_timestamp: item.block_timestamp.into(),
-                result: item.result.into(),
-                output: item.output.into(),
-                logs: item.logs.iter().cloned().map(|log| log.log.into()).collect(),
-                gas: item.gas.into(),
-                deployed_contract_address: item.deployed_contract_address.map_into(),
+            input: TransactionInputRocksdb {
+                tx_type: item.info.tx_type.map(|inner| inner.as_u64() as u8),
+                chain_id: item.evm_input.chain_id.map_into(),
+                hash: item.info.hash.into(),
+                nonce: item.evm_input.nonce.unwrap_or_default().into(),
+                signer: item.evm_input.from.into(),
+                from: item.evm_input.from.into(),
+                to: item.evm_input.to.map_into(),
+                value: item.evm_input.value.into(),
+                input: item.evm_input.data.clone().into(),
+                gas_limit: item.evm_input.gas_limit.into(),
+                gas_price: item.evm_input.gas_price.into(),
+                v: item.signature.v.as_u64(),
+                r: item.signature.r.into_limbs(),
+                s: item.signature.s.into_limbs(),
             },
-            logs: item.logs.into_iter().map(LogMinedRocksdb::from).collect(), // TODO: remove duplicated logs from execution
-            transaction_index: IndexRocksdb::from(item.transaction_index),
+            execution: ExecutionRocksdb {
+                block_timestamp: item.evm_input.block_timestamp.into(),
+                result: item.result.execution.result.into(),
+                output: item.result.execution.output.into(),
+                logs: item.result.execution.logs.into_iter().map(|log| log.into()).collect(),
+                gas: item.result.execution.gas_used.into(),
+                deployed_contract_address: item.result.execution.deployed_contract_address.map_into(),
+            },
+            #[allow(deprecated)]
+            logs: vec![],
+            transaction_index: IndexRocksdb(idx as u32),
         }
     }
 }
 
-impl TransactionMined {
+impl TransactionExecution {
     pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb) -> Self {
-        let logs = other
-            .logs
-            .into_iter()
-            .map(|log| {
-                LogMined::from_rocks_primitives(
-                    log.log,
-                    block_number,
-                    block_hash,
-                    other.transaction_index.as_usize(),
-                    other.input.hash,
-                    log.index,
-                )
-            })
-            .collect();
+        let logs = other.execution.logs.into_iter().map(|log| log.into()).collect();
 
         let (result, output) = ExecutionResultBuilder((other.execution.result, other.execution.output)).build();
+
+        let input = TransactionInput::from(other.input);
+        let evm_result = EvmExecutionResult {
+            execution: EvmExecution {
+                block_timestamp: other.execution.block_timestamp.into(),
+                result,
+                output,
+                logs,
+                gas_used: other.execution.gas.into(),
+                changes: ExecutionChanges::default(),
+                deployed_contract_address: other.execution.deployed_contract_address.map_into()
+            },
+            metrics: EvmExecutionMetrics::default()
+        };
+
         Self {
-            block_number: block_number.into(),
-            block_hash: block_hash.into(),
-            input: other.input.into(),
-            block_timestamp: other.execution.block_timestamp.into(),
-            result,
-            output,
-            gas: other.execution.gas.into(),
-            deployed_contract_address: other.execution.deployed_contract_address.map_into(),
-            transaction_index: other.transaction_index.into(),
-            logs,
+            info: input.transaction_info,
+            signature: input.signature,
+            evm_input: EvmInput::from_eth_transaction(&input.execution_info, block_number.into(), other.execution.block_timestamp.into()),
+            result: evm_result,
         }
     }
 }

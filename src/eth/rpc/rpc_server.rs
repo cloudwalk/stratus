@@ -39,6 +39,7 @@ use tracing::Span;
 use tracing::field;
 use tracing::info_span;
 
+use crate::eth::primitives::TransactionExecution;
 use crate::GlobalState;
 use crate::NodeMode;
 use crate::alias::AlloyReceipt;
@@ -76,7 +77,6 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::RpcContext;
@@ -976,7 +976,7 @@ fn eth_get_transaction_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
     }
 }
 
-fn rpc_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<Option<TransactionStage>, StratusError> {
+fn rpc_get_transaction_receipt(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<Option<TransactionExecution>, StratusError> {
     // parse params
     let (_, tx_hash) = next_rpc_param::<Hash>(params.sequence())?;
 
@@ -1018,7 +1018,7 @@ fn stratus_get_transaction_result(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     match rpc_get_transaction_receipt(params, ctx)? {
         Some(tx) => {
             tracing::info!("transaction receipt found");
-            Ok(to_json_value(tx.result()))
+            Ok(to_json_value(tx.result.execution.result))
         }
         None => {
             tracing::info!("transaction receipt not found");
@@ -1047,7 +1047,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
-            let overestimated_gas = (result.gas.as_u64()) as f64 * 1.1;
+            let overestimated_gas = (result.gas_used.as_u64()) as f64 * 1.1;
             Ok(hex_num(U256::from(overestimated_gas as u64)))
         }
 

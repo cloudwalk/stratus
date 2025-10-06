@@ -69,7 +69,7 @@ pub struct EvmExecution {
     pub logs: Vec<Log>,
 
     /// Consumed gas.
-    pub gas: Gas,
+    pub gas_used: Gas,
 
     /// Storage changes that happened during the transaction execution.
     pub changes: ExecutionChanges,
@@ -103,7 +103,7 @@ impl EvmExecution {
             result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
-            gas: Gas::from(receipt.gas_used),
+            gas_used: Gas::from(receipt.gas_used),
             changes,
             deployed_contract_address: None,
         };
@@ -205,7 +205,7 @@ impl EvmExecution {
     /// This method updates the attributes that can diverge based on the receipt of the external transaction.
     pub fn apply_receipt(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
         // fix gas
-        self.gas = Gas::from(receipt.gas_used);
+        self.gas_used = Gas::from(receipt.gas_used);
 
         // fix logs
         self.fix_logs_gas_left(receipt);
@@ -318,7 +318,7 @@ mod tests {
         assert!(execution.is_failure());
         assert_eq!(execution.output, Bytes::default());
         assert!(execution.logs.is_empty());
-        assert_eq!(execution.gas, Gas::from(receipt.gas_used));
+        assert_eq!(execution.gas_used, Gas::from(receipt.gas_used));
 
         // Verify sender changes
         let sender_changes = execution.changes.accounts.get(&sender_address).unwrap();
@@ -569,7 +569,7 @@ mod tests {
             accounts,
             ..Default::default()
         };
-        execution.gas = Gas::from(100u64);
+        execution.gas_used = Gas::from(100u64);
 
         // Create a receipt with higher gas used and execution cost
         let mut receipt: ExternalReceipt = Faker.fake();

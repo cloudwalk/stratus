@@ -102,7 +102,7 @@ impl PartialOrd for TxCount {
     }
 }
 
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Default, fake::Dummy)]
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Default, fake::Dummy, Eq)]
 pub enum ReadKind {
     Call((BlockNumber, TxCount)),
     #[default]

@@ -10,7 +10,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -42,7 +42,7 @@ impl From<Block> for BlockRocksdb {
                 total_difficulty: item.header.total_difficulty.into(),
                 nonce: item.header.nonce.into(),
             },
-            transactions: item.transactions.into_iter().map(TransactionMinedRocksdb::from).collect(),
+            transactions: item.transactions.into_iter().enumerate().map(TransactionMinedRocksdb::from).collect(),
         }
     }
 }
@@ -72,7 +72,7 @@ impl From<BlockRocksdb> for Block {
         let transactions = item
             .transactions
             .into_iter()
-            .map(|tx| TransactionMined::from_rocks_primitives(tx, header.number.into(), header.hash.into()))
+            .map(|tx| TransactionExecution::from_rocks_primitives(tx, header.number.into(), header.hash.into()))
             .collect();
         Block { header, transactions }
     }

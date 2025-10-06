@@ -4,8 +4,8 @@ use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
 
 /// Evm execution result.
-#[derive(DebugAsJson, Clone, serde::Serialize, Default)]
-#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy, PartialEq))]
+#[derive(DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq, Eq)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct EvmExecutionResult {
     pub execution: EvmExecution,
     pub metrics: EvmExecutionMetrics,

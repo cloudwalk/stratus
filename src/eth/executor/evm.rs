@@ -68,7 +68,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
-use crate::eth::primitives::TransactionStage;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::StratusStorage;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
@@ -252,11 +252,11 @@ impl Evm {
         let mut evm = Self::create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db, self.kind);
 
         // Execute all transactions before target tx_hash
-        for tx in block.transactions.into_iter().sorted_by_key(|item| item.transaction_index) {
-            if tx.input.transaction_info.hash == tx_hash {
+        for tx in block.transactions.into_iter() {
+            if tx.info.hash == tx_hash {
                 break;
             }
-            let tx_input: EvmInput = tx.into();
+            let tx_input: EvmInput = tx.evm_input;
 
             // Configure EVM state
             evm.fill_env(tx_input);
@@ -516,7 +516,7 @@ fn parse_revm_execution(revm_result: ResultAndState, input: EvmInput, execution_
         result,
         output: tx_output,
         logs,
-        gas,
+        gas_used: gas,
         changes,
         deployed_contract_address,
     })
@@ -591,18 +591,18 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
     Ok((execution_changes, deployed_contract_address))
 }
 
-pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionStage) -> GethTrace {
+pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionExecution) -> GethTrace {
     match tracer_type {
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => FourByteFrame::default().into(),
         // HACK: Spoof empty call frame to prevent Blockscout from retrying unnecessary trace calls
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
-            let (typ, to) = match tx.to() {
-                Some(_) => ("CALL".to_string(), tx.to().map_into()),
-                None => ("CREATE".to_string(), tx.deployed_contract_address().map_into()),
+            let (typ, to) = match tx.evm_input.to {
+                Some(_) => ("CALL".to_string(), tx.evm_input.to.map_into()),
+                None => ("CREATE".to_string(), tx.result.execution.deployed_contract_address.map_into()),
             };
 
             CallFrame {
-                from: tx.from().into(),
+                from: tx.evm_input.from.into(),
                 to,
                 typ,
                 ..Default::default()

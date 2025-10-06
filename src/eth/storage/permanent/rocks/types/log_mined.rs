@@ -3,8 +3,7 @@ use std::fmt::Debug;
 use super::block_number::BlockNumberRocksdb;
 use super::hash::HashRocksdb;
 use super::log::LogRocksdb;
-use crate::eth::primitives::Index;
-use crate::eth::primitives::LogMined;
+use crate::eth::primitives::{Index, Log, LogMessage};
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
@@ -13,16 +12,16 @@ pub struct LogMinedRocksdb {
     pub index: u64,
 }
 
-impl From<LogMined> for LogMinedRocksdb {
-    fn from(item: LogMined) -> Self {
+impl From<(Log, u64)> for LogMinedRocksdb {
+    fn from((log, index): (Log, u64)) -> Self {
         Self {
-            log: item.log.into(),
-            index: item.log_index.into(),
+            log: log.into(),
+            index,
         }
     }
 }
 
-impl LogMined {
+impl LogMessage {
     pub fn from_rocks_primitives(
         other: LogRocksdb,
         block_number: BlockNumberRocksdb,

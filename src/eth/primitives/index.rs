@@ -7,7 +7,7 @@ use crate::ext::RuintExt;
 
 /// Represents a transaction index or log index.
 #[derive(
-    DebugAsJson, derive_more::Display, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Hash, PartialOrd, Ord,
+    DebugAsJson, derive_more::Display, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, derive_more::AddAssign, Hash, PartialOrd, Ord,
 )]
 pub struct Index(pub u64);
 

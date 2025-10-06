@@ -426,7 +426,7 @@ impl Executor {
         cfg_if! {
             if #[cfg(feature = "metrics")] {
                 let tx_metrics = tx_execution.metrics();
-                let tx_gas = tx_execution.result.execution.gas;
+                let tx_gas = tx_execution.result.execution.gas_used;
             }
         }
 
@@ -539,7 +539,7 @@ impl Executor {
             #[cfg(feature = "metrics")]
             let tx_metrics = tx_execution.metrics();
             #[cfg(feature = "metrics")]
-            let gas_used = tx_execution.result.execution.gas;
+            let gas_used = tx_execution.result.execution.gas_used;
             #[cfg(feature = "metrics")]
             let function = codegen::function_sig(&tx_input.execution_info.input);
             #[cfg(feature = "metrics")]
@@ -626,7 +626,7 @@ impl Executor {
                     metrics::inc_executor_local_call(start.elapsed(), true, contract, function);
                     metrics::inc_executor_local_call_account_reads(evm_result.metrics.account_reads, contract, function);
                     metrics::inc_executor_local_call_slot_reads(evm_result.metrics.slot_reads, contract, function);
-                    metrics::inc_executor_local_call_gas(evm_result.execution.gas.as_u64() as usize, contract, function);
+                    metrics::inc_executor_local_call_gas(evm_result.execution.gas_used.as_u64() as usize, contract, function);
                 }
                 Err(_) => {
                     metrics::inc_executor_local_call(start.elapsed(), false, contract, function);

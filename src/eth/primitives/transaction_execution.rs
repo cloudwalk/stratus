@@ -9,6 +9,7 @@ use crate::alias::AlloyLogData;
 use crate::alias::AlloyLogPrimitive;
 use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
+use crate::alias::JsonValue;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::EvmExecutionMetrics;
@@ -18,10 +19,11 @@ use crate::eth::primitives::Signature;
 use crate::eth::primitives::TransactionInfo;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::logs_bloom::LogsBloom;
+use crate::ext::to_json_value;
 use crate::ext::OptionExt;
 
-#[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(test, derive(fake::Dummy, PartialEq))]
+#[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct TransactionExecution {
     pub info: TransactionInfo,
     pub signature: Signature,
@@ -59,6 +61,14 @@ impl TransactionExecution {
             log_index: None,
             removed: false,
         }
+    }
+
+    pub fn to_json_rpc_receipt(self) -> JsonValue {
+        to_json_value(AlloyReceipt::from(self))
+    }
+
+    pub fn logs(&self) -> &Vec<Log> {
+        &self.result.execution.logs
     }
 }
 
@@ -100,7 +110,7 @@ impl From<TransactionExecution> for AlloyReceipt {
 
         let receipt = Receipt {
             status: Eip658Value::Eip658(value.result.execution.is_success()),
-            cumulative_gas_used: value.result.execution.gas.into(),
+            cumulative_gas_used: value.result.execution.gas_used.into(),
             logs: alloy_logs.into_iter().map(|log| log.inner).collect(),
         };
 
@@ -135,7 +145,7 @@ impl From<TransactionExecution> for AlloyReceipt {
             transaction_index: None,
             block_hash: None,
             block_number: None,
-            gas_used: value.result.execution.gas.into(),
+            gas_used: value.result.execution.gas_used.into(),
             effective_gas_price: value.evm_input.gas_price,
             blob_gas_used: None,
             blob_gas_price: None,
