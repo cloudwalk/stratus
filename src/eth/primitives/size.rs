@@ -2,7 +2,9 @@ use alloy_primitives::U64;
 use alloy_primitives::U256;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::ext::RuintExt;
@@ -11,6 +13,7 @@ use crate::ext::RuintExt;
 #[serde(transparent)]
 pub struct Size(U64);
 
+#[cfg(test)]
 impl Dummy<Faker> for Size {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(U64::random_with(rng))

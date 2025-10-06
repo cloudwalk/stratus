@@ -1,12 +1,15 @@
 use alloy_primitives::B64;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 /// The nonce of an Ethereum block.
 #[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MinerNonce(B64);
 
+#[cfg(test)]
 impl Dummy<Faker> for MinerNonce {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         B64::random_with(rng).into()
