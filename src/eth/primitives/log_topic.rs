@@ -3,7 +3,9 @@ use std::fmt::Display;
 use alloy_primitives::B256;
 use alloy_primitives::FixedBytes;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 /// Topic is part of a [`Log`](super::Log) emitted by the EVM during contract execution.
@@ -16,6 +18,7 @@ impl Display for LogTopic {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for LogTopic {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(FixedBytes::random_with(rng))

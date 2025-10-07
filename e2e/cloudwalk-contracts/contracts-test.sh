@@ -20,7 +20,6 @@ test() {
         return 1
     fi
     git restore .
-    cp ../../../hardhat.config.ts .
     rm -rf .openzeppelin/
 
     # apply git patch
@@ -65,7 +64,6 @@ asdf local nodejs 20.10.0 || echo "asdf, nodejs plugin or nodejs version not fou
 token=0
 periphery=0
 multisig=0
-compound=0
 yield=0
 pix=0
 cppv2=0
@@ -79,9 +77,8 @@ print_help() {
     echo "  -t, --token             for brlc-token"
     echo "  -p, --periphery         for brlc-periphery"
     echo "  -m, --multisig          for brlc-multisig"
-    echo "  -c, --compound          for compound-periphery"
-    echo "  -i, --yield             for brlc-yield-streamer"
-    echo "  -x, --pix               for brlc-pix-cashier"
+    echo "  -i, --yield             for brlc-net-yield-distributor"
+    echo "  -x, --pix               for brlc-cashier"
     echo "  -2, --cppv2             for brlc-periphery-v2"
     echo "  -f, --capybara-finance  for brlc-capybara-finance"
     echo "  -a, --credit-agent      for brlc-credit-agent"
@@ -92,7 +89,6 @@ if [ "$#" == 0 ]; then
     token=1
     periphery=1
     multisig=1
-    compound=1
     yield=1
     pix=1
     cppv2=1
@@ -117,10 +113,6 @@ if [[ "$#" -gt 0 ]]; then
         ;;
     -m | --multisig)
         multisig=1
-        shift
-        ;;
-    -c | --compound)
-        compound=1
         shift
         ;;
     -i | --yield)
@@ -160,14 +152,14 @@ fi
 
 if [ "$pix" == 1 ]; then
     # Cashier Transition: test Cashier v4, regardless if the repository was renamed or not
-    test brlc-cashier CashierSharded "$@" || test brlc-pix-cashier CashierSharded "$@"
+    test brlc-cashier CashierSharded "$@"
 fi
 
 if [ "$yield" == 1 ]; then
     # BalanceTracker Transition: test BalanceTracker, regardless of repository
-    test brlc-balance-tracker BalanceTracker "$@" || test brlc-yield-streamer BalanceTracker "$@"
+    test brlc-balance-tracker BalanceTracker "$@" || test brlc-net-yield-distributor BalanceTracker "$@"
 
-    test brlc-yield-streamer YieldStreamer "$@"
+    test brlc-net-yield-distributor NetYieldDistributor "$@"
 fi
 
 if [ "$periphery" == 1 ]; then
@@ -180,10 +172,6 @@ if [ "$multisig" == 1 ]; then
     test brlc-multisig MultiSigWallet "$@"
     test brlc-multisig MultiSigWalletFactory "$@"
     test brlc-multisig MultiSigWalletUpgradeable "$@"
-fi
-
-if [ "$compound" == 1 ]; then
-    test compound-periphery CompoundAgent "$@"
 fi
 
 if [ "$capybara_finance" == 1 ]; then

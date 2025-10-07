@@ -1,21 +1,34 @@
+#[cfg(test)]
 use alloy_consensus::Signed;
+#[cfg(test)]
 use alloy_consensus::TxEnvelope;
+#[cfg(test)]
 use alloy_consensus::TxLegacy;
+#[cfg(test)]
 use alloy_consensus::transaction::Recovered;
+#[cfg(test)]
 use alloy_primitives::Bytes;
+#[cfg(test)]
 use alloy_primitives::Signature;
+#[cfg(test)]
 use alloy_primitives::TxKind;
+#[cfg(test)]
 use alloy_primitives::U256;
 use anyhow::Context;
 use anyhow::Result;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Fake;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::alias::AlloyTransaction;
+#[cfg(test)]
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
+#[cfg(test)]
 use crate::eth::primitives::Wei;
 
 #[derive(Debug, Clone, PartialEq, derive_more::Deref, serde::Serialize)]
@@ -87,6 +100,7 @@ impl ExternalTransaction {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for ExternalTransaction {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
         let from: Address = faker.fake_with_rng(rng);

@@ -8,7 +8,8 @@ use super::log::LogRocksdb;
 use super::unix_time::UnixTimeRocksdb;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionRocksdb {
     pub block_timestamp: UnixTimeRocksdb,
     pub result: ExecutionResultRocksdb,

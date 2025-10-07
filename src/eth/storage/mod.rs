@@ -60,7 +60,8 @@ impl StorageConfig {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize, fake::Dummy, Eq)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize, Eq)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub enum TxCount {
     Full,
     Partial(u64),
@@ -114,7 +115,8 @@ impl PartialOrd for TxCount {
     }
 }
 
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Default, fake::Dummy, Eq)]
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Default, Eq)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub enum ReadKind {
     Call((BlockNumber, TxCount)),
     #[default]
