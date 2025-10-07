@@ -33,7 +33,7 @@ pub struct TransactionExecution {
     pub result: EvmExecutionResult,
     // mined data
     pub index: Index,
-    pub block_hash: Option<Hash>
+    pub block_hash: Option<Hash>,
 }
 
 impl TransactionExecution {

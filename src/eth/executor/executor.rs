@@ -396,7 +396,14 @@ impl Executor {
                     return Err(e);
                 };
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_execution, tx_index.try_into()?, None)
+                TransactionExecution::new(
+                    tx_input.transaction_info,
+                    tx_input.signature,
+                    evm_input,
+                    evm_execution,
+                    tx_index.try_into()?,
+                    None,
+                )
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -542,7 +549,7 @@ impl Executor {
                 evm_input,
                 evm_result,
                 tx_index.try_into()?,
-                None
+                None,
             );
             #[cfg(feature = "metrics")]
             let tx_metrics = tx_execution.metrics();
