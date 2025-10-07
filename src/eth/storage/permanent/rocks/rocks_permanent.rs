@@ -8,6 +8,8 @@ use anyhow::bail;
 
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
+use crate::eth::primitives::LogMessage;
+use crate::eth::primitives::TransactionExecution;
 use crate::GlobalState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -19,14 +21,12 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
-use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
@@ -195,7 +195,7 @@ impl RocksPermanentStorage {
         result.map_err(|err| StorageError::RocksError { err })
     }
 
-    pub fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError> {
+    pub fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
         self.state
             .read_transaction(hash)
             .map_err(|err| StorageError::RocksError { err })
@@ -204,7 +204,7 @@ impl RocksPermanentStorage {
             })
     }
 
-    pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>, StorageError> {
+    pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMessage>, StorageError> {
         self.state.read_logs(filter).map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read log in RocksPermanent");
         })

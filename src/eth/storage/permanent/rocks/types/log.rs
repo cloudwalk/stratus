@@ -25,17 +25,4 @@ impl From<Log> for LogRocksdb {
     }
 }
 
-impl From<LogRocksdb> for Log {
-    fn from(item: LogRocksdb) -> Self {
-        Self {
-            address: item.address.into(),
-            topic0: item.topics.0.map_into(),
-            topic1: item.topics.1.map_into(),
-            topic2: item.topics.2.map_into(),
-            topic3: item.topics.3.map_into(),
-            data: item.data.into(),
-        }
-    }
-}
-
 impl SerializeDeserializeWithContext for LogRocksdb {}

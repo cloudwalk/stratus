@@ -48,13 +48,13 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::TransactionExecution;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
@@ -262,7 +262,7 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionMined>> {
+    pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionExecution>> {
         let Some(block_number) = self.transactions.get(&tx_hash.into())? else {
             return Ok(None);
         };
@@ -278,14 +278,18 @@ impl RocksStorageState {
         match transaction {
             Some(tx) => {
                 tracing::trace!(%tx_hash, "transaction found");
-                Ok(Some(TransactionMined::from_rocks_primitives(tx, block_number.into_inner(), block.header.hash)))
+                Ok(Some(TransactionExecution::from_rocks_primitives(
+                    tx,
+                    block_number.into_inner(),
+                    block.header.hash,
+                )))
             }
             None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
                 .with_context(|| format!("block_number = {block_number:?} tx_hash = {tx_hash}")),
         }
     }
 
-    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>> {
+    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMessage>> {
         let is_block_number_in_end_range = |number: BlockNumber| match filter.to_block.as_ref() {
             Some(&last_block) => number <= last_block,
             None => true,
@@ -306,12 +310,13 @@ impl RocksStorageState {
 
             let block = block.into_inner();
             let logs = block.transactions.into_iter().enumerate().flat_map(|(tx_index, transaction)| {
-                transaction.logs.into_iter().map(move |log| {
-                    LogMined::from_rocks_primitives(log.log, block.header.number, block.header.hash, tx_index, transaction.input.hash, log.index)
-                })
+                transaction
+                    .logs
+                    .into_iter()
+                    .map(move |log| LogMessage::from_rocks_primitives(log, block.header.number, block.header.hash, tx_index, transaction.input.hash))
             });
 
-            let filtered_logs = logs.filter(|log| filter.matches(log));
+            let filtered_logs = logs.filter(|log| filter.matches(&log.log, block.header.number.into()));
             logs_result.extend(filtered_logs);
         }
         Ok(logs_result)
@@ -400,12 +405,13 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
+                }
+            }
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
@@ -439,7 +445,7 @@ impl RocksStorageState {
 
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.input.transaction_info.hash.into(), transaction.block_number.into()));
+            txs_batch.push((transaction.info.hash.into(), transaction.evm_input.block_number.into()));
         }
         self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
 
@@ -482,7 +488,7 @@ impl RocksStorageState {
     pub fn prepare_block_insertion(&self, block: Block, account_changes: ExecutionChanges, batch: &mut WriteBatch) -> Result<()> {
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.input.transaction_info.hash.into(), transaction.block_number.into()));
+            txs_batch.push((transaction.info.hash.into(), transaction.evm_input.block_number.into()));
         }
 
         self.transactions.prepare_batch_insertion(txs_batch, batch)?;
@@ -763,7 +769,10 @@ mod tests {
     use fake::Faker;
 
     use super::*;
+    use crate::eth::executor::EvmExecutionResult;
+    use crate::eth::executor::EvmInput;
     use crate::eth::primitives::BlockHeader;
+    use crate::eth::primitives::EvmExecution;
 
     #[test]
     #[cfg(feature = "dev")]
@@ -821,9 +830,18 @@ mod tests {
                     number: number.into(),
                     ..Faker.fake()
                 },
-                transactions: vec![TransactionMined {
-                    block_number: number.into(),
-                    logs: vec![Faker.fake(), Faker.fake()],
+                transactions: vec![TransactionExecution {
+                    evm_input: EvmInput {
+                        block_number: number.into(),
+                        ..Faker.fake()
+                    },
+                    result: EvmExecutionResult {
+                        execution: EvmExecution {
+                            logs: vec![Faker.fake(), Faker.fake()],
+                            ..Faker.fake()
+                        },
+                        ..Faker.fake()
+                    },
                     ..Faker.fake()
                 }],
             };

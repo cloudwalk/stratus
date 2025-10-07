@@ -611,7 +611,7 @@ impl StratusStorage {
             }
         })?;
         if let Some(tx_temp) = temp_tx {
-            return Ok(tx_temp);
+            return Ok(Some(tx_temp));
         }
 
         // read from perm
@@ -622,10 +622,7 @@ impl StratusStorage {
                 tracing::error!(reason = ?e, "failed to read transaction from permanent storage");
             }
         })?;
-        match perm_tx {
-            Some(tx) => Ok(Some(TransactionStage::new_mined(tx))),
-            None => Ok(None),
-        }
+        Ok(perm_tx)
     }
 
     pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMessage>, StorageError> {

@@ -24,22 +24,10 @@ use crate::ext::RuintExt;
     Hash,
     PartialOrd,
     Ord,
-    Deref
+    Deref,
+    Default
 )]
 pub struct Index(#[deref] pub u64);
-
-#[derive(Deref, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Debug, DerefMut, derive_new::new)]
-pub struct WithIndex<T>
-where
-    T: Clone + PartialEq + Eq + fake::Dummy<Faker> + serde::Serialize,
-{
-    #[deref_mut]
-    #[deref]
-    inner: T,
-    index: Index,
-}
-
-
 
 impl Index {
     pub const ZERO: Index = Index(0u64);

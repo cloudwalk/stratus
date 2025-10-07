@@ -95,7 +95,6 @@ impl Block {
 
     pub fn create_log_messages(&self) -> Vec<LogMessage> {
         let mut log_messages = vec![];
-        let mut log_idx = Index::ZERO;
         for (transaction_index, tx) in self.transactions.iter().enumerate() {
             for log in tx.logs() {
                 log_messages.push(LogMessage {
@@ -104,9 +103,7 @@ impl Block {
                     transaction_index: (transaction_index as u64).into(),
                     block_hash: self.hash(),
                     block_number: self.number(),
-                    log_index: log_idx,
                 });
-                log_idx += Index::ONE;
             }
         }
         log_messages

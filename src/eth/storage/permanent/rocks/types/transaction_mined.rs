@@ -22,10 +22,7 @@ use crate::ext::RuintExt;
 pub struct TransactionMinedRocksdb {
     pub input: TransactionInputRocksdb,
     pub execution: ExecutionRocksdb,
-    #[deprecated(
-        note = "Use logs in execution instead"
-    )]
-    logs: Vec<LogMinedRocksdb>,
+    pub logs: Vec<LogMinedRocksdb>,
     pub transaction_index: IndexRocksdb,
 }
 
@@ -48,16 +45,14 @@ impl From<(usize, TransactionExecution)> for TransactionMinedRocksdb {
                 r: item.signature.r.into_limbs(),
                 s: item.signature.s.into_limbs(),
             },
-            execution: ExecutionRocksdb {
-                block_timestamp: item.evm_input.block_timestamp.into(),
-                result: item.result.execution.result.into(),
-                output: item.result.execution.output.into(),
-                logs: item.result.execution.logs.into_iter().map(|log| log.into()).collect(),
-                gas: item.result.execution.gas_used.into(),
-                deployed_contract_address: item.result.execution.deployed_contract_address.map_into(),
-            },
-            #[allow(deprecated)]
-            logs: vec![],
+            execution: ExecutionRocksdb::new(
+                item.evm_input.block_timestamp.into(),
+                item.result.execution.result.into(),
+                item.result.execution.output.into(),
+                item.result.execution.gas_used.into(),
+                item.result.execution.deployed_contract_address.map_into(),
+            ),
+            logs: item.result.execution.logs.into_iter().map(|log| log.into()).collect(),
             transaction_index: IndexRocksdb(idx as u32),
         }
     }
@@ -65,7 +60,7 @@ impl From<(usize, TransactionExecution)> for TransactionMinedRocksdb {
 
 impl TransactionExecution {
     pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb) -> Self {
-        let logs = other.execution.logs.into_iter().map(|log| log.into()).collect();
+        let logs = other.logs.into_iter().map(|log| log.into()).collect();
 
         let (result, output) = ExecutionResultBuilder((other.execution.result, other.execution.output)).build();
 
@@ -78,9 +73,9 @@ impl TransactionExecution {
                 logs,
                 gas_used: other.execution.gas.into(),
                 changes: ExecutionChanges::default(),
-                deployed_contract_address: other.execution.deployed_contract_address.map_into()
+                deployed_contract_address: other.execution.deployed_contract_address.map_into(),
             },
-            metrics: EvmExecutionMetrics::default()
+            metrics: EvmExecutionMetrics::default(),
         };
 
         Self {
@@ -88,6 +83,7 @@ impl TransactionExecution {
             signature: input.signature,
             evm_input: EvmInput::from_eth_transaction(&input.execution_info, block_number.into(), other.execution.block_timestamp.into()),
             result: evm_result,
+            index: other.transaction_index.into(),
         }
     }
 }

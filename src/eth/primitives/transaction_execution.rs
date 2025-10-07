@@ -70,6 +70,10 @@ impl TransactionExecution {
         to_json_value(AlloyReceipt::from(self))
     }
 
+    pub fn to_json_rpc_transaction(self) -> JsonValue {
+        to_json_value(AlloyTransaction::from(self))
+    }
+
     pub fn logs(&self) -> &Vec<Log> {
         &self.result.execution.logs
     }
