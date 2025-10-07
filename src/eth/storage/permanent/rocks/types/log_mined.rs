@@ -3,7 +3,9 @@ use std::fmt::Debug;
 use super::block_number::BlockNumberRocksdb;
 use super::hash::HashRocksdb;
 use super::log::LogRocksdb;
-use crate::eth::primitives::{Index, Log, LogMessage};
+use crate::eth::primitives::Index;
+use crate::eth::primitives::Log;
+use crate::eth::primitives::LogMessage;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::ext::OptionExt;
 
@@ -16,10 +18,7 @@ pub struct LogMinedRocksdb {
 impl From<Log> for LogMinedRocksdb {
     fn from(log: Log) -> Self {
         let index = log.index.unwrap_or_default().into();
-        Self {
-            log: log.into(),
-            index,
-        }
+        Self { log: log.into(), index }
     }
 }
 
@@ -32,7 +31,7 @@ impl From<LogMinedRocksdb> for Log {
             topic2: value.log.topics.2.map_into(),
             topic3: value.log.topics.3.map_into(),
             data: value.log.data.into(),
-            index: Some(value.index.into())
+            index: Some(value.index.into()),
         }
     }
 }

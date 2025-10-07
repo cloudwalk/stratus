@@ -2,9 +2,7 @@ use alloy_primitives::U64;
 use alloy_primitives::U256;
 use anyhow::bail;
 use derive_more::Deref;
-use derive_more::DerefMut;
 use display_json::DebugAsJson;
-use fake::Faker;
 
 use crate::ext::RuintExt;
 
@@ -25,7 +23,7 @@ use crate::ext::RuintExt;
     PartialOrd,
     Ord,
     Deref,
-    Default
+    Default,
 )]
 pub struct Index(#[deref] pub u64);
 

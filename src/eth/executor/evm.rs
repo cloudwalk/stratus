@@ -217,7 +217,8 @@ impl Evm {
             .ok_or_else(|| anyhow!("transaction not found: {tx_hash}"))?;
 
         // CREATE transactions need to be traced for blockscout to work correctly
-        if tx.result.execution.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.result.execution.result, ExecutionResult::Success) {
+        if tx.result.execution.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.result.execution.result, ExecutionResult::Success)
+        {
             return Ok(default_trace(tracer_type, tx));
         }
 

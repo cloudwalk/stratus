@@ -14,14 +14,15 @@ use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionInfo;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::Signature;
 use crate::eth::primitives::TransactionInfo;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::logs_bloom::LogsBloom;
-use crate::ext::to_json_value;
 use crate::ext::OptionExt;
+use crate::ext::to_json_value;
 
 #[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
@@ -30,14 +31,34 @@ pub struct TransactionExecution {
     pub signature: Signature,
     pub evm_input: EvmInput,
     pub result: EvmExecutionResult,
-    /// tx index
-    pub index: Index
+    // mined data
+    pub index: Index,
+    pub block_hash: Option<Hash>
 }
 
 impl TransactionExecution {
     /// Returns the EVM execution metrics.
     pub fn metrics(&self) -> EvmExecutionMetrics {
         self.result.metrics
+    }
+
+    pub fn create_alloy_logs(&self) -> Vec<AlloyLog> {
+        self.logs()
+            .iter()
+            .map(|log| AlloyLog {
+                inner: AlloyLogPrimitive {
+                    address: log.address.into(),
+                    data: AlloyLogData::new_unchecked(log.topics_non_empty().into_iter().map(Into::into).collect(), log.data.clone().into()),
+                },
+                block_hash: self.block_hash.map_into(),
+                block_number: Some(self.evm_input.block_number.as_u64()),
+                block_timestamp: Some(*self.evm_input.block_timestamp),
+                transaction_hash: Some(self.info.hash.into()),
+                transaction_index: Some(self.index.into()),
+                log_index: log.index.map_into(),
+                removed: false,
+            })
+            .collect()
     }
 
     /// Computes the bloom filter from execution logs.
@@ -47,23 +68,6 @@ impl TransactionExecution {
             bloom.accrue_log(log);
         }
         bloom
-    }
-
-    /// Converts a Log to AlloyLog without block/transaction metadata. XXX
-    fn log_to_alloy_log(log: &Log) -> AlloyLog {
-        AlloyLog {
-            inner: AlloyLogPrimitive {
-                address: log.address.into(),
-                data: AlloyLogData::new_unchecked(log.topics_non_empty().into_iter().map(Into::into).collect(), log.data.clone().into()),
-            },
-            block_hash: None,
-            block_number: None,
-            block_timestamp: None,
-            transaction_hash: None,
-            transaction_index: None,
-            log_index: None,
-            removed: false,
-        }
     }
 
     pub fn to_json_rpc_receipt(self) -> JsonValue {
@@ -107,18 +111,12 @@ impl From<TransactionExecution> for TransactionInput {
 
 impl From<TransactionExecution> for AlloyReceipt {
     fn from(value: TransactionExecution) -> Self {
-        let alloy_logs: Vec<_> = value
-            .result
-            .execution
-            .logs
-            .iter()
-            .map(TransactionExecution::log_to_alloy_log)
-            .collect();
+        let alloy_logs = value.create_alloy_logs();
 
         let receipt = Receipt {
             status: Eip658Value::Eip658(value.result.execution.is_success()),
             cumulative_gas_used: value.result.execution.gas_used.into(),
-            logs: alloy_logs.into_iter().map(|log| log.inner).collect(),
+            logs: alloy_logs,
         };
 
         let receipt_with_bloom = ReceiptWithBloom {
@@ -126,7 +124,7 @@ impl From<TransactionExecution> for AlloyReceipt {
             logs_bloom: value.compute_bloom().into(),
         };
 
-        let primitives_envelope = match value.info.tx_type.and_then(|tx| tx.try_into().ok()) {
+        let inner = match value.info.tx_type.and_then(|tx| tx.try_into().ok()) {
             Some(1u64) => ReceiptEnvelope::Eip2930(receipt_with_bloom),
             Some(2u64) => ReceiptEnvelope::Eip1559(receipt_with_bloom),
             Some(3u64) => ReceiptEnvelope::Eip4844(receipt_with_bloom),
@@ -134,24 +132,12 @@ impl From<TransactionExecution> for AlloyReceipt {
             _ => ReceiptEnvelope::Legacy(receipt_with_bloom),
         };
 
-        // Convert from ReceiptEnvelope<alloy_primitives::Log> to ReceiptEnvelope<alloy_rpc_types_eth::Log>
-        let inner = primitives_envelope.map_logs(|log| AlloyLog {
-            inner: log,
-            block_hash: None,
-            block_number: None,
-            block_timestamp: None,
-            transaction_hash: None,
-            transaction_index: None,
-            log_index: None,
-            removed: false,
-        });
-
         Self {
             inner,
             transaction_hash: value.info.hash.into(),
-            transaction_index: None,
-            block_hash: None,
-            block_number: None,
+            transaction_index: Some(value.index.into()),
+            block_hash: value.block_hash.map_into(),
+            block_number: Some(value.evm_input.block_number.as_u64()),
             gas_used: value.result.execution.gas_used.into(),
             effective_gas_price: value.evm_input.gas_price,
             blob_gas_used: None,

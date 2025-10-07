@@ -9,8 +9,8 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
-use crate::ext::to_json_value;
 use crate::ext::OptionExt;
+use crate::ext::to_json_value;
 
 /// Log that was emitted by the EVM and added to a block.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -39,13 +39,7 @@ impl LogMessage {
         to_json_value(alloy_log)
     }
 
-    pub fn from_parts(
-        log: Log,
-        block_number: BlockNumber,
-        block_hash: Hash,
-        transaction_hash: Hash,
-        transaction_index: Index,
-    ) -> Self {
+    pub fn from_parts(log: Log, block_number: BlockNumber, block_hash: Hash, transaction_hash: Hash, transaction_index: Index) -> Self {
         Self {
             log,
             transaction_hash,

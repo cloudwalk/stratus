@@ -39,7 +39,6 @@ use tracing::Span;
 use tracing::field;
 use tracing::info_span;
 
-use crate::eth::primitives::TransactionExecution;
 use crate::GlobalState;
 use crate::NodeMode;
 use crate::alias::AlloyReceipt;
@@ -76,6 +75,7 @@ use crate::eth::primitives::StateError;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;

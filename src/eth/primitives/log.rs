@@ -28,7 +28,7 @@ pub struct Log {
     pub data: Bytes,
 
     /// log index (Some if mined)
-    pub index: Option<Index>
+    pub index: Option<Index>,
 }
 
 impl Log {
@@ -42,7 +42,15 @@ impl Log {
         self.topics().into_iter().flatten().collect()
     }
 
-    pub fn to_alloy_log(self, block_hash: Hash, block_number: BlockNumber, block_timestamp: UnixTime, transaction_hash: Hash, transaction_index: Index, log_index: Index) -> AlloyLog {
+    pub fn to_alloy_log(
+        self,
+        block_hash: Hash,
+        block_number: BlockNumber,
+        block_timestamp: UnixTime,
+        transaction_hash: Hash,
+        transaction_index: Index,
+        log_index: Index,
+    ) -> AlloyLog {
         AlloyLog {
             inner: AlloyLogPrimitive {
                 address: self.address.into(),

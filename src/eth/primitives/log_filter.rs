@@ -158,7 +158,9 @@ mod tests {
         assert!(not(filter.matches(&log_with_topics([None, topics[0], None, None]), BlockNumber::ZERO)));
         assert!(not(filter.matches(&log_with_topics([None, None, topics[0], None]), BlockNumber::ZERO)));
         assert!(not(filter.matches(&log_with_topics([None, None, None, topics[0]]), BlockNumber::ZERO)));
-        assert!(not(filter.matches(&log_with_topics([topics[2], topics[2], topics[4], topics[0]]), BlockNumber::ZERO)));
+        assert!(not(
+            filter.matches(&log_with_topics([topics[2], topics[2], topics[4], topics[0]]), BlockNumber::ZERO)
+        ));
         assert!(not(filter.matches(&log_with_topics([topics[3], None, topics[5], None]), BlockNumber::ZERO)));
         assert!(not(filter.matches(&log_with_topics([topics[2], topics[4], None, topics[6]]), BlockNumber::ZERO)));
         assert!(not(filter.matches(&log_with_topics([None, topics[0], topics[4], topics[6]]), BlockNumber::ZERO)));

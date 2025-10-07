@@ -135,6 +135,7 @@ impl From<PendingBlock> for Block {
         let mut log_index = Index::ZERO;
         for (tx_idx, mut tx) in txs.into_iter().enumerate() {
             assert_eq!(tx_idx, *tx.index as usize);
+            tx.block_hash = Some(block.hash());
             for log in tx.result.execution.logs.iter_mut() {
                 log.index = Some(log_index);
                 log_index += Index::ONE;

@@ -232,7 +232,10 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionExecu
             let amount_bytes: [u8; 32] = match log.data.0.clone().try_into() {
                 Ok(amount_bytes) => amount_bytes,
                 Err(_) => {
-                    tracing::error!(?hash, "bug: event identified as ERC-20 transfer should have the amount as 32 bytes in the data field");
+                    tracing::error!(
+                        ?hash,
+                        "bug: event identified as ERC-20 transfer should have the amount as 32 bytes in the data field"
+                    );
                     return None;
                 }
             };

@@ -84,6 +84,7 @@ impl TransactionExecution {
             evm_input: EvmInput::from_eth_transaction(&input.execution_info, block_number.into(), other.execution.block_timestamp.into()),
             result: evm_result,
             index: other.transaction_index.into(),
+            block_hash: Some(block_hash.into())
         }
     }
 }

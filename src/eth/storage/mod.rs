@@ -71,7 +71,7 @@ impl TryFrom<TxCount> for Index {
     fn try_from(value: TxCount) -> Result<Self, Self::Error> {
         match value {
             TxCount::Partial(idx) => Ok(idx.into()),
-            TxCount::Full => bail!("full transactions has unknown tx index")
+            TxCount::Full => bail!("full transactions has unknown tx index"),
         }
     }
 }

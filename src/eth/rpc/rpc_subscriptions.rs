@@ -16,12 +16,12 @@ use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tokio::time::timeout;
 
-use crate::eth::primitives::LogMessage;
 use crate::GlobalState;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogFilterInput;
+use crate::eth::primitives::LogMessage;
 use crate::eth::primitives::RpcError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::UnixTimeNow;
