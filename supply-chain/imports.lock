@@ -120,6 +120,48 @@ user-id = 51017
 user-login = "JohnTitor"
 user-name = "Yuki Okushi"
 
+[[publisher.sentry-core]]
+version = "0.42.0"
+when = "2025-07-29"
+user-id = 12434
+user-login = "getsentry-bot"
+user-name = "Sentry Bot"
+
+[[publisher.sentry-core]]
+version = "0.43.0"
+when = "2025-09-24"
+user-id = 12434
+user-login = "getsentry-bot"
+user-name = "Sentry Bot"
+
+[[publisher.sentry-tracing]]
+version = "0.42.0"
+when = "2025-07-29"
+user-id = 12434
+user-login = "getsentry-bot"
+user-name = "Sentry Bot"
+
+[[publisher.sentry-tracing]]
+version = "0.43.0"
+when = "2025-09-24"
+user-id = 12434
+user-login = "getsentry-bot"
+user-name = "Sentry Bot"
+
+[[publisher.sentry-types]]
+version = "0.42.0"
+when = "2025-07-29"
+user-id = 12434
+user-login = "getsentry-bot"
+user-name = "Sentry Bot"
+
+[[publisher.sentry-types]]
+version = "0.43.0"
+when = "2025-09-24"
+user-id = 12434
+user-login = "getsentry-bot"
+user-name = "Sentry Bot"
+
 [[publisher.unicode-normalization]]
 version = "0.1.24"
 when = "2024-09-17"

@@ -1608,23 +1608,11 @@ criteria = "safe-to-deploy"
 version = "0.42.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.sentry-core]]
-version = "0.42.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.sentry-debug-images]]
 version = "0.42.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.sentry-panic]]
-version = "0.42.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.sentry-tracing]]
-version = "0.42.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.sentry-types]]
 version = "0.42.0"
 criteria = "safe-to-deploy"
 
