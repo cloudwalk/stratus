@@ -17,7 +17,7 @@ use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlock;
@@ -29,7 +29,6 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
@@ -599,7 +598,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionStage>, StorageError> {
+    pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionExecution>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_transaction", %tx_hash).entered();
 
@@ -612,7 +611,7 @@ impl StratusStorage {
             }
         })?;
         if let Some(tx_temp) = temp_tx {
-            return Ok(Some(TransactionStage::new_executed(tx_temp)));
+            return Ok(tx_temp);
         }
 
         // read from perm
@@ -629,7 +628,7 @@ impl StratusStorage {
         }
     }
 
-    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>, StorageError> {
+    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMessage>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_logs", ?filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading logs");

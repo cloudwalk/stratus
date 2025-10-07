@@ -217,7 +217,7 @@ impl Evm {
             .ok_or_else(|| anyhow!("transaction not found: {tx_hash}"))?;
 
         // CREATE transactions need to be traced for blockscout to work correctly
-        if tx.deployed_contract_address().is_none() && trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
+        if tx.result.execution.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.result.execution.result, ExecutionResult::Success) {
             return Ok(default_trace(tracer_type, tx));
         }
 
@@ -226,21 +226,21 @@ impl Evm {
             .journaled_state
             .database
             .storage
-            .read_block(BlockFilter::Number(tx.block_number()))?
+            .read_block(BlockFilter::Number(tx.evm_input.block_number))?
             .ok_or_else(|| {
                 StratusError::Storage(StorageError::BlockNotFound {
-                    filter: BlockFilter::Number(tx.block_number()),
+                    filter: BlockFilter::Number(tx.evm_input.block_number),
                 })
             })?;
 
         let tx_info = TransactionInfo {
             block_hash: Some(block.hash().0.0.into()),
             hash: Some(tx_hash.0.0.into()),
-            index: tx.index().map_into(),
+            index: Some(tx.index.into()),
             block_number: Some(block.number().as_u64()),
             base_fee: None,
         };
-        let inspect_input: EvmInput = tx.try_into()?;
+        let inspect_input: EvmInput = tx.evm_input;
         self.evm.journaled_state.database.reset(EvmInput {
             point_in_time: PointInTime::MinedPast(inspect_input.block_number.prev().unwrap_or_default()),
             ..Default::default()

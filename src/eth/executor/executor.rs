@@ -363,7 +363,8 @@ impl Executor {
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         let tx_input: TransactionInput = tx.try_into()?;
-        let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &self.storage.read_pending_block_header().0);
+        let (pending_block, tx_index) = self.storage.read_pending_block_header();
+        let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_block.number, *pending_block.timestamp);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
@@ -395,7 +396,7 @@ impl Executor {
                     return Err(e);
                 };
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_execution)
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_execution, tx_index.try_into()?)
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -418,7 +419,7 @@ impl Executor {
                 evm_input.gas_limit = tx_input.execution_info.gas_limit;
                 evm_input.gas_price = tx_input.execution_info.gas_price;
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result)
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result, tx_index.try_into()?)
             }
         };
 
@@ -515,8 +516,8 @@ impl Executor {
             });
 
             // prepare evm input
-            let (pending_header, _) = self.storage.read_pending_block_header();
-            let evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &pending_header);
+            let (pending_header, tx_index) = self.storage.read_pending_block_header();
+            let evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::debug!(
@@ -535,7 +536,7 @@ impl Executor {
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new(tx_input.transaction_info.clone(), tx_input.signature.clone(), evm_input, evm_result);
+            let tx_execution = TransactionExecution::new(tx_input.transaction_info.clone(), tx_input.signature.clone(), evm_input, evm_result, tx_index.try_into()?);
             #[cfg(feature = "metrics")]
             let tx_metrics = tx_execution.metrics();
             #[cfg(feature = "metrics")]

@@ -14,6 +14,7 @@ use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionInfo;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::Signature;
 use crate::eth::primitives::TransactionInfo;
@@ -29,6 +30,8 @@ pub struct TransactionExecution {
     pub signature: Signature,
     pub evm_input: EvmInput,
     pub result: EvmExecutionResult,
+    /// tx index
+    pub index: Index
 }
 
 impl TransactionExecution {
@@ -46,7 +49,7 @@ impl TransactionExecution {
         bloom
     }
 
-    /// Converts a Log to AlloyLog without block/transaction metadata.
+    /// Converts a Log to AlloyLog without block/transaction metadata. XXX
     fn log_to_alloy_log(log: &Log) -> AlloyLog {
         AlloyLog {
             inner: AlloyLogPrimitive {

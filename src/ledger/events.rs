@@ -19,7 +19,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogTopic;
-use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::UnixTime;
 use crate::if_else;
 
@@ -218,25 +218,28 @@ impl Event for AccountTransfers {
 const TRANSFER_EVENT: LogTopic = LogTopic(B256::new(hex!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")));
 
 /// Converts a mined transaction into multiple account transfers events to be published.
-pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined>) -> Vec<AccountTransfers> {
+pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionExecution>) -> Vec<AccountTransfers> {
+    let hash = tx.info.hash;
     // identify token transfers in transaction
     let transfers = tx
         .as_ref()
+        .result
+        .execution
         .logs
         .iter()
-        .filter(|log| log.log.topic0.is_some_and(|topic0| topic0 == TRANSFER_EVENT))
+        .filter(|log| log.topic0.is_some_and(|topic0| topic0 == TRANSFER_EVENT))
         .filter_map(|log| {
-            let amount_bytes: [u8; 32] = match log.log.data.0.clone().try_into() {
+            let amount_bytes: [u8; 32] = match log.data.0.clone().try_into() {
                 Ok(amount_bytes) => amount_bytes,
                 Err(_) => {
-                    tracing::error!(?log.transaction_hash, "bug: event identified as ERC-20 transfer should have the amount as 32 bytes in the data field");
+                    tracing::error!(?hash, "bug: event identified as ERC-20 transfer should have the amount as 32 bytes in the data field");
                     return None;
                 }
             };
 
-            let token = log.log.address;
-            let from: Address = log.log.topic1?.into();
-            let to: Address = log.log.topic2?.into();
+            let token = log.address;
+            let from: Address = log.topic1?.into();
+            let to: Address = log.topic2?.into();
             let amount = U256::from_be_bytes(amount_bytes); // TODO: review
 
             Some((token, from, to, amount))
@@ -258,17 +261,17 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined
             publication_id: Uuid::now_v7(),
             publication_datetime: Utc::now(),
             account_address: *account,
-            transaction_hash: tx.input.transaction_info.hash,
-            transaction_index: tx.transaction_index.0,
-            contract_address: tx.input.execution_info.to.unwrap_or_else(|| {
-                tracing::error!(?tx.input.transaction_info.hash, "bug: transaction emitting transfers must have the contract address");
+            transaction_hash: tx.info.hash,
+            transaction_index: tx.index.0,
+            contract_address: tx.evm_input.to.unwrap_or_else(|| {
+                tracing::error!(?tx.info.hash, "bug: transaction emitting transfers must have the contract address");
                 Address::ZERO
             }),
-            function_id: tx.input.execution_info.input[0..4].try_into().unwrap_or_else(|_| {
-                tracing::error!(?tx.input.transaction_info.hash, "bug: transaction emitting transfers must have the 4-byte signature");
+            function_id: tx.evm_input.data[0..4].try_into().unwrap_or_else(|_| {
+                tracing::error!(?tx.info.hash, "bug: transaction emitting transfers must have the 4-byte signature");
                 [0; 4]
             }),
-            block_number: tx.block_number,
+            block_number: tx.evm_input.block_number,
             block_datetime: block_timestamp.into(),
             transfers: vec![],
         };
@@ -314,8 +317,8 @@ mod tests {
     use crate::eth::primitives::BlockNumber;
     use crate::eth::primitives::Bytes;
     use crate::eth::primitives::Hash;
-    use crate::eth::primitives::LogMined;
-    use crate::eth::primitives::TransactionMined;
+    use crate::eth::primitives::Log;
+    use crate::eth::primitives::TransactionExecution;
     use crate::eth::primitives::UnixTime;
     use crate::eth::primitives::test_accounts;
     use crate::ext::to_json_value;
@@ -392,28 +395,28 @@ mod tests {
         let block_timestamp: UnixTime = 1729108070.into();
 
         // 2. generate fake tx data
-        let mut tx: TransactionMined = Fake::fake(&Faker);
-        tx.input.execution_info.input = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let mut tx: TransactionExecution = Fake::fake(&Faker);
+        tx.evm_input.data = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
 
-        let mut log_transfer1: LogMined = Fake::fake(&Faker);
-        log_transfer1.log.address = token_address;
-        log_transfer1.log.topic0 = Some(TRANSFER_EVENT);
-        log_transfer1.log.topic1 = Some(alice.address.into());
-        log_transfer1.log.topic2 = Some(bob.address.into());
-        log_transfer1.log.data = Bytes(amount_bytes.to_vec());
+        let mut log_transfer1: Log = Fake::fake(&Faker);
+        log_transfer1.address = token_address;
+        log_transfer1.topic0 = Some(TRANSFER_EVENT);
+        log_transfer1.topic1 = Some(alice.address.into());
+        log_transfer1.topic2 = Some(bob.address.into());
+        log_transfer1.data = Bytes(amount_bytes.to_vec());
 
-        let mut log_transfer2: LogMined = Fake::fake(&Faker);
-        log_transfer2.log.address = token_address;
-        log_transfer2.log.topic0 = Some(TRANSFER_EVENT);
-        log_transfer2.log.topic1 = Some(bob.address.into());
-        log_transfer2.log.topic2 = Some(charlie.address.into());
-        log_transfer2.log.data = Bytes(amount_bytes.to_vec());
+        let mut log_transfer2: Log = Fake::fake(&Faker);
+        log_transfer2.address = token_address;
+        log_transfer2.topic0 = Some(TRANSFER_EVENT);
+        log_transfer2.topic1 = Some(bob.address.into());
+        log_transfer2.topic2 = Some(charlie.address.into());
+        log_transfer2.data = Bytes(amount_bytes.to_vec());
 
-        let log_random: LogMined = Fake::fake(&Faker);
+        let log_random: Log = Fake::fake(&Faker);
 
-        tx.logs.push(log_transfer1);
-        tx.logs.push(log_random);
-        tx.logs.push(log_transfer2);
+        tx.result.execution.logs.push(log_transfer1);
+        tx.result.execution.logs.push(log_random);
+        tx.result.execution.logs.push(log_transfer2);
 
         // 3. parse events
         let events = transaction_to_events(block_timestamp, Cow::Borrowed(&tx));
@@ -421,10 +424,10 @@ mod tests {
         // 4. assert events
         assert_eq!(events.len(), 3); // number of accounts involved in all transactions
         for event in events {
-            assert_eq!(&event.transaction_hash, &tx.input.transaction_info.hash);
-            assert_eq!(&event.contract_address, &tx.input.execution_info.to.unwrap());
-            assert_eq!(&event.function_id[0..], &tx.input.execution_info.input.0[0..4]);
-            assert_eq!(&event.block_number, &tx.block_number);
+            assert_eq!(&event.transaction_hash, &tx.info.hash);
+            assert_eq!(&event.contract_address, &tx.evm_input.to.unwrap());
+            assert_eq!(&event.function_id[0..], &tx.evm_input.data.0[0..4]);
+            assert_eq!(&event.block_number, &tx.evm_input.block_number);
             assert_eq!(&event.block_datetime, &DateTime::<Utc>::from(block_timestamp));
 
             // assert transfers

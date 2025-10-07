@@ -1,5 +1,6 @@
 //! Ethereum / EVM storage.
 
+use anyhow::bail;
 use cache::CacheConfig;
 pub use cache::StorageCache;
 pub use permanent::PermanentStorageConfig;
@@ -20,6 +21,7 @@ use display_json::DebugAsJson;
 pub use temporary::compute_pending_block_number;
 
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::StratusError;
 
 // -----------------------------------------------------------------------------
@@ -62,6 +64,16 @@ impl StorageConfig {
 pub enum TxCount {
     Full,
     Partial(u64),
+}
+
+impl TryFrom<TxCount> for Index {
+    type Error = anyhow::Error;
+    fn try_from(value: TxCount) -> Result<Self, Self::Error> {
+        match value {
+            TxCount::Partial(idx) => Ok(idx.into()),
+            TxCount::Full => bail!("full transactions has unknown tx index")
+        }
+    }
 }
 
 impl From<u64> for TxCount {

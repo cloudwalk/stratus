@@ -1,15 +1,45 @@
 use alloy_primitives::U64;
 use alloy_primitives::U256;
 use anyhow::bail;
+use derive_more::Deref;
+use derive_more::DerefMut;
 use display_json::DebugAsJson;
+use fake::Faker;
 
 use crate::ext::RuintExt;
 
 /// Represents a transaction index or log index.
 #[derive(
-    DebugAsJson, derive_more::Display, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, derive_more::AddAssign, Hash, PartialOrd, Ord,
+    DebugAsJson,
+    derive_more::Display,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    fake::Dummy,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_more::Add,
+    derive_more::AddAssign,
+    Hash,
+    PartialOrd,
+    Ord,
+    Deref
 )]
-pub struct Index(pub u64);
+pub struct Index(#[deref] pub u64);
+
+#[derive(Deref, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Debug, DerefMut, derive_new::new)]
+pub struct WithIndex<T>
+where
+    T: Clone + PartialEq + Eq + fake::Dummy<Faker> + serde::Serialize,
+{
+    #[deref_mut]
+    #[deref]
+    inner: T,
+    index: Index,
+}
+
+
 
 impl Index {
     pub const ZERO: Index = Index(0u64);

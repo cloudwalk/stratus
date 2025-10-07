@@ -136,7 +136,12 @@ impl From<PendingBlock> for Block {
         block.header.size = Size::from(txs.len() as u64);
 
         let mut log_index = Index::ZERO;
-        for (_tx_idx, tx) in txs.into_iter().enumerate() {
+        for (tx_idx, mut tx) in txs.into_iter().enumerate() {
+            assert_eq!(tx_idx, *tx.index as usize);
+            for log in tx.result.execution.logs.iter_mut() {
+                log.index = Some(log_index);
+                log_index += Index::ONE;
+            }
             block.transactions.push(tx);
         }
 

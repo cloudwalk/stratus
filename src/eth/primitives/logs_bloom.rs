@@ -81,6 +81,7 @@ mod tests {
             topic2: Some(hex!("000000000000000000000000081d2c5b26db6f6e0944e4725b3b61b26e25dd8a").into()),
             topic3: None,
             data: hex!("0000000000000000000000000000000000000000000000000000000005f5e100").as_ref().into(),
+            index: None,
         };
         let log2 = Log {
             address: hex!("b1f571b3254c99a0a562124738f0193de2b2b2a9").into(),
@@ -94,6 +95,7 @@ mod tests {
             )
             .as_ref()
             .into(),
+            index: None,
         };
         let mut bloom = LogsBloom::default();
         bloom.accrue_log(&log1);

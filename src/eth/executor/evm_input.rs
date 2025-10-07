@@ -84,7 +84,7 @@ pub struct EvmInput {
 
 impl EvmInput {
     /// Creates from a transaction that was sent to Stratus with `eth_sendRawTransaction` or during Importing.
-    pub fn from_eth_transaction(input: &ExecutionInfo, block_number: BlockNumber, timestamp: UnixTime) -> Self {
+    pub fn from_eth_transaction(input: &ExecutionInfo, block_number: BlockNumber, block_timestamp: UnixTime) -> Self {
         Self {
             from: input.signer,
             to: input.to,
@@ -93,8 +93,8 @@ impl EvmInput {
             gas_limit: input.gas_limit,
             gas_price: input.gas_price,
             nonce: Some(input.nonce),
-            block_number: pending_header.number,
-            block_timestamp: *pending_header.timestamp,
+            block_number,
+            block_timestamp,
             point_in_time: PointInTime::Pending,
             chain_id: input.chain_id,
             kind: ReadKind::Transaction,
