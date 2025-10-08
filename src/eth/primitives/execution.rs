@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use display_json::DebugAsJson;
 use hex_literal::hex;
 use revm::primitives::alloy_primitives;
+use serde_with::serde_as;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -23,10 +24,12 @@ use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::log_and_err;
 
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionChanges {
     pub accounts: HashMap<Address, ExecutionAccountChanges, hash_hasher::HashBuildHasher>,
+    #[serde_as(as = "Vec<(_, _)>")]
     pub slots: HashMap<(Address, SlotIndex), SlotValue, hash_hasher::HashBuildHasher>,
 }
 

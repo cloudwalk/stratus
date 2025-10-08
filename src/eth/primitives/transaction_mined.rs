@@ -40,7 +40,7 @@ impl TransactionMined {
                 },
                 block_hash: Some(self.mined_data.block_hash.into()),
                 block_number: Some(self.evm_input.block_number.as_u64()),
-                block_timestamp: Some(*self.evm_input.block_timestamp),
+                block_timestamp: None,
                 transaction_hash: Some(self.info.hash.into()),
                 transaction_index: Some(*self.mined_data.index),
                 log_index: Some(*self.mined_data.first_log_index + idx as u64),
@@ -63,8 +63,21 @@ impl TransactionMined {
 
 impl From<TransactionMined> for AlloyTransaction {
     fn from(value: TransactionMined) -> Self {
+        let gas_price = value.execution.evm_input.gas_price;
+        let block_hash = value.mined_data.block_hash;
+        let block_number = value.execution.evm_input.block_number;
+        let transaction_index = value.mined_data.index;
+
         let tx_input: TransactionInput = value.into();
-        tx_input.into()
+        let inner = AlloyTransaction::from(tx_input).inner;
+
+        Self {
+            inner,
+            block_hash: Some(block_hash.into()),
+            block_number: Some(block_number.as_u64()),
+            transaction_index: Some(transaction_index.into()),
+            effective_gas_price: Some(gas_price),
+        }
     }
 }
 

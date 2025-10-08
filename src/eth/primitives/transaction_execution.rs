@@ -20,6 +20,7 @@ use crate::eth::primitives::TransactionInfo;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::ext::OptionExt;
+use crate::ext::RuintExt;
 
 #[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
@@ -98,7 +99,7 @@ impl From<TransactionExecution> for TransactionInput {
 pub fn _tx_to_alloy_receipt_impl(execution: TransactionExecution, alloy_logs: Vec<AlloyLog>, mined_data: Option<MinedData>) -> AlloyReceipt {
     let receipt = Receipt {
         status: Eip658Value::Eip658(execution.result.execution.is_success()),
-        cumulative_gas_used: execution.result.execution.gas_used.into(),
+        cumulative_gas_used: execution.result.execution.gas_used.into(), // TODO: implement cumulative gas used correctly
         logs: alloy_logs,
     };
 
@@ -107,7 +108,7 @@ pub fn _tx_to_alloy_receipt_impl(execution: TransactionExecution, alloy_logs: Ve
         logs_bloom: execution.compute_bloom().into(),
     };
 
-    let inner = match execution.info.tx_type.and_then(|tx| tx.try_into().ok()) {
+    let inner = match execution.info.tx_type.map(|tx| tx.as_u64()) {
         Some(1u64) => ReceiptEnvelope::Eip2930(receipt_with_bloom),
         Some(2u64) => ReceiptEnvelope::Eip1559(receipt_with_bloom),
         Some(3u64) => ReceiptEnvelope::Eip4844(receipt_with_bloom),

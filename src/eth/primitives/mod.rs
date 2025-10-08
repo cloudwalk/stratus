@@ -140,7 +140,6 @@ mod tests {
 
     gen_test_serde!(Account);
     gen_test_serde!(Address);
-    gen_test_serde!(Block);
     gen_test_serde!(BlockFilter);
     gen_test_serde!(BlockHeader);
     gen_test_serde!(BlockNumber);
@@ -150,7 +149,6 @@ mod tests {
     gen_test_serde!(Difficulty);
     gen_test_serde!(EcdsaRs);
     gen_test_serde!(EcdsaV);
-    //gen_test_serde!(EvmExecution);
     gen_test_serde!(EvmExecutionMetrics);
     gen_test_serde!(ExecutionAccountChanges);
     gen_test_serde!(ExecutionResult);

@@ -318,18 +318,45 @@ where
 // -----------------------------------------------------------------------------
 
 /// Generates unit test that checks implementation of [`Serialize`](serde::Serialize) and [`Deserialize`](serde::Deserialize) are compatible.
+///
+/// # Usage
+///
+/// ```ignore
+/// // Generate both serde_json and serde_debug_json tests
+/// gen_test_serde!(MyType);
+///
+/// // Skip the serde_debug_json test
+/// gen_test_serde!(MyType, skip_debug);
+/// ```
 #[macro_export]
 macro_rules! gen_test_serde {
-    ($type:ty) => {
+    // Internal: generate debug test
+    (@gen_debug $type:ty) => {
         paste::paste! {
             #[test]
             pub fn [<serde_debug_json_ $type:snake>]() {
                 let original = <fake::Faker as fake::Fake>::fake::<$type>(&fake::Faker);
                 let encoded_json = serde_json::to_string(&original).expect(concat!("failed to serialize in test for ", stringify!($type)));
                 let encoded_debug = format!("{:?}", original);
-                assert_eq!(encoded_json, encoded_debug);
+                assert_eq!(encoded_json, encoded_debug, "encoded_json and encoded_debug are not equal");
             }
+        }
+    };
 
+    // Public: with skip_debug flag
+    ($type:ty, skip_debug) => {
+        $crate::gen_test_serde!(@gen_json $type);
+    };
+
+    // Public: default (generate both tests)
+    ($type:ty) => {
+        $crate::gen_test_serde!(@gen_debug $type);
+        $crate::gen_test_serde!(@gen_json $type);
+    };
+
+    // Internal: generate json test
+    (@gen_json $type:ty) => {
+        paste::paste! {
             #[test]
             pub fn [<serde_json_ $type:snake>]() {
                 // encode
@@ -338,15 +365,15 @@ macro_rules! gen_test_serde {
 
                 // decode
                 let decoded = serde_json::from_str::<$type>(&encoded).unwrap();
-                assert_eq!(decoded, original);
+                assert_eq!(decoded, original, "decoded and original are not equal");
 
                 // re-encode
                 let reencoded = serde_json::to_string(&decoded).unwrap();
-                assert_eq!(reencoded, encoded);
+                assert_eq!(reencoded, encoded, "reencoded and encoded are not equal");
 
                 // re-decode
                 let redecoded = serde_json::from_str::<$type>(&reencoded).unwrap();
-                assert_eq!(redecoded, original);
+                assert_eq!(redecoded, original, "reencoded and original are not equal");
             }
         }
     };

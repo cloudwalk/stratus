@@ -399,6 +399,7 @@ mod tests {
 
         // 2. generate fake tx data
         let mut tx: TransactionMined = Fake::fake(&Faker);
+        tx.execution.evm_input.to = Some(Faker::fake(&Faker));
         tx.execution.evm_input.data = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         let mut log_transfer1: Log = Fake::fake(&Faker);
