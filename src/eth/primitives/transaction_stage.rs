@@ -14,7 +14,10 @@ pub enum TransactionStage {
 
 impl TransactionStage {
     pub fn to_json_rpc_receipt(self) -> JsonValue {
-        to_json_value(AlloyReceipt::from(self))
+        match self {
+            TransactionStage::Mined(tx) => to_json_value(AlloyReceipt::from(tx)),
+            TransactionStage::Pending(_) => JsonValue::Null,
+        }
     }
 
     pub fn to_json_rpc_transaction(self) -> JsonValue {
