@@ -74,10 +74,10 @@ outdated:
     cargo outdated --root-deps-only --ignore-external-rel
 
 # Stratus: Check for unused dependencies
-check-unused-deps:
+check-unused-deps nightly-version="":
     #!/bin/bash
-    command -v cargo-udeps >/dev/null 2>&1 || { cargo +nightly install cargo-udeps; }
-    cargo +nightly udeps --all-targets
+    command -v cargo-udeps >/dev/null 2>&1 || { cargo +nightly{{nightly-version}} install cargo-udeps; }
+    cargo +nightly{{nightly-version}} udeps --all-targets
 
 # Stratus: Update only the project dependencies
 update:
@@ -104,7 +104,7 @@ stratus *args="":
 # Bin: Stratus main service as leader
 stratus-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    source <(just coverage-env)
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
@@ -128,7 +128,7 @@ stratus-follower *args="":
 # Bin: Stratus main service as follower
 stratus-follower-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    source <(just coverage-env)
     FEATURES="dev"
     if [[ "{{args}}" =~ --use-rocksdb-replication ]]; then
         FEATURES="dev,replication"
@@ -144,7 +144,7 @@ rpc-downloader *args="":
 
 rpc-downloader-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    source <(just coverage-env)
     cargo build
     cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
 
@@ -154,9 +154,9 @@ importer-offline *args="":
 
 importer-offline-test *args="":
     #!/bin/bash
-    source <(cargo llvm-cov show-env --export-prefix)
+    source <(just coverage-env)
     cargo build
-    cargo run --bin importer-offline -- {{args}} > importer-offline.log
+    cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -174,8 +174,8 @@ test-doc name="":
 run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
-    source <(cargo llvm-cov show-env --export-prefix)
     cargo llvm-cov clean --workspace
+    source <(just coverage-env)
     just {{recipe}} {{args}}
     result_code=$?
     echo "Killing stratus"
@@ -230,8 +230,7 @@ e2e-admin-password:
     for test in "enabled|test123" "disabled|"; do
         IFS="|" read -r type pass <<< "$test"
         just _log "Running admin password tests with password $type"
-        ADMIN_PASSWORD=$pass just stratus-test -a 0.0.0.0:3000 > /dev/null &
-        just _wait_for_stratus
+        ADMIN_PASSWORD=$pass just stratus-test -a 0.0.0.0:3000
 
         npx hardhat test test/admin/e2e-admin-password-$type.test.ts --network stratus
         exit_code=$?
@@ -289,9 +288,7 @@ e2e-stratus block-mode="automine" test="":
 e2e-clock-stratus:
     #!/bin/bash
     just _log "Starting Stratus"
-    just stratus-test --block-mode 1s -a 0.0.0.0:3000 > stratus.log &
-
-    just _wait_for_stratus
+    just stratus-test --block-mode 1s -a 0.0.0.0:3000
 
     just _log "Validating block time"
     ./utils/block-time-check.sh
@@ -310,21 +307,21 @@ shell-lint mode="--write":
     @shfmt {{ mode }} --indent 4 e2e/cloudwalk-contracts/*.sh
     @shellcheck e2e/cloudwalk-contracts/*.sh --severity=warning --shell=bash
 
-e2e-leader use_rocksdb_replication="false":
+e2e-leader:
     #!/bin/bash
     echo "starting e2e-leader"
-    REPLICATION_FLAG=""
-    if [ "{{use_rocksdb_replication}}" = "true" ]; then
-        REPLICATION_FLAG="--use-rocksdb-replication"
-    fi
-    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000 ${REPLICATION_FLAG}
+    # Leader doesn't need block changes flag, only follower does
+    unset ENABLE_BLOCK_CHANGES_REPLICATION
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-test --block-mode 1s --rocks-path-prefix=temp_3000
 
-e2e-follower test="brlc" use_rocksdb_replication="false":
+e2e-follower test="brlc" use_block_changes_replication="false":
     #!/bin/bash
-    REPLICATION_FLAG=""
-    if [ "{{use_rocksdb_replication}}" = "true" ]; then
-        REPLICATION_FLAG="--use-rocksdb-replication"
+    if [ "{{use_block_changes_replication}}" = "true" ]; then
+        export ENABLE_BLOCK_CHANGES_REPLICATION=true
+    else
+        export ENABLE_BLOCK_CHANGES_REPLICATION=false
     fi
+
     if [ "{{test}}" = "kafka" ]; then
     # Start Kafka using Docker Compose
         just _log "Starting Kafka"
@@ -332,21 +329,28 @@ e2e-follower test="brlc" use_rocksdb_replication="false":
         just _log "Waiting Kafka start"
         wait-service --tcp 0.0.0.0:29092 -- echo
         docker exec kafka kafka-topics --create --topic stratus-events --bootstrap-server localhost:29092 --partitions 1 --replication-factor 1
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 ${REPLICATION_FLAG} -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/ --kafka-bootstrap-servers localhost:29092 --kafka-topic stratus-events --kafka-client-id stratus-producer --kafka-security-protocol none
     else
-        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 ${REPLICATION_FLAG} -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+        RUST_BACKTRACE=1 RUST_LOG=info just stratus-follower-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
     fi
 
 
-_e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false":
+_e2e-leader-follower-up-impl test="brlc" use_block_changes_replication="false":
     #!/bin/bash
+
     mkdir e2e_logs
 
     # Start Stratus with leader flag
-    just e2e-leader {{use_rocksdb_replication}}
+    just e2e-leader
+
+    if [ "{{use_block_changes_replication}}" = "true" ]; then
+        export ENABLE_BLOCK_CHANGES_REPLICATION=true
+    else
+        export ENABLE_BLOCK_CHANGES_REPLICATION=false
+    fi
 
     # Start Stratus with follower flag
-    just e2e-follower {{test}} {{use_rocksdb_replication}}
+    just e2e-follower {{test}} {{use_block_changes_replication}}
 
     if [ "{{test}}" = "deploy" ]; then
         just _log "Running deploy script"
@@ -390,8 +394,8 @@ _e2e-leader-follower-up-impl test="brlc" use_rocksdb_replication="false":
     fi
 
 # E2E: Leader & Follower Up
-e2e-leader-follower-up test="brlc" use_rocksdb_replication="false":
-    just _e2e-leader-follower-up-impl {{test}} {{use_rocksdb_replication}}
+e2e-leader-follower-up test="brlc" use_block_changes_replication="false":
+    just _e2e-leader-follower-up-impl {{test}} {{use_block_changes_replication}}
     just e2e-leader-follower-down
 
 # E2E: Leader & Follower Down
@@ -557,3 +561,11 @@ e2e-genesis:
     npm install
     npx hardhat test test/genesis/genesis.test.ts --network stratus
     killport 3000 -s sigterm
+
+coverage-env:
+    #!/usr/bin/env bash
+    COVERAGE_FLAGS=$(env -u RUSTFLAGS cargo llvm-cov show-env 2>/dev/null | grep "^RUSTFLAGS=" | cut -d"'" -f2)
+    CURRENT_RUSTFLAGS="${RUSTFLAGS:-}"
+    if ! echo "$CURRENT_RUSTFLAGS" | grep -F -- "$COVERAGE_FLAGS" > /dev/null; then \
+        cargo llvm-cov show-env --export-prefix 2>/dev/null | grep '^export '; \
+    fi

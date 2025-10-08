@@ -1,12 +1,12 @@
 //! In-memory storage implementations.
 
-use std::collections::HashMap;
-
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
@@ -18,7 +18,6 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
-use crate::eth::storage::AccountWithSlots;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::call::InMemoryCallTemporaryStorage;
@@ -50,16 +49,20 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.set_pending_block_header(block_number)
     }
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool, is_local: bool) -> Result<(), StorageError> {
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
+        self.transaction_storage.set_pending_from_external(block);
+    }
+
+    pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
         self.call_storage.update_state_with_transaction(&tx);
-        self.transaction_storage.save_pending_execution(tx, check_conflicts, is_local)
+        self.transaction_storage.save_pending_execution(tx)
     }
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {
         self.transaction_storage.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self) -> anyhow::Result<PendingBlock, StorageError> {
+    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
         self.call_storage.retain_recent_blocks();
         self.transaction_storage.finish_pending_block()
     }
@@ -118,19 +121,19 @@ pub struct InMemoryTemporaryStorageState {
     pub block: PendingBlock,
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
-    pub accounts: HashMap<Address, AccountWithSlots, hash_hasher::HashBuildHasher>,
+    pub block_changes: ExecutionChanges,
 }
 
 impl InMemoryTemporaryStorageState {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
             block: PendingBlock::new_at_now(block_number),
-            accounts: HashMap::default(),
+            block_changes: ExecutionChanges::default(),
         }
     }
 
     pub fn reset(&mut self) {
         self.block = PendingBlock::new_at_now(1.into());
-        self.accounts.clear();
+        self.block_changes = ExecutionChanges::default();
     }
 }

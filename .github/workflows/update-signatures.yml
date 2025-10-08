@@ -54,6 +54,7 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          sign-commits: true
           commit-message: "Update contract signatures"
           title: "auto: update contract signatures"
           body: |

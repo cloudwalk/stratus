@@ -84,33 +84,36 @@ clone_alternative() {
 token=0
 periphery=0
 multisig=0
-compound=0
 yield=0
 pix=0
 cppv2=0
+capybara_finance=0
+credit_agent=0
 
 # Help function
 print_help() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -t, --token       for brlc-token"
-    echo "  -p, --periphery   for brlc-periphery"
-    echo "  -m, --multisig    for brlc-multisig"
-    echo "  -c, --compound    for compound-periphery"
-    echo "  -i, --yield       for brlc-yield-streamer"
-    echo "  -x, --pix         for brlc-pix-cashier"
-    echo "  -2, --cppv2       for brlc-periphery-v2"
-    echo "  -h, --help        display this help and exit"
+    echo "  -t, --token             for brlc-token"
+    echo "  -p, --periphery         for brlc-periphery"
+    echo "  -m, --multisig          for brlc-multisig"
+    echo "  -i, --yield             for brlc-net-yield-distributor"
+    echo "  -x, --pix               for brlc-cashier"
+    echo "  -2, --cppv2             for brlc-periphery-v2"
+    echo "  -f, --capybara-finance  for brlc-capybara-finance"
+    echo "  -a, --credit-agent      for brlc-credit-agent"
+    echo "  -h, --help              display this help and exit"
 }
 
 if [ "$#" == 0 ]; then
     token=1
     periphery=1
     multisig=1
-    compound=1
     yield=1
     pix=1
     cppv2=1
+    capybara_finance=1
+    credit_agent=1
 fi
 
 # Process arguments
@@ -132,10 +135,6 @@ while [[ "$#" -gt 0 ]]; do
         multisig=1
         shift
         ;;
-    -c | --compound)
-        compound=1
-        shift
-        ;;
     -i | --yield)
         yield=1
         shift
@@ -146,6 +145,14 @@ while [[ "$#" -gt 0 ]]; do
         ;;
     -2 | --cppv2)
         cppv2=1
+        shift
+        ;;
+    -f | --capybara-finance)
+        capybara_finance=1
+        shift
+        ;;
+    -a | --credit-agent)
+        credit_agent=1
         shift
         ;;
     *)
@@ -163,23 +170,14 @@ if [ "$token" == 1 ]; then
 fi
 
 if [ "$pix" == 1 ]; then
-    # Cashier Transition: attempts to clone the cashier v4 repository/contract using different methods
-    # It tries multiple repository names and branches to ensure we get the correct version
-
-    # First, try to clone the 'brlc-cashier' repo, using the 'pix-cashier-v4' branch
-    clone_alternative brlc-cashier pix-cashier-v4 brlc-cashier ||
-        # If that fails, try to clone the 'brlc-pix-cashier' repo, again using the 'pix-cashier-v4' branch
-        clone_alternative brlc-pix-cashier pix-cashier-v4 brlc-cashier ||
-        # If both of those fail, try to clone the 'brlc-cashier' repo using the default branch
-        clone brlc-cashier ||
-        # As a last resort, try to clone the 'brlc-pix-cashier' repo using the default branch
-        clone brlc-pix-cashier
+    # Cashier Transition: clone the 'brlc-cashier' repo using the default branch
+    clone brlc-cashier
 fi
 
 if [ "$yield" == 1 ]; then
     # BalanceTracker Transition: clone balance tracker if it exists and contains the hardhat project.
     clone brlc-balance-tracker || log "Balance Tracker not isolated yet. Skipping..."
-    clone brlc-yield-streamer
+    clone brlc-net-yield-distributor
 fi
 
 if [ "$periphery" == 1 ]; then
@@ -191,8 +189,12 @@ if [ "$multisig" == 1 ]; then
     clone brlc-multisig
 fi
 
-if [ "$compound" == 1 ]; then
-    clone compound-periphery
+if [ "$capybara_finance" == 1 ]; then
+    clone brlc-capybara-finance
+fi
+
+if [ "$credit_agent" == 1 ]; then
+    clone brlc-credit-agent
 fi
 
 # Alternative versions

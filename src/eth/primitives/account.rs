@@ -1,17 +1,18 @@
 use display_json::DebugAsJson;
+use revm::primitives::KECCAK_EMPTY;
 use revm::state::Bytecode;
 
 use crate::alias::RevmAccountInfo;
 use crate::alias::RevmAddress;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::CodeHash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::Wei;
 
 /// Ethereum account (wallet or contract).
 ///
 /// TODO: group bytecode, code_hash, static_slot_indexes and mapping_slot_indexes into a single bytecode struct.
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Deserialize, serde::Serialize)]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Account {
     /// Immutable address of the account.
     pub address: Address,
@@ -23,11 +24,8 @@ pub struct Account {
     pub balance: Wei,
 
     /// Contract bytecode. Present only if the account is a contract.
-    #[dummy(default)]
+    #[cfg_attr(test, dummy(default))]
     pub bytecode: Option<Bytecode>,
-
-    /// Keccak256 Hash of the bytecode. If bytecode is null, then the hash of empty string.
-    pub code_hash: CodeHash,
 }
 
 impl Account {
@@ -43,7 +41,6 @@ impl Account {
             nonce: Nonce::ZERO,
             balance,
             bytecode: None,
-            code_hash: CodeHash::default(),
         }
     }
 }
@@ -60,7 +57,6 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
             nonce: info.nonce.into(),
             balance: info.balance.into(),
             bytecode: info.code,
-            code_hash: info.code_hash.into(),
         }
     }
 }
@@ -69,13 +65,13 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
 
-impl From<&Account> for RevmAccountInfo {
-    fn from(value: &Account) -> Self {
+impl From<Account> for RevmAccountInfo {
+    fn from(value: Account) -> Self {
         Self {
             nonce: value.nonce.into(),
             balance: value.balance.into(),
-            code_hash: value.code_hash.0.0.into(),
-            code: value.bytecode.as_ref().cloned(),
+            code_hash: KECCAK_EMPTY,
+            code: value.bytecode,
         }
     }
 }

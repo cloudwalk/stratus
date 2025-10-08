@@ -6,18 +6,21 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use clap::Parser;
 use display_json::DebugAsJson;
+use http::HeaderMap;
+use http::header::HeaderName;
+use http::header::HeaderValue;
 use itertools::Itertools;
 use opentelemetry::KeyValue;
+use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::Protocol;
-use opentelemetry_otlp::SpanExporterBuilder;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_otlp::WithHttpConfig;
+use opentelemetry_otlp::WithTonicConfig;
+use opentelemetry_otlp::tonic_types::metadata::MetadataMap;
 use opentelemetry_sdk::Resource as SdkResource;
-use opentelemetry_sdk::runtime;
-use opentelemetry_sdk::trace;
 use opentelemetry_sdk::trace::BatchConfigBuilder;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::trace::Tracer as SdkTracer;
-use tonic::metadata::MetadataKey;
-use tonic::metadata::MetadataMap;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 use tracing_subscriber::fmt;
@@ -159,20 +162,39 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
         })
         .collect_vec();
 
+    let resource = SdkResource::builder()
+        .with_attributes([KeyValue::new("service.name", build_info::service_name())])
+        .build();
+
     // configure tracer
-    let tracer_exporter: SpanExporterBuilder = match protocol {
+    match protocol {
         TracingProtocol::Grpc => {
-            let mut protocol_metadata = MetadataMap::new();
+            let mut http_metadata = HeaderMap::new();
             for (key, value) in headers {
-                protocol_metadata.insert(MetadataKey::from_str(key).unwrap(), value.parse().unwrap());
+                let header_name = HeaderName::from_str(key).unwrap();
+                let header_value = HeaderValue::from_str(value).unwrap();
+                http_metadata.insert(header_name, header_value);
             }
 
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_protocol(Protocol::Grpc)
+            let protocol_metadata = MetadataMap::from_headers(http_metadata);
+
+            let exporter = opentelemetry_otlp::SpanExporter::builder()
+                .with_tonic()
                 .with_endpoint(url)
                 .with_metadata(protocol_metadata)
-                .into()
+                .build()
+                .unwrap();
+
+            let batch_config = BatchConfigBuilder::default().with_max_queue_size(u16::MAX as usize).build();
+            let batch_processor = opentelemetry_sdk::trace::BatchSpanProcessor::builder(exporter)
+                .with_batch_config(batch_config)
+                .build();
+
+            SdkTracerProvider::builder()
+                .with_resource(resource.clone())
+                .with_span_processor(batch_processor)
+                .build()
+                .tracer(build_info::binary_name())
         }
         TracingProtocol::HttpBinary | TracingProtocol::HttpJson => {
             let mut protocol_headers = HashMap::new();
@@ -180,26 +202,25 @@ fn opentelemetry_tracer(url: &str, protocol: TracingProtocol, headers: &[String]
                 protocol_headers.insert(key.to_owned(), value.to_owned());
             }
 
-            opentelemetry_otlp::new_exporter()
-                .http()
-                .with_protocol(protocol.into())
+            let exporter = opentelemetry_otlp::SpanExporter::builder()
+                .with_http()
                 .with_endpoint(url)
                 .with_headers(protocol_headers)
-                .into()
+                .build()
+                .unwrap();
+
+            let batch_config = BatchConfigBuilder::default().with_max_queue_size(u16::MAX as usize).build();
+            let batch_processor = opentelemetry_sdk::trace::BatchSpanProcessor::builder(exporter)
+                .with_batch_config(batch_config)
+                .build();
+
+            SdkTracerProvider::builder()
+                .with_resource(resource.clone())
+                .with_span_processor(batch_processor)
+                .build()
+                .tracer(build_info::binary_name())
         }
-    };
-
-    let tracer_config = trace::config().with_resource(SdkResource::new(vec![KeyValue::new("service.name", build_info::service_name())]));
-
-    // configure pipeline
-    let batch_config = BatchConfigBuilder::default().with_max_queue_size(u16::MAX as usize).build();
-    opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(tracer_exporter)
-        .with_trace_config(tracer_config)
-        .with_batch_config(batch_config)
-        .install_batch(runtime::Tokio)
-        .unwrap()
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -229,7 +250,7 @@ impl FromStr for TracingProtocol {
             "grpc" => Ok(Self::Grpc),
             "http-binary" => Ok(Self::HttpBinary),
             "http-json" => Ok(Self::HttpJson),
-            s => Err(anyhow!("unknown tracing protocol: {}", s)),
+            s => Err(anyhow!("unknown tracing protocol: {s}")),
         }
     }
 }
@@ -281,7 +302,7 @@ impl FromStr for TracingLogFormat {
             "minimal" => Ok(Self::Minimal),
             "normal" => Ok(Self::Normal),
             "verbose" | "full" => Ok(Self::Verbose),
-            s => Err(anyhow!("unknown log format: {}", s)),
+            s => Err(anyhow!("unknown log format: {s}")),
         }
     }
 }

@@ -9,13 +9,25 @@ use display_json::DebugAsJson;
 use crate::ext::to_json_string;
 
 /// Changes that happened to an account value during a transaction.
-#[derive(Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionValueChange<T>
 where
     T: PartialEq + serde::Serialize,
 {
     original: ValueState<T>,
     modified: ValueState<T>,
+}
+
+impl<T> Copy for ExecutionValueChange<T> where T: Copy + PartialEq + serde::Serialize {}
+
+impl<T> From<T> for ExecutionValueChange<T>
+where
+    T: PartialEq + serde::Serialize,
+{
+    fn from(value: T) -> Self {
+        Self::from_modified(value)
+    }
 }
 
 impl<T> Debug for ExecutionValueChange<T>
@@ -52,6 +64,10 @@ where
         self.modified = ValueState::Set(value);
     }
 
+    pub fn set_original(&mut self, value: T) {
+        self.original = ValueState::Set(value);
+    }
+
     /// Takes the original value as reference if it is set.
     pub fn take_original_ref(&self) -> Option<&T> {
         self.original.take_ref()
@@ -81,19 +97,42 @@ where
     pub fn is_modified(&self) -> bool {
         self.modified.is_set() && (self.original != self.modified)
     }
+
+    pub fn is_empty(&self) -> bool {
+        !self.modified.is_set() && !self.original.is_set()
+    }
+}
+
+impl<T> From<Option<T>> for ExecutionValueChange<T>
+where
+    T: PartialEq + serde::Serialize,
+{
+    fn from(value: Option<T>) -> Self {
+        let modified = match value {
+            None => ValueState::NotSet,
+            Some(value) => ValueState::Set(value),
+        };
+        ExecutionValueChange {
+            original: ValueState::NotSet,
+            modified,
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
 // Value State
 // -----------------------------------------------------------------------------
 
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 #[serde(rename_all = "snake_case")]
 pub enum ValueState<T> {
     Set(T),
     #[default]
     NotSet,
 }
+
+impl<T> Copy for ValueState<T> where T: Copy {}
 
 impl<T> ValueState<T> {
     pub fn is_set(&self) -> bool {

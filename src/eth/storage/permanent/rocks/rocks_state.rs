@@ -9,6 +9,7 @@ use std::time::Instant;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
+use itertools::Itertools;
 use rocksdb::DB;
 use rocksdb::Direction;
 use rocksdb::Options;
@@ -25,18 +26,15 @@ use super::cf_versions::CfAccountsHistoryValue;
 use super::cf_versions::CfAccountsValue;
 use super::cf_versions::CfBlocksByHashValue;
 use super::cf_versions::CfBlocksByNumberValue;
-#[cfg(feature = "replication")]
-use super::cf_versions::CfReplicationLogsValue;
 use super::cf_versions::CfTransactionsValue;
 use super::rocks_cf::RocksCfRef;
+use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_config::CacheSetting;
 use super::rocks_config::DbConfig;
 use super::rocks_db::create_or_open_db;
 use super::types::AccountRocksdb;
 use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
-#[cfg(feature = "replication")]
-use super::types::BytesRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
@@ -47,7 +45,7 @@ use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionAccountChanges;
+use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMined;
@@ -60,11 +58,13 @@ use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::storage::permanent::rocks::cf_versions::CfBlockChangesValue;
+use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 use crate::log_and_err;
-use crate::utils::GIGABYTE;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "rocks_metrics")] {
@@ -79,37 +79,19 @@ cfg_if::cfg_if! {
     }
 }
 
-pub fn generate_cf_options_map(cache_multiplier: Option<f32>) -> BTreeMap<&'static str, Options> {
-    let cache_multiplier = cache_multiplier.unwrap_or(1.0);
+pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap<&'static str, Options> {
+    // Helper function to create cache setting from size
+    let cache_setting_from_size = |size: usize| -> CacheSetting { CacheSetting::Enabled(size) };
 
-    // multiplies the given size in GBs by the cache multiplier
-    let cached_in_gigs_and_multiplied = |size_in_gbs: u64| -> CacheSetting {
-        let size = (size_in_gbs as f32) * cache_multiplier;
-        let size = GIGABYTE * size as usize;
-        CacheSetting::Enabled(size)
-    };
-
-    #[cfg(not(feature = "replication"))]
     btmap! {
-        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(10)),
-        "accounts_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
-        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(30)),
-        "account_slots_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
-        "transactions" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
-        "blocks_by_number" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
-        "blocks_by_hash" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
-    }
-
-    #[cfg(feature = "replication")]
-    btmap! {
-        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(10)),
-        "accounts_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
-        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cached_in_gigs_and_multiplied(30)),
-        "account_slots_history" => DbConfig::HistoricalData.to_options(cached_in_gigs_and_multiplied(2)),
-        "transactions" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
-        "blocks_by_number" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
-        "blocks_by_hash" => DbConfig::Default.to_options(cached_in_gigs_and_multiplied(2)),
-        "replication_logs" => DbConfig::Default.to_options(CacheSetting::Disabled),
+        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cache_setting_from_size(cf_cache_config.accounts)),
+        "accounts_history" => DbConfig::HistoricalData.to_options(cache_setting_from_size(cf_cache_config.accounts_history)),
+        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cache_setting_from_size(cf_cache_config.account_slots)),
+        "account_slots_history" => DbConfig::HistoricalData.to_options(cache_setting_from_size(cf_cache_config.account_slots_history)),
+        "transactions" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.transactions)),
+        "blocks_by_number" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_number)),
+        "blocks_by_hash" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_hash)),
+        "block_changes" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.block_changes)),
     }
 }
 
@@ -142,8 +124,7 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<'static, HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<'static, BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<'static, HashRocksdb, CfBlocksByHashValue>,
-    #[cfg(feature = "replication")]
-    replication_logs: RocksCfRef<'static, BlockNumberRocksdb, CfReplicationLogsValue>,
+    block_changes: RocksCfRef<'static, BlockNumberRocksdb, CfBlockChangesValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "rocks_metrics")]
     prev_stats: Mutex<HashMap<HistogramInt, (Sum, Count)>>,
@@ -155,22 +136,13 @@ pub struct RocksStorageState {
     db_options: Options,
     shutdown_timeout: Duration,
     enable_sync_write: bool,
-
-    #[cfg(feature = "replication")]
-    pub use_rocksdb_replication: bool,
 }
 
 impl RocksStorageState {
-    pub fn new(
-        path: String,
-        shutdown_timeout: Duration,
-        cache_multiplier: Option<f32>,
-        enable_sync_write: bool,
-        #[cfg(feature = "replication")] use_rocksdb_replication: bool,
-    ) -> Result<Self> {
+    pub fn new(path: String, shutdown_timeout: Duration, cf_cache_config: RocksCfCacheConfig, enable_sync_write: bool) -> Result<Self> {
         tracing::debug!("creating (or opening an existing) database with the specified column families");
 
-        let cf_options_map = generate_cf_options_map(cache_multiplier);
+        let cf_options_map = generate_cf_options_map(&cf_cache_config);
 
         #[cfg_attr(not(feature = "rocks_metrics"), allow(unused_variables))]
         let (db, db_options) = create_or_open_db(&path, &cf_options_map).context("when trying to create (or open) rocksdb")?;
@@ -191,8 +163,7 @@ impl RocksStorageState {
             transactions: new_cf_ref(db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(db, "blocks_by_hash", &cf_options_map)?,
-            #[cfg(feature = "replication")]
-            replication_logs: new_cf_ref(db, "replication_logs", &cf_options_map)?,
+            block_changes: new_cf_ref(db, "block_changes", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
             #[cfg(feature = "rocks_metrics")]
@@ -200,9 +171,6 @@ impl RocksStorageState {
             db: Arc::clone(db),
             shutdown_timeout,
             enable_sync_write,
-
-            #[cfg(feature = "replication")]
-            use_rocksdb_replication,
         };
 
         tracing::debug!("opened database successfully");
@@ -214,14 +182,7 @@ impl RocksStorageState {
     pub fn new_in_testdir() -> anyhow::Result<(Self, tempfile::TempDir)> {
         let test_dir = tempfile::tempdir()?;
         let path = test_dir.as_ref().display().to_string();
-        let state = Self::new(
-            path,
-            Duration::ZERO,
-            None,
-            true,
-            #[cfg(feature = "replication")]
-            false,
-        )?;
+        let state = Self::new(path, Duration::ZERO, RocksCfCacheConfig::default(), true)?;
         Ok((state, test_dir))
     }
 
@@ -250,45 +211,53 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    fn prepare_batch_with_execution_changes<C>(&self, changes: C, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()>
-    where
-        C: IntoIterator<Item = ExecutionAccountChanges>,
-    {
-        for change in changes {
-            let block_number = block_number.into();
-            let address: AddressRocksdb = change.address.into();
+    fn prepare_batch_with_execution_changes(&self, changes: ExecutionChanges, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
+        let mut block_changes = BlockChangesRocksdb::with_capacity(changes.accounts.len());
+        let block_number = block_number.into();
 
-            if change.is_account_modified() {
-                let address: AddressRocksdb = change.address.into();
+        for (address, change) in changes.accounts {
+            let address: AddressRocksdb = address.into();
+            if change.is_modified() {
+                let mut account_change_entry = AccountChangesRocksdb::default();
                 let mut account_info_entry = self.accounts.get(&address)?.unwrap_or(AccountRocksdb::default().into());
 
-                if let Some(nonce) = change.nonce.take_modified() {
-                    account_info_entry.nonce = nonce.into();
+                if change.nonce.is_changed() {
+                    let nonce = (*change.nonce.value()).into();
+                    account_info_entry.nonce = nonce;
+                    account_change_entry.nonce = Some(nonce);
                 }
-                if let Some(balance) = change.balance.take_modified() {
-                    account_info_entry.balance = balance.into();
+                if change.balance.is_changed() {
+                    let balance = (*change.balance.value()).into();
+                    account_info_entry.balance = balance;
+                    account_change_entry.balance = Some(balance);
                 }
-                if let Some(bytecode) = change.bytecode.take_modified() {
-                    account_info_entry.bytecode = bytecode.map_into();
+                if change.bytecode.is_changed() {
+                    let bytecode = change.bytecode.value().clone().map_into();
+                    account_info_entry.bytecode = bytecode.clone();
+                    account_change_entry.bytecode = Some(bytecode);
                 }
 
                 self.accounts.prepare_batch_insertion([(address, account_info_entry.clone())], batch)?;
                 self.accounts_history
                     .prepare_batch_insertion([((address, block_number), account_info_entry.into_inner().into())], batch)?;
-            }
-
-            for (&slot_index, slot_change) in &change.slots {
-                if let Some(slot) = slot_change.take_modified_ref() {
-                    let slot_index = slot_index.into();
-                    let slot_value: SlotValueRocksdb = slot.value.into();
-
-                    self.account_slots
-                        .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
-                    self.account_slots_history
-                        .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
-                }
+                block_changes.account_changes.insert(address, account_change_entry);
             }
         }
+
+        for ((address, slot_index), slot_value) in changes.slots {
+            let address = address.into();
+            let slot_index = slot_index.into();
+            let slot_value: SlotValueRocksdb = slot_value.into();
+
+            self.account_slots
+                .prepare_batch_insertion([((address, slot_index), slot_value.into())], batch)?;
+            self.account_slots_history
+                .prepare_batch_insertion([((address, slot_index, block_number), slot_value.into())], batch)?;
+
+            block_changes.slot_changes.insert((address, slot_index), slot_value);
+        }
+
+        self.block_changes.prepare_batch_insertion([(block_number, block_changes.into())], batch)?;
 
         Ok(())
     }
@@ -418,6 +387,12 @@ impl RocksStorageState {
         }
     }
 
+    pub fn read_accounts(&self, addresses: Vec<Address>) -> Result<Vec<(Address, Account)>> {
+        self.accounts
+            .multi_get(addresses.into_iter().map_into())
+            .map(|vec| vec.into_iter().map(|(addr, acc)| (addr.into(), acc.to_account(addr.into()))).collect_vec())
+    }
+
     pub fn read_block(&self, selection: BlockFilter) -> Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
@@ -433,15 +408,6 @@ impl RocksStorageState {
                 },
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
-    }
-
-    #[cfg(feature = "replication")]
-    pub fn read_replication_log(&self, block_number: BlockNumber) -> Result<Option<WriteBatch>> {
-        let block_number_rocks = block_number.into();
-
-        let replication_log = self.replication_logs.get(&block_number_rocks)?.map(|value| value.into_inner().to_write_batch());
-
-        Ok(replication_log)
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
@@ -468,36 +434,19 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
-    pub fn save_block_batch(&self, block_batch: Vec<Block>) -> Result<()> {
-        let mut batch = WriteBatch::default();
-        for block in block_batch {
-            self.prepare_block_insertion(block, &mut batch)?;
-        }
-        self.write_in_batch_for_multiple_cfs(batch)
-    }
-
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>) -> Result<()> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: ExecutionChanges) -> Result<()> {
         let mut batch = WriteBatch::default();
 
-        let account_changes = block.compact_account_changes();
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
+            txs_batch.push((transaction.input.transaction_info.hash.into(), transaction.block_number.into()));
         }
         self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
 
         let number = block.number();
         let block_hash = block.hash();
 
-        let block_without_changes = {
-            let mut block_mut = block;
-            block_mut.transactions.iter_mut().for_each(|transaction| {
-                transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
-            });
-            block_mut
-        };
-
-        let block_by_number = (number.into(), block_without_changes.into());
+        let block_by_number = (number.into(), block.into());
         self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
@@ -521,29 +470,19 @@ impl RocksStorageState {
             &mut batch,
         )?;
 
-        #[cfg(feature = "replication")]
-        {
-            let batch_clone = WriteBatch::from_data(batch.data());
-            let batch_rocksdb = BytesRocksdb::from(batch_clone);
-            self.replication_logs
-                .prepare_batch_insertion([(number.into(), batch_rocksdb.into())], &mut batch)?;
-        }
-
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn save_block(&self, block: Block) -> Result<()> {
+    pub fn save_block(&self, block: Block, account_changes: ExecutionChanges) -> Result<()> {
         let mut batch = WriteBatch::default();
-        self.prepare_block_insertion(block, &mut batch)?;
+        self.prepare_block_insertion(block, account_changes, &mut batch)?;
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn prepare_block_insertion(&self, block: Block, batch: &mut WriteBatch) -> Result<()> {
-        let account_changes = block.compact_account_changes();
-
+    pub fn prepare_block_insertion(&self, block: Block, account_changes: ExecutionChanges, batch: &mut WriteBatch) -> Result<()> {
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.input.hash.into(), transaction.block_number.into()));
+            txs_batch.push((transaction.input.transaction_info.hash.into(), transaction.block_number.into()));
         }
 
         self.transactions.prepare_batch_insertion(txs_batch, batch)?;
@@ -551,19 +490,7 @@ impl RocksStorageState {
         let number = block.number();
         let block_hash = block.hash();
 
-        // this is an optimization, instead of saving the entire block into the database,
-        // remove all discardable account changes
-        let block_without_changes = {
-            let mut block_mut = block;
-            // mutate it
-            block_mut.transactions.iter_mut().for_each(|transaction| {
-                // checks if it has a contract address to keep, later this will be used to gather deployed_contract_address
-                transaction.execution.changes.retain(|_, change| change.bytecode.is_modified());
-            });
-            block_mut
-        };
-
-        let block_by_number = (number.into(), block_without_changes.into());
+        let block_by_number = (number.into(), block.into());
         self.blocks_by_number.prepare_batch_insertion([block_by_number], batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
@@ -571,28 +498,7 @@ impl RocksStorageState {
 
         self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
 
-        #[cfg(feature = "replication")]
-        {
-            let batch_clone = WriteBatch::from_data(batch.data());
-            let batch_rocksdb = BytesRocksdb::from(batch_clone);
-            self.replication_logs.prepare_batch_insertion([(number.into(), batch_rocksdb.into())], batch)?;
-        }
-
         Ok(())
-    }
-
-    #[cfg(feature = "replication")]
-    pub fn apply_replication_log(&self, block_number: BlockNumber, replication_log: WriteBatch) -> Result<()> {
-        let mut write_batch = replication_log;
-
-        let batch_clone = WriteBatch::from_data(write_batch.data());
-
-        let batch_rocksdb = BytesRocksdb::from(batch_clone);
-
-        self.replication_logs
-            .prepare_batch_insertion([(block_number.into(), batch_rocksdb.into())], &mut write_batch)?;
-
-        self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
     /// Write to DB in a batch
@@ -698,6 +604,14 @@ impl RocksStorageState {
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
         Ok(())
     }
+
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>> {
+        let Some(block_wo_changes) = self.read_block(selection)? else {
+            return Ok(None);
+        };
+        let changes = self.block_changes.get(&block_wo_changes.number().into())?;
+        Ok(Some((block_wo_changes, changes.map(|changes| changes.into_inner()).unwrap_or_default())))
+    }
 }
 
 #[cfg(feature = "rocks_metrics")]
@@ -790,21 +704,13 @@ impl RocksStorageState {
     pub fn export_column_family_size_metrics(&self) -> Result<()> {
         let db_name = self.db_path_filename();
 
-        let column_families = vec![
-            ("accounts", &self.accounts.column_family),
-            ("accounts_history", &self.accounts_history.column_family),
-            ("account_slots", &self.account_slots.column_family),
-            ("account_slots_history", &self.account_slots_history.column_family),
-            ("transactions", &self.transactions.column_family),
-            ("blocks_by_number", &self.blocks_by_number.column_family),
-            ("blocks_by_hash", &self.blocks_by_hash.column_family),
-            #[cfg(feature = "replication")]
-            ("replication_logs", &self.replication_logs.column_family),
-        ];
+        let cf_names = DB::list_cf(&Options::default(), &self.db_path)?;
 
-        for (cf_name, cf_handle) in column_families {
-            if let Ok(Some(size)) = self.db.property_int_value_cf(cf_handle, "rocksdb.total-sst-files-size") {
-                metrics::set_rocks_cf_size(size, db_name, cf_name);
+        for cf_name in cf_names {
+            if let Some(cf_handle) = self.db.cf_handle(&cf_name)
+                && let Ok(Some(size)) = self.db.property_int_value_cf(&cf_handle, "rocksdb.total-sst-files-size")
+            {
+                metrics::set_rocks_cf_size(size, db_name, &cf_name);
             }
         }
 
@@ -857,9 +763,7 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::alias::RevmBytecode;
     use crate::eth::primitives::BlockHeader;
-    use crate::eth::primitives::ExecutionValueChange;
 
     #[test]
     #[cfg(feature = "dev")]
@@ -924,7 +828,7 @@ mod tests {
                 }],
             };
 
-            state.save_block(block).unwrap();
+            state.save_block(block, ExecutionChanges::default()).unwrap();
         }
 
         let filter = LogFilter {
@@ -937,52 +841,6 @@ mod tests {
     }
 
     #[test]
-    fn regression_test_saving_account_changes_for_accounts_that_didnt_change() {
-        let (state, _test_dir) = RocksStorageState::new_in_testdir().unwrap();
-
-        let change_base = ExecutionAccountChanges {
-            new_account: false,
-            address: Faker.fake(),
-            nonce: ExecutionValueChange::from_original(Faker.fake()),
-            balance: ExecutionValueChange::from_original(Faker.fake()),
-            bytecode: ExecutionValueChange::from_original(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
-            code_hash: Faker.fake(),
-            slots: BTreeMap::new(),
-        };
-
-        // 4 changes for the same address, the first isn't modified, the other three are
-        let changes = [
-            ExecutionAccountChanges { ..change_base.clone() },
-            ExecutionAccountChanges {
-                nonce: ExecutionValueChange::from_modified(Faker.fake()),
-                ..change_base.clone()
-            },
-            ExecutionAccountChanges {
-                balance: ExecutionValueChange::from_modified(Faker.fake()),
-                ..change_base.clone()
-            },
-            ExecutionAccountChanges {
-                bytecode: ExecutionValueChange::from_modified(Some(RevmBytecode::new_raw(Faker.fake::<Vec<u8>>().into()))),
-                ..change_base
-            },
-        ];
-
-        let mut batch = WriteBatch::default();
-        // add accounts in separate blocks so they show up in history
-        state.prepare_batch_with_execution_changes([changes[0].clone()], 1.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes([changes[1].clone()], 2.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes([changes[2].clone()], 3.into(), &mut batch).unwrap();
-        state.prepare_batch_with_execution_changes([changes[3].clone()], 4.into(), &mut batch).unwrap();
-        state.write_in_batch_for_multiple_cfs(batch).unwrap();
-
-        let accounts = state.read_all_accounts().unwrap();
-        assert_eq!(accounts.len(), 1);
-
-        let history = state.read_all_historical_accounts().unwrap();
-        assert_eq!(history.len(), 3);
-    }
-
-    #[test]
     fn test_column_families_creation_order_is_deterministic() {
         let mut previous_order: Option<Vec<String>> = None;
 
@@ -992,7 +850,7 @@ mod tests {
             let path = test_dir.as_ref().display().to_string();
 
             // Create the database with the column families
-            let cf_options_map = generate_cf_options_map(None);
+            let cf_options_map = generate_cf_options_map(&RocksCfCacheConfig::default());
             let (_db, _) = create_or_open_db(&path, &cf_options_map).unwrap();
 
             // Get the actual CF order from RocksDB

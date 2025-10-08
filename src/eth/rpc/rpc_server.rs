@@ -8,8 +8,6 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use alloy_primitives::U256;
-#[cfg(feature = "replication")]
-use alloy_primitives::hex;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::Result;
@@ -46,6 +44,9 @@ use crate::NodeMode;
 use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
 use crate::config::StratusConfig;
+use crate::eth::codegen;
+use crate::eth::codegen::CONTRACTS;
+use crate::eth::decode;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::Importer;
@@ -58,6 +59,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::ConsensusError;
+use crate::eth::primitives::DecodeInputError;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::ImporterError;
@@ -178,7 +180,6 @@ impl Server {
         let ctx = RpcContext {
             server: Arc::new(this.clone()),
             client_version: "stratus",
-            gas_price: 0,
             subs: Arc::clone(&subs.connected),
         };
 
@@ -203,7 +204,7 @@ impl Server {
             .set_id_provider(RandomStringIdProvider::new(8))
             .max_connections(this.rpc_config.rpc_max_connections)
             .max_response_body_size(this.rpc_config.rpc_max_response_size_bytes)
-            .set_batch_request_config(BatchRequestConfig::Limit(500))
+            .set_batch_request_config(BatchRequestConfig::Limit(this.rpc_config.batch_request_limit))
             .build();
 
         // serve module
@@ -324,9 +325,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 
     // stratus importing helpers
     module.register_blocking_method("stratus_getBlockAndReceipts", stratus_get_block_and_receipts)?;
-
-    #[cfg(feature = "replication")]
-    module.register_blocking_method("stratus_getReplicationLog", stratus_get_replication_log)?;
+    module.register_blocking_method("stratus_getBlockWithChanges", stratus_get_block_with_changes)?;
 
     // block
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
@@ -606,6 +605,9 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         external_rpc_timeout,
         sync_interval,
         external_rpc_max_response_size_bytes,
+        enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
+            .ok()
+            .is_some_and(|val| val == "1" || val == "true"),
     };
 
     importer_config.init_follower_importer(ctx).await
@@ -822,7 +824,7 @@ fn eth_block_number(_params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) 
     let _method_enter = info_span!("rpc::eth_blockNumber", block_number = field::Empty).entered();
 
     // execute
-    let block_number = ctx.server.storage.read_mined_block_number()?;
+    let block_number = ctx.server.storage.read_mined_block_number();
     Span::with(|s| s.rec_str("block_number", &block_number));
 
     Ok(to_json_value(block_number))
@@ -853,48 +855,25 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     }))
 }
 
-#[cfg(feature = "replication")]
-fn stratus_get_replication_log(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::stratus_getReplicationLog", filter = field::Empty).entered();
+    let _method_enter = info_span!("rpc::stratus_getBlockWithChanges").entered();
 
     // parse params
     let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
 
     // track
-    Span::with(|s| s.rec_str("filter", &filter));
-    tracing::info!(%filter, "reading replication log");
+    tracing::info!(%filter, "reading block and changes");
 
-    // Resolve the block filter to a specific block number
-    let block_number = match ctx.server.storage.read_block(filter)? {
-        Some(block) => block.number(),
-        None => {
-            tracing::info!(%filter, "block not found");
-            return Ok(JsonValue::Null);
-        }
+    let Some(block) = ctx.server.storage.read_block_with_changes(filter)? else {
+        tracing::info!(%filter, "block not found");
+        return Ok(JsonValue::Null);
     };
 
-    // execute
-    let replication_log = ctx.server.storage.read_replication_log(block_number)?;
+    tracing::info!(%filter, "block with changes found");
 
-    match replication_log {
-        Some(log) => {
-            let log_data = log.data();
-            let encoded = hex::encode(log_data);
-
-            tracing::info!(%block_number, log_size = log_data.len(), "replication log found");
-
-            Ok(json!({
-                "block_number": block_number,
-                "replication_log": encoded
-            }))
-        }
-        None => {
-            tracing::info!(%block_number, "replication log not found");
-            Ok(JsonValue::Null)
-        }
-    }
+    Ok(json!(block))
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
@@ -1128,7 +1107,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
     }
 }
 
-fn debug_trace_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<GethTrace, StratusError> {
+fn debug_trace_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!("rpc::debug_traceTransaction", tx_hash = field::Empty,).entered();
@@ -1145,7 +1124,11 @@ fn debug_trace_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extens
     match ctx.server.executor.trace_transaction(tx_hash, opts, trace_unsuccessful_only) {
         Ok(result) => {
             tracing::info!(?tx_hash, "executed debug_traceTransaction successfully");
-            Ok(result)
+
+            // Enhance GethTrace with decoded information using serialization approach
+            let enhanced_response = enhance_trace_with_decoded_info(&result);
+
+            Ok(enhanced_response)
         }
         Err(err) => {
             tracing::warn!(?err, "error executing debug_traceTransaction");
@@ -1204,14 +1187,14 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             .into());
         }
     };
-    let tx_hash = tx.hash;
+    let tx_hash = tx.transaction_info.hash;
 
     // track
     Span::with(|s| {
         s.rec_str("tx_hash", &tx_hash);
-        s.rec_str("tx_from", &tx.signer);
-        s.rec_opt("tx_to", &tx.to);
-        s.rec_str("tx_nonce", &tx.nonce);
+        s.rec_str("tx_from", &tx.execution_info.signer);
+        s.rec_opt("tx_to", &tx.execution_info.to);
+        s.rec_str("tx_nonce", &tx.execution_info.nonce);
     });
 
     if not(GlobalState::is_transactions_enabled()) {
@@ -1267,7 +1250,7 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     let to_block = match filter.to_block {
         Some(block) => block,
         None => {
-            let block = ctx.server.storage.read_mined_block_number()?;
+            let block = ctx.server.storage.read_mined_block_number();
             filter.to_block = Some(block);
             block
         }
@@ -1484,4 +1467,214 @@ fn hex_zero() -> String {
 
 fn hex_null() -> String {
     "0x".to_owned()
+}
+
+/// Enhances trace using serialized JSON modification
+fn enhance_trace_with_decoded_info(trace: &GethTrace) -> JsonValue {
+    match trace {
+        GethTrace::CallTracer(call_frame) => {
+            // Serialize first, then enhance
+            let mut json = to_json_value(call_frame);
+            enhance_serialized_call_frame(&mut json);
+            json
+        }
+        _ => {
+            // For non-CallTracer traces, return as-is without enhancement
+            to_json_value(trace)
+        }
+    }
+}
+
+fn enhance_serialized_call_frame(json: &mut JsonValue) {
+    if let Some(json_obj) = json.as_object_mut() {
+        json_obj
+            .get("from")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<Address>().ok())
+            .and_then(|addr| CONTRACTS.get(addr.as_slice()).map(|s| s.to_string()))
+            .and_then(|s| json_obj.insert("decodedFromContract".to_string(), json!(s)));
+
+        json_obj
+            .get("to")
+            .and_then(|v| if v.is_null() { None } else { v.as_str() })
+            .and_then(|s| s.parse::<Address>().ok())
+            .and_then(|addr| CONTRACTS.get(addr.as_slice()).map(|s| s.to_string()))
+            .and_then(|s| json_obj.insert("decodedToContract".to_string(), json!(s)));
+
+        json_obj
+            .get("input")
+            .and_then(|v| v.as_str())
+            .and_then(|s| const_hex::decode(s.trim_start_matches("0x")).ok())
+            .inspect(|input| {
+                if let Some(signature) = codegen::function_sig_opt(input) {
+                    json_obj.insert("decodedFunctionSignature".to_string(), json!(signature));
+                }
+
+                match decode::decode_input_arguments(input) {
+                    Ok(args) => {
+                        json_obj.insert("decodedFunctionArguments".to_string(), json!(args));
+                    }
+                    Err(DecodeInputError::InvalidAbi { message }) => {
+                        tracing::warn!(
+                            message = %message,
+                            "Invalid ABI stored"
+                        );
+                    }
+                    _ => (),
+                }
+            });
+        if let Some(calls) = json_obj.get_mut("calls").and_then(|v| v.as_array_mut()) {
+            for call in calls {
+                enhance_serialized_call_frame(call);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy_primitives::Address;
+    use alloy_primitives::Bytes;
+    use alloy_primitives::U256;
+    use alloy_rpc_types_trace::geth::CallFrame;
+
+    use super::*;
+
+    fn create_simple_test_call_structure() -> CallFrame {
+        // Create deepest level calls (level 3)
+        let deep_call_1 = CallFrame {
+            from: "0x562689c910361ae21d12eadafbfca727b3bcbc24".parse::<Address>().unwrap(), // Maps to Compound_Agent_4
+            to: Some("0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap()), // Maps to BRLCToken
+            input: Bytes::from(
+                const_hex::decode(
+                    "70a08231000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e", // balanceOf function
+                )
+                .unwrap(),
+            ),
+            output: Some(Bytes::from(
+                const_hex::decode("0000000000000000000000000000000000000000000000000de0b6b3a7640000").unwrap(),
+            )),
+            gas: U256::from(5000),
+            gas_used: U256::from(3000),
+            value: None,
+            typ: "STATICCALL".to_string(),
+            error: None,
+            revert_reason: None,
+            calls: Vec::new(),
+            logs: Vec::new(),
+        };
+
+        let deep_call_2 = CallFrame {
+            from: "0x3181ab023a4d4788754258be5a3b8cf3d8276b98".parse::<Address>().unwrap(), // Maps to Cashier_BRLC_v2
+            to: Some("0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap()), // Maps to USJIMToken
+            input: Bytes::from(
+                const_hex::decode(
+                    "dd62ed3e000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e000000000000000000000000a0b86a33e6441366ac2ed2e3a8da88e61c66a5e1", // allowance function
+                )
+                .unwrap(),
+            ),
+            output: Some(Bytes::from(
+                const_hex::decode("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").unwrap(),
+            )),
+            gas: U256::from(8000),
+            gas_used: U256::from(5000),
+            value: None,
+            typ: "STATICCALL".to_string(),
+            error: None,
+            revert_reason: None,
+            calls: Vec::new(),
+            logs: Vec::new(),
+        };
+
+        // Create level 2 nested calls using real contract addresses from CONTRACTS map
+        let nested_call_1 = CallFrame {
+            from: "0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap(), // Maps to BRLCToken
+            to: Some("0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap()), // Maps to USJIMToken
+            input: Bytes::from(
+                const_hex::decode(
+                    "a9059cbb000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e0000000000000000000000000000000000000000000000000de0b6b3a7640000", // transfer function
+                )
+                .unwrap(),
+            ),
+            output: Some(Bytes::from(
+                const_hex::decode("0000000000000000000000000000000000000000000000000000000000000001").unwrap(),
+            )),
+            gas: U256::from(21000),
+            gas_used: U256::from(20000),
+            value: None,
+            typ: "CALL".to_string(),
+            error: None,
+            revert_reason: None,
+            calls: vec![deep_call_1],
+            logs: Vec::new(),
+        };
+
+        let nested_call_2 = CallFrame {
+            from: "0x6d8da3c039d1d78622f27d4739e1e00b324afaaa".parse::<Address>().unwrap(), // Maps to USJIMToken
+            to: Some("0x3181ab023a4d4788754258be5a3b8cf3d8276b98".parse::<Address>().unwrap()), // Maps to Cashier_BRLC_v2
+            input: Bytes::from(
+                const_hex::decode(
+                    "095ea7b3000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e0000000000000000000000000000000000000000000000000de0b6b3a7640000", // approve function
+                )
+                .unwrap(),
+            ),
+            output: Some(Bytes::from(
+                const_hex::decode("0000000000000000000000000000000000000000000000000000000000000001").unwrap(),
+            )),
+            gas: U256::from(30000),
+            gas_used: U256::from(25000),
+            value: None,
+            typ: "CALL".to_string(),
+            error: None,
+            revert_reason: None,
+            calls: vec![deep_call_2],
+            logs: Vec::new(),
+        };
+
+        // Create main call containing nested calls (level 1)
+        CallFrame {
+            from: "0x742d35Cc6634C0532925a3b8D7C9be8813eeb02e".parse::<Address>().unwrap(),
+            to: Some("0xa9a55a81a4c085ec0c31585aed4cfb09d78dfd53".parse::<Address>().unwrap()), // BRLCToken
+            input: Bytes::from(
+                const_hex::decode(
+                    "23b872dd000000000000000000000000742d35cc6634c0532925a3b8d7c9be8813eeb02e000000000000000000000000a0b86a33e6441366ac2ed2e3a8da88e61c66a5e10000000000000000000000000000000000000000000000000de0b6b3a7640000", // transferFrom function
+                )
+                .unwrap(),
+            ),
+            output: Some(Bytes::from(
+                const_hex::decode("0000000000000000000000000000000000000000000000000000000000000001").unwrap(),
+            )),
+            gas: U256::from(100000),
+            gas_used: U256::from(85000),
+            value: None,
+            typ: "CALL".to_string(),
+            error: None,
+            revert_reason: None,
+            calls: vec![nested_call_1, nested_call_2],
+            logs: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_contract_name_decoding() {
+        // Create a 3-level structure using real contract addresses
+        let test_call = create_simple_test_call_structure();
+        let geth_trace = GethTrace::CallTracer(test_call);
+
+        // Enhance the trace with decoded information
+        let result = enhance_trace_with_decoded_info(&geth_trace);
+        let result_str = serde_json::to_string_pretty(&result).unwrap();
+
+        assert!(result_str.contains("Cashier_BRLC_v2"));
+        assert!(result_str.contains("BRLCToken"));
+        assert!(result_str.contains("USJIMToken"));
+        assert!(result_str.contains("Compound_Agent_4"));
+
+        // Verify function signature decoding for all the expected functions
+        assert!(result_str.contains("transfer(address,uint256)"));
+        assert!(result_str.contains("approve(address,uint256)"));
+        assert!(result_str.contains("transferFrom(address,address,uint256)"));
+        assert!(result_str.contains("balanceOf(address)"));
+        assert!(result_str.contains("allowance(address,address)"));
+    }
 }

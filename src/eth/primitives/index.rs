@@ -1,13 +1,13 @@
 use alloy_primitives::U64;
 use alloy_primitives::U256;
+use anyhow::bail;
 use display_json::DebugAsJson;
 
 use crate::ext::RuintExt;
 
 /// Represents a transaction index or log index.
-#[derive(
-    DebugAsJson, derive_more::Display, Clone, Copy, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, derive_more::Add, Hash, PartialOrd, Ord,
-)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_more::Add, Hash, PartialOrd, Ord)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Index(pub u64);
 
 impl Index {
@@ -43,7 +43,7 @@ impl TryFrom<i64> for Index {
 
     fn try_from(value: i64) -> Result<Self, Self::Error> {
         if value < 0 {
-            return Err(anyhow::anyhow!("Index cannot be negative"));
+            bail!("Index cannot be negative");
         }
         Ok(Self(value as u64))
     }

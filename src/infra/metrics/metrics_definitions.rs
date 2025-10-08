@@ -33,6 +33,9 @@ metrics! {
     "Time executing storage read_block operation."
     histogram_duration storage_read_block{storage, success},
 
+    "Time executing storage read_block_with_changes operation."
+    histogram_duration storage_read_block_with_changes{storage, success},
+
     "Time executing storage read_logs operation."
     histogram_duration storage_read_logs{storage, success},
 

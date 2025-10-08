@@ -3,9 +3,11 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use alloy_primitives::FixedBytes;
-use anyhow::anyhow;
+use anyhow::bail;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 use hex_literal::hex;
 
@@ -54,6 +56,7 @@ impl Display for Address {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for Address {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Address(FixedBytes::random_with(rng))
@@ -100,7 +103,7 @@ impl TryFrom<Vec<u8>> for Address {
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         if value.len() != 20 {
-            return Err(anyhow!("array of bytes to be converted to address must have exactly 20 bytes"));
+            bail!("array of bytes to be converted to address must have exactly 20 bytes");
         }
         Ok(Self(FixedBytes::from_slice(&value)))
     }

@@ -1,7 +1,5 @@
 //! In-memory storage implementations.
 
-use std::collections::HashMap;
-
 use parking_lot::RwLock;
 use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
@@ -13,9 +11,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::ExecutionConflicts;
-use crate::eth::primitives::ExecutionConflictsBuilder;
+use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
@@ -25,13 +22,13 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionInput;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTimeNow;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
-use crate::eth::storage::AccountWithSlots;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
 
@@ -46,45 +43,16 @@ impl InmemoryTransactionTemporaryStorage {
         Self {
             pending_block: RwLock::new(InMemoryTemporaryStorageState {
                 block: PendingBlock::new_at_now(block_number),
-                accounts: HashMap::default(),
+                block_changes: ExecutionChanges::default(),
             }),
             latest_block: RwLock::new(None),
         }
     }
 
-    fn check_conflicts(&self, execution: &EvmExecution) -> anyhow::Result<Option<ExecutionConflicts>, StorageError> {
-        let mut conflicts = ExecutionConflictsBuilder::default();
-
-        for (&address, change) in &execution.changes {
-            // check account info conflicts
-            if let Some(account) = self.read_account(address)? {
-                if let Some(expected) = change.nonce.take_original_ref() {
-                    let original = &account.nonce;
-                    if expected != original {
-                        conflicts.add_nonce(address, *original, *expected);
-                    }
-                }
-                if let Some(expected) = change.balance.take_original_ref() {
-                    let original = &account.balance;
-                    if expected != original {
-                        conflicts.add_balance(address, *original, *expected);
-                    }
-                }
-            }
-
-            // check slots conflicts
-            for (&slot_index, slot_change) in &change.slots {
-                if let Some(expected) = slot_change.take_original_ref() {
-                    let Some(original) = self.read_slot(address, slot_index)? else {
-                        continue;
-                    };
-                    if expected.value != original.value {
-                        conflicts.add_slot(address, slot_index, original.value, expected.value);
-                    }
-                }
-            }
-        }
-        Ok(conflicts.build())
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
+        let mut pending_block = self.pending_block.write();
+        pending_block.block.header.number = block.number();
+        pending_block.block.header.timestamp = block.timestamp().into();
     }
 
     // -------------------------------------------------------------------------
@@ -107,51 +75,22 @@ impl InmemoryTransactionTemporaryStorage {
     // Block and executions
     // -------------------------------------------------------------------------
 
-    pub fn save_pending_execution(&self, tx: TransactionExecution, check_conflicts: bool, is_local: bool) -> Result<(), StorageError> {
+    pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
-        if is_local && tx.evm_input != (&tx.input, &pending_block.block.header) {
-            let expected_input = EvmInput::from_eth_transaction(&tx.input, &pending_block.block.header);
+        if tx.evm_input != &pending_block.block.header {
+            let actual_input = tx.evm_input.clone();
+            let tx_input: TransactionInput = tx.into();
+            let expected_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &pending_block.block.header);
             return Err(StorageError::EvmInputMismatch {
                 expected: Box::new(expected_input),
-                actual: Box::new(tx.evm_input.clone()),
+                actual: Box::new(actual_input),
             });
         }
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        if check_conflicts && let Some(conflicts) = self.check_conflicts(&tx.result.execution)? {
-            return Err(StorageError::TransactionConflict(conflicts.into()));
-        }
-
-        // save account changes
-        let changes = tx.result.execution.changes.values();
-        for change in changes {
-            let account = pending_block
-                .accounts
-                .entry(change.address)
-                .or_insert_with(|| AccountWithSlots::new(change.address));
-
-            // account basic info
-            if let Some(nonce) = change.nonce.take_ref() {
-                account.info.nonce = *nonce;
-            }
-            if let Some(balance) = change.balance.take_ref() {
-                account.info.balance = *balance;
-            }
-
-            // bytecode (todo: where is code_hash?)
-            if let Some(Some(bytecode)) = change.bytecode.take_ref() {
-                account.info.bytecode = Some(bytecode.clone());
-            }
-
-            // slots
-            for slot in change.slots.values() {
-                if let Some(slot) = slot.take_ref() {
-                    account.slots.insert(slot.index, *slot);
-                }
-            }
-        }
+        pending_block.block_changes.merge(tx.result.execution.changes.clone()); // TODO: This clone can be removed by reworking the primitives
 
         // save execution
         pending_block.block.push_transaction(tx);
@@ -168,8 +107,9 @@ impl InmemoryTransactionTemporaryStorage {
         (*pending_block).clone()
     }
 
-    pub fn finish_pending_block(&self) -> anyhow::Result<PendingBlock, StorageError> {
+    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
         let pending_block = self.pending_block.upgradable_read();
+        let changes = pending_block.block_changes.clone();
 
         // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
         #[cfg(feature = "dev")]
@@ -195,11 +135,12 @@ impl InmemoryTransactionTemporaryStorage {
         #[cfg(not(feature = "dev"))]
         let finished_block = {
             let latest = RwLockWriteGuard::<Option<InMemoryTemporaryStorageState>>::downgrade(latest);
+
             #[allow(clippy::expect_used)]
             latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone()
         };
 
-        Ok(finished_block)
+        Ok((finished_block, changes))
     }
 
     pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
@@ -215,29 +156,26 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
 
     pub fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>, StorageError> {
-        Ok(match self.pending_block.read().accounts.get(&address) {
-            Some(pending_account) => Some(pending_account.info.clone()),
+        Ok(match self.pending_block.read().block_changes.accounts.get(&address) {
+            Some(pending_account) => Some(pending_account.clone().to_account(address)),
             None => self
                 .latest_block
                 .read()
                 .as_ref()
-                .and_then(|latest| latest.accounts.get(&address))
-                .map(|account| account.info.clone()),
+                .and_then(|latest| latest.block_changes.accounts.get(&address))
+                .map(|account| account.clone().to_account(address)),
         })
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError> {
-        Ok(
-            match self.pending_block.read().accounts.get(&address).and_then(|account| account.slots.get(&index)) {
-                Some(pending_slot) => Some(*pending_slot),
-                None => self
-                    .latest_block
-                    .read()
-                    .as_ref()
-                    .and_then(|latest| latest.accounts.get(&address).and_then(|account| account.slots.get(&index)))
-                    .copied(),
-            },
-        )
+        Ok(match self.pending_block.read().block_changes.slots.get(&(address, index)) {
+            Some(pending_value) => Some(Slot::new(index, *pending_value)),
+            None => self
+                .latest_block
+                .read()
+                .as_ref()
+                .and_then(|latest| latest.block_changes.slots.get(&(address, index)).map(|value| Slot::new(index, *value))),
+        })
     }
 
     // -------------------------------------------------------------------------
@@ -247,12 +185,7 @@ impl InmemoryTransactionTemporaryStorage {
     #[cfg(feature = "dev")]
     pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
-
-        // Only update if the account exists
-        if let Some(account) = pending_block.accounts.get_mut(&address) {
-            account.slots.insert(slot.index, slot);
-        }
-
+        pending_block.block_changes.slots.insert((address, slot.index), slot.value);
         Ok(())
     }
 
@@ -261,8 +194,8 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = self.pending_block.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.accounts.get_mut(&address) {
-            account.info.nonce = nonce;
+        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+            account.nonce.apply(nonce);
         }
 
         Ok(())
@@ -273,8 +206,8 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = self.pending_block.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.accounts.get_mut(&address) {
-            account.info.balance = balance;
+        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+            account.balance.apply(balance);
         }
 
         Ok(())
@@ -287,12 +220,12 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = self.pending_block.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.accounts.get_mut(&address) {
-            account.info.bytecode = if code.0.is_empty() {
+        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+            account.bytecode.apply(if code.0.is_empty() {
                 None
             } else {
                 Some(RevmBytecode::new_raw(code.0.into()))
-            };
+            });
         }
 
         Ok(())

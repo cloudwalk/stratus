@@ -14,6 +14,7 @@ use std::sync::mpsc;
 
 use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
+use anyhow::bail;
 use futures::StreamExt;
 use itertools::Itertools;
 use stratus::GlobalServices;
@@ -28,6 +29,7 @@ use stratus::eth::miner::MinerMode;
 use stratus::eth::miner::miner::CommitItem;
 use stratus::eth::primitives::Block;
 use stratus::eth::primitives::BlockNumber;
+use stratus::eth::primitives::ExecutionChanges;
 use stratus::eth::primitives::ExternalReceipts;
 use stratus::ext::spawn;
 use stratus::ext::spawn_thread;
@@ -47,7 +49,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 const RPC_FETCHER_CHANNEL_CAPACITY: usize = 10;
 
 type BlocksToExecute = Vec<ExternalBlockWithReceipts>;
-type BlocksToSave = Vec<Block>;
+type BlocksToSave = Vec<(Block, ExecutionChanges)>;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<ImporterOfflineConfig>::init();
@@ -90,7 +92,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     if block_start.is_zero() && !storage.has_genesis()? {
         let genesis_block = Block::genesis();
-        storage.save_genesis_block(genesis_block, initial_accounts)?;
+        storage.save_genesis_block(genesis_block, initial_accounts, ExecutionChanges::default())?;
         storage.finish_pending_block()?;
         block_start = BlockNumber::from(1);
     }
@@ -181,7 +183,7 @@ async fn run_rpc_block_fetcher(
         }
 
         if to_execute_tx.send(blocks).await.is_err() {
-            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "failed to send task to importer")));
+            bail!(GlobalState::shutdown_from(TASK_NAME, "failed to send task to importer"));
         };
     }
 }
@@ -276,8 +278,8 @@ fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToS
             return Ok(());
         };
 
-        for block in blocks_batch {
-            miner.commit(CommitItem::Block(block))?;
+        for (block, changes) in blocks_batch {
+            miner.commit(CommitItem::Block(block), changes)?;
         }
     }
 }
@@ -293,12 +295,12 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_
                 transactions = ?block.transactions,
                 "expected full transactions but got {:?}", block.transactions
             );
-            return Err(anyhow!(
+            bail!(
                 "expected full transactions, got {:?} for block number {} hash {:?}",
                 block.transactions,
                 block.number(),
                 block.hash()
-            ));
+            );
         };
 
         // Stably sort transactions and receipts by transaction_index

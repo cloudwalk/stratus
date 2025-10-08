@@ -1,7 +1,10 @@
 use alloy_primitives::U64;
 use alloy_primitives::U256;
+use anyhow::bail;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::ext::RuintExt;
@@ -22,6 +25,7 @@ impl Nonce {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for Nonce {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         Self(U64::random_with(rng))
@@ -37,7 +41,7 @@ impl TryFrom<i32> for Nonce {
 
     fn try_from(value: i32) -> Result<Self, Self::Error> {
         if value < 0 {
-            return Err(anyhow::anyhow!("Nonce cannot be negative"));
+            bail!("Nonce cannot be negative");
         }
         Ok(Self(U64::from(value as u32)))
     }

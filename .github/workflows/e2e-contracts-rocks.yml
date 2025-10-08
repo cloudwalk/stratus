@@ -29,13 +29,76 @@ on:
       - "Cargo.toml"
       - "rust-toolchain.toml"
 
+env:
+  CACHE_SHARED_KEY: stable-release
+  CACHE_KEY_CONTEXT: v1-cargo-contracts-tests
+  CACHE_PATH: |
+    ~/.cargo/registry/index/
+    ~/.cargo/registry/cache/
+    ~/.cargo/git/db/
+    ~/.cargo/bin
+    target/
+  CACHE_KEY: ${ CACHE_KEY_CONTEXT }
+
 jobs:
+  setup_cache:
+    name: Setup Cache for E2E Rocks tests
+    runs-on: ubuntu-22.04
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Calculate and set cache key
+        id: cache-key
+        run: |
+          CACHE_KEY="${ImageOS:-${{ runner.os }}}-${{ env.CACHE_KEY_CONTEXT }}-${{ hashFiles('**/Cargo.lock') }}"
+          echo "CACHE_KEY=$CACHE_KEY" >> $GITHUB_ENV
+          echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88      
+
+      - name: Rust Cache - Restore workflow cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CACHE_PATH }}
+          key: ${{ env.CACHE_KEY }}
+          restore-keys: ${{ env.CACHE_SHARED_KEY }}
+
+      - name: Install libsasl2-dev libssl-dev
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+
+      - name: Install cargo tools
+        run: cargo install killport@1.1.0 wait-service@0.3.1 || true
+
+      - name: Set up dependencies
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@0.6.14
+
+      - name: Build all dependencies to prime the cache
+        shell: bash
+        run: |
+          source <(cargo llvm-cov show-env --export-prefix)
+          cargo build --features dev
+
+      - name: Rust Cache - Save workflow cache
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ env.CACHE_KEY }}
+          path: ${{ env.CACHE_PATH }}
+
   contract_test_rocks:
     strategy:
       fail-fast: false
       matrix:
-        contract: [token, pix, periphery, compound, yield, multisig, cppv2]
+        contract: [token, pix, periphery, yield, multisig, cppv2, capybara-finance, credit-agent]
     name: E2E Rocks on ${{ matrix.contract }}
+    needs: setup_cache
     runs-on: ubuntu-22.04
     timeout-minutes: 45
 
@@ -47,22 +110,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Rust
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
-
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        id: cache-cargo
-        with:
-          prefix-key: ${{ runner.os }}-v3-cargo
-          shared-key: stable-release
-          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
-          cache-provider: "github"
-          cache-directories: "~/.cargo/bin/"
-
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88
+
+      - name: Rust Restore Cache
+        id: cache-cargo
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ needs.setup_cache.outputs.cache-key }}
+          restore-keys: ${{ env.CACHE_SHARED_KEY }}
+          path: ${{ env.CACHE_PATH }}
+
+      - name: Install cargo tools
+        run: cargo install killport@1.1.0 wait-service@0.3.1 || true
+  
       - name: Set up Just
         uses: extractions/setup-just@v2
 
@@ -75,12 +141,8 @@ jobs:
         run: npm install -g npm@10.8.2
 
       - name: Set up dependencies
+        uses: taiki-e/install-action@v2
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
-        run: |
-          cargo install killport || true
-          cargo install wait-service || true
-
-      - uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov@0.6.14
 

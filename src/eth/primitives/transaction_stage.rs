@@ -25,7 +25,7 @@ impl TransactionStage {
     pub fn to_json_rpc_transaction(self) -> JsonValue {
         match self {
             TransactionStage::Executed(tx) => {
-                let json_rpc_payload: AlloyTransaction = tx.input.into();
+                let json_rpc_payload: AlloyTransaction = tx.into();
                 to_json_value(json_rpc_payload)
             }
             TransactionStage::Mined(tx) => {
@@ -49,14 +49,14 @@ impl TransactionStage {
     pub fn deployed_contract_address(&self) -> Option<Address> {
         match self {
             Self::Executed(tx) => tx.result.execution.deployed_contract_address,
-            Self::Mined(tx) => tx.execution.deployed_contract_address,
+            Self::Mined(tx) => tx.deployed_contract_address,
         }
     }
 
     pub fn result(&self) -> &ExecutionResult {
         match self {
             Self::Executed(tx) => &tx.result.execution.result,
-            Self::Mined(tx) => &tx.execution.result,
+            Self::Mined(tx) => &tx.result,
         }
     }
 
@@ -77,14 +77,14 @@ impl TransactionStage {
     pub fn from(&self) -> Address {
         match self {
             Self::Executed(tx) => tx.evm_input.from,
-            Self::Mined(tx) => tx.input.signer,
+            Self::Mined(tx) => tx.input.execution_info.signer,
         }
     }
 
     pub fn to(&self) -> Option<Address> {
         match self {
             Self::Executed(tx) => tx.evm_input.to,
-            Self::Mined(tx) => tx.input.to,
+            Self::Mined(tx) => tx.input.execution_info.to,
         }
     }
 }

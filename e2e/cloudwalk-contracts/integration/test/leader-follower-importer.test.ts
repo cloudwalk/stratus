@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { keccak256 } from "ethers";
 
-import { ALICE, BOB } from "./helpers/account";
+import { ALICE, BOB, CHARLIE, DAVE } from "./helpers/account";
 import {
     getTransactionByHashUntilConfirmed,
     sendAndGetFullResponse,
@@ -34,7 +34,7 @@ describe("Leader & Follower importer integration test", function () {
         updateProviderUrl("stratus");
         const responseLeader = await sendAndGetFullResponse("stratus_shutdownImporter", []);
         expect(responseLeader.data.error.code).eq(7003);
-        expect(responseLeader.data.error.message).eq("Stratus node is not a follower.");
+        expect(responseLeader.data.error.message).eq("stratus node is not a follower.");
     });
 
     it("Shutdown command to Follower should succeed", async function () {
@@ -47,7 +47,7 @@ describe("Leader & Follower importer integration test", function () {
         updateProviderUrl("stratus-follower");
         const responseFollower = await sendAndGetFullResponse("stratus_shutdownImporter", []);
         expect(responseFollower.data.error.code).to.equal(4002);
-        expect(responseFollower.data.error.message).to.equal("Importer is already shutdown.");
+        expect(responseFollower.data.error.message).to.equal("importer is already shutdown.");
     });
 
     it("Validate Follower state and health after shutdown", async function () {
@@ -57,7 +57,7 @@ describe("Leader & Follower importer integration test", function () {
         expect(followerNode.is_importer_shutdown).to.equal(true);
         const followerHealth = await sendAndGetFullResponse("stratus_health", []);
         expect(followerHealth.data.error.code).eq(7001);
-        expect(followerHealth.data.error.message).eq("Stratus is not ready to start servicing requests.");
+        expect(followerHealth.data.error.message).eq("stratus is not ready to start servicing requests.");
     });
 
     it("Validate Leader state and health after Follower shutdown", async function () {
@@ -98,7 +98,7 @@ describe("Leader & Follower importer integration test", function () {
         const signedTx = await BOB.signWeiTransfer(ALICE.address, 1, nonce);
         const txResponse = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
         expect(txResponse.data.error.code).to.equal(5001);
-        expect(txResponse.data.error.message).to.equal("Consensus is temporarily unavailable for follower node.");
+        expect(txResponse.data.error.message).to.equal("consensus is temporarily unavailable for follower node.");
     });
 
     it("Init command to Leader should fail", async function () {
@@ -111,14 +111,14 @@ describe("Leader & Follower importer integration test", function () {
             "10485760",
         ]);
         expect(responseLeader.data.error.code).to.equal(7003);
-        expect(responseLeader.data.error.message).to.equal("Stratus node is not a follower.");
+        expect(responseLeader.data.error.message).to.equal("stratus node is not a follower.");
     });
 
     it("Init command to Follower without addresses should fail", async function () {
         updateProviderUrl("stratus-follower");
         const responseInvalidFollower = await sendAndGetFullResponse("stratus_initImporter", []);
         expect(responseInvalidFollower.data.error.code).to.equal(1005);
-        expect(responseInvalidFollower.data.error.message).to.equal("Expected String parameter, but received nothing.");
+        expect(responseInvalidFollower.data.error.message).to.equal("expected String parameter, but received nothing.");
     });
 
     it("Init command to Follower with invalid addresses should fail", async function () {
@@ -130,7 +130,7 @@ describe("Leader & Follower importer integration test", function () {
             "10485760",
         ]);
         expect(responseInvalidAddressFollower.data.error.code).to.equal(4004);
-        expect(responseInvalidAddressFollower.data.error.message).to.equal("Failed to initialize importer.");
+        expect(responseInvalidAddressFollower.data.error.message).to.equal("failed to initialize importer.");
     });
 
     it("Init command to Follower with valid params should succeed", async function () {
@@ -153,7 +153,7 @@ describe("Leader & Follower importer integration test", function () {
             "10485760",
         ]);
         expect(responseSecondInitFollower.data.error.code).to.equal(4001);
-        expect(responseSecondInitFollower.data.error.message).to.equal("Importer is already running.");
+        expect(responseSecondInitFollower.data.error.message).to.equal("importer is already running.");
     });
 
     it("Wait until Follower is in sync with Leader", async function () {
@@ -210,5 +210,94 @@ describe("Leader & Follower importer integration test", function () {
         updateProviderUrl("stratus");
         const txResponseLeader = await getTransactionByHashUntilConfirmed(txHash3);
         expect(txResponseLeader.data.result.hash).to.equal(txHash3);
+    });
+
+    it("Preserves correct signer for all transaction types on both Leader and Follower", async function () {
+        // Send Type 0 (Legacy) transaction from ALICE
+        updateProviderUrl("stratus");
+        const aliceNonceHex = await sendWithRetry("eth_getTransactionCount", [ALICE.address, "latest"]);
+        const aliceNonce = parseInt(aliceNonceHex, 16);
+        console.log("ALICE nonce (hex):", aliceNonceHex, "ALICE nonce (decimal):", aliceNonce);
+        const legacyTx = await ALICE.signWeiTransferLegacy(BOB.address, 1, aliceNonce);
+        const legacyHash = keccak256(legacyTx);
+        console.log("Type 0 (Legacy) transaction hash:", legacyHash);
+        await sendWithRetry("eth_sendRawTransaction", [legacyTx]);
+
+        // Send Type 1 (EIP-2930) transaction from DAVE (using fresh account to avoid nonce issues)
+        const daveNonceHex = await sendWithRetry("eth_getTransactionCount", [DAVE.address, "latest"]);
+        const daveNonce = parseInt(daveNonceHex, 16);
+        console.log("DAVE nonce (hex):", daveNonceHex, "DAVE nonce (decimal):", daveNonce);
+        const eip2930Tx = await DAVE.signWeiTransferEIP2930(ALICE.address, 1, daveNonce);
+        const eip2930Hash = keccak256(eip2930Tx);
+        console.log("Type 1 (EIP-2930) transaction hash:", eip2930Hash);
+        await sendWithRetry("eth_sendRawTransaction", [eip2930Tx]);
+
+        // Send Type 2 (EIP-1559) transaction from CHARLIE (to avoid nonce issues)
+        const charlieNonceHex = await sendWithRetry("eth_getTransactionCount", [CHARLIE.address, "latest"]);
+        const charlieNonce = parseInt(charlieNonceHex, 16);
+        console.log("CHARLIE nonce (hex):", charlieNonceHex, "CHARLIE nonce (decimal):", charlieNonce);
+        const eip1559Tx = await CHARLIE.signWeiTransferEIP1559(BOB.address, 1, charlieNonce);
+        const eip1559Hash = keccak256(eip1559Tx);
+        console.log("Type 2 (EIP-1559) transaction hash:", eip1559Hash);
+        await sendWithRetry("eth_sendRawTransaction", [eip1559Tx]);
+
+        // Verify on Leader
+        const leaderLegacyTx = await sendWithRetry("eth_getTransactionByHash", [legacyHash]);
+        expect(leaderLegacyTx.from.toLowerCase()).to.equal(ALICE.address.toLowerCase());
+        expect(leaderLegacyTx.type).to.equal("0x0");
+
+        const leaderEIP2930Tx = await sendWithRetry("eth_getTransactionByHash", [eip2930Hash]);
+        expect(leaderEIP2930Tx.from.toLowerCase()).to.equal(DAVE.address.toLowerCase());
+        expect(leaderEIP2930Tx.type).to.equal("0x1");
+
+        const leaderEIP1559Tx = await sendWithRetry("eth_getTransactionByHash", [eip1559Hash]);
+        expect(leaderEIP1559Tx.from.toLowerCase()).to.equal(CHARLIE.address.toLowerCase());
+        expect(leaderEIP1559Tx.type).to.equal("0x2");
+
+        // Wait for follower to sync
+        await waitForFollowerToSyncWithLeader();
+
+        // Verify on Follower
+        updateProviderUrl("stratus-follower");
+        const followerLegacyTx = await sendWithRetry("eth_getTransactionByHash", [legacyHash]);
+        expect(followerLegacyTx.from.toLowerCase()).to.equal(ALICE.address.toLowerCase());
+        expect(followerLegacyTx.type).to.equal("0x0");
+
+        const followerEIP2930Tx = await sendWithRetry("eth_getTransactionByHash", [eip2930Hash]);
+        expect(followerEIP2930Tx.from.toLowerCase()).to.equal(DAVE.address.toLowerCase());
+        expect(followerEIP2930Tx.type).to.equal("0x1");
+
+        const followerEIP1559Tx = await sendWithRetry("eth_getTransactionByHash", [eip1559Hash]);
+        expect(followerEIP1559Tx.from.toLowerCase()).to.equal(CHARLIE.address.toLowerCase());
+        expect(followerEIP1559Tx.type).to.equal("0x2");
+
+        // Also verify receipts on both Leader and Follower
+        console.log("Verifying receipts on Leader...");
+        updateProviderUrl("stratus");
+        console.log("Getting receipt for Type 0 (Legacy) tx:", legacyHash);
+        const leaderLegacyReceipt = await sendWithRetry("eth_getTransactionReceipt", [legacyHash]);
+        expect(leaderLegacyReceipt.from.toLowerCase()).to.equal(ALICE.address.toLowerCase());
+
+        console.log("Getting receipt for Type 1 (EIP-2930) tx:", eip2930Hash);
+        const leaderEIP2930Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip2930Hash]);
+        expect(leaderEIP2930Receipt.from.toLowerCase()).to.equal(DAVE.address.toLowerCase());
+
+        console.log("Getting receipt for Type 2 (EIP-1559) tx:", eip1559Hash);
+        const leaderEIP1559Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip1559Hash]);
+        expect(leaderEIP1559Receipt.from.toLowerCase()).to.equal(CHARLIE.address.toLowerCase());
+
+        console.log("Verifying receipts on Follower...");
+        updateProviderUrl("stratus-follower");
+        console.log("Getting receipt for Type 0 (Legacy) tx:", legacyHash);
+        const followerLegacyReceipt = await sendWithRetry("eth_getTransactionReceipt", [legacyHash]);
+        expect(followerLegacyReceipt.from.toLowerCase()).to.equal(ALICE.address.toLowerCase());
+
+        console.log("Getting receipt for Type 1 (EIP-2930) tx:", eip2930Hash);
+        const followerEIP2930Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip2930Hash]);
+        expect(followerEIP2930Receipt.from.toLowerCase()).to.equal(DAVE.address.toLowerCase());
+
+        console.log("Getting receipt for Type 2 (EIP-1559) tx:", eip1559Hash);
+        const followerEIP1559Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip1559Hash]);
+        expect(followerEIP1559Receipt.from.toLowerCase()).to.equal(CHARLIE.address.toLowerCase());
     });
 });

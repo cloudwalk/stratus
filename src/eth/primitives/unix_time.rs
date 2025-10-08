@@ -1,16 +1,17 @@
-use std::ops::Deref;
-
 use alloy_primitives::U256;
 use chrono::DateTime;
 use chrono::Utc;
+use derive_more::Deref;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::ext::InfallibleExt;
 
-#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct UnixTime(u64);
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Deref)]
+pub struct UnixTime(#[deref] u64);
 
 impl UnixTime {
     pub const ZERO: UnixTime = UnixTime(0u64);
@@ -36,14 +37,7 @@ impl UnixTime {
     }
 }
 
-impl Deref for UnixTime {
-    type Target = u64;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
+#[cfg(test)]
 impl Dummy<Faker> for UnixTime {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         rng.next_u64().into()

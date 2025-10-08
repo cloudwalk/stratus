@@ -1,10 +1,8 @@
-use std::collections::BTreeMap;
-
 use alloy_primitives::B256;
 use alloy_rpc_types_eth::BlockTransactions;
+use alloy_trie::root::ordered_trie_root;
 use display_json::DebugAsJson;
 use itertools::Itertools;
-use keccak_hasher::KeccakHasher;
 
 use super::ExternalBlock;
 use super::Index;
@@ -16,16 +14,15 @@ use crate::alias::AlloyBlockAlloyTransaction;
 use crate::alias::AlloyBlockB256;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
-use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
 
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Block {
     pub header: BlockHeader,
     pub transactions: Vec<TransactionMined>,
@@ -97,45 +94,17 @@ impl Block {
         self.header.hash
     }
 
-    /// Compact accounts changes removing intermediate values, keeping only the last modified nonce, balance, bytecode and slots.
-    pub fn compact_account_changes(&self) -> Vec<ExecutionAccountChanges> {
-        let mut block_compacted_changes: BTreeMap<Address, ExecutionAccountChanges> = BTreeMap::new();
-        for transaction in &self.transactions {
-            for transaction_changes in transaction.execution.changes.values() {
-                let account_compacted_changes = block_compacted_changes
-                    .entry(transaction_changes.address)
-                    .or_insert(transaction_changes.clone());
-
-                if let Some(&nonce) = transaction_changes.nonce.take_modified_ref() {
-                    account_compacted_changes.nonce.set_modified(nonce);
-                }
-
-                if let Some(balance) = transaction_changes.balance.take_modified_ref() {
-                    account_compacted_changes.balance.set_modified(*balance);
-                }
-
-                if let Some(bytecode) = transaction_changes.bytecode.take_modified_ref() {
-                    account_compacted_changes.bytecode.set_modified(bytecode.clone());
-                }
-
-                for (&slot_index, slot) in &transaction_changes.slots {
-                    let slot_compacted_changes = account_compacted_changes.slots.entry(slot_index).or_insert(slot.clone());
-                    if let Some(&slot_value) = slot.take_modified_ref() {
-                        slot_compacted_changes.set_modified(slot_value);
-                    }
-                }
-            }
-        }
-
-        block_compacted_changes.into_values().collect_vec()
-    }
-
-    fn mine_transaction(&mut self, tx: TransactionExecution, transaction_index: Index, log_index: &mut Index) -> TransactionMined {
+    fn mine_transaction(&mut self, mut tx: TransactionExecution, transaction_index: Index, log_index: &mut Index) -> TransactionMined {
         let mined_logs = Self::mine_logs(self, &tx, transaction_index, log_index);
-
+        let deployed_contract_address = tx.result.execution.deployed_contract_address;
+        let result = std::mem::take(&mut tx.result);
         TransactionMined {
-            input: tx.input,
-            execution: tx.result.execution,
+            input: tx.into(),
+            block_timestamp: result.execution.block_timestamp,
+            result: result.execution.result,
+            output: result.execution.output,
+            gas: result.execution.gas,
+            deployed_contract_address,
             transaction_index,
             block_number: self.header.number,
             block_hash: self.header.hash,
@@ -159,8 +128,8 @@ impl Block {
 
     fn calculate_transaction_root(&mut self) {
         if !self.transactions.is_empty() {
-            let transactions_hashes: Vec<Hash> = self.transactions.iter().map(|x| x.input.hash).collect();
-            self.header.transactions_root = triehash::ordered_trie_root::<KeccakHasher, _>(transactions_hashes).into();
+            let transactions_hashes: Vec<B256> = self.transactions.iter().map(|x| x.input.transaction_info.hash).map(B256::from).collect();
+            self.header.transactions_root = ordered_trie_root(&transactions_hashes).into();
         }
     }
 
@@ -175,9 +144,9 @@ impl Block {
 
     pub fn apply_external(&mut self, external_block: &ExternalBlock) {
         self.header.hash = external_block.hash();
-        self.header.timestamp = external_block.timestamp();
+        assert!(*self.header.timestamp == external_block.header.timestamp);
         for transaction in self.transactions.iter_mut() {
-            assert!(transaction.execution.block_timestamp == self.header.timestamp);
+            assert!(transaction.block_timestamp == self.header.timestamp);
             transaction.block_hash = external_block.hash();
             for log in transaction.logs.iter_mut() {
                 log.block_hash = external_block.hash();
@@ -225,7 +194,7 @@ impl From<Block> for AlloyBlockAlloyTransaction {
 impl From<Block> for AlloyBlockB256 {
     fn from(block: Block) -> Self {
         let alloy_block: AlloyBlockB256 = block.header.into();
-        let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.hash).map(B256::from).collect();
+        let transaction_hashes: Vec<B256> = block.transactions.into_iter().map(|x| x.input.transaction_info.hash).map(B256::from).collect();
 
         Self {
             transactions: BlockTransactions::Hashes(transaction_hashes),
