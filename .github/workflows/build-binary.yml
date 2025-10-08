@@ -93,6 +93,10 @@ jobs:
           echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
           echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
 
+      - name: Clean built binaries
+        run: |
+          cargo clean
+  
       - name: Set up dependencies
         uses: taiki-e/install-action@v2
         with:
@@ -100,7 +104,6 @@ jobs:
 
       - name: Build Debug binaries for cache
         run: |
-          cargo clean
           source <(cargo llvm-cov show-env --export-prefix)
           cargo build --features dev
 
