@@ -100,6 +100,7 @@ jobs:
 
       - name: Build Debug binaries for cache
         run: |
+          cargo clean
           source <(cargo llvm-cov show-env --export-prefix)
           cargo build --features dev
 
