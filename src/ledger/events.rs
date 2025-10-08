@@ -19,7 +19,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogTopic;
-use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::if_else;
 
@@ -218,7 +218,7 @@ impl Event for AccountTransfers {
 const TRANSFER_EVENT: LogTopic = LogTopic(B256::new(hex!("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")));
 
 /// Converts a mined transaction into multiple account transfers events to be published.
-pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionExecution>) -> Vec<AccountTransfers> {
+pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined>) -> Vec<AccountTransfers> {
     let hash = tx.info.hash;
     // identify token transfers in transaction
     let transfers = tx
@@ -265,7 +265,7 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionExecu
             publication_datetime: Utc::now(),
             account_address: *account,
             transaction_hash: tx.info.hash,
-            transaction_index: tx.index.0,
+            transaction_index: tx.mined_data.index.0,
             contract_address: tx.evm_input.to.unwrap_or_else(|| {
                 tracing::error!(?tx.info.hash, "bug: transaction emitting transfers must have the contract address");
                 Address::ZERO
@@ -321,7 +321,7 @@ mod tests {
     use crate::eth::primitives::Bytes;
     use crate::eth::primitives::Hash;
     use crate::eth::primitives::Log;
-    use crate::eth::primitives::TransactionExecution;
+    use crate::eth::primitives::TransactionMined;
     use crate::eth::primitives::UnixTime;
     use crate::eth::primitives::test_accounts;
     use crate::ext::to_json_value;
@@ -398,8 +398,8 @@ mod tests {
         let block_timestamp: UnixTime = 1729108070.into();
 
         // 2. generate fake tx data
-        let mut tx: TransactionExecution = Fake::fake(&Faker);
-        tx.evm_input.data = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let mut tx: TransactionMined = Fake::fake(&Faker);
+        tx.execution.evm_input.data = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         let mut log_transfer1: Log = Fake::fake(&Faker);
         log_transfer1.address = token_address;
@@ -417,9 +417,9 @@ mod tests {
 
         let log_random: Log = Fake::fake(&Faker);
 
-        tx.result.execution.logs.push(log_transfer1);
-        tx.result.execution.logs.push(log_random);
-        tx.result.execution.logs.push(log_transfer2);
+        tx.execution.result.execution.logs.push(log_transfer1);
+        tx.execution.result.execution.logs.push(log_random);
+        tx.execution.result.execution.logs.push(log_transfer2);
 
         // 3. parse events
         let events = transaction_to_events(block_timestamp, Cow::Borrowed(&tx));

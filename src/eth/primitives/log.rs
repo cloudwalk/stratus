@@ -27,9 +27,6 @@ pub struct Log {
 
     /// Additional data.
     pub data: Bytes,
-
-    /// log index (Some if mined)
-    pub index: Option<Index>,
 }
 
 impl Log {

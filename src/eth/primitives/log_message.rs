@@ -9,7 +9,6 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::Log;
-use crate::ext::OptionExt;
 use crate::ext::to_json_value;
 
 /// Log that was emitted by the EVM and added to a block.
@@ -30,6 +29,8 @@ pub struct LogMessage {
 
     /// Block hash where the log was mined.
     pub block_hash: Hash,
+
+    pub index: Index,
 }
 
 impl LogMessage {
@@ -39,13 +40,14 @@ impl LogMessage {
         to_json_value(alloy_log)
     }
 
-    pub fn from_parts(log: Log, block_number: BlockNumber, block_hash: Hash, transaction_hash: Hash, transaction_index: Index) -> Self {
+    pub fn new(log: Log, block_number: BlockNumber, block_hash: Hash, transaction_hash: Hash, transaction_index: Index, log_index: Index) -> Self {
         Self {
             log,
             transaction_hash,
             transaction_index,
             block_number,
             block_hash,
+            index: log_index,
         }
     }
 }
@@ -63,7 +65,7 @@ impl From<LogMessage> for AlloyLog {
             block_timestamp: None,
             transaction_hash: Some(value.transaction_hash.into()),
             transaction_index: Some(value.transaction_index.into()),
-            log_index: value.log.index.map_into(),
+            log_index: Some(value.index.into()),
             removed: false,
         }
     }

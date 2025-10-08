@@ -62,6 +62,7 @@ use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
+use crate::eth::primitives::MinedData;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
@@ -212,13 +213,14 @@ impl Evm {
             return Ok(NoopFrame::default().into());
         }
 
-        let tx = self
+        let (tx, mined_data): (TransactionExecution, Option<MinedData>) = self
             .evm
             .journaled_state
             .database
             .storage
             .read_transaction(tx_hash)?
-            .ok_or_else(|| anyhow!("transaction not found: {tx_hash}"))?;
+            .ok_or_else(|| anyhow!("transaction not found: {tx_hash}"))?
+            .into();
 
         // CREATE transactions need to be traced for blockscout to work correctly
         if tx.result.execution.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.result.execution.result, ExecutionResult::Success)
@@ -241,7 +243,7 @@ impl Evm {
         let tx_info = TransactionInfo {
             block_hash: Some(block.hash().0.0.into()),
             hash: Some(tx_hash.0.0.into()),
-            index: Some(tx.index.into()),
+            index: mined_data.map(|data| data.index.into()),
             block_number: Some(block.number().as_u64()),
             base_fee: None,
         };
@@ -261,7 +263,7 @@ impl Evm {
             if tx.info.hash == tx_hash {
                 break;
             }
-            let tx_input: EvmInput = tx.evm_input;
+            let tx_input: EvmInput = tx.execution.evm_input;
 
             // Configure EVM state
             evm.fill_env(tx_input);

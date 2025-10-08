@@ -26,7 +26,7 @@ use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
-use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
@@ -195,7 +195,7 @@ impl RocksPermanentStorage {
         result.map_err(|err| StorageError::RocksError { err })
     }
 
-    pub fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
+    pub fn read_transaction(&self, hash: Hash) -> anyhow::Result<Option<TransactionMined>, StorageError> {
         self.state
             .read_transaction(hash)
             .map_err(|err| StorageError::RocksError { err })

@@ -29,6 +29,7 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
@@ -598,7 +599,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionExecution>, StorageError> {
+    pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionStage>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_transaction", %tx_hash).entered();
 
@@ -611,7 +612,7 @@ impl StratusStorage {
             }
         })?;
         if let Some(tx_temp) = temp_tx {
-            return Ok(Some(tx_temp));
+            return Ok(Some(TransactionStage::Pending(tx_temp)));
         }
 
         // read from perm
@@ -622,7 +623,7 @@ impl StratusStorage {
                 tracing::error!(reason = ?e, "failed to read transaction from permanent storage");
             }
         })?;
-        Ok(perm_tx)
+        Ok(perm_tx.map(TransactionStage::Mined))
     }
 
     pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMessage>, StorageError> {

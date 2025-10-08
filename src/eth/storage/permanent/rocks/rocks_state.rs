@@ -54,7 +54,7 @@ use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
@@ -262,7 +262,7 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionExecution>> {
+    pub fn read_transaction(&self, tx_hash: Hash) -> Result<Option<TransactionMined>> {
         let Some(block_number) = self.transactions.get(&tx_hash.into())? else {
             return Ok(None);
         };
@@ -278,11 +278,7 @@ impl RocksStorageState {
         match transaction {
             Some(tx) => {
                 tracing::trace!(%tx_hash, "transaction found");
-                Ok(Some(TransactionExecution::from_rocks_primitives(
-                    tx,
-                    block_number.into_inner(),
-                    block.header.hash,
-                )))
+                Ok(Some(TransactionMined::from_rocks_primitives(tx, block_number.into_inner(), block.header.hash)))
             }
             None => log_and_err!("rocks error, transaction wasn't found in block where the index pointed at")
                 .with_context(|| format!("block_number = {block_number:?} tx_hash = {tx_hash}")),
@@ -772,6 +768,7 @@ mod tests {
     use crate::eth::executor::EvmInput;
     use crate::eth::primitives::BlockHeader;
     use crate::eth::primitives::EvmExecution;
+    use crate::eth::primitives::TransactionExecution;
 
     #[test]
     #[cfg(feature = "dev")]
@@ -829,14 +826,17 @@ mod tests {
                     number: number.into(),
                     ..Faker.fake()
                 },
-                transactions: vec![TransactionExecution {
-                    evm_input: EvmInput {
-                        block_number: number.into(),
-                        ..Faker.fake()
-                    },
-                    result: EvmExecutionResult {
-                        execution: EvmExecution {
-                            logs: vec![Faker.fake(), Faker.fake()],
+                transactions: vec![TransactionMined {
+                    execution: TransactionExecution {
+                        evm_input: EvmInput {
+                            block_number: number.into(),
+                            ..Faker.fake()
+                        },
+                        result: EvmExecutionResult {
+                            execution: EvmExecution {
+                                logs: vec![Faker.fake(), Faker.fake()],
+                                ..Faker.fake()
+                            },
                             ..Faker.fake()
                         },
                         ..Faker.fake()

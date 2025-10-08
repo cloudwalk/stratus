@@ -11,8 +11,11 @@ use crate::eth::executor::EvmInput;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::Index;
+use crate::eth::primitives::MinedData;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
+use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::types::execution_result::ExecutionResultBuilder;
 use crate::ext::OptionExt;
@@ -27,40 +30,54 @@ pub struct TransactionMinedRocksdb {
     pub transaction_index: IndexRocksdb,
 }
 
-impl From<(usize, TransactionExecution)> for TransactionMinedRocksdb {
-    fn from((idx, item): (usize, TransactionExecution)) -> Self {
+impl From<TransactionMined> for TransactionMinedRocksdb {
+    fn from(item: TransactionMined) -> Self {
+        let execution = item.execution;
         Self {
             input: TransactionInputRocksdb {
-                tx_type: item.info.tx_type.map(|inner| inner.as_u64() as u8),
-                chain_id: item.evm_input.chain_id.map_into(),
-                hash: item.info.hash.into(),
-                nonce: item.evm_input.nonce.unwrap_or_default().into(),
-                signer: item.evm_input.from.into(),
-                from: item.evm_input.from.into(),
-                to: item.evm_input.to.map_into(),
-                value: item.evm_input.value.into(),
-                input: item.evm_input.data.clone().into(),
-                gas_limit: item.evm_input.gas_limit.into(),
-                gas_price: item.evm_input.gas_price.into(),
-                v: item.signature.v.as_u64(),
-                r: item.signature.r.into_limbs(),
-                s: item.signature.s.into_limbs(),
+                tx_type: execution.info.tx_type.map(|inner| inner.as_u64() as u8),
+                chain_id: execution.evm_input.chain_id.map_into(),
+                hash: execution.info.hash.into(),
+                nonce: execution.evm_input.nonce.unwrap_or_default().into(),
+                signer: execution.evm_input.from.into(),
+                from: execution.evm_input.from.into(),
+                to: execution.evm_input.to.map_into(),
+                value: execution.evm_input.value.into(),
+                input: execution.evm_input.data.clone().into(),
+                gas_limit: execution.evm_input.gas_limit.into(),
+                gas_price: execution.evm_input.gas_price.into(),
+                v: execution.signature.v.as_u64(),
+                r: execution.signature.r.into_limbs(),
+                s: execution.signature.s.into_limbs(),
             },
             execution: ExecutionRocksdb::new(
-                item.evm_input.block_timestamp.into(),
-                item.result.execution.result.into(),
-                item.result.execution.output.into(),
-                item.result.execution.gas_used.into(),
-                item.result.execution.deployed_contract_address.map_into(),
+                execution.evm_input.block_timestamp.into(),
+                execution.result.execution.result.into(),
+                execution.result.execution.output.into(),
+                execution.result.execution.gas_used.into(),
+                execution.result.execution.deployed_contract_address.map_into(),
             ),
-            logs: item.result.execution.logs.into_iter().map(|log| log.into()).collect(),
-            transaction_index: IndexRocksdb(idx as u32),
+            logs: execution
+                .result
+                .execution
+                .logs
+                .into_iter()
+                .enumerate()
+                .map(|(idx, log)| (log, item.mined_data.first_log_index + Index(idx as u64)).into())
+                .collect(),
+            transaction_index: item.mined_data.index.into(),
         }
     }
 }
 
-impl TransactionExecution {
+impl TransactionMined {
     pub fn from_rocks_primitives(other: TransactionMinedRocksdb, block_number: BlockNumberRocksdb, block_hash: HashRocksdb) -> Self {
+        let mined_data = MinedData {
+            first_log_index: other.logs.first().map(|log| log.index).unwrap_or_default().into(),
+            index: other.transaction_index.into(),
+            block_hash: block_hash.into(),
+        };
+
         let logs = other.logs.into_iter().map(|log| log.into()).collect();
 
         let (result, output) = ExecutionResultBuilder((other.execution.result, other.execution.output)).build();
@@ -79,14 +96,14 @@ impl TransactionExecution {
             metrics: EvmExecutionMetrics::default(),
         };
 
-        Self {
+        let execution = TransactionExecution {
             info: input.transaction_info,
             signature: input.signature,
             evm_input: EvmInput::from_eth_transaction(&input.execution_info, block_number.into(), other.execution.block_timestamp.into()),
             result: evm_result,
-            index: other.transaction_index.into(),
-            block_hash: Some(block_hash.into()),
-        }
+        };
+
+        Self { execution, mined_data }
     }
 }
 

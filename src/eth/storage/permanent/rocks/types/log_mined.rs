@@ -16,9 +16,9 @@ pub struct LogMinedRocksdb {
     pub index: u64,
 }
 
-impl From<Log> for LogMinedRocksdb {
-    fn from(log: Log) -> Self {
-        let index = log.index.unwrap_or_default().into();
+impl From<(Log, Index)> for LogMinedRocksdb {
+    fn from((log, index): (Log, Index)) -> Self {
+        let index = index.into();
         Self { log: log.into(), index }
     }
 }
@@ -32,7 +32,6 @@ impl From<LogMinedRocksdb> for Log {
             topic2: value.log.topics.2.map_into(),
             topic3: value.log.topics.3.map_into(),
             data: value.log.data.into(),
-            index: Some(value.index.into()),
         }
     }
 }
@@ -45,12 +44,14 @@ impl LogMessage {
         tx_index: usize,
         tx_hash: HashRocksdb,
     ) -> Self {
+        let index = log.index.into();
         Self {
             block_number: block_number.into(),
             block_hash: block_hash.into(),
             log: log.into(),
             transaction_hash: tx_hash.into(),
             transaction_index: Index::from(tx_index as u64),
+            index,
         }
     }
 }

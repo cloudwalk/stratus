@@ -17,6 +17,7 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogMessage;
+use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::UnixTime;
 use crate::ext::to_json_value;
 
@@ -24,7 +25,7 @@ use crate::ext::to_json_value;
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct Block {
     pub header: BlockHeader,
-    pub transactions: Vec<TransactionExecution>,
+    pub transactions: Vec<TransactionMined>,
 }
 
 impl Block {
@@ -96,13 +97,14 @@ impl Block {
     pub fn create_log_messages(&self) -> Vec<LogMessage> {
         let mut log_messages = vec![];
         for (transaction_index, tx) in self.transactions.iter().enumerate() {
-            for log in tx.logs() {
+            for (idx, log) in tx.logs().iter().enumerate() {
                 log_messages.push(LogMessage {
                     log: log.clone(),
                     transaction_hash: tx.info.hash,
                     transaction_index: (transaction_index as u64).into(),
                     block_hash: self.hash(),
                     block_number: self.number(),
+                    index: tx.mined_data.first_log_index + Index(idx as u64),
                 });
             }
         }
@@ -133,14 +135,11 @@ impl From<PendingBlock> for Block {
         block.header.size = Size::from(txs.len() as u64);
 
         let mut log_index = Index::ZERO;
-        for (tx_idx, mut tx) in txs.into_iter().enumerate() {
-            assert_eq!(tx_idx, *tx.index as usize);
-            tx.block_hash = Some(block.hash());
-            for log in tx.result.execution.logs.iter_mut() {
-                log.index = Some(log_index);
-                log_index += Index::ONE;
-            }
-            block.transactions.push(tx);
+        for (tx_idx, execution) in txs.into_iter().enumerate() {
+            let log_count = execution.result.execution.logs.len() as u64;
+            let transaction_mined = TransactionMined::from_execution(execution, block.hash(), (tx_idx as u64).into(), log_index);
+            block.transactions.push(transaction_mined);
+            log_index += Index(log_count);
         }
 
         Self::calculate_transaction_root(&mut block);

@@ -7,7 +7,7 @@ use chrono::TimeZone;
 use chrono::Timelike;
 use indicatif::ProgressBar;
 use rocksdb::properties::ESTIMATE_NUM_KEYS;
-use stratus::eth::primitives::TransactionExecution;
+use stratus::eth::primitives::TransactionMined;
 use stratus::eth::storage::permanent::RocksCfCacheConfig;
 use stratus::eth::storage::permanent::rocks::RocksStorageState;
 use stratus::eth::storage::permanent::rocks::types::BlockNumberRocksdb;
@@ -29,7 +29,7 @@ fn transaction_mined_rocks_db_to_events(
     block_number: BlockNumberRocksdb,
     block_hash: HashRocksdb,
 ) -> Vec<AccountTransfers> {
-    let tx = TransactionExecution::from_rocks_primitives(tx, block_number, block_hash);
+    let tx = TransactionMined::from_rocks_primitives(tx, block_number, block_hash);
     transaction_to_events(block_timestamp.into(), Cow::Owned(tx))
 }
 
