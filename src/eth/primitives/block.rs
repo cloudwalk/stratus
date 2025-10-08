@@ -123,6 +123,7 @@ impl Block {
         assert!(*self.header.timestamp == external_block.header.timestamp);
         for transaction in self.transactions.iter_mut() {
             assert!(transaction.evm_input.block_timestamp == self.header.timestamp);
+            transaction.mined_data.block_hash = external_block.hash();
         }
     }
 }
