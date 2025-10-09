@@ -38,8 +38,8 @@ jobs:
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ github.run_id }}
-      cancel-in-progress: false
+      group: ${{ github.workflow }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout code
@@ -67,6 +67,6 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_SHARED_KEY }}
+          key: ${{ env.CACHE_SHARED_KEY }}-${{ github.workflow }}
 
 
