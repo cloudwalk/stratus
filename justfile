@@ -164,7 +164,12 @@ importer-offline-test *args="":
 # Test: run rust tests
 test:
     mkdir -p target/llvm-cov/codecov
-    cargo llvm-cov --lcov --output-path target/llvm-cov/codecov/rust_tests.info --ignore-filename-regex data_migration.rs
+    source <(just coverage-env)
+    cargo test
+    mkdir -p target/llvm-cov/codecov
+    cargo llvm-cov report --html --ignore-filename-regex data_migration.rs
+    cargo llvm-cov report --lcov --output-path target/llvm-cov/codecov/rust_tests.info --ignore-filename-regex data_migration.rs
+
 
 # Test: Execute Rust doc tests
 test-doc name="":
