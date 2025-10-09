@@ -363,7 +363,8 @@ impl Executor {
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         let tx_input: TransactionInput = tx.try_into()?;
-        let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &self.storage.read_pending_block_header().0);
+        let (pending_block, _) = self.storage.read_pending_block_header();
+        let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_block.number, *pending_block.timestamp);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
@@ -426,7 +427,7 @@ impl Executor {
         cfg_if! {
             if #[cfg(feature = "metrics")] {
                 let tx_metrics = tx_execution.metrics();
-                let tx_gas = tx_execution.result.execution.gas;
+                let tx_gas = tx_execution.result.execution.gas_used;
             }
         }
 
@@ -516,7 +517,7 @@ impl Executor {
 
             // prepare evm input
             let (pending_header, _) = self.storage.read_pending_block_header();
-            let evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &pending_header);
+            let evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::debug!(
@@ -539,7 +540,7 @@ impl Executor {
             #[cfg(feature = "metrics")]
             let tx_metrics = tx_execution.metrics();
             #[cfg(feature = "metrics")]
-            let gas_used = tx_execution.result.execution.gas;
+            let gas_used = tx_execution.result.execution.gas_used;
             #[cfg(feature = "metrics")]
             let function = codegen::function_sig(&tx_input.execution_info.input);
             #[cfg(feature = "metrics")]
@@ -626,7 +627,7 @@ impl Executor {
                     metrics::inc_executor_local_call(start.elapsed(), true, contract, function);
                     metrics::inc_executor_local_call_account_reads(evm_result.metrics.account_reads, contract, function);
                     metrics::inc_executor_local_call_slot_reads(evm_result.metrics.slot_reads, contract, function);
-                    metrics::inc_executor_local_call_gas(evm_result.execution.gas.as_u64() as usize, contract, function);
+                    metrics::inc_executor_local_call_gas(evm_result.execution.gas_used.as_u64() as usize, contract, function);
                 }
                 Err(_) => {
                     metrics::inc_executor_local_call(start.elapsed(), false, contract, function);

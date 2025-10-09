@@ -1,5 +1,6 @@
 //! Ethereum / EVM storage.
 
+use anyhow::bail;
 use cache::CacheConfig;
 pub use cache::StorageCache;
 pub use permanent::PermanentStorageConfig;
@@ -20,6 +21,7 @@ use display_json::DebugAsJson;
 pub use temporary::compute_pending_block_number;
 
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::StratusError;
 
 // -----------------------------------------------------------------------------
@@ -65,6 +67,16 @@ pub enum TxCount {
     Partial(u64),
 }
 
+impl TryFrom<TxCount> for Index {
+    type Error = anyhow::Error;
+    fn try_from(value: TxCount) -> Result<Self, Self::Error> {
+        match value {
+            TxCount::Partial(idx) => Ok(idx.into()),
+            TxCount::Full => bail!("full transactions has unknown tx index"),
+        }
+    }
+}
+
 impl From<u64> for TxCount {
     fn from(value: u64) -> Self {
         TxCount::Partial(value)
@@ -103,7 +115,7 @@ impl PartialOrd for TxCount {
     }
 }
 
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Default)]
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Default, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub enum ReadKind {
     Call((BlockNumber, TxCount)),
