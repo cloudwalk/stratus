@@ -39,19 +39,4 @@ impl ExecutionRocksdb {
     }
 }
 
-// impl From<ExecutionRocksdb> for EvmExecution {
-//     fn from(item: ExecutionRocksdb) -> Self {
-//         let (result, output) = ExecutionResultBuilder((item.result, item.output)).build();
-//         Self {
-//             block_timestamp: item.block_timestamp.into(),
-//             result,
-//             output,
-//             logs: item.logs.into_iter().map(LogRocksdb::from).collect(),
-//             gas_used: item.gas.into(),
-//             changes: ExecutionChanges::default(),
-//             deployed_contract_address: item.deployed_contract_address.map_into(),
-//         }
-//     }
-// }
-
 impl SerializeDeserializeWithContext for ExecutionRocksdb {}
