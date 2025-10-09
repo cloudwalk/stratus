@@ -8,7 +8,7 @@ Welcome to Stratus, the cutting-edge EVM-compatible ledger and JSON-RPC server. 
 2. Observability: We have a lot of metric, logs, tracing implemented so that you can effectively monitor every aspect of the application.
 3. Performance: By not aiming to be a blockchain (i.e. no decentralization) and by optimizing for scenarios with a limited number of contracts, we've been able to get single-token performances unheardof in any other evm-compatible ledger*. Currently we can achieve around 500M gas per second**. 
 
-You'll be hard pressed to find a private evm-compatible ledger solution that achieves those 3 factors as well as we do.
+You'd be hard pressed to find a private evm-compatible ledger solution that achieves those 3 factors as well as we do.
 
 *: Although you can find some that can do more GPS than us, it is measured on scenarios were the contracts are completely independent, such as n separate erc20-tokens. These types of executions can be parallelized, but we removed this feature from stratus in favor of optimizing for scenarios where transactions are mostly dependant on one another.
 
