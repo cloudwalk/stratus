@@ -163,6 +163,7 @@ importer-offline-test *args="":
 # ------------------------------------------------------------------------------
 # Test: run rust tests
 test:
+    #!/bin/bash
     mkdir -p target/llvm-cov/codecov
     source <(just coverage-env)
     cargo test
