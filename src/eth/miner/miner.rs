@@ -5,7 +5,6 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use anyhow::anyhow;
-use itertools::Itertools;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
 use tokio::sync::Mutex as AsyncMutex;
@@ -20,7 +19,7 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogMessage;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
@@ -64,7 +63,7 @@ pub struct Miner {
     pub notifier_blocks: broadcast::Sender<BlockHeader>,
 
     /// Broadcasts transaction logs events.
-    pub notifier_logs: broadcast::Sender<LogMined>,
+    pub notifier_logs: broadcast::Sender<LogMessage>,
 
     // -------------------------------------------------------------------------
     // Shutdown
@@ -314,11 +313,7 @@ impl Miner {
         } else {
             None
         };
-        let block_logs = if self.has_log_subscribers() {
-            Some(block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec())
-        } else {
-            None
-        };
+        let block_logs = self.has_log_subscribers().then(|| block.create_log_messages());
 
         // save storage
         self.storage.save_block(block, changes)?;
@@ -357,7 +352,7 @@ impl Miner {
     }
 
     /// Sends notifications for logs
-    fn send_log_notifications(&self, logs: &Option<Vec<LogMined>>) {
+    fn send_log_notifications(&self, logs: &Option<Vec<LogMessage>>) {
         if let Some(logs) = logs {
             for log in logs {
                 let _ = self.notifier_logs.send(log.clone());
