@@ -67,6 +67,6 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_SHARED_KEY }}-${{ github.workflow }}
+          key: ${{ env.CACHE_SHARED_KEY }}-${{ runner.os }}--${{ hashFiles('**/Cargo.lock') }}
 
 
