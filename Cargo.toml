@@ -21,7 +21,7 @@ derive-new = "=0.7.0"
 hash_hasher = "=2.0.4"
 hex_fmt = "=0.3.0"
 hex-literal = "=1.0.0"
-humantime = "=2.2.0"
+humantime = "=2.3.0"
 indexmap = { version = "=2.11.1", features = ["serde"] }
 itertools = "=0.14.0"
 nanoid = "=0.4.0"
