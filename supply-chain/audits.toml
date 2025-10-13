@@ -17,6 +17,23 @@ criteria = "safe-to-deploy"
 delta = "0.2.34 -> 0.2.35"
 notes = "Bumps arrayvec crate from 0.5.1 to 0.7.0 and includes the required changes."
 
+[[audits.quick_cache]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.6.17"
+notes = """
+Reviewed quick_cache 0.6.17.
+
+- MIT license.
+- Small, well-scoped changes vs 0.6.16: hashbrown bump; new Cache::set_capacity and memory_used APIs.
+- No network or file IO; no build.rs.
+- Default features use parking_lot and ahash; both can be disabled.
+- Docs confirm scan-resistant S3-FIFO/Clock-PRO policy; values are cloned on get (use Arc<_> if heavy).
+- Readme states only trivially verifiable unsafe; concurrency via locks/shards; no background threads.
+- No RustSec advisories found as of 2025-10-13.
+- Risks to note: ahash is non-cryptographic; ensure keys aren’t used for security-sensitive hashing.
+"""
+
 [[audits.tempfile]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
