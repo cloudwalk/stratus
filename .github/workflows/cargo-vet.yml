@@ -61,7 +61,7 @@ jobs:
     - name: Invoke cargo-vet
       id: vet
       continue-on-error: true
-      run: cargo vet --locked
+      run: cargo vet
 
     - name: Decide whether Codex should run
       id: codex_guard
@@ -103,26 +103,45 @@ jobs:
           Environment setup
           -----------------
           - Work from the repository root.
-          - Verify the Rust toolchain is available (`rustup --version`). If not, install it with `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88` and add `$HOME/.cargo/bin` to PATH.
+          - Verify the Rust toolchain is available (`rustup --version`). If not, install it with `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88`, then run `source "$HOME/.cargo/env"` (or add `$HOME/.cargo/bin` to PATH).
           - Confirm `cargo vet` is installed (`cargo vet --version`). If missing, run `cargo install --version ${{ env.CARGO_VET_VERSION }} cargo-vet`.
 
           Certification tasks
           -------------------
-          1. Fetch the latest base branch data (for example with `git fetch origin ${{ github.base_ref }}`) so diffs are accurate.
-          2. Run `cargo vet --locked --output-format json` to list every failing crate and to capture any trusted publisher suggestions.
-          3. Cross-check `Cargo.lock` against origin/${{ github.base_ref }} to enumerate crate version bumps. Skip brand new dependencies that have no previous version.
-          4. For each bump, run `cargo vet --locked diff <crate> <from> <to>` and review the diff. If anything is risky or unclear, stop immediately and explain why in your final message—do not certify.
+          1. Fetch the latest base branch data with `git fetch origin ${{ github.base_ref }}`. If the fetch fails (for example, due to blocked network access), stop and report the failure instead of guessing.
+          2. Run `cargo vet` to list the failing crates and read the recommended commands. Follow those recommendations first and avoid rerunning the command until previous invocations finish. A typical output looks like:
+             ```
+             serde:1.0.220 missing ["safe-to-deploy"]
+             recommended audits for safe-to-deploy:
+                 cargo vet diff serde 1.0.224 1.0.220  … 
+                 cargo vet diff serde_core 1.0.224 1.0.220  …
+                 cargo vet diff serde_derive 1.0.224 1.0.220  …
+                 NOTE: isrg, mozilla, and bytecode-alliance trust David Tolnay (dtolnay) - consider cargo vet trust --all dtolnay
+             ```
+          3. When you need structured data, run `cargo vet --output-format json` and record the results.
+          4. For each recommended diff, run `cargo vet diff --mode local <crate> <from> <to>` and review the diff output. If a required crate download is missing and cannot be fetched, explain the limitation and stop.
           5. When satisfied the upgrade meets `safe-to-deploy`, execute:
-               `cargo vet --locked certify <crate> <from> <to> --criteria safe-to-deploy --accept-all --who "${{ env.AUDITOR_NAME }} <${{ env.AUDITOR_EMAIL }}>"`
+               `cargo vet certify <crate> <from> <to> --criteria safe-to-deploy --accept-all --who "${{ env.AUDITOR_NAME }} <${{ env.AUDITOR_EMAIL }}>" --notes "<short summary>"`
              Include a concise `--notes` summary (<= 200 characters) describing the review.
-          6. If the JSON report shows missing trusted publishers that are safe to endorse, run:
-               `cargo vet --locked trust <crate> <publisher> --criteria safe-to-deploy --notes "<short rationale>"`
+          6. If the reports highlight publishers to trust (for example via `NOTE:` lines), run:
+               `cargo vet trust <crate-or-flag> <publisher> --criteria safe-to-deploy --notes "<short rationale>"`
              Only trust publishers when the evidence justifies it.
-          7. After certifying and/or trusting, re-run `cargo vet --locked` to confirm the supply chain passes.
-          8. On success, configure git with the auditor identity (set both user.name and user.email), commit any changes under `supply-chain/` using message `chore(vet): auto-certify dependabot bump`, and push directly back to `${{ github.head_ref }}`.
+          7. After certifying and/or trusting, re-run `cargo vet` to confirm the supply chain passes.
+          8. Configure git with the auditor identity (set both user.name and user.email), commit any changes under `supply-chain/` using message `chore(vet): auto-certify dependabot bump`, and push directly back to `${{ github.head_ref }}`.
 
           Guardrails
           ----------
           - Work from the repository root; do not touch unrelated files.
           - Abort and report clearly if any certification or trust decision is uncertain.
           - Finish with a brief summary of actions (or failure reason) in your final message.
+
+    - name: Invoke cargo-vet after Codex
+      id: vet_after
+      if: ${{ steps.codex.outcome == 'success' }}
+      run: cargo vet
+
+    - name: Fail if cargo-vet still failing
+      if: ${{ steps.vet.outcome == 'failure' && (steps.codex.outcome != 'success' || steps.vet_after.outcome == 'failure') }}
+      run: |
+        echo "cargo vet remains failing or Codex auto-certification did not run" >&2
+        exit 1
