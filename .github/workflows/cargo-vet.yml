@@ -100,8 +100,14 @@ jobs:
           author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
 
-          What to do
-          ----------
+          Environment setup
+          -----------------
+          - Work from the repository root.
+          - Verify the Rust toolchain is available (`rustup --version`). If not, install it with `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88` and add `$HOME/.cargo/bin` to PATH.
+          - Confirm `cargo vet` is installed (`cargo vet --version`). If missing, run `cargo install --version ${{ env.CARGO_VET_VERSION }} cargo-vet`.
+
+          Certification tasks
+          -------------------
           1. Fetch the latest base branch data (for example with `git fetch origin ${{ github.base_ref }}`) so diffs are accurate.
           2. Run `cargo vet --locked --output-format json` to list every failing crate and to capture any trusted publisher suggestions.
           3. Cross-check `Cargo.lock` against origin/${{ github.base_ref }} to enumerate crate version bumps. Skip brand new dependencies that have no previous version.
