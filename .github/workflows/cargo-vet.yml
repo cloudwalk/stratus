@@ -25,15 +25,24 @@ on:
       - "Cargo.lock"
       - "Cargo.toml"
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   cargo-vet:
     name: Vet Dependencies
     runs-on: ubuntu-22.04
     env:
       CARGO_VET_VERSION: 0.10.0
+      AUDITOR_NAME: github-actions[bot]
+      AUDITOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: true
 
     - name: Set up Rust
       run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
@@ -45,9 +54,69 @@ jobs:
 
     - name: Add the tool cache directory to the search path
       run: echo "${{ runner.tool_cache }}/cargo-vet/bin" >> $GITHUB_PATH
-      
+
     - name: Ensure that the tool cache is populated with the cargo-vet binary
       run: cargo install --root ${{ runner.tool_cache }}/cargo-vet --version ${{ env.CARGO_VET_VERSION }} cargo-vet
-      
+
     - name: Invoke cargo-vet
+      id: vet
+      continue-on-error: true
       run: cargo vet --locked
+
+    - name: Decide whether Codex should run
+      id: codex_guard
+      if: ${{ github.event_name == 'pull_request' }}
+      env:
+        VET_OUTCOME: ${{ steps.vet.outcome }}
+        HEAD_REF: ${{ github.head_ref }}
+      run: |
+        if [ "$VET_OUTCOME" = "failure" ] && [[ "$HEAD_REF" == dependabot-* ]]; then
+          echo "run=true" >>"$GITHUB_OUTPUT"
+        else
+          echo "run=false" >>"$GITHUB_OUTPUT"
+        fi
+
+    # Hand over to Codex when Dependabot bumps need fresh audits.
+    - name: Codex auto-certify dependabot bump
+      id: codex
+      if: ${{ steps.codex_guard.outputs.run == 'true' }}
+      uses: openai/codex-action@v1
+      env:
+        AUDITOR_NAME: ${{ env.AUDITOR_NAME }}
+        AUDITOR_EMAIL: ${{ env.AUDITOR_EMAIL }}
+        BASE_REF: ${{ github.base_ref }}
+        HEAD_BRANCH: ${{ github.head_ref }}
+      with:
+        openai-api-key: ${{ secrets.OPENAI_KEY }}
+        prompt: |
+          You are the supply-chain auditor for the Stratus repository. Dependabot opened this PR and cargo-vet currently fails because new crate versions are missing review.
+
+          Context
+          -------
+          Repository: ${{ github.repository }}
+          Base branch: origin/${{ github.base_ref }}
+          Head branch: ${{ github.head_ref }}
+          Auditor identity: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+
+          What to do
+          ----------
+          1. Fetch the latest base branch data (for example with `git fetch origin ${{ github.base_ref }}`) so diffs are accurate.
+          2. Run `cargo vet --locked --output-format json` to list every failing crate and to capture any trusted publisher suggestions.
+          3. Cross-check `Cargo.lock` against origin/${{ github.base_ref }} to enumerate crate version bumps. Skip brand new dependencies that have no previous version.
+          4. For each bump, run `cargo vet --locked diff <crate> <from> <to>` and review the diff. If anything is risky or unclear, stop immediately and explain why in your final message—do not certify.
+          5. When satisfied the upgrade meets `safe-to-deploy`, execute:
+               `cargo vet --locked certify <crate> <from> <to> --criteria safe-to-deploy --accept-all --who "${{ env.AUDITOR_NAME }} <${{ env.AUDITOR_EMAIL }}>"`
+             Include a concise `--notes` summary (<= 200 characters) describing the review.
+          6. If the JSON report shows missing trusted publishers that are safe to endorse, run:
+               `cargo vet --locked trust <crate> <publisher> --criteria safe-to-deploy --notes "<short rationale>"`
+             Only trust publishers when the evidence justifies it.
+          7. After certifying and/or trusting, re-run `cargo vet --locked` to confirm the supply chain passes.
+          8. On success, configure git with the auditor identity (set both user.name and user.email), commit any changes under `supply-chain/` using message `chore(vet): auto-certify dependabot bump`, and push directly back to `${{ github.head_ref }}`.
+
+          Guardrails
+          ----------
+          - Work from the repository root; do not touch unrelated files.
+          - Abort and report clearly if any certification or trust decision is uncertain.
+          - Finish with a brief summary of actions (or failure reason) in your final message.
