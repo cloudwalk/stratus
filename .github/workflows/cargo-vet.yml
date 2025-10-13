@@ -63,6 +63,10 @@ jobs:
       continue-on-error: true
       run: cargo vet
 
+    - name: Fetch base branch for Codex
+      if: ${{ github.event_name == 'pull_request' }}
+      run: git fetch origin ${{ github.base_ref }}
+
     - name: Decide whether Codex should run
       id: codex_guard
       if: ${{ github.event_name == 'pull_request' }}
@@ -108,7 +112,7 @@ jobs:
 
           Certification tasks
           -------------------
-          1. Fetch the latest base branch data with `git fetch origin ${{ github.base_ref }}`. If the fetch fails (for example, due to blocked network access), stop and report the failure instead of guessing.
+          1. The latest base branch data (origin/${{ github.base_ref }}) has already been fetched for you. Work against that local ref; if you ever need to refetch and the network blocks it, report the failure instead of guessing.
           2. Run `cargo vet` to list the failing crates and read the recommended commands. Follow those recommendations first and avoid rerunning the command until previous invocations finish. A typical output looks like:
              ```
              serde:1.0.220 missing ["safe-to-deploy"]
