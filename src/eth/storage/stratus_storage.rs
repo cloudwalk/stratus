@@ -17,7 +17,7 @@ use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlock;
@@ -448,12 +448,12 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
-    pub fn save_execution(&self, tx: TransactionExecution, is_local: bool) -> Result<(), StorageError> {
+    pub fn save_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
         let changes = tx.result.execution.changes.clone();
 
         #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.input.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.input.hash, changes = ?tx.result.execution.changes, "saving execution");
+        let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.info.hash).entered();
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?tx.result.execution.changes, "saving execution");
 
         // Log warning if a failed transaction has slot changes
         if !tx.result.execution.result.is_success() {
@@ -464,7 +464,7 @@ impl StratusStorage {
             }
         }
 
-        timed(|| self.temp.save_pending_execution(tx, is_local))
+        timed(|| self.temp.save_pending_execution(tx))
             .with(|m| {
                 metrics::inc_storage_save_execution(m.elapsed, label::TEMP, m.result.is_ok());
                 match &m.result {
@@ -612,7 +612,7 @@ impl StratusStorage {
             }
         })?;
         if let Some(tx_temp) = temp_tx {
-            return Ok(Some(TransactionStage::new_executed(tx_temp)));
+            return Ok(Some(TransactionStage::Pending(tx_temp)));
         }
 
         // read from perm
@@ -623,13 +623,10 @@ impl StratusStorage {
                 tracing::error!(reason = ?e, "failed to read transaction from permanent storage");
             }
         })?;
-        match perm_tx {
-            Some(tx) => Ok(Some(TransactionStage::new_mined(tx))),
-            None => Ok(None),
-        }
+        Ok(perm_tx.map(TransactionStage::Mined))
     }
 
-    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>, StorageError> {
+    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMessage>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_logs", ?filter).entered();
         tracing::debug!(storage = %label::PERM, ?filter, "reading logs");

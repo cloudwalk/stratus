@@ -3,7 +3,8 @@ use std::fmt::Debug;
 use crate::eth::primitives::Hash;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct HashRocksdb([u8; 32]);
 
 impl From<Hash> for HashRocksdb {

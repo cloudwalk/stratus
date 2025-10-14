@@ -5,7 +5,6 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use anyhow::anyhow;
-use itertools::Itertools;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
 use tokio::sync::Mutex as AsyncMutex;
@@ -20,7 +19,7 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogMessage;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
@@ -64,7 +63,7 @@ pub struct Miner {
     pub notifier_blocks: broadcast::Sender<BlockHeader>,
 
     /// Broadcasts transaction logs events.
-    pub notifier_logs: broadcast::Sender<LogMined>,
+    pub notifier_logs: broadcast::Sender<LogMessage>,
 
     // -------------------------------------------------------------------------
     // Shutdown
@@ -197,8 +196,8 @@ impl Miner {
     }
 
     /// Persists a transaction execution.
-    pub fn save_execution(&self, tx_execution: TransactionExecution, is_local: bool) -> Result<(), StratusError> {
-        let tx_hash = tx_execution.input.hash;
+    pub fn save_execution(&self, tx_execution: TransactionExecution) -> Result<(), StratusError> {
+        let tx_hash = tx_execution.info.hash;
 
         // track
         #[cfg(feature = "tracing")]
@@ -211,7 +210,7 @@ impl Miner {
         let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         // save execution to temporary storage
-        self.storage.save_execution(tx_execution, is_local)?;
+        self.storage.save_execution(tx_execution)?;
 
         // notify
         if self.has_pending_tx_subscribers() {
@@ -314,11 +313,7 @@ impl Miner {
         } else {
             None
         };
-        let block_logs = if self.has_log_subscribers() {
-            Some(block.transactions.iter().flat_map(|tx| &tx.logs).cloned().collect_vec())
-        } else {
-            None
-        };
+        let block_logs = self.has_log_subscribers().then(|| block.create_log_messages());
 
         // save storage
         self.storage.save_block(block, changes)?;
@@ -357,7 +352,7 @@ impl Miner {
     }
 
     /// Sends notifications for logs
-    fn send_log_notifications(&self, logs: &Option<Vec<LogMined>>) {
+    fn send_log_notifications(&self, logs: &Option<Vec<LogMessage>>) {
         if let Some(logs) = logs {
             for log in logs {
                 let _ = self.notifier_logs.send(log.clone());

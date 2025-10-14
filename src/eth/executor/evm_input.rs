@@ -7,14 +7,12 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
+use crate::eth::primitives::ExecutionInfo;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::TransactionMined;
-use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::ReadKind;
@@ -23,7 +21,8 @@ use crate::ext::OptionExt;
 use crate::ext::not;
 
 /// EVM input data. Usually derived from a transaction or call.
-#[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, fake::Dummy, PartialEq)]
+#[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct EvmInput {
     /// Operation party address.
     ///
@@ -86,17 +85,17 @@ pub struct EvmInput {
 
 impl EvmInput {
     /// Creates from a transaction that was sent to Stratus with `eth_sendRawTransaction` or during Importing.
-    pub fn from_eth_transaction(input: &TransactionInput, pending_header: &PendingBlockHeader) -> Self {
+    pub fn from_eth_transaction(input: &ExecutionInfo, block_number: BlockNumber, block_timestamp: UnixTime) -> Self {
         Self {
             from: input.signer,
             to: input.to,
             value: input.value,
             data: input.input.clone(),
-            gas_limit: Gas::MAX,
-            gas_price: 0,
+            gas_limit: input.gas_limit,
+            gas_price: input.gas_price,
             nonce: Some(input.nonce),
-            block_number: pending_header.number,
-            block_timestamp: *pending_header.timestamp,
+            block_number,
+            block_timestamp,
             point_in_time: PointInTime::Pending,
             chain_id: input.chain_id,
             kind: ReadKind::Transaction,
@@ -147,47 +146,9 @@ impl EvmInput {
     }
 }
 
-impl PartialEq<(&TransactionInput, &PendingBlockHeader)> for EvmInput {
-    fn eq(&self, other: &(&TransactionInput, &PendingBlockHeader)) -> bool {
-        self.block_number == other.1.number
-            && self.block_timestamp == *other.1.timestamp
-            && self.chain_id == other.0.chain_id
-            && self.data == other.0.input
-            && self.from == other.0.signer
-            && self.nonce.is_some_and(|inner| inner == other.0.nonce)
-            && self.value == other.0.value
-            && self.to == other.0.to
-    }
-}
-
-impl From<TransactionMined> for EvmInput {
-    fn from(value: TransactionMined) -> Self {
-        Self {
-            from: value.input.signer,
-            to: value.input.to,
-            value: value.input.value,
-            data: value.input.input,
-            nonce: Some(value.input.nonce),
-            gas_limit: value.input.gas_limit,
-            // We don't charge for transactions
-            gas_price: 0,
-            block_number: value.block_number,
-            block_timestamp: value.block_timestamp,
-            point_in_time: PointInTime::MinedPast(value.block_number),
-            chain_id: value.input.chain_id,
-            kind: ReadKind::Transaction,
-        }
-    }
-}
-
-impl TryFrom<TransactionStage> for EvmInput {
-    type Error = anyhow::Error;
-
-    fn try_from(value: TransactionStage) -> Result<Self, Self::Error> {
-        match value {
-            TransactionStage::Executed(tx) => Ok(tx.evm_input),
-            TransactionStage::Mined(tx) => Ok(tx.into()),
-        }
+impl PartialEq<&PendingBlockHeader> for EvmInput {
+    fn eq(&self, other: &&PendingBlockHeader) -> bool {
+        self.block_number == other.number && self.block_timestamp == *other.timestamp
     }
 }
 

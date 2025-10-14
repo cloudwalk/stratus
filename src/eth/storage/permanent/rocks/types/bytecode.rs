@@ -11,18 +11,9 @@ use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::test_utils::FakeEnum;
 
 #[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    bincode::Encode,
-    bincode::Decode,
-    fake::Dummy,
-    serde::Serialize,
-    serde::Deserialize,
-    strum::VariantNames,
-    stratus_macros::FakeEnum,
+    Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize, strum::VariantNames, stratus_macros::FakeEnum,
 )]
+#[cfg_attr(test, derive(fake::Dummy))]
 #[fake_enum(generate = "crate::utils::test_utils::fake_first")]
 pub enum BytecodeRocksdb {
     LegacyRaw(BytesRocksdb),
@@ -30,14 +21,16 @@ pub enum BytecodeRocksdb {
     Eip7702(Eip7702BytecodeRocksdb),
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct LegacyAnalyzedBytecodeRocksdb {
     bytecode: BytesRocksdb,
     original_len: usize,
     jump_table: Vec<u8>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Eip7702BytecodeRocksdb {
     pub delegated_address: AddressRocksdb,
     pub version: u8,

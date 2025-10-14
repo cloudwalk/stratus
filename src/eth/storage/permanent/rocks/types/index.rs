@@ -3,8 +3,9 @@ use std::fmt::Debug;
 use crate::eth::primitives::Index;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
-#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, Copy, Hash, fake::Dummy, serde::Serialize, serde::Deserialize)]
-pub struct IndexRocksdb(pub(self) u32);
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, Copy, Hash, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
+pub struct IndexRocksdb(pub u32);
 
 impl IndexRocksdb {
     pub fn as_usize(&self) -> usize {

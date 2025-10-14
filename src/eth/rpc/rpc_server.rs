@@ -1018,7 +1018,7 @@ fn stratus_get_transaction_result(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     match rpc_get_transaction_receipt(params, ctx)? {
         Some(tx) => {
             tracing::info!("transaction receipt found");
-            Ok(to_json_value(tx.result()))
+            Ok(to_json_value(tx.to_result().execution.result))
         }
         None => {
             tracing::info!("transaction receipt not found");
@@ -1047,7 +1047,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
-            let overestimated_gas = (result.gas.as_u64()) as f64 * 1.1;
+            let overestimated_gas = (result.gas_used.as_u64()) as f64 * 1.1;
             Ok(hex_num(U256::from(overestimated_gas as u64)))
         }
 
@@ -1187,14 +1187,14 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             .into());
         }
     };
-    let tx_hash = tx.hash;
+    let tx_hash = tx.transaction_info.hash;
 
     // track
     Span::with(|s| {
         s.rec_str("tx_hash", &tx_hash);
-        s.rec_str("tx_from", &tx.signer);
-        s.rec_opt("tx_to", &tx.to);
-        s.rec_str("tx_nonce", &tx.nonce);
+        s.rec_str("tx_from", &tx.execution_info.signer);
+        s.rec_opt("tx_to", &tx.execution_info.to);
+        s.rec_str("tx_nonce", &tx.execution_info.nonce);
     });
 
     if not(GlobalState::is_transactions_enabled()) {

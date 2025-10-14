@@ -1,22 +1,19 @@
 [![codecov](https://codecov.io/github/cloudwalk/stratus/graph/badge.svg?token=D1795GHLG6)](https://codecov.io/github/cloudwalk/stratus)
 
 # Stratus ☁️
-A
-Welcome to Stratus, the cutting-edge EVM executor and JSON-RPC server with custom storage that scales horizontally. Built in Rust 🦀 for speed and reliability, Stratus is here to take your blockchain projects to the next level!
 
-## Current storage implementations
+Welcome to Stratus, the cutting-edge EVM-compatible ledger and JSON-RPC server. This projects has 3 focuses of optimization:
 
-- In Memory
-- RocksDB (default)
+1. Reliability: We have nodes running for months without any sort of restart or maintenance, and we give you the tools needed to do maintenance on the leader node with less than 5 seconds of downtime.
+2. Observability: We have a lot of metric, logs, tracing implemented so that you can effectively monitor every aspect of the application.
+3. Performance: By not aiming to be a blockchain (i.e. no decentralization) and by optimizing for scenarios with a limited number of contracts, we've been able to get single-token performances unheardof in any other evm-compatible ledger*. Currently we can achieve around 500M gas per second**. 
 
-## Performance Landscape
+You'd be hard pressed to find a private evm-compatible ledger solution that achieves those 3 factors as well as we do.
 
-Stratus is engineered for high performance, with a unique node Stratus was capable of handling:
+*: Although you can find some that can do more GPS than us, it is measured on scenarios were the contracts are completely independent, such as n separate erc20-tokens. These types of executions can be parallelized, but we removed this feature from stratus in favor of optimizing for scenarios where transactions are mostly dependant on one another.
 
-- 10k transactions per second (TPS) for reading
-- 2,5k transactions per second (TPS) for writing (custom contract operations), reaching around 540M of gas per second
 
-We aim to reach 5k write transactions per second with a unique node and 1M in a cluster.
+**: This varies greatly depending on the contract implementation. Since gas costs are stipulated for traditional blockchains, gas throughput is not the ideal proxy for a performance metric on Stratus.
 
 ## Getting Started with Stratus
 

@@ -1,4 +1,3 @@
-use std::cmp::min;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
@@ -63,20 +62,25 @@ use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
+use crate::eth::primitives::MinedData;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
-use crate::eth::primitives::TransactionStage;
+use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::StratusStorage;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
+#[cfg(feature = "dev")]
 const GAS_MAX_LIMIT: u64 = 1_000_000_000;
+#[cfg(not(feature = "dev"))]
+const GAS_MAX_LIMIT: u64 = 100_000_000;
+
 type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
 type GeneralRevm<DB> =
     RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, (), EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles, EthFrame>;
@@ -209,16 +213,18 @@ impl Evm {
             return Ok(NoopFrame::default().into());
         }
 
-        let tx = self
+        let (tx, mined_data): (TransactionExecution, Option<MinedData>) = self
             .evm
             .journaled_state
             .database
             .storage
             .read_transaction(tx_hash)?
-            .ok_or_else(|| anyhow!("transaction not found: {tx_hash}"))?;
+            .ok_or_else(|| anyhow!("transaction not found: {tx_hash}"))?
+            .into();
 
         // CREATE transactions need to be traced for blockscout to work correctly
-        if tx.deployed_contract_address().is_none() && trace_unsuccessful_only && matches!(tx.result(), ExecutionResult::Success) {
+        if tx.result.execution.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.result.execution.result, ExecutionResult::Success)
+        {
             return Ok(default_trace(tracer_type, tx));
         }
 
@@ -227,21 +233,21 @@ impl Evm {
             .journaled_state
             .database
             .storage
-            .read_block(BlockFilter::Number(tx.block_number()))?
+            .read_block(BlockFilter::Number(tx.evm_input.block_number))?
             .ok_or_else(|| {
                 StratusError::Storage(StorageError::BlockNotFound {
-                    filter: BlockFilter::Number(tx.block_number()),
+                    filter: BlockFilter::Number(tx.evm_input.block_number),
                 })
             })?;
 
         let tx_info = TransactionInfo {
             block_hash: Some(block.hash().0.0.into()),
             hash: Some(tx_hash.0.0.into()),
-            index: tx.index().map_into(),
+            index: mined_data.map(|data| data.index.into()),
             block_number: Some(block.number().as_u64()),
             base_fee: None,
         };
-        let inspect_input: EvmInput = tx.try_into()?;
+        let inspect_input: EvmInput = tx.evm_input;
         self.evm.journaled_state.database.reset(EvmInput {
             point_in_time: PointInTime::MinedPast(inspect_input.block_number.prev().unwrap_or_default()),
             ..Default::default()
@@ -253,11 +259,11 @@ impl Evm {
         let mut evm = Self::create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db, self.kind);
 
         // Execute all transactions before target tx_hash
-        for tx in block.transactions.into_iter().sorted_by_key(|item| item.transaction_index) {
-            if tx.input.hash == tx_hash {
+        for tx in block.transactions.into_iter() {
+            if tx.info.hash == tx_hash {
                 break;
             }
-            let tx_input: EvmInput = tx.into();
+            let tx_input: EvmInput = tx.execution.evm_input;
 
             // Configure EVM state
             evm.fill_env(tx_input);
@@ -355,8 +361,8 @@ impl TxEnvExt for TxEnv {
             Some(contract) => TransactTo::Call(contract.into()),
             None => TransactTo::Create,
         };
-        self.gas_limit = min(input.gas_limit.into(), GAS_MAX_LIMIT);
-        self.gas_price = input.gas_price;
+        self.gas_limit = GAS_MAX_LIMIT;
+        self.gas_price = 0;
         self.chain_id = input.chain_id.map_into();
         self.nonce = input.nonce.map_into().unwrap_or_default();
         self.data = input.data.into();
@@ -517,7 +523,7 @@ fn parse_revm_execution(revm_result: ResultAndState, input: EvmInput, execution_
         result,
         output: tx_output,
         logs,
-        gas,
+        gas_used: gas,
         changes,
         deployed_contract_address,
     })
@@ -592,18 +598,18 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
     Ok((execution_changes, deployed_contract_address))
 }
 
-pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionStage) -> GethTrace {
+pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionExecution) -> GethTrace {
     match tracer_type {
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => FourByteFrame::default().into(),
         // HACK: Spoof empty call frame to prevent Blockscout from retrying unnecessary trace calls
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
-            let (typ, to) = match tx.to() {
-                Some(_) => ("CALL".to_string(), tx.to().map_into()),
-                None => ("CREATE".to_string(), tx.deployed_contract_address().map_into()),
+            let (typ, to) = match tx.evm_input.to {
+                Some(_) => ("CALL".to_string(), tx.evm_input.to.map_into()),
+                None => ("CREATE".to_string(), tx.result.execution.deployed_contract_address.map_into()),
             };
 
             CallFrame {
-                from: tx.from().into(),
+                from: tx.evm_input.from.into(),
                 to,
                 typ,
                 ..Default::default()
