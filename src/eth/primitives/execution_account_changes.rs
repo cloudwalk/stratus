@@ -27,9 +27,30 @@ impl ExecutionAccountChanges {
     /// Merges another [`ExecutionAccountChanges`] into this one, replacing self values with values from other.
     /// For slots, performs a union of the BTrees, giving preference to values from other.
     pub fn merge(&mut self, other: ExecutionAccountChanges) {
-        self.nonce = ExecutionValueChange { original: self.nonce.original , modified: other.nonce.modified };
-        self.balance = ExecutionValueChange { original: self.balance.original , modified: other.balance.modified };
-        self.bytecode = ExecutionValueChange { original: self.bytecode.original.clone() , modified: other.bytecode.modified };
+        self.nonce = ExecutionValueChange {
+            original: self.nonce.original,
+            modified: if other.nonce.modified.is_set() {
+                other.nonce.modified
+            } else {
+                self.nonce.modified
+            },
+        };
+        self.balance = ExecutionValueChange {
+            original: self.balance.original,
+            modified: if other.balance.modified.is_set() {
+                other.balance.modified
+            } else {
+                self.balance.modified
+            },
+        };
+        self.bytecode = ExecutionValueChange {
+            original: self.bytecode.original.clone(),
+            modified: if other.bytecode.modified.is_set() {
+                other.bytecode.modified
+            } else {
+                self.bytecode.modified.clone()
+            },
+        };
 
         // Merge slots, giving preference to values from other
         for (slot_index, slot_change) in other.slots {
@@ -37,7 +58,11 @@ impl ExecutionAccountChanges {
                 Some(existing_slot) => {
                     *existing_slot = ExecutionValueChange {
                         original: existing_slot.original.clone(),
-                        modified: slot_change.modified
+                        modified: if slot_change.modified.is_set() {
+                            slot_change.modified
+                        } else {
+                            existing_slot.modified.clone()
+                        },
                     };
                 }
                 None => {
