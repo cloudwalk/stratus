@@ -27,13 +27,23 @@ impl ExecutionAccountChanges {
     /// Merges another [`ExecutionAccountChanges`] into this one, replacing self values with values from other.
     /// For slots, performs a union of the BTrees, giving preference to values from other.
     pub fn merge(&mut self, other: ExecutionAccountChanges) {
-        self.nonce = other.nonce;
-        self.balance = other.balance;
-        self.bytecode = other.bytecode;
+        self.nonce = ExecutionValueChange { original: self.nonce.original , modified: other.nonce.modified };
+        self.balance = ExecutionValueChange { original: self.balance.original , modified: other.balance.modified };
+        self.bytecode = ExecutionValueChange { original: self.bytecode.original.clone() , modified: other.bytecode.modified };
 
         // Merge slots, giving preference to values from other
         for (slot_index, slot_change) in other.slots {
-            self.slots.insert(slot_index, slot_change);
+            match self.slots.get_mut(&slot_index) {
+                Some(existing_slot) => {
+                    *existing_slot = ExecutionValueChange {
+                        original: existing_slot.original.clone(),
+                        modified: slot_change.modified
+                    };
+                }
+                None => {
+                    self.slots.insert(slot_index, slot_change);
+                }
+            }
         }
     }
 

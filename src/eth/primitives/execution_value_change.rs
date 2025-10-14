@@ -14,8 +14,8 @@ pub struct ExecutionValueChange<T>
 where
     T: PartialEq + serde::Serialize,
 {
-    original: ValueState<T>,
-    modified: ValueState<T>,
+    pub original: ValueState<T>,
+    pub modified: ValueState<T>,
 }
 
 impl<T> Copy for ExecutionValueChange<T> where T: Copy + PartialEq + serde::Serialize {}
