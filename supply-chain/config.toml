@@ -724,10 +724,6 @@ criteria = "safe-to-deploy"
 version = "0.14.5"
 criteria = "safe-to-deploy"
 
-[[exemptions.hashbrown]]
-version = "0.15.5"
-criteria = "safe-to-deploy"
-
 [[exemptions.hashlink]]
 version = "0.10.0"
 criteria = "safe-to-deploy"
@@ -1205,10 +1201,6 @@ version = "0.11.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.phf_shared]]
-version = "0.12.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.phf_shared]]
 version = "0.13.1"
 criteria = "safe-to-deploy"
 
@@ -1294,10 +1286,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.quick-xml]]
 version = "0.38.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.quick_cache]]
-version = "0.6.16"
 criteria = "safe-to-deploy"
 
 [[exemptions.quinn]]
@@ -1608,23 +1596,11 @@ criteria = "safe-to-deploy"
 version = "0.42.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.sentry-core]]
-version = "0.42.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.sentry-debug-images]]
 version = "0.42.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.sentry-panic]]
-version = "0.42.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.sentry-tracing]]
-version = "0.42.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.sentry-types]]
 version = "0.42.0"
 criteria = "safe-to-deploy"
 
@@ -1686,10 +1662,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.slab]]
 version = "0.4.11"
-criteria = "safe-to-deploy"
-
-[[exemptions.smallvec]]
-version = "1.15.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.socket2]]

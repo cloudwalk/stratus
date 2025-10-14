@@ -92,19 +92,3 @@ jobs:
         run: |
           echo "Artifact ID: ${{ steps.upload-str.outputs.artifact-id }} (stratus)"
           echo "Artifact URL: ${{ steps.upload-str.outputs.artifact-url }} (stratus)"
-
-      - name: Set up dependencies
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov@0.6.14
-
-      - name: Build Debug binaries for cache
-        run: |
-          source <(cargo llvm-cov show-env --export-prefix)
-          cargo build --features dev
-
-      - name: Rust Cache - Save shared key
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ env.CACHE_SHARED_KEY }}
