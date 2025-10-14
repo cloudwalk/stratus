@@ -1,17 +1,20 @@
 use std::borrow::Cow;
 
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Faker;
 
 use crate::eth::codegen::error_sig_opt;
 use crate::eth::primitives::Bytes;
 
 /// Indicates how a transaction execution was finished.
-#[derive(DebugAsJson, strum::Display, Clone, PartialEq, Eq, fake::Dummy, derive_new::new, serde::Serialize, serde::Deserialize, strum::EnumString)]
+#[derive(DebugAsJson, strum::Display, Clone, PartialEq, Eq, derive_new::new, serde::Serialize, serde::Deserialize, strum::EnumString, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionResult {
     /// Finished normally (RETURN opcode).
     #[strum(to_string = "success")]
+    #[default]
     Success,
 
     /// Transaction execution finished with a reversion (REVERT opcode).
@@ -32,6 +35,7 @@ impl ExecutionResult {
 #[derive(Debug, thiserror::Error, serde::Serialize, serde::Deserialize, Default, Clone, PartialEq, Eq)]
 pub struct RevertReason(pub Cow<'static, str>);
 
+#[cfg(test)]
 impl fake::Dummy<Faker> for RevertReason {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, _rng: &mut R) -> Self {
         RevertReason(Cow::Borrowed("reverted"))

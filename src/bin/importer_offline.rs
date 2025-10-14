@@ -14,6 +14,7 @@ use std::sync::mpsc;
 
 use alloy_rpc_types_eth::BlockTransactions;
 use anyhow::anyhow;
+use anyhow::bail;
 use futures::StreamExt;
 use itertools::Itertools;
 use stratus::GlobalServices;
@@ -182,7 +183,7 @@ async fn run_rpc_block_fetcher(
         }
 
         if to_execute_tx.send(blocks).await.is_err() {
-            return Err(anyhow!(GlobalState::shutdown_from(TASK_NAME, "failed to send task to importer")));
+            bail!(GlobalState::shutdown_from(TASK_NAME, "failed to send task to importer"));
         };
     }
 }
@@ -294,12 +295,12 @@ async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_
                 transactions = ?block.transactions,
                 "expected full transactions but got {:?}", block.transactions
             );
-            return Err(anyhow!(
+            bail!(
                 "expected full transactions, got {:?} for block number {} hash {:?}",
                 block.transactions,
                 block.number(),
                 block.hash()
-            ));
+            );
         };
 
         // Stably sort transactions and receipts by transaction_index

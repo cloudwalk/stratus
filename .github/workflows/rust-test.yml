@@ -28,6 +28,14 @@ on:
       - "Cargo.lock"
       - "Cargo.toml"
 
+env:
+  CACHE_SHARED_KEY: stable-release
+  CACHE_PATH: |
+    ~/.cargo/registry/index/
+    ~/.cargo/registry/cache/
+    ~/.cargo/git/db/
+    target/
+
 jobs:
   unit_tests:
     name: Rust Tests
@@ -42,18 +50,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Rust
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        id: cache-cargo
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          prefix-key: ${{ runner.os }}-v3-cargo
-          shared-key: test
-          key: ${{ hashFiles('Cargo.lock', 'Cargo.toml') }}
-          cache-provider: "github"
-          cache-directories: "~/.cargo/bin/"
+          toolchain: 1.88
+
+      - name: Rust Cache - Restore shared key
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CACHE_PATH }}
+          restore-keys: ${{ env.CACHE_SHARED_KEY }}
+          key: ${{ env.CACHE_SHARED_KEY }}
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev

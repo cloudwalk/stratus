@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Context;
+use anyhow::bail;
 use jsonrpsee::core::ClientError;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::client::Subscription;
@@ -276,7 +277,7 @@ impl BlockchainClient {
         let mut first_attempt = true;
         loop {
             if GlobalState::is_shutdown_warn(TASK_NAME) {
-                return Err(anyhow::anyhow!("shutdown warning"));
+                bail!("shutdown warning");
             };
 
             let ws_read = self.require_ws().await?;

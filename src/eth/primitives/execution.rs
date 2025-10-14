@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use display_json::DebugAsJson;
 use hex_literal::hex;
 use revm::primitives::alloy_primitives;
+use serde_with::serde_as;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -23,9 +24,12 @@ use crate::eth::primitives::Wei;
 use crate::ext::not;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize, Default)]
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionChanges {
     pub accounts: HashMap<Address, ExecutionAccountChanges, hash_hasher::HashBuildHasher>,
+    #[serde_as(as = "Vec<(_, _)>")]
     pub slots: HashMap<(Address, SlotIndex), SlotValue, hash_hasher::HashBuildHasher>,
 }
 
@@ -48,16 +52,27 @@ impl ExecutionChanges {
     }
 
     pub fn merge(&mut self, other: ExecutionChanges) {
-        self.accounts.extend(other.accounts);
+        for (address, changes) in other.accounts {
+            match self.accounts.entry(address) {
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    let current_changes = entry.get_mut();
+                    current_changes.merge(changes);
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(changes);
+                }
+            }
+        }
         self.slots.extend(other.slots);
     }
 }
 
 /// Output of a transaction executed in the EVM.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct EvmExecution {
     /// Assumed block timestamp during the execution.
-    pub block_timestamp: UnixTime,
+    pub block_timestamp: UnixTime, // TODO: remove this
 
     /// Status of the execution.
     pub result: ExecutionResult,
@@ -69,7 +84,7 @@ pub struct EvmExecution {
     pub logs: Vec<Log>,
 
     /// Consumed gas.
-    pub gas: Gas,
+    pub gas_used: Gas,
 
     /// Storage changes that happened during the transaction execution.
     pub changes: ExecutionChanges,
@@ -103,7 +118,7 @@ impl EvmExecution {
             result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
-            gas: Gas::from(receipt.gas_used),
+            gas_used: Gas::from(receipt.gas_used),
             changes,
             deployed_contract_address: None,
         };
@@ -205,7 +220,7 @@ impl EvmExecution {
     /// This method updates the attributes that can diverge based on the receipt of the external transaction.
     pub fn apply_receipt(&mut self, receipt: &ExternalReceipt) -> anyhow::Result<()> {
         // fix gas
-        self.gas = Gas::from(receipt.gas_used);
+        self.gas_used = Gas::from(receipt.gas_used);
 
         // fix logs
         self.fix_logs_gas_left(receipt);
@@ -318,7 +333,7 @@ mod tests {
         assert!(execution.is_failure());
         assert_eq!(execution.output, Bytes::default());
         assert!(execution.logs.is_empty());
-        assert_eq!(execution.gas, Gas::from(receipt.gas_used));
+        assert_eq!(execution.gas_used, Gas::from(receipt.gas_used));
 
         // Verify sender changes
         let sender_changes = execution.changes.accounts.get(&sender_address).unwrap();
@@ -569,7 +584,7 @@ mod tests {
             accounts,
             ..Default::default()
         };
-        execution.gas = Gas::from(100u64);
+        execution.gas_used = Gas::from(100u64);
 
         // Create a receipt with higher gas used and execution cost
         let mut receipt: ExternalReceipt = Faker.fake();

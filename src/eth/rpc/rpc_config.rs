@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::net::SocketAddr;
 
-use anyhow::anyhow;
+use anyhow::bail;
 use clap::Parser;
 
 use super::RpcClientApp;
@@ -39,11 +39,11 @@ pub struct RpcServerConfig {
 impl RpcServerConfig {
     pub fn parse_rpc_client_app_hashset(input: &str) -> anyhow::Result<HashSet<RpcClientApp>> {
         if input.is_empty() {
-            return Err(anyhow!("invalid client list"));
+            bail!("invalid client list");
         }
 
         let set: HashSet<RpcClientApp> = input.split(',').map(|s| RpcClientApp::parse(s.trim())).collect();
 
-        if set.is_empty() { Err(anyhow!("invalid client list")) } else { Ok(set) }
+        if set.is_empty() { bail!("invalid client list") } else { Ok(set) }
     }
 }

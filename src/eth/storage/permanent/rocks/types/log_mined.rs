@@ -4,40 +4,54 @@ use super::block_number::BlockNumberRocksdb;
 use super::hash::HashRocksdb;
 use super::log::LogRocksdb;
 use crate::eth::primitives::Index;
-use crate::eth::primitives::LogMined;
+use crate::eth::primitives::Log;
+use crate::eth::primitives::LogMessage;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::ext::OptionExt;
 
-#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct LogMinedRocksdb {
     pub log: LogRocksdb,
     pub index: u64,
 }
 
-impl From<LogMined> for LogMinedRocksdb {
-    fn from(item: LogMined) -> Self {
+impl From<(Log, Index)> for LogMinedRocksdb {
+    fn from((log, index): (Log, Index)) -> Self {
+        let index = index.into();
+        Self { log: log.into(), index }
+    }
+}
+
+impl From<LogMinedRocksdb> for Log {
+    fn from(value: LogMinedRocksdb) -> Self {
         Self {
-            log: item.log.into(),
-            index: item.log_index.into(),
+            address: value.log.address.into(),
+            topic0: value.log.topics.0.map_into(),
+            topic1: value.log.topics.1.map_into(),
+            topic2: value.log.topics.2.map_into(),
+            topic3: value.log.topics.3.map_into(),
+            data: value.log.data.into(),
         }
     }
 }
 
-impl LogMined {
+impl LogMessage {
     pub fn from_rocks_primitives(
-        other: LogRocksdb,
+        log: LogMinedRocksdb,
         block_number: BlockNumberRocksdb,
         block_hash: HashRocksdb,
         tx_index: usize,
         tx_hash: HashRocksdb,
-        log_index: u64,
     ) -> Self {
+        let index = log.index.into();
         Self {
             block_number: block_number.into(),
             block_hash: block_hash.into(),
-            log: other.into(),
+            log: log.into(),
             transaction_hash: tx_hash.into(),
             transaction_index: Index::from(tx_index as u64),
-            log_index: Index::from(log_index),
+            index,
         }
     }
 }

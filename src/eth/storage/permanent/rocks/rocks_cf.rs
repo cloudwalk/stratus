@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use anyhow::Result;
-use anyhow::anyhow;
+use anyhow::bail;
 use rocksdb::ColumnFamilyRef;
 use rocksdb::DB;
 use rocksdb::DBIteratorWithThreadMode;
@@ -48,9 +48,7 @@ where
     /// Create Column Family reference struct.
     pub fn new(db: &'a Arc<DB>, column_family: &str) -> Result<Self> {
         let Some(cf) = db.cf_handle(column_family) else {
-            return Err(anyhow!(
-                "can't find column family '{column_family}' in database! check if CFs are configured properly when creating/opening the DB",
-            ));
+            bail!("can't find column family '{column_family}' in database! check if CFs are configured properly when creating/opening the DB");
         };
 
         let this = Self {

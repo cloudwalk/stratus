@@ -1,13 +1,20 @@
 use display_json::DebugAsJson;
 
 use crate::alias::AlloyLog;
+use crate::alias::AlloyLogData;
+use crate::alias::AlloyLogPrimitive;
 use crate::alias::RevmLog;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Hash;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::LogTopic;
+use crate::eth::primitives::UnixTime;
 
 /// Log is an event emitted by the EVM during contract execution.
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, fake::Dummy, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(fake::Dummy))]
 pub struct Log {
     /// Address that emitted the log.
     pub address: Address,
@@ -31,6 +38,31 @@ impl Log {
     /// Returns all non-empty topics in the log.
     pub fn topics_non_empty(&self) -> Vec<LogTopic> {
         self.topics().into_iter().flatten().collect()
+    }
+
+    pub fn to_alloy_log(
+        self,
+        block_hash: Hash,
+        block_number: BlockNumber,
+        block_timestamp: UnixTime,
+        transaction_hash: Hash,
+        transaction_index: Index,
+        log_index: Index,
+    ) -> AlloyLog {
+        AlloyLog {
+            inner: AlloyLogPrimitive {
+                address: self.address.into(),
+                // Using new_unchecked is safe because topics_non_empty() guarantees ≤ 4 topics
+                data: AlloyLogData::new_unchecked(self.topics_non_empty().into_iter().map(Into::into).collect(), self.data.into()),
+            },
+            block_hash: Some(block_hash.into()),
+            block_number: Some(block_number.as_u64()),
+            block_timestamp: Some(*block_timestamp),
+            transaction_hash: Some(transaction_hash.into()),
+            transaction_index: Some(transaction_index.into()),
+            log_index: Some(log_index.into()),
+            removed: false,
+        }
     }
 }
 

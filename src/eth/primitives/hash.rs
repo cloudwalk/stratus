@@ -4,7 +4,9 @@ use std::str::FromStr;
 use alloy_primitives::B256;
 use anyhow::anyhow;
 use display_json::DebugAsJson;
+#[cfg(test)]
 use fake::Dummy;
+#[cfg(test)]
 use fake::Faker;
 
 #[derive(DebugAsJson, Clone, Copy, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
@@ -26,6 +28,7 @@ impl Display for Hash {
     }
 }
 
+#[cfg(test)]
 impl Dummy<Faker> for Hash {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(_: &Faker, rng: &mut R) -> Self {
         B256::random_with(rng).into()
