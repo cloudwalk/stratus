@@ -39,6 +39,24 @@ Reviewed quick_cache 0.6.17.
 - Risks to note: ahash is non-cryptographic; ensure keys aren’t used for security-sensitive hashing.
 """
 
+[[audits.serde]]
+who = "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.224 -> 1.0.220"
+notes = "Revert to 1.0.220 readds serde_if_integer128; removing diagnostic attrs keeps behavior stable."
+
+[[audits.serde_core]]
+who = "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.224 -> 1.0.220"
+notes = "Revert to 1.0.220 trims docs, restores ContentVisitor export; serialization logic unchanged."
+
+[[audits.serde_derive]]
+who = "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.224 -> 1.0.220"
+notes = "Revert to 1.0.220 restores Content next_value pattern; derive output stays safe."
+
 [[audits.tempfile]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
