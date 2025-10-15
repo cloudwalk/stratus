@@ -61,7 +61,18 @@ jobs:
     - name: Invoke cargo-vet
       id: vet
       continue-on-error: true
-      run: cargo vet
+      run: |
+        set -o pipefail
+        tmp="$(mktemp)"
+        cargo vet 2>&1 | tee "$tmp"
+        status=${PIPESTATUS[0]}
+        {
+          echo "log<<EOF"
+          cat "$tmp"
+          echo "EOF"
+        } >>"$GITHUB_OUTPUT"
+        rm -f "$tmp"
+        exit $status
 
     - name: Fetch base branch for Codex
       if: ${{ github.event_name == 'pull_request' }}
@@ -113,7 +124,7 @@ jobs:
           Certification tasks
           -------------------
           1. The latest base branch data (origin/${{ github.base_ref }}) has already been fetched for you. Work against that local ref; if you ever need to refetch and the network blocks it, report the failure instead of guessing.
-          2. Run `cargo vet` to list the failing crates and read the recommended commands. Follow those recommendations first and avoid rerunning the command until previous invocations finish. A typical output looks like:
+          2. Review the captured report in "Latest cargo vet output" below to identify failing crates and recommended commands. Re-run `cargo vet` only if you need to refresh the data and the necessary downloads succeed without network access. A typical output looks like:
              ```
              serde:1.0.220 missing ["safe-to-deploy"]
              recommended audits for safe-to-deploy:
@@ -123,7 +134,7 @@ jobs:
                  NOTE: isrg, mozilla, and bytecode-alliance trust David Tolnay (dtolnay) - consider cargo vet trust --all dtolnay
              ```
           3. When you need structured data, run `cargo vet --output-format json` and record the results.
-          4. For each recommended diff, run `cargo vet diff --mode local <crate> <from> <to>` and review the diff output. If a required crate download is missing and cannot be fetched, explain the limitation and stop.
+          4. For each recommended diff, run `cargo vet diff --locked --mode local <crate> <from> <to>` and review the diff output. If a required crate download is missing and cannot be fetched, explain the limitation and stop.
           5. When satisfied the upgrade meets `safe-to-deploy`, execute:
                `cargo vet certify <crate> <from> <to> --criteria safe-to-deploy --accept-all --who "${{ env.AUDITOR_NAME }} <${{ env.AUDITOR_EMAIL }}>" --notes "<short summary>"`
              Include a concise `--notes` summary (<= 200 characters) describing the review.
@@ -132,6 +143,10 @@ jobs:
              Only trust publishers when the evidence justifies it.
           7. After certifying and/or trusting, re-run `cargo vet` to confirm the supply chain passes.
           8. Configure git with the auditor identity (set both user.name and user.email), commit any changes under `supply-chain/` using message `chore(vet): auto-certify dependabot bump`, and push directly back to `${{ github.head_ref }}`.
+
+          Latest cargo vet output
+          -----------------------
+          ${{ steps.vet.outputs.log }}
 
           Guardrails
           ----------
