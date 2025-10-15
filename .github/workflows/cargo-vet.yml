@@ -35,8 +35,10 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       CARGO_VET_VERSION: 0.10.0
-      AUDITOR_NAME: github-actions[bot]
-      AUDITOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+      AUDITOR_NAME: codex
+      AUDITOR_EMAIL: codex@cloudwalk.io
+      COMMITTER_NAME: dependabot[bot]
+      COMMITTER_EMAIL: 49699333+dependabot[bot]@users.noreply.github.com
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -103,20 +105,25 @@ jobs:
         AUDITOR_EMAIL: ${{ env.AUDITOR_EMAIL }}
         BASE_REF: ${{ github.base_ref }}
         HEAD_BRANCH: ${{ github.head_ref }}
+        COMMITTER_NAME: ${{ env.COMMITTER_NAME }}
+        COMMITTER_EMAIL: ${{ env.COMMITTER_EMAIL }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ github.token }}
       with:
         openai-api-key: ${{ secrets.OPENAI_KEY }}
         sandbox: danger-full-access 
         prompt: |
-          You are the supply-chain auditor for the Stratus repository. Dependabot opened this PR and cargo-vet currently fails because new crate versions are missing review.
+          You are Codex, the supply-chain auditor for the Stratus repository. Dependabot opened this PR and cargo-vet currently fails because new crate versions are missing review.
 
           Context
           -------
           Repository: ${{ github.repository }}
           Base branch: origin/${{ github.base_ref }}
           Head branch: ${{ github.head_ref }}
-          Auditor identity: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          Auditor identity: ${{ env.AUDITOR_NAME }} <${{ env.AUDITOR_EMAIL }}>
+          author: ${{ env.COMMITTER_NAME }} <${{ env.COMMITTER_EMAIL }}>
+          committer: ${{ env.COMMITTER_NAME }} <${{ env.COMMITTER_EMAIL }}>
 
           Environment setup
           -----------------
@@ -130,14 +137,17 @@ jobs:
           2. Review the captured report in "Latest cargo vet output" below to identify failing crates and recommended commands. Do not re-run `cargo vet`; rely on the recorded output. 
           3. Extract the recommended commands from that report; there is no need to run `cargo vet --output-format json`.
           4. For each recommended diff, run `cargo vet diff --locked --mode local <crate> <from> <to>` and review the diff output. If a required crate download is missing and cannot be fetched, explain the limitation and stop.
-          5. When satisfied the upgrade meets `safe-to-deploy`, execute:
+          5. If the reports highlight publishers to trust (for example via `NOTE:` lines) and you want to record that trust **instead of** adding audits, run the suggested command before you certify anything:
+               `cargo vet trust --locked <crate-or-flag> <publisher> --criteria safe-to-deploy --notes "<short rationale>"`
+             Skip this step once you have already certified all diffs; the trust command will exit with an error when there are no failing packages left.
+          6. When satisfied the upgrade meets `safe-to-deploy`, execute:
                `cargo vet certify <crate> <from> <to> --criteria safe-to-deploy --accept-all --who "${{ env.AUDITOR_NAME }} <${{ env.AUDITOR_EMAIL }}>" --notes "<short summary>"`
              Include a concise `--notes` summary (<= 200 characters) describing the review.
-          6. If the reports highlight publishers to trust (for example via `NOTE:` lines), run:
-               `cargo vet trust <crate-or-flag> <publisher> --criteria safe-to-deploy --notes "<short rationale>"`
-             Only trust publishers when the evidence justifies it.
-          7. Do not re-run `cargo vet`; the workflow will invoke it after this step completes.
-          8. Configure git with the auditor identity (set both user.name and user.email), commit any changes under `supply-chain/` using message `chore(vet): auto-certify dependabot bump`, and push directly back to `${{ github.head_ref }}`.
+          7. Do not re-run `cargo vet`.
+          8. Configure git with `${{ env.COMMITTER_NAME }}` / `${{ env.COMMITTER_EMAIL }}` (set `user.name` and `user.email`), commit any changes under `supply-chain/` using message `chore(vet): auto-certify dependabot bump`, and push directly back to `${{ github.head_ref }}`.
+          9. Post a PR comment summarizing what you did by running:
+               `gh pr comment "$PR_NUMBER" --body "<two-to-three bullet summary prefixed with Codex>"`
+             Use the provided `GH_TOKEN` for authentication and keep the comment friendly and informative.
 
           Latest cargo vet output
           -----------------------
