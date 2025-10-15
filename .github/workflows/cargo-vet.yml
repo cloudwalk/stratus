@@ -106,6 +106,7 @@ jobs:
         HEAD_BRANCH: ${{ github.head_ref }}
       with:
         openai-api-key: ${{ secrets.OPENAI_KEY }}
+        sandbox: danger-full-access 
         prompt: |
           You are the supply-chain auditor for the Stratus repository. Dependabot opened this PR and cargo-vet currently fails because new crate versions are missing review.
 
@@ -124,22 +125,10 @@ jobs:
           - Verify the Rust toolchain is available (`rustup --version`). If not, install it with `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88`, then run `source "$HOME/.cargo/env"` (or add `$HOME/.cargo/bin` to PATH).
           - Confirm `cargo vet` is installed (`cargo vet --version`). If missing, run `cargo install --version ${{ env.CARGO_VET_VERSION }} cargo-vet`.
 
-          Known limitations
-          -----------------
-          - Re-running `cargo vet` inside this action fails with `Couldn't acquire the cache's lock (os error 13)`. Do not invoke it; rely on the captured output below.
-
           Certification tasks
           -------------------
           1. The latest base branch data (origin/${{ github.base_ref }}) has already been fetched for you. Work against that local ref; if you ever need to refetch and the network blocks it, report the failure instead of guessing.
-          2. Review the captured report in "Latest cargo vet output" below to identify failing crates and recommended commands. Do not re-run `cargo vet`; rely on the recorded output. A typical report looks like:
-             ```
-             serde:1.0.220 missing ["safe-to-deploy"]
-             recommended audits for safe-to-deploy:
-                 cargo vet diff serde 1.0.224 1.0.220  … 
-                 cargo vet diff serde_core 1.0.224 1.0.220  …
-                 cargo vet diff serde_derive 1.0.224 1.0.220  …
-                 NOTE: isrg, mozilla, and bytecode-alliance trust David Tolnay (dtolnay) - consider cargo vet trust --all dtolnay
-             ```
+          2. Review the captured report in "Latest cargo vet output" below to identify failing crates and recommended commands. Do not re-run `cargo vet`; rely on the recorded output. 
           3. Extract the recommended commands from that report; there is no need to run `cargo vet --output-format json`.
           4. For each recommended diff, run `cargo vet diff --locked --mode local <crate> <from> <to>` and review the diff output. If a required crate download is missing and cannot be fetched, explain the limitation and stop.
           5. When satisfied the upgrade meets `safe-to-deploy`, execute:
@@ -160,6 +149,7 @@ jobs:
           - Work from the repository root; do not touch unrelated files.
           - Abort and report clearly if any certification or trust decision is uncertain.
           - Finish with a brief summary of actions (or failure reason) in your final message.
+          - You have no network access; do not attempt to reach the internet.
 
     - name: Invoke cargo-vet after Codex
       id: vet_after
