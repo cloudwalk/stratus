@@ -145,9 +145,6 @@ jobs:
              Include a concise `--notes` summary (<= 200 characters) describing the review.
           7. You may also run `cargo vet prune` to remove any unnecessary exemptions.
           8. Configure git with `${{ env.COMMITTER_NAME }}` / `${{ env.COMMITTER_EMAIL }}` (set `user.name` and `user.email`), commit any changes under `supply-chain/` using message `chore(vet): auto-certify dependabot bump`, and push directly back to `${{ github.head_ref }}`.
-          9. Post a PR comment summarizing what you did by running:
-               `gh pr comment "$PR_NUMBER" --body "<two-to-three bullet summary prefixed with Codex>"`
-             Use the provided `GH_TOKEN` for authentication and keep the comment friendly and informative.
 
           Latest cargo vet output
           -----------------------
