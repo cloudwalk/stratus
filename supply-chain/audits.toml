@@ -6,6 +6,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.30"
 
+[[audits.alloy-primitives]]
+who = "codex <codex@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.3.1 -> 1.4.0"
+notes = "Reviewed optional rkyv/borsh support, hash builder wrapper, and sqlx Signed encode/decode; unsafe usage unchanged and sound."
+
 [[audits.alloy-serde]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
