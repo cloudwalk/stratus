@@ -124,7 +124,7 @@ jobs:
           Certification tasks
           -------------------
           1. The latest base branch data (origin/${{ github.base_ref }}) has already been fetched for you. Work against that local ref; if you ever need to refetch and the network blocks it, report the failure instead of guessing.
-          2. Review the captured report in "Latest cargo vet output" below to identify failing crates and recommended commands. Re-run `cargo vet` only if you need to refresh the data and the necessary downloads succeed without network access. A typical output looks like:
+          2. Review the captured report in "Latest cargo vet output" below to identify failing crates and recommended commands. Do not re-run `cargo vet`; rely on the recorded output. A typical report looks like:
              ```
              serde:1.0.220 missing ["safe-to-deploy"]
              recommended audits for safe-to-deploy:
@@ -133,7 +133,7 @@ jobs:
                  cargo vet diff serde_derive 1.0.224 1.0.220  …
                  NOTE: isrg, mozilla, and bytecode-alliance trust David Tolnay (dtolnay) - consider cargo vet trust --all dtolnay
              ```
-          3. When you need structured data, run `cargo vet --output-format json` and record the results.
+          3. Extract the recommended commands from that report; there is no need to run `cargo vet --output-format json`.
           4. For each recommended diff, run `cargo vet diff --locked --mode local <crate> <from> <to>` and review the diff output. If a required crate download is missing and cannot be fetched, explain the limitation and stop.
           5. When satisfied the upgrade meets `safe-to-deploy`, execute:
                `cargo vet certify <crate> <from> <to> --criteria safe-to-deploy --accept-all --who "${{ env.AUDITOR_NAME }} <${{ env.AUDITOR_EMAIL }}>" --notes "<short summary>"`
@@ -141,7 +141,7 @@ jobs:
           6. If the reports highlight publishers to trust (for example via `NOTE:` lines), run:
                `cargo vet trust <crate-or-flag> <publisher> --criteria safe-to-deploy --notes "<short rationale>"`
              Only trust publishers when the evidence justifies it.
-          7. After certifying and/or trusting, re-run `cargo vet` to confirm the supply chain passes.
+          7. Do not re-run `cargo vet`; the workflow will invoke it after this step completes.
           8. Configure git with the auditor identity (set both user.name and user.email), commit any changes under `supply-chain/` using message `chore(vet): auto-certify dependabot bump`, and push directly back to `${{ github.head_ref }}`.
 
           Latest cargo vet output
