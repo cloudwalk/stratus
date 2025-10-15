@@ -60,19 +60,22 @@ jobs:
 
     - name: Invoke cargo-vet
       id: vet
-      continue-on-error: true
       run: |
         set -o pipefail
         tmp="$(mktemp)"
-        cargo vet 2>&1 | tee "$tmp"
-        status=${PIPESTATUS[0]}
+        if cargo vet 2>&1 | tee "$tmp"; then
+          status=0
+        else
+          status=$?
+        fi
         {
           echo "log<<EOF"
           cat "$tmp"
           echo "EOF"
+          echo "exit_code=$status"
         } >>"$GITHUB_OUTPUT"
         rm -f "$tmp"
-        exit $status
+        exit 0
 
     - name: Fetch base branch for Codex
       if: ${{ github.event_name == 'pull_request' }}
@@ -82,10 +85,10 @@ jobs:
       id: codex_guard
       if: ${{ github.event_name == 'pull_request' }}
       env:
-        VET_OUTCOME: ${{ steps.vet.outcome }}
+        VET_EXIT_CODE: ${{ steps.vet.outputs.exit_code }}
         HEAD_REF: ${{ github.head_ref }}
       run: |
-        if [ "$VET_OUTCOME" = "failure" ] && [[ "$HEAD_REF" == dependabot-* ]]; then
+        if [ "${VET_EXIT_CODE:-1}" != "0" ] && [[ "$HEAD_REF" == dependabot-* ]]; then
           echo "run=true" >>"$GITHUB_OUTPUT"
         else
           echo "run=false" >>"$GITHUB_OUTPUT"
@@ -120,6 +123,10 @@ jobs:
           - Work from the repository root.
           - Verify the Rust toolchain is available (`rustup --version`). If not, install it with `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88`, then run `source "$HOME/.cargo/env"` (or add `$HOME/.cargo/bin` to PATH).
           - Confirm `cargo vet` is installed (`cargo vet --version`). If missing, run `cargo install --version ${{ env.CARGO_VET_VERSION }} cargo-vet`.
+
+          Known limitations
+          -----------------
+          - Re-running `cargo vet` inside this action fails with `Couldn't acquire the cache's lock (os error 13)`. Do not invoke it; rely on the captured output below.
 
           Certification tasks
           -------------------
@@ -160,7 +167,7 @@ jobs:
       run: cargo vet
 
     - name: Fail if cargo-vet still failing
-      if: ${{ steps.vet.outcome == 'failure' && (steps.codex.outcome != 'success' || steps.vet_after.outcome == 'failure') }}
+      if: ${{ steps.vet.outputs.exit_code != '0' && (steps.codex.outcome != 'success' || steps.vet_after.outcome == 'failure') }}
       run: |
         echo "cargo vet remains failing or Codex auto-certification did not run" >&2
         exit 1
