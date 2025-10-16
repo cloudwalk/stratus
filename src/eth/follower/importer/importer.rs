@@ -205,13 +205,13 @@ impl Importer {
     pub const TASKS_COUNT: usize = 3;
 
     /// Receive data from channel with timeout
-    async fn receive_with_timeout<T>(rx: &mut mpsc::Receiver<T>) -> Option<T> {
+    async fn receive_with_timeout<T>(rx: &mut mpsc::Receiver<T>) -> anyhow::Result<Option<T>> {
         match timeout(Duration::from_secs(2), rx.recv()).await {
-            Ok(Some(inner)) => Some(inner),
-            Ok(None) => None, // channel closed
+            Ok(Some(inner)) => Ok(Some(inner)),
+            Ok(None) => bail!("channel closed"),
             Err(_timed_out) => {
                 tracing::warn!(timeout = "2s", "timeout reading block executor channel, expected around 1 block per second");
-                None
+                Ok(None)
             }
         }
     }
@@ -252,8 +252,10 @@ impl Importer {
                 return Ok(());
             }
 
-            let Some((block, receipts)) = Self::receive_with_timeout(&mut backlog_rx).await else {
-                break;
+            let (block, receipts) = match Self::receive_with_timeout(&mut backlog_rx).await {
+                Ok(Some((block, receipts))) => (block, receipts),
+                Ok(None) => continue,
+                Err(_) => break,
             };
 
             #[cfg(feature = "metrics")]
@@ -343,8 +345,10 @@ impl Importer {
                 return Ok(());
             }
 
-            let Some((block, changes)) = Self::receive_with_timeout(&mut backlog_rx).await else {
-                break;
+            let (block, changes) = match Self::receive_with_timeout(&mut backlog_rx).await {
+                Ok(Some((block, changes))) => (block, changes),
+                Ok(None) => continue,
+                Err(_) => break,
             };
 
             tracing::info!(block_number = %block.number(), "received block with changes");
@@ -409,18 +413,21 @@ impl Importer {
                         set_external_rpc_current_block(block.number());
                         continue;
                     }
-                    Ok(None) =>
+                    Ok(None) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} newHeads subscription closed by the other side", TASK_NAME);
-                        },
-                    Ok(Some(Err(e))) =>
+                        }
+                    }
+                    Ok(Some(Err(e))) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!(reason = ?e, "{} failed to read newHeads subscription event", TASK_NAME);
-                        },
-                    Err(_) =>
+                        }
+                    }
+                    Err(_) => {
                         if !Self::should_shutdown(TASK_NAME) {
                             tracing::error!("{} timed-out waiting for newHeads subscription event", TASK_NAME);
-                        },
+                        }
+                    }
                 }
 
                 if Self::should_shutdown(TASK_NAME) {
@@ -436,10 +443,11 @@ impl Importer {
                             tracing::info!("{} resubscribed to newHeads event", TASK_NAME);
                             sub_new_heads = Some(sub);
                         }
-                        Err(e) =>
+                        Err(e) => {
                             if !Self::should_shutdown(TASK_NAME) {
                                 tracing::error!(reason = ?e, "{} failed to resubscribe to newHeads event", TASK_NAME);
-                            },
+                            }
+                        }
                     }
                 }
             }
@@ -460,10 +468,11 @@ impl Importer {
                     set_external_rpc_current_block(block_number);
                     traced_sleep(sync_interval, SleepReason::SyncData).await;
                 }
-                Err(e) =>
+                Err(e) => {
                     if !Self::should_shutdown(TASK_NAME) {
                         tracing::error!(reason = ?e, "failed to retrieve block number. retrying now.");
-                    },
+                    }
+                }
             }
         }
     }
