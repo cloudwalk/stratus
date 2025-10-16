@@ -510,7 +510,7 @@ impl Importer {
             }
 
             // we are behind current, so we will fetch multiple blocks in parallel to catch up
-            let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1; // TODO: use count_to from BlockNumber
+            let blocks_behind = importer_block_number.count_to(external_rpc_current_block);
             let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
             tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with blocks");
 
@@ -589,7 +589,7 @@ impl Importer {
             }
 
             // we are behind current, so we will fetch multiple blocks in parallel to catch up
-            let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1; // TODO: use count_to from BlockNumber
+            let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1;
             let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
             tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with blocks");
 
