@@ -85,33 +85,36 @@ pub fn event_names_from_filter(filter: &LogFilter) -> SoliditySignature {
     if let Some(Some(first_topic)) = topic0.0.first() {
         return event_sig(first_topic.as_ref());
     }
-    
+
     metrics::LABEL_MISSING
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::eth::primitives::{LogFilterInput, LogFilterInputTopic, LogTopic};
-    use crate::eth::storage::StratusStorage;
     use std::sync::Arc;
+
+    use super::*;
+    use crate::eth::primitives::LogFilterInput;
+    use crate::eth::primitives::LogFilterInputTopic;
+    use crate::eth::primitives::LogTopic;
+    use crate::eth::storage::StratusStorage;
 
     #[test]
     fn test_event_sig_with_empty_bytes() {
-        let result = event_sig(&[]);
+        let result = event_sig([]);
         assert_eq!(result, metrics::LABEL_MISSING);
     }
 
     #[test]
     fn test_event_sig_with_wrong_size() {
-        let result = event_sig(&[0u8; 4]); // 4 bytes instead of 32
+        let result = event_sig([0u8; 4]); // 4 bytes instead of 32
         assert_eq!(result, metrics::LABEL_MISSING);
     }
 
     #[test]
     fn test_event_sig_with_unknown_signature() {
         let unknown_sig = [0xFFu8; 32];
-        let result = event_sig(&unknown_sig);
+        let result = event_sig(unknown_sig);
         assert_eq!(result, metrics::LABEL_UNKNOWN);
     }
 
@@ -120,7 +123,7 @@ mod tests {
         let storage = StratusStorage::new_test().unwrap();
         let filter_input = LogFilterInput::default();
         let filter = filter_input.parse(&Arc::new(storage)).unwrap();
-        
+
         let result = event_names_from_filter(&filter);
         assert_eq!(result, metrics::LABEL_MISSING);
     }
@@ -133,7 +136,7 @@ mod tests {
             ..Default::default()
         };
         let filter = filter_input.parse(&Arc::new(storage)).unwrap();
-        
+
         let result = event_names_from_filter(&filter);
         assert_eq!(result, metrics::LABEL_MISSING);
     }
@@ -147,8 +150,24 @@ mod tests {
             ..Default::default()
         };
         let filter = filter_input.parse(&Arc::new(storage)).unwrap();
-        
+
         let result = event_names_from_filter(&filter);
         assert_eq!(result, metrics::LABEL_UNKNOWN);
+    }
+
+    #[test]
+    fn test_event_names_from_filter_with_known_topic() {
+        let storage = StratusStorage::new_test().unwrap();
+        let transfer_event = [
+            221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241, 99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179,
+            239,
+        ];
+        let filter_input = LogFilterInput {
+            topics: vec![LogFilterInputTopic(vec![Some(LogTopic::from(transfer_event))])],
+            ..Default::default()
+        };
+        let filter = filter_input.parse(&Arc::new(storage)).unwrap();
+        let result = event_names_from_filter(&filter);
+        assert_eq!(result, "Transfer(address,address,uint256)");
     }
 }

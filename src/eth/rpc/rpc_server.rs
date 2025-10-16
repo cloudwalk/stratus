@@ -1401,11 +1401,11 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
             "logs" => {
                 let (_, filter_input) = next_rpc_param_or_default::<LogFilterInput>(params)?;
                 let filter = filter_input.parse(&ctx.server.storage)?;
-                
+
                 let event_name = codegen::event_names_from_filter(&filter).to_string();
                 Span::with(|s| s.rec_str("subscription_event", &event_name));
                 tracing::info!(subscription_event = %event_name, "subscribing to logs with event filter");
-                
+
                 ctx.subs.add_logs_subscription(client, filter, pending.accept().await?).await;
             }
 
