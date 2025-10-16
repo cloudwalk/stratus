@@ -286,6 +286,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("stratus_setBalance", stratus_set_balance)?;
         module.register_blocking_method("hardhat_setCode", stratus_set_code)?;
         module.register_blocking_method("stratus_setCode", stratus_set_code)?;
+        module.register_blocking_method("stratus_clearCache", stratus_clear_cache)?;
     }
 
     // stratus status
@@ -368,6 +369,12 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 #[cfg(feature = "dev")]
 fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     ctx.server.miner.mine_local_and_commit()?;
+    Ok(to_json_value(true))
+}
+
+#[cfg(feature = "dev")]
+fn stratus_clear_cache(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    ctx.server.storage.clear_cache();
     Ok(to_json_value(true))
 }
 

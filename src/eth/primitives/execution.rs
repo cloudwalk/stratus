@@ -52,7 +52,17 @@ impl ExecutionChanges {
     }
 
     pub fn merge(&mut self, other: ExecutionChanges) {
-        self.accounts.extend(other.accounts);
+        for (address, changes) in other.accounts {
+            match self.accounts.entry(address) {
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    let current_changes = entry.get_mut();
+                    current_changes.merge(changes);
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(changes);
+                }
+            }
+        }
         self.slots.extend(other.slots);
     }
 }
