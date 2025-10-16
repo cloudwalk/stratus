@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use crate::eth::primitives::Address;
+use crate::eth::primitives::LogFilter;
 use crate::infra::metrics;
 
 include!(concat!(env!("OUT_DIR"), "/contracts.rs"));
@@ -54,4 +55,119 @@ pub fn error_sig_opt(bytes: impl AsRef<[u8]>) -> Option<Cow<'static, str>> {
                     .map(Cow::Owned)
             })
         })
+}
+
+pub fn event_sig(bytes: impl AsRef<[u8]>) -> SoliditySignature {
+    match event_sig_opt(bytes) {
+        Some(signature) => signature,
+        None => metrics::LABEL_UNKNOWN,
+    }
+}
+
+pub fn event_sig_opt(bytes: impl AsRef<[u8]>) -> Option<SoliditySignature> {
+    let bytes_slice = bytes.as_ref();
+    if bytes_slice.len() != 32 {
+        return Some(metrics::LABEL_MISSING);
+    }
+    let id: [u8; 32] = bytes_slice.try_into().ok()?;
+    SIGNATURES_32_BYTES.get(&id).copied()
+}
+
+pub fn event_names_from_filter(filter: &LogFilter) -> SoliditySignature {
+    let topics = &filter.original_input.topics;
+    if topics.is_empty() {
+        return metrics::LABEL_MISSING;
+    }
+    let topic0 = &topics[0];
+    if topic0.is_empty() || topic0.contains(&None) {
+        return metrics::LABEL_MISSING;
+    }
+    if let Some(Some(first_topic)) = topic0.0.first() {
+        return event_sig(first_topic.as_ref());
+    }
+
+    metrics::LABEL_MISSING
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::eth::primitives::LogFilterInput;
+    use crate::eth::primitives::LogFilterInputTopic;
+    use crate::eth::primitives::LogTopic;
+    use crate::eth::storage::StratusStorage;
+
+    #[test]
+    fn test_event_sig_with_empty_bytes() {
+        let result = event_sig([]);
+        assert_eq!(result, metrics::LABEL_MISSING);
+    }
+
+    #[test]
+    fn test_event_sig_with_wrong_size() {
+        let result = event_sig([0u8; 4]); // 4 bytes instead of 32
+        assert_eq!(result, metrics::LABEL_MISSING);
+    }
+
+    #[test]
+    fn test_event_sig_with_unknown_signature() {
+        let unknown_sig = [0xFFu8; 32];
+        let result = event_sig(unknown_sig);
+        assert_eq!(result, metrics::LABEL_UNKNOWN);
+    }
+
+    #[test]
+    fn test_event_names_from_filter_no_topics() {
+        let storage = StratusStorage::new_test().unwrap();
+        let filter_input = LogFilterInput::default();
+        let filter = filter_input.parse(&Arc::new(storage)).unwrap();
+
+        let result = event_names_from_filter(&filter);
+        assert_eq!(result, metrics::LABEL_MISSING);
+    }
+
+    #[test]
+    fn test_event_names_from_filter_with_none_topic() {
+        let storage = StratusStorage::new_test().unwrap();
+        let filter_input = LogFilterInput {
+            topics: vec![LogFilterInputTopic(vec![None])],
+            ..Default::default()
+        };
+        let filter = filter_input.parse(&Arc::new(storage)).unwrap();
+
+        let result = event_names_from_filter(&filter);
+        assert_eq!(result, metrics::LABEL_MISSING);
+    }
+
+    #[test]
+    fn test_event_names_from_filter_with_unknown_topic() {
+        let storage = StratusStorage::new_test().unwrap();
+        let unknown_topic = LogTopic::from([0xFFu8; 32]);
+        let filter_input = LogFilterInput {
+            topics: vec![LogFilterInputTopic(vec![Some(unknown_topic)])],
+            ..Default::default()
+        };
+        let filter = filter_input.parse(&Arc::new(storage)).unwrap();
+
+        let result = event_names_from_filter(&filter);
+        assert_eq!(result, metrics::LABEL_UNKNOWN);
+    }
+
+    #[test]
+    fn test_event_names_from_filter_with_known_topic() {
+        let storage = StratusStorage::new_test().unwrap();
+        let transfer_event = [
+            221, 242, 82, 173, 27, 226, 200, 155, 105, 194, 176, 104, 252, 55, 141, 170, 149, 43, 167, 241, 99, 196, 161, 22, 40, 245, 90, 77, 245, 35, 179,
+            239,
+        ];
+        let filter_input = LogFilterInput {
+            topics: vec![LogFilterInputTopic(vec![Some(LogTopic::from(transfer_event))])],
+            ..Default::default()
+        };
+        let filter = filter_input.parse(&Arc::new(storage)).unwrap();
+        let result = event_names_from_filter(&filter);
+        assert_eq!(result, "Transfer(address,address,uint256)");
+    }
 }
