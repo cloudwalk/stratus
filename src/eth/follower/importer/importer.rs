@@ -145,12 +145,16 @@ impl Importer {
         let storage = &self.storage;
         let number: BlockNumber = storage.read_block_number_to_resume_import()?;
 
-        match self.importer_mode {
+        // Spawn common tasks: number fetcher
+        let task_number_fetcher = spawn(
+            "importer::number-fetcher",
+            Importer::start_number_fetcher(Arc::clone(&self.chain), self.sync_interval),
+        );
+
+        let (exec_or_save_handle, block_fetcher_handle) = match self.importer_mode {
             ImporterMode::NormalFollower | ImporterMode::FakeLeader => {
-                // Use existing block fetcher and executor approach
                 let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
 
-                // Spawn block executor
                 let task_executor = spawn(
                     "importer::executor",
                     Importer::start_block_executor(
@@ -162,56 +166,34 @@ impl Importer {
                     ),
                 );
 
-                // Spawn block number fetcher
-                let number_fetcher_chain = Arc::clone(&self.chain);
-                let task_number_fetcher = spawn(
-                    "importer::number-fetcher",
-                    Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
-                );
-
-                // Spawn block fetcher
-                let block_fetcher_chain = Arc::clone(&self.chain);
                 let task_block_fetcher = spawn(
                     "importer::block-fetcher",
-                    Importer::start_block_fetcher(block_fetcher_chain, backlog_tx, number),
+                    Importer::start_block_fetcher(Arc::clone(&self.chain), backlog_tx, number),
                 );
 
-                // Await all tasks
-                let results = try_join!(task_executor, task_block_fetcher, task_number_fetcher)?;
-                results.0?;
-                results.1?;
-                results.2?;
+                (task_executor, task_block_fetcher)
             }
             ImporterMode::BlockWithChanges => {
-                // Use existing block fetcher and executor approach
                 let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
 
-                // Spawn block executor
                 let task_saver = spawn(
                     "importer::executor",
                     Importer::start_block_saver(Arc::clone(&self.miner), backlog_rx, self.kafka_connector.clone()),
                 );
 
-                // Spawn block number fetcher
-                let number_fetcher_chain = Arc::clone(&self.chain);
-                let task_number_fetcher = spawn(
-                    "importer::number-fetcher",
-                    Importer::start_number_fetcher(number_fetcher_chain, self.sync_interval),
-                );
-
-                // Spawn block fetcher
-                let block_fetcher_chain = Arc::clone(&self.chain);
                 let task_block_fetcher = spawn(
                     "importer::block-with-changes-fetcher",
-                    Importer::start_block_with_changes_fetcher(block_fetcher_chain, Arc::clone(storage), backlog_tx, number),
+                    Importer::start_block_with_changes_fetcher(Arc::clone(&self.chain), Arc::clone(storage), backlog_tx, number),
                 );
 
-                let results = try_join!(task_saver, task_block_fetcher, task_number_fetcher)?;
-                results.0?;
-                results.1?;
-                results.2?;
+                (task_saver, task_block_fetcher)
             }
-        }
+        };
+
+        let results = try_join!(exec_or_save_handle, block_fetcher_handle, task_number_fetcher)?;
+        results.0?;
+        results.1?;
+        results.2?;
 
         Ok(())
     }
@@ -221,6 +203,38 @@ impl Importer {
     // -----------------------------------------------------------------------------
 
     pub const TASKS_COUNT: usize = 3;
+
+    /// Receive data from channel with timeout
+    async fn receive_with_timeout<T>(rx: &mut mpsc::Receiver<T>) -> Option<T> {
+        match timeout(Duration::from_secs(2), rx.recv()).await {
+            Ok(Some(inner)) => Some(inner),
+            Ok(None) => None, // channel closed
+            Err(_timed_out) => {
+                tracing::warn!(timeout = "2s", "timeout reading block executor channel, expected around 1 block per second");
+                None
+            }
+        }
+    }
+
+    /// Send block transactions to Kafka
+    async fn send_block_to_kafka(kafka_connector: &Option<Arc<KafkaConnector>>, block: &Block) -> anyhow::Result<()> {
+        if let Some(kafka_conn) = kafka_connector {
+            let events = block
+                .transactions
+                .iter()
+                .flat_map(|tx| transaction_to_events(block.header.timestamp, Cow::Borrowed(tx)));
+
+            kafka_conn.send_buffered(events, 50).await?;
+        }
+        Ok(())
+    }
+
+    /// Record metrics for imported block
+    #[cfg(feature = "metrics")]
+    fn record_import_metrics(block_tx_len: usize, start: std::time::Instant) {
+        metrics::inc_n_importer_online_transactions_total(block_tx_len as u64);
+        metrics::inc_import_online_mined_block(start.elapsed());
+    }
 
     // Executes external blocks and persist them to storage.
     async fn start_block_executor(
@@ -238,13 +252,8 @@ impl Importer {
                 return Ok(());
             }
 
-            let (block, receipts) = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
-                Ok(Some(inner)) => inner,
-                Ok(None) => break, // channel closed
-                Err(_timed_out) => {
-                    tracing::warn!(timeout = "2s", "timeout reading block executor channel, expected around 1 block per second");
-                    continue;
-                }
+            let Some((block, receipts)) = Self::receive_with_timeout(&mut backlog_rx).await else {
+                break;
             };
 
             #[cfg(feature = "metrics")]
@@ -301,14 +310,7 @@ impl Importer {
                 }
             };
 
-            if let Some(ref kafka_conn) = kafka_connector {
-                let events = mined_block
-                    .transactions
-                    .iter()
-                    .flat_map(|tx| transaction_to_events(mined_block.header.timestamp, Cow::Borrowed(tx)));
-
-                kafka_conn.send_buffered(events, 50).await?;
-            }
+            Self::send_block_to_kafka(&kafka_connector, &mined_block).await?;
 
             match miner.commit(CommitItem::Block(mined_block), changes) {
                 Ok(_) => {
@@ -321,10 +323,7 @@ impl Importer {
             }
 
             #[cfg(feature = "metrics")]
-            {
-                metrics::inc_n_importer_online_transactions_total(receipts_len as u64);
-                metrics::inc_import_online_mined_block(start.elapsed());
-            }
+            Self::record_import_metrics(receipts_len, start);
         }
 
         warn_task_tx_closed(TASK_NAME);
@@ -344,13 +343,8 @@ impl Importer {
                 return Ok(());
             }
 
-            let (block, changes) = match timeout(Duration::from_secs(2), backlog_rx.recv()).await {
-                Ok(Some(inner)) => inner,
-                Ok(None) => break, // channel closed
-                Err(_timed_out) => {
-                    tracing::warn!(timeout = "2s", "timeout reading block executor channel, expected around 1 block per second");
-                    continue;
-                }
+            let Some((block, changes)) = Self::receive_with_timeout(&mut backlog_rx).await else {
+                break;
             };
 
             tracing::info!(block_number = %block.number(), "received block with changes");
@@ -358,22 +352,12 @@ impl Importer {
             #[cfg(feature = "metrics")]
             let (start, block_tx_len) = (metrics::now(), block.transactions.len());
 
-            if let Some(ref kafka_conn) = kafka_connector {
-                let events = block
-                    .transactions
-                    .iter()
-                    .flat_map(|tx| transaction_to_events(block.header.timestamp, Cow::Borrowed(tx)));
-
-                kafka_conn.send_buffered(events, 50).await?;
-            }
+            Self::send_block_to_kafka(&kafka_connector, &block).await?;
 
             miner.commit(CommitItem::ReplicationBlock(block), changes)?;
 
             #[cfg(feature = "metrics")]
-            {
-                metrics::inc_n_importer_online_transactions_total(block_tx_len as u64);
-                metrics::inc_import_online_mined_block(start.elapsed());
-            }
+            Self::record_import_metrics(block_tx_len, start);
         }
 
         warn_task_tx_closed(TASK_NAME);
@@ -488,17 +472,24 @@ impl Importer {
     // Block fetcher
     // -----------------------------------------------------------------------------
 
-    /// Retrieves blocks and receipts.
-    async fn start_block_fetcher(
-        chain: Arc<BlockchainClient>,
-        backlog_tx: mpsc::Sender<(ExternalBlock, Vec<ExternalReceipt>)>,
+    /// Generic block fetcher that handles the common logic of fetching blocks in parallel
+    async fn generic_block_fetcher<T, U, FetchFut, ProcessFut, FetchFn, ProcessFn>(
+        task_name: &'static str,
+        backlog_tx: mpsc::Sender<U>,
         mut importer_block_number: BlockNumber,
-    ) -> anyhow::Result<()> {
-        const TASK_NAME: &str = "external-block-fetcher";
+        fetch_fn: FetchFn,
+        process_fn: ProcessFn,
+    ) -> anyhow::Result<()>
+    where
+        FetchFut: std::future::Future<Output = T>,
+        ProcessFut: std::future::Future<Output = anyhow::Result<U>>,
+        FetchFn: Fn(BlockNumber) -> FetchFut,
+        ProcessFn: Fn(T) -> ProcessFut,
+    {
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
 
         loop {
-            if Self::should_shutdown(TASK_NAME) {
+            if Self::should_shutdown(task_name) {
                 return Ok(());
             }
 
@@ -517,53 +508,69 @@ impl Importer {
             let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
             while blocks_to_fetch > 0 {
                 blocks_to_fetch -= 1;
-                tasks.push(fetch_block_and_receipts(Arc::clone(&chain), importer_block_number));
+                tasks.push(fetch_fn(importer_block_number));
                 importer_block_number = importer_block_number.next_block_number();
             }
 
             // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
-            while let Some((mut block, mut receipts)) = tasks.next().await {
-                let block_number = block.number();
-                let BlockTransactions::Full(transactions) = &mut block.transactions else {
-                    bail!("expected full transactions, got hashes or uncle");
-                };
-
-                if transactions.len() != receipts.len() {
-                    bail!(
-                        "block {} has mismatched transaction and receipt length: {} transactions but {} receipts",
-                        block_number,
-                        transactions.len(),
-                        receipts.len()
-                    );
-                }
-
-                // Stably sort transactions and receipts by transaction_index
-                transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
-                receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
-
-                // perform additional checks on the transaction index
-                for window in transactions.windows(2) {
-                    let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
-                    let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
-                    if tx_index + 1 != next_tx_index {
-                        tracing::error!(tx_index, next_tx_index, "two consecutive transactions must have consecutive indices");
-                    }
-                }
-                for window in receipts.windows(2) {
-                    let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
-                    let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
-                    if tx_index + 1 != next_tx_index {
-                        tracing::error!(tx_index, next_tx_index, "two consecutive receipts must have consecutive indices");
-                    }
-                }
-
-                if backlog_tx.send((block, receipts)).await.is_err() {
-                    warn_task_rx_closed(TASK_NAME);
+            while let Some(fetched_data) = tasks.next().await {
+                let processed = process_fn(fetched_data).await?;
+                if backlog_tx.send(processed).await.is_err() {
+                    warn_task_rx_closed(task_name);
                     return Ok(());
                 }
             }
         }
+    }
+
+    /// Retrieves blocks and receipts.
+    async fn start_block_fetcher(
+        chain: Arc<BlockchainClient>,
+        backlog_tx: mpsc::Sender<(ExternalBlock, Vec<ExternalReceipt>)>,
+        importer_block_number: BlockNumber,
+    ) -> anyhow::Result<()> {
+        let fetch_fn = |block_number| fetch_block_and_receipts(Arc::clone(&chain), block_number);
+        let process_fn = |data: (ExternalBlock, Vec<ExternalReceipt>)| async move {
+            let (mut block, mut receipts) = data;
+            let block_number = block.number();
+            let BlockTransactions::Full(transactions) = &mut block.transactions else {
+                bail!("expected full transactions, got hashes or uncle");
+            };
+
+            if transactions.len() != receipts.len() {
+                bail!(
+                    "block {} has mismatched transaction and receipt length: {} transactions but {} receipts",
+                    block_number,
+                    transactions.len(),
+                    receipts.len()
+                );
+            }
+
+            // Stably sort transactions and receipts by transaction_index
+            transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+            receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+
+            // perform additional checks on the transaction index
+            for window in transactions.windows(2) {
+                let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+                let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+                if tx_index + 1 != next_tx_index {
+                    tracing::error!(tx_index, next_tx_index, "two consecutive transactions must have consecutive indices");
+                }
+            }
+            for window in receipts.windows(2) {
+                let tx_index = window[0].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+                let next_tx_index = window[1].transaction_index.ok_or(anyhow!("missing transaction index"))? as u32;
+                if tx_index + 1 != next_tx_index {
+                    tracing::error!(tx_index, next_tx_index, "two consecutive receipts must have consecutive indices");
+                }
+            }
+
+            Ok((block, receipts))
+        };
+
+        Self::generic_block_fetcher("external-block-fetcher", backlog_tx, importer_block_number, fetch_fn, process_fn).await
     }
 
     /// Retrieves blocks with changes.
@@ -571,45 +578,18 @@ impl Importer {
         chain: Arc<BlockchainClient>,
         storage: Arc<StratusStorage>,
         backlog_tx: mpsc::Sender<(Block, ExecutionChanges)>,
-        mut importer_block_number: BlockNumber,
+        importer_block_number: BlockNumber,
     ) -> anyhow::Result<()> {
-        const TASK_NAME: &str = "block-with-changes-fetcher";
-        let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
-
-        loop {
-            if Self::should_shutdown(TASK_NAME) {
-                return Ok(());
-            }
-
-            // if we are ahead of current block number, await until we are behind again
-            let external_rpc_current_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::Relaxed);
-            if importer_block_number.as_u64() > external_rpc_current_block {
-                yield_now().await;
-                continue;
-            }
-
-            // we are behind current, so we will fetch multiple blocks in parallel to catch up
-            let blocks_behind = external_rpc_current_block.saturating_sub(importer_block_number.as_u64()) + 1;
-            let mut blocks_to_fetch = min(blocks_behind, 1_000); // avoid spawning millions of tasks (not parallelism), at least until we know it is safe
-            tracing::info!(%blocks_behind, blocks_to_fetch, "catching up with blocks");
-
-            let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
-            while blocks_to_fetch > 0 {
-                blocks_to_fetch -= 1;
-                tasks.push(fetch_block_with_changes(Arc::clone(&chain), importer_block_number));
-                importer_block_number = importer_block_number.next_block_number();
-            }
-
-            // keep fetching in order
-            let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
-            while let Some((block, changes)) = tasks.next().await {
+        let fetch_fn = |block_number| fetch_block_with_changes(Arc::clone(&chain), block_number);
+        let process_fn = |data| {
+            let storage = Arc::clone(&storage);
+            async move {
+                let (block, changes) = data;
                 let changes = create_execution_changes(&storage, changes)?;
-                if backlog_tx.send((block, changes)).await.is_err() {
-                    warn_task_rx_closed(TASK_NAME);
-                    return Ok(());
-                }
+                Ok((block, changes))
             }
-        }
+        };
+        Self::generic_block_fetcher("block-with-changes-fetcher", backlog_tx, importer_block_number, fetch_fn, process_fn).await
     }
 }
 
@@ -632,52 +612,63 @@ fn create_execution_changes(storage: &Arc<StratusStorage>, changes: BlockChanges
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
+
+/// Generic retry logic for fetching data from blockchain
+async fn fetch_with_retry<T, F, Fut>(block_number: BlockNumber, fetch_fn: F, operation_name: &str) -> T
+where
+    F: Fn(BlockNumber) -> Fut,
+    Fut: std::future::Future<Output = anyhow::Result<Option<T>>>,
+{
     const RETRY_DELAY: Duration = Duration::from_millis(10);
     Span::with(|s| {
         s.rec_str("block_number", &block_number);
     });
 
     loop {
-        tracing::info!(%block_number, "fetching block and receipts");
+        tracing::info!(%block_number, "fetching {}", operation_name);
 
-        match chain.fetch_block_and_receipts(block_number).await {
-            Ok(Some(response)) => return (response.block, response.receipts),
+        match fetch_fn(block_number).await {
+            Ok(Some(response)) => return response,
             Ok(None) => {
-                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block and receipts not available yet, retrying with delay.");
+                tracing::warn!(
+                    %block_number,
+                    delay_ms = %RETRY_DELAY.as_millis(),
+                    "{} not available yet, retrying with delay.",
+                    operation_name
+                );
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
             }
             Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch block and receipts, retrying with delay.");
+                tracing::warn!(
+                    reason = ?e,
+                    %block_number,
+                    delay_ms = %RETRY_DELAY.as_millis(),
+                    "failed to fetch {}, retrying with delay.",
+                    operation_name
+                );
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
             }
         };
     }
 }
 
+async fn fetch_block_and_receipts(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
+    let fetch_fn = |bn| {
+        let chain = Arc::clone(&chain);
+        async move {
+            chain
+                .fetch_block_and_receipts(bn)
+                .await
+                .map(|opt| opt.map(|response| (response.block, response.receipts)))
+        }
+    };
+
+    fetch_with_retry(block_number, fetch_fn, "block and receipts").await
+}
+
 async fn fetch_block_with_changes(chain: Arc<BlockchainClient>, block_number: BlockNumber) -> (Block, BlockChangesRocksdb) {
-    const RETRY_DELAY: Duration = Duration::from_millis(10);
-    Span::with(|s| {
-        s.rec_str("block_number", &block_number);
-    });
-
-    loop {
-        tracing::info!(%block_number, "fetching block and changes");
-
-        match chain.fetch_block_with_changes(block_number).await {
-            Ok(Some(response)) => {
-                return response;
-            }
-            Ok(None) => {
-                tracing::warn!(%block_number, delay_ms = %RETRY_DELAY.as_millis(), "block and receipts not available yet, retrying with delay.");
-                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
-            }
-            Err(e) => {
-                tracing::warn!(reason = ?e, %block_number, delay_ms = %RETRY_DELAY.as_millis(), "failed to fetch block and receipts, retrying with delay.");
-                traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
-            }
-        };
-    }
+    let fetch_fn = |bn| chain.fetch_block_with_changes(bn);
+    fetch_with_retry(block_number, fetch_fn, "block and changes").await
 }
 
 impl Consensus for Importer {
