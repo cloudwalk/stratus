@@ -13,6 +13,7 @@ const DEFAULT_ACCOUNT_SLOTS_HISTORY_CACHE: usize = 20 * GIGABYTE;
 const DEFAULT_TRANSACTIONS_CACHE: usize = 20 * GIGABYTE;
 const DEFAULT_BLOCKS_BY_HASH_CACHE: usize = 2 * GIGABYTE;
 const DEFAULT_BLOCKS_BY_NUMBER_CACHE: usize = 20 * GIGABYTE;
+const DEFAULT_BLOCKS_BY_TIMESTAMP_CACHE: usize = 2 * GIGABYTE;
 const DEFAULT_BLOCK_CHANGES_CACHE: usize = 2 * GIGABYTE;
 
 /// Configuration for individual RocksDB Column Family caches.
@@ -77,6 +78,14 @@ pub struct RocksCfCacheConfig {
     )]
     pub blocks_by_hash: usize,
 
+    /// Cache size in bytes for the 'blocks_by_timestamp' column family.
+    #[arg(
+        long = "rocks-cf-cache-blocks-by-timestamp",
+        env = "ROCKS_CF_CACHE_BLOCKS_BY_TIMESTAMP",
+        default_value_t = DEFAULT_BLOCKS_BY_TIMESTAMP_CACHE
+    )]
+    pub blocks_by_timestamp: usize,
+
     /// Cache size in bytes for the 'block_changes' column family.
     #[arg(
         long = "rocks-cf-cache-block-changes",
@@ -96,6 +105,7 @@ impl Default for RocksCfCacheConfig {
             transactions: DEFAULT_TRANSACTIONS_CACHE,                   // 2GB
             blocks_by_number: DEFAULT_BLOCKS_BY_NUMBER_CACHE,           // 2GB
             blocks_by_hash: DEFAULT_BLOCKS_BY_HASH_CACHE,               // 2GB
+            blocks_by_timestamp: DEFAULT_BLOCKS_BY_TIMESTAMP_CACHE,     // 2GB
             block_changes: DEFAULT_BLOCK_CHANGES_CACHE,                 // 2GB
         }
     }
@@ -114,6 +124,7 @@ impl RocksCfCacheConfig {
         self.transactions = (self.transactions as f64 * multiplier) as usize;
         self.blocks_by_number = (self.blocks_by_number as f64 * multiplier) as usize;
         self.blocks_by_hash = (self.blocks_by_hash as f64 * multiplier) as usize;
+        self.blocks_by_timestamp = (self.blocks_by_timestamp as f64 * multiplier) as usize;
         self.block_changes = (self.block_changes as f64 * multiplier) as usize;
         self
     }
