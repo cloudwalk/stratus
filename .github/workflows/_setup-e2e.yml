@@ -109,16 +109,6 @@ jobs:
           RELEASE: 0
           RUST_BACKTRACE: 1
 
-      - name: Disk usage snapshot (post-tests)
-        if: always()
-        run: |
-          df -h
-          du -m -d1 target 2>/dev/null | sort -nr | head -n 15 || true
-          du -m -d1 ~/.cargo 2>/dev/null | sort -nr | head -n 15 || true
-          du -m -d1 e2e/node_modules 2>/dev/null | sort -nr | head -n 15 || true
-          sudo du -m -d1 /usr 2>/dev/null | sort -nr | head -n 15 || true
-          sudo du -m -d1 /var/lib/docker 2>/dev/null | sort -nr | head -n 15 || true
-
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
         with:
