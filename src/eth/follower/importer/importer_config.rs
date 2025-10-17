@@ -9,7 +9,7 @@ use super::importer::ImporterMode;
 use crate::GlobalState;
 use crate::NodeMode;
 use crate::eth::executor::Executor;
-use crate::eth::follower::importer::Importer;
+use crate::eth::follower::importer::OldImporter;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::ConsensusError;
 use crate::eth::primitives::ImporterError;
@@ -61,7 +61,7 @@ impl ImporterConfig {
         miner: Arc<Miner>,
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
-    ) -> anyhow::Result<Option<Arc<Importer>>> {
+    ) -> anyhow::Result<Option<Arc<OldImporter>>> {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
             NodeMode::Follower =>
@@ -88,7 +88,7 @@ impl ImporterConfig {
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
         importer_mode: ImporterMode,
-    ) -> anyhow::Result<Option<Arc<Importer>>> {
+    ) -> anyhow::Result<Option<Arc<OldImporter>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
 
@@ -102,7 +102,7 @@ impl ImporterConfig {
             .await?,
         );
 
-        let importer = Importer::new(
+        let importer = OldImporter::new(
             executor,
             Arc::clone(&miner),
             Arc::clone(&storage),
