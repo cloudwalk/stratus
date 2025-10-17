@@ -57,6 +57,14 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
+      - name: Disk usage snapshot (pre-build)
+        run: |
+          df -h
+          du -m -d1 target 2>/dev/null | sort -nr | head -n 15 || true
+          du -m -d1 ~/.cargo 2>/dev/null | sort -nr | head -n 15 || true
+          du -m -d1 e2e/node_modules 2>/dev/null | sort -nr | head -n 15 || true
+          sudo du -m -d1 /var/lib/docker 2>/dev/null | sort -nr | head -n 15 || true
+
       - name: Set up Just
         uses: extractions/setup-just@v2
 
@@ -96,11 +104,20 @@ jobs:
       - name: Run e2e tests
         run: ${{ inputs.justfile_env }} just run-test ${{ inputs.justfile_recipe }} ${{ inputs.justfile_args }}
         env:
-          CARGO_INCREMENTAL: 0
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error
           RELEASE: 0
           RUST_BACKTRACE: 1
+
+      - name: Disk usage snapshot (post-tests)
+        if: always()
+        run: |
+          df -h
+          du -m -d1 target 2>/dev/null | sort -nr | head -n 15 || true
+          du -m -d1 ~/.cargo 2>/dev/null | sort -nr | head -n 15 || true
+          du -m -d1 e2e/node_modules 2>/dev/null | sort -nr | head -n 15 || true
+          sudo du -m -d1 /usr 2>/dev/null | sort -nr | head -n 15 || true
+          sudo du -m -d1 /var/lib/docker 2>/dev/null | sort -nr | head -n 15 || true
 
       - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v5
