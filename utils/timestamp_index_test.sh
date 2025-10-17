@@ -38,37 +38,34 @@ to_dec() {
   printf "%d" "$1"
 }
 
-# Inline unified diff that comments out the two timestamp index writes
-read -r -d '' DISABLE_PATCH <<'PATCH'
-diff --git a/src/eth/storage/permanent/rocks/rocks_state.rs b/src/eth/storage/permanent/rocks/rocks_state.rs
---- a/src/eth/storage/permanent/rocks/rocks_state.rs
-+++ b/src/eth/storage/permanent/rocks/rocks_state.rs
-@@ -462,12 +462,12 @@
-         let block_by_hash = (block_hash.into(), number.into());
-         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
+DISABLE_PATCH=""
 
--        let block_by_timestamp = (timestamp.into(), number.into());
--        self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], &mut batch)?;
-+        // let block_by_timestamp = (timestamp.into(), number.into());
-+        // self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], &mut batch)?;
-
-         self.prepare_batch_with_execution_changes(account_changes, number, &mut batch)?;
-@@ -510,12 +510,12 @@
-         let block_by_hash = (block_hash.into(), number.into());
-         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], batch)?;
-
--        let block_by_timestamp = (timestamp.into(), number.into());
--        self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], batch)?;
-+        // let block_by_timestamp = (timestamp.into(), number.into());
-+        // self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], batch)?;
-
-         self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
-PATCH
+generate_patch_from_current() {
+  info "Generating patch from current file using git diff"
+  # Edit file in-place to comment out timestamp index lines, capture diff, then revert
+  local backup="${TARGET_FILE}.bak.$$"
+  cp "${TARGET_FILE}" "${backup}"
+  # Comment out the two occurrences in both functions
+  sed -i '' \
+    -e 's/^\([\t ]*\)let block_by_timestamp = (timestamp.into(), number.into());/\1\/\/ let block_by_timestamp = (timestamp.into(), number.into());/' \
+    -e 's/^\([\t ]*\)self\.blocks_by_timestamp\.prepare_batch_insertion(\[block_by_timestamp\], \&mut batch)\?;/\1\/\/ self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], \&mut batch)?;/' \
+    -e 's/^\([\t ]*\)self\.blocks_by_timestamp\.prepare_batch_insertion(\[block_by_timestamp\], batch)\?;/\1\/\/ self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], batch)?;/' \
+    "${TARGET_FILE}"
+  DISABLE_PATCH=$(git diff -- "${TARGET_FILE}")
+  # Revert changes to keep working tree clean before applying later
+  mv "${backup}" "${TARGET_FILE}"
+}
 
 apply_patch() {
   info "Applying disable patch with git"
-  echo "${DISABLE_PATCH}" | git apply -p0 --check
-  echo "${DISABLE_PATCH}" | git apply -p0
+  if [ -z "${DISABLE_PATCH}" ]; then
+    generate_patch_from_current
+  fi
+  # Try a tolerant apply first (ignore whitespace), then strict as fallback
+  if ! echo "${DISABLE_PATCH}" | git apply -p1 --ignore-space-change --ignore-whitespace -v; then
+    info "Retrying patch apply without whitespace relaxing"
+    echo "${DISABLE_PATCH}" | git apply -p1 -v
+  fi
 }
 
 revert_file() {
@@ -105,9 +102,19 @@ main() {
   start_stratus
   info "Mining without timestamp index for ${MINE_SECONDS}s"
   sleep "${MINE_SECONDS}"
+
+  # Verification: early block (block #1)
+  EARLY_JSON=$(rpc '{"jsonrpc":"2.0","id":"earliest","method":"eth_getBlockByNumber","params":["latest", false]}')
+  TS_OLD_HEX=$(echo "$EARLY_JSON" | jq -r ".result.timestamp")
+  TS_OLD_DEC=$(to_dec "${TS_OLD_HEX:-0}")
+  info "Early block timestamp: ${TS_OLD_DEC} (${TS_OLD_HEX}) - Before indexing"
+  RES_OLD_BEFORE=$(rpc "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"stratus_getBlockByTimestamp\",\"params\":[${TS_OLD_DEC}, false]}")
+  echo "$RES_OLD_BEFORE" | jq .
+
   stop_stratus
 
   # Phase 2: Restore file; run again on same DB (indexing enabled)
+  info "Phase 2: Restore file; run again on same DB (indexing enabled)"
   revert_file
   cargo build --quiet
   start_stratus
@@ -122,14 +129,9 @@ main() {
   RES_NEW=$(rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"stratus_getBlockByTimestamp\",\"params\":[${TS_NEW_DEC}, false]}")
   if command -v jq >/dev/null 2>&1; then echo "$RES_NEW" | jq .; else echo "$RES_NEW"; fi
 
-  # Verification: early block (block #1)
-  EARLY_JSON=$(rpc '{"jsonrpc":"2.0","id":"earliest","method":"eth_getBlockByNumber","params":["0x1", false]}')
-  TS_OLD_HEX=$(echo "$EARLY_JSON" | jq -r ".result.timestamp")
-  TS_OLD_DEC=$(to_dec "${TS_OLD_HEX:-0}")
-  info "Early block #1 timestamp: ${TS_OLD_DEC} (${TS_OLD_HEX})"
+  info "Early block timestamp: ${TS_OLD_DEC} (${TS_OLD_HEX}) - After indexing"
   RES_OLD_BEFORE=$(rpc "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"stratus_getBlockByTimestamp\",\"params\":[${TS_OLD_DEC}, false]}")
-  info "Early by timestamp BEFORE migration (expect null):"
-  if command -v jq >/dev/null 2>&1; then echo "$RES_OLD_BEFORE" | jq .; else echo "$RES_OLD_BEFORE"; fi
+  echo "$RES_OLD_BEFORE" | jq .
 
   # Migration
   info "Running migrate_timestamp_index on ${DB_PATH}"
@@ -142,6 +144,7 @@ main() {
   RES_OLD_AFTER=$(rpc "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"stratus_getBlockByTimestamp\",\"params\":[${TS_OLD_DEC}, false]}")
   info "Early by timestamp AFTER migration (expect block):"
   if command -v jq >/dev/null 2>&1; then echo "$RES_OLD_AFTER" | jq .; else echo "$RES_OLD_AFTER"; fi
+  stop_stratus
 
   info "Done. DB kept at ${DB_PATH}"
 }
