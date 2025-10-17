@@ -1,7 +1,7 @@
 mod fetchers;
-#[allow(clippy::module_inception)]
-mod importer;
 pub(crate) mod importer_config;
+#[allow(clippy::module_inception)]
+mod importer_supervisor;
 mod importers;
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -10,8 +10,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::bail;
-pub use importer::ImporterConsensus;
 pub use importer_config::ImporterConfig;
+pub use importer_supervisor::ImporterConsensus;
 use itertools::Itertools;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
