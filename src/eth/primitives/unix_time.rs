@@ -10,7 +10,7 @@ use fake::Faker;
 
 use crate::ext::InfallibleExt;
 
-#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Deref)]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Deref, Hash)]
 pub struct UnixTime(#[deref] u64);
 
 impl UnixTime {
@@ -67,6 +67,12 @@ impl From<UnixTime> for U256 {
 impl From<UnixTime> for DateTime<Utc> {
     fn from(value: UnixTime) -> Self {
         DateTime::from_timestamp(value.0 as i64, 0).expect_infallible()
+    }
+}
+
+impl std::fmt::Display for UnixTime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

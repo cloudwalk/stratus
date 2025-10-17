@@ -833,7 +833,7 @@ impl StratusStorage {
             BlockFilter::Latest => Ok(PointInTime::Mined),
             BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
             BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),
-            BlockFilter::Hash(_) => match self.read_block(block_filter)? {
+            BlockFilter::Hash(_) | BlockFilter::Timestamp(_) => match self.read_block(block_filter)? {
                 Some(block) => Ok(PointInTime::MinedPast(block.header.number)),
                 None => Err(StorageError::BlockNotFound { filter: block_filter }),
             },

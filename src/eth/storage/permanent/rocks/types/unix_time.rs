@@ -4,7 +4,7 @@ use crate::eth::primitives::UnixTime;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::gen_newtype_from;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize, Hash)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct UnixTimeRocksdb(pub u64);
 

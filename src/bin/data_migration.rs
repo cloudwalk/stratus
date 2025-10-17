@@ -132,6 +132,8 @@ fn generate_cf_options_map() -> BTreeMap<&'static str, Options> {
     cf_options.insert("transactions", DbConfig::Default.to_options(CacheSetting::Disabled, None));
     cf_options.insert("blocks_by_number", DbConfig::Default.to_options(CacheSetting::Disabled, None));
     cf_options.insert("blocks_by_hash", DbConfig::Default.to_options(CacheSetting::Disabled, None));
+    cf_options.insert("blocks_by_timestamp", DbConfig::Default.to_options(CacheSetting::Disabled, None));
+    cf_options.insert("block_changes", DbConfig::Default.to_options(CacheSetting::Disabled, None));
 
     cf_options
 }
