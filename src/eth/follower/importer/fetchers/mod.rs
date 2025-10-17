@@ -19,12 +19,15 @@ pub mod block_with_receipts;
 const PARALLEL_BLOCKS: usize = 3;
 
 #[async_trait]
-pub trait DataFetcher<FetchedType: Send + 'static, PostProcessType: Send + 'static>: Send + Sync + Sized {
-    async fn fetch(&self, block_number: BlockNumber) -> FetchedType;
-    async fn post_process(&self, data: FetchedType) -> anyhow::Result<PostProcessType>;
+pub trait DataFetcher: Send + Sync + Sized {
+    type FetchedType: Send + 'static;
+    type PostProcessType: Send + 'static;
+
+    async fn fetch(&self, block_number: BlockNumber) -> Self::FetchedType;
+    async fn post_process(&self, data: Self::FetchedType) -> anyhow::Result<Self::PostProcessType>;
 
     /// Generic block fetcher that handles the common logic of fetching blocks in parallel
-    async fn run(self, backlog_tx: mpsc::Sender<PostProcessType>, mut importer_block_number: BlockNumber) -> anyhow::Result<()> {
+    async fn run(self, backlog_tx: mpsc::Sender<Self::PostProcessType>, mut importer_block_number: BlockNumber) -> anyhow::Result<()> {
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
         const TASK_NAME: &str = "importer block fetcher";
 

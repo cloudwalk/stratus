@@ -25,8 +25,10 @@ pub struct ReexecutionWorker {
 }
 
 #[async_trait]
-impl ImporterWorker<(ExternalBlock, Vec<ExternalReceipt>)> for ReexecutionWorker {
-    async fn import(&self, (block, receipts): (ExternalBlock, Vec<ExternalReceipt>)) -> anyhow::Result<()> {
+impl ImporterWorker for ReexecutionWorker {
+    type DataType = (ExternalBlock, Vec<ExternalReceipt>);
+
+    async fn import(&self, (block, receipts): Self::DataType) -> anyhow::Result<()> {
         const TASK_NAME: &str = "block-executor";
 
         #[cfg(feature = "metrics")]

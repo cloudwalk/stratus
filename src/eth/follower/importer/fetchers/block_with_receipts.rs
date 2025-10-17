@@ -17,8 +17,11 @@ pub struct BlockWithReceiptsFetcher {
 }
 
 #[async_trait]
-impl DataFetcher<(ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)> for BlockWithReceiptsFetcher {
-    async fn fetch(&self, block_number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
+impl DataFetcher for BlockWithReceiptsFetcher {
+    type FetchedType = (ExternalBlock, Vec<ExternalReceipt>);
+    type PostProcessType = (ExternalBlock, Vec<ExternalReceipt>);
+
+    async fn fetch(&self, block_number: BlockNumber) -> Self::FetchedType {
         let fetch_fn = |bn| {
             let chain = Arc::clone(&self.chain);
             async move {
@@ -32,7 +35,7 @@ impl DataFetcher<(ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<Exte
         fetch_with_retry(block_number, fetch_fn, "block and receipts").await
     }
 
-    async fn post_process(&self, data: (ExternalBlock, Vec<ExternalReceipt>)) -> anyhow::Result<(ExternalBlock, Vec<ExternalReceipt>)> {
+    async fn post_process(&self, data: Self::FetchedType) -> anyhow::Result<Self::PostProcessType> {
         let (mut block, mut receipts) = data;
         let block_number = block.number();
         let BlockTransactions::Full(transactions) = &mut block.transactions else {

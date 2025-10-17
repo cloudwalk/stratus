@@ -20,8 +20,10 @@ pub struct ReplicationWorker {
 }
 
 #[async_trait]
-impl ImporterWorker<(Block, ExecutionChanges)> for ReplicationWorker {
-    async fn import(&self, (block, changes): (Block, ExecutionChanges)) -> anyhow::Result<()> {
+impl ImporterWorker for ReplicationWorker {
+    type DataType = (Block, ExecutionChanges);
+
+    async fn import(&self, (block, changes): Self::DataType) -> anyhow::Result<()> {
         tracing::info!(block_number = %block.number(), "received block with changes");
 
         #[cfg(feature = "metrics")]

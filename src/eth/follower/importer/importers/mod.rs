@@ -11,9 +11,11 @@ pub mod fake_leader;
 pub mod replication;
 
 #[async_trait]
-pub trait ImporterWorker<DataType: Send + 'static>: Send + Sync + Sized {
-    async fn import(&self, data: DataType) -> anyhow::Result<()>;
-    async fn run(self, mut backlog_rx: mpsc::Receiver<DataType>) -> anyhow::Result<()> {
+pub trait ImporterWorker: Send + Sync + Sized {
+    type DataType: Send + 'static;
+
+    async fn import(&self, data: Self::DataType) -> anyhow::Result<()>;
+    async fn run(self, mut backlog_rx: mpsc::Receiver<Self::DataType>) -> anyhow::Result<()> {
         const TASK_NAME: &str = "importer-worker";
         let _permit = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire().await;
         loop {

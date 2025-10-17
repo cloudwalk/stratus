@@ -18,13 +18,16 @@ pub struct BlockWithChangesFetcher {
 }
 
 #[async_trait]
-impl DataFetcher<(Block, BlockChangesRocksdb), (Block, ExecutionChanges)> for BlockWithChangesFetcher {
-    async fn fetch(&self, block_number: BlockNumber) -> (Block, BlockChangesRocksdb) {
+impl DataFetcher for BlockWithChangesFetcher {
+    type FetchedType = (Block, BlockChangesRocksdb);
+    type PostProcessType = (Block, ExecutionChanges);
+
+    async fn fetch(&self, block_number: BlockNumber) -> Self::FetchedType {
         let fetch_fn = |bn| self.chain.fetch_block_with_changes(bn);
         fetch_with_retry(block_number, fetch_fn, "block and changes").await
     }
 
-    async fn post_process(&self, data: (Block, BlockChangesRocksdb)) -> anyhow::Result<(Block, ExecutionChanges)> {
+    async fn post_process(&self, data: Self::FetchedType) -> anyhow::Result<Self::PostProcessType> {
         let storage = Arc::clone(&self.storage);
         let (block, changes) = data;
         let changes = create_execution_changes(&storage, changes)?;

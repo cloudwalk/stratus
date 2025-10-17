@@ -19,8 +19,10 @@ pub struct FakeLeaderWorker {
 }
 
 #[async_trait]
-impl ImporterWorker<(ExternalBlock, Vec<ExternalReceipt>)> for FakeLeaderWorker {
-    async fn import(&self, (block, _): (ExternalBlock, Vec<ExternalReceipt>)) -> anyhow::Result<()> {
+impl ImporterWorker for FakeLeaderWorker {
+    type DataType = (ExternalBlock, Vec<ExternalReceipt>);
+
+    async fn import(&self, (block, _): Self::DataType) -> anyhow::Result<()> {
         for tx in block.0.transactions.into_transactions() {
             tracing::info!(?tx, "executing tx as fake miner");
             if let Err(e) = self.executor.execute_local_transaction(tx.try_into()?) {

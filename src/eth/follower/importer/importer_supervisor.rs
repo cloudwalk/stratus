@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -21,27 +20,24 @@ use crate::eth::follower::importer::importers::fake_leader::FakeLeaderWorker;
 use crate::eth::follower::importer::importers::replication::ReplicationWorker;
 use crate::eth::follower::importer::start_number_fetcher;
 use crate::eth::miner::Miner;
-use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalReceipt;
 use crate::eth::storage::StratusStorage;
-use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::spawn;
 use crate::infra::BlockchainClient;
 use crate::infra::kafka::KafkaConnector;
 use crate::utils::DropTimer;
 
-type ReexecutionFollower =
-    ImporterSupervisor<BlockWithReceiptsFetcher, ReexecutionWorker, (ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)>;
-type FakeLeader = ImporterSupervisor<BlockWithReceiptsFetcher, FakeLeaderWorker, (ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)>;
-type ReplicationFollower = ImporterSupervisor<BlockWithChangesFetcher, ReplicationWorker, (Block, BlockChangesRocksdb), (Block, ExecutionChanges)>;
+type ReexecutionFollower = ImporterSupervisor<BlockWithReceiptsFetcher, ReexecutionWorker>;
+type FakeLeader = ImporterSupervisor<BlockWithReceiptsFetcher, FakeLeaderWorker>;
+type ReplicationFollower = ImporterSupervisor<BlockWithChangesFetcher, ReplicationWorker>;
 
-pub struct ImporterSupervisor<Fetcher: DataFetcher<FT, PT>, Importer: ImporterWorker<PT>, FT: Send + 'static, PT: Send + 'static> {
+pub struct ImporterSupervisor<Fetcher, Importer>
+where
+    Fetcher: DataFetcher,
+    Importer: ImporterWorker<DataType = Fetcher::PostProcessType>,
+{
     fetcher: Fetcher,
     importer: Importer,
-    _phantom: std::marker::PhantomData<(FT, PT)>,
 }
 
 impl ReexecutionFollower {
@@ -54,11 +50,7 @@ impl ReexecutionFollower {
 
         let fetcher = BlockWithReceiptsFetcher { chain: Arc::clone(&chain) };
 
-        Self {
-            fetcher,
-            importer,
-            _phantom: PhantomData,
-        }
+        Self { fetcher, importer }
     }
 }
 
@@ -68,11 +60,7 @@ impl FakeLeader {
 
         let fetcher = BlockWithReceiptsFetcher { chain: Arc::clone(&chain) };
 
-        Self {
-            fetcher,
-            importer,
-            _phantom: PhantomData,
-        }
+        Self { fetcher, importer }
     }
 }
 
@@ -82,16 +70,14 @@ impl ReplicationFollower {
 
         let fetcher = BlockWithChangesFetcher { chain, storage };
 
-        Self {
-            fetcher,
-            importer,
-            _phantom: PhantomData,
-        }
+        Self { fetcher, importer }
     }
 }
 
-impl<Fetcher: DataFetcher<FT, PT> + 'static, Importer: ImporterWorker<PT> + 'static, FT: Send + 'static, PT: Send + 'static>
-    ImporterSupervisor<Fetcher, Importer, FT, PT>
+impl<Fetcher, Importer> ImporterSupervisor<Fetcher, Importer>
+where
+    Fetcher: DataFetcher + 'static,
+    Importer: ImporterWorker<DataType = Fetcher::PostProcessType> + 'static,
 {
     async fn run(self, resume_from: BlockNumber, sync_interval: Duration, chain: Arc<BlockchainClient>) -> anyhow::Result<()> {
         let _timer = DropTimer::start("importer-online::run_importer_online");
