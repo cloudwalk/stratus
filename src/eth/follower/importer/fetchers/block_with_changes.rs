@@ -1,30 +1,16 @@
-use std::cmp::min;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
-use alloy_rpc_types_eth::BlockTransactions;
-use anyhow::anyhow;
-use anyhow::bail;
 use async_trait::async_trait;
-use futures::StreamExt;
-use tokio::sync::mpsc;
-use tokio::task::yield_now;
 
-use crate::eth::follower::importer::EXTERNAL_RPC_CURRENT_BLOCK;
 use crate::eth::follower::importer::create_execution_changes;
 use crate::eth::follower::importer::fetch_with_retry;
 use crate::eth::follower::importer::fetchers::FetcherWorker;
-use crate::eth::follower::importer::should_shutdown;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalReceipt;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
-use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::infra::BlockchainClient;
-use crate::infra::tracing::warn_task_rx_closed;
 
 pub struct BlockChangesFetcherWorker {
     pub chain: Arc<BlockchainClient>,

@@ -1,24 +1,12 @@
-use std::borrow::Cow;
-use std::cmp::min;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use alloy_rpc_types_eth::BlockTransactions;
-use anyhow::anyhow;
 use anyhow::bail;
-use async_trait::async_trait;
-use futures::StreamExt;
 use futures::try_join;
-use itertools::Itertools;
 use tokio::sync::mpsc;
-use tokio::task::yield_now;
-use tokio::time::timeout;
-use tracing::Span;
 
-use crate::GlobalState;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::EXTERNAL_RPC_CURRENT_BLOCK;
@@ -33,35 +21,17 @@ use crate::eth::follower::importer::importers::fake_leader::FakeLeaderWorker;
 use crate::eth::follower::importer::importers::replication::BlockSaverWorker;
 use crate::eth::follower::importer::start_number_fetcher;
 use crate::eth::miner::Miner;
-use crate::eth::miner::miner::CommitItem;
-use crate::eth::miner::miner::interval_miner::mine_and_commit;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
-use crate::eth::primitives::ExternalReceipts;
-use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
-use crate::ext::DisplayExt;
-use crate::ext::SleepReason;
 use crate::ext::spawn;
-use crate::ext::traced_sleep;
-use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::infra::BlockchainClient;
 use crate::infra::kafka::KafkaConnector;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
-use crate::infra::tracing::SpanExt;
-use crate::infra::tracing::warn_task_rx_closed;
-use crate::infra::tracing::warn_task_tx_closed;
-use crate::ledger::events::transaction_to_events;
-use crate::log_and_err;
 use crate::utils::DropTimer;
-#[cfg(feature = "metrics")]
-use crate::utils::calculate_tps;
 
 pub struct ImporterSupervisor<Fetcher: FetcherWorker<FT, PT>, Importer: ImporterWorker<PT>, FT: Send + 'static, PT: Send + 'static> {
     fetcher: Fetcher,
