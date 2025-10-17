@@ -197,7 +197,7 @@ default = ["metrics", "tracing"]
 # Application is running in develoment mode.
 dev = []
 
-# Legacy binaries that are not part of the standard build.
+# Binaries that are not part of the standard build or CI/CD tests.
 tools = []
 
 # Enable runtime metrics collection.
