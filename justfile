@@ -111,6 +111,7 @@ stratus-test *args="":
     fi
     echo "leader features: " $FEATURES
     cargo build --features $FEATURES
+    just disk-usage-snapshot "after stratus build"
     cargo run --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
 
@@ -146,6 +147,7 @@ rpc-downloader-test *args="":
     #!/bin/bash
     source <(just coverage-env)
     cargo build
+    just disk-usage-snapshot "after rpc-downloader build"
     cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
@@ -156,6 +158,7 @@ importer-offline-test *args="":
     #!/bin/bash
     source <(just coverage-env)
     cargo build
+    just disk-usage-snapshot "after importer-offline build"
     cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
 
 # ------------------------------------------------------------------------------
@@ -575,3 +578,17 @@ coverage-env:
     if ! echo "$CURRENT_RUSTFLAGS" | grep -F -- "$COVERAGE_FLAGS" > /dev/null; then \
         cargo llvm-cov show-env --export-prefix 2>/dev/null | grep '^export '; \
     fi
+
+disk-usage-snapshot label="":
+    #!/bin/bash
+    label="{{label}}"
+    if [ -n "$label" ]; then
+        echo "== Disk usage snapshot: $label =="
+    else
+        echo "== Disk usage snapshot =="
+    fi
+    df -h
+    du -m -d1 target 2>/dev/null | sort -nr | head -n 15 || true
+    du -m -d1 ~/.cargo 2>/dev/null | sort -nr | head -n 15 || true
+    du -m -d1 e2e/node_modules 2>/dev/null | sort -nr | head -n 15 || true
+    docker system df || true
