@@ -588,7 +588,21 @@ disk-usage-snapshot label="":
         echo "== Disk usage snapshot =="
     fi
     df -h
-    du -m -d1 target 2>/dev/null | sort -nr | head -n 15 || true
-    du -m -d1 ~/.cargo 2>/dev/null | sort -nr | head -n 15 || true
-    du -m -d1 e2e/node_modules 2>/dev/null | sort -nr | head -n 15 || true
-    docker system df || true
+    log_top() {
+        local path="$1"
+        local depth="${2:-1}"
+        if [ -d "$path" ]; then
+            echo "-- ${path}"
+            du -m --max-depth="$depth" "$path" 2>/dev/null | sort -nr | head -n 10 | awk '{printf "%8s MB\t%s\n", $1, $2}'
+            echo
+        fi
+    }
+    log_top target 2 || true
+    log_top ~/.cargo 2 || true
+    log_top e2e/node_modules 1 || true
+    if command -v docker >/dev/null 2>&1; then
+        echo "-- docker system df"
+        docker system df || true
+        echo "-- docker system df -v (top entries)"
+        docker system df -v | head -n 40 || true
+    fi
