@@ -107,6 +107,12 @@ criteria = "safe-to-deploy"
 delta = "2.1.1 -> 2.1.5"
 notes = "Reviewed 2.1.1->2.1.5: FK20 setup zero-inits, audit info, no new unsafe beyond existing C bindings."
 
+[[audits.console]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.16.0 -> 0.16.1"
+notes = "Reviewed 0.16.0->0.16.1: adds Display wrapper for ansi stripping, QNX cfmakeraw shim; no new unsafe."
+
 [[audits.const_format]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -277,4 +283,10 @@ end = "2026-10-17"
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-03-01"
+end = "2026-10-17"
+
+[[trusted.windows-sys]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-11-15"
 end = "2026-10-17"
