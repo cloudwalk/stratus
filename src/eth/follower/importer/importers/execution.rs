@@ -18,14 +18,14 @@ use crate::infra::kafka::KafkaConnector;
 use crate::infra::metrics;
 use crate::log_and_err;
 
-pub struct BlockExecutorWorker {
+pub struct ReexecutionWorker {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
     pub kafka_connector: Option<KafkaConnector>,
 }
 
 #[async_trait]
-impl ImporterWorker<(ExternalBlock, Vec<ExternalReceipt>)> for BlockExecutorWorker {
+impl ImporterWorker<(ExternalBlock, Vec<ExternalReceipt>)> for ReexecutionWorker {
     async fn import(&self, (block, receipts): (ExternalBlock, Vec<ExternalReceipt>)) -> anyhow::Result<()> {
         const TASK_NAME: &str = "block-executor";
 

@@ -19,7 +19,7 @@ pub mod block_with_receipts;
 const PARALLEL_BLOCKS: usize = 3;
 
 #[async_trait]
-pub trait FetcherWorker<FetchedType: Send + 'static, PostProcessType: Send + 'static>: Send + Sync + Sized {
+pub trait DataFetcher<FetchedType: Send + 'static, PostProcessType: Send + 'static>: Send + Sync + Sized {
     async fn fetch(&self, block_number: BlockNumber) -> FetchedType;
     async fn post_process(&self, data: FetchedType) -> anyhow::Result<PostProcessType>;
 

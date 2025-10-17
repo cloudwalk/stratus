@@ -6,18 +6,18 @@ use anyhow::bail;
 use async_trait::async_trait;
 
 use crate::eth::follower::importer::fetch_with_retry;
-use crate::eth::follower::importer::fetchers::FetcherWorker;
+use crate::eth::follower::importer::fetchers::DataFetcher;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::infra::BlockchainClient;
 
-pub struct ExecutionFetcherWorker {
+pub struct BlockWithReceiptsFetcher {
     pub chain: Arc<BlockchainClient>,
 }
 
 #[async_trait]
-impl FetcherWorker<(ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)> for ExecutionFetcherWorker {
+impl DataFetcher<(ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)> for BlockWithReceiptsFetcher {
     async fn fetch(&self, block_number: BlockNumber) -> (ExternalBlock, Vec<ExternalReceipt>) {
         let fetch_fn = |bn| {
             let chain = Arc::clone(&self.chain);

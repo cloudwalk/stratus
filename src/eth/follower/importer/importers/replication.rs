@@ -14,13 +14,13 @@ use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
-pub struct BlockSaverWorker {
+pub struct ReplicationWorker {
     pub miner: Arc<Miner>,
     pub kafka_connector: Option<KafkaConnector>,
 }
 
 #[async_trait]
-impl ImporterWorker<(Block, ExecutionChanges)> for BlockSaverWorker {
+impl ImporterWorker<(Block, ExecutionChanges)> for ReplicationWorker {
     async fn import(&self, (block, changes): (Block, ExecutionChanges)) -> anyhow::Result<()> {
         tracing::info!(block_number = %block.number(), "received block with changes");
 

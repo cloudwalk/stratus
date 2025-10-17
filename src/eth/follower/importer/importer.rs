@@ -12,13 +12,13 @@ use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::EXTERNAL_RPC_CURRENT_BLOCK;
 use crate::eth::follower::importer::ImporterMode;
 use crate::eth::follower::importer::LATEST_FETCHED_BLOCK_TIME;
-use crate::eth::follower::importer::fetchers::FetcherWorker;
-use crate::eth::follower::importer::fetchers::block_with_changes::BlockChangesFetcherWorker;
-use crate::eth::follower::importer::fetchers::block_with_receipts::ExecutionFetcherWorker;
+use crate::eth::follower::importer::fetchers::DataFetcher;
+use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
+use crate::eth::follower::importer::fetchers::block_with_receipts::BlockWithReceiptsFetcher;
 use crate::eth::follower::importer::importers::ImporterWorker;
-use crate::eth::follower::importer::importers::execution::BlockExecutorWorker;
+use crate::eth::follower::importer::importers::execution::ReexecutionWorker;
 use crate::eth::follower::importer::importers::fake_leader::FakeLeaderWorker;
-use crate::eth::follower::importer::importers::replication::BlockSaverWorker;
+use crate::eth::follower::importer::importers::replication::ReplicationWorker;
 use crate::eth::follower::importer::start_number_fetcher;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::Block;
@@ -33,23 +33,23 @@ use crate::infra::BlockchainClient;
 use crate::infra::kafka::KafkaConnector;
 use crate::utils::DropTimer;
 
-pub struct ImporterSupervisor<Fetcher: FetcherWorker<FT, PT>, Importer: ImporterWorker<PT>, FT: Send + 'static, PT: Send + 'static> {
+pub struct ImporterSupervisor<Fetcher: DataFetcher<FT, PT>, Importer: ImporterWorker<PT>, FT: Send + 'static, PT: Send + 'static> {
     fetcher: Fetcher,
     importer: Importer,
     _phantom: std::marker::PhantomData<(FT, PT)>,
 }
 
 type NormalFollower =
-    ImporterSupervisor<ExecutionFetcherWorker, BlockExecutorWorker, (ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)>;
+    ImporterSupervisor<BlockWithReceiptsFetcher, ReexecutionWorker, (ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)>;
 impl NormalFollower {
     fn new(executor: Arc<Executor>, miner: Arc<Miner>, chain: Arc<BlockchainClient>, kafka_connector: Option<KafkaConnector>) -> Self {
-        let importer = BlockExecutorWorker {
+        let importer = ReexecutionWorker {
             executor,
             miner,
             kafka_connector,
         };
 
-        let fetcher = ExecutionFetcherWorker { chain: Arc::clone(&chain) };
+        let fetcher = BlockWithReceiptsFetcher { chain: Arc::clone(&chain) };
 
         Self {
             fetcher,
@@ -59,12 +59,12 @@ impl NormalFollower {
     }
 }
 
-type FakeLeader = ImporterSupervisor<ExecutionFetcherWorker, FakeLeaderWorker, (ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)>;
+type FakeLeader = ImporterSupervisor<BlockWithReceiptsFetcher, FakeLeaderWorker, (ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)>;
 impl FakeLeader {
     fn new(executor: Arc<Executor>, miner: Arc<Miner>, chain: Arc<BlockchainClient>) -> Self {
         let importer = FakeLeaderWorker { executor, miner };
 
-        let fetcher = ExecutionFetcherWorker { chain: Arc::clone(&chain) };
+        let fetcher = BlockWithReceiptsFetcher { chain: Arc::clone(&chain) };
 
         Self {
             fetcher,
@@ -74,12 +74,12 @@ impl FakeLeader {
     }
 }
 
-type ReplicationFollower = ImporterSupervisor<BlockChangesFetcherWorker, BlockSaverWorker, (Block, BlockChangesRocksdb), (Block, ExecutionChanges)>;
+type ReplicationFollower = ImporterSupervisor<BlockWithChangesFetcher, ReplicationWorker, (Block, BlockChangesRocksdb), (Block, ExecutionChanges)>;
 impl ReplicationFollower {
     fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, chain: Arc<BlockchainClient>, kafka_connector: Option<KafkaConnector>) -> Self {
-        let importer = BlockSaverWorker { miner, kafka_connector };
+        let importer = ReplicationWorker { miner, kafka_connector };
 
-        let fetcher = BlockChangesFetcherWorker { chain, storage };
+        let fetcher = BlockWithChangesFetcher { chain, storage };
 
         Self {
             fetcher,
@@ -89,7 +89,7 @@ impl ReplicationFollower {
     }
 }
 
-impl<Fetcher: FetcherWorker<FT, PT> + 'static, Importer: ImporterWorker<PT> + 'static, FT: Send + 'static, PT: Send + 'static>
+impl<Fetcher: DataFetcher<FT, PT> + 'static, Importer: ImporterWorker<PT> + 'static, FT: Send + 'static, PT: Send + 'static>
     ImporterSupervisor<Fetcher, Importer, FT, PT>
 {
     async fn _run(self, resume_from: BlockNumber, sync_interval: Duration, chain: Arc<BlockchainClient>) -> anyhow::Result<()> {

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::eth::follower::importer::create_execution_changes;
 use crate::eth::follower::importer::fetch_with_retry;
-use crate::eth::follower::importer::fetchers::FetcherWorker;
+use crate::eth::follower::importer::fetchers::DataFetcher;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionChanges;
@@ -12,13 +12,13 @@ use crate::eth::storage::StratusStorage;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::infra::BlockchainClient;
 
-pub struct BlockChangesFetcherWorker {
+pub struct BlockWithChangesFetcher {
     pub chain: Arc<BlockchainClient>,
     pub storage: Arc<StratusStorage>,
 }
 
 #[async_trait]
-impl FetcherWorker<(Block, BlockChangesRocksdb), (Block, ExecutionChanges)> for BlockChangesFetcherWorker {
+impl DataFetcher<(Block, BlockChangesRocksdb), (Block, ExecutionChanges)> for BlockWithChangesFetcher {
     async fn fetch(&self, block_number: BlockNumber) -> (Block, BlockChangesRocksdb) {
         let fetch_fn = |bn| self.chain.fetch_block_with_changes(bn);
         fetch_with_retry(block_number, fetch_fn, "block and changes").await
