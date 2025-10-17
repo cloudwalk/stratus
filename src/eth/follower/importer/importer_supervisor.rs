@@ -93,7 +93,7 @@ impl ReplicationFollower {
 impl<Fetcher: DataFetcher<FT, PT> + 'static, Importer: ImporterWorker<PT> + 'static, FT: Send + 'static, PT: Send + 'static>
     ImporterSupervisor<Fetcher, Importer, FT, PT>
 {
-    async fn _run(self, resume_from: BlockNumber, sync_interval: Duration, chain: Arc<BlockchainClient>) -> anyhow::Result<()> {
+    async fn run(self, resume_from: BlockNumber, sync_interval: Duration, chain: Arc<BlockchainClient>) -> anyhow::Result<()> {
         let _timer = DropTimer::start("importer-online::run_importer_online");
 
         // Spawn common tasks: number fetcher
@@ -127,17 +127,17 @@ pub async fn start_importer(
     match importer_mode {
         ImporterMode::BlockWithChanges => {
             ReplicationFollower::new(storage, miner, Arc::clone(&chain), kafka_connector)
-                ._run(resume_from, sync_interval, chain)
+                .run(resume_from, sync_interval, chain)
                 .await?;
         }
         ImporterMode::ReexecutionFollower => {
             ReexecutionFollower::new(executor, miner, Arc::clone(&chain), kafka_connector)
-                ._run(resume_from, sync_interval, chain)
+                .run(resume_from, sync_interval, chain)
                 .await?;
         }
         ImporterMode::FakeLeader =>
             FakeLeader::new(executor, miner, Arc::clone(&chain))
-                ._run(resume_from, sync_interval, chain)
+                .run(resume_from, sync_interval, chain)
                 .await?,
     }
     Ok(())
