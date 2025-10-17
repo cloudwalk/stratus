@@ -96,6 +96,7 @@ jobs:
       - name: Run e2e tests
         run: ${{ inputs.justfile_env }} just run-test ${{ inputs.justfile_recipe }} ${{ inputs.justfile_args }}
         env:
+          CARGO_INCREMENTAL: 0
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error
           RELEASE: 0
