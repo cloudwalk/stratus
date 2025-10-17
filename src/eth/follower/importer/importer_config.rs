@@ -74,7 +74,7 @@ impl ImporterConfig {
                     if self.enable_block_changes_replication {
                         ImporterMode::BlockWithChanges
                     } else {
-                        ImporterMode::NormalFollower
+                        ImporterMode::ReexecutionFollower
                     },
                 )
                 .await,

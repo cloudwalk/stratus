@@ -33,15 +33,18 @@ use crate::infra::BlockchainClient;
 use crate::infra::kafka::KafkaConnector;
 use crate::utils::DropTimer;
 
+type ReexecutionFollower =
+    ImporterSupervisor<BlockWithReceiptsFetcher, ReexecutionWorker, (ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)>;
+type FakeLeader = ImporterSupervisor<BlockWithReceiptsFetcher, FakeLeaderWorker, (ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)>;
+type ReplicationFollower = ImporterSupervisor<BlockWithChangesFetcher, ReplicationWorker, (Block, BlockChangesRocksdb), (Block, ExecutionChanges)>;
+
 pub struct ImporterSupervisor<Fetcher: DataFetcher<FT, PT>, Importer: ImporterWorker<PT>, FT: Send + 'static, PT: Send + 'static> {
     fetcher: Fetcher,
     importer: Importer,
     _phantom: std::marker::PhantomData<(FT, PT)>,
 }
 
-type NormalFollower =
-    ImporterSupervisor<BlockWithReceiptsFetcher, ReexecutionWorker, (ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)>;
-impl NormalFollower {
+impl ReexecutionFollower {
     fn new(executor: Arc<Executor>, miner: Arc<Miner>, chain: Arc<BlockchainClient>, kafka_connector: Option<KafkaConnector>) -> Self {
         let importer = ReexecutionWorker {
             executor,
@@ -59,7 +62,6 @@ impl NormalFollower {
     }
 }
 
-type FakeLeader = ImporterSupervisor<BlockWithReceiptsFetcher, FakeLeaderWorker, (ExternalBlock, Vec<ExternalReceipt>), (ExternalBlock, Vec<ExternalReceipt>)>;
 impl FakeLeader {
     fn new(executor: Arc<Executor>, miner: Arc<Miner>, chain: Arc<BlockchainClient>) -> Self {
         let importer = FakeLeaderWorker { executor, miner };
@@ -74,7 +76,6 @@ impl FakeLeader {
     }
 }
 
-type ReplicationFollower = ImporterSupervisor<BlockWithChangesFetcher, ReplicationWorker, (Block, BlockChangesRocksdb), (Block, ExecutionChanges)>;
 impl ReplicationFollower {
     fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, chain: Arc<BlockchainClient>, kafka_connector: Option<KafkaConnector>) -> Self {
         let importer = ReplicationWorker { miner, kafka_connector };
@@ -129,15 +130,16 @@ pub async fn start_importer(
                 ._run(resume_from, sync_interval, chain)
                 .await?;
         }
-        ImporterMode::NormalFollower => {
-            NormalFollower::new(executor, miner, Arc::clone(&chain), kafka_connector)
+        ImporterMode::ReexecutionFollower => {
+            ReexecutionFollower::new(executor, miner, Arc::clone(&chain), kafka_connector)
                 ._run(resume_from, sync_interval, chain)
                 .await?;
         }
-        ImporterMode::FakeLeader =>
+        ImporterMode::FakeLeader => {
             FakeLeader::new(executor, miner, Arc::clone(&chain))
                 ._run(resume_from, sync_interval, chain)
-                .await?,
+                .await?
+        }
     }
     Ok(())
 }

@@ -38,7 +38,7 @@ use crate::log_and_err;
 #[derive(Clone, Copy)]
 pub enum ImporterMode {
     /// A normal follower imports a mined block.
-    NormalFollower,
+    ReexecutionFollower,
     /// Fake leader feches a block, re-executes its txs and then mines it's own block.
     FakeLeader,
     /// Fetch a block with pre-computed changes
