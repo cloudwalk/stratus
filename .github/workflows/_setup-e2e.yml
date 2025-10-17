@@ -57,14 +57,6 @@ jobs:
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
-      - name: Disk usage snapshot (pre-build)
-        run: |
-          df -h
-          du -m -d1 target 2>/dev/null | sort -nr | head -n 15 || true
-          du -m -d1 ~/.cargo 2>/dev/null | sort -nr | head -n 15 || true
-          du -m -d1 e2e/node_modules 2>/dev/null | sort -nr | head -n 15 || true
-          sudo du -m -d1 /var/lib/docker 2>/dev/null | sort -nr | head -n 15 || true
-
       - name: Set up Just
         uses: extractions/setup-just@v2
 

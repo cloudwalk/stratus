@@ -111,7 +111,6 @@ stratus-test *args="":
     fi
     echo "leader features: " $FEATURES
     cargo build --features $FEATURES
-    just disk-usage-snapshot "after stratus build"
     cargo run --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
 
@@ -147,7 +146,6 @@ rpc-downloader-test *args="":
     #!/bin/bash
     source <(just coverage-env)
     cargo build
-    just disk-usage-snapshot "after rpc-downloader build"
     cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
 
 # Bin: Import external RPC blocks from temporary storage to Stratus storage
@@ -158,7 +156,6 @@ importer-offline-test *args="":
     #!/bin/bash
     source <(just coverage-env)
     cargo build
-    just disk-usage-snapshot "after importer-offline build"
     cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
 
 # ------------------------------------------------------------------------------
@@ -577,32 +574,4 @@ coverage-env:
     CURRENT_RUSTFLAGS="${RUSTFLAGS:-}"
     if ! echo "$CURRENT_RUSTFLAGS" | grep -F -- "$COVERAGE_FLAGS" > /dev/null; then \
         cargo llvm-cov show-env --export-prefix 2>/dev/null | grep '^export '; \
-    fi
-
-disk-usage-snapshot label="":
-    #!/bin/bash
-    label="{{label}}"
-    if [ -n "$label" ]; then
-        echo "== Disk usage snapshot: $label =="
-    else
-        echo "== Disk usage snapshot =="
-    fi
-    df -h
-    log_top() {
-        local path="$1"
-        local depth="${2:-1}"
-        if [ -d "$path" ]; then
-            echo "-- ${path}"
-            du -m --max-depth="$depth" "$path" 2>/dev/null | sort -nr | head -n 10 | awk '{printf "%8s MB\t%s\n", $1, $2}'
-            echo
-        fi
-    }
-    log_top target 2 || true
-    log_top ~/.cargo 2 || true
-    log_top e2e/node_modules 1 || true
-    if command -v docker >/dev/null 2>&1; then
-        echo "-- docker system df"
-        docker system df || true
-        echo "-- docker system df -v (top entries)"
-        docker system df -v | head -n 40 || true
     fi
