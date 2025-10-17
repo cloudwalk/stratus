@@ -49,8 +49,8 @@ use crate::eth::codegen::CONTRACTS;
 use crate::eth::decode;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
-use crate::eth::follower::importer::OldImporter;
 use crate::eth::follower::importer::ImporterConfig;
+use crate::eth::follower::importer::ImporterConsensus;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
@@ -110,7 +110,7 @@ pub struct Server {
     pub storage: Arc<StratusStorage>,
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
-    pub importer: Arc<RwLock<Option<Arc<OldImporter>>>>,
+    pub importer: Arc<RwLock<Option<Arc<ImporterConsensus>>>>,
 
     // config
     pub app_config: StratusConfig,
@@ -242,11 +242,11 @@ impl Server {
         metrics::set_consensus_is_ready(if is_healthy { 1u64 } else { 0u64 });
     }
 
-    fn read_importer(&self) -> Option<Arc<OldImporter>> {
+    fn read_importer(&self) -> Option<Arc<ImporterConsensus>> {
         self.importer.read().as_ref().map(Arc::clone)
     }
 
-    pub fn set_importer(&self, importer: Option<Arc<OldImporter>>) {
+    pub fn set_importer(&self, importer: Option<Arc<ImporterConsensus>>) {
         *self.importer.write() = importer;
     }
 

@@ -129,6 +129,7 @@ sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 # Historic events processor
 indicatif = "=0.18.0"
 dashmap = "6.1.0"
+async-trait = "0.1.89"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies

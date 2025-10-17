@@ -19,7 +19,6 @@ use crate::alias::JsonValue;
 use crate::config;
 use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
-use crate::eth::follower::importer::OldImporter;
 use crate::eth::rpc::RpcContext;
 use crate::ext::not;
 use crate::ext::spawn_signal_handler;
@@ -116,7 +115,7 @@ pub static STRATUS_SHUTDOWN_SIGNAL: LazyLock<CancellationToken> = LazyLock::new(
 static IMPORTER_SHUTDOWN: AtomicBool = AtomicBool::new(true);
 
 /// A guard that is taken when importer is running.
-pub static IMPORTER_ONLINE_TASKS_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(OldImporter::TASKS_COUNT));
+pub static IMPORTER_ONLINE_TASKS_SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(crate::eth::follower::importer::TASKS_COUNT));
 
 /// Transaction should be accepted?
 static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -226,7 +225,9 @@ impl GlobalState {
     /// Waits till importer is done.
     pub async fn wait_for_importer_to_finish() {
         // 3 permits will be available when all 3 tasks are finished
-        let result = IMPORTER_ONLINE_TASKS_SEMAPHORE.acquire_many(OldImporter::TASKS_COUNT as u32).await;
+        let result = IMPORTER_ONLINE_TASKS_SEMAPHORE
+            .acquire_many(crate::eth::follower::importer::TASKS_COUNT as u32)
+            .await;
 
         if let Err(e) = result {
             tracing::error!(reason = ?e, "error waiting for importer to finish");
