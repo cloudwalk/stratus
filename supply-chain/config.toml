@@ -244,10 +244,6 @@ criteria = "safe-to-deploy"
 version = "2.0.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.atomic-waker]]
-version = "1.1.2"
-criteria = "safe-to-deploy"
-
 [[exemptions.aurora-engine-modexp]]
 version = "1.2.0"
 criteria = "safe-to-deploy"
@@ -944,22 +940,6 @@ criteria = "safe-to-deploy"
 version = "0.17.3+10.4.2"
 criteria = "safe-to-deploy"
 
-[[exemptions.libsecp256k1]]
-version = "0.7.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.libsecp256k1-core]]
-version = "0.3.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.libsecp256k1-gen-ecmult]]
-version = "0.3.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.libsecp256k1-gen-genmult]]
-version = "0.3.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.libsqlite3-sys]]
 version = "0.30.1"
 criteria = "safe-to-deploy"
@@ -990,10 +970,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.macro-string]]
 version = "0.1.4"
-criteria = "safe-to-deploy"
-
-[[exemptions.matchers]]
-version = "0.2.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.md-5]]
@@ -1042,10 +1018,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.ntapi]]
 version = "0.4.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.nu-ansi-term]]
-version = "0.50.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.num]]
@@ -1624,10 +1596,6 @@ criteria = "safe-to-deploy"
 version = "0.2.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.sha2]]
-version = "0.9.9"
-criteria = "safe-to-deploy"
-
 [[exemptions.sha3-asm]]
 version = "0.1.4"
 criteria = "safe-to-deploy"
@@ -1828,18 +1796,6 @@ criteria = "safe-to-deploy"
 version = "0.3.3"
 criteria = "safe-to-deploy"
 
-[[exemptions.tracing-attributes]]
-version = "0.1.30"
-criteria = "safe-to-deploy"
-
-[[exemptions.tracing-core]]
-version = "0.1.34"
-criteria = "safe-to-deploy"
-
-[[exemptions.tracing-log]]
-version = "0.2.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.tracing-opentelemetry]]
 version = "0.31.0"
 criteria = "safe-to-deploy"
@@ -2012,32 +1968,16 @@ criteria = "safe-to-deploy"
 version = "0.57.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.windows-core]]
-version = "0.61.2"
-criteria = "safe-to-deploy"
-
 [[exemptions.windows-implement]]
 version = "0.57.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.windows-implement]]
-version = "0.60.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.windows-interface]]
 version = "0.57.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.windows-interface]]
-version = "0.59.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.windows-link]]
 version = "0.1.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.windows-link]]
-version = "0.2.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.windows-registry]]
