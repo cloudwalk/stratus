@@ -626,57 +626,7 @@ impl RocksStorageState {
         Ok(())
     }
 
-    /// Populates the blocks_by_timestamp index for all existing blocks.
-    /// 
-    /// This migration should be run once after adding the timestamp index feature
-    /// to index all blocks that were saved before this feature was added.
-    /// 
-    /// # Arguments
-    /// * `batch_size` - Number of blocks to process per write batch (default: 10000)
-    /// 
-    /// # Returns
-    /// The number of blocks that were indexed
-    pub fn migrate_add_timestamp_index(&self, batch_size: usize) -> Result<usize> {
-        tracing::info!("starting migration to add timestamp index");
-        
-        let mut batch = WriteBatch::default();
-        let mut indexed_count = 0;
-        let mut batch_count = 0;
-        
-        // Iterate through all existing blocks
-        let iter = self.blocks_by_number.iter_start();
-        for result in iter {
-            let (block_number, block_value) = result?;
-            let block = block_value.into_inner();
-            
-            // Add timestamp index entry
-            let timestamp = block.header.timestamp;
-            self.blocks_by_timestamp.prepare_batch_insertion(
-                [(timestamp.into(), block_number.into())], 
-                &mut batch
-            )?;
-            
-            indexed_count += 1;
-            batch_count += 1;
-            
-            // Write batch when it reaches the specified size
-            if batch_count >= batch_size {
-                tracing::info!("writing batch of {} blocks to timestamp index", batch_count);
-                self.write_in_batch_for_multiple_cfs(batch)?;
-                batch = WriteBatch::default();
-                batch_count = 0;
-            }
-        }
-        
-        // Write any remaining items in the batch
-        if batch_count > 0 {
-            tracing::info!("writing final batch of {} blocks to timestamp index", batch_count);
-            self.write_in_batch_for_multiple_cfs(batch)?;
-        }
-        
-        tracing::info!("migration completed: indexed {} blocks by timestamp", indexed_count);
-        Ok(indexed_count)
-    }
+    
 
     pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>> {
         let Some(block_wo_changes) = self.read_block(selection)? else {
