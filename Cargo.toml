@@ -180,10 +180,12 @@ path = "src/bin/importer_offline.rs"
 [[bin]]
 name = "historic_events_processor"
 path = "src/bin/historic_events_processor.rs"
+required-features = ["tools"]
 
 [[bin]]
 name = "data_migration"
 path = "src/bin/data_migration.rs"
+required-features = ["tools"]
 
 # ------------------------------------------------------------------------------
 # Features
@@ -194,6 +196,9 @@ default = ["metrics", "tracing"]
 
 # Application is running in develoment mode.
 dev = []
+
+# Legacy binaries that are not part of the standard build.
+tools = []
 
 # Enable runtime metrics collection.
 metrics = ["dep:metrics-exporter-prometheus"]
