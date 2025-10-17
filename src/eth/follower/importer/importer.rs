@@ -135,11 +135,10 @@ pub async fn start_importer(
                 ._run(resume_from, sync_interval, chain)
                 .await?;
         }
-        ImporterMode::FakeLeader => {
+        ImporterMode::FakeLeader =>
             FakeLeader::new(executor, miner, Arc::clone(&chain))
                 ._run(resume_from, sync_interval, chain)
-                .await?
-        }
+                .await?,
     }
     Ok(())
 }
