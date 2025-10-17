@@ -57,6 +57,13 @@ user-id = 56903
 user-login = "robjtede"
 user-name = "Rob Ede"
 
+[[publisher.async-trait]]
+version = "0.1.89"
+when = "2025-08-14"
+user-id = 3618
+user-login = "dtolnay"
+user-name = "David Tolnay"
+
 [[publisher.bumpalo]]
 version = "3.19.0"
 when = "2025-06-24"
