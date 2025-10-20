@@ -124,6 +124,18 @@ who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "2.2.0 -> 2.3.0"
 
+[[audits.opentelemetry]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: adds Extractor::get_all default/tests, aligns trace/span id conversions and global tracer setter returns (); no unsafe."
+
+[[audits.opentelemetry_sdk]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: propagates parent remote flag, skips on_start for non-recording spans, restores async BatchSpanProcessor concurrency limits; no unsafe."
+
 [[audits.quick_cache]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -236,6 +248,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "3.21.0 -> 3.23.0"
 notes = "Mostly docs, tests and cicd."
+
+[[audits.tracing-opentelemetry]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.32.0"
+notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
 
 [[trusted.async-trait]]
 criteria = "safe-to-deploy"
