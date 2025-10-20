@@ -124,6 +124,48 @@ who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "2.2.0 -> 2.3.0"
 
+[[audits.opentelemetry]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: adds Extractor::get_all default/tests, aligns trace/span id conversions and global tracer setter returns (); no unsafe."
+
+[[audits.opentelemetry-http]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: implements Extractor::get_all, adds reqwest feature split and generic HyperClient transport; only new tests/docs, no unsafe."
+
+[[audits.opentelemetry-otlp]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: wire up HTTP compression features, align internal-logs usage, regen docs/tests; no unsafe code."
+
+[[audits.opentelemetry-proto]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: regen proto bindings incl profiles v1development, adds span flag propagation + serde helpers; codegen only, no unsafe."
+
+[[audits.opentelemetry_sdk]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: propagates parent remote flag, skips on_start for non-recording spans, restores async BatchSpanProcessor concurrency limits; no unsafe."
+
+[[audits.prost]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.14.1"
+notes = "Reviewed 0.13.5->0.14.1: Message trait no longer requires Debug, docs/features align with 0.14 release; unsafe encoding paths unchanged."
+
+[[audits.prost-derive]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.14.1"
+notes = "Reviewed 0.13.5->0.14.1: oneof merge logic uses single if-let path, docs/version bumps only; no unsafe changes."
+
 [[audits.quick_cache]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -236,6 +278,24 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "3.21.0 -> 3.23.0"
 notes = "Mostly docs, tests and cicd."
+
+[[audits.tonic]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.14.2"
+notes = "Reviewed 0.13.1->0.14.2: adds TLS handshake timeout/config tweaks, reorganizes feature gating (load-shed, tls-connect-info) and bumps deps; only metadata unsafe remains unchanged."
+
+[[audits.tonic-prost]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.14.2"
+notes = "Inspected 0.14.2: prost-based codec/encoder/decoder split from tonic, simple BufferSettings plumbing; crate contains no unsafe."
+
+[[audits.tracing-opentelemetry]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.32.0"
+notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
 
 [[trusted.async-trait]]
 criteria = "safe-to-deploy"
