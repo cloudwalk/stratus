@@ -18,6 +18,7 @@ import {
     deployTestContractBalances,
     deployTestContractBlockTimestamp,
     deployTestRevertReason,
+    fromHexTimestamp,
     prepareSignedTx,
     send,
     sendAndGetError,
@@ -30,7 +31,6 @@ import {
     sendReset,
     subscribeAndGetEvent,
     subscribeAndGetEventWithContract,
-    fromHexTimestamp,
     toHex,
     toPaddedHex,
 } from "../helpers/rpc";
