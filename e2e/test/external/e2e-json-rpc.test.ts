@@ -30,6 +30,7 @@ import {
     sendReset,
     subscribeAndGetEvent,
     subscribeAndGetEventWithContract,
+    fromHexTimestamp,
     toHex,
     toPaddedHex,
 } from "../helpers/rpc";
@@ -182,6 +183,16 @@ describe("JSON-RPC", () => {
 
                 // Compare receipt fields
                 expect(combinedReceipt).to.deep.equal(safeIndividualReceipt);
+            });
+        });
+        describe("stratus_getBlockByTimestamp", () => {
+            it("fetches block by timestamp", async () => {
+                await sendReset();
+                await sendEvmMine();
+                const block = await send("eth_getBlockByNumber", [0x1, false]);
+                const timestamp = fromHexTimestamp(block.timestamp);
+                const blockByTimestamp = await send("stratus_getBlockByTimestamp", [timestamp, false]);
+                expect(blockByTimestamp?.number).eq(block.number);
             });
         });
         it("eth_getUncleByBlockHashAndIndex", async function () {
