@@ -61,8 +61,10 @@ fn main() -> Result<()> {
         anyhow::bail!("Missing 'blocks_by_number' column family");
     };
     let Some(cf_blocks_by_timestamp) = db.cf_handle("blocks_by_timestamp") else {
-        anyhow::bail!("Missing 'blocks_by_timestamp' column family. \
-            Please run the Stratus node at least once to initialize the database with the required column families.");
+        anyhow::bail!(
+            "Missing 'blocks_by_timestamp' column family. \
+            Please run the Stratus node at least once to initialize the database with the required column families."
+        );
     };
 
     // Iterate and write in batches
