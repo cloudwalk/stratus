@@ -28,6 +28,10 @@ struct Args {
     /// Batch size for data migration (number of blocks per batch)
     #[clap(long, default_value = "10000")]
     batch_size: usize,
+
+    /// Optional starting block number (inclusive)
+    #[clap(long)]
+    start_block: Option<u64>,
 }
 
 fn main() -> Result<()> {
@@ -68,7 +72,25 @@ fn main() -> Result<()> {
 
     let mut ro = ReadOptions::default();
     ro.set_total_order_seek(true);
-    let mut iter = db.iterator_cf_opt(&cf_blocks_by_number, ro, IteratorMode::From(&[], Direction::Forward));
+
+    // If a start block is provided, seek the iterator from that block number
+    let mut start_key_bytes_opt: Option<Vec<u8>> = None;
+    if let Some(start_block) = args.start_block {
+        let start_block_u32: u32 = u32::try_from(start_block)
+            .context("--start-block value exceeds supported range (u32)")?;
+        let start_key_rocks = BlockNumberRocksdb::from(start_block_u32);
+        let key_bytes = SerdeCtx::serialize_with_context(&start_key_rocks)?;
+        tracing::info!("Starting from block {}", start_block_u32);
+        start_key_bytes_opt = Some(key_bytes);
+    }
+
+    let iter_mode = if let Some(ref key_bytes) = start_key_bytes_opt {
+        IteratorMode::From(key_bytes, Direction::Forward)
+    } else {
+        IteratorMode::From(&[], Direction::Forward)
+    };
+
+    let mut iter = db.iterator_cf_opt(&cf_blocks_by_number, ro, iter_mode);
 
     while let Some(Ok((key_bytes, value_bytes))) = iter.next() {
         // Decode components
