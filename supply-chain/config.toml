@@ -1088,18 +1088,6 @@ criteria = "safe-to-deploy"
 version = "0.30.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.opentelemetry-http]]
-version = "0.30.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.opentelemetry-otlp]]
-version = "0.30.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.opentelemetry-proto]]
-version = "0.30.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.opentelemetry_sdk]]
 version = "0.30.0"
 criteria = "safe-to-deploy"
@@ -1230,14 +1218,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.proptest]]
 version = "1.7.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.prost]]
-version = "0.13.5"
-criteria = "safe-to-deploy"
-
-[[exemptions.prost-derive]]
-version = "0.13.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.quanta]]
@@ -1770,10 +1750,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.toml_edit]]
 version = "0.22.27"
-criteria = "safe-to-deploy"
-
-[[exemptions.tonic]]
-version = "0.13.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.tower]]
