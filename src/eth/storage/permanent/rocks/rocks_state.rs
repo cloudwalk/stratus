@@ -626,8 +626,6 @@ impl RocksStorageState {
         Ok(())
     }
 
-    
-
     pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>> {
         let Some(block_wo_changes) = self.read_block(selection)? else {
             return Ok(None);

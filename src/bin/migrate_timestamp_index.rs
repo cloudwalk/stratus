@@ -1,8 +1,8 @@
 /// Binary to populate the blocks_by_timestamp index for existing blocks.
-/// 
+///
 /// This migration should be run once after deploying the timestamp index feature
 /// to index all blocks that were saved before this feature was added.
-/// 
+///
 /// Usage:
 ///   cargo run --bin migrate_timestamp_index -- --db-path ./data/rocksdb
 use std::time::Instant;
@@ -10,13 +10,18 @@ use std::time::Instant;
 use anyhow::Context;
 use anyhow::Result;
 use clap::Parser;
-use rocksdb::{IteratorMode, ReadOptions, Direction, WriteBatch};
+use rocksdb::Direction;
+use rocksdb::IteratorMode;
+use rocksdb::ReadOptions;
+use rocksdb::WriteBatch;
+use stratus::eth::storage::permanent::RocksCfCacheConfig;
+use stratus::eth::storage::permanent::rocks::SerializeDeserializeWithContext as SerdeCtx;
+use stratus::eth::storage::permanent::rocks::cf_versions::CfBlocksByHashValue;
+use stratus::eth::storage::permanent::rocks::cf_versions::CfBlocksByNumberValue;
 use stratus::eth::storage::permanent::rocks::rocks_db::create_or_open_db;
 use stratus::eth::storage::permanent::rocks::rocks_state::generate_cf_options_map;
-use stratus::eth::storage::permanent::RocksCfCacheConfig;
-use stratus::eth::storage::permanent::rocks::cf_versions::{CfBlocksByNumberValue, CfBlocksByHashValue};
-use stratus::eth::storage::permanent::rocks::types::{UnixTimeRocksdb, BlockNumberRocksdb};
-use stratus::eth::storage::permanent::rocks::SerializeDeserializeWithContext as SerdeCtx;
+use stratus::eth::storage::permanent::rocks::types::BlockNumberRocksdb;
+use stratus::eth::storage::permanent::rocks::types::UnixTimeRocksdb;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about = "Migrate existing blocks to add timestamp index")]
@@ -37,10 +42,7 @@ struct Args {
 fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
-        )
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")))
         .init();
 
     // Parse command line arguments
@@ -76,8 +78,7 @@ fn main() -> Result<()> {
     // If a start block is provided, seek the iterator from that block number
     let mut start_key_bytes_opt: Option<Vec<u8>> = None;
     if let Some(start_block) = args.start_block {
-        let start_block_u32: u32 = u32::try_from(start_block)
-            .context("--start-block value exceeds supported range (u32)")?;
+        let start_block_u32: u32 = u32::try_from(start_block).context("--start-block value exceeds supported range (u32)")?;
         let start_key_rocks = BlockNumberRocksdb::from(start_block_u32);
         let key_bytes = SerdeCtx::serialize_with_context(&start_key_rocks)?;
         tracing::info!("Starting from block {}", start_block_u32);
@@ -94,15 +95,13 @@ fn main() -> Result<()> {
 
     while let Some(Ok((key_bytes, value_bytes))) = iter.next() {
         // Decode components
-        let block_number: BlockNumberRocksdb = SerdeCtx::deserialize_with_context(&key_bytes)
-            .context("Failed to decode block number key")?;
-        let block_cf_value: CfBlocksByNumberValue = SerdeCtx::deserialize_with_context(&value_bytes)
-            .context("Failed to decode block value")?;
+        let block_number: BlockNumberRocksdb = SerdeCtx::deserialize_with_context(&key_bytes).context("Failed to decode block number key")?;
+        let block_cf_value: CfBlocksByNumberValue = SerdeCtx::deserialize_with_context(&value_bytes).context("Failed to decode block value")?;
         let block = block_cf_value.into_inner();
         let ts = block.header.timestamp; // UnixTimeRocksdb-compatible value
 
         // Prepare insertion into blocks_by_timestamp: key=UnixTimeRocksdb, value=CfBlocksByHashValue(BlockNumberRocksdb)
-        let ts_key: UnixTimeRocksdb = ts.into();
+        let ts_key: UnixTimeRocksdb = ts;
         let bn_val: CfBlocksByHashValue = block_number.into();
 
         let ts_key_bytes = SerdeCtx::serialize_with_context(&ts_key)?;
@@ -126,10 +125,7 @@ fn main() -> Result<()> {
 
     let duration = start_time.elapsed();
 
-    tracing::info!(
-        "Migration completed successfully in {:.2?}",
-        duration
-    );
+    tracing::info!("Migration completed successfully in {:.2?}", duration);
     tracing::info!("Total blocks indexed: {}", indexed_count);
 
     // Print performance stats
@@ -140,4 +136,3 @@ fn main() -> Result<()> {
 
     Ok(())
 }
-
