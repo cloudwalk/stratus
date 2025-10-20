@@ -49,8 +49,8 @@ use crate::eth::codegen::CONTRACTS;
 use crate::eth::decode;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
-use crate::eth::follower::importer::Importer;
 use crate::eth::follower::importer::ImporterConfig;
+use crate::eth::follower::importer::ImporterConsensus;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
@@ -110,7 +110,7 @@ pub struct Server {
     pub storage: Arc<StratusStorage>,
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
-    pub importer: Arc<RwLock<Option<Arc<Importer>>>>,
+    pub importer: Arc<RwLock<Option<Arc<ImporterConsensus>>>>,
 
     // config
     pub app_config: StratusConfig,
@@ -242,11 +242,11 @@ impl Server {
         metrics::set_consensus_is_ready(if is_healthy { 1u64 } else { 0u64 });
     }
 
-    fn read_importer(&self) -> Option<Arc<Importer>> {
+    fn read_importer(&self) -> Option<Arc<ImporterConsensus>> {
         self.importer.read().as_ref().map(Arc::clone)
     }
 
-    pub fn set_importer(&self, importer: Option<Arc<Importer>>) {
+    pub fn set_importer(&self, importer: Option<Arc<ImporterConsensus>>) {
         *self.importer.write() = importer;
     }
 
@@ -1288,7 +1288,8 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
         filter = field::Empty,
         filter_from = field::Empty,
         filter_to = field::Empty,
-        filter_range = field::Empty
+        filter_range = field::Empty,
+        filter_event = field::Empty
     )
     .entered();
 
@@ -1307,14 +1308,17 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     };
     let blocks_in_range = filter.from_block.count_to(to_block);
 
+    let event_name = codegen::event_names_from_filter(&filter);
+
     // track
     Span::with(|s| {
         s.rec_str("filter", &to_json_string(&filter));
         s.rec_str("filter_from", &filter.from_block);
         s.rec_str("filter_to", &to_block);
         s.rec_str("filter_range", &blocks_in_range);
+        s.rec_str("filter_event", &event_name);
     });
-    tracing::info!(?filter, "reading logs");
+    tracing::info!(?filter, filter_event = %event_name, "reading logs");
 
     // check range
     if blocks_in_range > MAX_BLOCK_RANGE {
@@ -1410,7 +1414,7 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
 async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>, ext: Extensions) -> impl IntoSubscriptionCloseResponse {
     // `middleware_enter` created to be used as a parent by `method_span`
     let middleware_enter = ext.enter_middleware_span();
-    let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty);
+    let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty, subscription_event = field::Empty);
     drop(middleware_enter);
 
     async move {
@@ -1445,8 +1449,13 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
             }
 
             "logs" => {
-                let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
-                let filter = filter.parse(&ctx.server.storage)?;
+                let (_, filter_input) = next_rpc_param_or_default::<LogFilterInput>(params)?;
+                let filter = filter_input.parse(&ctx.server.storage)?;
+
+                let event_name = codegen::event_names_from_filter(&filter).to_string();
+                Span::with(|s| s.rec_str("subscription_event", &event_name));
+                tracing::info!(subscription_event = %event_name, "subscribing to logs with event filter");
+
                 ctx.subs.add_logs_subscription(client, filter, pending.accept().await?).await;
             }
 

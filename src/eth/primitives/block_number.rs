@@ -46,8 +46,8 @@ impl BlockNumber {
     /// Count how many blocks there is between itself and the othe block.
     ///
     /// Assumes that self is the lower-end of the range.
-    pub fn count_to(self, higher_end: BlockNumber) -> u64 {
-        if higher_end >= self { higher_end.as_u64() - self.as_u64() + 1 } else { 0 }
+    pub fn count_to(self, higher_end: impl Into<u64>) -> u64 {
+        higher_end.into().saturating_sub(self.as_u64()) + 1
     }
 
     pub fn as_i64(&self) -> i64 {
@@ -158,6 +158,12 @@ impl FromStr for BlockNumber {
 // -----------------------------------------------------------------------------
 // Conversions: Self -> Other
 // -----------------------------------------------------------------------------
+impl From<BlockNumber> for u64 {
+    fn from(block_number: BlockNumber) -> Self {
+        block_number.as_u64()
+    }
+}
+
 impl From<BlockNumber> for U64 {
     fn from(block_number: BlockNumber) -> Self {
         block_number.0
