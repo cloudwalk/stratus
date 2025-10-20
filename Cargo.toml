@@ -80,7 +80,7 @@ alloy-rpc-types-trace = "=1.0.38"
 alloy-rpc-types-eth = "=1.0.38"
 alloy-consensus = { version = "=1.0.38", features = ["k256"] }
 alloy-primitives = { version = "=1.4.1", features = ["rand"] }
-alloy-eips = "=1.0.38"
+alloy-eips = "=1.0.41"
 
 # network
 jsonrpsee = { version = "=0.26.0", features = ["server", "client"] }
