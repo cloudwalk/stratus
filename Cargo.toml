@@ -38,7 +38,7 @@ static_assertions = "=1.1.0"
 strum = { version = "=0.27.2", features = ["derive"] }
 quick_cache = "=0.6.17"
 sugars = "=3.0.1"
-thiserror = "=2.0.16"
+thiserror = "=2.0.17"
 uuid = { version = "=1.18.1", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
 libc = "=0.2.175"
