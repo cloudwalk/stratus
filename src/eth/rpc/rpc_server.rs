@@ -49,8 +49,8 @@ use crate::eth::codegen::CONTRACTS;
 use crate::eth::decode;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
-use crate::eth::follower::importer::Importer;
 use crate::eth::follower::importer::ImporterConfig;
+use crate::eth::follower::importer::ImporterConsensus;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
@@ -110,7 +110,7 @@ pub struct Server {
     pub storage: Arc<StratusStorage>,
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
-    pub importer: Arc<RwLock<Option<Arc<Importer>>>>,
+    pub importer: Arc<RwLock<Option<Arc<ImporterConsensus>>>>,
 
     // config
     pub app_config: StratusConfig,
@@ -242,11 +242,11 @@ impl Server {
         metrics::set_consensus_is_ready(if is_healthy { 1u64 } else { 0u64 });
     }
 
-    fn read_importer(&self) -> Option<Arc<Importer>> {
+    fn read_importer(&self) -> Option<Arc<ImporterConsensus>> {
         self.importer.read().as_ref().map(Arc::clone)
     }
 
-    pub fn set_importer(&self, importer: Option<Arc<Importer>>) {
+    pub fn set_importer(&self, importer: Option<Arc<ImporterConsensus>>) {
         *self.importer.write() = importer;
     }
 
@@ -332,6 +332,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
     module.register_blocking_method("eth_getBlockByNumber", eth_get_block_by_number)?;
     module.register_blocking_method("eth_getBlockByHash", eth_get_block_by_hash)?;
+    module.register_blocking_method("stratus_getBlockByTimestamp", stratus_get_block_by_timestamp)?;
     module.register_method("eth_getUncleByBlockHashAndIndex", eth_get_uncle_by_block_hash_and_index)?;
 
     // transactions
@@ -949,6 +950,48 @@ fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Exte
     Ok(JsonValue::Null)
 }
 
+fn stratus_get_block_by_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    use crate::eth::primitives::UnixTime;
+
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!(
+        "rpc::stratus_getBlockByTimestamp",
+        timestamp = field::Empty,
+        block_number = field::Empty,
+        found = field::Empty
+    )
+    .entered();
+
+    let (params, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
+    let (_, full_transactions) = next_rpc_param::<bool>(params)?;
+
+    Span::with(|s| s.rec_str("timestamp", &timestamp));
+    tracing::info!(%timestamp, %full_transactions, "reading block by timestamp");
+
+    let filter = BlockFilter::Timestamp(timestamp);
+    let block = ctx.server.storage.read_block(filter)?;
+    Span::with(|s| {
+        s.record("found", block.is_some());
+        if let Some(ref block) = block {
+            s.rec_str("block_number", &block.number());
+        }
+    });
+    match (block, full_transactions) {
+        (Some(block), true) => {
+            tracing::info!(%timestamp, "block with full transactions found");
+            Ok(block.to_json_rpc_with_full_transactions())
+        }
+        (Some(block), false) => {
+            tracing::info!(%timestamp, "block with only hashes found");
+            Ok(block.to_json_rpc_with_transactions_hashes())
+        }
+        (None, _) => {
+            tracing::info!(%timestamp, "block not found");
+            Ok(JsonValue::Null)
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Transaction
 // -----------------------------------------------------------------------------
@@ -1245,7 +1288,8 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
         filter = field::Empty,
         filter_from = field::Empty,
         filter_to = field::Empty,
-        filter_range = field::Empty
+        filter_range = field::Empty,
+        filter_event = field::Empty
     )
     .entered();
 
@@ -1264,14 +1308,17 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     };
     let blocks_in_range = filter.from_block.count_to(to_block);
 
+    let event_name = codegen::event_names_from_filter(&filter);
+
     // track
     Span::with(|s| {
         s.rec_str("filter", &to_json_string(&filter));
         s.rec_str("filter_from", &filter.from_block);
         s.rec_str("filter_to", &to_block);
         s.rec_str("filter_range", &blocks_in_range);
+        s.rec_str("filter_event", &event_name);
     });
-    tracing::info!(?filter, "reading logs");
+    tracing::info!(?filter, filter_event = %event_name, "reading logs");
 
     // check range
     if blocks_in_range > MAX_BLOCK_RANGE {
@@ -1367,7 +1414,7 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
 async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>, ext: Extensions) -> impl IntoSubscriptionCloseResponse {
     // `middleware_enter` created to be used as a parent by `method_span`
     let middleware_enter = ext.enter_middleware_span();
-    let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty);
+    let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty, subscription_event = field::Empty);
     drop(middleware_enter);
 
     async move {
@@ -1402,8 +1449,13 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
             }
 
             "logs" => {
-                let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
-                let filter = filter.parse(&ctx.server.storage)?;
+                let (_, filter_input) = next_rpc_param_or_default::<LogFilterInput>(params)?;
+                let filter = filter_input.parse(&ctx.server.storage)?;
+
+                let event_name = codegen::event_names_from_filter(&filter).to_string();
+                Span::with(|s| s.rec_str("subscription_event", &event_name));
+                tracing::info!(subscription_event = %event_name, "subscribing to logs with event filter");
+
                 ctx.subs.add_logs_subscription(client, filter, pending.accept().await?).await;
             }
 
