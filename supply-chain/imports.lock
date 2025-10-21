@@ -149,8 +149,8 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-core]]
-version = "0.43.0"
-when = "2025-09-24"
+version = "0.45.0"
+when = "2025-10-08"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
@@ -163,8 +163,8 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-tracing]]
-version = "0.43.0"
-when = "2025-09-24"
+version = "0.45.0"
+when = "2025-10-08"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
@@ -177,8 +177,8 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-types]]
-version = "0.43.0"
-when = "2025-09-24"
+version = "0.45.0"
+when = "2025-10-08"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
