@@ -38,6 +38,7 @@ use super::types::BlockNumberRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
+use super::types::UnixTimeRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -91,6 +92,7 @@ pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap
         "transactions" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.transactions)),
         "blocks_by_number" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_number)),
         "blocks_by_hash" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_hash)),
+        "blocks_by_timestamp" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_timestamp)),
         "block_changes" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.block_changes)),
     }
 }
@@ -124,6 +126,7 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<'static, HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<'static, BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<'static, HashRocksdb, CfBlocksByHashValue>,
+    blocks_by_timestamp: RocksCfRef<'static, UnixTimeRocksdb, CfBlocksByHashValue>,
     block_changes: RocksCfRef<'static, BlockNumberRocksdb, CfBlockChangesValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "rocks_metrics")]
@@ -163,6 +166,7 @@ impl RocksStorageState {
             transactions: new_cf_ref(db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(db, "blocks_by_hash", &cf_options_map)?,
+            blocks_by_timestamp: new_cf_ref(db, "blocks_by_timestamp", &cf_options_map)?,
             block_changes: new_cf_ref(db, "block_changes", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
@@ -207,6 +211,7 @@ impl RocksStorageState {
         self.transactions.clear()?;
         self.blocks_by_number.clear()?;
         self.blocks_by_hash.clear()?;
+        self.blocks_by_timestamp.clear()?;
         Ok(())
     }
 
@@ -407,6 +412,12 @@ impl RocksStorageState {
                 } else {
                     Ok(None)
                 },
+            BlockFilter::Timestamp(timestamp) =>
+                if let Some(block_number) = self.blocks_by_timestamp.get(&timestamp.into())? {
+                    self.blocks_by_number.get(&block_number)
+                } else {
+                    Ok(None)
+                },
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
@@ -446,12 +457,16 @@ impl RocksStorageState {
 
         let number = block.number();
         let block_hash = block.hash();
+        let timestamp = block.header.timestamp;
 
         let block_by_number = (number.into(), block.into());
         self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
+
+        let block_by_timestamp = (timestamp.into(), number.into());
+        self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], &mut batch)?;
 
         self.prepare_batch_with_execution_changes(account_changes, number, &mut batch)?;
 
@@ -490,12 +505,16 @@ impl RocksStorageState {
 
         let number = block.number();
         let block_hash = block.hash();
+        let timestamp = block.header.timestamp;
 
         let block_by_number = (number.into(), block.into());
         self.blocks_by_number.prepare_batch_insertion([block_by_number], batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], batch)?;
+
+        let block_by_timestamp = (timestamp.into(), number.into());
+        self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], batch)?;
 
         self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
 
@@ -603,6 +622,7 @@ impl RocksStorageState {
         self.transactions.clear().context("when clearing transactions")?;
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
+        self.blocks_by_timestamp.clear().context("when clearing blocks_by_timestamp")?;
         Ok(())
     }
 
@@ -676,6 +696,7 @@ impl RocksStorageState {
         self.accounts_history.export_metrics();
         self.blocks_by_hash.export_metrics();
         self.blocks_by_number.export_metrics();
+        self.blocks_by_timestamp.export_metrics();
         self.transactions.export_metrics();
         Ok(())
     }

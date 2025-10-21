@@ -332,6 +332,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
     module.register_blocking_method("eth_getBlockByNumber", eth_get_block_by_number)?;
     module.register_blocking_method("eth_getBlockByHash", eth_get_block_by_hash)?;
+    module.register_blocking_method("stratus_getBlockByTimestamp", stratus_get_block_by_timestamp)?;
     module.register_method("eth_getUncleByBlockHashAndIndex", eth_get_uncle_by_block_hash_and_index)?;
 
     // transactions
@@ -947,6 +948,48 @@ fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcC
 
 fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     Ok(JsonValue::Null)
+}
+
+fn stratus_get_block_by_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    use crate::eth::primitives::UnixTime;
+
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!(
+        "rpc::stratus_getBlockByTimestamp",
+        timestamp = field::Empty,
+        block_number = field::Empty,
+        found = field::Empty
+    )
+    .entered();
+
+    let (params, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
+    let (_, full_transactions) = next_rpc_param::<bool>(params)?;
+
+    Span::with(|s| s.rec_str("timestamp", &timestamp));
+    tracing::info!(%timestamp, %full_transactions, "reading block by timestamp");
+
+    let filter = BlockFilter::Timestamp(timestamp);
+    let block = ctx.server.storage.read_block(filter)?;
+    Span::with(|s| {
+        s.record("found", block.is_some());
+        if let Some(ref block) = block {
+            s.rec_str("block_number", &block.number());
+        }
+    });
+    match (block, full_transactions) {
+        (Some(block), true) => {
+            tracing::info!(%timestamp, "block with full transactions found");
+            Ok(block.to_json_rpc_with_full_transactions())
+        }
+        (Some(block), false) => {
+            tracing::info!(%timestamp, "block with only hashes found");
+            Ok(block.to_json_rpc_with_transactions_hashes())
+        }
+        (None, _) => {
+            tracing::info!(%timestamp, "block not found");
+            Ok(JsonValue::Null)
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
