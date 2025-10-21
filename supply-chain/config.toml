@@ -1084,14 +1084,6 @@ criteria = "safe-to-deploy"
 version = "0.9.109"
 criteria = "safe-to-deploy"
 
-[[exemptions.opentelemetry]]
-version = "0.30.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.opentelemetry_sdk]]
-version = "0.30.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.os_info]]
 version = "3.12.0"
 criteria = "safe-to-deploy"
@@ -1698,14 +1690,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.tempfile]]
 version = "3.21.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.thiserror]]
-version = "2.0.16"
-criteria = "safe-to-deploy"
-
-[[exemptions.thiserror-impl]]
-version = "2.0.16"
 criteria = "safe-to-deploy"
 
 [[exemptions.threadpool]]
