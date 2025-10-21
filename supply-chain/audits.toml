@@ -183,6 +183,22 @@ Reviewed quick_cache 0.6.17.
 - Risks to note: ahash is non-cryptographic; ensure keys aren’t used for security-sensitive hashing.
 """
 
+[[audits.quick_cache]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.6.17 -> 0.6.18"
+notes = """
+- Scope: Small patch (7 files, +113/−8).
+- Unsafe: None new introduced; only existing trivially verifiable usages remain.
+- Network or file I/O: None present.
+- Build scripts or proc-macros: None (no build.rs, no proc-macro crate).
+- Dependencies: No new external crates; dependency graph unchanged.
+- License and metadata: Unchanged.
+- Behavior: Internal cache logic and API only; no new external effects or concurrency primitives introduced.
+
+Assessment: Low-risk patch, implementation consistent with prior vetted version. Safe to deploy.
+"""
+
 [[audits.revm]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
