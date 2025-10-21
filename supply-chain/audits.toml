@@ -24,6 +24,23 @@ criteria = "safe-to-deploy"
 delta = "1.0.30 -> 1.0.38"
 notes = "Reviewed 1.0.30->1.0.38: new constants + helpers for blob params, no unsafe changes."
 
+[[audits.alloy-eips]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.41"
+notes = """
+- Scope: Small patch (4 files, +105/−10). No structural or behavioral changes beyond minor maintenance.
+- Dependencies: Only internal bump of alloy-serde 1.0.38 → 1.0.41. No new external crates or feature changes.
+- Unsafe: None present.
+- Network or file I/O: None present.
+- Build scripts or proc-macros: None (no build.rs, no proc-macro crate).
+- License and metadata: Unchanged.
+- Code behavior: Pure data/type logic (EIP constants, helpers). No new system calls, I/O, or unsafe paths.
+- Feature posture: Still supports no_std; safe optional serde/kzg/ssz features.
+
+Assessment: Low risk, patch-level release consistent with previous vetted version. Safe to deploy
+"""
+
 [[audits.alloy-json-abi]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
