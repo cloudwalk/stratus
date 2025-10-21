@@ -121,11 +121,12 @@ impl TracingConfig {
             }
         };
 
-        // configure sentry layer
         let sentry_layer = match &sentry_config {
             Some(sentry_config) => {
                 println!("tracing registry: enabling sentry exporter | url={}", sentry_config.sentry_url);
-                let layer = sentry_tracing::layer().with_filter(EnvFilter::from_default_env());
+                let layer = sentry_tracing::layer()
+                    .event_filter(SentryConfig::sentry_event_filter)
+                    .with_filter(EnvFilter::from_default_env());
                 Some(layer)
             }
             None => {
