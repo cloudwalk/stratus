@@ -8,7 +8,6 @@ pub fn sentry_event_filter(metadata: &tracing::Metadata) -> sentry_tracing::Even
 
     match *metadata.level() {
         Level::ERROR => EventFilter::Event,
-        Level::WARN => EventFilter::Breadcrumb,
         _ => EventFilter::Ignore,
     }
 }
