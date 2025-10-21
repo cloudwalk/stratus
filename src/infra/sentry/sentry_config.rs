@@ -33,16 +33,4 @@ impl SentryConfig {
 
         Ok(guard)
     }
-
-
-    pub fn sentry_event_filter(metadata: &tracing::Metadata) -> sentry_tracing::EventFilter {
-        use sentry_tracing::EventFilter;
-        use tracing::Level;
-
-        match *metadata.level() {
-            Level::ERROR => EventFilter::Event,
-            Level::WARN => EventFilter::Breadcrumb,
-            _ => EventFilter::Ignore,
-        }
-    }
 }
