@@ -11,3 +11,7 @@ pub fn sentry_event_filter(metadata: &tracing::Metadata) -> sentry_tracing::Even
         _ => EventFilter::Ignore,
     }
 }
+
+pub fn sentry_span_filter(metadata: &tracing::Metadata) -> bool {
+    matches!(*metadata.level(), tracing::Level::ERROR)
+}
