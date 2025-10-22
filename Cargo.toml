@@ -106,8 +106,8 @@ opentelemetry-otlp = { version = "=0.31.0", features = [
     "tls-roots",
     "grpc-tonic",
 ] }
-sentry = "=0.45.0"
-sentry-tracing = "=0.45.0"
+sentry = "=0.45.0" # Should match sentry-tracing version
+sentry-tracing = "=0.45.0" # Should match sentry version
 tracing = { version = "=0.1.41", features = ["attributes"] }
 tracing-opentelemetry = "=0.32.0"
 tracing-subscriber = { version = "=0.3.20", features = ["env-filter", "json"] }
