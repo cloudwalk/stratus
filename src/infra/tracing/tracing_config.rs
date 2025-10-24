@@ -23,6 +23,7 @@ use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::trace::Tracer as SdkTracer;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
+use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -121,11 +122,14 @@ impl TracingConfig {
             }
         };
 
-        // configure sentry layer
         let sentry_layer = match &sentry_config {
             Some(sentry_config) => {
                 println!("tracing registry: enabling sentry exporter | url={}", sentry_config.sentry_url);
-                let layer = sentry_tracing::layer().with_filter(EnvFilter::from_default_env());
+                let layer = sentry_tracing::layer()
+                    .event_filter(crate::infra::sentry::sentry_event_filter)
+                    .span_filter(crate::infra::sentry::sentry_span_filter)
+                    .with_filter(LevelFilter::ERROR)
+                    .with_filter(EnvFilter::from_default_env());
                 Some(layer)
             }
             None => {
