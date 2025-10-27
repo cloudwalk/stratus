@@ -309,6 +309,10 @@ pub struct ImporterOfflineConfig {
     #[arg(long = "block-saver-queue-size", env = "BLOCK_SAVER_QUEUE_SIZE", default_value = "10")]
     pub block_saver_queue_size: usize,
 
+    /// When enabled, importer attempts to fix execution mismatches by retrying with alternate signer strategies.
+    #[arg(long = "try-fix-mismatch", env = "TRY_FIX_MISMATCH", default_value = "false")]
+    pub try_fix_mismatch: bool,
+
     #[clap(flatten)]
     pub executor: ExecutorConfig,
 

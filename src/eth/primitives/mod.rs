@@ -102,6 +102,7 @@ pub use stratus_error::TransactionError;
 pub use stratus_error::UnexpectedError;
 pub use transaction_execution::TransactionExecution;
 pub use transaction_input::ExecutionInfo;
+pub use transaction_input::ExternalTransactionSignerStrategy;
 pub use transaction_input::Signature;
 pub use transaction_input::TransactionInfo;
 pub use transaction_input::TransactionInput;

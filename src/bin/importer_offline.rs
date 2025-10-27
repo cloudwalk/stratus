@@ -21,6 +21,8 @@ use stratus::GlobalServices;
 use stratus::GlobalState;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
+use stratus::eth::executor::ExternalBlockExecutionParams;
+use stratus::eth::executor::ExternalTxSignerStrategy;
 use stratus::eth::external_rpc::ExternalBlockWithReceipts;
 use stratus::eth::external_rpc::ExternalRpc;
 use stratus::eth::external_rpc::PostgresExternalRpc;
@@ -113,8 +115,9 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     let miner_clone = Arc::clone(&miner);
     let batch_size = config.block_saver_batch_size;
+    let try_fix_mismatch = config.try_fix_mismatch;
     spawn_thread("block-executor", move || {
-        if let Err(e) = run_external_block_executor(executor, miner_clone, fetch_to_execute_rx, execute_to_save_tx, batch_size) {
+        if let Err(e) = run_external_block_executor(executor, miner_clone, fetch_to_execute_rx, execute_to_save_tx, batch_size, try_fix_mismatch) {
             tracing::error!(reason = ?e, "'block-executor' task failed");
         }
     });
@@ -194,6 +197,7 @@ fn run_external_block_executor(
     mut from_fetcher_rx: async_mpsc::Receiver<BlocksToExecute>,
     to_saver_tx: mpsc::SyncSender<BlocksToSave>,
     batch_size: usize,
+    try_fix_mismatch: bool,
 ) -> anyhow::Result<()> {
     const TASK_NAME: &str = "run_external_block_executor";
     let _timer = DropTimer::start("importer-offline::run_external_block_executor");
@@ -238,8 +242,69 @@ fn run_external_block_executor(
                     return Ok(());
                 }
 
-                executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
-                let mined_block = miner.mine_external(block)?;
+                let original_block = block.clone();
+                let original_receipts = receipts.clone();
+
+                let strategies: &[ExternalTxSignerStrategy] = if try_fix_mismatch {
+                    &[
+                        ExternalTxSignerStrategy::Recover,
+                        ExternalTxSignerStrategy::RecoverWithFlippedV,
+                        ExternalTxSignerStrategy::ReceiptFrom,
+                    ]
+                } else {
+                    &[ExternalTxSignerStrategy::Recover]
+                };
+
+                let execute_attempt = |strategy: ExternalTxSignerStrategy| -> anyhow::Result<(Block, ExecutionChanges)> {
+                    executor.execute_external_block_with_params(
+                        original_block.clone(),
+                        ExternalReceipts::from(original_receipts.clone()),
+                        ExternalBlockExecutionParams::new(strategy),
+                    )?;
+                    miner.mine_external(original_block.clone())
+                };
+
+                let mut last_error: Option<anyhow::Error> = None;
+                let mut mined: Option<(Block, ExecutionChanges)> = None;
+
+                for strategy in strategies.iter().copied() {
+                    if try_fix_mismatch && strategy != ExternalTxSignerStrategy::Recover {
+                        tracing::info!(
+                            parent: None,
+                            %block_start,
+                            %block_end,
+                            ?strategy,
+                            "retrying external block execution with alternate signer strategy"
+                        );
+                    }
+
+                    match execute_attempt(strategy) {
+                        Ok(result) => {
+                            if try_fix_mismatch && strategy != ExternalTxSignerStrategy::Recover {
+                                tracing::info!(parent: None, %block_start, %block_end, ?strategy, "resolved external block mismatch with alternate signer strategy");
+                            }
+                            mined = Some(result);
+                            break;
+                        }
+                        Err(err) => {
+                            let is_receipt_fallback = strategy == ExternalTxSignerStrategy::ReceiptFrom;
+                            if try_fix_mismatch && !is_receipt_fallback && is_mismatch_error(&err) {
+                                tracing::warn!(parent: None, %block_start, %block_end, ?strategy, "external block mismatch detected, retrying with alternate signer strategy");
+                                last_error = Some(err);
+                                continue;
+                            }
+                            return Err(err);
+                        }
+                    }
+                }
+
+                let Some(mined_block) = mined else {
+                    match last_error {
+                        Some(err) => return Err(err),
+                        None => return log_and_err!(GlobalState::shutdown_from(TASK_NAME, "failed to execute external block without specific error")),
+                    }
+                };
+
                 executed_batch.push(mined_block);
             }
 
@@ -334,4 +399,8 @@ async fn block_number_to_stop(rpc_storage: &Arc<PostgresExternalRpc>) -> anyhow:
         Ok(None) => Ok(BlockNumber::ZERO),
         Err(e) => Err(e),
     }
+}
+
+fn is_mismatch_error(err: &anyhow::Error) -> bool {
+    err.chain().any(|source| source.to_string().contains("mismatching block info"))
 }

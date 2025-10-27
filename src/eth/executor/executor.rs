@@ -24,6 +24,7 @@ use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::miner::Miner;
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
@@ -33,6 +34,7 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::eth::primitives::ExternalTransaction;
+use crate::eth::primitives::ExternalTransactionSignerStrategy;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::RpcError;
@@ -279,6 +281,32 @@ pub struct Executor {
     storage: Arc<StratusStorage>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExternalTxSignerStrategy {
+    Recover,
+    RecoverWithFlippedV,
+    ReceiptFrom,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ExternalBlockExecutionParams {
+    pub signer_strategy: ExternalTxSignerStrategy,
+}
+
+impl ExternalBlockExecutionParams {
+    pub const fn new(signer_strategy: ExternalTxSignerStrategy) -> Self {
+        Self { signer_strategy }
+    }
+}
+
+impl Default for ExternalBlockExecutionParams {
+    fn default() -> Self {
+        Self {
+            signer_strategy: ExternalTxSignerStrategy::Recover,
+        }
+    }
+}
+
 impl Executor {
     pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating executor");
@@ -298,7 +326,16 @@ impl Executor {
     /// Reexecutes an external block locally and imports it to the temporary storage.
     ///
     /// Returns the remaining receipts that were not consumed by the execution.
-    pub fn execute_external_block(&self, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<()> {
+    pub fn execute_external_block(&self, block: ExternalBlock, receipts: ExternalReceipts) -> anyhow::Result<()> {
+        self.execute_external_block_with_params(block, receipts, ExternalBlockExecutionParams::default())
+    }
+
+    pub fn execute_external_block_with_params(
+        &self,
+        mut block: ExternalBlock,
+        mut receipts: ExternalReceipts,
+        params: ExternalBlockExecutionParams,
+    ) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), EvmExecutionMetrics::default());
@@ -322,6 +359,7 @@ impl Executor {
                 receipt,
                 block_number,
                 block_timestamp,
+                params.signer_strategy,
                 #[cfg(feature = "metrics")]
                 &mut block_metrics,
             )?;
@@ -348,6 +386,7 @@ impl Executor {
         receipt: ExternalReceipt,
         block_number: BlockNumber,
         block_timestamp: UnixTime,
+        signer_strategy: ExternalTxSignerStrategy,
         #[cfg(feature = "metrics")] block_metrics: &mut EvmExecutionMetrics,
     ) -> anyhow::Result<()> {
         // track
@@ -362,7 +401,13 @@ impl Executor {
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
         tracing::debug!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
-        let tx_input: TransactionInput = tx.try_into()?;
+        let signer_override = match signer_strategy {
+            ExternalTxSignerStrategy::Recover => ExternalTransactionSignerStrategy::Recover,
+            ExternalTxSignerStrategy::RecoverWithFlippedV => ExternalTransactionSignerStrategy::RecoverWithFlippedV,
+            ExternalTxSignerStrategy::ReceiptFrom => ExternalTransactionSignerStrategy::Receipt(Address::from(receipt.0.from)),
+        };
+
+        let tx_input: TransactionInput = TransactionInput::try_from_external_transaction_with_strategy(tx, signer_override)?;
         let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &self.storage.read_pending_block_header().0);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
