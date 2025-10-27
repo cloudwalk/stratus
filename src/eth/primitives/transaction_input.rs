@@ -15,6 +15,8 @@ use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
+use anyhow::anyhow;
+use anyhow::bail;
 use display_json::DebugAsJson;
 use rlp::Decodable;
 
@@ -154,17 +156,24 @@ fn try_from_alloy_transaction_with_strategy(
     value: alloy_rpc_types_eth::Transaction,
     strategy: ExternalTransactionSignerStrategy,
 ) -> anyhow::Result<TransactionInput> {
-    // The inner recovered transaction always carries the original signer.
-    let original_signer = value.inner.signer();
     let original_signature = *value.inner.signature();
 
     match strategy {
-        ExternalTransactionSignerStrategy::Recover => Ok(transaction_input_from_alloy(&value, Address::from(original_signer), &original_signature)),
+        ExternalTransactionSignerStrategy::Recover => {
+            let signer = match value.inner.recover_signer() {
+                Ok(signer) => Address::from(signer),
+                Err(e) => {
+                    tracing::warn!(reason = ?e, "failed to recover transaction signer");
+                    bail!("Transaction signer cannot be recovered. Check the transaction signature is valid.");
+                }
+            };
+            Ok(transaction_input_from_alloy(&value, signer, &original_signature))
+        }
         ExternalTransactionSignerStrategy::RecoverWithFlippedV => {
             let flipped_signature = original_signature.with_parity(!original_signature.v());
             let flipped_signer = recover_signer_with_signature(&value, flipped_signature).map_err(|e| {
                 tracing::warn!(reason = ?e, "failed to recover transaction signer with flipped parity");
-                anyhow::anyhow!("Transaction signer cannot be recovered with flipped parity. Check the transaction signature is valid.")
+                anyhow!("Transaction signer cannot be recovered with flipped parity. Check the transaction signature is valid.")
             })?;
             Ok(transaction_input_from_alloy(&value, Address::from(flipped_signer), &flipped_signature))
         }
