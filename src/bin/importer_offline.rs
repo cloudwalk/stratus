@@ -402,5 +402,9 @@ async fn block_number_to_stop(rpc_storage: &Arc<PostgresExternalRpc>) -> anyhow:
 }
 
 fn is_mismatch_error(err: &anyhow::Error) -> bool {
-    err.chain().any(|source| source.to_string().contains("mismatching block info"))
+    err.chain().any(|source| {
+        let message = source.to_string();
+        let message_lower = message.to_ascii_lowercase();
+        message_lower.contains("mismatch") || message_lower.contains("receipt missing for hash")
+    })
 }
