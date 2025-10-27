@@ -77,6 +77,7 @@ pub enum ExternalTransactionSignerStrategy {
     Recover,
     RecoverWithFlippedV,
     Receipt(Address),
+    StoredSigner,
 }
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -178,6 +179,10 @@ fn try_from_alloy_transaction_with_strategy(
             Ok(transaction_input_from_alloy(&value, Address::from(flipped_signer), &flipped_signature))
         }
         ExternalTransactionSignerStrategy::Receipt(signer) => Ok(transaction_input_from_alloy(&value, signer, &original_signature)),
+        ExternalTransactionSignerStrategy::StoredSigner => {
+            let signer = Address::from(value.inner.signer());
+            Ok(transaction_input_from_alloy(&value, signer, &original_signature))
+        }
     }
 }
 

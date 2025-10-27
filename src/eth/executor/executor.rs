@@ -286,6 +286,7 @@ pub enum ExternalTxSignerStrategy {
     Recover,
     RecoverWithFlippedV,
     ReceiptFrom,
+    StoredSigner,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -405,6 +406,7 @@ impl Executor {
             ExternalTxSignerStrategy::Recover => ExternalTransactionSignerStrategy::Recover,
             ExternalTxSignerStrategy::RecoverWithFlippedV => ExternalTransactionSignerStrategy::RecoverWithFlippedV,
             ExternalTxSignerStrategy::ReceiptFrom => ExternalTransactionSignerStrategy::Receipt(Address::from(receipt.0.from)),
+            ExternalTxSignerStrategy::StoredSigner => ExternalTransactionSignerStrategy::StoredSigner,
         };
 
         let tx_input: TransactionInput = TransactionInput::try_from_external_transaction_with_strategy(tx, signer_override)?;

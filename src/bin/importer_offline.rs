@@ -247,6 +247,7 @@ fn run_external_block_executor(
                     ExternalTxSignerStrategy::Recover,
                     ExternalTxSignerStrategy::RecoverWithFlippedV,
                     ExternalTxSignerStrategy::ReceiptFrom,
+                    ExternalTxSignerStrategy::StoredSigner,
                 ];
 
                 let execute_attempt = |strategy: ExternalTxSignerStrategy| -> anyhow::Result<(Block, ExecutionChanges)> {
