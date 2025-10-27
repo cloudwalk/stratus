@@ -21,8 +21,6 @@ use stratus::GlobalServices;
 use stratus::GlobalState;
 use stratus::config::ImporterOfflineConfig;
 use stratus::eth::executor::Executor;
-use stratus::eth::executor::ExternalBlockExecutionParams;
-use stratus::eth::executor::ExternalTxSignerStrategy;
 use stratus::eth::external_rpc::ExternalBlockWithReceipts;
 use stratus::eth::external_rpc::ExternalRpc;
 use stratus::eth::external_rpc::PostgresExternalRpc;
@@ -240,64 +238,8 @@ fn run_external_block_executor(
                     return Ok(());
                 }
 
-                let original_block = block.clone();
-                let original_receipts = receipts.clone();
-
-                let strategies = [
-                    ExternalTxSignerStrategy::Recover,
-                    ExternalTxSignerStrategy::RecoverWithFlippedV,
-                    ExternalTxSignerStrategy::ReceiptFrom,
-                    ExternalTxSignerStrategy::StoredSigner,
-                ];
-
-                let execute_attempt = |strategy: ExternalTxSignerStrategy| -> anyhow::Result<(Block, ExecutionChanges)> {
-                    executor.execute_external_block_with_params(
-                        original_block.clone(),
-                        ExternalReceipts::from(original_receipts.clone()),
-                        ExternalBlockExecutionParams::new(strategy),
-                    )?;
-                    miner.mine_external(original_block.clone())
-                };
-
-                let mut last_error: Option<anyhow::Error> = None;
-                let mut mined: Option<(Block, ExecutionChanges)> = None;
-
-                for (attempt, strategy) in strategies.iter().copied().enumerate() {
-                    if attempt > 0 {
-                        tracing::info!(
-                            parent: None,
-                            %block_start,
-                            %block_end,
-                            ?strategy,
-                            "retrying external block execution with alternate signer strategy"
-                        );
-                    }
-
-                    match execute_attempt(strategy) {
-                        Ok(result) => {
-                            if attempt > 0 {
-                                tracing::info!(
-                                    parent: None,
-                                    %block_start,
-                                    %block_end,
-                                    ?strategy,
-                                    "external block execution succeeded with alternate signer strategy"
-                                );
-                            }
-                            mined = Some(result);
-                            break;
-                        }
-                        Err(err) => {
-                            last_error = Some(err);
-                            continue;
-                        }
-                    }
-                }
-
-                let Some(mined_block) = mined else {
-                    return Err(last_error.unwrap_or_else(|| anyhow!("failed to execute external block without specific error")));
-                };
-
+                executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
+                let mined_block = miner.mine_external(block)?;
                 executed_batch.push(mined_block);
             }
 

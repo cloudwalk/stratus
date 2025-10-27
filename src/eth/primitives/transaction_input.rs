@@ -15,8 +15,6 @@ use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
-use anyhow::anyhow;
-use anyhow::bail;
 use display_json::DebugAsJson;
 use rlp::Decodable;
 
@@ -70,14 +68,6 @@ impl From<Signature> for AlloySignature {
     fn from(value: Signature) -> Self {
         AlloySignature::new(SignatureComponent(value.r).into(), SignatureComponent(value.s).into(), value.v == U64::ONE)
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum ExternalTransactionSignerStrategy {
-    Recover,
-    RecoverWithFlippedV,
-    Receipt(Address),
-    StoredSigner,
 }
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -135,7 +125,7 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        TransactionInput::try_from_external_transaction_with_strategy(value, ExternalTransactionSignerStrategy::Recover)
+        try_from_alloy_transaction(value.0)
     }
 }
 
@@ -143,51 +133,15 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction_with_strategy(value, ExternalTransactionSignerStrategy::Recover)
+        try_from_alloy_transaction(value)
     }
 }
 
-impl TransactionInput {
-    pub fn try_from_external_transaction_with_strategy(value: ExternalTransaction, strategy: ExternalTransactionSignerStrategy) -> anyhow::Result<Self> {
-        try_from_alloy_transaction_with_strategy(value.0, strategy)
-    }
-}
+fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow::Result<TransactionInput> {
+    let signer = Address::from(value.inner.signer());
+    let signature = value.inner.signature();
 
-fn try_from_alloy_transaction_with_strategy(
-    value: alloy_rpc_types_eth::Transaction,
-    strategy: ExternalTransactionSignerStrategy,
-) -> anyhow::Result<TransactionInput> {
-    let original_signature = *value.inner.signature();
-
-    match strategy {
-        ExternalTransactionSignerStrategy::Recover => {
-            let signer = match value.inner.recover_signer() {
-                Ok(signer) => Address::from(signer),
-                Err(e) => {
-                    tracing::warn!(reason = ?e, "failed to recover transaction signer");
-                    bail!("Transaction signer cannot be recovered. Check the transaction signature is valid.");
-                }
-            };
-            Ok(transaction_input_from_alloy(&value, signer, &original_signature))
-        }
-        ExternalTransactionSignerStrategy::RecoverWithFlippedV => {
-            let flipped_signature = original_signature.with_parity(!original_signature.v());
-            let flipped_signer = recover_signer_with_signature(&value, flipped_signature).map_err(|e| {
-                tracing::warn!(reason = ?e, "failed to recover transaction signer with flipped parity");
-                anyhow!("Transaction signer cannot be recovered with flipped parity. Check the transaction signature is valid.")
-            })?;
-            Ok(transaction_input_from_alloy(&value, Address::from(flipped_signer), &flipped_signature))
-        }
-        ExternalTransactionSignerStrategy::Receipt(signer) => Ok(transaction_input_from_alloy(&value, signer, &original_signature)),
-        ExternalTransactionSignerStrategy::StoredSigner => {
-            let signer = Address::from(value.inner.signer());
-            Ok(transaction_input_from_alloy(&value, signer, &original_signature))
-        }
-    }
-}
-
-fn transaction_input_from_alloy(value: &alloy_rpc_types_eth::Transaction, signer: Address, signature: &alloy_primitives::Signature) -> TransactionInput {
-    TransactionInput {
+    Ok(TransactionInput {
         transaction_info: TransactionInfo {
             tx_type: Some(U64::from(value.inner.tx_type() as u8)),
             hash: Hash::from(*value.inner.tx_hash()),
@@ -210,18 +164,7 @@ fn transaction_input_from_alloy(value: &alloy_rpc_types_eth::Transaction, signer
             s: signature.s(),
             v: if signature.v() { U64::ONE } else { U64::ZERO },
         },
-    }
-}
-
-fn recover_signer_with_signature(
-    value: &alloy_rpc_types_eth::Transaction,
-    signature: alloy_primitives::Signature,
-) -> anyhow::Result<alloy_primitives::Address> {
-    let envelope = value.inner.clone_inner();
-    let signed = envelope.into_signed();
-    let (typed_tx, _, hash) = signed.into_parts();
-    let signed_with_override = Signed::new_unchecked(typed_tx, signature, hash);
-    signed_with_override.recover_signer().map_err(anyhow::Error::from)
+    })
 }
 
 // -----------------------------------------------------------------------------
