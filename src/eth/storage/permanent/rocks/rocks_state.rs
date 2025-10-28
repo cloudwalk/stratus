@@ -53,6 +53,8 @@ use crate::eth::primitives::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::TimestampSeekMode;
+use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
@@ -420,6 +422,84 @@ impl RocksStorageState {
                 },
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
+    }
+
+    pub fn read_block_by_timestamp(&self, target: UnixTime, seek_mode: TimestampSeekMode) -> Result<Option<Block>> {
+        tracing::debug!(timestamp = %target, ?seek_mode, "reading block by timestamp with mode");
+
+        if matches!(seek_mode, TimestampSeekMode::Exact) {
+            return self.read_block(BlockFilter::Timestamp(target));
+        }
+
+        let target_value = *target;
+        let timestamp_key: UnixTimeRocksdb = target.into();
+
+        let load_block = |block_number: &CfBlocksByHashValue| -> Result<Option<Block>> {
+            self.blocks_by_number
+                .get(block_number)
+                .map(|block_opt| block_opt.map(|block| block.into_inner().into()))
+        };
+
+        if let Some(block_number) = self.blocks_by_timestamp.get(&timestamp_key)? {
+            return load_block(&block_number);
+        }
+
+        let next_entry = self
+            .blocks_by_timestamp
+            .seek(timestamp_key)?
+            .filter(|(ts, _)| ts.0 >= target_value);
+
+        let mut prev_iter = self.blocks_by_timestamp.iter_from(timestamp_key, Direction::Reverse)?;
+        let mut prev_entry = None;
+        while let Some(entry) = prev_iter.next() {
+            let (ts, block_number) = entry?;
+            if ts.0 <= target_value {
+                prev_entry = Some((ts, block_number));
+                break;
+            }
+        }
+
+        match seek_mode {
+            TimestampSeekMode::Exact => unreachable!("handled earlier"),
+            TimestampSeekMode::ExactOrNext => {
+                if let Some((_, block_number)) = next_entry.as_ref() {
+                    return load_block(block_number);
+                }
+                Ok(None)
+            }
+            TimestampSeekMode::ExactOrPrevious => {
+                if let Some((_, block_number)) = prev_entry.as_ref() {
+                    return load_block(block_number);
+                }
+                Ok(None)
+            }
+            TimestampSeekMode::ClosestPrevious | TimestampSeekMode::ClosestNext => {
+                let prev = prev_entry.as_ref();
+                let next = next_entry.as_ref();
+
+                match (prev, next) {
+                    (None, None) => Ok(None),
+                    (Some((_, block_number)), None) => load_block(block_number),
+                    (None, Some((_, block_number))) => load_block(block_number),
+                    (Some((prev_ts, prev_block)), Some((next_ts, next_block))) => {
+                        let prev_diff = target_value.saturating_sub(prev_ts.0);
+                        let next_diff = next_ts.0.saturating_sub(target_value);
+
+                        let choose_prev = match seek_mode {
+                            TimestampSeekMode::ClosestPrevious => prev_diff <= next_diff,
+                            TimestampSeekMode::ClosestNext => prev_diff < next_diff,
+                            TimestampSeekMode::Exact | TimestampSeekMode::ExactOrNext | TimestampSeekMode::ExactOrPrevious => unreachable!("covered above"),
+                        };
+
+                        if choose_prev {
+                            load_block(prev_block)
+                        } else {
+                            load_block(next_block)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {

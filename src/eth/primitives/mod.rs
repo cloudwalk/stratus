@@ -50,7 +50,7 @@ pub use account::Account;
 pub use account::test_accounts;
 pub use address::Address;
 pub use block::Block;
-pub use block_filter::BlockFilter;
+pub use block_filter::{BlockFilter, TimestampSeekMode};
 pub use block_header::BlockHeader;
 pub use block_number::BlockNumber;
 pub use bytes::Bytes;

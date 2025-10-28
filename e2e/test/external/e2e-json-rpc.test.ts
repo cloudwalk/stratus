@@ -194,6 +194,41 @@ describe("JSON-RPC", () => {
                 const blockByTimestamp = await send("stratus_getBlockByTimestamp", [timestamp, false]);
                 expect(blockByTimestamp?.number).eq(block.number);
             });
+
+            it("supports timestamp seek modes", async () => {
+                await sendReset();
+                await sendEvmMine();
+
+                const firstBlock = await send("eth_getBlockByNumber", [0x1, false]);
+                const firstTimestamp = fromHexTimestamp(firstBlock.timestamp);
+
+                const nextTimestamp = firstTimestamp + 10;
+                await send("evm_setNextBlockTimestamp", [nextTimestamp]);
+                await sendEvmMine();
+
+                const secondBlock = await send("eth_getBlockByNumber", [0x2, false]);
+                const secondTimestamp = fromHexTimestamp(secondBlock.timestamp);
+
+                const midwayTimestamp = firstTimestamp + Math.floor((secondTimestamp - firstTimestamp) / 2);
+
+                const defaultSeek = await send("stratus_getBlockByTimestamp", [midwayTimestamp, false]);
+                expect(defaultSeek?.number).eq(firstBlock.number);
+
+                const nextSeek = await send("stratus_getBlockByTimestamp", [midwayTimestamp, false, "closest_next"]);
+                expect(nextSeek?.number).eq(secondBlock.number);
+
+                const exactMissing = await send("stratus_getBlockByTimestamp", [midwayTimestamp, false, "exact"]);
+                expect(exactMissing).to.be.null;
+
+                const exactOrNext = await send("stratus_getBlockByTimestamp", [midwayTimestamp, false, "exact_or_next"]);
+                expect(exactOrNext?.number).eq(secondBlock.number);
+
+                const exactOrPrevious = await send("stratus_getBlockByTimestamp", [secondTimestamp + 1, false, "exact_or_previous"]);
+                expect(exactOrPrevious?.number).eq(secondBlock.number);
+
+                const exactMatch = await send("stratus_getBlockByTimestamp", [firstTimestamp, false, "exact"]);
+                expect(exactMatch?.number).eq(firstBlock.number);
+            });
         });
         it("eth_getUncleByBlockHashAndIndex", async function () {
             if (isStratus) {

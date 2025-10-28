@@ -28,8 +28,10 @@ use crate::eth::primitives::SlotIndex;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StorageError;
+use crate::eth::primitives::TimestampSeekMode;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
+use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
@@ -582,6 +584,19 @@ impl StratusStorage {
             metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read block");
+            }
+        })
+    }
+
+    pub fn read_block_by_timestamp(&self, timestamp: UnixTime, seek_mode: TimestampSeekMode) -> Result<Option<Block>, StorageError> {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::read_block_by_timestamp", %timestamp, %seek_mode).entered();
+        tracing::debug!(storage = %label::PERM, %timestamp, %seek_mode, "reading block by timestamp");
+
+        timed(|| self.perm.read_block_by_timestamp(timestamp, seek_mode)).with(|m| {
+            metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read block by timestamp");
             }
         })
     }
