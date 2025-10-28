@@ -125,7 +125,7 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value.0)
+        TransactionInput::try_from_external_transaction_with_expected_signer(value, None)
     }
 }
 
@@ -133,12 +133,50 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value)
+        try_from_alloy_transaction(value, None)
     }
 }
 
-fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow::Result<TransactionInput> {
-    let signer = Address::from(value.inner.signer());
+impl TransactionInput {
+    pub fn try_from_external_transaction_with_expected_signer(value: ExternalTransaction, expected_signer: Option<Address>) -> anyhow::Result<Self> {
+        try_from_alloy_transaction(value.0, expected_signer)
+    }
+}
+
+fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, expected_signer: Option<Address>) -> anyhow::Result<TransactionInput> {
+    let stored_signer = Address::from(value.inner.signer());
+    let tx_hash = Hash::from(*value.inner.tx_hash());
+
+    let signer = match value.inner.recover_signer() {
+        Ok(recovered) => {
+            let recovered_signer = Address::from(recovered);
+            if let Some(expected) = expected_signer {
+                if expected != recovered_signer {
+                    tracing::warn!(
+                        %tx_hash,
+                        %expected,
+                        %recovered_signer,
+                        %stored_signer,
+                        "recovered signer mismatches expected signer from receipt, falling back to stored signer"
+                    );
+                    stored_signer
+                } else {
+                    recovered_signer
+                }
+            } else {
+                recovered_signer
+            }
+        }
+        Err(err) => {
+            tracing::warn!(
+                reason = ?err,
+                %tx_hash,
+                %stored_signer,
+                "failed to recover transaction signer, falling back to stored signer from payload"
+            );
+            stored_signer
+        }
+    };
     let signature = value.inner.signature();
 
     Ok(TransactionInput {

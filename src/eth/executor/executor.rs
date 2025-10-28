@@ -24,6 +24,7 @@ use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::miner::Miner;
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
@@ -362,7 +363,8 @@ impl Executor {
         let _span = info_span!("executor::external_transaction", tx_hash = %tx.hash()).entered();
         tracing::debug!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
-        let tx_input: TransactionInput = tx.try_into()?;
+        let expected_signer = Address::from(receipt.0.from);
+        let tx_input: TransactionInput = TransactionInput::try_from_external_transaction_with_expected_signer(tx.clone(), Some(expected_signer))?;
         let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &self.storage.read_pending_block_header().0);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
