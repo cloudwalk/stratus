@@ -53,10 +53,10 @@ use crate::eth::primitives::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
@@ -441,9 +441,9 @@ impl RocksStorageState {
         let target_value = *target;
         let next_entry = self.blocks_by_timestamp.seek(timestamp_key)?.filter(|(ts, _)| ts.0 >= target_value);
 
-        let mut prev_iter = self.blocks_by_timestamp.iter_from(timestamp_key, Direction::Reverse)?;
+        let prev_iter = self.blocks_by_timestamp.iter_from(timestamp_key, Direction::Reverse)?;
         let mut prev_entry = None;
-        while let Some(entry) = prev_iter.next() {
+        for entry in prev_iter {
             let (ts, block_number) = entry?;
             if ts.0 <= target_value {
                 prev_entry = Some((ts, block_number));

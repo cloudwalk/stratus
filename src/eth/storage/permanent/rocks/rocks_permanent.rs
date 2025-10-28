@@ -27,6 +27,7 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
+use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
@@ -181,6 +182,16 @@ impl RocksPermanentStorage {
         });
         if let Ok(Some(block)) = &block {
             tracing::trace!(?selection, ?block, "block found");
+        }
+        block.map_err(|err| StorageError::RocksError { err })
+    }
+
+    pub fn read_block_by_timestamp(&self, target: UnixTime) -> anyhow::Result<Option<Block>, StorageError> {
+        let block = self.state.read_block_by_timestamp(target).inspect_err(|e| {
+            tracing::error!(reason = ?e, "failed to read block in RocksPermanent");
+        });
+        if let Ok(Some(block)) = &block {
+            tracing::trace!(?target, ?block, "block found");
         }
         block.map_err(|err| StorageError::RocksError { err })
     }
