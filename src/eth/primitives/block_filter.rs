@@ -1,99 +1,12 @@
-use std::fmt::{self, Display};
-use std::str::FromStr;
+use std::fmt::Display;
 
 use display_json::DebugAsJson;
-use serde::Deserialize;
-use serde::Deserializer;
-use serde::Serialize;
-use serde::Serializer;
 
 use super::PointInTime;
 use super::UnixTime;
 use crate::alias::JsonValue;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum TimestampSeekMode {
-    Exact,
-    ClosestPrevious,
-    ClosestNext,
-    ExactOrNext,
-    ExactOrPrevious,
-}
-
-impl TimestampSeekMode {
-    const VARIANTS: &'static [&'static str] = &[
-        "exact",
-        "closest",
-        "closest_next",
-        "exact_or_next",
-        "exact_or_previous",
-    ];
-
-    fn canonical(self) -> &'static str {
-        match self {
-            Self::Exact => "exact",
-            Self::ClosestPrevious => "closest",
-            Self::ClosestNext => "closest_next",
-            Self::ExactOrNext => "exact_or_next",
-            Self::ExactOrPrevious => "exact_or_previous",
-        }
-    }
-}
-
-impl Default for TimestampSeekMode {
-    fn default() -> Self {
-        Self::ClosestPrevious
-    }
-}
-
-impl Display for TimestampSeekMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.canonical())
-    }
-}
-
-impl Serialize for TimestampSeekMode {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(self.canonical())
-    }
-}
-
-impl<'de> Deserialize<'de> for TimestampSeekMode {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        value
-            .parse::<TimestampSeekMode>()
-            .map_err(|_| D::Error::unknown_variant(value.as_str(), Self::VARIANTS))
-    }
-}
-
-impl FromStr for TimestampSeekMode {
-    type Err = ();
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let normalized = input
-            .trim()
-            .to_ascii_lowercase()
-            .replace([' ', '-'], "_");
-
-        match normalized.as_str() {
-            "exact" | "exact_match" => Ok(Self::Exact),
-            "closest" | "closest_previous" | "closest_prev" | "closest_tie_previous" | "closest_tie_prev" => Ok(Self::ClosestPrevious),
-            "closest_next" | "closest_tie_next" => Ok(Self::ClosestNext),
-            "exact_or_next" | "exact_next" => Ok(Self::ExactOrNext),
-            "exact_or_previous" | "exact_or_prev" | "exact_previous" | "exact_prev" => Ok(Self::ExactOrPrevious),
-            _ => Err(()),
-        }
-    }
-}
 
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Hash)]
 #[cfg_attr(test, derive(fake::Dummy))]

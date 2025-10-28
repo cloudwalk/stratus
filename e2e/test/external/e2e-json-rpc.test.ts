@@ -195,7 +195,7 @@ describe("JSON-RPC", () => {
                 expect(blockByTimestamp?.number).eq(block.number);
             });
 
-            it("supports timestamp seek modes", async () => {
+            it("returns the closest block preferring previous on ties", async () => {
                 await sendReset();
                 await sendEvmMine();
 
@@ -214,20 +214,15 @@ describe("JSON-RPC", () => {
                 const defaultSeek = await send("stratus_getBlockByTimestamp", [midwayTimestamp, false]);
                 expect(defaultSeek?.number).eq(firstBlock.number);
 
-                const nextSeek = await send("stratus_getBlockByTimestamp", [midwayTimestamp, false, "closest_next"]);
-                expect(nextSeek?.number).eq(secondBlock.number);
+                const closerToNext = await send("stratus_getBlockByTimestamp", [midwayTimestamp + 1, false]);
+                expect(closerToNext?.number).eq(secondBlock.number);
 
-                const exactMissing = await send("stratus_getBlockByTimestamp", [midwayTimestamp, false, "exact"]);
-                expect(exactMissing).to.be.null;
+                const beforeFirstTarget = Math.max(firstTimestamp - 1, 0);
+                const beforeFirst = await send("stratus_getBlockByTimestamp", [beforeFirstTarget, false]);
+                expect(beforeFirst?.number).eq(firstBlock.number);
 
-                const exactOrNext = await send("stratus_getBlockByTimestamp", [midwayTimestamp, false, "exact_or_next"]);
-                expect(exactOrNext?.number).eq(secondBlock.number);
-
-                const exactOrPrevious = await send("stratus_getBlockByTimestamp", [secondTimestamp + 1, false, "exact_or_previous"]);
-                expect(exactOrPrevious?.number).eq(secondBlock.number);
-
-                const exactMatch = await send("stratus_getBlockByTimestamp", [firstTimestamp, false, "exact"]);
-                expect(exactMatch?.number).eq(firstBlock.number);
+                const afterSecond = await send("stratus_getBlockByTimestamp", [secondTimestamp + 1, false]);
+                expect(afterSecond?.number).eq(secondBlock.number);
             });
         });
         it("eth_getUncleByBlockHashAndIndex", async function () {
