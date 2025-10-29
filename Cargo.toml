@@ -44,7 +44,7 @@ stratus_macros = { path = "./crates/stratus_macros" }
 libc = "=0.2.175"
 
 # async
-tokio = { version = "=1.47.1", features = [
+tokio = { version = "=1.48.0", features = [
     "rt-multi-thread",
     "macros",
     "signal"
