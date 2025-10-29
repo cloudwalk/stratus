@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
+use alloy_primitives::BlockTimestamp;
 use alloy_primitives::U256;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
@@ -53,8 +54,10 @@ use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::follower::importer::ImporterConsensus;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
+use crate::eth::primitives;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
+use crate::eth::primitives::BlockTimestampSeek;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
@@ -951,24 +954,24 @@ fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Exte
 }
 
 fn stratus_get_block_by_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    use crate::eth::primitives::UnixTime;
-
     let _middleware_enter = ext.enter_middleware_span();
     let _method_enter = info_span!(
         "rpc::stratus_getBlockByTimestamp",
         timestamp = field::Empty,
+        seek_mode = field::Empty,
         block_number = field::Empty,
         found = field::Empty
     )
     .entered();
 
-    let (params, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;
+    let (params, timestamp) = next_rpc_param::<BlockTimestampSeek>(params.sequence())?;
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
 
     Span::with(|s| {
-        s.rec_str("timestamp", &timestamp);
+        s.rec_str("timestamp", &timestamp.timestamp);
+        s.rec_str("seek_mode", &timestamp.mode);
     });
-    tracing::info!(%timestamp, %full_transactions, "reading block by timestamp");
+    tracing::info!(%timestamp.timestamp, %timestamp.mode, %full_transactions, "reading block by timestamp");
 
     let block = ctx.server.storage.read_block_by_timestamp(timestamp)?;
     Span::with(|s| {
@@ -979,15 +982,15 @@ fn stratus_get_block_by_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     });
     match (block, full_transactions) {
         (Some(block), true) => {
-            tracing::info!(%timestamp, "block with full transactions found");
+            tracing::info!(%block.header.timestamp, "block with full transactions found");
             Ok(block.to_json_rpc_with_full_transactions())
         }
         (Some(block), false) => {
-            tracing::info!(%timestamp, "block with only hashes found");
+            tracing::info!(%block.header.timestamp, "block with only hashes found");
             Ok(block.to_json_rpc_with_transactions_hashes())
         }
         (None, _) => {
-            tracing::info!(%timestamp, "block not found");
+            tracing::info!(%timestamp.timestamp, "block not found");
             Ok(JsonValue::Null)
         }
     }

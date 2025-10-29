@@ -1,6 +1,8 @@
 use std::fmt::Display;
 
 use display_json::DebugAsJson;
+use serde::Deserialize;
+use serde::Serialize;
 
 use super::PointInTime;
 use super::UnixTime;
@@ -26,9 +28,6 @@ pub enum BlockFilter {
 
     /// Retrieve a block by its number.
     Number(BlockNumber),
-
-    /// Retrieve a block by its timestamp.
-    Timestamp(UnixTime),
 }
 
 impl Display for BlockFilter {
@@ -39,7 +38,6 @@ impl Display for BlockFilter {
             BlockFilter::Earliest => write!(f, "earliest"),
             BlockFilter::Hash(block_hash) => write!(f, "{block_hash}"),
             BlockFilter::Number(block_number) => write!(f, "{block_number}"),
-            BlockFilter::Timestamp(timestamp) => write!(f, "timestamp:{}", *timestamp),
         }
     }
 }

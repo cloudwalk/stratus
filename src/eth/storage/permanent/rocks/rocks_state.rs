@@ -44,6 +44,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockTimestampSeek;
+use crate::eth::primitives::BlockTimestampSeekMode;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
@@ -407,64 +409,48 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
-            BlockFilter::Timestamp(timestamp) =>
-                if let Some(block_number) = self.blocks_by_timestamp.get(&timestamp.into())? {
-                    self.blocks_by_number.get(&block_number)
-                } else {
-                    Ok(None)
-                },
+                }
+            }
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
-    pub fn read_block_by_timestamp(&self, target: UnixTime) -> Result<Option<Block>> {
-        tracing::debug!(timestamp = %target, "reading block by timestamp");
+    pub fn read_block_by_timestamp(&self, target: BlockTimestampSeek) -> Result<Option<Block>> {
+        tracing::debug!(%target.timestamp, %target.mode, "reading block by timestamp");
 
-        let timestamp_key: UnixTimeRocksdb = target.into();
+        let timestamp_key: UnixTimeRocksdb = target.timestamp.into();
 
-        let load_block = |block_number: &CfBlocksByHashValue| -> Result<Option<Block>> {
-            self.blocks_by_number
-                .get(block_number)
-                .map(|block_opt| block_opt.map(|block| block.into_inner().into()))
-        };
+        let next_entry = self.blocks_by_timestamp.seek(timestamp_key)?.filter(|(ts, _)| ts.0 >= timestamp_key.0);
 
-        if let Some(block_number) = self.blocks_by_timestamp.get(&timestamp_key)? {
-            return load_block(&block_number);
-        }
-
-        let target_value = *target;
-        let next_entry = self.blocks_by_timestamp.seek(timestamp_key)?.filter(|(ts, _)| ts.0 >= target_value);
-
-        let prev_iter = self.blocks_by_timestamp.iter_from(timestamp_key, Direction::Reverse)?;
-        let mut prev_entry = None;
-        for entry in prev_iter {
-            let (ts, block_number) = entry?;
-            if ts.0 <= target_value {
-                prev_entry = Some((ts, block_number));
-                break;
-            }
-        }
-
-        match (prev_entry.as_ref(), next_entry.as_ref()) {
-            (None, None) => Ok(None),
-            (Some((_, block_number)), None) => load_block(block_number),
-            (None, Some((_, block_number))) => load_block(block_number),
-            (Some((prev_ts, prev_block)), Some((next_ts, next_block))) => {
-                let prev_diff = target_value.saturating_sub(prev_ts.0);
-                let next_diff = next_ts.0.saturating_sub(target_value);
-
-                if prev_diff <= next_diff {
-                    load_block(prev_block)
-                } else {
-                    load_block(next_block)
+        let found_block_number = if let Some(entry) = next_entry
+            && entry.0 == timestamp_key
+        {
+            Some(entry.1)
+        } else {
+            match target.mode {
+                BlockTimestampSeekMode::ExactOrNext => next_entry.map(|e| e.1),
+                BlockTimestampSeekMode::ExactOrPrevious => {
+                    let prev_entry = self
+                        .blocks_by_timestamp
+                        .iter_from(timestamp_key, Direction::Reverse)?
+                        .next()
+                        .and_then(Result::ok);
+                    prev_entry.map(|e| e.1)
                 }
             }
+        };
+        if let Some(block) = found_block_number {
+            return self
+                .blocks_by_number
+                .get(&block)
+                .map(|block_opt| block_opt.map(|block| block.into_inner().into()));
+        } else {
+            Ok(None)
         }
     }
 

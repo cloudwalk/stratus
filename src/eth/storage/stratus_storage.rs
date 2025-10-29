@@ -11,6 +11,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockTimestampSeek;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
@@ -587,10 +588,10 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_block_by_timestamp(&self, timestamp: UnixTime) -> Result<Option<Block>, StorageError> {
+    pub fn read_block_by_timestamp(&self, timestamp: BlockTimestampSeek) -> Result<Option<Block>, StorageError> {
         #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::read_block_by_timestamp", %timestamp).entered();
-        tracing::debug!(storage = %label::PERM, %timestamp, "reading block by timestamp");
+        let _span = tracing::info_span!("storage::read_block_by_timestamp", %timestamp.timestamp, %timestamp.mode).entered();
+        tracing::debug!(storage = %label::PERM, %timestamp.timestamp, %timestamp.mode, "reading block by timestamp");
 
         timed(|| self.perm.read_block_by_timestamp(timestamp)).with(|m| {
             metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
