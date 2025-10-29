@@ -197,10 +197,13 @@ describe("JSON-RPC", () => {
 
             it("respects seek mode when selecting closest block", async () => {
                 await sendReset();
+                const baseTimestamp = 1_000;
+                await send("evm_setNextBlockTimestamp", [baseTimestamp]);
                 await sendEvmMine();
 
                 const firstBlock = await send("eth_getBlockByNumber", [0x1, false]);
                 const firstTimestamp = fromHexTimestamp(firstBlock.timestamp);
+                expect(firstTimestamp).eq(baseTimestamp);
 
                 const nextTimestamp = firstTimestamp + 10;
                 await send("evm_setNextBlockTimestamp", [nextTimestamp]);
@@ -220,7 +223,7 @@ describe("JSON-RPC", () => {
                 const explicitNext = await send("stratus_getBlockByTimestamp", [{ timestamp: midwayTimestamp + 1, mode: "exactOrNext" }, false]);
                 expect(explicitNext?.number).eq(secondBlock.number);
 
-                const beforeFirstTarget = Math.max(firstTimestamp - 1, 0);
+                const beforeFirstTarget = firstTimestamp - 1;
                 const beforeFirst = await send("stratus_getBlockByTimestamp", [{ timestamp: beforeFirstTarget }, false]);
                 expect(beforeFirst).to.be.null;
 
