@@ -40,7 +40,7 @@ pub enum RpcError {
 
     #[error("failed to decode {rust_type} parameter.")]
     #[error_code = 4]
-    ParameterInvalid { rust_type: &'static str, decode_error: String },
+    ParameterDecodeError { rust_type: &'static str, decode_error: String },
 
     #[error("expected {rust_type} parameter, but received nothing.")]
     #[error_code = 5]
@@ -61,6 +61,10 @@ pub enum RpcError {
     #[error("miner mode param is invalid.")]
     #[error_code = 9]
     MinerModeParamInvalid,
+
+    #[error("parameter is invalid")]
+    #[error_code = 10]
+    ParameterInvalid,
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
@@ -284,7 +288,7 @@ impl StratusError {
         match self {
             // RPC
             Self::RPC(RpcError::BlockFilterInvalid { filter }) => to_json_value(filter),
-            Self::RPC(RpcError::ParameterInvalid { decode_error, .. }) => to_json_value(decode_error),
+            Self::RPC(RpcError::ParameterDecodeError { decode_error, .. }) => to_json_value(decode_error),
 
             // Transaction
             Self::RPC(RpcError::TransactionInvalid { decode_error }) => to_json_value(decode_error),
