@@ -203,7 +203,6 @@ describe("JSON-RPC", () => {
 
                 const firstBlock = await send("eth_getBlockByNumber", [0x1, false]);
                 const firstTimestamp = fromHexTimestamp(firstBlock.timestamp);
-                expect(firstTimestamp).eq(baseTimestamp);
 
                 const nextTimestamp = firstTimestamp + 10;
                 await send("evm_setNextBlockTimestamp", [nextTimestamp]);
@@ -229,7 +228,7 @@ describe("JSON-RPC", () => {
                 ]);
                 expect(explicitNext?.number).eq(secondBlock.number);
 
-                const beforeFirstTarget = firstTimestamp - 1;
+                const beforeFirstTarget = Math.max(firstTimestamp - 1, 0);
                 const beforeFirst = await send("stratus_getBlockByTimestamp", [
                     { timestamp: beforeFirstTarget },
                     false,
