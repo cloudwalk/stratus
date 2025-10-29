@@ -1,9 +1,10 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::eth::primitives::UnixTime;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Default, strum::Display)]
 pub enum BlockTimestampSeekMode {
-    #[default]    
+    #[default]
     ExactOrPrevious,
     ExactOrNext,
 }
@@ -14,4 +15,3 @@ pub struct BlockTimestampSeek {
     #[serde(default)]
     pub mode: BlockTimestampSeekMode,
 }
-
