@@ -11,7 +11,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockTimestampSeek;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
@@ -587,19 +586,6 @@ impl StratusStorage {
         })
     }
 
-    pub fn read_block_by_timestamp(&self, timestamp: BlockTimestampSeek) -> Result<Option<Block>, StorageError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::read_block_by_timestamp", %timestamp.timestamp, %timestamp.mode).entered();
-        tracing::debug!(storage = %label::PERM, %timestamp.timestamp, %timestamp.mode, "reading block by timestamp");
-
-        timed(|| self.perm.read_block_by_timestamp(timestamp)).with(|m| {
-            metrics::inc_storage_read_block(m.elapsed, label::PERM, m.result.is_ok());
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read block by timestamp");
-            }
-        })
-    }
-
     pub fn read_block_with_changes(&self, filter: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>, StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::read_block_with_changes", %filter).entered();
@@ -847,7 +833,7 @@ impl StratusStorage {
             BlockFilter::Latest => Ok(PointInTime::Mined),
             BlockFilter::Earliest => Ok(PointInTime::MinedPast(BlockNumber::ZERO)),
             BlockFilter::Number(number) => Ok(PointInTime::MinedPast(number)),
-            BlockFilter::Hash(_) => match self.read_block(block_filter)? {
+            BlockFilter::Hash(_) | BlockFilter::Timestamp(_) => match self.read_block(block_filter)? {
                 Some(block) => Ok(PointInTime::MinedPast(block.header.number)),
                 None => Err(StorageError::BlockNotFound { filter: block_filter }),
             },

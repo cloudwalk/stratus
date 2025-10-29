@@ -14,7 +14,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockTimestampSeek;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
@@ -182,16 +181,6 @@ impl RocksPermanentStorage {
         });
         if let Ok(Some(block)) = &block {
             tracing::trace!(?selection, ?block, "block found");
-        }
-        block.map_err(|err| StorageError::RocksError { err })
-    }
-
-    pub fn read_block_by_timestamp(&self, target: BlockTimestampSeek) -> anyhow::Result<Option<Block>, StorageError> {
-        let block = self.state.read_block_by_timestamp(target).inspect_err(|e| {
-            tracing::error!(reason = ?e, "failed to read block by timestamp in RocksPermanent");
-        });
-        if let Ok(Some(block)) = &block {
-            tracing::trace!(?target, ?block, "block found");
         }
         block.map_err(|err| StorageError::RocksError { err })
     }
