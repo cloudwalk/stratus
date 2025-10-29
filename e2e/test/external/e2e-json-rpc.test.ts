@@ -191,11 +191,11 @@ describe("JSON-RPC", () => {
                 await sendEvmMine();
                 const block = await send("eth_getBlockByNumber", [0x1, false]);
                 const timestamp = fromHexTimestamp(block.timestamp);
-                const blockByTimestamp = await send("stratus_getBlockByTimestamp", [timestamp, false]);
+                const blockByTimestamp = await send("stratus_getBlockByTimestamp", [{ timestamp }, false]);
                 expect(blockByTimestamp?.number).eq(block.number);
             });
 
-            it("returns the closest block preferring previous on ties", async () => {
+            it("respects seek mode when selecting closest block", async () => {
                 await sendReset();
                 await sendEvmMine();
 
@@ -211,18 +211,24 @@ describe("JSON-RPC", () => {
 
                 const midwayTimestamp = firstTimestamp + Math.floor((secondTimestamp - firstTimestamp) / 2);
 
-                const defaultSeek = await send("stratus_getBlockByTimestamp", [midwayTimestamp, false]);
+                const defaultSeek = await send("stratus_getBlockByTimestamp", [{ timestamp: midwayTimestamp }, false]);
                 expect(defaultSeek?.number).eq(firstBlock.number);
 
-                const closerToNext = await send("stratus_getBlockByTimestamp", [midwayTimestamp + 1, false]);
-                expect(closerToNext?.number).eq(secondBlock.number);
+                const explicitPrevious = await send("stratus_getBlockByTimestamp", [{ timestamp: midwayTimestamp + 1, mode: "ExactOrPrevious" }, false]);
+                expect(explicitPrevious?.number).eq(firstBlock.number);
+
+                const explicitNext = await send("stratus_getBlockByTimestamp", [{ timestamp: midwayTimestamp + 1, mode: "ExactOrNext" }, false]);
+                expect(explicitNext?.number).eq(secondBlock.number);
 
                 const beforeFirstTarget = Math.max(firstTimestamp - 1, 0);
-                const beforeFirst = await send("stratus_getBlockByTimestamp", [beforeFirstTarget, false]);
-                expect(beforeFirst?.number).eq(firstBlock.number);
+                const beforeFirst = await send("stratus_getBlockByTimestamp", [{ timestamp: beforeFirstTarget }, false]);
+                expect(beforeFirst).to.be.null;
 
-                const afterSecond = await send("stratus_getBlockByTimestamp", [secondTimestamp + 1, false]);
-                expect(afterSecond?.number).eq(secondBlock.number);
+                const afterSecondWithPrevious = await send("stratus_getBlockByTimestamp", [{ timestamp: secondTimestamp + 1, mode: "ExactOrPrevious" }, false]);
+                expect(afterSecondWithPrevious?.number).eq(secondBlock.number);
+
+                const afterSecondWithNext = await send("stratus_getBlockByTimestamp", [{ timestamp: secondTimestamp + 1, mode: "ExactOrNext" }, false]);
+                expect(afterSecondWithNext).to.be.null;
             });
         });
         it("eth_getUncleByBlockHashAndIndex", async function () {
