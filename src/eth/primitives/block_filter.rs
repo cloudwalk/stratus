@@ -39,7 +39,7 @@ impl Display for BlockFilter {
             BlockFilter::Earliest => write!(f, "earliest"),
             BlockFilter::Hash(block_hash) => write!(f, "{block_hash}"),
             BlockFilter::Number(block_number) => write!(f, "{block_number}"),
-            BlockFilter::Timestamp(timestamp) => write!(f, "{:?}", timestamp),
+            BlockFilter::Timestamp(timestamp) => write!(f, "{timestamp:?}"),
         }
     }
 }

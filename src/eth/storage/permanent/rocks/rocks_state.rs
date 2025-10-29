@@ -406,13 +406,12 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) => {
+            BlockFilter::Hash(block_hash) =>
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                }
-            }
+                },
             BlockFilter::Timestamp(timestamp) => self
                 .blocks_by_timestamp
                 .iter_from(timestamp.timestamp.into(), timestamp.mode.into())?
