@@ -412,12 +412,14 @@ impl RocksStorageState {
                 } else {
                     Ok(None)
                 },
-            BlockFilter::Timestamp(timestamp) =>
-                if let Some(block_number) = self.blocks_by_timestamp.get(&timestamp.into())? {
-                    self.blocks_by_number.get(&block_number)
-                } else {
-                    Ok(None)
-                },
+            BlockFilter::Timestamp(timestamp) => self
+                .blocks_by_timestamp
+                .iter_from(timestamp.timestamp.into(), timestamp.mode.into())?
+                .next()
+                .transpose()?
+                .map(|inner| self.blocks_by_number.get(&inner.1))
+                .transpose()
+                .map(|nested_opt| nested_opt.flatten()),
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
