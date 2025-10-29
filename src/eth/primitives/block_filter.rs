@@ -99,7 +99,7 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
                 // Check if this is a timestamp filter object with "timestamp" and optional "mode" fields
                 if map.contains_key("timestamp") {
                     let timestamp_filter: BlockTimestampFilter = serde_json::from_value(serde_json::Value::Object(map))
-                        .map_err(|e| serde::de::Error::custom(format!("failed to parse timestamp filter: {}", e)))?;
+                        .map_err(|e| serde::de::Error::custom(format!("failed to parse timestamp filter: {e}")))?;
                     return Ok(Self::Timestamp(timestamp_filter));
                 }
 
@@ -128,8 +128,8 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
                     }
                     "Timestamp" => {
                         // Handle {"Timestamp": {...}} format
-                        let timestamp_filter: BlockTimestampFilter = serde_json::from_value(value.clone())
-                            .map_err(|e| serde::de::Error::custom(format!("failed to parse timestamp filter: {}", e)))?;
+                        let timestamp_filter: BlockTimestampFilter =
+                            serde_json::from_value(value.clone()).map_err(|e| serde::de::Error::custom(format!("failed to parse timestamp filter: {e}")))?;
                         Ok(Self::Timestamp(timestamp_filter))
                     }
                     _ => Err(serde::de::Error::custom(
