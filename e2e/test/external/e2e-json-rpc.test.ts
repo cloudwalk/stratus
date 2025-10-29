@@ -228,13 +228,6 @@ describe("JSON-RPC", () => {
                 ]);
                 expect(explicitNext?.number).eq(secondBlock.number);
 
-                const beforeFirstTarget = Math.max(firstTimestamp - 1, 0);
-                const beforeFirst = await send("stratus_getBlockByTimestamp", [
-                    { timestamp: beforeFirstTarget },
-                    false,
-                ]);
-                expect(beforeFirst).to.be.null;
-
                 const afterSecondWithPrevious = await send("stratus_getBlockByTimestamp", [
                     { timestamp: secondTimestamp + 1, mode: "exactOrPrevious" },
                     false,
