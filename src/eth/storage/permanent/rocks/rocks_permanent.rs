@@ -28,7 +28,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
-use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;

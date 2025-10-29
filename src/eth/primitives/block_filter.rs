@@ -2,10 +2,8 @@ use std::fmt::Display;
 
 use display_json::DebugAsJson;
 use serde::Deserialize;
-use serde::Serialize;
 
 use super::PointInTime;
-use super::UnixTime;
 use crate::alias::JsonValue;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;

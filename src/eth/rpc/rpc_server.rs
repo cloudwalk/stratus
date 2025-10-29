@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 
-use alloy_primitives::BlockTimestamp;
 use alloy_primitives::U256;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
@@ -54,7 +53,6 @@ use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::follower::importer::ImporterConsensus;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
-use crate::eth::primitives;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockTimestampSeek;

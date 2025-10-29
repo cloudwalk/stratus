@@ -31,7 +31,6 @@ use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
-use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
