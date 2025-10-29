@@ -820,10 +820,6 @@ criteria = "safe-to-deploy"
 version = "0.9.7"
 criteria = "safe-to-deploy"
 
-[[exemptions.io-uring]]
-version = "0.7.9"
-criteria = "safe-to-deploy"
-
 [[exemptions.ipnet]]
 version = "2.11.0"
 criteria = "safe-to-deploy"
@@ -1658,14 +1654,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.tiny-keccak]]
 version = "2.0.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.tokio]]
-version = "1.47.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.tokio-macros]]
-version = "2.5.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.tokio-rustls]]
