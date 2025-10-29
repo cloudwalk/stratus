@@ -3,9 +3,9 @@ use std::fmt::Display;
 use display_json::DebugAsJson;
 
 use super::PointInTime;
-use super::UnixTime;
 use crate::alias::JsonValue;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockTimestampFilter;
 use crate::eth::primitives::Hash;
 
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Hash)]
@@ -28,7 +28,7 @@ pub enum BlockFilter {
     Number(BlockNumber),
 
     /// Retrieve a block by its timestamp.
-    Timestamp(UnixTime),
+    Timestamp(BlockTimestampFilter),
 }
 
 impl Display for BlockFilter {
@@ -39,7 +39,7 @@ impl Display for BlockFilter {
             BlockFilter::Earliest => write!(f, "earliest"),
             BlockFilter::Hash(block_hash) => write!(f, "{block_hash}"),
             BlockFilter::Number(block_number) => write!(f, "{block_number}"),
-            BlockFilter::Timestamp(timestamp) => write!(f, "timestamp:{}", *timestamp),
+            BlockFilter::Timestamp(timestamp) => write!(f, "{timestamp:?}"),
         }
     }
 }
@@ -96,26 +96,44 @@ impl<'de> serde::Deserialize<'de> for BlockFilter {
             }
 
             serde_json::Value::Object(map) => {
+                // Check if this is a timestamp filter object with "timestamp" and optional "mode" fields
+                if map.contains_key("timestamp") {
+                    let timestamp_filter: BlockTimestampFilter = serde_json::from_value(serde_json::Value::Object(map))
+                        .map_err(|e| serde::de::Error::custom(format!("failed to parse timestamp filter: {e}")))?;
+                    return Ok(Self::Timestamp(timestamp_filter));
+                }
+
+                // Otherwise, handle single-field object format like {"Hash": "..."} or {"Number": "..."}
                 if map.len() != 1 {
                     return Err(serde::de::Error::custom("value was an object with an unexpected number of fields"));
                 }
                 let Some((key, value)) = map.iter().next() else {
                     return Err(serde::de::Error::custom("value was an object with no fields"));
                 };
-                let Some(value_str) = value.as_str() else {
-                    return Err(serde::de::Error::custom("value was an object with non-str fields"));
-                };
+
                 match key.as_str() {
                     "Hash" => {
+                        let Some(value_str) = value.as_str() else {
+                            return Err(serde::de::Error::custom("Hash field must be a string"));
+                        };
                         let hash: Hash = value_str.parse().map_err(serde::de::Error::custom)?;
                         Ok(Self::Hash(hash))
                     }
                     "Number" => {
+                        let Some(value_str) = value.as_str() else {
+                            return Err(serde::de::Error::custom("Number field must be a string"));
+                        };
                         let number: BlockNumber = value_str.parse().map_err(serde::de::Error::custom)?;
                         Ok(Self::Number(number))
                     }
+                    "Timestamp" => {
+                        // Handle {"Timestamp": {...}} format
+                        let timestamp_filter: BlockTimestampFilter =
+                            serde_json::from_value(value.clone()).map_err(|e| serde::de::Error::custom(format!("failed to parse timestamp filter: {e}")))?;
+                        Ok(Self::Timestamp(timestamp_filter))
+                    }
                     _ => Err(serde::de::Error::custom(
-                        "value was an object but its field was neither \"Hash\" nor \"Number\"",
+                        "value was an object but its field was not one of \"Hash\", \"Number\", \"Timestamp\", or \"timestamp\"",
                     )),
                 }
             }
@@ -146,5 +164,57 @@ mod tests {
     fn serde_block_number_with_number() {
         let json = json!("0x2");
         assert_eq!(serde_json::from_value::<BlockFilter>(json).unwrap(), BlockFilter::Number(2usize.into()));
+    }
+
+    #[test]
+    fn serde_block_filter_with_timestamp_lowercase() {
+        let json = json!({"timestamp": 1234567890});
+        let result = serde_json::from_value::<BlockFilter>(json).unwrap();
+        match result {
+            BlockFilter::Timestamp(filter) => {
+                assert_eq!(*filter.timestamp, 1234567890);
+                assert_eq!(filter.mode, BlockTimestampSeekMode::ExactOrPrevious);
+            }
+            _ => panic!("Expected BlockFilter::Timestamp"),
+        }
+    }
+
+    #[test]
+    fn serde_block_filter_with_timestamp_and_mode() {
+        let json = json!({"timestamp": 1234567890, "mode": "exactOrNext"});
+        let result = serde_json::from_value::<BlockFilter>(json).unwrap();
+        match result {
+            BlockFilter::Timestamp(filter) => {
+                assert_eq!(*filter.timestamp, 1234567890);
+                assert_eq!(filter.mode, BlockTimestampSeekMode::ExactOrNext);
+            }
+            _ => panic!("Expected BlockFilter::Timestamp"),
+        }
+    }
+
+    #[test]
+    fn serde_block_filter_with_timestamp_capitalized() {
+        let json = json!({"Timestamp": {"timestamp": 1234567890}});
+        let result = serde_json::from_value::<BlockFilter>(json).unwrap();
+        match result {
+            BlockFilter::Timestamp(filter) => {
+                assert_eq!(*filter.timestamp, 1234567890);
+                assert_eq!(filter.mode, BlockTimestampSeekMode::ExactOrPrevious);
+            }
+            _ => panic!("Expected BlockFilter::Timestamp"),
+        }
+    }
+
+    #[test]
+    fn serde_block_filter_with_timestamp_capitalized_and_mode() {
+        let json = json!({"Timestamp": {"timestamp": 1234567890, "mode": "exactOrPrevious"}});
+        let result = serde_json::from_value::<BlockFilter>(json).unwrap();
+        match result {
+            BlockFilter::Timestamp(filter) => {
+                assert_eq!(*filter.timestamp, 1234567890);
+                assert_eq!(filter.mode, BlockTimestampSeekMode::ExactOrPrevious);
+            }
+            _ => panic!("Expected BlockFilter::Timestamp"),
+        }
     }
 }
