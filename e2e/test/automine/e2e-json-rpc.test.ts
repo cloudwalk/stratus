@@ -192,6 +192,24 @@ describe("JSON-RPC", () => {
                 let block = await send("eth_getBlockByNumber", [NON_EXISTANT_BLOCK, true]);
                 expect(block).to.be.null;
             });
+            it("accepts 'latest' as block parameter", async () => {
+                let block: Block = await send("eth_getBlockByNumber", ["latest", true]);
+                expect(block.hash).to.not.be.undefined;
+                expect(block.number).to.not.be.undefined;
+            });
+            it("accepts 'earliest' as block parameter", async () => {
+                let block: Block = await send("eth_getBlockByNumber", ["earliest", true]);
+                expect(block.number).eq("0x0");
+            });
+            it("accepts 'pending' as block parameter", async () => {
+                let block: Block = await send("eth_getBlockByNumber", ["pending", true]);
+                expect(block).to.not.be.null;
+            });
+            it("rejects block hash as parameter", async () => {
+                const error = await sendAndGetError("eth_getBlockByNumber", [hash, true]);
+                expect(error.code).eq(1010); // ParameterInvalid error code
+                expect(error.message).to.include("parameter is invalid");
+            });
         });
         describe("eth_getBlockByHash", () => {
             it("fetches genesis block correctly", async () => {
@@ -202,6 +220,26 @@ describe("JSON-RPC", () => {
             it("returns null if block does not exist", async () => {
                 let block = await send("eth_getBlockByHash", [HASH_ZERO, true]);
                 expect(block).to.be.null;
+            });
+            it("rejects 'latest' as parameter", async () => {
+                const error = await sendAndGetError("eth_getBlockByHash", ["latest", true]);
+                expect(error.code).eq(1010); // ParameterInvalid error code
+                expect(error.message).to.include("parameter is invalid");
+            });
+            it("rejects 'earliest' as parameter", async () => {
+                const error = await sendAndGetError("eth_getBlockByHash", ["earliest", true]);
+                expect(error.code).eq(1010);
+                expect(error.message).to.include("parameter is invalid");
+            });
+            it("rejects 'pending' as parameter", async () => {
+                const error = await sendAndGetError("eth_getBlockByHash", ["pending", true]);
+                expect(error.code).eq(1010);
+                expect(error.message).to.include("parameter is invalid");
+            });
+            it("rejects block number as parameter", async () => {
+                const error = await sendAndGetError("eth_getBlockByHash", ["0x1", true]);
+                expect(error.code).eq(1010);
+                expect(error.message).to.include("parameter is invalid");
             });
         });
         it("eth_getUncleByBlockHashAndIndex", async function () {

@@ -885,39 +885,51 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    eth_get_block_by_selector::<'h'>(params, ctx, ext)
-}
-
-fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    eth_get_block_by_selector::<'n'>(params, ctx, ext)
-}
-
-#[inline(always)]
-fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = if KIND == 'h' {
-        info_span!(
-            "rpc::eth_getBlockByHash",
-            filter = field::Empty,
-            block_number = field::Empty,
-            found = field::Empty
-        )
-        .entered()
-    } else {
-        info_span!(
-            "rpc::eth_getBlockByNumber",
-            filter = field::Empty,
-            block_number = field::Empty,
-            found = field::Empty
-        )
-        .entered()
-    };
 
-    // parse params
+    let _method_enter = info_span!(
+        "rpc::eth_getBlockByHash",
+        filter = field::Empty,
+        block_number = field::Empty,
+        found = field::Empty
+    )
+    .entered();
+
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
 
+    match &filter {
+        BlockFilter::Hash(_) => (),
+        _ => return Err(StratusError::RPC(RpcError::ParameterInvalid)),
+    }
+
+    eth_get_block_by_selector(filter, full_transactions, ctx)
+}
+
+fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    let _middleware_enter = ext.enter_middleware_span();
+
+    let _method_enter = info_span!(
+        "rpc::eth_getBlockByNumber",
+        filter = field::Empty,
+        block_number = field::Empty,
+        found = field::Empty
+    )
+    .entered();
+
+    let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (_, full_transactions) = next_rpc_param::<bool>(params)?;
+
+    match &filter {
+        BlockFilter::Earliest | BlockFilter::Latest | BlockFilter::Number(_) | BlockFilter::Pending => (),
+        _ => return Err(StratusError::RPC(RpcError::ParameterInvalid)),
+    }
+
+    eth_get_block_by_selector(filter, full_transactions, ctx)
+}
+
+#[inline(always)]
+fn eth_get_block_by_selector(filter: BlockFilter, full_transactions: bool, ctx: Arc<RpcContext>) -> Result<JsonValue, StratusError> {
     // track
     Span::with(|s| s.rec_str("filter", &filter));
     tracing::info!(%filter, %full_transactions, "reading block");
