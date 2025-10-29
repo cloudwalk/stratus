@@ -44,8 +44,6 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::BlockTimestampSeek;
-use crate::eth::primitives::BlockTimestampSeekMode;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
@@ -408,47 +406,23 @@ impl RocksStorageState {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
             BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) =>
+            BlockFilter::Hash(block_hash) => {
                 if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
                     self.blocks_by_number.get(&block_number)
                 } else {
                     Ok(None)
-                },
-        };
-        block.map(|block_option| block_option.map(|block| block.into_inner().into()))
-    }
-
-    pub fn read_block_by_timestamp(&self, target: BlockTimestampSeek) -> Result<Option<Block>> {
-        tracing::debug!(%target.timestamp, %target.mode, "reading block by timestamp");
-
-        let timestamp_key: UnixTimeRocksdb = target.timestamp.into();
-
-        let next_entry = self.blocks_by_timestamp.seek(timestamp_key)?.filter(|(ts, _)| ts.0 >= timestamp_key.0);
-
-        let found_block_number = if let Some(entry) = &next_entry
-            && entry.0 == timestamp_key
-        {
-            Some(entry.1.clone())
-        } else {
-            match target.mode {
-                BlockTimestampSeekMode::ExactOrNext => next_entry.map(|e| e.1),
-                BlockTimestampSeekMode::ExactOrPrevious => {
-                    let prev_entry = self
-                        .blocks_by_timestamp
-                        .iter_from(timestamp_key, Direction::Reverse)?
-                        .next()
-                        .and_then(Result::ok);
-                    prev_entry.map(|e| e.1)
                 }
             }
+            BlockFilter::Timestamp(timestamp) => self
+                .blocks_by_timestamp
+                .iter_from(timestamp.timestamp.into(), timestamp.mode.into())?
+                .next()
+                .transpose()?
+                .map(|inner| self.blocks_by_number.get(&inner.1))
+                .transpose()
+                .map(|nested_opt| nested_opt.flatten()),
         };
-        if let Some(block) = found_block_number {
-            self.blocks_by_number
-                .get(&block)
-                .map(|block_opt| block_opt.map(|block| block.into_inner().into()))
-        } else {
-            Ok(None)
-        }
+        block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {

@@ -100,7 +100,7 @@ pub use stratus_error::StorageError;
 pub use stratus_error::StratusError;
 pub use stratus_error::TransactionError;
 pub use stratus_error::UnexpectedError;
-pub use timestamp::BlockTimestampSeek;
+pub use timestamp::BlockTimestampFilter;
 pub use timestamp::BlockTimestampSeekMode;
 pub use transaction_execution::TransactionExecution;
 pub use transaction_input::ExecutionInfo;

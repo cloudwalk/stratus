@@ -5,6 +5,7 @@ use display_json::DebugAsJson;
 use super::PointInTime;
 use crate::alias::JsonValue;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::BlockTimestampFilter;
 use crate::eth::primitives::Hash;
 
 #[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, Hash)]
@@ -25,6 +26,9 @@ pub enum BlockFilter {
 
     /// Retrieve a block by its number.
     Number(BlockNumber),
+
+    /// Retrieve a block by its timestamp.
+    Timestamp(BlockTimestampFilter),
 }
 
 impl Display for BlockFilter {
@@ -35,6 +39,7 @@ impl Display for BlockFilter {
             BlockFilter::Earliest => write!(f, "earliest"),
             BlockFilter::Hash(block_hash) => write!(f, "{block_hash}"),
             BlockFilter::Number(block_number) => write!(f, "{block_number}"),
+            BlockFilter::Timestamp(timestamp) => write!(f, "{:?}", timestamp),
         }
     }
 }

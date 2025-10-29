@@ -55,7 +55,6 @@ use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockTimestampSeek;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
@@ -254,7 +253,7 @@ impl Server {
     async fn health(&self) -> bool {
         match GlobalState::get_node_mode() {
             NodeMode::Leader | NodeMode::FakeLeader => true,
-            NodeMode::Follower =>
+            NodeMode::Follower => {
                 if GlobalState::is_importer_shutdown() {
                     tracing::warn!("stratus is unhealthy because importer is shutdown");
                     false
@@ -266,7 +265,8 @@ impl Server {
                             false
                         }
                     }
-                },
+                }
+            }
         }
     }
 }
@@ -897,22 +897,30 @@ fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extens
 fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = if KIND == 'h' {
-        info_span!(
+
+    let _method_enter = match KIND {
+        'h' => info_span!(
             "rpc::eth_getBlockByHash",
             filter = field::Empty,
             block_number = field::Empty,
             found = field::Empty
         )
-        .entered()
-    } else {
-        info_span!(
+        .entered(),
+        'n' => info_span!(
             "rpc::eth_getBlockByNumber",
             filter = field::Empty,
             block_number = field::Empty,
             found = field::Empty
         )
-        .entered()
+        .entered(),
+        't' => info_span!(
+            "rpc::stratus_getBlockByTimestamp",
+            filter = field::Empty,
+            block_number = field::Empty,
+            found = field::Empty
+        )
+        .entered(),
+        _ => unreachable!(),
     };
 
     // parse params
@@ -952,46 +960,7 @@ fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Exte
 }
 
 fn stratus_get_block_by_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!(
-        "rpc::stratus_getBlockByTimestamp",
-        timestamp = field::Empty,
-        seek_mode = field::Empty,
-        block_number = field::Empty,
-        found = field::Empty
-    )
-    .entered();
-
-    let (params, timestamp) = next_rpc_param::<BlockTimestampSeek>(params.sequence())?;
-    let (_, full_transactions) = next_rpc_param::<bool>(params)?;
-
-    Span::with(|s| {
-        s.rec_str("timestamp", &timestamp.timestamp);
-        s.rec_str("seek_mode", &timestamp.mode);
-    });
-    tracing::info!(%timestamp.timestamp, %timestamp.mode, %full_transactions, "reading block by timestamp");
-
-    let block = ctx.server.storage.read_block_by_timestamp(timestamp)?;
-    Span::with(|s| {
-        s.record("found", block.is_some());
-        if let Some(ref block) = block {
-            s.rec_str("block_number", &block.number());
-        }
-    });
-    match (block, full_transactions) {
-        (Some(block), true) => {
-            tracing::info!(%block.header.timestamp, "block with full transactions found");
-            Ok(block.to_json_rpc_with_full_transactions())
-        }
-        (Some(block), false) => {
-            tracing::info!(%block.header.timestamp, "block with only hashes found");
-            Ok(block.to_json_rpc_with_transactions_hashes())
-        }
-        (None, _) => {
-            tracing::info!(%timestamp.timestamp, "block not found");
-            Ok(JsonValue::Null)
-        }
-    }
+    eth_get_block_by_selector::<'t'>(params, ctx, ext)
 }
 
 // -----------------------------------------------------------------------------
