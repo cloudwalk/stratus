@@ -443,8 +443,7 @@ impl RocksStorageState {
             }
         };
         if let Some(block) = found_block_number {
-            self
-                .blocks_by_number
+            self.blocks_by_number
                 .get(&block)
                 .map(|block_opt| block_opt.map(|block| block.into_inner().into()))
         } else {

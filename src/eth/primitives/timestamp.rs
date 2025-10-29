@@ -3,6 +3,7 @@ use serde::Serialize;
 
 use crate::eth::primitives::UnixTime;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Default, strum::Display)]
+#[serde(rename_all = "camelCase")]
 pub enum BlockTimestampSeekMode {
     #[default]
     ExactOrPrevious,
