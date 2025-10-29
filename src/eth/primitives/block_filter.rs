@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
 use display_json::DebugAsJson;
-use serde::Deserialize;
 
 use super::PointInTime;
 use crate::alias::JsonValue;
