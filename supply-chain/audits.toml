@@ -462,6 +462,20 @@ user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-10-09"
 end = "2026-10-21"
 
+[[trusted.tokio]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2020-12-25"
+end = "2026-10-29"
+notes = "Trusting Alice Ryhl (Darksonn) as publisher for tokio releases; widely vetted by mozilla/bytecode-alliance."
+
+[[trusted.tokio-macros]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2020-10-26"
+end = "2026-10-29"
+notes = "Trusting Alice Ryhl (Darksonn) as publisher for tokio-macros releases; aligns with upstream trusted audits."
+
 [[trusted.windows-sys]]
 criteria = "safe-to-deploy"
 user-id = 64539 # Kenny Kerr (kennykerr)
