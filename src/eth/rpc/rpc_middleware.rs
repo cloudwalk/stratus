@@ -325,6 +325,12 @@ impl Future for RpcResponse<'_> {
                 None => (Level::INFO, 0),
             };
 
+            // only log rpc_result if log level is not info
+            let rpc_result = if !matches!(level, Level::INFO) {
+                &response_result
+            } else {
+                Default::default()
+            };
             let log_tracing_event = || {
                 event_with!(
                     level,
@@ -336,7 +342,7 @@ impl Future for RpcResponse<'_> {
                     rpc_tx_function = %resp.tx.as_ref().map(|tx|tx.function).or_empty(),
                     rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
                     rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
-                    rpc_result = %response_result,
+                    %rpc_result,
                     rpc_success = %response_success,
                     duration_us = %elapsed.as_micros(),
                     "rpc response"
