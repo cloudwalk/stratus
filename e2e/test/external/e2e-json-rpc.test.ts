@@ -217,20 +217,35 @@ describe("JSON-RPC", () => {
                 const defaultSeek = await send("stratus_getBlockByTimestamp", [{ timestamp: midwayTimestamp }, false]);
                 expect(defaultSeek?.number).eq(firstBlock.number);
 
-                const explicitPrevious = await send("stratus_getBlockByTimestamp", [{ timestamp: midwayTimestamp + 1, mode: "exactOrPrevious" }, false]);
+                const explicitPrevious = await send("stratus_getBlockByTimestamp", [
+                    { timestamp: midwayTimestamp + 1, mode: "exactOrPrevious" },
+                    false,
+                ]);
                 expect(explicitPrevious?.number).eq(firstBlock.number);
 
-                const explicitNext = await send("stratus_getBlockByTimestamp", [{ timestamp: midwayTimestamp + 1, mode: "exactOrNext" }, false]);
+                const explicitNext = await send("stratus_getBlockByTimestamp", [
+                    { timestamp: midwayTimestamp + 1, mode: "exactOrNext" },
+                    false,
+                ]);
                 expect(explicitNext?.number).eq(secondBlock.number);
 
                 const beforeFirstTarget = firstTimestamp - 1;
-                const beforeFirst = await send("stratus_getBlockByTimestamp", [{ timestamp: beforeFirstTarget }, false]);
+                const beforeFirst = await send("stratus_getBlockByTimestamp", [
+                    { timestamp: beforeFirstTarget },
+                    false,
+                ]);
                 expect(beforeFirst).to.be.null;
 
-                const afterSecondWithPrevious = await send("stratus_getBlockByTimestamp", [{ timestamp: secondTimestamp + 1, mode: "exactOrPrevious" }, false]);
+                const afterSecondWithPrevious = await send("stratus_getBlockByTimestamp", [
+                    { timestamp: secondTimestamp + 1, mode: "exactOrPrevious" },
+                    false,
+                ]);
                 expect(afterSecondWithPrevious?.number).eq(secondBlock.number);
 
-                const afterSecondWithNext = await send("stratus_getBlockByTimestamp", [{ timestamp: secondTimestamp + 1, mode: "exactOrNext" }, false]);
+                const afterSecondWithNext = await send("stratus_getBlockByTimestamp", [
+                    { timestamp: secondTimestamp + 1, mode: "exactOrNext" },
+                    false,
+                ]);
                 expect(afterSecondWithNext).to.be.null;
             });
         });
