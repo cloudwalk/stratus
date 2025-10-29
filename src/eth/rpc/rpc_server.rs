@@ -899,8 +899,8 @@ fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensio
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
 
     match &filter {
-        BlockFilter::Hash(_)=> (),
-        _ => return Err(StratusError::RPC(RpcError::ParameterInvalid))
+        BlockFilter::Hash(_) => (),
+        _ => return Err(StratusError::RPC(RpcError::ParameterInvalid)),
     }
 
     eth_get_block_by_selector(filter, full_transactions, ctx)
@@ -922,7 +922,7 @@ fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extens
 
     match &filter {
         BlockFilter::Earliest | BlockFilter::Latest | BlockFilter::Number(_) | BlockFilter::Pending => (),
-        _ => return Err(StratusError::RPC(RpcError::ParameterInvalid))
+        _ => return Err(StratusError::RPC(RpcError::ParameterInvalid)),
     }
 
     eth_get_block_by_selector(filter, full_transactions, ctx)
