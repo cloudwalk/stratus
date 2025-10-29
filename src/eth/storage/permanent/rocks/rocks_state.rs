@@ -426,10 +426,10 @@ impl RocksStorageState {
 
         let next_entry = self.blocks_by_timestamp.seek(timestamp_key)?.filter(|(ts, _)| ts.0 >= timestamp_key.0);
 
-        let found_block_number = if let Some(entry) = next_entry
+        let found_block_number = if let Some(entry) = &next_entry
             && entry.0 == timestamp_key
         {
-            Some(entry.1)
+            Some(entry.1.clone())
         } else {
             match target.mode {
                 BlockTimestampSeekMode::ExactOrNext => next_entry.map(|e| e.1),
@@ -444,10 +444,10 @@ impl RocksStorageState {
             }
         };
         if let Some(block) = found_block_number {
-            return self
+            self
                 .blocks_by_number
                 .get(&block)
-                .map(|block_opt| block_opt.map(|block| block.into_inner().into()));
+                .map(|block_opt| block_opt.map(|block| block.into_inner().into()))
         } else {
             Ok(None)
         }
