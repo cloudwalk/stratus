@@ -7,6 +7,17 @@ on:
         description: "List of features to enable"
         required: false
         default: ""
+  push:
+    branches:
+      - "main"
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "tests/fixtures/**"
+      - "static/**"
+      - ".sqlx/**"
 
 env:
   RETENTION_DAYS: 90
