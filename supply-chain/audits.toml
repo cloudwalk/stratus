@@ -342,6 +342,18 @@ criteria = "safe-to-deploy"
 delta = "3.21.0 -> 3.23.0"
 notes = "Mostly docs, tests and cicd."
 
+[[audits.tikv-jemalloc-sys]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7 -> 0.6.1+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7"
+notes = "Reviewed 0.6.0+... -> 0.6.1+...: build.rs now funnels make invocations through helper honoring CARGO_MAKEFLAGS and only changes logging; new override_allocator feature wires #[used] statics (or zone ctor on apple) to keep malloc/free symbol overrides linked, drawing from existing externs; added tests for malloc_conf and override interop. No new FFI definitions or unsafe behavior beyond these references."
+
+[[audits.tikv-jemallocator]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.6.0 -> 0.6.1"
+notes = "Reviewed 0.6.0->0.6.1: crate restructured but runtime logic unchanged aside from cfg align tables (mipsel/powerpc64le now use 16 byte max_align); added tests/background thread docs and new wrapper features mapping to sys crate; no new unsafe and allocator paths still delegate to ffi."
+
 [[audits.tonic]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
