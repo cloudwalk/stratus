@@ -228,6 +228,12 @@ criteria = "safe-to-deploy"
 delta = "27.1.0 -> 30.1.0"
 notes = "Reviewed 27.1.0->30.1.0: optional fee charge flag, kzg provider swap, no unsafe additions."
 
+[[audits.revm]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "30.1.0 -> 30.2.0"
+notes = "Reviewed 30.1.0->30.2.0: crate sources unchanged; only updates dependency pins to newer revm-* crates so no new logic, unsafe, or capabilities."
+
 [[audits.revm-bytecode]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -264,11 +270,23 @@ criteria = "safe-to-deploy"
 delta = "8.1.0 -> 11.1.2"
 notes = "Reviewed 8.1.0->11.1.2: transaction index errors, fee helpers, no unsafe changes."
 
+[[audits.revm-handler]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "11.1.2 -> 11.2.0"
+notes = "Reviewed 11.1.2->11.2.0: call frame setup accepts optional known bytecode and falls back to journal_mut().load_account_code when absent; precompile checkpoint logic unchanged, no unsafe code introduced or new ambient access."
+
 [[audits.revm-inspector]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "8.1.0 -> 11.1.2"
 notes = "Reviewed 8.1.0->11.1.2: inspector trait refactors, frame helpers, no unsafe."
+
+[[audits.revm-inspector]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "11.1.2 -> 11.2.0"
+notes = "Reviewed 11.1.2->11.2.0: crate sources unchanged aside from dependency bumps to new revm-handler/interpreter; no new logic or unsafe paths."
 
 [[audits.revm-inspectors]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -281,6 +299,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "24.0.0 -> 27.0.2"
 notes = "Reviewed 24.0.0->27.0.2: loop control simplifications, stack accessors, no unsafe."
+
+[[audits.revm-interpreter]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "27.0.2 -> 28.0.0"
+notes = "Reviewed 27.0.2->28.0.0: CallInputs now carries optional (hash, bytecode) so handler can reuse already-fetched code; resize_memory! adds memory_limit guard via SharedMemory::limit_reached using saturating offsets; new halt_memory_limit_oog and tests ensure distinguishing memory limit vs gas OOG; no new unsafe, host/account loading unchanged."
 
 [[audits.revm-precompile]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
