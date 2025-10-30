@@ -71,7 +71,6 @@ jobs:
 
             if [ -n "${FILES}" ]; then
               echo "Profile data found at ${BUCKET_PATH}:"
-              echo "${FILES}"
               break
             fi
 
