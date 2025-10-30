@@ -4933,9 +4933,9 @@ dependencies = [
 
 [[package]]
 name = "revm"
-version = "30.1.0"
+version = "30.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc57cfaa9b93f4bffc06810655f392fed97fe2cb18de4b169bf6da14c5e51e64"
+checksum = "76df793c6ef3bef8f88f05b3873ebebce1494385a3ce8f58ad2e2e111aa0de11"
 dependencies = [
  "revm-bytecode",
  "revm-context",
@@ -5024,9 +5024,9 @@ dependencies = [
 
 [[package]]
 name = "revm-handler"
-version = "11.1.2"
+version = "11.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54384bb0b081184c3ba3fc66e72781ff6ca5a8408067000f58255ab515b2fdb0"
+checksum = "b1d8049b2fbff6636150f4740c95369aa174e41b0383034e0e256cfdffcfcd23"
 dependencies = [
  "auto_impl",
  "derive-where",
@@ -5043,9 +5043,9 @@ dependencies = [
 
 [[package]]
 name = "revm-inspector"
-version = "11.1.2"
+version = "11.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c0ed01fe30ba5f5690115cbe531962bbbfc12603c695ceaddc28d457a646a05"
+checksum = "e2a21dd773b654ec7e080025eecef4ac84c711150d1bd36acadf0546f471329a"
 dependencies = [
  "auto_impl",
  "either",
@@ -5081,9 +5081,9 @@ dependencies = [
 
 [[package]]
 name = "revm-interpreter"
-version = "27.0.2"
+version = "28.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0834fc25c020061f0f801d8de8bb53c88a63631cca5884a6c65b90c85e241138"
+checksum = "f1de5c790122f8ded67992312af8acd41ccfcee629b25b819e10c5b1f69caf57"
 dependencies = [
  "revm-bytecode",
  "revm-context-interface",
@@ -6608,9 +6608,9 @@ dependencies = [
 
 [[package]]
 name = "tikv-jemalloc-sys"
-version = "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7"
+version = "0.6.1+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd3c60906412afa9c2b5b5a48ca6a5abe5736aec9eb48ad05037a677e52e4e2d"
+checksum = "cd8aa5b2ab86a2cefa406d889139c162cbb230092f7d1d7cbc1716405d852a3b"
 dependencies = [
  "cc",
  "libc",
@@ -6618,9 +6618,9 @@ dependencies = [
 
 [[package]]
 name = "tikv-jemallocator"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cec5ff18518d81584f477e9bfdf957f5bb0979b0bac3af4ca30b5b3ae2d2865"
+checksum = "0359b4327f954e0567e69fb191cf1436617748813819c94b8cd4a431422d053a"
 dependencies = [
  "libc",
  "tikv-jemalloc-sys",
