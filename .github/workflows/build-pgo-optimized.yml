@@ -15,7 +15,7 @@ jobs:
   build_optimized:
     name: Build PGO optimized binary
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 180
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.run_id }}
@@ -47,6 +47,20 @@ jobs:
 
       - name: Create profiles directory
         run: mkdir -p /tmp/profiles/${{ github.sha }}
+
+      - name: Wait for profile data availability
+        run: |
+          BUCKET_PATH="gs://stratus_performance_benchmark_staging/profile-data/${{ github.sha }}/"
+          SLEEP_INTERVAL=60
+
+          echo "Waiting for profile data at ${BUCKET_PATH}"
+
+          until gsutil -q ls "${BUCKET_PATH}**" >/dev/null 2>&1; do
+            echo "Profile data not yet available. Sleeping ${SLEEP_INTERVAL}s."
+            sleep "${SLEEP_INTERVAL}"
+          done
+
+          echo "Profile data found at ${BUCKET_PATH}"
 
       - name: Download profile data from GCS
         run: |
