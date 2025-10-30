@@ -130,6 +130,12 @@ criteria = "safe-to-deploy"
 delta = "0.16.0 -> 0.16.1"
 notes = "Reviewed 0.16.0->0.16.1: adds Display wrapper for ansi stripping, QNX cfmakeraw shim; no new unsafe."
 
+[[audits.const-hex]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.15.0 -> 1.17.0"
+notes = "Reviewed 1.15.0->1.17.0: removes runtime hex re-export dependency; new encode_to_str APIs reuse encode_to_slice and only call from_utf8_unchecked_mut after length/ascii validation; serde module now uses serde_core alias; no new I/O or FFI and unsafe surface otherwise unchanged."
+
 [[audits.const_format]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -431,6 +437,20 @@ criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-10-09"
 end = "2026-10-21"
+
+[[trusted.tokio]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2020-12-25"
+end = "2026-10-29"
+notes = "Trusting Alice Ryhl (Darksonn) as publisher for tokio releases; widely vetted by mozilla/bytecode-alliance."
+
+[[trusted.tokio-macros]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2020-10-26"
+end = "2026-10-29"
+notes = "Trusting Alice Ryhl (Darksonn) as publisher for tokio-macros releases; aligns with upstream trusted audits."
 
 [[trusted.windows-sys]]
 criteria = "safe-to-deploy"
