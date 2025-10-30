@@ -326,10 +326,10 @@ impl Future for RpcResponse<'_> {
             };
 
             // only log rpc_result if log level is not info
-            let rpc_result = if !matches!(level, Level::INFO) {
-                &response_result
-            } else {
+            let rpc_result = if matches!(level, Level::INFO) {
                 Default::default()
+            } else {
+                &response_result
             };
             let log_tracing_event = || {
                 event_with!(
