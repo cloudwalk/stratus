@@ -66,12 +66,20 @@ jobs:
 
           echo "Waiting for profile data at ${BUCKET_PATH}"
 
-          until gsutil -q ls "${BUCKET_PATH}**" >/dev/null 2>&1; do
+          while true; do
+            FILES=$(gsutil ls "${BUCKET_PATH}**" 2>/dev/null | grep -v '/$' || true)
+
+            if [ -n "${FILES}" ]; then
+              echo "Profile data found at ${BUCKET_PATH}:"
+              echo "${FILES}"
+              break
+            fi
+
             echo "Profile data not yet available. Sleeping ${SLEEP_INTERVAL}s."
             sleep "${SLEEP_INTERVAL}"
           done
 
-          echo "Profile data found at ${BUCKET_PATH}"
+          echo "Ready to download profile data from ${BUCKET_PATH}"
 
       - name: Download profile data from GCS
         run: |
