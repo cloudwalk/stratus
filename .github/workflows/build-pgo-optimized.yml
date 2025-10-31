@@ -7,6 +7,17 @@ on:
         description: "List of features to enable"
         required: false
         default: ""
+  push:
+    branches:
+      - "main"
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "tests/fixtures/**"
+      - "static/**"
+      - ".sqlx/**"
 
 env:
   RETENTION_DAYS: 90
@@ -15,7 +26,7 @@ jobs:
   build_optimized:
     name: Build PGO optimized binary
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 300
 
     concurrency:
       group: ${{ github.workflow }}-${{ github.run_id }}
@@ -47,6 +58,26 @@ jobs:
 
       - name: Create profiles directory
         run: mkdir -p /tmp/profiles/${{ github.sha }}
+
+      - name: Wait for profile data availability
+        run: |
+          BUCKET_PATH="gs://stratus_performance_benchmark_staging/profile-data/${{ github.sha }}/"
+          SLEEP_INTERVAL=60
+
+          echo "Waiting for profile data at ${BUCKET_PATH}"
+
+          while true; do
+            FILES=$(gsutil ls "${BUCKET_PATH}**" 2>/dev/null | grep -v '/$' || true)
+
+            if [ -n "${FILES}" ]; then
+              echo "Profile data found at ${BUCKET_PATH}:"
+              break
+            fi
+
+            sleep "${SLEEP_INTERVAL}"
+          done
+
+          echo "Ready to download profile data from ${BUCKET_PATH}"
 
       - name: Download profile data from GCS
         run: |
