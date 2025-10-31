@@ -74,7 +74,6 @@ jobs:
               break
             fi
 
-            echo "Profile data not yet available. Sleeping ${SLEEP_INTERVAL}s."
             sleep "${SLEEP_INTERVAL}"
           done
 
