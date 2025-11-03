@@ -49,8 +49,8 @@ use crate::eth::codegen::CONTRACTS;
 use crate::eth::decode;
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
-use crate::eth::follower::importer::Importer;
 use crate::eth::follower::importer::ImporterConfig;
+use crate::eth::follower::importer::ImporterConsensus;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
@@ -110,7 +110,7 @@ pub struct Server {
     pub storage: Arc<StratusStorage>,
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
-    pub importer: Arc<RwLock<Option<Arc<Importer>>>>,
+    pub importer: Arc<RwLock<Option<Arc<ImporterConsensus>>>>,
 
     // config
     pub app_config: StratusConfig,
@@ -242,11 +242,11 @@ impl Server {
         metrics::set_consensus_is_ready(if is_healthy { 1u64 } else { 0u64 });
     }
 
-    fn read_importer(&self) -> Option<Arc<Importer>> {
+    fn read_importer(&self) -> Option<Arc<ImporterConsensus>> {
         self.importer.read().as_ref().map(Arc::clone)
     }
 
-    pub fn set_importer(&self, importer: Option<Arc<Importer>>) {
+    pub fn set_importer(&self, importer: Option<Arc<ImporterConsensus>>) {
         *self.importer.write() = importer;
     }
 
@@ -286,6 +286,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
         module.register_blocking_method("stratus_setBalance", stratus_set_balance)?;
         module.register_blocking_method("hardhat_setCode", stratus_set_code)?;
         module.register_blocking_method("stratus_setCode", stratus_set_code)?;
+        module.register_blocking_method("stratus_clearCache", stratus_clear_cache)?;
     }
 
     // stratus status
@@ -331,6 +332,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("eth_blockNumber", eth_block_number)?;
     module.register_blocking_method("eth_getBlockByNumber", eth_get_block_by_number)?;
     module.register_blocking_method("eth_getBlockByHash", eth_get_block_by_hash)?;
+    module.register_blocking_method("stratus_getBlockByTimestamp", stratus_get_block_by_timestamp)?;
     module.register_method("eth_getUncleByBlockHashAndIndex", eth_get_uncle_by_block_hash_and_index)?;
 
     // transactions
@@ -368,6 +370,12 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
 #[cfg(feature = "dev")]
 fn evm_mine(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
     ctx.server.miner.mine_local_and_commit()?;
+    Ok(to_json_value(true))
+}
+
+#[cfg(feature = "dev")]
+fn stratus_clear_cache(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
+    ctx.server.storage.clear_cache();
     Ok(to_json_value(true))
 }
 
@@ -877,39 +885,51 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 }
 
 fn eth_get_block_by_hash(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    eth_get_block_by_selector::<'h'>(params, ctx, ext)
-}
-
-fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    eth_get_block_by_selector::<'n'>(params, ctx, ext)
-}
-
-#[inline(always)]
-fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
-    // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = if KIND == 'h' {
-        info_span!(
-            "rpc::eth_getBlockByHash",
-            filter = field::Empty,
-            block_number = field::Empty,
-            found = field::Empty
-        )
-        .entered()
-    } else {
-        info_span!(
-            "rpc::eth_getBlockByNumber",
-            filter = field::Empty,
-            block_number = field::Empty,
-            found = field::Empty
-        )
-        .entered()
-    };
 
-    // parse params
+    let _method_enter = info_span!(
+        "rpc::eth_getBlockByHash",
+        filter = field::Empty,
+        block_number = field::Empty,
+        found = field::Empty
+    )
+    .entered();
+
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
     let (_, full_transactions) = next_rpc_param::<bool>(params)?;
 
+    match &filter {
+        BlockFilter::Hash(_) => (),
+        _ => return Err(StratusError::RPC(RpcError::ParameterInvalid)),
+    }
+
+    eth_get_block_by_selector(filter, full_transactions, ctx)
+}
+
+fn eth_get_block_by_number(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    let _middleware_enter = ext.enter_middleware_span();
+
+    let _method_enter = info_span!(
+        "rpc::eth_getBlockByNumber",
+        filter = field::Empty,
+        block_number = field::Empty,
+        found = field::Empty
+    )
+    .entered();
+
+    let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (_, full_transactions) = next_rpc_param::<bool>(params)?;
+
+    match &filter {
+        BlockFilter::Earliest | BlockFilter::Latest | BlockFilter::Number(_) | BlockFilter::Pending => (),
+        _ => return Err(StratusError::RPC(RpcError::ParameterInvalid)),
+    }
+
+    eth_get_block_by_selector(filter, full_transactions, ctx)
+}
+
+#[inline(always)]
+fn eth_get_block_by_selector(filter: BlockFilter, full_transactions: bool, ctx: Arc<RpcContext>) -> Result<JsonValue, StratusError> {
     // track
     Span::with(|s| s.rec_str("filter", &filter));
     tracing::info!(%filter, %full_transactions, "reading block");
@@ -940,6 +960,27 @@ fn eth_get_block_by_selector<const KIND: char>(params: Params<'_>, ctx: Arc<RpcC
 
 fn eth_get_uncle_by_block_hash_and_index(_: Params<'_>, _: &RpcContext, _: &Extensions) -> Result<JsonValue, StratusError> {
     Ok(JsonValue::Null)
+}
+
+fn stratus_get_block_by_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!(
+        "rpc::stratus_getBlockByTimestamp",
+        timestamp = field::Empty,
+        block_number = field::Empty,
+        found = field::Empty
+    )
+    .entered();
+
+    let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (_, full_transactions) = next_rpc_param::<bool>(params)?;
+
+    match &filter {
+        BlockFilter::Timestamp { .. } => (),
+        _ => return Err(StratusError::RPC(RpcError::ParameterInvalid)),
+    }
+
+    eth_get_block_by_selector(filter, full_transactions, ctx)
 }
 
 // -----------------------------------------------------------------------------
@@ -1018,7 +1059,7 @@ fn stratus_get_transaction_result(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     match rpc_get_transaction_receipt(params, ctx)? {
         Some(tx) => {
             tracing::info!("transaction receipt found");
-            Ok(to_json_value(tx.result()))
+            Ok(to_json_value(tx.to_result().execution.result))
         }
         None => {
             tracing::info!("transaction receipt not found");
@@ -1047,7 +1088,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
-            let overestimated_gas = (result.gas.as_u64()) as f64 * 1.1;
+            let overestimated_gas = (result.gas_used.as_u64()) as f64 * 1.1;
             Ok(hex_num(U256::from(overestimated_gas as u64)))
         }
 
@@ -1238,7 +1279,8 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
         filter = field::Empty,
         filter_from = field::Empty,
         filter_to = field::Empty,
-        filter_range = field::Empty
+        filter_range = field::Empty,
+        filter_event = field::Empty
     )
     .entered();
 
@@ -1257,14 +1299,17 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     };
     let blocks_in_range = filter.from_block.count_to(to_block);
 
+    let event_name = codegen::event_names_from_filter(&filter);
+
     // track
     Span::with(|s| {
         s.rec_str("filter", &to_json_string(&filter));
         s.rec_str("filter_from", &filter.from_block);
         s.rec_str("filter_to", &to_block);
         s.rec_str("filter_range", &blocks_in_range);
+        s.rec_str("filter_event", &event_name);
     });
-    tracing::info!(?filter, "reading logs");
+    tracing::info!(?filter, filter_event = %event_name, "reading logs");
 
     // check range
     if blocks_in_range > MAX_BLOCK_RANGE {
@@ -1360,7 +1405,7 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
 async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx: Arc<RpcContext>, ext: Extensions) -> impl IntoSubscriptionCloseResponse {
     // `middleware_enter` created to be used as a parent by `method_span`
     let middleware_enter = ext.enter_middleware_span();
-    let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty);
+    let method_span = info_span!("rpc::eth_subscribe", subscription = field::Empty, subscription_event = field::Empty);
     drop(middleware_enter);
 
     async move {
@@ -1395,8 +1440,13 @@ async fn eth_subscribe(params: Params<'_>, pending: PendingSubscriptionSink, ctx
             }
 
             "logs" => {
-                let (_, filter) = next_rpc_param_or_default::<LogFilterInput>(params)?;
-                let filter = filter.parse(&ctx.server.storage)?;
+                let (_, filter_input) = next_rpc_param_or_default::<LogFilterInput>(params)?;
+                let filter = filter_input.parse(&ctx.server.storage)?;
+
+                let event_name = codegen::event_names_from_filter(&filter).to_string();
+                Span::with(|s| s.rec_str("subscription_event", &event_name));
+                tracing::info!(subscription_event = %event_name, "subscribing to logs with event filter");
+
                 ctx.subs.add_logs_subscription(client, filter, pending.accept().await?).await;
             }
 

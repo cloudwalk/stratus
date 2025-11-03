@@ -5,11 +5,12 @@ use clap::Parser;
 use display_json::DebugAsJson;
 use serde_json::json;
 
-use super::importer::ImporterMode;
 use crate::GlobalState;
 use crate::NodeMode;
 use crate::eth::executor::Executor;
-use crate::eth::follower::importer::Importer;
+use crate::eth::follower::importer::ImporterMode;
+use crate::eth::follower::importer::importer_supervisor::ImporterConsensus;
+use crate::eth::follower::importer::importer_supervisor::start_importer;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::ConsensusError;
 use crate::eth::primitives::ImporterError;
@@ -61,7 +62,7 @@ impl ImporterConfig {
         miner: Arc<Miner>,
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
-    ) -> anyhow::Result<Option<Arc<Importer>>> {
+    ) -> anyhow::Result<Option<Arc<ImporterConsensus>>> {
         match GlobalState::get_node_mode() {
             NodeMode::Leader => Ok(None),
             NodeMode::Follower =>
@@ -73,7 +74,7 @@ impl ImporterConfig {
                     if self.enable_block_changes_replication {
                         ImporterMode::BlockWithChanges
                     } else {
-                        ImporterMode::NormalFollower
+                        ImporterMode::ReexecutionFollower
                     },
                 )
                 .await,
@@ -88,10 +89,9 @@ impl ImporterConfig {
         storage: Arc<StratusStorage>,
         kafka_connector: Option<KafkaConnector>,
         importer_mode: ImporterMode,
-    ) -> anyhow::Result<Option<Arc<Importer>>> {
+    ) -> anyhow::Result<Option<Arc<ImporterConsensus>>> {
         const TASK_NAME: &str = "importer::init";
         tracing::info!("creating importer for follower node");
-
         let chain = Arc::new(
             BlockchainClient::new_http_ws(
                 &self.external_rpc,
@@ -102,27 +102,17 @@ impl ImporterConfig {
             .await?,
         );
 
-        let importer = Importer::new(
-            executor,
-            Arc::clone(&miner),
-            Arc::clone(&storage),
-            Arc::clone(&chain),
-            kafka_connector.map(Arc::new),
-            self.sync_interval,
-            importer_mode,
-        );
-        let importer = Arc::new(importer);
-
-        spawn(TASK_NAME, {
-            let importer = Arc::clone(&importer);
-            async move {
-                if let Err(e) = importer.run_importer_online().await {
-                    tracing::error!(reason = ?e, "importer-online failed");
-                }
-            }
+        let consensus = Arc::new(ImporterConsensus {
+            storage: Arc::clone(&storage),
+            chain: Arc::clone(&chain),
         });
 
-        Ok(Some(importer))
+        spawn(
+            TASK_NAME,
+            start_importer(importer_mode, storage, executor, miner, chain, kafka_connector, self.sync_interval),
+        );
+
+        Ok(Some(consensus))
     }
 
     pub async fn init_follower_importer(&self, ctx: Arc<RpcContext>) -> Result<serde_json::Value, StratusError> {

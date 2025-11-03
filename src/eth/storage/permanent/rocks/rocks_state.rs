@@ -38,6 +38,7 @@ use super::types::BlockNumberRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
+use super::types::UnixTimeRocksdb;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
@@ -48,7 +49,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
@@ -91,6 +92,7 @@ pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap
         "transactions" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.transactions)),
         "blocks_by_number" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_number)),
         "blocks_by_hash" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_hash)),
+        "blocks_by_timestamp" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_timestamp)),
         "block_changes" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.block_changes)),
     }
 }
@@ -124,6 +126,7 @@ pub struct RocksStorageState {
     pub transactions: RocksCfRef<'static, HashRocksdb, CfTransactionsValue>,
     pub blocks_by_number: RocksCfRef<'static, BlockNumberRocksdb, CfBlocksByNumberValue>,
     blocks_by_hash: RocksCfRef<'static, HashRocksdb, CfBlocksByHashValue>,
+    blocks_by_timestamp: RocksCfRef<'static, UnixTimeRocksdb, CfBlocksByHashValue>,
     block_changes: RocksCfRef<'static, BlockNumberRocksdb, CfBlockChangesValue>,
     /// Last collected stats for a histogram
     #[cfg(feature = "rocks_metrics")]
@@ -163,6 +166,7 @@ impl RocksStorageState {
             transactions: new_cf_ref(db, "transactions", &cf_options_map)?,
             blocks_by_number: new_cf_ref(db, "blocks_by_number", &cf_options_map)?,
             blocks_by_hash: new_cf_ref(db, "blocks_by_hash", &cf_options_map)?,
+            blocks_by_timestamp: new_cf_ref(db, "blocks_by_timestamp", &cf_options_map)?,
             block_changes: new_cf_ref(db, "block_changes", &cf_options_map)?,
             #[cfg(feature = "rocks_metrics")]
             prev_stats: Mutex::default(),
@@ -207,6 +211,7 @@ impl RocksStorageState {
         self.transactions.clear()?;
         self.blocks_by_number.clear()?;
         self.blocks_by_hash.clear()?;
+        self.blocks_by_timestamp.clear()?;
         Ok(())
     }
 
@@ -285,7 +290,7 @@ impl RocksStorageState {
         }
     }
 
-    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMined>> {
+    pub fn read_logs(&self, filter: &LogFilter) -> Result<Vec<LogMessage>> {
         let is_block_number_in_end_range = |number: BlockNumber| match filter.to_block.as_ref() {
             Some(&last_block) => number <= last_block,
             None => true,
@@ -306,12 +311,13 @@ impl RocksStorageState {
 
             let block = block.into_inner();
             let logs = block.transactions.into_iter().enumerate().flat_map(|(tx_index, transaction)| {
-                transaction.logs.into_iter().map(move |log| {
-                    LogMined::from_rocks_primitives(log.log, block.header.number, block.header.hash, tx_index, transaction.input.hash, log.index)
-                })
+                transaction
+                    .logs
+                    .into_iter()
+                    .map(move |log| LogMessage::from_rocks_primitives(log, block.header.number, block.header.hash, tx_index, transaction.input.hash))
             });
 
-            let filtered_logs = logs.filter(|log| filter.matches(log));
+            let filtered_logs = logs.filter(|log| filter.matches(&log.log, block.header.number.into()));
             logs_result.extend(filtered_logs);
         }
         Ok(logs_result)
@@ -406,6 +412,14 @@ impl RocksStorageState {
                 } else {
                     Ok(None)
                 },
+            BlockFilter::Timestamp(timestamp) => self
+                .blocks_by_timestamp
+                .iter_from(timestamp.timestamp.into(), timestamp.mode.into())?
+                .next()
+                .transpose()?
+                .map(|inner| self.blocks_by_number.get(&inner.1))
+                .transpose()
+                .map(|nested_opt| nested_opt.flatten()),
         };
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
@@ -439,18 +453,22 @@ impl RocksStorageState {
 
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.input.transaction_info.hash.into(), transaction.block_number.into()));
+            txs_batch.push((transaction.info.hash.into(), transaction.evm_input.block_number.into()));
         }
         self.transactions.prepare_batch_insertion(txs_batch, &mut batch)?;
 
         let number = block.number();
         let block_hash = block.hash();
+        let timestamp = block.header.timestamp;
 
         let block_by_number = (number.into(), block.into());
         self.blocks_by_number.prepare_batch_insertion([block_by_number], &mut batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], &mut batch)?;
+
+        let block_by_timestamp = (timestamp.into(), number.into());
+        self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], &mut batch)?;
 
         self.prepare_batch_with_execution_changes(account_changes, number, &mut batch)?;
 
@@ -482,19 +500,23 @@ impl RocksStorageState {
     pub fn prepare_block_insertion(&self, block: Block, account_changes: ExecutionChanges, batch: &mut WriteBatch) -> Result<()> {
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
-            txs_batch.push((transaction.input.transaction_info.hash.into(), transaction.block_number.into()));
+            txs_batch.push((transaction.info.hash.into(), transaction.evm_input.block_number.into()));
         }
 
         self.transactions.prepare_batch_insertion(txs_batch, batch)?;
 
         let number = block.number();
         let block_hash = block.hash();
+        let timestamp = block.header.timestamp;
 
         let block_by_number = (number.into(), block.into());
         self.blocks_by_number.prepare_batch_insertion([block_by_number], batch)?;
 
         let block_by_hash = (block_hash.into(), number.into());
         self.blocks_by_hash.prepare_batch_insertion([block_by_hash], batch)?;
+
+        let block_by_timestamp = (timestamp.into(), number.into());
+        self.blocks_by_timestamp.prepare_batch_insertion([block_by_timestamp], batch)?;
 
         self.prepare_batch_with_execution_changes(account_changes, number, batch)?;
 
@@ -602,6 +624,7 @@ impl RocksStorageState {
         self.transactions.clear().context("when clearing transactions")?;
         self.blocks_by_hash.clear().context("when clearing blocks_by_hash")?;
         self.blocks_by_number.clear().context("when clearing blocks_by_number")?;
+        self.blocks_by_timestamp.clear().context("when clearing blocks_by_timestamp")?;
         Ok(())
     }
 
@@ -675,6 +698,7 @@ impl RocksStorageState {
         self.accounts_history.export_metrics();
         self.blocks_by_hash.export_metrics();
         self.blocks_by_number.export_metrics();
+        self.blocks_by_timestamp.export_metrics();
         self.transactions.export_metrics();
         Ok(())
     }
@@ -763,7 +787,11 @@ mod tests {
     use fake::Faker;
 
     use super::*;
+    use crate::eth::executor::EvmExecutionResult;
+    use crate::eth::executor::EvmInput;
     use crate::eth::primitives::BlockHeader;
+    use crate::eth::primitives::EvmExecution;
+    use crate::eth::primitives::TransactionExecution;
 
     #[test]
     #[cfg(feature = "dev")]
@@ -822,8 +850,20 @@ mod tests {
                     ..Faker.fake()
                 },
                 transactions: vec![TransactionMined {
-                    block_number: number.into(),
-                    logs: vec![Faker.fake(), Faker.fake()],
+                    execution: TransactionExecution {
+                        evm_input: EvmInput {
+                            block_number: number.into(),
+                            ..Faker.fake()
+                        },
+                        result: EvmExecutionResult {
+                            execution: EvmExecution {
+                                logs: vec![Faker.fake(), Faker.fake()],
+                                ..Faker.fake()
+                            },
+                            ..Faker.fake()
+                        },
+                        ..Faker.fake()
+                    },
                     ..Faker.fake()
                 }],
             };

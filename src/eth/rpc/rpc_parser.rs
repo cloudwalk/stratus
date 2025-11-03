@@ -54,7 +54,7 @@ where
         Ok(None) => Err(RpcError::ParameterMissing {
             rust_type: type_basename::<T>(),
         }),
-        Err(e) => Err(RpcError::ParameterInvalid {
+        Err(e) => Err(RpcError::ParameterDecodeError {
             rust_type: type_basename::<T>(),
             decode_error: e.data().map(|x| x.to_string()).unwrap_or_default(),
         }),

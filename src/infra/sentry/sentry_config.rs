@@ -22,6 +22,7 @@ impl SentryConfig {
         let guard = sentry::init((
             self.sentry_url.clone(),
             sentry::ClientOptions {
+                max_breadcrumbs: 0,
                 release: Some(release.clone().into()),
                 environment: Some(env.to_string().into()),
                 ..Default::default()

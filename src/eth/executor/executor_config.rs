@@ -1,4 +1,3 @@
-use std::cmp::max;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -16,18 +15,14 @@ pub struct ExecutorConfig {
     #[arg(long = "executor-chain-id", alias = "chain-id", env = "EXECUTOR_CHAIN_ID")]
     pub executor_chain_id: u64,
 
-    /// Number of EVM instances to run.
-    #[arg(long = "executor-evms", alias = "evms", env = "EXECUTOR_EVMS", default_value = "30")]
-    pub executor_evms: usize,
+    #[arg(long = "executor-call-present-evms", env = "EXECUTOR_CALL_PRESENT_EVMS", default_value_t = 50)]
+    pub call_present_evms: usize,
 
-    #[arg(long = "executor-call-present-evms", env = "EXECUTOR_CALL_PRESENT_EVMS")]
-    pub executor_call_present_evms: Option<usize>,
+    #[arg(long = "executor-call-past-evms", env = "EXECUTOR_CALL_PAST_EVMS", default_value_t = 50)]
+    pub call_past_evms: usize,
 
-    #[arg(long = "executor-call-past-evms", env = "EXECUTOR_CALL_PAST_EVMS")]
-    pub executor_call_past_evms: Option<usize>,
-
-    #[arg(long = "executor-inspector-evms", env = "EXECUTOR_INSPECTOR_EVMS")]
-    pub executor_inspector_evms: Option<usize>,
+    #[arg(long = "executor-inspector-evms", env = "EXECUTOR_INSPECTOR_EVMS", default_value_t = 50)]
+    pub inspector_evms: usize,
 
     /// Should reject contract transactions and calls to accounts that are not contracts?
     #[arg(
@@ -51,8 +46,7 @@ impl ExecutorConfig {
     ///
     /// Note: Should be called only after async runtime is initialized.
     pub fn init(&self, storage: Arc<StratusStorage>, miner: Arc<Miner>) -> Arc<Executor> {
-        let mut config = self.clone();
-        config.executor_evms = max(config.executor_evms, 1);
+        let config = self.clone();
         tracing::info!(?config, "creating executor");
 
         let executor = Executor::new(storage, miner, config);

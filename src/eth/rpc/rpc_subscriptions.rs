@@ -21,7 +21,7 @@ use crate::eth::primitives::BlockHeader;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogFilterInput;
-use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogMessage;
 use crate::eth::primitives::RpcError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::UnixTimeNow;
@@ -61,7 +61,7 @@ pub struct RpcSubscriptions {
 
 impl RpcSubscriptions {
     /// Creates a new subscription manager that automatically spawns all necessary tasks in background.
-    pub fn spawn(rx_pending_txs: broadcast::Receiver<Hash>, rx_blocks: broadcast::Receiver<BlockHeader>, rx_logs: broadcast::Receiver<LogMined>) -> Self {
+    pub fn spawn(rx_pending_txs: broadcast::Receiver<Hash>, rx_blocks: broadcast::Receiver<BlockHeader>, rx_logs: broadcast::Receiver<LogMessage>) -> Self {
         let connected = Arc::new(RpcSubscriptionsConnected::default());
 
         Self::spawn_subscriptions_cleaner(Arc::clone(&connected));
@@ -255,7 +255,7 @@ impl RpcSubscriptions {
     }
 
     /// Spawns a new task that notifies subscribers about new transactions logs.
-    fn spawn_logs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_log_mined: broadcast::Receiver<LogMined>) -> JoinHandle<anyhow::Result<()>> {
+    fn spawn_logs_notifier(subs: Arc<RpcSubscriptionsConnected>, mut rx_log_mined: broadcast::Receiver<LogMessage>) -> JoinHandle<anyhow::Result<()>> {
         const TASK_NAME: &str = "rpc::sub::logs";
         spawn(TASK_NAME, async move {
             loop {
@@ -273,7 +273,7 @@ impl RpcSubscriptions {
                 let matching_subscribers = interested_subs
                     .values()
                     .flat_map(HashMap::values)
-                    .filter_map(|s| if_else!(s.filter.matches(&log), Some(&s.inner), None))
+                    .filter_map(|s| if_else!(s.filter.matches(&log.log, log.block_number), Some(&s.inner), None))
                     .collect_vec();
 
                 if !matching_subscribers.is_empty() {

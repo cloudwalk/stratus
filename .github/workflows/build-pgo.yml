@@ -21,13 +21,6 @@ on:
 
 env:
   RETENTION_DAYS: 90
-  CACHE_SHARED_KEY: stable-release
-  CACHE_PATH: |
-    ~/.cargo/registry/index/
-    ~/.cargo/registry/cache/
-    ~/.cargo/git/db/
-    target/
-
 
 jobs:
   build_binaries:
@@ -47,13 +40,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88
-
-      - name: Rust Cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ env.CACHE_PATH }}
-          restore-keys: ${{ env.CACHE_SHARED_KEY }}
-          key: ${{ env.CACHE_SHARED_KEY }}
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev

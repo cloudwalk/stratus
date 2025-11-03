@@ -2,8 +2,8 @@ use display_json::DebugAsJson;
 
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Log;
 use crate::eth::primitives::LogFilterInput;
-use crate::eth::primitives::LogMined;
 use crate::ext::not;
 
 #[derive(Clone, DebugAsJson, serde::Serialize, Eq, Hash, PartialEq)]
@@ -21,23 +21,23 @@ pub struct LogFilter {
 
 impl LogFilter {
     /// Checks if a log matches the filter.
-    pub fn matches(&self, log: &LogMined) -> bool {
+    pub fn matches(&self, log: &Log, block_number: BlockNumber) -> bool {
         // filter block range
-        if log.block_number < self.from_block {
+        if block_number < self.from_block {
             return false;
         }
-        if self.to_block.as_ref().is_some_and(|to_block| log.block_number > *to_block) {
+        if self.to_block.as_ref().is_some_and(|to_block| block_number > *to_block) {
             return false;
         }
 
         // filter address
         let has_addresses = not(self.addresses.is_empty());
-        if has_addresses && not(self.addresses.contains(&log.address())) {
+        if has_addresses && not(self.addresses.contains(&log.address)) {
             return false;
         }
 
         let filter_topics = &self.original_input.topics;
-        let log_topics = log.log.topics();
+        let log_topics = log.topics();
 
         // (https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs)
         // Matching rules for filtering topics in `eth_getLogs`:
@@ -114,22 +114,20 @@ mod tests {
         .unwrap()
     }
 
-    fn log_with_topics(topics: [Option<LogTopic>; 4]) -> LogMined {
-        let mut log_mined = fake_first::<LogMined>();
-        log_mined.log = Log {
+    fn log_with_topics(topics: [Option<LogTopic>; 4]) -> Log {
+        let log = fake_first::<Log>();
+        Log {
             topic0: topics[0],
             topic1: topics[1],
             topic2: topics[2],
             topic3: topics[3],
-            ..log_mined.log
-        };
-        log_mined
+            ..log
+        }
     }
 
-    fn log_with_address(address: Address) -> LogMined {
-        let mut log_mined = fake_first::<LogMined>();
-        log_mined.log = Log { address, ..log_mined.log };
-        log_mined
+    fn log_with_address(address: Address) -> Log {
+        let log = fake_first::<Log>();
+        Log { address, ..log }
     }
 
     #[test]
@@ -146,40 +144,42 @@ mod tests {
             ],
         );
 
-        assert!(filter.matches(&log_with_topics([topics[1], None, topics[4], topics[6]])));
-        assert!(filter.matches(&log_with_topics([topics[2], None, topics[4], topics[6]])));
-        assert!(filter.matches(&log_with_topics([topics[3], None, topics[4], topics[6]])));
-        assert!(filter.matches(&log_with_topics([topics[3], None, topics[5], topics[6]])));
-        assert!(filter.matches(&log_with_topics([topics[3], topics[0], topics[5], topics[7]])));
-        assert!(filter.matches(&log_with_topics([topics[1], topics[2], topics[4], topics[6]])));
-        assert!(filter.matches(&log_with_topics([topics[2], topics[4], topics[4], topics[7]])));
-        assert!(filter.matches(&log_with_topics([topics[2], topics[7], topics[5], topics[6]])));
+        assert!(filter.matches(&log_with_topics([topics[1], None, topics[4], topics[6]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([topics[2], None, topics[4], topics[6]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([topics[3], None, topics[4], topics[6]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([topics[3], None, topics[5], topics[6]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([topics[3], topics[0], topics[5], topics[7]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([topics[1], topics[2], topics[4], topics[6]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([topics[2], topics[4], topics[4], topics[7]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([topics[2], topics[7], topics[5], topics[6]]), BlockNumber::ZERO));
 
-        assert!(not(filter.matches(&log_with_topics([None, None, None, None]))));
-        assert!(not(filter.matches(&log_with_topics([topics[0], None, None, None]))));
-        assert!(not(filter.matches(&log_with_topics([None, topics[0], None, None]))));
-        assert!(not(filter.matches(&log_with_topics([None, None, topics[0], None]))));
-        assert!(not(filter.matches(&log_with_topics([None, None, None, topics[0]]))));
-        assert!(not(filter.matches(&log_with_topics([topics[2], topics[2], topics[4], topics[0]]))));
-        assert!(not(filter.matches(&log_with_topics([topics[3], None, topics[5], None]))));
-        assert!(not(filter.matches(&log_with_topics([topics[2], topics[4], None, topics[6]]))));
-        assert!(not(filter.matches(&log_with_topics([None, topics[0], topics[4], topics[6]]))));
-        assert!(not(filter.matches(&log_with_topics([topics[3], topics[0], topics[4], None]))));
+        assert!(not(filter.matches(&log_with_topics([None, None, None, None]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([topics[0], None, None, None]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([None, topics[0], None, None]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([None, None, topics[0], None]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([None, None, None, topics[0]]), BlockNumber::ZERO)));
+        assert!(not(
+            filter.matches(&log_with_topics([topics[2], topics[2], topics[4], topics[0]]), BlockNumber::ZERO)
+        ));
+        assert!(not(filter.matches(&log_with_topics([topics[3], None, topics[5], None]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([topics[2], topics[4], None, topics[6]]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([None, topics[0], topics[4], topics[6]]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([topics[3], topics[0], topics[4], None]), BlockNumber::ZERO)));
 
         let filter = build_filter(vec![], vec![vec![None], vec![topics[1], topics[2]]]);
 
-        assert!(filter.matches(&log_with_topics([topics[1], topics[1], topics[1], topics[1]])));
-        assert!(filter.matches(&log_with_topics([topics[1], topics[1], topics[1], None])));
-        assert!(filter.matches(&log_with_topics([topics[1], topics[1], None, topics[1]])));
-        assert!(filter.matches(&log_with_topics([None, topics[1], topics[1], topics[1]])));
-        assert!(filter.matches(&log_with_topics([topics[0], topics[1], None, topics[2]])));
-        assert!(filter.matches(&log_with_topics([None, topics[2], None, topics[1]])));
+        assert!(filter.matches(&log_with_topics([topics[1], topics[1], topics[1], topics[1]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([topics[1], topics[1], topics[1], None]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([topics[1], topics[1], None, topics[1]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([None, topics[1], topics[1], topics[1]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([topics[0], topics[1], None, topics[2]]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_topics([None, topics[2], None, topics[1]]), BlockNumber::ZERO));
 
-        assert!(not(filter.matches(&log_with_topics([topics[1], None, topics[1], topics[1]]))));
-        assert!(not(filter.matches(&log_with_topics([topics[1], None, None, None]))));
-        assert!(not(filter.matches(&log_with_topics([topics[1], topics[3], None, None]))));
-        assert!(not(filter.matches(&log_with_topics([None, topics[3], None, None]))));
-        assert!(not(filter.matches(&log_with_topics([None, None, None, None]))));
+        assert!(not(filter.matches(&log_with_topics([topics[1], None, topics[1], topics[1]]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([topics[1], None, None, None]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([topics[1], topics[3], None, None]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([None, topics[3], None, None]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_topics([None, None, None, None]), BlockNumber::ZERO)));
     }
 
     #[test]
@@ -188,17 +188,17 @@ mod tests {
 
         let filter = build_filter(vec![addresses[1], addresses[2]], vec![]);
 
-        assert!(filter.matches(&log_with_address(addresses[1])));
-        assert!(filter.matches(&log_with_address(addresses[2])));
+        assert!(filter.matches(&log_with_address(addresses[1]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_address(addresses[2]), BlockNumber::ZERO));
 
-        assert!(not(filter.matches(&log_with_address(addresses[0]))));
-        assert!(not(filter.matches(&log_with_address(addresses[3]))));
+        assert!(not(filter.matches(&log_with_address(addresses[0]), BlockNumber::ZERO)));
+        assert!(not(filter.matches(&log_with_address(addresses[3]), BlockNumber::ZERO)));
 
         let filter = build_filter(vec![], vec![]);
 
-        assert!(filter.matches(&log_with_address(addresses[0])));
-        assert!(filter.matches(&log_with_address(addresses[1])));
-        assert!(filter.matches(&log_with_address(addresses[2])));
-        assert!(filter.matches(&log_with_address(addresses[3])));
+        assert!(filter.matches(&log_with_address(addresses[0]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_address(addresses[1]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_address(addresses[2]), BlockNumber::ZERO));
+        assert!(filter.matches(&log_with_address(addresses[3]), BlockNumber::ZERO));
     }
 }
