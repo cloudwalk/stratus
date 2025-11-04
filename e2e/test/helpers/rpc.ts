@@ -335,6 +335,12 @@ export async function sendEvmMine(): Promise<any> {
     return result;
 }
 
+/// Clears the cache
+export async function sendClearCache(): Promise<any> {
+    const result = await send("stratus_clearCache", []);
+    return result;
+}
+
 /// Open a WebSocket connection and return the socket
 export function openWebSocketConnection(): WebSocket {
     const socket = new WebSocket(providerUrl.replace("http", "ws"));

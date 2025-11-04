@@ -5,7 +5,7 @@ use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, Copy, Hash, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
-pub struct IndexRocksdb(pub(self) u32);
+pub struct IndexRocksdb(pub u32);
 
 impl IndexRocksdb {
     pub fn as_usize(&self) -> usize {

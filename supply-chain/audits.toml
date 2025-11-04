@@ -1,7 +1,77 @@
 
 # cargo-vet audits file
 
+[[audits.alloy-consensus]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.24 -> 1.0.38"
+notes = "Reviewed 1.0.24->1.0.38: unsupported type error helper and doc cleanup; no unsafe."
+
+[[audits.alloy-consensus-any]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.24 -> 1.0.38"
+notes = "Reviewed 1.0.24->1.0.38: doc cfg removal and dependency bumps only."
+
 [[audits.alloy-eips]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.24 -> 1.0.30"
+
+[[audits.alloy-eips]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.30 -> 1.0.38"
+notes = "Reviewed 1.0.30->1.0.38: new constants + helpers for blob params, no unsafe changes."
+
+[[audits.alloy-eips]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.41"
+notes = """
+- Scope: Small patch (4 files, +105/−10). No structural or behavioral changes beyond minor maintenance.
+- Dependencies: Only internal bump of alloy-serde 1.0.38 → 1.0.41. No new external crates or feature changes.
+- Unsafe: None present.
+- Network or file I/O: None present.
+- Build scripts or proc-macros: None (no build.rs, no proc-macro crate).
+- License and metadata: Unchanged.
+- Code behavior: Pure data/type logic (EIP constants, helpers). No new system calls, I/O, or unsafe paths.
+- Feature posture: Still supports no_std; safe optional serde/kzg/ssz features.
+
+Assessment: Low risk, patch-level release consistent with previous vetted version. Safe to deploy
+"""
+
+[[audits.alloy-json-abi]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.2.0 -> 1.4.1"
+notes = "Reviewed 1.2.0->1.4.1: adds selector lookup, bumps deps; serde-only, no unsafe additions."
+
+[[audits.alloy-network-primitives]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.24 -> 1.0.38"
+notes = "Reviewed 1.0.24->1.0.38: ReceiptResponse::cost helper only; docs cleanup."
+
+[[audits.alloy-primitives]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.3.1 -> 1.4.1"
+notes = "Reviewed 1.3.1->1.4.1: database trait impls and helpers, no unsafe changes."
+
+[[audits.alloy-rpc-types-eth]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.24 -> 1.0.38"
+notes = "Reviewed 1.0.24->1.0.38: decoding helpers and enum cleanup only."
+
+[[audits.alloy-rpc-types-trace]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.24 -> 1.0.38"
+notes = "Reviewed 1.0.24->1.0.38: decode helpers, structlog adjustments; no runtime capabilities."
+
+[[audits.alloy-serde]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.30"
@@ -9,7 +79,62 @@ delta = "1.0.24 -> 1.0.30"
 [[audits.alloy-serde]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
-delta = "1.0.24 -> 1.0.30"
+delta = "1.0.30 -> 1.0.41"
+notes = "Reviewed 1.0.30->1.0.41: display serializers avoid intermediate String; doc cfg removal; no unsafe."
+
+[[audits.alloy-sol-macro]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.3.0 -> 1.4.1"
+notes = "Reviewed proc-macro diff: doc cfg removal and docs link cleanup only."
+
+[[audits.alloy-sol-macro-expander]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.3.0 -> 1.4.1"
+notes = "Reviewed 1.3.0->1.4.1: derive propagation, map generator refactor, no unsafe."
+
+[[audits.alloy-sol-macro-input]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.3.0 -> 1.4.1"
+notes = "Reviewed 1.3.0->1.4.1: attribute merge helper and derive propagation; purely procedural macro logic."
+
+[[audits.alloy-sol-type-parser]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.3.0 -> 1.4.1"
+notes = "Reviewed 1.3.0->1.4.1: doc feature flag cleanup, inline removals; no unsafe or IO."
+
+[[audits.alloy-sol-types]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.2.0 -> 1.4.1"
+notes = "Reviewed 1.2.0->1.4.1: panic messages synced, topic padding fix, feature gating; no unsafe additions."
+
+[[audits.alloy-tx-macros]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.24 -> 1.0.41"
+notes = "Reviewed 1.0.24->1.0.41: serde path fixes, TypedTransaction generation enhancements; macro-only."
+
+[[audits.c-kzg]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "2.1.1 -> 2.1.5"
+notes = "Reviewed 2.1.1->2.1.5: FK20 setup zero-inits, audit info, no new unsafe beyond existing C bindings."
+
+[[audits.console]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.16.0 -> 0.16.1"
+notes = "Reviewed 0.16.0->0.16.1: adds Display wrapper for ansi stripping, QNX cfmakeraw shim; no new unsafe."
+
+[[audits.const-hex]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.15.0 -> 1.17.0"
+notes = "Reviewed 1.15.0->1.17.0: removes runtime hex re-export dependency; new encode_to_str APIs reuse encode_to_slice and only call from_utf8_unchecked_mut after length/ascii validation; serde module now uses serde_core alias; no new I/O or FFI and unsafe surface otherwise unchanged."
 
 [[audits.const_format]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
@@ -17,11 +142,241 @@ criteria = "safe-to-deploy"
 delta = "0.2.34 -> 0.2.35"
 notes = "Bumps arrayvec crate from 0.5.1 to 0.7.0 and includes the required changes."
 
+[[audits.humantime]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "2.2.0 -> 2.3.0"
+
+[[audits.opentelemetry]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: adds Extractor::get_all default/tests, aligns trace/span id conversions and global tracer setter returns (); no unsafe."
+
+[[audits.opentelemetry-http]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: implements Extractor::get_all, adds reqwest feature split and generic HyperClient transport; only new tests/docs, no unsafe."
+
+[[audits.opentelemetry-otlp]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: wire up HTTP compression features, align internal-logs usage, regen docs/tests; no unsafe code."
+
+[[audits.opentelemetry-proto]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: regen proto bindings incl profiles v1development, adds span flag propagation + serde helpers; codegen only, no unsafe."
+
+[[audits.opentelemetry_sdk]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.31.0"
+notes = "Reviewed 0.30.0->0.31.0: propagates parent remote flag, skips on_start for non-recording spans, restores async BatchSpanProcessor concurrency limits; no unsafe."
+
+[[audits.prost]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.14.1"
+notes = "Reviewed 0.13.5->0.14.1: Message trait no longer requires Debug, docs/features align with 0.14 release; unsafe encoding paths unchanged."
+
+[[audits.prost-derive]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.14.1"
+notes = "Reviewed 0.13.5->0.14.1: oneof merge logic uses single if-let path, docs/version bumps only; no unsafe changes."
+
+[[audits.quick_cache]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.6.17"
+notes = """
+Reviewed quick_cache 0.6.17.
+
+- MIT license.
+- Small, well-scoped changes vs 0.6.16: hashbrown bump; new Cache::set_capacity and memory_used APIs.
+- No network or file IO; no build.rs.
+- Default features use parking_lot and ahash; both can be disabled.
+- Docs confirm scan-resistant S3-FIFO/Clock-PRO policy; values are cloned on get (use Arc<_> if heavy).
+- Readme states only trivially verifiable unsafe; concurrency via locks/shards; no background threads.
+- No RustSec advisories found as of 2025-10-13.
+- Risks to note: ahash is non-cryptographic; ensure keys aren’t used for security-sensitive hashing.
+"""
+
+[[audits.quick_cache]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.6.17 -> 0.6.18"
+notes = """
+- Scope: Small patch (7 files, +113/−8).
+- Unsafe: None new introduced; only existing trivially verifiable usages remain.
+- Network or file I/O: None present.
+- Build scripts or proc-macros: None (no build.rs, no proc-macro crate).
+- Dependencies: No new external crates; dependency graph unchanged.
+- License and metadata: Unchanged.
+- Behavior: Internal cache logic and API only; no new external effects or concurrency primitives introduced.
+
+Assessment: Low-risk patch, implementation consistent with prior vetted version. Safe to deploy.
+"""
+
+[[audits.revm]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "27.1.0 -> 30.1.0"
+notes = "Reviewed 27.1.0->30.1.0: optional fee charge flag, kzg provider swap, no unsafe additions."
+
+[[audits.revm]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "30.1.0 -> 30.2.0"
+notes = "Reviewed 30.1.0->30.2.0: crate sources unchanged; only updates dependency pins to newer revm-* crates so no new logic, unsafe, or capabilities."
+
+[[audits.revm-bytecode]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "6.2.0 -> 7.0.2"
+notes = "Reviewed 6.2.0->7.0.2: JumpTable uses Bytes backing, serde compat, opcode metadata update."
+
+[[audits.revm-context]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "8.0.4 -> 10.1.2"
+notes = "Reviewed 8.0.4->10.1.2: journal skip-cold helpers, local context message storage; no unsafe increments."
+
+[[audits.revm-context-interface]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "9.0.0 -> 11.1.2"
+notes = "Reviewed 9.0.0->11.1.2: transaction helpers and balance checks, precompile message plumbing; no unsafe."
+
+[[audits.revm-database]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "7.0.3 -> 9.0.2"
+notes = "Reviewed 7.0.3->9.0.2: caching helpers, FK20 pretty print, transaction ID tracking; no unsafe changes."
+
+[[audits.revm-database-interface]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "7.0.3 -> 8.0.3"
+notes = "Reviewed 7.0.3->8.0.3: async handle guard for block_in_place, shared test constants, doc updates; no unsafe changes."
+
+[[audits.revm-handler]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "8.1.0 -> 11.1.2"
+notes = "Reviewed 8.1.0->11.1.2: transaction index errors, fee helpers, no unsafe changes."
+
+[[audits.revm-handler]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "11.1.2 -> 11.2.0"
+notes = "Reviewed 11.1.2->11.2.0: call frame setup accepts optional known bytecode and falls back to journal_mut().load_account_code when absent; precompile checkpoint logic unchanged, no unsafe code introduced or new ambient access."
+
+[[audits.revm-inspector]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "8.1.0 -> 11.1.2"
+notes = "Reviewed 8.1.0->11.1.2: inspector trait refactors, frame helpers, no unsafe."
+
+[[audits.revm-inspector]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "11.1.2 -> 11.2.0"
+notes = "Reviewed 11.1.2->11.2.0: crate sources unchanged aside from dependency bumps to new revm-handler/interpreter; no new logic or unsafe paths."
+
+[[audits.revm-inspectors]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.27.1 -> 0.31.2"
+notes = "Reviewed 0.27.1->0.31.2: tracing improvements, depth fixes, reuse buffers; no new unsafe."
+
+[[audits.revm-interpreter]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "24.0.0 -> 27.0.2"
+notes = "Reviewed 24.0.0->27.0.2: loop control simplifications, stack accessors, no unsafe."
+
+[[audits.revm-interpreter]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "27.0.2 -> 28.0.0"
+notes = "Reviewed 27.0.2->28.0.0: CallInputs now carries optional (hash, bytecode) so handler can reuse already-fetched code; resize_memory! adds memory_limit guard via SharedMemory::limit_reached using saturating offsets; new halt_memory_limit_oog and tests ensure distinguishing memory limit vs gas OOG; no new unsafe, host/account loading unchanged."
+
+[[audits.revm-precompile]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "25.0.0 -> 28.1.1"
+notes = "Reviewed 25.0.0->28.1.1: crypto provider integration, kzg swap, no new unsafe beyond existing FFI."
+
+[[audits.revm-primitives]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "20.2.0 -> 21.0.1"
+notes = "Reviewed 20.2.0->21.0.1: new hardfork enum entries, once_lock fix, constants tweaks; no new unsafe."
+
+[[audits.revm-state]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "7.0.3 -> 8.0.2"
+notes = "Reviewed 7.0.3->8.0.2: cold slot tracking tightened, extra tests, no new unsafe."
+
+[[audits.rug]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.27.0 -> 1.28.0"
+notes = "Reviewed 1.27.0->1.28.0: feature reorg, serde/borsh modules; no unsafe changes."
+
+[[audits.syn-solidity]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.3.0 -> 1.4.1"
+notes = "Reviewed 1.3.0->1.4.1: adds transient keyword support and doc cfg cleanup; no unsafe."
+
 [[audits.tempfile]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "3.21.0 -> 3.23.0"
 notes = "Mostly docs, tests and cicd."
+
+[[audits.tikv-jemalloc-sys]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7 -> 0.6.1+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7"
+notes = "Reviewed 0.6.0+... -> 0.6.1+...: build.rs now funnels make invocations through helper honoring CARGO_MAKEFLAGS and only changes logging; new override_allocator feature wires #[used] statics (or zone ctor on apple) to keep malloc/free symbol overrides linked, drawing from existing externs; added tests for malloc_conf and override interop. No new FFI definitions or unsafe behavior beyond these references."
+
+[[audits.tikv-jemallocator]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.6.0 -> 0.6.1"
+notes = "Reviewed 0.6.0->0.6.1: crate restructured but runtime logic unchanged aside from cfg align tables (mipsel/powerpc64le now use 16 byte max_align); added tests/background thread docs and new wrapper features mapping to sys crate; no new unsafe and allocator paths still delegate to ffi."
+
+[[audits.tonic]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.14.2"
+notes = "Reviewed 0.13.1->0.14.2: adds TLS handshake timeout/config tweaks, reorganizes feature gating (load-shed, tls-connect-info) and bumps deps; only metadata unsafe remains unchanged."
+
+[[audits.tonic-prost]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.14.2"
+notes = "Inspected 0.14.2: prost-based codec/encoder/decoder split from tonic, simple BufferSettings plumbing; crate contains no unsafe."
+
+[[audits.tracing-opentelemetry]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.32.0"
+notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
+
+[[trusted.async-trait]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-07-23"
+end = "2026-10-17"
 
 [[trusted.phf]]
 criteria = "safe-to-deploy"
@@ -29,11 +384,53 @@ user-id = 51017 # Yuki Okushi (JohnTitor)
 start = "2021-06-17"
 end = "2026-09-30"
 
+[[trusted.phf_macros]]
+criteria = "safe-to-deploy"
+user-id = 51017 # Yuki Okushi (JohnTitor)
+start = "2021-06-17"
+end = "2026-10-17"
+
+[[trusted.sentry]]
+criteria = "safe-to-deploy"
+user-id = 12434 # Sentry Bot (getsentry-bot)
+start = "2019-02-25"
+end = "2026-10-22"
+
+[[trusted.sentry-actix]]
+criteria = "safe-to-deploy"
+user-id = 12434 # Sentry Bot (getsentry-bot)
+start = "2019-02-25"
+end = "2026-10-22"
+
+[[trusted.sentry-backtrace]]
+criteria = "safe-to-deploy"
+user-id = 12434 # Sentry Bot (getsentry-bot)
+start = "2020-06-18"
+end = "2026-10-22"
+
+[[trusted.sentry-contexts]]
+criteria = "safe-to-deploy"
+user-id = 12434 # Sentry Bot (getsentry-bot)
+start = "2020-06-18"
+end = "2026-10-22"
+
 [[trusted.sentry-core]]
 criteria = "safe-to-deploy"
 user-id = 12434 # Sentry Bot (getsentry-bot)
 start = "2020-06-18"
 end = "2026-10-07"
+
+[[trusted.sentry-debug-images]]
+criteria = "safe-to-deploy"
+user-id = 12434 # Sentry Bot (getsentry-bot)
+start = "2020-06-18"
+end = "2026-10-22"
+
+[[trusted.sentry-panic]]
+criteria = "safe-to-deploy"
+user-id = 12434 # Sentry Bot (getsentry-bot)
+start = "2020-06-18"
+end = "2026-10-22"
 
 [[trusted.sentry-tracing]]
 criteria = "safe-to-deploy"
@@ -46,3 +443,53 @@ criteria = "safe-to-deploy"
 user-id = 12434 # Sentry Bot (getsentry-bot)
 start = "2019-11-08"
 end = "2026-10-07"
+
+[[trusted.serde]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-03-01"
+end = "2026-10-17"
+
+[[trusted.serde_core]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2025-09-13"
+end = "2026-10-17"
+
+[[trusted.serde_derive]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-03-01"
+end = "2026-10-17"
+
+[[trusted.thiserror]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-10-09"
+end = "2026-10-21"
+
+[[trusted.thiserror-impl]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-10-09"
+end = "2026-10-21"
+
+[[trusted.tokio]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2020-12-25"
+end = "2026-10-29"
+notes = "Trusting Alice Ryhl (Darksonn) as publisher for tokio releases; widely vetted by mozilla/bytecode-alliance."
+
+[[trusted.tokio-macros]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2020-10-26"
+end = "2026-10-29"
+notes = "Trusting Alice Ryhl (Darksonn) as publisher for tokio-macros releases; aligns with upstream trusted audits."
+
+[[trusted.windows-sys]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-11-15"
+end = "2026-10-17"

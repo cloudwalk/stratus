@@ -81,7 +81,11 @@ impl InmemoryTransactionTemporaryStorage {
         if tx.evm_input != &pending_block.block.header {
             let actual_input = tx.evm_input.clone();
             let tx_input: TransactionInput = tx.into();
-            let expected_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &pending_block.block.header);
+            let expected_input = EvmInput::from_eth_transaction(
+                &tx_input.execution_info,
+                pending_block.block.header.number,
+                *pending_block.block.header.timestamp,
+            );
             return Err(StorageError::EvmInputMismatch {
                 expected: Box::new(expected_input),
                 actual: Box::new(actual_input),

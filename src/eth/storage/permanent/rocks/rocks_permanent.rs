@@ -19,7 +19,7 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMined;
+use crate::eth::primitives::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PointInTime;
@@ -204,7 +204,7 @@ impl RocksPermanentStorage {
             })
     }
 
-    pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMined>, StorageError> {
+    pub fn read_logs(&self, filter: &LogFilter) -> anyhow::Result<Vec<LogMessage>, StorageError> {
         self.state.read_logs(filter).map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read log in RocksPermanent");
         })

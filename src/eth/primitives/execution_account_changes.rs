@@ -91,6 +91,18 @@ impl ExecutionAccountChanges {
         self.bytecode.apply(modified_account.bytecode);
     }
 
+    pub fn merge(&mut self, other: ExecutionAccountChanges) {
+        if other.nonce.is_changed() {
+            self.nonce = other.nonce;
+        }
+        if other.balance.is_changed() {
+            self.balance = other.balance;
+        }
+        if other.bytecode.is_changed() {
+            self.bytecode = other.bytecode;
+        }
+    }
+
     pub fn apply_original(&mut self, original_account: Account) {
         self.nonce.apply_original(original_account.nonce);
         self.balance.apply_original(original_account.balance);

@@ -1,4 +1,3 @@
-use std::cmp::max;
 use std::mem;
 use std::sync::Arc;
 
@@ -98,11 +97,8 @@ impl InspectorTask {
 
 /// Manages EVM pool and communication channels.
 struct Evms {
-    /// Pool for serial execution of transactions received via `eth_sendRawTransaction`. Usually contains a single EVM.
-    pub tx_local: crossbeam_channel::Sender<EvmTask>,
-
-    /// Pool for serial execution of external transactions received via `importer-online` or `importer-offline`. Usually contains a single EVM.
-    pub tx_external: crossbeam_channel::Sender<EvmTask>,
+    /// Worker for execution of transactions.
+    pub tx: crossbeam_channel::Sender<EvmTask>,
 
     /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from current state. Usually contains multiple EVMs.
     pub call_present: crossbeam_channel::Sender<EvmTask>,
@@ -110,6 +106,7 @@ struct Evms {
     /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from past state. Usually contains multiple EVMs.
     pub call_past: crossbeam_channel::Sender<EvmTask>,
 
+    /// Pool for parallel execution of tx inspections (debug_traceTransaction). Usually contains multiple EVMs.
     pub inspector: crossbeam_channel::Sender<InspectorTask>,
 }
 
@@ -189,23 +186,13 @@ impl Evms {
             tx
         };
 
-        let tx_local = spawn_evms("evm-tx-serial", 1, EvmKind::Transaction);
-        let tx_external = spawn_evms("evm-tx-external", 1, EvmKind::Transaction);
-        let call_present = spawn_evms(
-            "evm-call-present",
-            max(config.executor_call_present_evms.unwrap_or(config.executor_evms / 2), 1),
-            EvmKind::Call,
-        );
-        let call_past = spawn_evms(
-            "evm-call-past",
-            max(config.executor_call_past_evms.unwrap_or(config.executor_evms / 4), 1),
-            EvmKind::Call,
-        );
-        let inspector = spawn_inspectors("inspector", max(config.executor_inspector_evms.unwrap_or(config.executor_evms / 4), 1));
+        let tx = spawn_evms("evm-tx", 1, EvmKind::Transaction);
+        let call_present = spawn_evms("evm-call-present", config.call_present_evms, EvmKind::Call);
+        let call_past = spawn_evms("evm-call-past", config.call_past_evms, EvmKind::Call);
+        let inspector = spawn_inspectors("inspector", config.inspector_evms);
 
         Evms {
-            tx_local,
-            tx_external,
+            tx,
             call_present,
             call_past,
             inspector,
@@ -218,8 +205,7 @@ impl Evms {
 
         let task = EvmTask::new(evm_input, execution_tx);
         let _ = match route {
-            EvmRoute::Local => self.tx_local.send(task),
-            EvmRoute::External => self.tx_external.send(task),
+            EvmRoute::Transaction => self.tx.send(task),
             EvmRoute::CallPresent => self.call_present.send(task),
             EvmRoute::CallPast => self.call_past.send(task),
         };
@@ -243,11 +229,8 @@ impl Evms {
 
 #[derive(Debug, Clone, Copy, strum::Display)]
 pub enum EvmRoute {
-    #[strum(to_string = "local")]
-    Local,
-
-    #[strum(to_string = "external")]
-    External,
+    #[strum(to_string = "transaction")]
+    Transaction,
 
     #[strum(to_string = "call_present")]
     CallPresent,
@@ -372,7 +355,7 @@ impl Executor {
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
-                let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::External);
+                let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::Transaction);
 
                 // handle re-execution result
                 let mut evm_execution = match evm_execution {
@@ -428,7 +411,7 @@ impl Executor {
         cfg_if! {
             if #[cfg(feature = "metrics")] {
                 let tx_metrics = tx_execution.metrics();
-                let tx_gas = tx_execution.result.execution.gas;
+                let tx_gas = tx_execution.result.execution.gas_used;
             }
         }
 
@@ -518,7 +501,7 @@ impl Executor {
 
             // prepare evm input
             let (pending_header, _) = self.storage.read_pending_block_header();
-            let evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &pending_header);
+            let evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::debug!(
@@ -533,7 +516,7 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            let evm_result = self.evms.execute(evm_input.clone(), EvmRoute::Local)?;
+            let evm_result = self.evms.execute(evm_input.clone(), EvmRoute::Transaction)?;
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
@@ -541,7 +524,7 @@ impl Executor {
             #[cfg(feature = "metrics")]
             let tx_metrics = tx_execution.metrics();
             #[cfg(feature = "metrics")]
-            let gas_used = tx_execution.result.execution.gas;
+            let gas_used = tx_execution.result.execution.gas_used;
             #[cfg(feature = "metrics")]
             let function = codegen::function_sig(&tx_input.execution_info.input);
             #[cfg(feature = "metrics")]
@@ -628,7 +611,7 @@ impl Executor {
                     metrics::inc_executor_local_call(start.elapsed(), true, contract, function);
                     metrics::inc_executor_local_call_account_reads(evm_result.metrics.account_reads, contract, function);
                     metrics::inc_executor_local_call_slot_reads(evm_result.metrics.slot_reads, contract, function);
-                    metrics::inc_executor_local_call_gas(evm_result.execution.gas.as_u64() as usize, contract, function);
+                    metrics::inc_executor_local_call_gas(evm_result.execution.gas_used.as_u64() as usize, contract, function);
                 }
                 Err(_) => {
                     metrics::inc_executor_local_call(start.elapsed(), false, contract, function);
