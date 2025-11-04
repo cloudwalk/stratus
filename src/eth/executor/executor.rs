@@ -348,7 +348,8 @@ impl Executor {
 
         let expected_signer = Address::from(receipt.0.from);
         let tx_input: TransactionInput = TransactionInput::try_from_external_transaction_with_expected_signer(tx.clone(), Some(expected_signer))?;
-        let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, &self.storage.read_pending_block_header().0);
+        let pending_header = self.storage.read_pending_block_header().0;
+        let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_header.number, *pending_header.timestamp);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {

@@ -17,6 +17,7 @@ use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
 use display_json::DebugAsJson;
 use rlp::Decodable;
+use anyhow::bail;
 
 use crate::alias::AlloyTransaction;
 use crate::eth::primitives::Address;
@@ -144,7 +145,6 @@ impl TransactionInput {
 }
 
 fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, expected_signer: Option<Address>) -> anyhow::Result<TransactionInput> {
-    let stored_signer = Address::from(value.inner.signer());
     let tx_hash = Hash::from(*value.inner.tx_hash());
 
     let signer = match value.inner.recover_signer() {
@@ -156,10 +156,9 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, expected_
                         %tx_hash,
                         %expected,
                         %recovered_signer,
-                        %stored_signer,
-                        "recovered signer mismatches expected signer from receipt, falling back to stored signer"
+                        "recovered signer mismatches expected signer from receipt, falling back to expected signer"
                     );
-                    stored_signer
+                    expected
                 } else {
                     recovered_signer
                 }
@@ -171,10 +170,14 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction, expected_
             tracing::warn!(
                 reason = ?err,
                 %tx_hash,
-                %stored_signer,
-                "failed to recover transaction signer, falling back to stored signer from payload"
+                missing_expected = expected_signer.is_none(),
+                "failed to recover transaction signer, falling back to expected signer when available"
             );
-            stored_signer
+            if let Some(expected) = expected_signer {
+                expected
+            } else {
+                bail!("failed to recover signer for {tx_hash} and no expected signer was provided");
+            }
         }
     };
     let signature = value.inner.signature();
