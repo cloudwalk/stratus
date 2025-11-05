@@ -1644,10 +1644,6 @@ criteria = "safe-to-deploy"
 version = "0.26.2"
 criteria = "safe-to-deploy"
 
-[[exemptions.tokio-util]]
-version = "0.7.16"
-criteria = "safe-to-deploy"
-
 [[exemptions.toml_datetime]]
 version = "0.6.11"
 criteria = "safe-to-deploy"

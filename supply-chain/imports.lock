@@ -259,6 +259,13 @@ user-id = 6741
 user-login = "Darksonn"
 user-name = "Alice Ryhl"
 
+[[publisher.tokio-util]]
+version = "0.7.17"
+when = "2025-11-02"
+user-id = 6741
+user-login = "Darksonn"
+user-name = "Alice Ryhl"
+
 [[publisher.unicode-normalization]]
 version = "0.1.24"
 when = "2024-09-17"
