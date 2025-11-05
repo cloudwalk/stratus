@@ -99,6 +99,12 @@ user-id = 4484
 user-login = "hsivonen"
 user-name = "Henri Sivonen"
 
+[[publisher.libc]]
+version = "0.2.177"
+when = "2025-10-09"
+user-id = 55123
+user-login = "rust-lang-owner"
+
 [[publisher.local-channel]]
 version = "0.1.5"
 when = "2023-10-29"
@@ -249,6 +255,13 @@ user-name = "Alice Ryhl"
 [[publisher.tokio-macros]]
 version = "2.6.0"
 when = "2025-10-14"
+user-id = 6741
+user-login = "Darksonn"
+user-name = "Alice Ryhl"
+
+[[publisher.tokio-util]]
+version = "0.7.17"
+when = "2025-11-02"
 user-id = 6741
 user-login = "Darksonn"
 user-name = "Alice Ryhl"
