@@ -76,7 +76,7 @@ outdated:
 # Stratus: Check for unused dependencies
 check-unused-deps nightly-version="":
     #!/bin/bash
-    command -v cargo-udeps >/dev/null 2>&1 || { cargo +nightly{{nightly-version}} install cargo-udeps; }
+    command -v cargo-udeps >/dev/null 2>&1 || { cargo +nightly{{nightly-version}} install cargo-udeps --version 0.1.59 --locked; }
     cargo +nightly{{nightly-version}} udeps --all-targets
 
 # Stratus: Update only the project dependencies
