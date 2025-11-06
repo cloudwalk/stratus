@@ -7,6 +7,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.38"
 notes = "Reviewed 1.0.24->1.0.38: unsupported type error helper and doc cleanup; no unsafe."
 
+[[audits.alloy-consensus]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.41"
+notes = "reviewed 1.0.38->1.0.41: legacy gas_price serde saturates; new 4844 sidecar mapping + tests; no unsafe/deps"
+
 [[audits.alloy-consensus-any]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
