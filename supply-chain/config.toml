@@ -488,10 +488,6 @@ criteria = "safe-to-deploy"
 version = "0.20.11"
 criteria = "safe-to-deploy"
 
-[[exemptions.darling_macro]]
-version = "0.21.3"
-criteria = "safe-to-deploy"
-
 [[exemptions.dashmap]]
 version = "6.1.0"
 criteria = "safe-to-deploy"
@@ -1360,10 +1356,6 @@ criteria = "safe-to-deploy"
 version = "1.2.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.rustc-demangle]]
-version = "0.1.26"
-criteria = "safe-to-deploy"
-
 [[exemptions.rustc-hex]]
 version = "2.1.0"
 criteria = "safe-to-deploy"
@@ -1406,10 +1398,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.rustls-webpki]]
 version = "0.103.4"
-criteria = "safe-to-deploy"
-
-[[exemptions.rustversion]]
-version = "1.0.22"
 criteria = "safe-to-deploy"
 
 [[exemptions.rusty-fork]]
