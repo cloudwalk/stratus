@@ -129,7 +129,7 @@ rdkafka = {version = "=0.38.0", features = ["ssl", "sasl"] }
 sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
 # Historic events processor tool
-indicatif = { version = "=0.18.0", optional = true }
+indicatif = { version = "=0.18.2", optional = true }
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies

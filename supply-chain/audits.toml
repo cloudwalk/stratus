@@ -153,6 +153,12 @@ who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "2.2.0 -> 2.3.0"
 
+[[audits.indicatif]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.18.0 -> 0.18.2"
+notes = "reviewed 0.18.0->0.18.2: ansi-aware truncation writes via AnsiCodeIterator; progress char head logic avoids spurious glyphs; width calc handles embedded NUL; tests cover combining accents/colors; vt100 dep bump only"
+
 [[audits.opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
