@@ -380,18 +380,6 @@ criteria = "safe-to-deploy"
 version = "1.8.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.clap]]
-version = "4.5.47"
-criteria = "safe-to-deploy"
-
-[[exemptions.clap_builder]]
-version = "4.5.47"
-criteria = "safe-to-deploy"
-
-[[exemptions.clap_derive]]
-version = "4.5.47"
-criteria = "safe-to-deploy"
-
 [[exemptions.clap_lex]]
 version = "0.7.5"
 criteria = "safe-to-deploy"

@@ -85,6 +85,27 @@ user-id = 3788
 user-login = "emilio"
 user-name = "Emilio Cobos Álvarez"
 
+[[publisher.clap]]
+version = "4.5.51"
+when = "2025-10-29"
+user-id = 6743
+user-login = "epage"
+user-name = "Ed Page"
+
+[[publisher.clap_builder]]
+version = "4.5.51"
+when = "2025-10-29"
+user-id = 6743
+user-login = "epage"
+user-name = "Ed Page"
+
+[[publisher.clap_derive]]
+version = "4.5.49"
+when = "2025-10-13"
+user-id = 6743
+user-login = "epage"
+user-name = "Ed Page"
+
 [[publisher.core-foundation]]
 version = "0.9.3"
 when = "2022-02-07"
