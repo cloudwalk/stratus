@@ -53,7 +53,7 @@ tokio-util = "=0.7.17"
 async-trait = "=0.1.89"
 
 # config
-clap = { version = "=4.5.47", features = ["derive", "env"] }
+clap = { version = "=4.5.51", features = ["derive", "env"] }
 dotenvy = "=0.15.7"
 
 # serialization
