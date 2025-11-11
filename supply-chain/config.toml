@@ -928,10 +928,6 @@ criteria = "safe-to-deploy"
 version = "0.9.4"
 criteria = "safe-to-deploy"
 
-[[exemptions.lock_api]]
-version = "0.4.13"
-criteria = "safe-to-deploy"
-
 [[exemptions.lru-slab]]
 version = "0.1.2"
 criteria = "safe-to-deploy"
@@ -1082,14 +1078,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.parking]]
 version = "2.2.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.parking_lot]]
-version = "0.12.4"
-criteria = "safe-to-deploy"
-
-[[exemptions.parking_lot_core]]
-version = "0.9.11"
 criteria = "safe-to-deploy"
 
 [[exemptions.paste]]
