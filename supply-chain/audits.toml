@@ -47,6 +47,17 @@ notes = """
 Assessment: Low risk, patch-level release consistent with previous vetted version. Safe to deploy
 """
 
+[[audits.alloy-eips]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.41 -> 1.1.0"
+notes = """
+Reviewed 1.0.41 → 1.1.0 via diff.rs (8 files, +44/−14). Crate provides typed EIP specs/constants (e.g., EIP-1559 defaults; EIP-7002 types) with optional serde helpers.
+- No network or filesystem I/O; library-only types/consts.
+- Dependency surface remains Alloy ecosystem crates; serde optional.
+- Changes appear additive/refactor-level; no risky behavior introduced.
+"""
+
 [[audits.alloy-json-abi]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -87,6 +98,16 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "1.0.30 -> 1.0.41"
 notes = "Reviewed 1.0.30->1.0.41: display serializers avoid intermediate String; doc cfg removal; no unsafe."
+
+[[audits.alloy-serde]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.41 -> 1.1.0"
+notes = """
+Reviewed 1.0.41 → 1.1.0 via diff.rs (5 files, +65/−7). Crate provides serde helpers for Alloy types (e.g., quantity/TTD/storage helpers).
+- No network or filesystem I/O; serde-only utilities.
+- API changes are additive/maintenance-level; no behavior that affects process safety.
+"""
 
 [[audits.alloy-sol-macro]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
