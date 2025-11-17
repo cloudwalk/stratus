@@ -25,9 +25,9 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn;
 use crate::infra::BlockchainClient;
+use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
-use crate::infra::kafka::KafkaConnector;
 use crate::utils::DropTimer;
 
 type ReexecutionFollower = ImporterSupervisor<BlockWithReceiptsFetcher, ReexecutionWorker>;
