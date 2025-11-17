@@ -37,8 +37,7 @@ pub trait Consensus: Send + Sync {
             tracing::warn!("follower is ahead of the leader");
         }
 
-        let should_serve = !(is_far_behind || is_ahead);
-        should_serve
+        !(is_far_behind || is_ahead)
     }
 
     /// Forwards a transaction to leader.
