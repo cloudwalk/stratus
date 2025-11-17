@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use strum::AsRefStr;
+
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::StratusError;
@@ -10,7 +12,8 @@ use crate::infra::metrics;
 
 const MAX_ALLOWED_LAG_BLOCKS: u64 = 3;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, AsRefStr)]
+#[strum(serialize_all = "lowercase")]
 pub enum LagDirection {
     Ahead,
     Behind,

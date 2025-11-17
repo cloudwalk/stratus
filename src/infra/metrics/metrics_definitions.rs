@@ -92,7 +92,7 @@ metrics! {
     counter importer_online_transactions_total{},
 
     "Number of blocks the follower is behind the leader."
-    gauge importer_online_lag_blocks{}
+    gauge importer_online_lag_blocks{direction}
 }
 
 // Execution metrics.

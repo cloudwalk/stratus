@@ -154,15 +154,14 @@ impl Consensus for ImporterConsensus {
             let leader_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst);
             let follower_block = self.storage.read_mined_block_number().as_u64();
 
-            let distance = leader_block.abs_diff(follower_block);
-            #[cfg(feature = "metrics")]
-            metrics::set_importer_online_lag_blocks(leader_block.saturating_sub(follower_block));
-
             let direction = if follower_block > leader_block {
                 LagDirection::Ahead
             } else {
                 LagDirection::Behind
             };
+            let distance = leader_block.abs_diff(follower_block);
+            #[cfg(feature = "metrics")]
+            metrics::set_importer_online_lag_blocks(distance, direction.as_ref());
 
             Ok(LagStatus { distance, direction })
         }
