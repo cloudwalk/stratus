@@ -7,6 +7,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.38"
 notes = "Reviewed 1.0.24->1.0.38: unsupported type error helper and doc cleanup; no unsafe."
 
+[[audits.alloy-consensus]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.41"
+notes = "reviewed 1.0.38->1.0.41: legacy gas_price serde saturates; new 4844 sidecar mapping + tests; no unsafe/deps"
+
 [[audits.alloy-consensus-any]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -130,6 +136,12 @@ criteria = "safe-to-deploy"
 delta = "0.16.0 -> 0.16.1"
 notes = "Reviewed 0.16.0->0.16.1: adds Display wrapper for ansi stripping, QNX cfmakeraw shim; no new unsafe."
 
+[[audits.const-hex]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.15.0 -> 1.17.0"
+notes = "Reviewed 1.15.0->1.17.0: removes runtime hex re-export dependency; new encode_to_str APIs reuse encode_to_slice and only call from_utf8_unchecked_mut after length/ascii validation; serde module now uses serde_core alias; no new I/O or FFI and unsafe surface otherwise unchanged."
+
 [[audits.const_format]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -140,6 +152,12 @@ notes = "Bumps arrayvec crate from 0.5.1 to 0.7.0 and includes the required chan
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "2.2.0 -> 2.3.0"
+
+[[audits.indicatif]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.18.0 -> 0.18.2"
+notes = "reviewed 0.18.0->0.18.2: ansi-aware truncation writes via AnsiCodeIterator; progress char head logic avoids spurious glyphs; width calc handles embedded NUL; tests cover combining accents/colors; vt100 dep bump only"
 
 [[audits.opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -222,6 +240,12 @@ criteria = "safe-to-deploy"
 delta = "27.1.0 -> 30.1.0"
 notes = "Reviewed 27.1.0->30.1.0: optional fee charge flag, kzg provider swap, no unsafe additions."
 
+[[audits.revm]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "30.1.0 -> 30.2.0"
+notes = "Reviewed 30.1.0->30.2.0: crate sources unchanged; only updates dependency pins to newer revm-* crates so no new logic, unsafe, or capabilities."
+
 [[audits.revm-bytecode]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -258,11 +282,23 @@ criteria = "safe-to-deploy"
 delta = "8.1.0 -> 11.1.2"
 notes = "Reviewed 8.1.0->11.1.2: transaction index errors, fee helpers, no unsafe changes."
 
+[[audits.revm-handler]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "11.1.2 -> 11.2.0"
+notes = "Reviewed 11.1.2->11.2.0: call frame setup accepts optional known bytecode and falls back to journal_mut().load_account_code when absent; precompile checkpoint logic unchanged, no unsafe code introduced or new ambient access."
+
 [[audits.revm-inspector]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "8.1.0 -> 11.1.2"
 notes = "Reviewed 8.1.0->11.1.2: inspector trait refactors, frame helpers, no unsafe."
+
+[[audits.revm-inspector]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "11.1.2 -> 11.2.0"
+notes = "Reviewed 11.1.2->11.2.0: crate sources unchanged aside from dependency bumps to new revm-handler/interpreter; no new logic or unsafe paths."
 
 [[audits.revm-inspectors]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -275,6 +311,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "24.0.0 -> 27.0.2"
 notes = "Reviewed 24.0.0->27.0.2: loop control simplifications, stack accessors, no unsafe."
+
+[[audits.revm-interpreter]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "27.0.2 -> 28.0.0"
+notes = "Reviewed 27.0.2->28.0.0: CallInputs now carries optional (hash, bytecode) so handler can reuse already-fetched code; resize_memory! adds memory_limit guard via SharedMemory::limit_reached using saturating offsets; new halt_memory_limit_oog and tests ensure distinguishing memory limit vs gas OOG; no new unsafe, host/account loading unchanged."
 
 [[audits.revm-precompile]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -312,6 +354,18 @@ criteria = "safe-to-deploy"
 delta = "3.21.0 -> 3.23.0"
 notes = "Mostly docs, tests and cicd."
 
+[[audits.tikv-jemalloc-sys]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.6.0+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7 -> 0.6.1+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7"
+notes = "Reviewed 0.6.0+... -> 0.6.1+...: build.rs now funnels make invocations through helper honoring CARGO_MAKEFLAGS and only changes logging; new override_allocator feature wires #[used] statics (or zone ctor on apple) to keep malloc/free symbol overrides linked, drawing from existing externs; added tests for malloc_conf and override interop. No new FFI definitions or unsafe behavior beyond these references."
+
+[[audits.tikv-jemallocator]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.6.0 -> 0.6.1"
+notes = "Reviewed 0.6.0->0.6.1: crate restructured but runtime logic unchanged aside from cfg align tables (mipsel/powerpc64le now use 16 byte max_align); added tests/background thread docs and new wrapper features mapping to sys crate; no new unsafe and allocator paths still delegate to ffi."
+
 [[audits.tonic]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -335,6 +389,48 @@ criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-07-23"
 end = "2026-10-17"
+
+[[trusted.clap]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2021-12-08"
+end = "2026-11-11"
+
+[[trusted.clap_builder]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2023-03-28"
+end = "2026-11-11"
+
+[[trusted.clap_derive]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2021-12-08"
+end = "2026-11-11"
+
+[[trusted.libc]]
+criteria = "safe-to-deploy"
+user-id = 55123 # rust-lang-owner
+start = "2024-08-15"
+end = "2026-11-04"
+
+[[trusted.lock_api]]
+criteria = "safe-to-deploy"
+user-id = 2915 # Amanieu d'Antras (Amanieu)
+start = "2019-05-04"
+end = "2026-11-11"
+
+[[trusted.parking_lot]]
+criteria = "safe-to-deploy"
+user-id = 2915 # Amanieu d'Antras (Amanieu)
+start = "2019-05-04"
+end = "2026-11-11"
+
+[[trusted.parking_lot_core]]
+criteria = "safe-to-deploy"
+user-id = 2915 # Amanieu d'Antras (Amanieu)
+start = "2019-05-04"
+end = "2026-11-11"
 
 [[trusted.phf]]
 criteria = "safe-to-deploy"
@@ -431,6 +527,26 @@ criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-10-09"
 end = "2026-10-21"
+
+[[trusted.tokio]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2020-12-25"
+end = "2026-10-29"
+notes = "Trusting Alice Ryhl (Darksonn) as publisher for tokio releases; widely vetted by mozilla/bytecode-alliance."
+
+[[trusted.tokio-macros]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2020-10-26"
+end = "2026-10-29"
+notes = "Trusting Alice Ryhl (Darksonn) as publisher for tokio-macros releases; aligns with upstream trusted audits."
+
+[[trusted.tokio-util]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2021-01-12"
+end = "2026-11-04"
 
 [[trusted.windows-sys]]
 criteria = "safe-to-deploy"
