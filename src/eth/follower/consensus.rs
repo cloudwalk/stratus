@@ -8,6 +8,12 @@ use crate::infra::BlockchainClient;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
+#[derive(Clone, Copy, Debug)]
+pub struct LagStatus {
+    pub blocks_behind: u64,
+    pub is_ahead: bool,
+}
+
 #[allow(async_fn_in_trait)]
 pub trait Consensus: Send + Sync {
     /// Whether this node should serve requests.
@@ -20,12 +26,18 @@ pub trait Consensus: Send + Sync {
             }
         };
 
-        let should_serve = lag <= 3;
+        let too_far = lag.blocks_behind > 3;
+        let is_ahead = lag.is_ahead;
 
-        if !should_serve {
-            tracing::warn!(?lag, "validator and replica are too far apart");
+        if too_far {
+            tracing::warn!(blocks_behind = lag.blocks_behind, "validator and replica are too far apart");
         }
 
+        if is_ahead {
+            tracing::warn!("follower is ahead of the leader");
+        }
+
+        let should_serve = !(too_far || is_ahead);
         should_serve
     }
 
@@ -46,6 +58,6 @@ pub trait Consensus: Send + Sync {
 
     fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>>;
 
-    /// Get the lag between this node and the leader.
-    async fn lag(&self) -> anyhow::Result<u64>;
+    /// Get the lag status between this node and the leader.
+    async fn lag(&self) -> anyhow::Result<LagStatus>;
 }

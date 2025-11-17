@@ -89,7 +89,10 @@ metrics! {
     histogram_duration import_online_mined_block{},
 
     "Number of transactions imported."
-    counter importer_online_transactions_total{}
+    counter importer_online_transactions_total{},
+
+    "Number of blocks the follower is behind the leader."
+    gauge importer_online_lag_blocks{}
 }
 
 // Execution metrics.

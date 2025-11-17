@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
+use crate::eth::follower::consensus::LagStatus;
 use crate::eth::follower::importer::EXTERNAL_RPC_CURRENT_BLOCK;
 use crate::eth::follower::importer::ImporterMode;
 use crate::eth::follower::importer::LATEST_FETCHED_BLOCK_TIME;
@@ -24,6 +25,8 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn;
 use crate::infra::BlockchainClient;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 use crate::infra::kafka::KafkaConnector;
 use crate::utils::DropTimer;
 
@@ -134,7 +137,7 @@ pub struct ImporterConsensus {
 }
 
 impl Consensus for ImporterConsensus {
-    async fn lag(&self) -> anyhow::Result<u64> {
+    async fn lag(&self) -> anyhow::Result<LagStatus> {
         let last_fetched_time = LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
 
         if last_fetched_time == 0 {
@@ -147,7 +150,16 @@ impl Consensus for ImporterConsensus {
                 "too much time elapsed without communicating with the leader. elapsed: {elapsed}s"
             ))
         } else {
-            Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number().as_u64())
+            let leader_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst);
+            let follower_block = self.storage.read_mined_block_number().as_u64();
+
+            #[cfg(feature = "metrics")]
+            metrics::set_importer_online_lag_blocks(leader_block.saturating_sub(follower_block));
+
+            Ok(LagStatus {
+                blocks_behind: leader_block.saturating_sub(follower_block),
+                is_ahead: follower_block > leader_block,
+            })
         }
     }
 
