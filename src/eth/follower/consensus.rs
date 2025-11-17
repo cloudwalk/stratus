@@ -26,10 +26,10 @@ pub trait Consensus: Send + Sync {
             }
         };
 
-        let too_far = lag.blocks_behind > 3;
+        let is_far_behind = lag.blocks_behind > 3;
         let is_ahead = lag.is_ahead;
 
-        if too_far {
+        if is_far_behind {
             tracing::warn!(blocks_behind = lag.blocks_behind, "validator and replica are too far apart");
         }
 
@@ -37,7 +37,7 @@ pub trait Consensus: Send + Sync {
             tracing::warn!("follower is ahead of the leader");
         }
 
-        let should_serve = !(too_far || is_ahead);
+        let should_serve = !(is_far_behind || is_ahead);
         should_serve
     }
 
