@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
+use crate::eth::follower::consensus::LagDirection;
 use crate::eth::follower::consensus::LagStatus;
 use crate::eth::follower::importer::EXTERNAL_RPC_CURRENT_BLOCK;
 use crate::eth::follower::importer::ImporterMode;
@@ -153,13 +154,17 @@ impl Consensus for ImporterConsensus {
             let leader_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst);
             let follower_block = self.storage.read_mined_block_number().as_u64();
 
+            let distance = leader_block.abs_diff(follower_block);
             #[cfg(feature = "metrics")]
             metrics::set_importer_online_lag_blocks(leader_block.saturating_sub(follower_block));
 
-            Ok(LagStatus {
-                blocks_behind: leader_block.saturating_sub(follower_block),
-                is_ahead: follower_block > leader_block,
-            })
+            let direction = if follower_block > leader_block {
+                LagDirection::Ahead
+            } else {
+                LagDirection::Behind
+            };
+
+            Ok(LagStatus { distance, direction })
         }
     }
 

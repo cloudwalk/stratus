@@ -8,10 +8,28 @@ use crate::infra::BlockchainClient;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
+const MAX_ALLOWED_LAG_BLOCKS: u64 = 3;
+
+#[derive(Clone, Copy, Debug)]
+pub enum LagDirection {
+    Ahead,
+    Behind,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct LagStatus {
-    pub blocks_behind: u64,
-    pub is_ahead: bool,
+    pub distance: u64,
+    pub direction: LagDirection,
+}
+
+impl LagStatus {
+    pub fn is_ahead(&self) -> bool {
+        matches!(self.direction, LagDirection::Ahead)
+    }
+
+    pub fn is_far_behind(&self) -> bool {
+        matches!(self.direction, LagDirection::Behind) && self.distance > MAX_ALLOWED_LAG_BLOCKS
+    }
 }
 
 #[allow(async_fn_in_trait)]
@@ -26,18 +44,15 @@ pub trait Consensus: Send + Sync {
             }
         };
 
-        let is_far_behind = lag.blocks_behind > 3;
-        let is_ahead = lag.is_ahead;
-
-        if is_far_behind {
-            tracing::warn!(blocks_behind = lag.blocks_behind, "validator and replica are too far apart");
+        if lag.is_far_behind() {
+            tracing::warn!(blocks_behind = lag.distance, "validator and replica are too far apart");
         }
 
-        if is_ahead {
-            tracing::warn!("follower is ahead of the leader");
+        if lag.is_ahead() {
+            tracing::warn!(distance = lag.distance, "follower is ahead of the leader");
         }
 
-        !(is_far_behind || is_ahead)
+        !(lag.is_far_behind() || lag.is_ahead())
     }
 
     /// Forwards a transaction to leader.
