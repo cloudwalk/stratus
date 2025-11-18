@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use strum::AsRefStr;
+
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::StratusError;
@@ -7,6 +9,31 @@ use crate::eth::rpc::RpcClientApp;
 use crate::infra::BlockchainClient;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
+
+const MAX_ALLOWED_LAG_BLOCKS: u64 = 3;
+
+#[derive(Clone, Copy, Debug, AsRefStr)]
+#[strum(serialize_all = "lowercase")]
+pub enum LagDirection {
+    Ahead,
+    Behind,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LagStatus {
+    pub distance: u64,
+    pub direction: LagDirection,
+}
+
+impl LagStatus {
+    pub fn is_ahead(&self) -> bool {
+        matches!(self.direction, LagDirection::Ahead)
+    }
+
+    pub fn is_far_behind(&self) -> bool {
+        matches!(self.direction, LagDirection::Behind) && self.distance > MAX_ALLOWED_LAG_BLOCKS
+    }
+}
 
 #[allow(async_fn_in_trait)]
 pub trait Consensus: Send + Sync {
@@ -20,13 +47,15 @@ pub trait Consensus: Send + Sync {
             }
         };
 
-        let should_serve = lag <= 3;
-
-        if !should_serve {
-            tracing::warn!(?lag, "validator and replica are too far apart");
+        if lag.is_far_behind() {
+            tracing::warn!(blocks_behind = lag.distance, "validator and replica are too far apart");
         }
 
-        should_serve
+        if lag.is_ahead() {
+            tracing::warn!(distance = lag.distance, "follower is ahead of the leader");
+        }
+
+        !(lag.is_far_behind() || lag.is_ahead())
     }
 
     /// Forwards a transaction to leader.
@@ -46,6 +75,6 @@ pub trait Consensus: Send + Sync {
 
     fn get_chain(&self) -> anyhow::Result<&Arc<BlockchainClient>>;
 
-    /// Get the lag between this node and the leader.
-    async fn lag(&self) -> anyhow::Result<u64>;
+    /// Get the lag status between this node and the leader.
+    async fn lag(&self) -> anyhow::Result<LagStatus>;
 }
