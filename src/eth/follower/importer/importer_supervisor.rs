@@ -8,6 +8,8 @@ use tokio::sync::mpsc;
 
 use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
+use crate::eth::follower::consensus::LagDirection;
+use crate::eth::follower::consensus::LagStatus;
 use crate::eth::follower::importer::EXTERNAL_RPC_CURRENT_BLOCK;
 use crate::eth::follower::importer::ImporterMode;
 use crate::eth::follower::importer::LATEST_FETCHED_BLOCK_TIME;
@@ -25,6 +27,8 @@ use crate::eth::storage::StratusStorage;
 use crate::ext::spawn;
 use crate::infra::BlockchainClient;
 use crate::infra::kafka::KafkaConnector;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 use crate::utils::DropTimer;
 
 type ReexecutionFollower = ImporterSupervisor<BlockWithReceiptsFetcher, ReexecutionWorker>;
@@ -134,7 +138,7 @@ pub struct ImporterConsensus {
 }
 
 impl Consensus for ImporterConsensus {
-    async fn lag(&self) -> anyhow::Result<u64> {
+    async fn lag(&self) -> anyhow::Result<LagStatus> {
         let last_fetched_time = LATEST_FETCHED_BLOCK_TIME.load(Ordering::Relaxed);
 
         if last_fetched_time == 0 {
@@ -147,7 +151,19 @@ impl Consensus for ImporterConsensus {
                 "too much time elapsed without communicating with the leader. elapsed: {elapsed}s"
             ))
         } else {
-            Ok(EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst) - self.storage.read_mined_block_number().as_u64())
+            let leader_block = EXTERNAL_RPC_CURRENT_BLOCK.load(Ordering::SeqCst);
+            let follower_block = self.storage.read_mined_block_number().as_u64();
+
+            let direction = if follower_block > leader_block {
+                LagDirection::Ahead
+            } else {
+                LagDirection::Behind
+            };
+            let distance = leader_block.abs_diff(follower_block);
+            #[cfg(feature = "metrics")]
+            metrics::set_importer_online_lag_blocks(distance, direction.as_ref());
+
+            Ok(LagStatus { distance, direction })
         }
     }
 
