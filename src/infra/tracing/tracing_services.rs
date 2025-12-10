@@ -86,6 +86,9 @@ where
     fn format_event(&self, ctx: &fmt::FmtContext<'_, S, DefaultFields>, mut writer: fmt::format::Writer<'_>, event: &tracing::Event<'_>) -> std::fmt::Result {
         let meta = event.metadata();
 
+        let mut fields = to_json_value(event.field_map());
+        strip_empty_fields(&mut fields);
+
         // parse spans
         let context = ctx.lookup_current().map(|span| {
             let mut root_span = None;
@@ -108,6 +111,8 @@ where
                 }
             }
 
+            strip_empty_context(&mut merged_span_context);
+
             // generate context field
             TracingLogContextField {
                 root_span_id: root_span.as_ref().map(|s| s.id().into_u64()).unwrap_or(0),
@@ -124,7 +129,7 @@ where
             level: meta.level().as_serde(),
             target: meta.target(),
             thread: std::thread::current(),
-            fields: to_json_value(event.field_map()),
+            fields,
             context,
         };
 
@@ -171,6 +176,33 @@ struct TracingLogContextField<'a> {
     span_name: &'a str,
     #[serde(flatten)]
     context: HashMap<String, JsonValue>,
+}
+
+fn strip_empty_fields(value: &mut JsonValue) {
+    match value {
+        JsonValue::Array(items) => {
+            items.iter_mut().for_each(strip_empty_fields);
+            items.retain(|item| !is_empty_value(item));
+        }
+        JsonValue::Object(map) => {
+            map.values_mut().for_each(strip_empty_fields);
+            map.retain(|_, value| !is_empty_value(value));
+        }
+        _ => {}
+    }
+}
+
+fn strip_empty_context(context: &mut HashMap<String, JsonValue>) {
+    context.values_mut().for_each(strip_empty_fields);
+    context.retain(|_, value| !is_empty_value(value));
+}
+
+fn is_empty_value(value: &JsonValue) -> bool {
+    match value {
+        JsonValue::Null => true,
+        JsonValue::String(value) => value.is_empty(),
+        _ => false,
+    }
 }
 
 // -----------------------------------------------------------------------------
