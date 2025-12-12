@@ -1224,10 +1224,6 @@ criteria = "safe-to-deploy"
 version = "0.10.4"
 criteria = "safe-to-deploy"
 
-[[exemptions.reqwest]]
-version = "0.12.23"
-criteria = "safe-to-deploy"
-
 [[exemptions.revm]]
 version = "27.1.0"
 criteria = "safe-to-deploy"
