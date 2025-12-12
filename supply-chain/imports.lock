@@ -189,6 +189,13 @@ user-id = 51017
 user-login = "JohnTitor"
 user-name = "Yuki Okushi"
 
+[[publisher.reqwest]]
+version = "0.12.24"
+when = "2025-10-13"
+user-id = 359
+user-login = "seanmonstar"
+user-name = "Sean McArthur"
+
 [[publisher.sentry]]
 version = "0.45.0"
 when = "2025-10-08"
