@@ -180,6 +180,12 @@ criteria = "safe-to-deploy"
 delta = "0.18.0 -> 0.18.2"
 notes = "reviewed 0.18.0->0.18.2: ansi-aware truncation writes via AnsiCodeIterator; progress char head logic avoids spurious glyphs; width calc handles embedded NUL; tests cover combining accents/colors; vt100 dep bump only"
 
+[[audits.indicatif]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.18.2 -> 0.18.3"
+notes = "0.18.3 removes demo examples, derives Default for MultiProgressAlignment/ProgressFinish, and adds ProgressBar::set_elapsed which rewinds the start Instant via checked_sub; no unsafe code touched."
+
 [[audits.opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -476,6 +482,12 @@ criteria = "safe-to-deploy"
 user-id = 51017 # Yuki Okushi (JohnTitor)
 start = "2021-06-17"
 end = "2026-10-17"
+
+[[trusted.reqwest]]
+criteria = "safe-to-deploy"
+user-id = 359 # Sean McArthur (seanmonstar)
+start = "2019-03-04"
+end = "2026-12-10"
 
 [[trusted.sentry]]
 criteria = "safe-to-deploy"
