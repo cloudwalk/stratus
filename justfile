@@ -525,10 +525,6 @@ hiveview:
 contracts-clone *args="":
     cd e2e/cloudwalk-contracts && ./contracts-clone.sh {{args}}
 
-# Contracts: Compile selected Solidity contracts
-contracts-compile:
-    cd e2e/cloudwalk-contracts && ./contracts-compile.sh
-
 # Contracts: Flatten solidity contracts for integration test
 contracts-flatten *args="":
     cd e2e/cloudwalk-contracts && ./contracts-flatten.sh {{args}}
