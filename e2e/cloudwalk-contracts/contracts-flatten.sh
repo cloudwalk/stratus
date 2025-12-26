@@ -4,6 +4,7 @@
 #
 set -eo pipefail
 source "$(dirname "$0")/_functions.sh"
+root=$(pwd)
 
 # ------------------------------------------------------------------------------
 # Functions
@@ -11,34 +12,37 @@ source "$(dirname "$0")/_functions.sh"
 
 # Flatten Solidity contracts from a project.
 flatten() {
-    repo=$1
+    contract_project=$1
     contract=$2
+    target_file="$root/integration/contracts/$contract.flattened.sol"
 
-    if [ -f integration/contracts/"$contract".flattened.sol ]; then
-        echo "Skipping flattening of $contract ($repo)"
+    rm -rf ../node_modules # TODO: remove
+
+
+    echo "root: $root"
+    echo "contract: $contract"
+    echo "contract_project: $contract_project"
+
+    if [ -f "$target_file" ]; then
+        log "Skipping flattening of $contract ($contract_project)"
         return
     fi
 
-    log "Flattenning: $contract ($repo)"
-
-    # Enter the repository folder
-    if ! cd repos/"$repo"; then
-        log "$repo folder does not exist"
-        return 1
-    fi
+    log "Flattening: $contract ($contract_project)"
 
     # Flatten
-    DOTENV_CONFIG_QUIET=true npx hardhat flatten contracts/"$contract".sol >../../integration/contracts/"$contract".flattened.sol
+
+    pnpm -C ../brlc-monorepo run flatten:contract "$contract_project" "$contract".sol $target_file
 
     # Leave the repository folder
-    cd ../../
+    cd $root
 
     # Install ts-node if not installed
     command -v ts-node >/dev/null || npm install --save-dev ts-node
 
     # Lint the flattened contract
-    log "Linting the flattened $contract ($repo)"
-    npx ts-node integration/test/helpers/lint-flattened.ts integration/contracts/"$contract".flattened.sol
+    log "Linting the flattened $contract ($contract_project)"
+ #   npx ts-node integration/test/helpers/lint-flattened.ts integration/contracts/"$contract".flattened.sol
 
 }
 
@@ -46,118 +50,33 @@ flatten() {
 # Execution
 # ------------------------------------------------------------------------------
 
-# Initialize variables
-token=0
-periphery=0
-multisig=0
-yield=0
-pix=0
-capybara_finance=0
-credit_agent=0
-
 # Help function
 print_help() {
-    echo "Usage: $0 [OPTIONS]"
-    echo "Options:"
-    echo "  -t, --token             for brlc-token"
-    echo "  -p, --periphery         for brlc-periphery"
-    echo "  -m, --multisig          for brlc-multisig"
-    echo "  -i, --yield             for brlc-net-yield-distributor"
-    echo "  -x, --pix               for brlc-cashier"
-    echo "  -f, --capybara-finance  for brlc-capybara-finance"
-    echo "  -a, --credit-agent      for brlc-credit-agent"
-    echo "  -h, --help              display this help and exit"
+    echo "Usage: $0 <project_name> <contract_name>"
+    echo ""
+    echo "Flattens a single Solidity contract from a given project in the brlc-monorepo into integration/contracts."
+    echo ""
+    echo "Arguments:"
+    echo "  project_name   Folder name under brlc-monorepo/ (e.g. token)"
+    echo "  contract_name  Solidity contract file name without .sol (e.g. BRLCToken)"
 }
 
-if [ "$#" == 0 ]; then
-    token=1
-    periphery=1
-    multisig=1
-    yield=1
-    pix=1
-    capybara_finance=1
-    credit_agent=1
-fi
-
-# Process arguments
-while [[ "$#" -gt 0 ]]; do
-    case "$1" in
+case "${1:-}" in
     -h | --help)
         print_help
         exit 0
         ;;
-    -t | --token)
-        token=1
-        shift
-        ;;
-    -p | --periphery)
-        periphery=1
-        shift
-        ;;
-    -m | --multisig)
-        multisig=1
-        shift
-        ;;
-    -i | --yield)
-        yield=1
-        shift
-        ;;
-    -x | --pix)
-        pix=1
-        shift
-        ;;
-    -f | --capybara-finance)
-        capybara_finance=1
-        shift
-        ;;
-    -a | --credit-agent)
-        credit_agent=1
-        shift
-        ;;
-    *)
-        echo "Unknown option: $1"
-        print_help
-        exit 1
-        ;;
-    esac
-done
-# configure tools
-asdf set --home solidity 0.8.16 || echo "asdf, solidity plugin or solidity version not found"
+esac
 
-log "Flattening repositories"
-
-if [ "$token" == 1 ]; then
-    flatten brlc-token BRLCToken
+if [ "$#" -ne 2 ]; then
+    echo "Error: expected <project_name> and <contract_name>."
+    echo ""
+    print_help
+    exit 1
 fi
 
-if [ "$pix" == 1 ]; then
-    # Cashier Transition: flatten Cashier regardless if the repo was renamed or not
-    flatten brlc-cashier Cashier
-    flatten brlc-cashier CashierShard
-fi
+project_name=$1
+contract_name=$2
 
-if [ "$yield" == 1 ]; then
-    # BalanceTracker Transition: flatten BalanceTracker regardless if the repo is isolated or not
-    flatten brlc-balance-tracker BalanceTracker || flatten brlc-net-yield-distributor BalanceTracker
-    flatten brlc-net-yield-distributor NetYieldDistributor
-fi
-
-if [ "$periphery" == 1 ]; then
-    # Periphery Transition: flatten Periphery regardless if the repo was renamed or not
-    flatten brlc-card-payment-processor CardPaymentProcessor || flatten brlc-periphery CardPaymentProcessor
-    flatten brlc-card-payment-processor CashbackDistributor || flatten brlc-periphery CashbackDistributor
-fi
-
-if [ "$multisig" == 1 ]; then
-    flatten brlc-multisig MultiSigWallet
-fi
-
-if [ "$capybara_finance" == 1 ]; then
-    flatten brlc-capybara-finance LendingMarket
-    flatten brlc-capybara-finance LiquidityPool
-    flatten brlc-capybara-finance CreditLine
-fi
-
-if [ "$credit_agent" == 1 ]; then
-    flatten brlc-credit-agent CreditAgent
-fi
+log "Flattening contract"
+flatten "$project_name" "$contract_name"

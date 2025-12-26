@@ -42,7 +42,6 @@ env:
     target/
   CACHE_KEY: ${ CACHE_KEY_CONTEXT }
 
-
 jobs:
   setup_cache:
     name: Setup Cache for E2E Leader & Follower tests
@@ -63,7 +62,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.88      
+          toolchain: 1.88
 
       - name: Rust Cache - Restore workflow cache
         uses: actions/cache/restore@v4
@@ -89,7 +88,7 @@ jobs:
           source <(cargo llvm-cov show-env --export-prefix)
           echo "RUSTFLAGS=${RUSTFLAGS}"
           cargo build --features dev
-      
+
       - name: Rust Cache - Save workflow cache
         uses: actions/cache/save@v4
         with:
@@ -100,8 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test:
-          [brlc, importer, miner, change, deploy, kafka, health]
+        test: [brlc, importer, miner, change, deploy, kafka, health]
         use_block_changes_replication: [false, true]
     name: "E2E Leader & Follower on ${{ matrix.test }} (Replication: ${{ matrix.use_block_changes_replication }})"
     needs: setup_cache
@@ -135,9 +133,13 @@ jobs:
       - name: Set up Just
         uses: extractions/setup-just@v2
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
+          cache: pnpm
           node-version-file: .tool-versions
 
       - name: Install npm
@@ -167,10 +169,12 @@ jobs:
           sudo apt-get install -y docker-compose
 
       - name: Clone BRLCToken repository
-        run: just contracts-clone --token
+        if: matrix.test == 'brlc'
+        run: just contracts-clone
 
       - name: Flatten BRLCToken contract
-        run: just contracts-flatten --token
+        if: matrix.test == 'brlc'
+        run: just contracts-flatten token BRLCToken
 
       - name: Run e2e tests
         run: just run-test e2e-leader-follower-up ${{ matrix.test }} ${{ matrix.use_block_changes_replication }}
