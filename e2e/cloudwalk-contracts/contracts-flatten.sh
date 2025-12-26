@@ -16,8 +16,7 @@ flatten() {
     contract=$2
     target_file="$root/integration/contracts/$contract.flattened.sol"
 
-    rm -rf ../node_modules # TODO: remove
-
+    rm -rf ../node_modules # need to clean up tests node_modules to avoid conflicts
 
     echo "root: $root"
     echo "contract: $contract"
@@ -42,7 +41,7 @@ flatten() {
 
     # Lint the flattened contract
     log "Linting the flattened $contract ($contract_project)"
- #   npx ts-node integration/test/helpers/lint-flattened.ts integration/contracts/"$contract".flattened.sol
+    npx ts-node integration/test/helpers/lint-flattened.ts integration/contracts/"$contract".flattened.sol
 
 }
 
@@ -57,15 +56,15 @@ print_help() {
     echo "Flattens a single Solidity contract from a given project in the brlc-monorepo into integration/contracts."
     echo ""
     echo "Arguments:"
-    echo "  project_name   Folder name under brlc-monorepo/ (e.g. token)"
+    echo "  project_name   Folder name under brlc-monorepo/contracts/ (e.g. token)"
     echo "  contract_name  Solidity contract file name without .sol (e.g. BRLCToken)"
 }
 
 case "${1:-}" in
-    -h | --help)
-        print_help
-        exit 0
-        ;;
+-h | --help)
+    print_help
+    exit 0
+    ;;
 esac
 
 if [ "$#" -ne 2 ]; then

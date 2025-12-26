@@ -19,8 +19,7 @@ clone() {
         git -C "$target" pull
     else
         log "Cloning: $repo"
-        # TODO: remove the stratus-integration branch once the integration tests are merged into main
-        if ! git clone https://github.com/cloudwalk/"$repo".git -b stratus-integration "$target"; then
+        if ! git clone https://github.com/cloudwalk/"$repo".git -b main "$target"; then
             log "Clone failed. Removing folder and exiting."
             rm -rf "$target"
             return 1
@@ -28,7 +27,8 @@ clone() {
     fi
 
     log "Installing dependencies: $repo"
-    if ! pnpm -C "$target" install; then
+    corepack enable
+    if ! corepack pnpm -C "$target" install; then
         log "Dependencies install failed. Removing folder and exiting."
         rm -rf "$target"
         return 1

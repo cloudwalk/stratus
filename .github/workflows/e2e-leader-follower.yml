@@ -99,7 +99,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [brlc, importer, miner, change, deploy, kafka, health]
+        test: 
+          [brlc, importer, miner, change, deploy, kafka, health]
         use_block_changes_replication: [false, true]
     name: "E2E Leader & Follower on ${{ matrix.test }} (Replication: ${{ matrix.use_block_changes_replication }})"
     needs: setup_cache
@@ -133,13 +134,9 @@ jobs:
       - name: Set up Just
         uses: extractions/setup-just@v2
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          cache: pnpm
           node-version-file: .tool-versions
 
       - name: Install npm
@@ -169,11 +166,9 @@ jobs:
           sudo apt-get install -y docker-compose
 
       - name: Clone BRLCToken repository
-        if: matrix.test == 'brlc'
         run: just contracts-clone
 
       - name: Flatten BRLCToken contract
-        if: matrix.test == 'brlc'
         run: just contracts-flatten token BRLCToken
 
       - name: Run e2e tests
