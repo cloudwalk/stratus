@@ -201,7 +201,6 @@ impl Evm {
                 cfg_env.disable_eip3541 = false;
                 cfg_env.disable_eip7623 = false;
                 cfg_env.disable_base_fee = false;
-                cfg_env.disable_priority_fee_check = false;
                 cfg_env.disable_fee_charge = false;
             })
             .modify_block_chained(|block_env: &mut BlockEnv| {
