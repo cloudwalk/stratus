@@ -186,6 +186,7 @@ impl Evm {
         let ctx = Context::new(db, spec)
             .modify_cfg_chained(|cfg_env| {
                 cfg_env.chain_id = chain_id;
+                cfg_env.tx_chain_id_check = matches!(kind, EvmKind::Transaction);
                 cfg_env.disable_nonce_check = matches!(kind, EvmKind::Call);
                 cfg_env.disable_eip3607 = matches!(kind, EvmKind::Call);
                 cfg_env.limit_contract_code_size = Some(usize::MAX);
