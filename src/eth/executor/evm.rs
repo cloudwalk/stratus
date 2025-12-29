@@ -195,6 +195,14 @@ impl Evm {
                 cfg_env.blob_base_fee_update_fraction = None;
                 cfg_env.disable_eip3607 = matches!(kind, EvmKind::Call);
                 cfg_env.limit_contract_code_size = Some(usize::MAX);
+                cfg_env.memory_limit = (1 << 32) - 1;
+                cfg_env.disable_balance_check = false;
+                cfg_env.disable_block_gas_limit = false;
+                cfg_env.disable_eip3541 = false;
+                cfg_env.disable_eip7623 = false;
+                cfg_env.disable_base_fee = false;
+                cfg_env.disable_priority_fee_check = false;
+                cfg_env.disable_fee_charge = false;
             })
             .modify_block_chained(|block_env: &mut BlockEnv| {
                 block_env.beneficiary = Address::COINBASE.into();

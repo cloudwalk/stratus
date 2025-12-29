@@ -136,10 +136,33 @@ indicatif = { version = "=0.18.3", optional = true }
 # ------------------------------------------------------------------------------
 
 [target.'cfg(not(all(target_arch = "aarch64", target_os = "linux")))'.dependencies]
-revm = { version = "=30.2.0", features = ["asm-keccak", "serde", "optional_eip3607"] }
+revm = { version = "=30.2.0", features = [
+    "asm-keccak",
+    "serde",
+    "memory_limit",
+    "optional_balance_check",
+    "optional_block_gas_limit",
+    "optional_eip3541",
+    "optional_eip3607",
+    "optional_eip7623",
+    "optional_fee_charge",
+    "optional_no_base_fee",
+    "optional_priority_fee_check",
+] }
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies]
-revm = { version = "=30.2.0", features = ["serde", "optional_eip3607"]}
+revm = { version = "=30.2.0", features = [
+    "serde",
+    "memory_limit",
+    "optional_balance_check",
+    "optional_block_gas_limit",
+    "optional_eip3541",
+    "optional_eip3607",
+    "optional_eip7623",
+    "optional_fee_charge",
+    "optional_no_base_fee",
+    "optional_priority_fee_check",
+]}
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { version = "=0.6.1", optional = true }
