@@ -13,6 +13,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.38 -> 1.0.41"
 notes = "reviewed 1.0.38->1.0.41: legacy gas_price serde saturates; new 4844 sidecar mapping + tests; no unsafe/deps"
 
+[[audits.alloy-consensus]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.41 -> 1.1.0"
+notes = "No new unsafe or capability access; added helper conversions and EIP-4844 sidecar mapping."
+
 [[audits.alloy-consensus-any]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -144,6 +150,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.41"
 notes = "Reviewed 1.0.24->1.0.41: serde path fixes, TypedTransaction generation enhancements; macro-only."
+
+[[audits.alloy-tx-macros]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.41 -> 1.2.1"
+notes = "No new unsafe or capability access; serde tag/alias refactor only."
 
 [[audits.c-kzg]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
