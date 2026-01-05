@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Clone Git repositories containing Solidity contracts.
+# Remove cloned Git repositories containing CW Solidity contracts.
 #
 set -eo pipefail
 source "$(dirname "$0")/_functions.sh"
@@ -9,16 +9,15 @@ source "$(dirname "$0")/_functions.sh"
 # Functions
 # ------------------------------------------------------------------------------
 
-# Clone a project to the projects directory.
-remove() {
-    repo=$1
-    target=repos/$repo
+# Remove the brlc-monorepo clone (this is what `contracts-clone.sh` creates).
+remove_brlc_monorepo() {
+    target=../brlc-monorepo
 
     if [ -d "$target" ]; then
-        log "Removing: $repo"
+        log "Removing: brlc-monorepo ($target)"
         rm -rf "$target"
     else
-        log "Already removed: $repo"
+        log "Already removed: brlc-monorepo ($target)"
         log "Nothing to do, leaving"
     fi
 }
@@ -27,111 +26,30 @@ remove() {
 # Execution
 # ------------------------------------------------------------------------------
 
-# Initialize variables
-token=0
-periphery=0
-multisig=0
-yield=0
-pix=0
-capybara_finance=0
-credit_agent=0
-
 # Help function
 print_help() {
     echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Removes the cloned brlc-monorepo repository used by the E2E contracts tests."
+    echo ""
     echo "Options:"
-    echo "  -t, --token             for brlc-token"
-    echo "  -p, --periphery         for brlc-periphery"
-    echo "  -m, --multisig          for brlc-multisig"
-    echo "  -i, --yield             for brlc-net-yield-distributor"
-    echo "  -x, --pix               for brlc-cashier"
-    echo "  -f, --capybara-finance  for brlc-capybara-finance"
-    echo "  -a, --credit-agent      for brlc-credit-agent"
-    echo "  -h, --help              display this help and exit"
+    echo "  -h, --help  display this help and exit"
 }
 
-if [ "$#" == 0 ]; then
-    token=1
-    periphery=1
-    multisig=1
-    yield=1
-    pix=1
-    capybara_finance=1
-    credit_agent=1
-fi
+case "${1:-}" in
+-h | --help)
+    print_help
+    exit 0
+    ;;
+"")
+    # default: remove everything that was cloned
+    ;;
+*)
+    echo "Unknown option: $1"
+    print_help
+    exit 1
+    ;;
+esac
 
-# Process arguments
-while [[ "$#" -gt 0 ]]; do
-    case "$1" in
-    -h | --help)
-        print_help
-        exit 0
-        ;;
-    -t | --token)
-        token=1
-        shift
-        ;;
-    -p | --periphery)
-        periphery=1
-        shift
-        ;;
-    -m | --multisig)
-        multisig=1
-        shift
-        ;;
-    -i | --yield)
-        yield=1
-        shift
-        ;;
-    -x | --pix)
-        pix=1
-        shift
-        ;;
-    -f | --capybara-finance)
-        capybara_finance=1
-        shift
-        ;;
-    -a | --credit-agent)
-        credit_agent=1
-        shift
-        ;;
-    *)
-        echo "Unknown option: $1"
-        print_help
-        exit 1
-        ;;
-    esac
-done
-
-log "Removing repositories"
-
-if [ "$token" == 1 ]; then
-    remove brlc-token
-fi
-
-if [ "$pix" == 1 ]; then
-    # Cashier Transition: remove regardless of the repository name at the moment
-    remove brlc-cashier
-fi
-
-if [ "$yield" == 1 ]; then
-    remove brlc-balance-tracker
-    remove brlc-net-yield-distributor
-fi
-
-if [ "$periphery" == 1 ]; then
-    # Periphery Transition: remove regardless of the repository name at the moment
-    remove brlc-card-payment-processor && remove brlc-periphery
-fi
-
-if [ "$multisig" == 1 ]; then
-    remove brlc-multisig
-fi
-
-if [ "$capybara_finance" == 1 ]; then
-    remove brlc-capybara-finance
-fi
-
-if [ "$credit_agent" == 1 ]; then
-    remove brlc-credit-agent
-fi
+log "Removing cloned repositories"
+remove_brlc_monorepo
