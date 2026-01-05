@@ -480,10 +480,6 @@ criteria = "safe-to-deploy"
 version = "6.1.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.der]]
-version = "0.7.10"
-criteria = "safe-to-deploy"
-
 [[exemptions.derivative]]
 version = "2.2.0"
 criteria = "safe-to-deploy"
@@ -1020,10 +1016,6 @@ criteria = "safe-to-deploy"
 version = "1.70.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.oneshot]]
-version = "0.1.11"
-criteria = "safe-to-deploy"
-
 [[exemptions.openssl]]
 version = "0.10.73"
 criteria = "safe-to-deploy"
@@ -1064,10 +1056,6 @@ criteria = "safe-to-deploy"
 version = "1.0.15"
 criteria = "safe-to-deploy"
 
-[[exemptions.pem-rfc7468]]
-version = "0.7.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.pest]]
 version = "2.8.1"
 criteria = "safe-to-deploy"
@@ -1098,10 +1086,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.pkcs8]]
 version = "0.10.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.pkg-config]]
-version = "0.3.32"
 criteria = "safe-to-deploy"
 
 [[exemptions.plist]]
@@ -1678,10 +1662,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.ureq-proto]]
 version = "0.4.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.utf-8]]
-version = "0.7.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.uuid]]
