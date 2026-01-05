@@ -19,6 +19,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.38"
 notes = "Reviewed 1.0.24->1.0.38: doc cfg removal and dependency bumps only."
 
+[[audits.alloy-consensus-any]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.41"
+notes = "Changelog only and Cargo.toml dependency bumps to 1.0.41; no code changes."
+
 [[audits.alloy-eips]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -70,6 +76,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.38"
 notes = "Reviewed 1.0.24->1.0.38: ReceiptResponse::cost helper only; docs cleanup."
 
+[[audits.alloy-network-primitives]]
+who = "Gabriel Martins"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.41"
+notes = "Changelog/doc refresh plus Cargo.toml dependency alignment to 1.0.41; no source changes."
+
 [[audits.alloy-primitives]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -87,6 +99,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.38"
 notes = "Reviewed 1.0.24->1.0.38: decoding helpers and enum cleanup only."
+
+[[audits.alloy-rpc-types-eth]]
+who = "Gabriel Martins"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.41"
+notes = "Reviewed changelog/doc updates plus src/account.rs import cleanup (Vec now behind serde); no functional changes beyond unused import fix."
 
 [[audits.alloy-rpc-types-trace]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
