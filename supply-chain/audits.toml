@@ -76,6 +76,12 @@ criteria = "safe-to-deploy"
 delta = "1.3.1 -> 1.4.1"
 notes = "Reviewed 1.3.1->1.4.1: database trait impls and helpers, no unsafe changes."
 
+[[audits.alloy-primitives]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.4.1 -> 1.5.2"
+notes = "Reviewed 1.4.1->1.5.2: new keccak cache using rapidhash/fixed-cache, map hasher switches to FxHasher with unsafe length preconditions enforced via assert_unchecked; added keccak cache entry points and address/bloom helpers. No new ambient capabilities beyond hashing and fixed cache; unsafe confined to length-checked hashing and cache key construction."
+
 [[audits.alloy-rpc-types-eth]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -267,6 +273,12 @@ notes = """
 Assessment: Low-risk patch, implementation consistent with prior vetted version. Safe to deploy.
 """
 
+[[audits.rapidhash]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "4.2.0"
+notes = "Inspected 4.2.0: pure hashing crate; default build keeps safety checks. Unsafe usage limited to guarded pointer reads in util::read with explicit length assertions; no I/O or syscalls."
+
 [[audits.revm]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -375,6 +387,12 @@ criteria = "safe-to-deploy"
 delta = "1.27.0 -> 1.28.0"
 notes = "Reviewed 1.27.0->1.28.0: feature reorg, serde/borsh modules; no unsafe changes."
 
+[[audits.ruint]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.16.0 -> 1.17.2"
+notes = "Reviewed 1.16.0->1.17.2: functions depending on reciprocal division now marked unsafe and call sites updated; MSRV bumped, serde_core split; added ark-ff 0.5 support and minor API cleanups. Unsafe blocks guarded by explicit precondition checks; no new ambient capabilities."
+
 [[audits.syn-solidity]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -440,6 +458,18 @@ criteria = "safe-to-deploy"
 user-id = 6743 # Ed Page (epage)
 start = "2021-12-08"
 end = "2026-11-11"
+
+[[trusted.hashbrown]]
+criteria = "safe-to-deploy"
+user-id = 55123 # rust-lang-owner
+start = "2025-04-30"
+end = "2026-12-10"
+
+[[trusted.indexmap]]
+criteria = "safe-to-deploy"
+user-id = 539 # Josh Stone (cuviper)
+start = "2020-01-15"
+end = "2026-12-10"
 
 [[trusted.libc]]
 criteria = "safe-to-deploy"

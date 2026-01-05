@@ -22,7 +22,7 @@ hash_hasher = "=2.0.4"
 hex_fmt = "=0.3.0"
 hex-literal = "=1.1.0"
 humantime = "=2.3.0"
-indexmap = { version = "=2.12.0", features = ["serde"] }
+indexmap = { version = "=2.12.1", features = ["serde"] }
 itertools = "=0.14.0"
 nanoid = "=0.4.0"
 oneshot = "=0.1.11"
@@ -79,7 +79,7 @@ revm-inspectors = { version = "=0.31.2", features = ["js-tracer"] }
 alloy-rpc-types-trace = "=1.0.38"
 alloy-rpc-types-eth = "=1.0.38"
 alloy-consensus = { version = "=1.0.41", features = ["k256"] }
-alloy-primitives = { version = "=1.4.1", features = ["rand"] }
+alloy-primitives = { version = "=1.5.2", features = ["rand"] }
 alloy-eips = "=1.1.0"
 
 # network
