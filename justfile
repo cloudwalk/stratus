@@ -522,12 +522,8 @@ hiveview:
 # ------------------------------------------------------------------------------
 
 # Contracts: Clone Solidity repositories
-contracts-clone *args="":
-    cd e2e/cloudwalk-contracts && ./contracts-clone.sh {{args}}
-
-# Contracts: Compile selected Solidity contracts
-contracts-compile:
-    cd e2e/cloudwalk-contracts && ./contracts-compile.sh
+contracts-clone:
+    cd e2e/cloudwalk-contracts && ./contracts-clone.sh
 
 # Contracts: Flatten solidity contracts for integration test
 contracts-flatten *args="":
@@ -539,8 +535,8 @@ contracts-test *args="":
 alias e2e-contracts := contracts-test
 
 # Contracts: Remove all the cloned repositories
-contracts-remove *args="":
-    cd e2e/cloudwalk-contracts && ./contracts-remove.sh {{args}}
+contracts-remove:
+    cd e2e/cloudwalk-contracts && ./contracts-remove.sh
 
 # Contracts: Start Stratus and run contracts tests
 contracts-test-stratus *args="":

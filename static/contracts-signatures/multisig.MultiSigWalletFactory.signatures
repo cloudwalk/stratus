@@ -1,0 +1,7 @@
+Function signatures:
+0f7d85d0: deployNewWallet(address[],uint16)
+7ad71f72: wallets(uint256)
+47b2470d: walletsCount()
+
+Event signatures:
+6c2dedd3da3970de18095b000c2026dba4e53d35538b695a5c433abd5564e3ba: NewWallet(address,address,uint256)
