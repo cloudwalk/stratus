@@ -216,6 +216,12 @@ criteria = "safe-to-deploy"
 delta = "0.18.2 -> 0.18.3"
 notes = "0.18.3 removes demo examples, derives Default for MultiProgressAlignment/ProgressFinish, and adds ProgressBar::set_elapsed which rewinds the start Instant via checked_sub; no unsafe code touched."
 
+[[audits.num-bigint-dig]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.8.4 -> 0.8.6"
+notes = "Reviewed 0.8.4->0.8.6: Cargo manifest now explicitly lists lib/tests and disables auto targets; removes byteorder dep, reorders feature table. Code changes limited to import cleanups, alloc::vec usage, and calling rand::Rng::r#gen; no algorithmic or unsafe changes."
+
 [[audits.opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -398,6 +404,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "7.0.3 -> 8.0.2"
 notes = "Reviewed 7.0.3->8.0.2: cold slot tracking tightened, extra tests, no new unsafe."
+
+[[audits.rsa]]
+who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.9.8 -> 0.9.10"
+notes = "Reviewed 0.9.8->0.9.10: key validation now rejects primes <=1 to avoid later panics; public-key check now accepts optional max size so default validation no longer caps modulus bits, with new_with_max_size retaining bound; dependency bump to num-bigint-dig 0.8.6. No unsafe or new ambient capabilities."
 
 [[audits.rug]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
