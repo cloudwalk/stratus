@@ -435,6 +435,11 @@ criteria = "safe-to-deploy"
 delta = "3.21.0 -> 3.23.0"
 notes = "Mostly docs, tests and cicd."
 
+[[audits.tempfile]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "3.23.0 -> 3.24.0"
+
 [[audits.tikv-jemalloc-sys]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -507,6 +512,12 @@ user-id = 55123 # rust-lang-owner
 start = "2024-08-15"
 end = "2026-11-04"
 
+[[trusted.linux-raw-sys]]
+criteria = "safe-to-deploy"
+user-id = 6825 # Dan Gohman (sunfishcode)
+start = "2021-06-12"
+end = "2027-01-13"
+
 [[trusted.lock_api]]
 criteria = "safe-to-deploy"
 user-id = 2915 # Amanieu d'Antras (Amanieu)
@@ -542,6 +553,12 @@ criteria = "safe-to-deploy"
 user-id = 359 # Sean McArthur (seanmonstar)
 start = "2019-03-04"
 end = "2026-12-10"
+
+[[trusted.rustix]]
+criteria = "safe-to-deploy"
+user-id = 6825 # Dan Gohman (sunfishcode)
+start = "2021-10-29"
+end = "2027-01-13"
 
 [[trusted.sentry]]
 criteria = "safe-to-deploy"
