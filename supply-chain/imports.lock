@@ -147,8 +147,8 @@ user-login = "cuviper"
 user-name = "Josh Stone"
 
 [[publisher.libc]]
-version = "0.2.177"
-when = "2025-10-09"
+version = "0.2.180"
+when = "2026-01-08"
 user-id = 55123
 user-login = "rust-lang-owner"
 
