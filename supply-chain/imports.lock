@@ -71,6 +71,13 @@ user-id = 696
 user-login = "fitzgen"
 user-name = "Nick Fitzgerald"
 
+[[publisher.bytes]]
+version = "1.11.0"
+when = "2025-11-14"
+user-id = 6741
+user-login = "Darksonn"
+user-name = "Alice Ryhl"
+
 [[publisher.bytestring]]
 version = "1.4.0"
 when = "2024-11-24"

@@ -471,6 +471,12 @@ user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-07-23"
 end = "2026-10-17"
 
+[[trusted.bytes]]
+criteria = "safe-to-deploy"
+user-id = 6741 # Alice Ryhl (Darksonn)
+start = "2021-01-11"
+end = "2027-01-13"
+
 [[trusted.clap]]
 criteria = "safe-to-deploy"
 user-id = 6743 # Ed Page (epage)

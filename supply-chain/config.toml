@@ -344,10 +344,6 @@ criteria = "safe-to-deploy"
 version = "1.10.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.bytes]]
-version = "1.10.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.bzip2-sys]]
 version = "0.1.13+1.0.8"
 criteria = "safe-to-deploy"
