@@ -147,8 +147,8 @@ user-login = "cuviper"
 user-name = "Josh Stone"
 
 [[publisher.libc]]
-version = "0.2.177"
-when = "2025-10-09"
+version = "0.2.180"
+when = "2026-01-08"
 user-id = 55123
 user-login = "rust-lang-owner"
 
@@ -368,6 +368,13 @@ when = "2025-11-02"
 user-id = 6741
 user-login = "Darksonn"
 user-name = "Alice Ryhl"
+
+[[publisher.tower-http]]
+version = "0.6.8"
+when = "2025-12-08"
+user-id = 359
+user-login = "seanmonstar"
+user-name = "Sean McArthur"
 
 [[publisher.unicode-normalization]]
 version = "0.1.24"
