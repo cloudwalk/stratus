@@ -16,11 +16,11 @@ fc0c546a: token()
 f2fde38b: transferOwnership(address)
 
 Error signatures:
-0666bcba: FromDayPriorInitDay()
-1dd3c0a0: SafeCastOverflowUint16()
-a9627746: SafeCastOverflowUint240()
-f1f88d16: ToDayPriorFromDay()
-d86ad9cf: UnauthorizedCaller(address)
+88dbe8bf: BalanceTracker_CallerUnauthorized(address)
+ee94ff73: BalanceTracker_FromDayPriorInitDay()
+2a810254: BalanceTracker_SafeCastOverflowUint16()
+35ac126f: BalanceTracker_SafeCastOverflowUint240()
+cb06a95d: BalanceTracker_ToDayPriorFromDay()
 
 Event signatures:
 8d995e7fbf7a5ef41cee9e6936368925d88e07af89306bb78a698551562e683c: BalanceRecordCreated(address,uint16,uint240)

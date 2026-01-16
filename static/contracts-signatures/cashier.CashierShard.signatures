@@ -26,8 +26,8 @@ f2fde38b: transferOwnership(address)
 
 Error signatures:
 9996b315: AddressEmptyCode(address)
+05df9c39: CashierShard_CallerUnauthorized()
 968ef00e: CashierShard_ImplementationAddressInvalid()
-dc6ced8a: CashierShard_Unauthorized()
 4c9c8ce3: ERC1967InvalidImplementation(address)
 b398979f: ERC1967NonPayable()
 d6bda275: FailedCall()
