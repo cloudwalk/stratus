@@ -137,10 +137,10 @@ For non-interactive auditing and certification, use the following approaches:
 - **`cargo vet certify`**: To certify a crate non-interactively, use the `--accept-all` flag. You can provide notes directly using the `--notes` argument. This bypasses the interactive diff entirely and allows for direct certification based on a summary of changes.
   Example: `cargo vet certify serde 1.0.189 --criteria safe-to-deploy --who "Alice Example <alice@example.com>" --notes "Routine dependency bump; no unsafe code changes" --accept-all`
 
-  **Important Note for `audits.toml`**: When providing multi-line notes, ensure you use *real breaklines* within the TOML string, enclosed in triple quotes (`'''...'''`), instead of `\n` escape sequences. For example:
+  **Important Note for `audits.toml`**: When providing multi-line notes, ensure you use *real breaklines* within the TOML string, enclosed in triple *double* quotes (`"""..."""`), instead of `\n` escape sequences. For example:
   ```toml
-  notes = '''Line 1
+  notes = """Line 1
   Line 2
-  Line 3'''
+  Line 3"""
   ```
   This ensures proper formatting and readability in the generated `audits.toml`.
