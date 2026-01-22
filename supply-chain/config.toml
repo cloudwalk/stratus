@@ -704,10 +704,6 @@ criteria = "safe-to-deploy"
 version = "0.12.4"
 criteria = "safe-to-deploy"
 
-[[exemptions.hostname]]
-version = "0.4.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.http]]
 version = "0.2.12"
 criteria = "safe-to-deploy"
