@@ -504,6 +504,12 @@ criteria = "safe-to-deploy"
 version = "0.14.2"
 notes = "Inspected 0.14.2: prost-based codec/encoder/decoder split from tonic, simple BufferSettings plumbing; crate contains no unsafe."
 
+[[audits.tower]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.5.3"
+notes = "Safety: no new I/O or network; no build.rs or proc-macros; unsafe usage unchanged. Dependencies/features: feature table reshuffled (removes internal __common), slab bumped to 0.4.9; dev deps adjust futures/rand/tokio versions. Main change: adds ServiceBuilder::boxed_clone_sync and validates retry jitter isn’t NaN; behavior otherwise unchanged."
+
 [[audits.tracing-opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
