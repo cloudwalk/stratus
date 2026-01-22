@@ -187,6 +187,34 @@ criteria = "safe-to-deploy"
 delta = "2.1.1 -> 2.1.5"
 notes = "Reviewed 2.1.1->2.1.5: FK20 setup zero-inits, audit info, no new unsafe beyond existing C bindings."
 
+[[audits.chrono]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.4.43"
+notes = """
+Supply-Chain Security Vetting Summary
+
+Code Injection / Execution Risk:
+- No risk detected. No evidence of new unsafe execution paths, build-time abuse, or arbitrary code execution introduced in 0.4.43. New 'defmt' feature adds format derives but no runtime execution.
+
+Network & Exfiltration Risk:
+- No risk detected. No new network communication, telemetry, or external data transfer observed in the changes.
+
+File System & Output Risk:
+- No risk detected. No unexpected file reads/writes or artifact generation observed in the changes.
+
+Data Leakage Risk:
+- No risk detected. No new handling or exposure of sensitive data observed in the changes.
+
+External Control / Seizure Risk:
+- No risk detected. No new plugins, dynamic loading, or externally influenced execution paths found in the changes.
+
+Supply-Chain Integrity Risk:
+- No risk detected. Dependency updates ('pure-rust-locales' to 0.8.2, 'windows-bindgen' to 0.66) are minor and routine. No suspicious ownership changes, scope expansion, or other dependency anomalies identified.
+
+Conclusion:
+Based on the available evidence, the update of 'chrono' from 0.4.42 to 0.4.43 does not introduce observable supply-chain or security risks within the evaluated scope."""
+
 [[audits.console]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
