@@ -1576,10 +1576,6 @@ criteria = "safe-to-deploy"
 version = "0.22.27"
 criteria = "safe-to-deploy"
 
-[[exemptions.tower]]
-version = "0.5.2"
-criteria = "safe-to-deploy"
-
 [[exemptions.tower-layer]]
 version = "0.3.3"
 criteria = "safe-to-deploy"
