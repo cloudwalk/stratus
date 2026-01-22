@@ -38,7 +38,6 @@ Error signatures:
 ced32d6e: MultiSigGuardianWallet_GuardianAddressDuplicate()
 06529b6d: MultiSigGuardianWallet_GuardianApprovalsInsufficient()
 29b55f95: MultiSigGuardianWallet_GuardianNotInOwners()
-35dad612: MultiSigGuardianWallet_GuardiansArrayEmpty()
 fe4629af: MultiSigGuardianWallet_RequiredGuardianApprovalsInvalid()
 56822df6: MultiSigWallet_ApprovalsInsufficient()
 630df666: MultiSigWallet_CallerUnauthorized()
