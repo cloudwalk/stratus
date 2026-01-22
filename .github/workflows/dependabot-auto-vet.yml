@@ -1,0 +1,158 @@
+name: Dependabot Cargo Vet
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches:
+      - "*"
+
+jobs:
+  vet-dependabot:
+    if: github.actor == 'dependabot[bot]'
+    name: Vet Dependabot Updates
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      CARGO_VET_VERSION: 0.10.0
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: true
+
+      - name: Set up Rust
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
+
+      - name: Install cargo-vet
+        run: cargo install cargo-vet
+
+      - name: Initial cargo vet --locked
+        id: vet_locked_initial
+        run: |
+          set +e
+          cargo vet --locked > vet-locked.log 2>&1
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Try importing audits
+        if: steps.vet_locked_initial.outputs.status != '0'
+        run: |
+          cargo vet > vet-import.log 2>&1 || true
+          set +e
+          cargo vet --locked > vet-locked-final.log 2>&1
+          echo $? > vet-locked-final.status
+
+      - name: Derive vet status
+        id: vet_status
+        run: |
+          if [ -f vet-locked-final.status ]; then
+            status="$(cat vet-locked-final.status)"
+          else
+            status="${{ steps.vet_locked_initial.outputs.status }}"
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Early exit when fully vetted
+        if: steps.vet_status.outputs.status == '0'
+        run: echo "Vetting complete; no audits needed."
+
+      - name: Collect unvetted dependencies
+        if: steps.vet_status.outputs.status != '0'
+        run: |
+          logfile="vet-locked-final.log"
+          if [ ! -f "$logfile" ]; then
+            logfile="vet-locked.log"
+          fi
+
+          cp VETTING_CONTEXT.md vetting-context.md
+
+      - name: Invoke vetting agent (optional)
+        id: agent
+        if: steps.vet_status.outputs.status != '0'
+        continue-on-error: true
+        env:
+          AGENT_CMD: ${{ secrets.VET_AGENT_COMMAND }}
+        run: |
+          set -eo pipefail
+          if [ -z "$AGENT_CMD" ]; then
+            echo "Agent command not configured (set secrets.VET_AGENT_COMMAND)" >&2
+            exit 42
+          fi
+          # Expected agent contract:
+          # - Consumes unvetted.json and vetting-context.md
+          # - Emits agent-audits.json with entries:
+          #   [{"crate":"name","version":"x.y.z","criteria":"safe-to-deploy","who":"Agent Name <email>","notes":"..."}]
+          $AGENT_CMD --context vetting-context.md --unvetted unvetted.json --out agent-audits.json
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Comment when agent step failed or missing
+        if: steps.vet_status.outputs.status != '0' && (steps.agent.outcome == 'failure' || steps.agent.outputs.status != '0')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const unvetted = fs.existsSync('unvetted.json') ? fs.readFileSync('unvetted.json', 'utf8') : '[]';
+            const msg = [
+              'Cargo vet still needs audits and no agent result was applied.',
+              '',
+              'Unvetted dependencies:',
+              '```json',
+              unvetted,
+              '```',
+              '',
+              'Agent command not configured or failed. Configure secrets.VET_AGENT_COMMAND to integrate the vetting agent. See VETTING_CONTEXT.md for audit instructions.'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: msg
+            });
+            core.setFailed('Agent step failed or was not configured.')
+
+      - name: Apply agent audits
+        if: steps.vet_status.outputs.status != '0' && steps.agent.outcome == 'success' && steps.agent.outputs.status == '0'
+        run: |
+          set -eo pipefail
+          if [ ! -f agent-audits.json ]; then
+            echo "agent-audits.json missing" >&2
+            exit 1
+          fi
+          audits="$(cat agent-audits.json)"
+          echo "Agent audits: $audits"
+          jq -c '.[]' agent-audits.json | while read -r row; do
+            crate="$(echo "$row" | jq -r '.crate')"
+            version="$(echo "$row" | jq -r '.version')"
+            criteria="$(echo "$row" | jq -r '.criteria')"
+            who="$(echo "$row" | jq -r '.who')"
+            notes="$(echo "$row" | jq -r '.notes')"
+            if [ -z "$crate" ] || [ -z "$version" ] || [ -z "$criteria" ] || [ -z "$who" ]; then
+              echo "Incomplete audit entry: $row" >&2
+              exit 1
+            fi
+            cargo vet certify "$crate" "$version" --criteria "$criteria" --who "$who" --notes "$notes" --accept-all
+            echo "$who" > .agent-who
+          done
+
+      - name: Verify cargo vet after agent audits
+        if: steps.vet_status.outputs.status != '0' && steps.agent.outcome == 'success' && steps.agent.outputs.status == '0'
+        run: cargo vet --locked
+
+      - name: Commit audit changes
+        if: steps.vet_status.outputs.status != '0' && steps.agent.outcome == 'success' && steps.agent.outputs.status == '0'
+        run: |
+          set -eo pipefail
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          who="$(cat .agent-who || true)"
+          git config user.name "${who:-dependabot-vet-bot}"
+          git config user.email "actions@github.com"
+          git add supply-chain/audits.toml supply-chain/imports.lock || true
+          git commit -m "chore(vet): apply agent audits"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
