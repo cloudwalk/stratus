@@ -33,9 +33,9 @@ jobs:
 
       - name: Initial cargo vet --locked
         id: vet_locked_initial
+        continue-on-error: true
         run: |
-          set +e
-          cargo vet --locked > vet-locked.log 2>&1
+          cargo vet --locked > vet-locked.log 2>&1 || true
           echo "status=$?" >> "$GITHUB_OUTPUT"
 
       - name: Try importing audits
