@@ -39,8 +39,11 @@ jobs:
         id: vet_locked_initial
         continue-on-error: true
         run: |
-          cargo vet --locked > vet-locked.log 2>&1 || true
-          echo "status=$?" >> "$GITHUB_OUTPUT"
+          set +e
+          cargo vet --locked > vet-locked.log 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Try importing audits
         if: steps.vet_locked_initial.outputs.status != '0'
