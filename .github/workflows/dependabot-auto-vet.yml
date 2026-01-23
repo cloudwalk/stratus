@@ -26,10 +26,14 @@ jobs:
           persist-credentials: true
 
       - name: Set up Rust
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.89
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Install cargo-vet
-        run: cargo install cargo-vet
+        run: |
+          source "$HOME/.cargo/env"
+          cargo install --locked --version $CARGO_VET_VERSION cargo-vet
 
       - name: Initial cargo vet --locked
         id: vet_locked_initial
