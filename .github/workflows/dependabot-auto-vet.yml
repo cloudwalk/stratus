@@ -8,7 +8,7 @@ on:
 
 jobs:
   vet-dependabot:
-    if: github.actor == 'dependabot[bot]'
+    if: github.actor == 'bronzelle-cw' || github.actor == 'dependabot[bot]'
     name: Vet Dependabot Updates
     runs-on: ubuntu-22.04
     permissions:
@@ -59,51 +59,82 @@ jobs:
         if: steps.vet_status.outputs.status == '0'
         run: echo "Vetting complete; no audits needed."
 
-      - name: Collect unvetted dependencies
+      - name: Collect unvetted dependency and crate diff
+        id: collect_unvetted_and_diff
         if: steps.vet_status.outputs.status != '0'
         run: |
+          # Expect a single unvetted crate from dependabot PRs; parse the line "crate:old -> new"
           logfile="vet-locked-final.log"
           if [ ! -f "$logfile" ]; then
             logfile="vet-locked.log"
           fi
-
+          line="$(grep -m1 'unvetted dependencies:' -A2 "$logfile" | tail -n1 | tr -d '[:space:]')"
+          crate="${line%%:*}"
+          vers="${line#*:}"
+          old="${vers%->*}"
+          new="${vers#*->}"
+          if [ -z "$crate" ] || [ -z "$old" ] || [ -z "$new" ]; then
+            echo "Failed to parse unvetted crate/version from vet output" >&2
+            exit 1
+          fi
+          cargo vet diff "$crate" "$old" "$new" --mode local --output-format=human > crate-diff.txt || true
+          {
+            echo "crate=$crate"
+            echo "version=$new"
+            echo "diff<<'EOF'"
+            cat crate-diff.txt
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
           cp VETTING_CONTEXT.md vetting-context.md
 
-      - name: Invoke vetting agent (optional)
-        id: agent
+      - name: Build prompt for Codex agent
+        id: build_prompt
         if: steps.vet_status.outputs.status != '0'
-        continue-on-error: true
-        env:
-          AGENT_CMD: ${{ secrets.VET_AGENT_COMMAND }}
         run: |
-          set -eo pipefail
-          if [ -z "$AGENT_CMD" ]; then
-            echo "Agent command not configured (set secrets.VET_AGENT_COMMAND)" >&2
-            exit 42
-          fi
-          # Expected agent contract:
-          # - Consumes unvetted.json and vetting-context.md
-          # - Emits agent-audits.json with entries:
-          #   [{"crate":"name","version":"x.y.z","criteria":"safe-to-deploy","who":"Agent Name <email>","notes":"..."}]
-          $AGENT_CMD --context vetting-context.md --unvetted unvetted.json --out agent-audits.json
-          echo "status=$?" >> "$GITHUB_OUTPUT"
+          ctx="$(cat vetting-context.md)"
+          diff="${{ steps.collect_unvetted_and_diff.outputs.diff }}"
+          crate="${{ steps.collect_unvetted_and_diff.outputs.crate }}"
+          version="${{ steps.collect_unvetted_and_diff.outputs.version }}"
+          {
+            echo "prompt<<'EOF'"
+            echo "You are a Rust supply-chain security auditor. Follow VETTING_CONTEXT strictly and emit an audit for the unvetted crate."
+            echo
+            echo "VETTING_CONTEXT:"
+            echo "$ctx"
+            echo
+            echo "Unvetted dependency: $crate $version"
+            echo
+            echo "Diff between previous and bumped version (cargo vet diff):"
+            echo "$diff"
+            echo
+            echo "Respond ONLY with JSON (no prose, no code fences) matching:"
+            echo '[{\"crate\":\"name\",\"version\":\"x.y.z\",\"criteria\":\"safe-to-deploy\",\"who\":\"Agent Name <email>\",\"notes\":\"concise safety-focused notes per VETTING_CONTEXT\"}]'
+            echo "If you cannot complete the audit, respond with an empty array: []"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 🤖 Analyze and Fix Issue with Codex
+        id: codex
+        if: steps.vet_status.outputs.status != '0'
+        uses: openai/codex-action@main
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-5-codex
+          prompt: ${{ steps.build_prompt.outputs.prompt }}
 
       - name: Comment when agent step failed or missing
-        if: steps.vet_status.outputs.status != '0' && (steps.agent.outcome == 'failure' || steps.agent.outputs.status != '0')
+        if: steps.vet_status.outputs.status != '0' && (steps.codex.outcome == 'failure' || steps.codex.outputs.response == '')
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            const unvetted = fs.existsSync('unvetted.json') ? fs.readFileSync('unvetted.json', 'utf8') : '[]';
+            const crate = '${{ steps.collect_unvetted_and_diff.outputs.crate }}';
+            const version = '${{ steps.collect_unvetted_and_diff.outputs.version }}';
             const msg = [
               'Cargo vet still needs audits and no agent result was applied.',
               '',
-              'Unvetted dependencies:',
-              '```json',
-              unvetted,
-              '```',
+              `Unvetted dependency: ${crate} ${version}`,
               '',
-              'Agent command not configured or failed. Configure secrets.VET_AGENT_COMMAND to integrate the vetting agent. See VETTING_CONTEXT.md for audit instructions.'
+              'Codex agent was not configured or did not return a response. Ensure OPENAI_API_KEY is set and the prompt is valid.'
             ].join('\n');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -114,13 +145,10 @@ jobs:
             core.setFailed('Agent step failed or was not configured.')
 
       - name: Apply agent audits
-        if: steps.vet_status.outputs.status != '0' && steps.agent.outcome == 'success' && steps.agent.outputs.status == '0'
+        if: steps.vet_status.outputs.status != '0' && steps.codex.outcome == 'success' && steps.codex.outputs.response != ''
         run: |
           set -eo pipefail
-          if [ ! -f agent-audits.json ]; then
-            echo "agent-audits.json missing" >&2
-            exit 1
-          fi
+          echo '${{ steps.codex.outputs.response }}' > agent-audits.json
           audits="$(cat agent-audits.json)"
           echo "Agent audits: $audits"
           jq -c '.[]' agent-audits.json | while read -r row; do
@@ -138,11 +166,11 @@ jobs:
           done
 
       - name: Verify cargo vet after agent audits
-        if: steps.vet_status.outputs.status != '0' && steps.agent.outcome == 'success' && steps.agent.outputs.status == '0'
+        if: steps.vet_status.outputs.status != '0' && steps.codex.outcome == 'success' && steps.codex.outputs.response != ''
         run: cargo vet --locked
 
       - name: Commit audit changes
-        if: steps.vet_status.outputs.status != '0' && steps.agent.outcome == 'success' && steps.agent.outputs.status == '0'
+        if: steps.vet_status.outputs.status != '0' && steps.codex.outcome == 'success' && steps.codex.outputs.response != ''
         run: |
           set -eo pipefail
           if git diff --quiet; then
