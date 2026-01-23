@@ -1,0 +1,280 @@
+name: Dependabot Cargo Vet
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - "*"
+  workflow_dispatch:
+
+jobs:
+  vet-dependabot:
+    if: github.actor == 'bronzelle-cw' || github.actor == 'dependabot[bot]'
+    name: Vet Dependabot Updates
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      CARGO_VET_VERSION: 0.10.0
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: true
+
+      - name: Set up Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.89
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Install cargo-vet
+        run: |
+          source "$HOME/.cargo/env"
+          cargo install --locked --version "$CARGO_VET_VERSION" cargo-vet
+
+      - name: Initial cargo vet --locked
+        id: vet_locked_initial
+        continue-on-error: true
+        run: |
+          set +e
+          cargo vet --locked > vet-locked.log 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Try importing audits (and capture recommended diff)
+        id: import_and_recommend
+        if: steps.vet_locked_initial.outputs.status != '0'
+        run: |
+          cargo vet > vet-import.log 2>&1 || true
+
+          # Grab the first recommended diff line and keep the first 6 tokens:
+          # cargo vet diff <crate> <old> <new>
+          line="$(grep -m1 -E '^\s*cargo vet diff ' vet-import.log | sed -E 's/^\s+//')"
+          echo "$line" | awk '{print $1,$2,$3,$4,$5,$6}' > recommended.diff.cmd || true
+
+      - name: Early exit when fully vetted
+        if: steps.vet_locked_initial.outputs.status == '0'
+        run: echo "Vetting complete; no audits needed."
+
+      - name: Collect unvetted dependency and crate diff
+        id: collect_unvetted_and_diff
+        if: steps.vet_locked_initial.outputs.status != '0'
+        run: |
+          set -euo pipefail
+
+          if [ ! -s recommended.diff.cmd ]; then
+            echo "No recommended diff found" >&2
+            exit 1
+          fi
+
+          diff_cmd="$(cat recommended.diff.cmd)"
+
+          # diff_cmd tokens: cargo vet diff <crate> <old> <new>
+          set -- $diff_cmd
+          crate="$4"
+          old="$5"
+          new="$6"
+
+          # Make diff CI-friendly and avoid opening diff.rs
+          # Force no pager via env vars (best-effort).
+          set +e
+          PAGER=cat GIT_PAGER=cat cargo vet diff "$crate" "$old" "$new" --mode=local --output-format=human \
+            > crate-diff.txt 2> crate-diff.stderr
+          status=$?
+          set -e
+
+          # Treat both 0 and 1 as success (cargo-vet exit semantics vary by situation).
+          if [ "$status" -gt 1 ]; then
+            echo "cargo vet diff failed (status=$status). stderr:" >&2
+            sed -n '1,200p' crate-diff.stderr >&2
+            exit "$status"
+          fi
+
+          cp VETTING_CONTEXT.md vetting-context.md
+
+          {
+            echo "crate=$crate"
+            echo "version=$new"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build prompt file for Codex agent
+        id: build_prompt
+        if: steps.vet_locked_initial.outputs.status != '0'
+        run: |
+          set -euo pipefail
+
+          crate="${{ steps.collect_unvetted_and_diff.outputs.crate }}"
+          version="${{ steps.collect_unvetted_and_diff.outputs.version }}"
+
+          # Keep prompt bounded; large diffs can blow token limits.
+          diff="$(head -c 180000 crate-diff.txt)"
+          ctx="$(cat vetting-context.md)"
+
+          prompt_file="codex-prompt.md"
+
+          cat > "$prompt_file" <<'EOF'
+          You are a Rust supply-chain security auditor.
+
+          Task:
+          - Assess ONLY the *code changes shown in the provided diff* for supply-chain/security risk.
+          - Ignore dependency list changes and any new/removed transitive crates mentioned by the diff tooling or feature flags, because those crates may already be vetted elsewhere and are NOT visible here. Do NOT mark unvetted solely because a dependency name appears.
+          - If the diff references code you cannot see (e.g., "new dependency X" but no code changes shown), do not speculate—base your decision only on what is in the diff.
+
+          You must be conservative: if you cannot determine safety from the diff, mark unvetted.
+
+          Output MUST be exactly one JSON object (no prose, no code fences) with this schema:
+          {
+            "status": "vetted" | "unvetted",
+            "description": "THE DESCRIPTION OF ITS ASSESSTMENT"
+          }
+
+          VETTING_CONTEXT:
+          EOF
+
+          {
+            printf "%s\n\n" "$ctx"
+            printf "Unvetted dependency: %s %s\n\n" "$crate" "$version"
+            printf "Diff between previous and bumped version (cargo vet diff):\n"
+            printf "%s\n" "$diff"
+          } >> "$prompt_file"
+
+          echo "prompt_file=$prompt_file" >> "$GITHUB_OUTPUT"
+
+      - name: 🤖 Analyze diff with Codex
+        id: codex
+        if: steps.vet_locked_initial.outputs.status != '0'
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_KEY }}
+          model: gpt-5-codex
+          prompt-file: ${{ steps.build_prompt.outputs.prompt_file }}
+          output-file: codex-output.json
+          safety-strategy: drop-sudo
+          sandbox: workspace-write
+
+      - name: Parse agent result
+        id: parse_agent
+        if: steps.vet_locked_initial.outputs.status != '0'
+        run: |
+          set -euo pipefail
+
+          if [ ! -s codex-output.json ]; then
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # codex-output.json is expected to be the final message content.
+          # Validate it is JSON and has required fields.
+          if ! jq -e . codex-output.json >/dev/null 2>&1; then
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          status="$(jq -r '.status // empty' codex-output.json)"
+          desc="$(jq -r '.description // empty' codex-output.json)"
+
+          if [ "$status" != "vetted" ] && [ "$status" != "unvetted" ]; then
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "missing=false"
+            echo "status=$status"
+            echo "description<<DESC_EOF"
+            echo "$desc"
+            echo "DESC_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Comment when agent result missing/invalid
+        if: steps.vet_locked_initial.outputs.status != '0' && steps.parse_agent.outputs.missing == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const crate = '${{ steps.collect_unvetted_and_diff.outputs.crate }}';
+            const version = '${{ steps.collect_unvetted_and_diff.outputs.version }}';
+            const msg = [
+              'Cargo vet still needs audits, but the agent result was missing or invalid JSON.',
+              '',
+              `Unvetted dependency: ${crate} ${version}`,
+              '',
+              'Expected JSON: {"status":"vetted|unvetted","description":"..."}',
+              'Ensure OPENAI_KEY is set and the prompt enforces the JSON-only response.'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: msg
+            });
+            core.setFailed('Agent output missing or invalid.')
+
+      - name: Comment and stop when agent says unvetted
+        if: steps.vet_locked_initial.outputs.status != '0' && steps.parse_agent.outputs.missing == 'false' && steps.parse_agent.outputs.status == 'unvetted'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const crate = '${{ steps.collect_unvetted_and_diff.outputs.crate }}';
+            const version = '${{ steps.collect_unvetted_and_diff.outputs.version }}';
+            const desc = `${{ steps.parse_agent.outputs.description }}`;
+            const msg = [
+              'Cargo vet audit was NOT applied (agent marked as unvetted).',
+              '',
+              `Unvetted dependency: ${crate} ${version}`,
+              '',
+              'Assessment:',
+              desc || '(no description provided)'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: msg
+            });
+            core.setFailed('Agent marked update as unvetted; manual review required.')
+
+      - name: Apply audit when agent says vetted
+        if: steps.vet_locked_initial.outputs.status != '0' && steps.parse_agent.outputs.missing == 'false' && steps.parse_agent.outputs.status == 'vetted'
+        run: |
+          set -euo pipefail
+
+          crate="${{ steps.collect_unvetted_and_diff.outputs.crate }}"
+          version="${{ steps.collect_unvetted_and_diff.outputs.version }}"
+          notes="${{ steps.parse_agent.outputs.description }}"
+
+          # Use a stable bot identity for audits.
+          who="dependabot-vet-bot <actions@github.com>"
+
+          # Certify non-interactively.
+          cargo vet certify "$crate" "$version" \
+            --criteria "safe-to-deploy" \
+            --who "$who" \
+            --notes "$notes" \
+            --accept-all
+
+          echo "$who" > .agent-who
+
+      - name: Verify cargo vet after audit
+        if: steps.vet_locked_initial.outputs.status != '0' && steps.parse_agent.outputs.missing == 'false' && steps.parse_agent.outputs.status == 'vetted'
+        run: cargo vet --locked
+
+      - name: Commit audit changes
+        if: steps.vet_locked_initial.outputs.status != '0' && steps.parse_agent.outputs.missing == 'false' && steps.parse_agent.outputs.status == 'vetted'
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          who="$(cat .agent-who || true)"
+          git config user.name "${who:-dependabot-vet-bot}"
+          git config user.email "actions@github.com"
+          git add supply-chain/audits.toml supply-chain/imports.lock || true
+          git commit -m "chore(vet): apply agent audit"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
