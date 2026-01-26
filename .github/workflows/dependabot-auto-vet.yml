@@ -49,8 +49,8 @@ jobs:
         if: steps.vet_locked_initial.outputs.status != '0'
         run: |
           cargo vet > vet-import.log 2>&1 || true
-          # capture the first recommended diff command, if present
-          grep -m1 'cargo vet diff ' vet-import.log > recommended.diff.cmd || true
+          # capture the first recommended diff command, keep only the command and three args
+          grep -m1 'cargo vet diff ' vet-import.log | awk '{print $1, $2, $3, $4}' > recommended.diff.cmd || true
 
       - name: Derive vet status
         id: vet_status
@@ -70,22 +70,17 @@ jobs:
         id: collect_unvetted_and_diff
         if: steps.vet_status.outputs.status != '0'
         run: |
-          if [ -s recommended.diff.cmd ]; then
-            diff_cmd="$(cat recommended.diff.cmd)"
-            echo "Using recommended diff: $diff_cmd"
-            set -- $diff_cmd
-            crate="$3"
-            old="$4"
-            new="$5"
-          else
-            logfile="vet-locked.log"
-            line="$(grep -m1 'unvetted dependencies:' -A2 "$logfile" | tail -n1)"
-            echo "Parsed line: $line"
-            crate="$(echo "$line" | awk -F':' '{print $1}' | xargs)"
-            old="$(echo "$line" | awk -F'[: ]' '{print $2}')"
-            new="$old"
-            diff_cmd="cargo vet diff $crate $old $new"
+          if [ ! -s recommended.diff.cmd ]; then
+            echo "No recommended diff found" >&2
+            exit 1
           fi
+          diff_cmd="$(cat recommended.diff.cmd)"
+          echo "Using recommended diff: $diff_cmd"
+          # tokens: cargo vet diff crate old new
+          set -- $diff_cmd
+          crate="$3"
+          old="$4"
+          new="$5"
           cargo vet diff "$crate" "$old" "$new" --mode local --output-format=human > crate-diff.txt || true
           {
             echo "crate=$crate"
