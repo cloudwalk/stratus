@@ -97,7 +97,7 @@ jobs:
           # - pipe through cat to disable pager behavior reliably
           # Run diff and capture output, but don't let -e kill the step yet
           set +e
-          cargo vet diff "$crate" "$old" "$new" --mode=local --output-format=text \
+          cargo vet diff "$crate" "$old" "$new" --mode=local --output-format=human \
             > crate-diff.txt 2> crate-diff.stderr
           status=$?
           set -e
