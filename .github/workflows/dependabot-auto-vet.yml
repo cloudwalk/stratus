@@ -49,23 +49,18 @@ jobs:
         if: steps.vet_locked_initial.outputs.status != '0'
         run: |
           cargo vet > vet-import.log 2>&1 || true
-          set +e
-          cargo vet --locked > vet-locked-final.log 2>&1
-          echo $? > vet-locked-final.status
+          # capture the first recommended diff command, if present
+          grep -m1 'cargo vet diff ' vet-import.log > recommended.diff.cmd || true
 
       - name: Derive vet status
         id: vet_status
         run: |
-          if [ -f vet-locked-final.status ]; then
-            status="$(cat vet-locked-final.status)"
-          else
-            status="${{ steps.vet_locked_initial.outputs.status }}"
-          fi
+          status="${{ steps.vet_locked_initial.outputs.status }}"
           echo "status=$status" >> "$GITHUB_OUTPUT"
           echo "vet-locked.log:"
           cat vet-locked.log || true
-          echo "vet-locked-final.log:"
-          cat vet-locked-final.log || true
+          echo "vet-import.log:"
+          cat vet-import.log || true
 
       - name: Early exit when fully vetted
         if: steps.vet_status.outputs.status == '0'
@@ -75,18 +70,21 @@ jobs:
         id: collect_unvetted_and_diff
         if: steps.vet_status.outputs.status != '0'
         run: |
-          logfile="vet-locked-final.log"
-          [ -f "$logfile" ] || logfile="vet-locked.log"
-          line="$(grep -m1 'unvetted dependencies:' -A2 "$logfile" | tail -n1)"
-          echo "Parsed line: $line"
-          # Line format: "  uuid:1.18.1 -> 1.19.0 missing [\"safe-to-deploy\"]"
-          crate="$(echo "$line" | awk -F':' '{print $1}' | xargs)"
-          old="$(echo "$line" | awk -F':' '{print $2}' | awk '{print $1}')"
-          new="$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i=="->") {print $(i+1); break}}')"
-          echo "crate=$crate old=$old new=$new"
-          if [ -z "$crate" ] || [ -z "$old" ] || [ -z "$new" ]; then
-            echo "Failed to parse unvetted crate/version from vet output" >&2
-            exit 1
+          if [ -s recommended.diff.cmd ]; then
+            diff_cmd="$(cat recommended.diff.cmd)"
+            echo "Using recommended diff: $diff_cmd"
+            set -- $diff_cmd
+            crate="$3"
+            old="$4"
+            new="$5"
+          else
+            logfile="vet-locked.log"
+            line="$(grep -m1 'unvetted dependencies:' -A2 "$logfile" | tail -n1)"
+            echo "Parsed line: $line"
+            crate="$(echo "$line" | awk -F':' '{print $1}' | xargs)"
+            old="$(echo "$line" | awk -F'[: ]' '{print $2}')"
+            new="$old"
+            diff_cmd="cargo vet diff $crate $old $new"
           fi
           cargo vet diff "$crate" "$old" "$new" --mode local --output-format=human > crate-diff.txt || true
           {
