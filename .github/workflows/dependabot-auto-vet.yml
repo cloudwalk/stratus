@@ -92,7 +92,10 @@ jobs:
           old="$5"
           new="$6"
 
-          cargo vet diff "$crate" "$old" "$new" --output-format=human > crate-diff.txt
+          # Force CI-friendly output:
+          # - --mode=local avoids opening diff.rs in browser
+          # - pipe through cat to disable pager behavior reliably
+          cargo vet diff "$crate" "$old" "$new" --mode=local --output-format=text 2>crate-diff.stderr | cat > crate-diff.txt
 
           cp VETTING_CONTEXT.md vetting-context.md
 
