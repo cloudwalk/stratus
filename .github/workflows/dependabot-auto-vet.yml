@@ -78,12 +78,9 @@ jobs:
           fi
           # Grab the first unvetted dependency line, e.g., "uuid:1.18.1 -> 1.19.0 missing ..."
           line="$(grep -m1 'unvetted dependencies:' -A2 "$logfile" | tail -n1)"
-          line="$(echo "$line" | tr -d '[:space:]')"
-          crate="${line%%:*}"
-          rest="${line#*:}"
-          old="${rest%%->*}"
-          rest="${rest#*->}"
-          new="${rest%%missing*}"
+          crate="$(echo "$line" | awk '{split($1,a,":"); print a[1]}')"
+          old="$(echo "$line" | awk '{split($1,a,":"); print a[2]}')"
+          new="$(echo "$line" | awk '{print $3}')"
           if [ -z "$crate" ] || [ -z "$old" ] || [ -z "$new" ]; then
             echo "Failed to parse unvetted crate/version from vet output" >&2
             exit 1
