@@ -76,11 +76,14 @@ jobs:
           if [ ! -f "$logfile" ]; then
             logfile="vet-locked.log"
           fi
-          line="$(grep -m1 'unvetted dependencies:' -A2 "$logfile" | tail -n1 | tr -d '[:space:]')"
+          # Grab the first unvetted dependency line, e.g., "uuid:1.18.1 -> 1.19.0 missing ..."
+          line="$(grep -m1 'unvetted dependencies:' -A2 "$logfile" | tail -n1)"
+          line="$(echo "$line" | tr -d '[:space:]')"
           crate="${line%%:*}"
-          vers="${line#*:}"
-          old="${vers%->*}"
-          new="${vers#*->}"
+          rest="${line#*:}"
+          old="${rest%%->*}"
+          rest="${rest#*->}"
+          new="${rest%%missing*}"
           if [ -z "$crate" ] || [ -z "$old" ] || [ -z "$new" ]; then
             echo "Failed to parse unvetted crate/version from vet output" >&2
             exit 1
