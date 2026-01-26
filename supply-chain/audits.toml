@@ -239,6 +239,16 @@ criteria = "safe-to-deploy"
 delta = "1.0.0 -> 1.1.0"
 notes = "Adds colon-delimited literal support (':' skipped in parser) plus doc/metadata updates; no unsafe or behavioral regressions observed."
 
+[[audits.hostname]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.4.2"
+notes = """
+Safety: no new I/O or network beyond existing hostname syscalls; no build.rs or proc-macros; unsafe usage unchanged.
+Dependencies/features: bumps windows-link to 0.2; dev-only bumps windows-bindgen to 0.65 and adds similar-asserts; dependabot config added. Optional features unchanged.
+Main change: repository moved to github.com/djc/hostname with doc badge updates; tests unwrap bindgen result; behavior remains the same.
+"""
+
 [[audits.humantime]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -503,6 +513,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.14.2"
 notes = "Inspected 0.14.2: prost-based codec/encoder/decoder split from tonic, simple BufferSettings plumbing; crate contains no unsafe."
+
+[[audits.tower]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.5.3"
+notes = "Safety: no new I/O or network; no build.rs or proc-macros; unsafe usage unchanged. Dependencies/features: feature table reshuffled (removes internal __common), slab bumped to 0.4.9; dev deps adjust futures/rand/tokio versions. Main change: adds ServiceBuilder::boxed_clone_sync and validates retry jitter isn’t NaN; behavior otherwise unchanged."
 
 [[audits.tracing-opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
