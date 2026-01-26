@@ -82,7 +82,7 @@ jobs:
           # Line format: "  uuid:1.18.1 -> 1.19.0 missing [\"safe-to-deploy\"]"
           crate="$(echo "$line" | awk -F':' '{print $1}' | xargs)"
           old="$(echo "$line" | awk -F':' '{print $2}' | awk '{print $1}')"
-          new="$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i==\"->\") {print $(i+1); break}}')"
+          new="$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i=="->") {print $(i+1); break}}')"
           echo "crate=$crate old=$old new=$new"
           if [ -z "$crate" ] || [ -z "$old" ] || [ -z "$new" ]; then
             echo "Failed to parse unvetted crate/version from vet output" >&2
