@@ -62,6 +62,10 @@ jobs:
             status="${{ steps.vet_locked_initial.outputs.status }}"
           fi
           echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "vet-locked.log:"
+          cat vet-locked.log || true
+          echo "vet-locked-final.log:"
+          cat vet-locked-final.log || true
 
       - name: Early exit when fully vetted
         if: steps.vet_status.outputs.status == '0'
@@ -78,9 +82,12 @@ jobs:
           fi
           # Grab the first unvetted dependency line, e.g., "uuid:1.18.1 -> 1.19.0 missing ..."
           line="$(grep -m1 'unvetted dependencies:' -A2 "$logfile" | tail -n1)"
-          crate="$(echo "$line" | awk '{split($1,a,":"); print a[1]}')"
-          old="$(echo "$line" | awk '{split($1,a,":"); print a[2]}')"
-          new="$(echo "$line" | awk '{print $3}')"
+          echo "Parsed line: $line"
+          # Use regex to extract crate, old, new
+          crate="$(echo "$line" | sed -n 's/^[[:space:]]*\\([^: ]*\\):.*$/\\1/p')"
+          old="$(echo "$line" | sed -n 's/^[^:]*:\\([^ ]*\\).*/\\1/p')"
+          new="$(echo "$line" | sed -n 's/.*->[[:space:]]*\\([^[:space:]]*\\)[[:space:]]*.*/\\1/p')"
+          echo "crate=$crate old=$old new=$new"
           if [ -z "$crate" ] || [ -z "$old" ] || [ -z "$new" ]; then
             echo "Failed to parse unvetted crate/version from vet output" >&2
             exit 1
