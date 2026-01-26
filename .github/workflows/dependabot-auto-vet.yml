@@ -49,9 +49,15 @@ jobs:
         if: steps.vet_locked_initial.outputs.status != '0'
         run: |
           cargo vet > vet-import.log 2>&1 || true
-          # capture the first recommended diff command, keep only the command and three args
-          grep -m1 'cargo vet diff ' vet-import.log | awk '{print $1, $2, $3, $4}' > recommended.diff.cmd || true
 
+          # Grab the first recommended diff line and keep the first 6 tokens:
+          # cargo vet diff <crate> <old> <new>
+          line="$(grep -m1 -E '^\s*cargo vet diff ' vet-import.log | sed -E 's/^\s+//')"
+          echo "Recommended line: $line"
+          echo "$line" | awk '{print $1,$2,$3,$4,$5,$6}' > recommended.diff.cmd || true
+
+          echo "recommended.diff.cmd:"
+          cat recommended.diff.cmd || true
       - name: Derive vet status
         id: vet_status
         run: |
@@ -70,25 +76,24 @@ jobs:
         id: collect_unvetted_and_diff
         if: steps.vet_status.outputs.status != '0'
         run: |
+          set -euo pipefail
+
           if [ ! -s recommended.diff.cmd ]; then
             echo "No recommended diff found" >&2
             exit 1
           fi
+
           diff_cmd="$(cat recommended.diff.cmd)"
           echo "Using recommended diff: $diff_cmd"
-          # tokens: cargo vet diff crate old new
+
+          # diff_cmd tokens: cargo vet diff <crate> <old> <new>
           set -- $diff_cmd
-          crate="$3"
-          old="$4"
-          new="$5"
-          cargo vet diff "$crate" "$old" "$new" --mode local --output-format=human > crate-diff.txt || true
-          {
-            echo "crate=$crate"
-            echo "version=$new"
-            echo "diff<<'EOF'"
-            cat crate-diff.txt
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          crate="$4"
+          old="$5"
+          new="$6"
+
+          cargo vet diff "$crate" "$old" "$new" --output-format=human > crate-diff.txt
+
           cp VETTING_CONTEXT.md vetting-context.md
 
       - name: Build prompt for Codex agent
