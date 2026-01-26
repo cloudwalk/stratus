@@ -144,10 +144,20 @@ jobs:
             echo "$delim"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Debug OPENAI key presence
+        run: |
+          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
+            echo "OPENAI_API_KEY is empty/missing"
+            exit 1
+          fi
+          echo "OPENAI_API_KEY present (length: ${#OPENAI_API_KEY})"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
       - name: 🤖 Analyze and Fix Issue with Codex
         id: codex
         if: steps.vet_status.outputs.status != '0'
-        uses: openai/codex-action@main
+        uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: gpt-5-codex
