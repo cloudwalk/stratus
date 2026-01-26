@@ -125,8 +125,9 @@ jobs:
           diff="$(head -c 180000 crate-diff.txt)"
           crate="${{ steps.collect_unvetted_and_diff.outputs.crate }}"
           version="${{ steps.collect_unvetted_and_diff.outputs.version }}"
+          delim="PROMPT_$(date +%s%N)"
           {
-            echo "prompt<<'EOF'"
+            echo "prompt<<$delim"
             echo "You are a Rust supply-chain security auditor. Follow VETTING_CONTEXT strictly and emit an audit for the unvetted crate."
             echo
             echo "VETTING_CONTEXT:"
@@ -138,9 +139,9 @@ jobs:
             echo "$diff"
             echo
             echo "Respond ONLY with JSON (no prose, no code fences) matching:"
-            echo '[{\"crate\":\"name\",\"version\":\"x.y.z\",\"criteria\":\"safe-to-deploy\",\"who\":\"Agent Name <email>\",\"notes\":\"concise safety-focused notes per VETTING_CONTEXT\"}]'
+            echo '[{"crate":"name","version":"x.y.z","criteria":"safe-to-deploy","who":"Agent Name <email>","notes":"concise safety-focused notes per VETTING_CONTEXT"}]'
             echo "If you cannot complete the audit, respond with an empty array: []"
-            echo "EOF"
+            echo "$delim"
           } >> "$GITHUB_OUTPUT"
 
       - name: 🤖 Analyze and Fix Issue with Codex
