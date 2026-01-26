@@ -75,18 +75,14 @@ jobs:
         id: collect_unvetted_and_diff
         if: steps.vet_status.outputs.status != '0'
         run: |
-          # Expect a single unvetted crate from dependabot PRs; parse the line "crate:old -> new"
           logfile="vet-locked-final.log"
-          if [ ! -f "$logfile" ]; then
-            logfile="vet-locked.log"
-          fi
-          # Grab the first unvetted dependency line, e.g., "uuid:1.18.1 -> 1.19.0 missing ..."
+          [ -f "$logfile" ] || logfile="vet-locked.log"
           line="$(grep -m1 'unvetted dependencies:' -A2 "$logfile" | tail -n1)"
           echo "Parsed line: $line"
-          # Use regex to extract crate, old, new
-          crate="$(echo "$line" | sed -n 's/^[[:space:]]*\\([^: ]*\\):.*$/\\1/p')"
-          old="$(echo "$line" | sed -n 's/^[^:]*:\\([^ ]*\\).*/\\1/p')"
-          new="$(echo "$line" | sed -n 's/.*->[[:space:]]*\\([^[:space:]]*\\)[[:space:]]*.*/\\1/p')"
+          # Line format: "  uuid:1.18.1 -> 1.19.0 missing [\"safe-to-deploy\"]"
+          crate="$(echo "$line" | awk -F':' '{print $1}' | xargs)"
+          old="$(echo "$line" | awk -F':' '{print $2}' | awk '{print $1}')"
+          new="$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i==\"->\") {print $(i+1); break}}')"
           echo "crate=$crate old=$old new=$new"
           if [ -z "$crate" ] || [ -z "$old" ] || [ -z "$new" ]; then
             echo "Failed to parse unvetted crate/version from vet output" >&2
