@@ -95,16 +95,34 @@ jobs:
           # Force CI-friendly output:
           # - --mode=local avoids opening diff.rs in browser
           # - pipe through cat to disable pager behavior reliably
-          cargo vet diff "$crate" "$old" "$new" --mode=local --output-format=text 2>crate-diff.stderr | cat > crate-diff.txt
+          # Run diff and capture output, but don't let -e kill the step yet
+          set +e
+          cargo vet diff "$crate" "$old" "$new" --mode=local --output-format=text \
+            > crate-diff.txt 2> crate-diff.stderr
+          status=$?
+          set -e
 
+          echo "cargo vet diff exit status: $status"
+
+          # 0 = no diff, 1 = diff exists (expected), 2 = trouble (real failure)
+          if [ "$status" -gt 1 ]; then
+            echo "cargo vet diff failed (status=$status). stderr:"
+            sed -n '1,200p' crate-diff.stderr
+            exit "$status"
+          fi
           cp VETTING_CONTEXT.md vetting-context.md
+          {
+            echo "crate=$crate"
+            echo "version=$new"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build prompt for Codex agent
         id: build_prompt
         if: steps.vet_status.outputs.status != '0'
         run: |
           ctx="$(cat vetting-context.md)"
-          diff="${{ steps.collect_unvetted_and_diff.outputs.diff }}"
+          # diff="${{ steps.collect_unvetted_and_diff.outputs.diff }}"
+          diff="$(head -c 180000 crate-diff.txt)"
           crate="${{ steps.collect_unvetted_and_diff.outputs.crate }}"
           version="${{ steps.collect_unvetted_and_diff.outputs.version }}"
           {
