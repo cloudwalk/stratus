@@ -145,23 +145,29 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Debug OPENAI key presence
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
+          if [ -z "$OPENAI_API_KEY" ]; then
             echo "OPENAI_API_KEY is empty/missing"
             exit 1
           fi
+
           echo "OPENAI_API_KEY present (length: ${#OPENAI_API_KEY})"
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+          # Persist for subsequent steps in this job
+          echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> "$GITHUB_ENV"
 
       - name: 🤖 Analyze and Fix Issue with Codex
         id: codex
         if: steps.vet_status.outputs.status != '0'
         uses: openai/codex-action@v1
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          openai-api-key: ${{ env.OPENAI_API_KEY }}
           model: gpt-5-codex
           prompt: ${{ steps.build_prompt.outputs.prompt }}
+
 
       - name: Comment when agent step failed or missing
         if: steps.vet_status.outputs.status != '0' && (steps.codex.outcome == 'failure' || steps.codex.outputs.response == '')
