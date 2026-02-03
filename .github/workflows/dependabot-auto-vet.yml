@@ -234,7 +234,7 @@ jobs:
     outputs:
       missing: ${{ steps.parse.outputs.missing }}
       any_unvetted: ${{ steps.parse.outputs.any_unvetted }}
-      decisions: ${{ steps.parse.outputs.decisions }}
+      decisions_b64: ${{ steps.parse.outputs.decisions_b64 }}
 
     steps:
       - name: Checkout PR head
@@ -299,9 +299,9 @@ jobs:
 
           echo "missing=false" >> "$GITHUB_OUTPUT"
           echo "any_unvetted=$any_unvetted" >> "$GITHUB_OUTPUT"
-          echo "decisions<<DEC_EOF" >> "$GITHUB_OUTPUT"
-          cat codex-output.json >> "$GITHUB_OUTPUT"
-          echo "DEC_EOF" >> "$GITHUB_OUTPUT"
+          decisions_b64="$(base64 -w0 codex-output.json)"
+          echo "decisions_b64=$decisions_b64" >> "$GITHUB_OUTPUT"
+
 
   apply:
     if: needs.collect.outputs.vet_ok != 'true'
@@ -386,7 +386,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo '${{ needs.reason.outputs.decisions }}' > decisions.json
+          printf '%s' "${{ needs.reason.outputs.decisions_b64 }}" | base64 -d > decisions.json
 
           who="dependabot-vet-bot <actions@github.com>"
 
