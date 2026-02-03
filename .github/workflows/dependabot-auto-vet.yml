@@ -7,6 +7,10 @@ on:
       - "*"
   workflow_dispatch:
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   vet-dependabot:
     if: github.actor == 'bronzelle-cw' || github.actor == 'dependabot[bot]'
@@ -17,6 +21,7 @@ jobs:
       pull-requests: write
     env:
       CARGO_VET_VERSION: 0.10.0
+      RUST_TOOLCHAIN: 1.89
 
     steps:
       - name: Checkout PR head
@@ -27,11 +32,13 @@ jobs:
 
       - name: Set up Rust
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.89
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "$RUST_TOOLCHAIN"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Install cargo-vet
         run: |
+          set -euo pipefail
           source "$HOME/.cargo/env"
           cargo install --locked --version "$CARGO_VET_VERSION" cargo-vet
 
@@ -45,17 +52,6 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Try importing audits (and capture recommended diff)
-        id: import_and_recommend
-        if: steps.vet_locked_initial.outputs.status != '0'
-        run: |
-          cargo vet > vet-import.log 2>&1 || true
-
-          # Grab the first recommended diff line and keep the first 6 tokens:
-          # cargo vet diff <crate> <old> <new>
-          line="$(grep -m1 -E '^\s*cargo vet diff ' vet-import.log | sed -E 's/^\s+//')"
-          echo "$line" | awk '{print $1,$2,$3,$4,$5,$6}' > recommended.diff.cmd || true
-
       - name: Early exit when fully vetted
         if: steps.vet_locked_initial.outputs.status == '0'
         run: echo "Vetting complete; no audits needed."
@@ -66,21 +62,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ ! -s recommended.diff.cmd ]; then
-            echo "No recommended diff found" >&2
+          # Run cargo vet to get the recommended diff command line
+          cargo vet > vet-import.log 2>&1 || true
+
+          # Grab the first recommended diff line and keep the first 6 tokens:
+          # cargo vet diff <crate> <old> <new>
+          line="$(grep -m1 -E '^\s*cargo vet diff ' vet-import.log | sed -E 's/^\s+//')"
+          if [ -z "${line:-}" ]; then
+            echo "No recommended diff found in cargo vet output" >&2
+            sed -n '1,200p' vet-import.log >&2
             exit 1
           fi
 
-          diff_cmd="$(cat recommended.diff.cmd)"
-
-          # diff_cmd tokens: cargo vet diff <crate> <old> <new>
+          diff_cmd="$(echo "$line" | awk '{print $1,$2,$3,$4,$5,$6}')"
           set -- $diff_cmd
           crate="$4"
           old="$5"
           new="$6"
 
-          # Make diff CI-friendly and avoid opening diff.rs
-          # Force no pager via env vars (best-effort).
           set +e
           PAGER=cat GIT_PAGER=cat cargo vet diff "$crate" "$old" "$new" --mode=local --output-format=human \
             > crate-diff.txt 2> crate-diff.stderr
@@ -114,8 +113,9 @@ jobs:
           diff="$(head -c 180000 crate-diff.txt)"
           ctx="$(cat vetting-context.md)"
 
-          prompt_file="codex-prompt.md"
+          prompt_file="$(mktemp -t codex-prompt.XXXXXX.md)"
 
+          # IMPORTANT: heredoc content must stay indented inside run: |
           cat > "$prompt_file" <<'EOF'
           You are a Rust supply-chain security auditor.
 
@@ -167,8 +167,6 @@ jobs:
             exit 0
           fi
 
-          # codex-output.json is expected to be the final message content.
-          # Validate it is JSON and has required fields.
           if ! jq -e . codex-output.json >/dev/null 2>&1; then
             echo "missing=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -246,10 +244,8 @@ jobs:
           version="${{ steps.collect_unvetted_and_diff.outputs.version }}"
           notes="${{ steps.parse_agent.outputs.description }}"
 
-          # Use a stable bot identity for audits.
           who="dependabot-vet-bot <actions@github.com>"
 
-          # Certify non-interactively.
           cargo vet certify "$crate" "$version" \
             --criteria "safe-to-deploy" \
             --who "$who" \
