@@ -147,63 +147,66 @@ jobs:
       - name: Build prompt file for Codex agent (ALL crates)
         id: build_prompt
         if: steps.vet_locked_initial.outputs.status != '0'
+        env:
+          CASES_JSON: ${{ steps.build_cases.outputs.cases_json }}
         run: |
           set -euo pipefail
 
           ctx="$(cat vetting-context.md)"
-          cases='${{ steps.build_cases.outputs.cases_json }}'
-
           prompt_file="codex-prompt.md"
 
-          cat > "$prompt_file" <<'EOF'
-            You are a Rust supply-chain security auditor.
+          cat > "$prompt_file" <<-'EOF'
+          You are a Rust supply-chain security auditor.
 
-            Task:
-            - Assess ONLY the *code changes shown in the provided diffs* for supply-chain/security risk.
-            - Ignore dependency list changes and any new/removed transitive crates mentioned by the diff tooling or feature flags, because those crates may already be vetted elsewhere and are NOT visible here. Do NOT mark unvetted solely because a dependency name appears.
-            - If a diff references code you cannot see, do not speculate—base your decision only on what is in the diff.
+          Task:
+          - Assess ONLY the *code changes shown in the provided diffs* for supply-chain/security risk.
+          - Ignore dependency list changes and any new/removed transitive crates mentioned by the diff tooling or feature flags, because those crates may already be vetted elsewhere and are NOT visible here. Do NOT mark unvetted solely because a dependency name appears.
+          - If a diff references code you cannot see, do not speculate—base your decision only on what is in the diff.
 
-            Be conservative: if you cannot determine safety from the diff, mark unvetted.
+          Be conservative: if you cannot determine safety from the diff, mark unvetted.
 
-            Output MUST be ONLY JSON (no prose, no code fences) as an array, one entry per crate:
-            [
-              {
-                "crate": "name",
-                "version": "x.y.z",
-                "status": "vetted" | "unvetted",
-                "description": "THE DESCRIPTION OF ITS ASSESSMENT"
-              }
-            ]
+          Output MUST be ONLY JSON (no prose, no code fences) as an array, one entry per crate:
+          [
+            {
+              "crate": "name",
+              "version": "x.y.z",
+              "status": "vetted" | "unvetted",
+              "description": "THE DESCRIPTION OF ITS ASSESSMENT"
+            }
+          ]
 
-            VETTING_CONTEXT:
-            EOF
+          VETTING_CONTEXT:
+          EOF
 
           printf "%s\n\n" "$ctx" >> "$prompt_file"
           printf "CASES (each must produce one JSON entry):\n\n" >> "$prompt_file"
 
-          # Append each diff, bounded to keep tokens sane.
           python3 - <<'PY'
           import json, os
-          cases = json.loads(os.environ["CASES_JSON"])
-          with open(os.environ["PROMPT_FILE"], "a", encoding="utf-8") as f:
-            for idx, c in enumerate(cases, 1):
-              crate, old, new, diff_file = c["crate"], c["old"], c["new"], c["diff_file"]
-              f.write(f"## CASE {idx}: {crate} {old} -> {new}\n")
-              f.write(f"Unvetted dependency: {crate} {new}\n\n")
-              try:
-                with open(diff_file, "r", encoding="utf-8", errors="replace") as df:
-                  diff = df.read(180000)
-              except FileNotFoundError:
-                diff = "(missing diff file)"
-              f.write("Diff (cargo vet diff):\n")
-              f.write(diff)
-              f.write("\n\n")
-          PY
-        env:
-          CASES_JSON: ${{ steps.build_cases.outputs.cases_json }}
-          PROMPT_FILE: codex-prompt.md
 
-          # Expose file path via output
+          cases = json.loads(os.environ["CASES_JSON"])
+
+          def safe_read(path, limit=180000):
+              try:
+                  with open(path, "r", encoding="utf-8", errors="replace") as f:
+                      return f.read(limit)
+              except FileNotFoundError:
+                  return "(missing diff file)"
+
+          with open("codex-prompt.md", "a", encoding="utf-8") as f:
+              for idx, c in enumerate(cases, 1):
+                  crate = c["crate"]
+                  old = c["old"]
+                  new = c["new"]
+                  diff_file = c["diff_file"]
+
+                  f.write(f"## CASE {idx}: {crate} {old} -> {new}\n")
+                  f.write(f"Unvetted dependency: {crate} {new}\n\n")
+                  f.write("Diff (cargo vet diff):\n")
+                  f.write(safe_read(diff_file))
+                  f.write("\n\n")
+          PY
+
           echo "prompt_file=$prompt_file" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifacts (debuggable without log spam)
