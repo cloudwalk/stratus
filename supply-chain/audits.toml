@@ -526,6 +526,12 @@ criteria = "safe-to-deploy"
 version = "0.32.0"
 notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
 
+[[audits.uuid]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "1.19.0"
+notes = "Changes are limited to edition metadata updates, import refactors (e.g., switching to serde_core), and formatting; no new unsafe blocks, I/O, or expanded execution paths appear in the diff."
+
 [[trusted.async-trait]]
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
