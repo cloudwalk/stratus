@@ -410,7 +410,7 @@ jobs:
         run: cargo vet --locked
 
       - name: Commit audit changes
-        if: needs.reason.outputs.missing == 'false' && needs.reason.outputs.any_unvetted == 'false'
+        if: steps.vet_locked_initial.outputs.status != '0' && steps.parse_agent.outputs.missing == 'false' && steps.parse_agent.outputs.status == 'vetted'
         run: |
           set -euo pipefail
 
@@ -419,8 +419,17 @@ jobs:
             exit 0
           fi
 
+          branch="${{ github.event.pull_request.head.ref }}"
+
           git config user.name "dependabot-vet-bot"
           git config user.email "actions@github.com"
+
           git add supply-chain/audits.toml supply-chain/imports.lock || true
-          git commit -m "chore(vet): apply agent audits"
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+          git commit -m "chore(vet): apply agent audit"
+
+          git fetch origin "$branch:$branch" || git fetch origin "$branch"
+
+          git switch -c vet-bot-tmp
+          git rebase "origin/$branch"
+
+          git push origin "HEAD:$branch"
