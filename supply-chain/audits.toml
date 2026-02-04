@@ -473,6 +473,24 @@ criteria = "safe-to-deploy"
 delta = "1.16.0 -> 1.17.2"
 notes = "Reviewed 1.16.0->1.17.2: functions depending on reciprocal division now marked unsafe and call sites updated; MSRV bumped, serde_core split; added ark-ff 0.5 support and minor API cleanups. Unsafe blocks guarded by explicit precondition checks; no new ambient capabilities."
 
+[[audits.rustls-platform-verifier]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "0.6.2"
+notes = "Reviewed the code diff: library now threads an explicit CryptoProvider into existing platform verifiers, Android context handling adds a scoped `unsafe_clone` with clear lifetime constraints, and other changes remain within tests/examples (network/FS access only in opt-in example). No expanded ambient capabilities or new unsafe behavior affecting the shipped verifier were observed."
+
+[[audits.security-framework]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "3.5.1"
+notes = "Diff primarily adds keychain option builders, refactors existing wrappers, and adjusts tests; it does not introduce new unsafe patterns, dynamic execution paths, or additional network/filesystem access beyond existing Apple Security Framework FFI usage."
+
+[[audits.security-framework-sys]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "2.15.0"
+notes = "Diff only adds new CFStringRef extern constants and configuration metadata without introducing new unsafe logic or capability changes."
+
 [[audits.syn-solidity]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -513,6 +531,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.14.2"
 notes = "Inspected 0.14.2: prost-based codec/encoder/decoder split from tonic, simple BufferSettings plumbing; crate contains no unsafe."
+
+[[audits.tower]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "0.5.2"
+notes = "Diff only adjusts formatting, macro imports, and documentation; no new unsafe, I/O, networking, or other powerful behavior was introduced or expanded in the shown code."
 
 [[audits.tower]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"

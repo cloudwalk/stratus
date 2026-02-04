@@ -147,8 +147,8 @@ user-login = "cuviper"
 user-name = "Josh Stone"
 
 [[publisher.indexmap]]
-version = "2.12.1"
-when = "2025-11-20"
+version = "2.13.0"
+when = "2026-01-07"
 user-id = 539
 user-login = "cuviper"
 user-name = "Josh Stone"
@@ -239,6 +239,13 @@ user-name = "Yuki Okushi"
 [[publisher.reqwest]]
 version = "0.12.24"
 when = "2025-10-13"
+user-id = 359
+user-login = "seanmonstar"
+user-name = "Sean McArthur"
+
+[[publisher.reqwest]]
+version = "0.13.1"
+when = "2025-12-30"
 user-id = 359
 user-login = "seanmonstar"
 user-name = "Sean McArthur"
