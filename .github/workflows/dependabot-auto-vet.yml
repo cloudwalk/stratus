@@ -1,4 +1,4 @@
-name: Dependabot Cargo Vet
+name: Dependabot Cargo Vet (Single Job)
 
 on:
   pull_request:
@@ -7,20 +7,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  collect:
+  vet:
     if: github.actor == 'bronzelle-cw' || github.actor == 'dependabot[bot]'
-    name: Collect unvetted crates + diffs
     runs-on: ubuntu-22.04
     permissions:
       contents: write
       pull-requests: write
-    env:
-      CARGO_VET_VERSION: 0.10.0
 
-    outputs:
-      vet_ok: ${{ steps.vet_locked_initial.outputs.status == '0' }}
-      cases_json: ${{ steps.build_cases.outputs.cases_json }}
-      prompt_file: ${{ steps.build_prompt.outputs.prompt_file }}
+    env:
+      RUST_TOOLCHAIN: "1.89"
+      CARGO_VET_VERSION: "0.10.0"
+      CODEX_MODEL: "gpt-5-codex"
+      CRITERIA: "safe-to-deploy"
+      CONTEXT_FILE: "VETTING_CONTEXT.md"
+
+      # Prompt size guards (avoid accidental huge contexts)
+      CONTEXT_CHAR_LIMIT: "90000"
+      DIFF_CHAR_LIMIT: "180000"
 
     steps:
       - name: Checkout PR head
@@ -29,69 +32,128 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: true
 
+      # -------------------------
+      # Setup
+      # -------------------------
       - name: Set up Rust
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.89
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "${RUST_TOOLCHAIN}"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          source "$HOME/.cargo/env"
+          rustc --version
+          cargo --version
 
       - name: Install cargo-vet
         run: |
+          set -euo pipefail
           source "$HOME/.cargo/env"
           cargo install --locked --version "$CARGO_VET_VERSION" cargo-vet
+          cargo vet --version
 
-      - name: Initial cargo vet --locked
-        id: vet_locked_initial
-        continue-on-error: true
+      - name: Prepare workspace
         run: |
-          set +e
-          cargo vet --locked > vet-locked.log 2>&1
-          status=$?
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
+          set -euo pipefail
+          mkdir -p vet/diffs vet/diffs.capped vet/prompts vet/decisions
+          : > vet/vet-locked.log
+          : > vet/vet-import.log
 
-      - name: Early exit when fully vetted
-        if: steps.vet_locked_initial.outputs.status == '0'
-        run: echo "Vetting complete; no audits needed."
-
-      - name: Run cargo vet (unlocked) to get recommendations
-        id: vet_import
-        if: steps.vet_locked_initial.outputs.status != '0'
+      - name: Ensure context file exists
         run: |
-          cargo vet > vet-import.log 2>&1 || true
-
-          # Extract ALL recommended commands (first 6 tokens):
-          # cargo vet diff <crate> <old> <new>
-          grep -E '^\s*cargo vet diff ' vet-import.log \
-            | sed -E 's/^\s+//' \
-            | awk '{print $1,$2,$3,$4,$5,$6}' \
-            > recommended.diff.cmds || true
-
-          if [ ! -s recommended.diff.cmds ]; then
-            echo "No recommended diffs found in cargo vet output" >&2
-            sed -n '1,200p' vet-import.log >&2
+          set -euo pipefail
+          if [ ! -f "${CONTEXT_FILE}" ]; then
+            echo "Missing ${CONTEXT_FILE}. Add it to the repo or update CONTEXT_FILE env var." >&2
             exit 1
           fi
 
-      - name: Generate diffs for recommended crates
-        id: gen_diffs
-        if: steps.vet_locked_initial.outputs.status != '0'
+      - name: Cap context file size
         run: |
           set -euo pipefail
-          mkdir -p crate-diffs
+          python3 - <<'PY'
+          import os
+          path = os.environ["CONTEXT_FILE"]
+          lim = int(os.environ["CONTEXT_CHAR_LIMIT"])
+          with open(path, "r", encoding="utf-8", errors="replace") as f:
+            txt = f.read()
+          if len(txt) > lim:
+            txt = txt[:lim] + "\n\n[Context truncated by workflow]\n"
+          os.makedirs("vet", exist_ok=True)
+          with open("vet/context.capped.md", "w", encoding="utf-8") as out:
+            out.write(txt)
+          PY
+
+      # -------------------------
+      # Verification
+      # -------------------------
+      - name: cargo vet --locked (fast gate)
+        id: vet_locked
+        run: |
+          set +e
+          cargo vet --locked > vet/vet-locked.log 2>&1
+          st=$?
+          echo "status=$st" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Early exit comment if fully vetted
+        if: steps.vet_locked.outputs.status == '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '✅ **cargo-vet:** already fully vetted with `cargo vet --locked`.',
+              '',
+              '_No audits needed._'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+      - name: Stop job (fully vetted)
+        if: steps.vet_locked.outputs.status == '0'
+        run: exit 0
+
+      - name: cargo vet (unlocked) to get recommendations
+        run: |
+          set -euo pipefail
+          cargo vet > vet/vet-import.log 2>&1 || true
+
+          # Extract recommended: cargo vet diff <crate> <old> <new>
+          # Keep exactly first 6 tokens to avoid trailing noise.
+          grep -E '^\s*cargo vet diff ' vet/vet-import.log \
+            | sed -E 's/^\s+//' \
+            | awk '{print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6}' \
+            > vet/recommended.diff.cmds || true
+
+          if [ ! -s vet/recommended.diff.cmds ]; then
+            echo "No recommended diffs found in cargo vet output." >&2
+            sed -n '1,200p' vet/vet-import.log >&2
+            exit 1
+          fi
+
+          # Convert to cases.tsv: crate<TAB>old<TAB>new
+          awk -F'\t' '{print $4"\t"$5"\t"$6}' vet/recommended.diff.cmds > vet/cases.tsv
+
+      # -------------------------
+      # Collect
+      # -------------------------
+      - name: Generate diffs
+        run: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
 
           i=0
-          while read -r diff_cmd; do
+          while IFS=$'\t' read -r crate old new; do
             i=$((i+1))
-            set -- $diff_cmd
-            crate="$4"
-            old="$5"
-            new="$6"
-
-            out="crate-diffs/${i}-${crate}-${old}-${new}.txt"
-            err="crate-diffs/${i}-${crate}-${old}-${new}.stderr"
+            slug="$(printf '%s__%s__%s' "$crate" "$old" "$new" | tr '/: ' '___' )"
+            out="vet/diffs/${i}__${slug}.txt"
+            err="vet/diffs/${i}__${slug}.stderr"
 
             set +e
-            PAGER=cat GIT_PAGER=cat cargo vet diff "$crate" "$old" "$new" --mode=local --output-format=human >"$out" 2>"$err"
+            PAGER=cat GIT_PAGER=cat cargo vet diff "$crate" "$old" "$new" \
+              --mode=local --output-format=human >"$out" 2>"$err"
             st=$?
             set -e
 
@@ -101,338 +163,307 @@ jobs:
               sed -n '1,200p' "$err" >&2
               exit "$st"
             fi
-          done < recommended.diff.cmds
+          done < vet/cases.tsv
 
-          cp VETTING_CONTEXT.md vetting-context.md
-
-      - name: Build cases JSON (crates to certify)
-        id: build_cases
-        if: steps.vet_locked_initial.outputs.status != '0'
+      - name: Cap diff sizes (avoid huge prompts)
         run: |
           set -euo pipefail
-
-          # Build a JSON array of {crate, old, new, diff_file}
           python3 - <<'PY'
-          import json, glob, os, re
-          cases = []
-          for path in sorted(glob.glob("crate-diffs/*.txt")):
-            base = os.path.basename(path)
-            # format: N-crate-old-new.txt
-            m = re.match(r"^\d+-(.+?)-([^ -]+)-([^ -]+)\.txt$", base)
-            if not m:
-              continue
-            crate, old, new = m.group(1), m.group(2), m.group(3)
-            cases.append({"crate": crate, "old": old, "new": new, "diff_file": path})
-          print(json.dumps(cases))
-          PY
-          cases_json="$(python3 - <<'PY'
-          import json, sys, glob, os, re
-          cases = []
-          for path in sorted(glob.glob("crate-diffs/*.txt")):
-            base = os.path.basename(path)
-            m = re.match(r"^\d+-(.+?)-([^ -]+)-([^ -]+)\.txt$", base)
-            if not m:
-              continue
-            crate, old, new = m.group(1), m.group(2), m.group(3)
-            cases.append({"crate": crate, "old": old, "new": new, "diff_file": path})
-          sys.stdout.write(json.dumps(cases))
-          PY
-          )"
-          if [ "$cases_json" = "[]" ]; then
-            echo "No diff files found; cannot proceed" >&2
-            exit 1
-          fi
-          echo "cases_json=$cases_json" >> "$GITHUB_OUTPUT"
-
-      - name: Build prompt file for Codex agent (ALL crates)
-        id: build_prompt
-        if: steps.vet_locked_initial.outputs.status != '0'
-        env:
-          CASES_JSON: ${{ steps.build_cases.outputs.cases_json }}
-        run: |
-          set -euo pipefail
-
-          ctx="$(cat vetting-context.md)"
-          prompt_file="codex-prompt.md"
-
-          cat > "$prompt_file" <<-'EOF'
-          You are a Rust supply-chain security auditor.
-
-          Task:
-          - Assess ONLY the *code changes shown in the provided diffs* for supply-chain/security risk.
-          - Ignore dependency list changes and any new/removed transitive crates mentioned by the diff tooling or feature flags, because those crates may already be vetted elsewhere and are NOT visible here. Do NOT mark unvetted solely because a dependency name appears.
-          - If a diff references code you cannot see, do not speculate—base your decision only on what is in the diff.
-
-          Be conservative: if you cannot determine safety from the diff, mark unvetted.
-
-          Output MUST be ONLY JSON (no prose, no code fences) as an array, one entry per crate:
-          [
-            {
-              "crate": "name",
-              "version": "x.y.z",
-              "status": "vetted" | "unvetted",
-              "description": "THE DESCRIPTION OF ITS ASSESSMENT"
-            }
-          ]
-
-          VETTING_CONTEXT:
-          EOF
-
-          printf "%s\n\n" "$ctx" >> "$prompt_file"
-          printf "CASES (each must produce one JSON entry):\n\n" >> "$prompt_file"
-
-          python3 - <<'PY'
-          import json, os
-
-          cases = json.loads(os.environ["CASES_JSON"])
-
-          def safe_read(path, limit=180000):
-              try:
-                  with open(path, "r", encoding="utf-8", errors="replace") as f:
-                      return f.read(limit)
-              except FileNotFoundError:
-                  return "(missing diff file)"
-
-          with open("codex-prompt.md", "a", encoding="utf-8") as f:
-              for idx, c in enumerate(cases, 1):
-                  crate = c["crate"]
-                  old = c["old"]
-                  new = c["new"]
-                  diff_file = c["diff_file"]
-
-                  f.write(f"## CASE {idx}: {crate} {old} -> {new}\n")
-                  f.write(f"Unvetted dependency: {crate} {new}\n\n")
-                  f.write("Diff (cargo vet diff):\n")
-                  f.write(safe_read(diff_file))
-                  f.write("\n\n")
+          import glob, os
+          lim = int(os.environ["DIFF_CHAR_LIMIT"])
+          os.makedirs("vet/diffs.capped", exist_ok=True)
+          for path in sorted(glob.glob("vet/diffs/*.txt")):
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+              txt = f.read()
+            if len(txt) > lim:
+              txt = txt[:lim] + "\n\n[Diff truncated by workflow]\n"
+            out = os.path.join("vet/diffs.capped", os.path.basename(path))
+            with open(out, "w", encoding="utf-8") as w:
+              w.write(txt)
           PY
 
-          echo "prompt_file=$prompt_file" >> "$GITHUB_OUTPUT"
-
-      - name: Upload artifacts (debuggable without log spam)
-        if: steps.vet_locked_initial.outputs.status != '0'
-        uses: actions/upload-artifact@v4
-        with:
-          name: cargo-vet-context
-          path: |
-            vet-locked.log
-            vet-import.log
-            recommended.diff.cmds
-            crate-diffs/
-            vetting-context.md
-            codex-prompt.md
-
-  reason:
-    if: needs.collect.outputs.vet_ok != 'true'
-    name: Reason about diffs (Codex)
-    runs-on: ubuntu-22.04
-    needs: [collect]
-    permissions:
-      contents: write
-      pull-requests: write
-
-    outputs:
-      missing: ${{ steps.parse.outputs.missing }}
-      any_unvetted: ${{ steps.parse.outputs.any_unvetted }}
-      decisions_b64: ${{ steps.parse.outputs.decisions_b64 }}
-
-    steps:
-      - name: Checkout PR head
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: true
-
-      - name: Download prompt artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: cargo-vet-context
-          path: .
-
-      - name: 🤖 Analyze diffs with Codex
-        id: codex
+      # -------------------------
+      # Reasoning setup (codex-action once)
+      # -------------------------
+      - name: Initialize Codex environment (single run)
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_KEY }}
-          model: gpt-5-codex
-          prompt-file: codex-prompt.md
-          output-file: codex-output.json
+          model: ${{ env.CODEX_MODEL }}
+          prompt: "init"
+          output-file: vet/_codex-init.json
           safety-strategy: drop-sudo
           sandbox: workspace-write
 
-      - name: Parse agent result
-        id: parse
+      - name: Build prompt template
+        run: |
+          set -euo pipefail
+          cat > vet/prompt-template.md <<'EOF'
+          You are a Rust supply-chain security auditor.
+
+          Task:
+          - Assess ONLY the code changes shown in the provided diff for supply-chain/security risk.
+          - Ignore dependency list changes and any new/removed transitive crates mentioned by the diff tooling or feature flags unless accompanied by direct code changes that implement risky behavior.
+          - If the diff references code you cannot see, do not speculate—base your decision only on what is in the diff.
+
+          Be conservative: if you cannot determine safety from the diff, mark unvetted.
+
+          Output MUST be ONLY JSON (no prose, no markdown, no code fences), with this exact format:
+          {
+            "status": "vetted" | "unvetted",
+            "description": "Concise explanation referencing what was (or was not) observed in the diff. Do not cite dependency-list-only changes as the reason."
+          }
+
+          POLICY CONTEXT:
+          EOF
+
+      - name: Build per-crate prompt files
+        run: |
+          set -euo pipefail
+          i=0
+          while IFS=$'\t' read -r crate old new; do
+            i=$((i+1))
+            slug="$(printf '%s__%s__%s' "$crate" "$old" "$new" | tr '/: ' '___' )"
+            diff_file="vet/diffs.capped/${i}__${slug}.txt"
+            prompt_file="vet/prompts/${i}__${slug}.md"
+
+            if [ ! -s "$diff_file" ]; then
+              # Still create a prompt file for consistent handling downstream
+              {
+                cat vet/prompt-template.md
+                echo
+                cat vet/context.capped.md
+                echo
+                echo "CASE:"
+                echo "crate: ${crate}"
+                echo "old: ${old}"
+                echo "new: ${new}"
+                echo
+                echo "DIFF:"
+                echo "(missing diff file)"
+                echo
+              } > "$prompt_file"
+              continue
+            fi
+
+            {
+              cat vet/prompt-template.md
+              echo
+              cat vet/context.capped.md
+              echo
+              echo "CASE:"
+              echo "crate: ${crate}"
+              echo "old: ${old}"
+              echo "new: ${new}"
+              echo
+              echo "DIFF:"
+              cat "$diff_file"
+              echo
+            } > "$prompt_file"
+          done < vet/cases.tsv
+
+      - name: Run Codex sequentially per crate (CLI loop)
+        id: reason
         run: |
           set -euo pipefail
 
-          if [ ! -s codex-output.json ]; then
-            echo "missing=true" >> "$GITHUB_OUTPUT"
-            echo "any_unvetted=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          : > vet/decisions.jsonl
+          idx=0
 
-          if ! jq -e . codex-output.json >/dev/null 2>&1; then
-            echo "missing=true" >> "$GITHUB_OUTPUT"
-            echo "any_unvetted=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          while IFS=$'\t' read -r crate old new; do
+            idx=$((idx+1))
+            slug="$(printf '%s__%s__%s' "$crate" "$old" "$new" | tr '/: ' '___' )"
+            prompt_file="vet/prompts/${idx}__${slug}.md"
+            out_file="vet/decisions/${idx}__${slug}.raw.json"
 
-          # Expect an array of entries.
-          if ! jq -e 'type=="array"' codex-output.json >/dev/null 2>&1; then
-            echo "missing=true" >> "$GITHUB_OUTPUT"
-            echo "any_unvetted=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+            if [ ! -s "$prompt_file" ]; then
+              jq -nc --arg crate "$crate" --arg version "$new" \
+                --arg description "Missing prompt file; requires manual review." \
+                '{crate:$crate,version:$version,status:"unvetted",description:$description}' >> vet/decisions.jsonl
+              continue
+            fi
 
-          # Validate schema and compute any_unvetted.
-          any_unvetted="$(jq -r '[.[] | select(.status=="unvetted")] | length > 0' codex-output.json)"
-          if [ "$any_unvetted" != "true" ] && [ "$any_unvetted" != "false" ]; then
-            any_unvetted="true"
-          fi
+            # Run codex; output-last-message writes the assistant's last message
+            # We feed the prompt via stdin.
+            set +e
+            CODEX_HOME="${HOME}/.codex" codex exec \
+              --skip-git-repo-check \
+              --cd "$GITHUB_WORKSPACE" \
+              --output-last-message "$out_file" \
+              --model "${CODEX_MODEL}" \
+              --sandbox "workspace-write" \
+              < "$prompt_file"
+            st=$?
+            set -e
 
-          # Ensure required keys exist per entry
-          if ! jq -e 'all(.[]; (.crate|type=="string") and (.version|type=="string") and (.status=="vetted" or .status=="unvetted") and (.description|type=="string"))' codex-output.json >/dev/null 2>&1; then
-            echo "missing=true" >> "$GITHUB_OUTPUT"
-            echo "any_unvetted=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+            if [ "$st" -ne 0 ] || [ ! -s "$out_file" ]; then
+              jq -nc --arg crate "$crate" --arg version "$new" \
+                --arg description "Codex execution failed or produced no output; requires manual review." \
+                '{crate:$crate,version:$version,status:"unvetted",description:$description}' >> vet/decisions.jsonl
+              continue
+            fi
 
-          echo "missing=false" >> "$GITHUB_OUTPUT"
+            # Expect JSON object with {status, description}
+            if jq -e 'type=="object" and (.status=="vetted" or .status=="unvetted") and (.description|type=="string")' "$out_file" >/dev/null 2>&1; then
+              status="$(jq -r '.status' "$out_file")"
+              desc="$(jq -r '.description' "$out_file")"
+              jq -nc --arg crate "$crate" --arg version "$new" --arg status "$status" --arg description "$desc" \
+                '{crate:$crate,version:$version,status:$status,description:$description}' >> vet/decisions.jsonl
+            else
+              # Invalid output -> fail closed
+              jq -nc --arg crate "$crate" --arg version "$new" \
+                --arg description "Agent output missing/invalid JSON for this crate; requires manual review." \
+                '{crate:$crate,version:$version,status:"unvetted",description:$description}' >> vet/decisions.jsonl
+              # keep raw output for debugging
+              cp "$out_file" "vet/decisions/${idx}__${slug}.invalid.json" || true
+            fi
+          done < vet/cases.tsv
+
+          jq -s '.' vet/decisions.jsonl > vet/decisions.json
+
+          any_unvetted="$(jq -r '[.[] | select(.status=="unvetted")] | length > 0' vet/decisions.json)"
           echo "any_unvetted=$any_unvetted" >> "$GITHUB_OUTPUT"
-          decisions_b64="$(base64 -w0 codex-output.json)"
-          echo "decisions_b64=$decisions_b64" >> "$GITHUB_OUTPUT"
 
-
-  apply:
-    if: needs.collect.outputs.vet_ok != 'true'
-    name: Apply audits (if vetted)
-    runs-on: ubuntu-22.04
-    needs: [collect, reason]
-    permissions:
-      contents: write
-      pull-requests: write
-    env:
-      CARGO_VET_VERSION: 0.10.0
-
-    steps:
-      - name: Checkout PR head
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: true
-
-      - name: Set up Rust
+      # -------------------------
+      # Apply
+      # -------------------------
+      - name: Apply audits for vetted crates
+        id: apply
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.89
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-
-      - name: Install cargo-vet
-        run: |
+          set -euo pipefail
           source "$HOME/.cargo/env"
-          cargo install --locked --version "$CARGO_VET_VERSION" cargo-vet
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: cargo-vet-context
-          path: .
+          who="dependabot-vet-bot <actions@github.com>"
+          applied=0
 
-      - name: Comment when agent result missing/invalid
-        if: needs.reason.outputs.missing == 'true'
+          jq -c '.[] | select(.status=="vetted")' vet/decisions.json | while read -r row; do
+            crate="$(echo "$row" | jq -r '.crate')"
+            version="$(echo "$row" | jq -r '.version')"
+            desc="$(echo "$row" | jq -r '.description')"
+
+            cargo vet certify "$crate" "$version" \
+              --criteria "$CRITERIA" \
+              --who "$who" \
+              --notes "$desc" \
+              --accept-all
+
+            applied=$((applied+1))
+          done
+
+          echo "applied=$applied" >> "$GITHUB_OUTPUT"
+
+      - name: Verify cargo vet after applying (non-fatal)
+        id: verify_after
+        run: |
+          set +e
+          cargo vet --locked > vet/vet-locked-after.log 2>&1
+          st=$?
+          echo "status=$st" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      # -------------------------
+      # Commit & push (even if some crates unvetted)
+      # -------------------------
+      - name: Commit audit changes if any
+        id: commit
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "dependabot-vet-bot"
+          git config user.email "actions@github.com"
+
+          git add supply-chain/audits.toml supply-chain/imports.lock 2>/dev/null || true
+          git commit -m "chore(vet): apply automated audits" || true
+
+          sha="$(git rev-parse HEAD)"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Push commit back to PR branch (best effort)
+        id: push
+        run: |
+          set +e
+          if [ "${{ steps.commit.outputs.changed }}" != "true" ]; then
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          branch="${{ github.event.pull_request.head.ref }}"
+          git push origin "HEAD:$branch"
+          st=$?
+          if [ "$st" -eq 0 ]; then
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      # -------------------------
+      # PR Comment (consolidated)
+      # -------------------------
+      - name: Comment summary on PR
         uses: actions/github-script@v7
         with:
           script: |
-            const msg = [
-              'Cargo vet still needs audits, but the agent result was missing or invalid JSON.',
-              '',
-              'Expected JSON array like:',
-              '[{"crate":"name","version":"x.y.z","status":"vetted|unvetted","description":"..."}]',
-              '',
-              'Ensure OPENAI_KEY is set and the prompt enforces JSON-only output.'
-            ].join('\n');
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: msg
-            });
-            core.setFailed('Agent output missing or invalid.')
+            const fs = require('fs');
 
-      - name: Comment and stop when agent says unvetted
-        if: needs.reason.outputs.missing == 'false' && needs.reason.outputs.any_unvetted == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const decisions = JSON.parse(`${{ toJSON(needs.reason.outputs.decisions) }}`);
+            const decisions = JSON.parse(fs.readFileSync('vet/decisions.json', 'utf8'));
+            const vetted = decisions.filter(d => d.status === 'vetted');
             const unvetted = decisions.filter(d => d.status === 'unvetted');
-            const lines = [
-              'Cargo vet audit was NOT applied (agent marked one or more crates as unvetted).',
-              '',
-              'Unvetted cases:'
-            ];
-            for (const d of unvetted) {
-              lines.push(`- ${d.crate} ${d.version}: ${d.description || '(no description)'}`);
+
+            const changed = `${{ steps.commit.outputs.changed || 'false' }}` === 'true';
+            const pushed = `${{ steps.push.outputs.pushed || 'false' }}` === 'true';
+            const sha = `${{ steps.commit.outputs.sha || '' }}`.trim();
+            const vetAfterStatus = `${{ steps.verify_after.outputs.status }}`.trim();
+
+            const lines = [];
+            lines.push('## 🧾 cargo-vet automated audit summary');
+            lines.push('');
+
+            lines.push(`- **Vetted (auto-certified):** ${vetted.length}`);
+            lines.push(`- **Unvetted (needs manual review):** ${unvetted.length}`);
+            lines.push(`- **cargo vet --locked after apply:** ${vetAfterStatus === '0' ? '✅ pass' : `❌ fail (exit ${vetAfterStatus})`}`);
+            lines.push('');
+
+            if (changed) {
+              lines.push(`- **Audit files updated:** yes`);
+              if (sha) lines.push(`- **Commit:** ${sha}`);
+              lines.push(`- **Pushed to PR branch:** ${pushed ? 'yes' : 'no (push may be restricted for this actor/branch)'}`);
+            } else {
+              lines.push(`- **Audit files updated:** no changes to commit`);
             }
+
+            if (vetted.length) {
+              lines.push('');
+              lines.push('### ✅ Auto-certified');
+              for (const d of vetted) {
+                lines.push(`- **${d.crate} ${d.version}** — ${d.description || '(no description)'}`);
+              }
+            }
+
+            if (unvetted.length) {
+              lines.push('');
+              lines.push('### ⚠️ Needs manual review');
+              for (const d of unvetted) {
+                lines.push(`- **${d.crate} ${d.version}** — ${d.description || '(no description)'}`);
+              }
+            }
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: lines.join('\n')
             });
-            core.setFailed('Agent marked update as unvetted; manual review required.')
 
-      - name: Apply audits when ALL are vetted
-        if: needs.reason.outputs.missing == 'false' && needs.reason.outputs.any_unvetted == 'false'
+      # Optional: fail the job if anything unvetted remain
+      - name: Fail if unvetted remain (optional gate)
+        if: steps.reason.outputs.any_unvetted == 'true'
         run: |
-          set -euo pipefail
-
-          printf '%s' "${{ needs.reason.outputs.decisions_b64 }}" | base64 -d > decisions.json
-
-          who="dependabot-vet-bot <actions@github.com>"
-
-          jq -c '.[]' decisions.json | while read -r row; do
-            crate="$(echo "$row" | jq -r '.crate')"
-            version="$(echo "$row" | jq -r '.version')"
-            status="$(echo "$row" | jq -r '.status')"
-            desc="$(echo "$row" | jq -r '.description')"
-
-            if [ "$status" != "vetted" ]; then
-              echo "Refusing to certify non-vetted entry: $row" >&2
-              exit 1
-            fi
-
-            cargo vet certify "$crate" "$version" \
-              --criteria "safe-to-deploy" \
-              --who "$who" \
-              --notes "$desc" \
-              --accept-all
-          done
-
-      - name: Verify cargo vet after audits
-        if: needs.reason.outputs.missing == 'false' && needs.reason.outputs.any_unvetted == 'false'
-        run: cargo vet --locked
-
-      - name: Commit audit changes
-        if: steps.vet_locked_initial.outputs.status != '0' && steps.parse_agent.outputs.missing == 'false' && steps.parse_agent.outputs.status == 'vetted'
-        run: |
-          set -euo pipefail
-
-          if git diff --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
-
-          branch="${{ github.event.pull_request.head.ref }}"
-
-          git config user.name "dependabot-vet-bot"
-          git config user.email "actions@github.com"
-
-          git add supply-chain/audits.toml supply-chain/imports.lock || true
-          git commit -m "chore(vet): apply agent audit"
-
-          git fetch origin "$branch:$branch" || git fetch origin "$branch"
-
-          git switch -c vet-bot-tmp
-          git rebase "origin/$branch"
-
-          git push origin "HEAD:$branch"
+          echo "One or more crates were marked unvetted; manual review required."
+          exit 1
