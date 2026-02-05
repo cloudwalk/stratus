@@ -123,6 +123,15 @@ Based on the available evidence, this dependency update does not introduce obser
 This analysis is advisory, not authoritative.
 When in doubt, prefer caution and recommend human review rather than assuming safety.
 
+If the audit results are acceptable, **record the audit** using `cargo vet certify` (with an appropriate `--criteria`, `--who`, and `--notes`) so the dependency is marked as vetted. Only skip certification if explicitly disapproved by the user.
+
+When writing audit notes, lead with the safety posture (I/O, network, build/proc-macro, unsafe) and call out any new dependencies or feature gates. Close with the main change in one sentence so reviewers see the key impact. Example structure:
+- Safety: no new I/O/network; no build.rs/proc-macro; unsafe unchanged.
+- Dependencies/features: new optional feature X adds dependency Y; inert when disabled.
+- Main change: short summary of what changed.
+
+Always create audits via `cargo vet certify ... --accept-all --notes ...` and do not pre-edit `audits.toml`. Keep a guard that fails if multiple `[[audits.<crate>]]` entries exist for the same version to prevent duplicates.
+
 ## Cargo Vet Tool Usage Guidelines
 
 The `cargo vet inspect` command can be interactive, opening a browser and an editor. This can cause issues in non-interactive environments.
