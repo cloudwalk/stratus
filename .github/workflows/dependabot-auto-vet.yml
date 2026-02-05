@@ -8,7 +8,10 @@ on:
 
 jobs:
   vet:
-    if: github.actor == 'dependabot[bot]'
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.actor == 'dependabot[bot]')
+
     runs-on: ubuntu-22.04
     permissions:
       contents: write
