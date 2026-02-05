@@ -26,35 +26,48 @@ jobs:
           persist-credentials: true
 
       - name: Set up Rust
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.89
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Install cargo-vet
-        run: cargo install cargo-vet
+        run: |
+          source "$HOME/.cargo/env"
+          cargo install --locked --version $CARGO_VET_VERSION cargo-vet
 
       - name: Initial cargo vet --locked
         id: vet_locked_initial
         continue-on-error: true
         run: |
-          cargo vet --locked > vet-locked.log 2>&1 || true
-          echo "status=$?" >> "$GITHUB_OUTPUT"
+          set +e
+          cargo vet --locked > vet-locked.log 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Try importing audits
         if: steps.vet_locked_initial.outputs.status != '0'
         run: |
           cargo vet > vet-import.log 2>&1 || true
-          set +e
-          cargo vet --locked > vet-locked-final.log 2>&1
-          echo $? > vet-locked-final.status
+
+          # Grab the first recommended diff line and keep the first 6 tokens:
+          # cargo vet diff <crate> <old> <new>
+          line="$(grep -m1 -E '^\s*cargo vet diff ' vet-import.log | sed -E 's/^\s+//')"
+          echo "Recommended line: $line"
+          echo "$line" | awk '{print $1,$2,$3,$4,$5,$6}' > recommended.diff.cmd || true
+
+          echo "recommended.diff.cmd:"
+          cat recommended.diff.cmd || true
 
       - name: Derive vet status
         id: vet_status
         run: |
-          if [ -f vet-locked-final.status ]; then
-            status="$(cat vet-locked-final.status)"
-          else
-            status="${{ steps.vet_locked_initial.outputs.status }}"
-          fi
+          status="${{ steps.vet_locked_initial.outputs.status }}"
           echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "vet-locked.log:"
+          cat vet-locked.log || true
+          echo "vet-import.log:"
+          cat vet-import.log || true
 
       - name: Early exit when fully vetted
         if: steps.vet_status.outputs.status == '0'
@@ -64,41 +77,56 @@ jobs:
         id: collect_unvetted_and_diff
         if: steps.vet_status.outputs.status != '0'
         run: |
-          # Expect a single unvetted crate from dependabot PRs; parse the line "crate:old -> new"
-          logfile="vet-locked-final.log"
-          if [ ! -f "$logfile" ]; then
-            logfile="vet-locked.log"
-          fi
-          line="$(grep -m1 'unvetted dependencies:' -A2 "$logfile" | tail -n1 | tr -d '[:space:]')"
-          crate="${line%%:*}"
-          vers="${line#*:}"
-          old="${vers%->*}"
-          new="${vers#*->}"
-          if [ -z "$crate" ] || [ -z "$old" ] || [ -z "$new" ]; then
-            echo "Failed to parse unvetted crate/version from vet output" >&2
+          set -euo pipefail
+
+          if [ ! -s recommended.diff.cmd ]; then
+            echo "No recommended diff found" >&2
             exit 1
           fi
-          cargo vet diff "$crate" "$old" "$new" --mode local --output-format=human > crate-diff.txt || true
+
+          diff_cmd="$(cat recommended.diff.cmd)"
+          echo "Using recommended diff: $diff_cmd"
+
+          # diff_cmd tokens: cargo vet diff <crate> <old> <new>
+          set -- $diff_cmd
+          crate="$4"
+          old="$5"
+          new="$6"
+
+          # Run diff and capture output, but don't let -e kill the step yet
+          set +e
+          PAGER=cat GIT_PAGER=cat cargo vet diff "$crate" "$old" "$new" --mode=local --output-format=human \
+            > crate-diff.txt 2> crate-diff.stderr
+          status=$?
+          set -e
+
+          echo "cargo vet diff exit status: $status"
+
+          # 0 = no diff, 1 = diff exists (expected), 2 = trouble (real failure)
+          if [ "$status" -gt 1 ]; then
+            echo "cargo vet diff failed (status=$status). stderr:"
+            sed -n '1,200p' crate-diff.stderr
+            exit "$status"
+          fi
+
+          cp VETTING_CONTEXT.md vetting-context.md
           {
             echo "crate=$crate"
             echo "version=$new"
-            echo "diff<<'EOF'"
-            cat crate-diff.txt
-            echo "EOF"
           } >> "$GITHUB_OUTPUT"
-          cp VETTING_CONTEXT.md vetting-context.md
 
       - name: Build prompt for Codex agent
         id: build_prompt
         if: steps.vet_status.outputs.status != '0'
         run: |
           ctx="$(cat vetting-context.md)"
-          diff="${{ steps.collect_unvetted_and_diff.outputs.diff }}"
+          diff="$(head -c 180000 crate-diff.txt)"
           crate="${{ steps.collect_unvetted_and_diff.outputs.crate }}"
           version="${{ steps.collect_unvetted_and_diff.outputs.version }}"
+          delim="PROMPT_$(date +%s%N)"
           {
-            echo "prompt<<'EOF'"
-            echo "You are a Rust supply-chain security auditor. Follow VETTING_CONTEXT strictly and emit an audit for the unvetted crate."
+            echo "prompt<<$delim"
+            echo "You are a Rust supply-chain security auditor. Follow VETTING_CONTEXT strictly and assess the diff only."
             echo
             echo "VETTING_CONTEXT:"
             echo "$ctx"
@@ -108,16 +136,26 @@ jobs:
             echo "Diff between previous and bumped version (cargo vet diff):"
             echo "$diff"
             echo
-            echo "Respond ONLY with JSON (no prose, no code fences) matching:"
-            echo '[{\"crate\":\"name\",\"version\":\"x.y.z\",\"criteria\":\"safe-to-deploy\",\"who\":\"Agent Name <email>\",\"notes\":\"concise safety-focused notes per VETTING_CONTEXT\"}]'
-            echo "If you cannot complete the audit, respond with an empty array: []"
-            echo "EOF"
+            echo "Respond ONLY with JSON (no prose, no code fences) matching exactly:"
+            echo '{"status":"vetted|unvetted","description":"THE DESCRIPTION OF ITS ASSESSTMENT"}'
+            echo "$delim"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Debug OPENAI key presence
+        if: steps.vet_status.outputs.status != '0'
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_API_KEY is empty/missing"
+            exit 1
+          fi
+          echo "OPENAI_API_KEY present (length: ${#OPENAI_API_KEY})"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       - name: 🤖 Analyze and Fix Issue with Codex
         id: codex
         if: steps.vet_status.outputs.status != '0'
-        uses: openai/codex-action@main
+        uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: gpt-5-codex
@@ -145,33 +183,82 @@ jobs:
             });
             core.setFailed('Agent step failed or was not configured.')
 
-      - name: Apply agent audits
+      - name: Apply agent decision
+        id: apply_agent_decision
         if: steps.vet_status.outputs.status != '0' && steps.codex.outcome == 'success' && steps.codex.outputs.response != ''
         run: |
-          set -eo pipefail
-          echo '${{ steps.codex.outputs.response }}' > agent-audits.json
-          audits="$(cat agent-audits.json)"
-          echo "Agent audits: $audits"
-          jq -c '.[]' agent-audits.json | while read -r row; do
-            crate="$(echo "$row" | jq -r '.crate')"
-            version="$(echo "$row" | jq -r '.version')"
-            criteria="$(echo "$row" | jq -r '.criteria')"
-            who="$(echo "$row" | jq -r '.who')"
-            notes="$(echo "$row" | jq -r '.notes')"
-            if [ -z "$crate" ] || [ -z "$version" ] || [ -z "$criteria" ] || [ -z "$who" ]; then
-              echo "Incomplete audit entry: $row" >&2
-              exit 1
-            fi
-            cargo vet certify "$crate" "$version" --criteria "$criteria" --who "$who" --notes "$notes" --accept-all
-            echo "$who" > .agent-who
-          done
+          set -euo pipefail
 
-      - name: Verify cargo vet after agent audits
-        if: steps.vet_status.outputs.status != '0' && steps.codex.outcome == 'success' && steps.codex.outputs.response != ''
+          crate="${{ steps.collect_unvetted_and_diff.outputs.crate }}"
+          version="${{ steps.collect_unvetted_and_diff.outputs.version }}"
+
+          echo '${{ steps.codex.outputs.response }}' > agent-decision.json
+
+          # Validate JSON shape
+          jq -e '
+            (type=="object")
+            and (.status | type=="string")
+            and (.description | type=="string")
+            and (.status=="vetted" or .status=="unvetted")
+          ' agent-decision.json > /dev/null
+
+          status="$(jq -r '.status' agent-decision.json)"
+          desc="$(jq -r '.description' agent-decision.json)"
+
+          # Export for later steps (commenting)
+          delim="DESC_$(date +%s%N)"
+          {
+            echo "status=$status"
+            echo "description<<$delim"
+            echo "$desc"
+            echo "$delim"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$status" = "unvetted" ]; then
+            echo "Agent marked as unvetted; will not certify."
+            exit 0
+          fi
+
+          who="dependabot-vet-bot <actions@github.com>"
+          notes_one_line="$(printf "%s" "$desc" | tr '\n' ' ' | tr -s ' ')"
+
+          cargo vet certify "$crate" "$version" \
+            --criteria "safe-to-deploy" \
+            --who "$who" \
+            --notes "$notes_one_line" \
+            --accept-all
+
+          echo "$who" > .agent-who
+
+      - name: Comment when agent refuses to vet
+        if: steps.vet_status.outputs.status != '0' && steps.apply_agent_decision.outputs.status == 'unvetted'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const crate = '${{ steps.collect_unvetted_and_diff.outputs.crate }}';
+            const version = '${{ steps.collect_unvetted_and_diff.outputs.version }}';
+            const desc = `${{ steps.apply_agent_decision.outputs.description }}`;
+            const msg = [
+              'Cargo vet still needs audits, and the automated diff review **did not approve** this update.',
+              '',
+              `**Dependency:** \`${crate} ${version}\``,
+              '',
+              '**Assessment:**',
+              desc
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: msg
+            });
+
+      - name: Verify cargo vet after agent decision
+        if: steps.vet_status.outputs.status != '0' && steps.apply_agent_decision.outputs.status == 'vetted'
         run: cargo vet --locked
 
       - name: Commit audit changes
-        if: steps.vet_status.outputs.status != '0' && steps.codex.outcome == 'success' && steps.codex.outputs.response != ''
+        if: steps.vet_status.outputs.status != '0' && steps.apply_agent_decision.outputs.status == 'vetted'
         run: |
           set -eo pipefail
           if git diff --quiet; then
