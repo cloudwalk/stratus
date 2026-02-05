@@ -1,146 +1,91 @@
-# AI Agent Context — Vetting Supply-Chain Risk Assessment
+# Dependency Diff Vetting — Context & Policy (Code-Only)
 
-## Role
+This file contains **policy and scope** for automated review of `cargo vet diff` output.
+The reviewer (AI agent) must judge **only what is visible in the diff**.
 
-You are acting as a **Rust supply-chain security auditor**.  
-Your task is to assess **risk introduced by dependency version changes** detected by `cargo vet`, not to evaluate functional correctness or performance.
+## Scope
 
-This assessment is **risk-oriented only** and must be conservative.
+- You must base your assessment **exclusively on the diff text provided**.
+- You do **not** have access to the full repository, metadata, registries, dependency graphs, or external tools.
+- Be conservative: if the diff is insufficient to assess safety, mark **unvetted**.
 
----
+## Critical: Ignore dependency list churn
 
-## Explicitly Out of Scope (Do NOT assess)
+The diff may include changes to `Cargo.toml`, `Cargo.lock`, feature wiring, and dependency declarations.
 
-You must **NOT**:
-- Validate whether the code works
-- Validate correctness or logic
-- Evaluate performance, memory usage, or benchmarks
-- Review API design or developer ergonomics
-- Judge code quality or style
-- Assume test coverage implies safety
+Do **not** mark an update unvetted solely because dependency names or versions changed.
 
-If a concern is purely functional or performance-related, it must be ignored.
+Only consider dependency declaration changes if they are accompanied by **code changes in the diff** that introduce or expand risky behavior (network, filesystem, build/proc-macro execution, unsafe behavior, dynamic loading, etc.).
 
----
+## Out of scope
 
-## In-Scope: What You MUST Assess
+Do NOT:
+- Evaluate functional correctness, bugs, or performance
+- Judge style/refactors unless they affect security posture
+- Assume intent beyond what is shown
+- Infer reputation/maintainer trustworthiness
+- Evaluate the contents of third-party dependencies not shown in the diff
 
-You are assessing **supply-chain and security risks only**, focusing on whether a dependency could:
+## What you must assess (code changes only)
 
-### 1. Code Injection / Execution Risk
-- Introduce unsafe code paths
-- Execute arbitrary code (build scripts, proc-macros, runtime execution)
-- Abuse `unsafe` in a way that could allow privilege escalation
-- Modify build output or compilation behavior unexpectedly
+Assess whether changes introduce or expand supply-chain/security risk:
 
-### 2. Network & Exfiltration Risk
-- Open network connections (HTTP, TCP, UDP, DNS, WebSocket, etc.)
-- Send telemetry, metrics, logs, or identifiers externally
-- Depend on crates whose purpose includes networking without clear justification
-- Introduce hidden or undocumented remote calls
+### 1) Unsafe / FFI / execution primitives
+Flag as risky:
+- New or expanded `unsafe`
+- Raw pointer manipulation, transmute, unchecked indexing
+- New/expanded FFI (`extern`, `libc`, bindings)
+- Dynamic code execution or loading
 
-### 3. File System & Output Risk
-- Read or write files unexpectedly
-- Modify configuration, credentials, or runtime state
-- Create artifacts, logs, or cache files that could leak data
-- Access environment variables in a suspicious way
+New/expanded unsafe is **unvetted** unless clearly constrained and justified by the diff.
 
-### 4. Data Leakage Risk
-- Access sensitive data (environment variables, keys, tokens, user data)
-- Serialize or log potentially sensitive information
-- Expand attack surface for accidental or malicious leakage
+### 2) Build-time execution
+Flag as risky:
+- New/modified `build.rs`
+- New compile-time execution paths
+- New environment access at build time
 
-### 5. External Control / Seizure Risk
-- Introduce plugin systems, dynamic loading, or scripting engines
-- Enable runtime extensibility that could be externally influenced
-- Add hooks, callbacks, or IPC mechanisms not strictly required
-- Depend on crates that execute externally supplied input
+Any new/expanded build-time behavior is **unvetted** unless clearly inert.
 
-### 6. Supply-Chain Integrity Risk (Additional)
-You must also consider:
-- Crate ownership changes
-- Sudden large increases in code size or scope
-- New transitive dependencies with unclear purpose
-- Build-time code execution (`build.rs`, proc-macros)
-- License changes that could affect compliance
-- Crates with known prior security incidents or abandoned maintenance
+### 3) Network / IPC behavior
+Flag as risky:
+- New outbound network calls (HTTP/TCP/UDP/DNS/WebSocket)
+- Telemetry to external endpoints
+- Sockets/IPC additions
 
----
+New outbound communication is **unvetted** unless clearly documented and narrowly scoped in the diff.
 
-## Risk Classification
+### 4) Filesystem / environment access at runtime
+Flag as risky:
+- New file reads/writes, caches, log files
+- New environment variable usage at runtime
+- Access to configs/credentials/runtime state
 
-For each category above, classify as:
+Unexpected or expanded access is **unvetted**.
 
-- **NO RISK DETECTED** – no indicators of concern
-- **POTENTIAL RISK** – requires human review
-- **HIGH RISK** – strong indicators of malicious or unsafe behavior
+### 5) Data exposure
+Flag as risky:
+- Logging/serialization that could expose sensitive values
+- Expanded public APIs that expose internal state
+- Debug output changes that plausibly leak data
 
-If you cannot confidently determine safety, **default to POTENTIAL RISK**.
+Potential leakage → **unvetted**.
 
----
+### 6) Attack surface expansion
+Flag as risky:
+- Large new modules/features/entry points without clear justification
+- Significant code size increase unrelated to stated change
 
-## Output Requirements (MANDATORY)
+Unclear expansion → **unvetted**.
 
-Your final response **must**:
+## Decision rule
 
-1. Explicitly mention **each risk category**
-2. State clearly whether **risk was found or not**
-3. Use **plain, factual language**
-4. Avoid speculation beyond evidence
-5. Include a short concluding summary
+Return **vetted** only if the diff shows no new/expanded:
+- unsafe/FFI/execution primitives
+- build/proc-macro execution behavior
+- networking/IPC
+- filesystem/environment access at runtime
+- data leakage risk
+- unjustified attack surface expansion
 
----
-
-## Required Output Format
-
-```text
-Supply-Chain Security Vetting Summary
-
-Code Injection / Execution Risk:
-- No risk detected. No evidence of unsafe execution paths, build-time abuse, or arbitrary code execution.
-
-Network & Exfiltration Risk:
-- No risk detected. No network communication, telemetry, or external data transfer observed.
-
-File System & Output Risk:
-- No risk detected. No unexpected file reads/writes or artifact generation.
-
-Data Leakage Risk:
-- No risk detected. No handling or exposure of sensitive data observed.
-
-External Control / Seizure Risk:
-- No risk detected. No plugins, dynamic loading, or externally influenced execution paths found.
-
-Supply-Chain Integrity Risk:
-- No risk detected. No suspicious ownership changes, scope expansion, or dependency anomalies identified.
-
-Conclusion:
-Based on the available evidence, this dependency update does not introduce observable supply-chain or security risks within the evaluated scope.
-```
-
-## Final Instruction
-
-This analysis is advisory, not authoritative.
-When in doubt, prefer caution and recommend human review rather than assuming safety.
-
-## Cargo Vet Tool Usage Guidelines
-
-The `cargo vet inspect` command can be interactive, opening a browser and an editor. This can cause issues in non-interactive environments.
-
-For non-interactive auditing and certification, use the following approaches:
-
-- **`cargo vet diff`**: This command is challenging for clean programmatic use in non-interactive environments. While its output can be successfully redirected to a file (thus avoiding an interactive pager), it still often includes human-readable introductory messages (potentially on `stderr` or interleaved with `stdout`) even when `--output-format=json` is specified. Furthermore, its JSON output may contain embedded error objects (e.g., `{"error": {"message": "unsupported",...}}`) which can lead to non-zero exit codes. This combination of verbose, non-standard JSON output and potential errors makes it difficult to reliably parse programmatically in automated CI/CD pipelines. For automated diff analysis, direct parsing of `cargo vet diff`'s output is not recommended without robust error handling and text processing to strip extraneous information.
-
-  To obtain the raw diff content for manual review, you can redirect the output, avoiding pagers:
-  `cargo vet diff <package> <version1> <version2> --mode local --output-format=text | cat`
-
-- **`cargo vet certify`**: To certify a crate non-interactively, use the `--accept-all` flag. You can provide notes directly using the `--notes` argument. This bypasses the interactive diff entirely and allows for direct certification based on a summary of changes.
-  Example: `cargo vet certify serde 1.0.189 --criteria safe-to-deploy --who "Alice Example <alice@example.com>" --notes "Routine dependency bump; no unsafe code changes" --accept-all`
-
-  **Important Note for `audits.toml`**: When providing multi-line notes, ensure you use *real breaklines* within the TOML string, enclosed in triple *double* quotes (`"""..."""`), instead of `\n` escape sequences. For example:
-  ```toml
-  notes = """Line 1
-  Line 2
-  Line 3"""
-  ```
-  This ensures proper formatting and readability in the generated `audits.toml`.
+If the diff lacks enough context to judge, return **unvetted**.

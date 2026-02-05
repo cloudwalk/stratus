@@ -500,14 +500,6 @@ criteria = "safe-to-deploy"
 version = "0.20.2"
 criteria = "safe-to-deploy"
 
-[[exemptions.derive_more]]
-version = "2.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.derive_more-impl]]
-version = "2.0.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.deunicode]]
 version = "1.6.2"
 criteria = "safe-to-deploy"

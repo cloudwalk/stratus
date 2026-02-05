@@ -233,6 +233,24 @@ criteria = "safe-to-deploy"
 delta = "0.2.34 -> 0.2.35"
 notes = "Bumps arrayvec crate from 0.5.1 to 0.7.0 and includes the required changes."
 
+[[audits.convert_case]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "0.10.0"
+notes = "Diff shows only string case-conversion logic, configuration, and tests; no unsafe code, FFI, or new ambient capability usage observed."
+
+[[audits.derive_more]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "2.1.1"
+notes = "New code reuses core error traits, adds internal helper modules (e.g., as_dyn_error, cmp) and expands derive/test coverage without introducing unsafe blocks, FFI, or new IO/network behavior."
+
+[[audits.derive_more-impl]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "2.1.1"
+notes = "Adds procedural macro support (Eq/PartialEq derives, rename-all handling, updated docs) and refactors existing ops derives; new unsafe blocks only guard impossible match arms after discriminant checks, so no additional supply-chain risk observed in the reviewed diff."
+
 [[audits.hex-literal]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -473,6 +491,24 @@ criteria = "safe-to-deploy"
 delta = "1.16.0 -> 1.17.2"
 notes = "Reviewed 1.16.0->1.17.2: functions depending on reciprocal division now marked unsafe and call sites updated; MSRV bumped, serde_core split; added ark-ff 0.5 support and minor API cleanups. Unsafe blocks guarded by explicit precondition checks; no new ambient capabilities."
 
+[[audits.rustls-platform-verifier]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "0.6.2"
+notes = "Reviewed the code diff: library now threads an explicit CryptoProvider into existing platform verifiers, Android context handling adds a scoped `unsafe_clone` with clear lifetime constraints, and other changes remain within tests/examples (network/FS access only in opt-in example). No expanded ambient capabilities or new unsafe behavior affecting the shipped verifier were observed."
+
+[[audits.security-framework]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "3.5.1"
+notes = "Diff primarily adds keychain option builders, refactors existing wrappers, and adjusts tests; it does not introduce new unsafe patterns, dynamic execution paths, or additional network/filesystem access beyond existing Apple Security Framework FFI usage."
+
+[[audits.security-framework-sys]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "2.15.0"
+notes = "Diff only adds new CFStringRef extern constants and configuration metadata without introducing new unsafe logic or capability changes."
+
 [[audits.syn-solidity]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -515,6 +551,12 @@ version = "0.14.2"
 notes = "Inspected 0.14.2: prost-based codec/encoder/decoder split from tonic, simple BufferSettings plumbing; crate contains no unsafe."
 
 [[audits.tower]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "0.5.2"
+notes = "Diff only adjusts formatting, macro imports, and documentation; no new unsafe, I/O, networking, or other powerful behavior was introduced or expanded in the shown code."
+
+[[audits.tower]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.5.3"
@@ -525,6 +567,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.32.0"
 notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
+
+[[audits.uuid]]
+who = "dependabot-vet-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "1.19.0"
+notes = "Changes are limited to edition metadata updates, import refactors (e.g., switching to serde_core), and formatting; no new unsafe blocks, I/O, or expanded execution paths appear in the diff."
 
 [[trusted.async-trait]]
 criteria = "safe-to-deploy"
