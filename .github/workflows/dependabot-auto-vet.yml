@@ -19,7 +19,7 @@ jobs:
       CARGO_VET_VERSION: "0.10.0"
       CODEX_MODEL: "gpt-5-codex"
       CRITERIA: "safe-to-deploy"
-      CONTEXT_FILE: "VETTING_CONTEXT.md"
+      CONTEXT_FILE: "supply-chain/vet/VETTING_POLICY.md"
 
       # Prompt size guards (avoid accidental huge contexts)
       CONTEXT_CHAR_LIMIT: "90000"
@@ -403,9 +403,8 @@ jobs:
           git config user.name "dependabot-vet-bot"
           git config user.email "actions@github.com"
 
-          git add -A supply-chain
-          git status --short
-          git commit -m "chore(vet): apply automated audits"
+          git add -A supply-chain 2>/dev/null || true
+          git commit -m "chore(vet): apply automated audits" || true
 
           sha="$(git rev-parse HEAD)"
           echo "changed=true" >> "$GITHUB_OUTPUT"
