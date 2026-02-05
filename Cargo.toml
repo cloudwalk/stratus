@@ -16,7 +16,7 @@ cfg-if = "=1.0.4"
 chrono = { version = "=0.4.43", features = ["serde"] }
 const_format = "=0.2.35"
 const-hex = "=1.17.0"
-derive_more = "=2.0.1"
+derive_more = "=2.1.1"
 derive-new = "=0.7.0"
 hash_hasher = "=2.0.4"
 hex_fmt = "=0.3.0"
@@ -160,7 +160,7 @@ revm = { version = "=30.2.0", features = [
     "optional_eip7623",
     "optional_fee_charge",
     "optional_no_base_fee",
-]} 
+]}
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { version = "=0.6.1", optional = true }

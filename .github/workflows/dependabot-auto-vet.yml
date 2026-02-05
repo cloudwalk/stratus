@@ -363,7 +363,6 @@ jobs:
           source "$HOME/.cargo/env"
 
           who="dependabot-vet-bot <actions@github.com>"
-          applied=0
 
           jq -c '.[] | select(.status=="vetted")' vet/decisions.json | while read -r row; do
             crate="$(echo "$row" | jq -r '.crate')"
@@ -376,10 +375,7 @@ jobs:
               --notes "$desc" \
               --accept-all
 
-            applied=$((applied+1))
           done
-
-          echo "applied=$applied" >> "$GITHUB_OUTPUT"
 
       - name: Verify cargo vet after applying (non-fatal)
         id: verify_after
