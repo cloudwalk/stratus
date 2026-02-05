@@ -113,7 +113,7 @@ jobs:
 
       - name: Stop job (fully vetted)
         if: steps.vet_locked.outputs.status == '0'
-        run: exit 0
+        run: echo "Nothing to be done."
 
       - name: cargo vet (unlocked) to get recommendations
         id: vet_import
@@ -210,6 +210,7 @@ jobs:
       # Reasoning setup (codex-action once)
       # -------------------------
       - name: Initialize Codex environment (single run)
+        if: steps.vet_import.outputs.has_cases == 'true'
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_KEY }}
@@ -220,6 +221,7 @@ jobs:
           sandbox: workspace-write
 
       - name: Build prompt template
+        if: steps.vet_import.outputs.has_cases == 'true'
         run: |
           set -euo pipefail
           cat > vet/prompt-template.md <<'EOF'
