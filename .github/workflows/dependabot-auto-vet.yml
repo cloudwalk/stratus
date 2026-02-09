@@ -231,11 +231,7 @@ jobs:
           You are a Rust supply-chain security auditor.
 
           Task:
-          - Assess ONLY the code changes shown in the provided diff for supply-chain/security risk.
-          - Ignore dependency list changes and any new/removed transitive crates mentioned by the diff tooling or feature flags unless accompanied by direct code changes that implement risky behavior.
-          - If the diff references code you cannot see, do not speculate—base your decision only on what is in the diff.
-
-          Be conservative: if you cannot determine safety from the diff, mark unvetted.
+          - Follow the policy context below. If the diff references code you cannot see, do not speculate—base your decision only on what is in the diff.
 
           Output MUST be ONLY JSON (no prose, no markdown, no code fences), with this exact format:
           {
