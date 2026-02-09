@@ -253,25 +253,6 @@ jobs:
             diff_file="vet/diffs.capped/${i}__${slug}.txt"
             prompt_file="vet/prompts/${i}__${slug}.md"
 
-            if [ ! -s "$diff_file" ]; then
-              # Still create a prompt file for consistent handling downstream
-              {
-                cat vet/prompt-template.md
-                echo
-                cat vet/context.capped.md
-                echo
-                echo "CASE:"
-                echo "crate: ${crate}"
-                echo "old: ${old}"
-                echo "new: ${new}"
-                echo
-                echo "DIFF:"
-                echo "(missing diff file)"
-                echo
-              } > "$prompt_file"
-              continue
-            fi
-
             {
               cat vet/prompt-template.md
               echo
@@ -283,9 +264,15 @@ jobs:
               echo "new: ${new}"
               echo
               echo "DIFF:"
-              cat "$diff_file"
-              echo
             } > "$prompt_file"
+
+            if [ -s "$diff_file" ]; then
+              cat "$diff_file" >> "$prompt_file"
+              echo >> "$prompt_file"
+            else
+              echo "(missing diff file)" >> "$prompt_file"
+              echo >> "$prompt_file"
+            fi
           done < vet/cases.tsv
 
       - name: Run Codex sequentially per crate (CLI loop)
