@@ -272,15 +272,15 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-backtrace]]
-version = "0.46.1"
-when = "2026-01-07"
+version = "0.46.2"
+when = "2026-02-04"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-contexts]]
-version = "0.46.1"
-when = "2026-01-07"
+version = "0.46.2"
+when = "2026-02-04"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
@@ -293,22 +293,22 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-core]]
-version = "0.46.1"
-when = "2026-01-07"
+version = "0.46.2"
+when = "2026-02-04"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-debug-images]]
-version = "0.46.1"
-when = "2026-01-07"
+version = "0.46.2"
+when = "2026-02-04"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-panic]]
-version = "0.46.1"
-when = "2026-01-07"
+version = "0.46.2"
+when = "2026-02-04"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
@@ -321,8 +321,8 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-tracing]]
-version = "0.46.1"
-when = "2026-01-07"
+version = "0.46.2"
+when = "2026-02-04"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
@@ -335,8 +335,8 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-types]]
-version = "0.46.1"
-when = "2026-01-07"
+version = "0.46.2"
+when = "2026-02-04"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
