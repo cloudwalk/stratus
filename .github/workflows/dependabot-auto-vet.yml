@@ -25,8 +25,6 @@ jobs:
       CONTEXT_FILE: "supply-chain/vet/VETTING_POLICY.md"
 
       # Prompt size guards (avoid accidental huge contexts)
-      CONTEXT_CHAR_LIMIT: "90000"
-      DIFF_CHAR_LIMIT: "180000"
 
     steps:
       - name: Checkout PR head
@@ -57,7 +55,7 @@ jobs:
       - name: Prepare workspace
         run: |
           set -euo pipefail
-          mkdir -p vet/diffs vet/diffs.capped vet/prompts vet/decisions
+          mkdir -p vet/diffs vet/prompts vet/decisions
           : > vet/vet-locked.log
           : > vet/vet-import.log
 
@@ -68,22 +66,6 @@ jobs:
             echo "Missing ${CONTEXT_FILE}. Add it to the repo or update CONTEXT_FILE env var." >&2
             exit 1
           fi
-
-      - name: Cap context file size
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          path = os.environ["CONTEXT_FILE"]
-          lim = int(os.environ["CONTEXT_CHAR_LIMIT"])
-          with open(path, "r", encoding="utf-8", errors="replace") as f:
-            txt = f.read()
-          if len(txt) > lim:
-            txt = txt[:lim] + "\n\n[Context truncated by workflow]\n"
-          os.makedirs("vet", exist_ok=True)
-          with open("vet/context.capped.md", "w", encoding="utf-8") as out:
-            out.write(txt)
-          PY
 
       # -------------------------
       # Verification
@@ -191,24 +173,6 @@ jobs:
             fi
           done < vet/cases.tsv
 
-      - name: Cap diff sizes (avoid huge prompts)
-        if: steps.vet_import.outputs.has_cases == 'true'
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import glob, os
-          lim = int(os.environ["DIFF_CHAR_LIMIT"])
-          os.makedirs("vet/diffs.capped", exist_ok=True)
-          for path in sorted(glob.glob("vet/diffs/*.txt")):
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-              txt = f.read()
-            if len(txt) > lim:
-              txt = txt[:lim] + "\n\n[Diff truncated by workflow]\n"
-            out = os.path.join("vet/diffs.capped", os.path.basename(path))
-            with open(out, "w", encoding="utf-8") as w:
-              w.write(txt)
-          PY
-
       # -------------------------
       # Reasoning setup (codex-action once)
       # -------------------------
@@ -250,13 +214,13 @@ jobs:
           while IFS=$'\t' read -r crate old new; do
             i=$((i+1))
             slug="$(printf '%s__%s__%s' "$crate" "$old" "$new" | tr '/: ' '___' )"
-            diff_file="vet/diffs.capped/${i}__${slug}.txt"
+            diff_file="vet/diffs/${i}__${slug}.txt"
             prompt_file="vet/prompts/${i}__${slug}.md"
 
             {
               cat vet/prompt-template.md
               echo
-              cat vet/context.capped.md
+              cat "${CONTEXT_FILE}"
               echo
               echo "CASE:"
               echo "crate: ${crate}"
@@ -289,6 +253,7 @@ jobs:
             slug="$(printf '%s__%s__%s' "$crate" "$old" "$new" | tr '/: ' '___' )"
             prompt_file="vet/prompts/${idx}__${slug}.md"
             out_file="vet/decisions/${idx}__${slug}.raw.json"
+            err_file="vet/decisions/${idx}__${slug}.stderr.txt"
 
             if [ ! -s "$prompt_file" ]; then
               jq -nc --arg crate "$crate" --arg version "$new" \
@@ -306,13 +271,18 @@ jobs:
               --output-last-message "$out_file" \
               --model "${CODEX_MODEL}" \
               --sandbox "workspace-write" \
-              < "$prompt_file"
+              < "$prompt_file" \
+              2> "$err_file"
             st=$?
             set -e
 
             if [ "$st" -ne 0 ] || [ ! -s "$out_file" ]; then
+              description="Codex execution failed or produced no output; requires manual review."
+              if [ -s "$err_file" ] && grep -qiE 'context|maximum context|context length|prompt too long|input too large|max tokens|token limit' "$err_file"; then
+                description="Context too large for model; requires manual review."
+              fi
               jq -nc --arg crate "$crate" --arg version "$new" \
-                --arg description "Codex execution failed or produced no output; requires manual review." \
+                --arg description "$description" \
                 '{crate:$crate,version:$version,status:"unvetted",description:$description}' >> vet/decisions.jsonl
               continue
             fi
