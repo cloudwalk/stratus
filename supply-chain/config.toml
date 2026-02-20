@@ -704,10 +704,6 @@ criteria = "safe-to-deploy"
 version = "0.12.4"
 criteria = "safe-to-deploy"
 
-[[exemptions.hostname]]
-version = "0.4.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.http]]
 version = "0.2.12"
 criteria = "safe-to-deploy"
@@ -1578,10 +1574,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.toml_edit]]
 version = "0.22.27"
-criteria = "safe-to-deploy"
-
-[[exemptions.tower]]
-version = "0.5.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.tower-layer]]
