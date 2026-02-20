@@ -2,7 +2,7 @@
 name = "check_rpc_downloader"
 version = "0.1.0"
 description = ""
-authors = ["Arthur Meskelis <arthur.meskelis@cloudwalk.io>"]
+authors = ["Arthur Meskelis"]
 readme = "README.md"
 package-mode = false
 
