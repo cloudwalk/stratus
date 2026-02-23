@@ -473,6 +473,12 @@ criteria = "safe-to-deploy"
 delta = "1.16.0 -> 1.17.2"
 notes = "Reviewed 1.16.0->1.17.2: functions depending on reciprocal division now marked unsafe and call sites updated; MSRV bumped, serde_core split; added ark-ff 0.5 support and minor API cleanups. Unsafe blocks guarded by explicit precondition checks; no new ambient capabilities."
 
+[[audits.serde_json]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "1.0.149"
+notes = "1.0.145 -> 1.0.149 reviewed via cargo vet diff --mode local. Main change is float formatting backend switch from ryu to zmij plus parser/format normalization and tests; no new unsafe blocks, network/filesystem access, proc-macro, or suspicious build-time behavior in serde_json diff."
+
 [[audits.syn-solidity]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -525,6 +531,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.32.0"
 notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
+
+[[audits.zmij]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "1.0.21"
+notes = "1.0.20 -> 1.0.21 reviewed via cargo vet diff --mode local. Changes are version/docs/CI updates and internal pow10 table generation refactor; no added network/filesystem/process execution surfaces and no suspicious supply-chain behavior observed."
 
 [[trusted.async-trait]]
 criteria = "safe-to-deploy"
