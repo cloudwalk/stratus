@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Rust
         run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
@@ -49,12 +49,12 @@ jobs:
         run: cargo install --git https://github.com/Kobzol/cargo-pgo --branch release-plz-2025-04-04T20-27-31Z --rev 5c73c7b --locked
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
       - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
 
       - name: Create profiles directory
         run: mkdir -p /tmp/profiles/${{ github.sha }}
@@ -100,7 +100,7 @@ jobs:
           sha256sum stratus > ../../../checksums-optimized.txt
 
       - name: Upload optimized stratus binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         id: upload-optimized
         with:
           name: stratus-optimized-${{ github.sha }}
@@ -109,7 +109,7 @@ jobs:
           retention-days: ${{ env.RETENTION_DAYS }}
 
       - name: Upload checksums
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: checksums-optimized-${{ github.sha }}
           path: checksums-optimized.txt
