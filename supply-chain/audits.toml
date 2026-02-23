@@ -113,6 +113,12 @@ delta = "1.0.38 -> 1.0.41"
 notes = "Reviewed changelog/doc updates plus src/account.rs import cleanup (Vec now behind serde); no functional changes beyond unused import fix."
 
 [[audits.alloy-rpc-types-trace]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "1.0.41"
+notes = "1.0.38 -> 1.0.41 diff reviewed via cargo vet diff --mode local. Additive API/tests/changelog updates; no unsafe/build script/network/filesystem behavior introduced in this crate diff."
+
+[[audits.alloy-rpc-types-trace]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.38"
