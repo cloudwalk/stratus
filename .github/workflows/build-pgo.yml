@@ -34,10 +34,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
           toolchain: 1.88
 
@@ -61,7 +61,7 @@ jobs:
           sha256sum stratus > ../../../checksums.txt
 
       - name: Upload stratus
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         id: upload-str
         with:
           name: stratus-instrumented-${{ github.sha }}
@@ -70,7 +70,7 @@ jobs:
           retention-days: ${{ env.RETENTION_DAYS }}
 
       - name: Upload checksums
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: checksums-${{ github.sha }}
           path: checksums.txt
