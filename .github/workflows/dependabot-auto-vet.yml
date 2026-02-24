@@ -30,7 +30,7 @@ jobs:
       - name: Checkout PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: true
 
       # -------------------------
@@ -80,7 +80,7 @@ jobs:
           exit 0
 
       - name: Early exit comment if fully vetted
-        if: steps.vet_locked.outputs.status == '0'
+        if: github.event_name == 'pull_request' && steps.vet_locked.outputs.status == '0'
         uses: actions/github-script@v7
         with:
           script: |
@@ -346,49 +346,42 @@ jobs:
       # -------------------------
       # Commit & push (even if some crates unvetted)
       # -------------------------
-      - name: Commit audit changes if any
+      - name: Commit audit changes if any (signed)
+        id: signed_commit
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
+        with:
+          sign-commits: true
+          commit-message: "chore(vet): apply automated audits"
+          add-paths: |
+            supply-chain
+          branch: ${{ github.event.pull_request.head.ref }}
+          base: ${{ github.event.pull_request.base.ref }}
+
+      - name: Expose commit outputs
         id: commit
+        if: always()
         run: |
           set -euo pipefail
 
-          if git diff --quiet; then
+          op="${{ steps.signed_commit.outputs.pull-request-operation }}"
+          sha="${{ steps.signed_commit.outputs.pull-request-head-sha }}"
+
+          if [ "$op" = "none" ] || [ -z "$sha" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git config user.name "dependabot-vet-bot"
-          git config user.email "actions@github.com"
-
-          git add -A supply-chain 2>/dev/null || true
-          git commit -m "chore(vet): apply automated audits" || true
-
-          sha="$(git rev-parse HEAD)"
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-
-      - name: Push commit back to PR branch (best effort)
-        id: push
-        run: |
-          set +e
-          if [ "${{ steps.commit.outputs.changed }}" != "true" ]; then
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          branch="${{ github.event.pull_request.head.ref }}"
-          git push origin "HEAD:$branch"
-          st=$?
-          if [ "$st" -eq 0 ]; then
-            echo "pushed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-          fi
-          exit 0
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
 
       # -------------------------
       # PR Comment (consolidated)
       # -------------------------
       - name: Comment summary on PR
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
@@ -402,7 +395,7 @@ jobs:
             const importChanged = `${{ steps.detect_import_changes.outputs.import_changed || 'false' }}` === 'true';
 
             const changed = `${{ steps.commit.outputs.changed || 'false' }}` === 'true';
-            const pushed = `${{ steps.push.outputs.pushed || 'false' }}` === 'true';
+            const pushed = `${{ steps.commit.outputs.pushed || 'false' }}` === 'true';
             const sha = `${{ steps.commit.outputs.sha || '' }}`.trim();
             const vetAfterStatus = `${{ steps.verify_after.outputs.status }}`.trim();
 
