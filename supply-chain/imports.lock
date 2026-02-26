@@ -286,13 +286,6 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-core]]
-version = "0.45.0"
-when = "2025-10-08"
-user-id = 12434
-user-login = "getsentry-bot"
-user-name = "Sentry Bot"
-
-[[publisher.sentry-core]]
 version = "0.46.1"
 when = "2026-01-07"
 user-id = 12434
@@ -314,22 +307,8 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-tracing]]
-version = "0.45.0"
-when = "2025-10-08"
-user-id = 12434
-user-login = "getsentry-bot"
-user-name = "Sentry Bot"
-
-[[publisher.sentry-tracing]]
 version = "0.46.1"
 when = "2026-01-07"
-user-id = 12434
-user-login = "getsentry-bot"
-user-name = "Sentry Bot"
-
-[[publisher.sentry-types]]
-version = "0.45.0"
-when = "2025-10-08"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
@@ -363,15 +342,15 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror]]
-version = "2.0.17"
-when = "2025-09-28"
+version = "2.0.18"
+when = "2026-01-18"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror-impl]]
-version = "2.0.17"
-when = "2025-09-28"
+version = "2.0.18"
+when = "2026-01-18"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
