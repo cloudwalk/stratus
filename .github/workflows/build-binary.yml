@@ -11,6 +11,10 @@ on:
         description: "List of features to enable"
         required: false
         default: ""
+      commit_sha:
+        description: "Specific commit SHA to checkout and build. If empty, builds HEAD of the branch."
+        required: false
+        default: ""
   push:
     branches:
       - "main"
@@ -40,12 +44,20 @@ jobs:
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-{{ github.run_id }}
+      group: ${{ github.workflow }}-${{ github.run_id }}
       cancel-in-progress: false
 
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Checkout specific commit
+        if: ${{ github.event.inputs.commit_sha != '' }}
+        run: git checkout ${{ github.event.inputs.commit_sha }}
+
+      - name: Resolve build commit SHA
+        id: resolve-sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
@@ -75,7 +87,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         id: upload-str
         with:
-          name: stratus-${{ github.sha }}
+          name: stratus-${{ steps.resolve-sha.outputs.sha }}
           path: target/release/stratus
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
@@ -83,7 +95,7 @@ jobs:
       - name: Upload checksums
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: checksums-${{ github.sha }}
+          name: checksums-${{ steps.resolve-sha.outputs.sha }}
           path: checksums.txt
           if-no-files-found: error
           retention-days: ${{ env.RETENTION_DAYS }}
