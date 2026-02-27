@@ -56,7 +56,7 @@ jobs:
         run: rustup component add llvm-tools-preview
 
       - name: Install cargo-pgo
-        run: cargo install --git https://github.com/Kobzol/cargo-pgo --branch release-plz-2025-04-04T20-27-31Z --rev 5c73c7b --locked
+        run: cargo install --vers 0.3.0 cargo-pgo
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
