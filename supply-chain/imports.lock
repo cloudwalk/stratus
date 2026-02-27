@@ -370,8 +370,8 @@ user-login = "Darksonn"
 user-name = "Alice Ryhl"
 
 [[publisher.tokio-util]]
-version = "0.7.17"
-when = "2025-11-02"
+version = "0.7.18"
+when = "2026-01-04"
 user-id = 6741
 user-login = "Darksonn"
 user-name = "Alice Ryhl"
