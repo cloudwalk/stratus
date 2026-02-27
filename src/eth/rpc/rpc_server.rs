@@ -1243,6 +1243,12 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
         return Err(StateError::TransactionsDisabled.into());
     }
 
+    // HOTFIX: this is a temporary stopgap measure to prevent type 4 transactions which currently cause the followers to crash
+    if tx.transaction_info.tx_type.is_some_and(|t| t > 3) {
+        tracing::warn!(%tx_hash, "rejecting unsuported transaction type");
+        return Err(RpcError::ParameterInvalid.into());
+    }
+
     // execute locally or forward to leader
     match GlobalState::get_node_mode() {
         NodeMode::Leader | NodeMode::FakeLeader => match ctx.server.executor.execute_local_transaction(tx) {
