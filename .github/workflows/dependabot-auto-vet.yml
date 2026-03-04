@@ -177,18 +177,32 @@ jobs:
       # Reasoning setup (codex-action once)
       # -------------------------
       - name: Initialize Codex environment (single run)
+        id: codex_init
         if: steps.vet_import.outputs.has_cases == 'true'
+        continue-on-error: true
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_KEY }}
           model: ${{ env.CODEX_MODEL }}
           prompt: "init"
           output-file: vet/_codex-init.json
+          allow-bots: "true"
           safety-strategy: drop-sudo
           sandbox: workspace-write
 
-      - name: Build prompt template
+      - name: Capture Codex init status
+        id: codex_init_status
         if: steps.vet_import.outputs.has_cases == 'true'
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.codex_init.outcome }}" = "success" ]; then
+            echo "codex_init_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "codex_init_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build prompt template
+        if: steps.vet_import.outputs.has_cases == 'true' && steps.codex_init_status.outputs.codex_init_ok == 'true'
         run: |
           set -euo pipefail
           cat > vet/prompt-template.md <<'EOF'
@@ -207,7 +221,7 @@ jobs:
           EOF
 
       - name: Build per-crate prompt files
-        if: steps.vet_import.outputs.has_cases == 'true'
+        if: steps.vet_import.outputs.has_cases == 'true' && steps.codex_init_status.outputs.codex_init_ok == 'true'
         run: |
           set -euo pipefail
           i=0
@@ -242,6 +256,8 @@ jobs:
       - name: Run Codex sequentially per crate (CLI loop)
         id: reason
         if: steps.vet_import.outputs.has_cases == 'true'
+        env:
+          CODEX_INIT_OK: ${{ steps.codex_init_status.outputs.codex_init_ok || 'false' }}
         run: |
           set -euo pipefail
 
@@ -254,6 +270,13 @@ jobs:
             prompt_file="vet/prompts/${idx}__${slug}.md"
             out_file="vet/decisions/${idx}__${slug}.raw.json"
             err_file="vet/decisions/${idx}__${slug}.stderr.txt"
+
+            if [ "${CODEX_INIT_OK}" != "true" ]; then
+              jq -nc --arg crate "$crate" --arg version "$new" \
+                --arg description "Codex initialization unavailable or blocked; requires manual review." \
+                '{crate:$crate,version:$version,status:"unvetted",description:$description}' >> vet/decisions.jsonl
+              continue
+            fi
 
             if [ ! -s "$prompt_file" ]; then
               jq -nc --arg crate "$crate" --arg version "$new" \
@@ -393,6 +416,7 @@ jobs:
 
             const hasCases = `${{ steps.vet_import.outputs.has_cases || 'true' }}` === 'true';
             const importChanged = `${{ steps.detect_import_changes.outputs.import_changed || 'false' }}` === 'true';
+            const codexInitOk = `${{ steps.codex_init_status.outputs.codex_init_ok || 'false' }}` === 'true';
 
             const changed = `${{ steps.commit.outputs.changed || 'false' }}` === 'true';
             const pushed = `${{ steps.commit.outputs.pushed || 'false' }}` === 'true';
@@ -406,6 +430,7 @@ jobs:
             lines.push(`- **Vetted (auto-certified):** ${vetted.length}`);
             lines.push(`- **Unvetted (needs manual review):** ${unvetted.length}`);
             if (hasCases) {
+              lines.push(`- **Codex reasoning:** ${codexInitOk ? 'active' : 'fallback mode (manual review required)'}`);
               lines.push(`- **cargo vet --locked after apply:** ${vetAfterStatus === '0' ? '✅ pass' : `❌ fail (exit ${vetAfterStatus})`}`);
             }
             lines.push('');
