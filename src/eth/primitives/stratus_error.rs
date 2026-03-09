@@ -221,6 +221,10 @@ pub enum StateError {
     #[error("can't change miner mode while transactions are enabled.")]
     #[error_code = 7]
     TransactionsEnabled,
+
+    #[error("operation cannot be performed with current configuration.")]
+    #[error_code = 8]
+    Misconfigured { details: &'static str },
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr)]
