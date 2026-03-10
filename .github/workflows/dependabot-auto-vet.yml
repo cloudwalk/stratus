@@ -23,6 +23,7 @@ jobs:
       CODEX_MODEL: "gpt-5-codex"
       CRITERIA: "safe-to-deploy"
       CONTEXT_FILE: "supply-chain/vet/VETTING_POLICY.md"
+      RETENTION_DAYS: "90"
 
       # Prompt size guards (avoid accidental huge contexts)
 
@@ -367,38 +368,64 @@ jobs:
           exit 0
 
       # -------------------------
-      # Commit & push (even if some crates unvetted)
+      # Patch artifact publication
       # -------------------------
-      - name: Commit audit changes if any (signed)
-        id: signed_commit
-        if: github.event_name == 'pull_request'
-        uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
-        with:
-          sign-commits: true
-          commit-message: "chore(vet): apply automated audits"
-          add-paths: |
-            supply-chain
-          branch: ${{ github.event.pull_request.head.ref }}
-          base: ${{ github.event.pull_request.base.ref }}
-
-      - name: Expose commit outputs
-        id: commit
+      - name: Generate auto-vet patch
+        id: patch
         if: always()
         run: |
           set -euo pipefail
 
-          op="${{ steps.signed_commit.outputs.pull-request-operation }}"
-          sha="${{ steps.signed_commit.outputs.pull-request-head-sha }}"
+          patch_path="vet/auto-vet.patch"
 
-          if [ "$op" = "none" ] || [ -z "$sha" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
+          if git diff --quiet -- supply-chain; then
+            echo "has_patch=false" >> "$GITHUB_OUTPUT"
+            echo "patch_path=" >> "$GITHUB_OUTPUT"
+            echo "patch_bytes=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "pushed=true" >> "$GITHUB_OUTPUT"
+          git diff --binary --patch -- supply-chain > "$patch_path"
+
+          if [ ! -s "$patch_path" ]; then
+            echo "Expected patch file at $patch_path, but it was empty." >&2
+            exit 1
+          fi
+
+          patch_bytes="$(wc -c < "$patch_path" | tr -d '[:space:]')"
+          echo "has_patch=true" >> "$GITHUB_OUTPUT"
+          echo "patch_path=$patch_path" >> "$GITHUB_OUTPUT"
+          echo "patch_bytes=$patch_bytes" >> "$GITHUB_OUTPUT"
+
+      - name: Upload auto-vet patch artifact
+        id: upload_patch
+        if: github.event_name == 'pull_request' && steps.patch.outputs.has_patch == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dependabot-auto-vet-patch-pr-${{ github.event.pull_request.number }}
+          path: ${{ steps.patch.outputs.patch_path }}
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+
+      - name: Expose patch outputs
+        id: patch_meta
+        if: always()
+        run: |
+          set -euo pipefail
+
+          generated="${{ steps.patch.outputs.has_patch || 'false' }}"
+          uploaded="false"
+          if [ "${{ steps.upload_patch.outcome || 'skipped' }}" = "success" ]; then
+            uploaded="true"
+          fi
+
+          echo "generated=$generated" >> "$GITHUB_OUTPUT"
+          echo "uploaded=$uploaded" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=dependabot-auto-vet-patch-pr-${{ github.event.pull_request.number || 'manual' }}" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=${{ steps.upload_patch.outputs.artifact-id || '' }}" >> "$GITHUB_OUTPUT"
+          echo "artifact_url=${{ steps.upload_patch.outputs.artifact-url || '' }}" >> "$GITHUB_OUTPUT"
+          echo "run_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          echo "retention_days=${{ env.RETENTION_DAYS }}" >> "$GITHUB_OUTPUT"
 
       # -------------------------
       # PR Comment (consolidated)
@@ -418,9 +445,13 @@ jobs:
             const importChanged = `${{ steps.detect_import_changes.outputs.import_changed || 'false' }}` === 'true';
             const codexInitOk = `${{ steps.codex_init_status.outputs.codex_init_ok || 'false' }}` === 'true';
 
-            const changed = `${{ steps.commit.outputs.changed || 'false' }}` === 'true';
-            const pushed = `${{ steps.commit.outputs.pushed || 'false' }}` === 'true';
-            const sha = `${{ steps.commit.outputs.sha || '' }}`.trim();
+            const patchGenerated = `${{ steps.patch_meta.outputs.generated || 'false' }}` === 'true';
+            const patchUploaded = `${{ steps.patch_meta.outputs.uploaded || 'false' }}` === 'true';
+            const artifactName = `${{ steps.patch_meta.outputs.artifact_name || '' }}`.trim();
+            const artifactId = `${{ steps.patch_meta.outputs.artifact_id || '' }}`.trim();
+            const artifactUrl = `${{ steps.patch_meta.outputs.artifact_url || '' }}`.trim();
+            const runUrl = `${{ steps.patch_meta.outputs.run_url || '' }}`.trim();
+            const retentionDays = `${{ steps.patch_meta.outputs.retention_days || '' }}`.trim();
             const vetAfterStatus = `${{ steps.verify_after.outputs.status }}`.trim();
 
             const lines = [];
@@ -435,16 +466,49 @@ jobs:
             }
             lines.push('');
 
-            if (changed) {
-              lines.push(`- **Audit files updated:** yes`);
-              if (sha) lines.push(`- **Commit:** ${sha}`);
-              lines.push(`- **Pushed to PR branch:** ${pushed ? 'yes' : 'no (push may be restricted for this actor/branch)'}`);
+            if (patchGenerated) {
+              lines.push(`- **Patch generated:** yes`);
+              lines.push(`- **Artifact uploaded:** ${patchUploaded ? 'yes' : 'no'}`);
+              if (artifactName) lines.push(`- **Artifact name:** ${artifactName}`);
+              if (artifactId) lines.push(`- **Artifact ID:** ${artifactId}`);
+              if (retentionDays) lines.push(`- **Retention:** ${retentionDays} days`);
+              if (artifactUrl) {
+                lines.push(`- **Artifact download:** ${artifactUrl}`);
+              } else if (runUrl) {
+                lines.push(`- **Workflow run:** ${runUrl}`);
+              }
             } else {
-              lines.push(`- **Audit files updated:** no changes to commit`);
+              lines.push(`- **Patch generated:** no audit files were produced`);
             }
 
             if (!hasCases) {
               lines.push(`- **cargo vet import updates:** ${importChanged ? 'detected (no diffs required)' : 'none detected'}`);
+            }
+
+            lines.push('');
+            lines.push('CI did not commit anything. Review the patch locally and create the final signed commit yourself.');
+
+            if (patchUploaded) {
+              const downloadUrl = artifactUrl || '<artifact-download-url>';
+              lines.push('');
+              lines.push('### Apply the patch locally');
+              lines.push('The patch artifact is attached to this workflow run as a zip archive. Download it, extract `auto-vet.patch`, review the result, then create your signed commit.');
+              if (!artifactUrl && runUrl) {
+                lines.push(`If direct artifact download is unavailable here, open the workflow run and download the artifact from there: ${runUrl}`);
+              }
+              lines.push('');
+              lines.push('```bash');
+              lines.push('git checkout <pr-branch>');
+              lines.push('curl -L \\');
+              lines.push('  -H "Authorization: Bearer <github-token>" \\');
+              lines.push('  -o auto-vet-artifact.zip \\');
+              lines.push(`  ${downloadUrl}`);
+              lines.push('unzip -p auto-vet-artifact.zip auto-vet.patch > auto-vet.patch');
+              lines.push('git apply --index auto-vet.patch');
+              lines.push('git status');
+              lines.push('git commit -S -m "chore(vet): apply automated audits"');
+              lines.push('git push');
+              lines.push('```');
             }
 
             if (vetted.length) {
@@ -469,6 +533,12 @@ jobs:
               issue_number: context.issue.number,
               body: lines.join('\n')
             });
+
+      - name: Fail if patch publication did not complete
+        if: github.event_name == 'pull_request' && steps.patch_meta.outputs.generated == 'true' && steps.patch_meta.outputs.uploaded != 'true'
+        run: |
+          echo "Auto-vet patch generation succeeded, but the patch artifact was not uploaded."
+          exit 1
 
       # Optional: fail the job if anything unvetted remain
       - name: Fail if unvetted remain (optional gate)
