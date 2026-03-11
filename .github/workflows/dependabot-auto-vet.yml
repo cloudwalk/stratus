@@ -505,7 +505,7 @@ jobs:
               lines.push('```bash');
               lines.push('git checkout <pr-branch>');
               lines.push(`gh run download ${runId} -n ${artifactName}`);
-              lines.push(`git apply --index ${artifactName}/auto-vet.patch`);
+              lines.push(`git apply --index auto-vet.patch`);
               lines.push('git status');
               lines.push('git commit -S -m "chore(vet): apply automated audits"');
               lines.push('git push');
