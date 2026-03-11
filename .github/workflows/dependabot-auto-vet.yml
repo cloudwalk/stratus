@@ -452,6 +452,8 @@ jobs:
             const artifactUrl = `${{ steps.patch_meta.outputs.artifact_url || '' }}`.trim();
             const runUrl = `${{ steps.patch_meta.outputs.run_url || '' }}`.trim();
             const retentionDays = `${{ steps.patch_meta.outputs.retention_days || '' }}`.trim();
+            const runId = `${{ github.run_id }}`.trim();
+            const prNumber = `${{ github.event.pull_request.number || '' }}`.trim();
             const vetAfterStatus = `${{ steps.verify_after.outputs.status }}`.trim();
 
             const lines = [];
@@ -471,6 +473,8 @@ jobs:
               lines.push(`- **Artifact uploaded:** ${patchUploaded ? 'yes' : 'no'}`);
               if (artifactName) lines.push(`- **Artifact name:** ${artifactName}`);
               if (artifactId) lines.push(`- **Artifact ID:** ${artifactId}`);
+              if (prNumber) lines.push(`- **PR number:** ${prNumber}`);
+              if (runId) lines.push(`- **Run ID:** ${runId}`);
               if (retentionDays) lines.push(`- **Retention:** ${retentionDays} days`);
               if (artifactUrl) {
                 lines.push(`- **Artifact download:** ${artifactUrl}`);
@@ -497,13 +501,24 @@ jobs:
                 lines.push(`If direct artifact download is unavailable here, open the workflow run and download the artifact from there: ${runUrl}`);
               }
               lines.push('');
+              lines.push('Preferred: GitHub CLI');
+              lines.push('```bash');
+              lines.push('git checkout <pr-branch>');
+              lines.push(`gh run download ${runId} -n ${artifactName}`);
+              lines.push(`git apply --index ${artifactName}/auto-vet.patch`);
+              lines.push('git status');
+              lines.push('git commit -S -m "chore(vet): apply automated audits"');
+              lines.push('git push');
+              lines.push('```');
+              lines.push('');
+              lines.push('Fallback: direct artifact download');
               lines.push('```bash');
               lines.push('git checkout <pr-branch>');
               lines.push('curl -L \\');
               lines.push('  -H "Authorization: Bearer <github-token>" \\');
               lines.push('  -o auto-vet-artifact.zip \\');
               lines.push(`  ${downloadUrl}`);
-              lines.push('unzip -p auto-vet-artifact.zip auto-vet.patch > auto-vet.patch');
+              lines.push('unzip -p auto-vet-artifact.zip vet/auto-vet.patch > auto-vet.patch');
               lines.push('git apply --index auto-vet.patch');
               lines.push('git status');
               lines.push('git commit -S -m "chore(vet): apply automated audits"');
