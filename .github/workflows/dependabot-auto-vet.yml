@@ -8,7 +8,10 @@ on:
 
 jobs:
   vet:
-    if: github.actor == 'bronzelle-cw' || github.actor == 'dependabot[bot]'
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.actor == 'dependabot[bot]')
+
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -20,16 +23,15 @@ jobs:
       CODEX_MODEL: "gpt-5-codex"
       CRITERIA: "safe-to-deploy"
       CONTEXT_FILE: "supply-chain/vet/VETTING_POLICY.md"
+      RETENTION_DAYS: "90"
 
       # Prompt size guards (avoid accidental huge contexts)
-      CONTEXT_CHAR_LIMIT: "90000"
-      DIFF_CHAR_LIMIT: "180000"
 
     steps:
       - name: Checkout PR head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: true
 
       # -------------------------
@@ -54,7 +56,7 @@ jobs:
       - name: Prepare workspace
         run: |
           set -euo pipefail
-          mkdir -p vet/diffs vet/diffs.capped vet/prompts vet/decisions
+          mkdir -p vet/diffs vet/prompts vet/decisions
           : > vet/vet-locked.log
           : > vet/vet-import.log
 
@@ -65,22 +67,6 @@ jobs:
             echo "Missing ${CONTEXT_FILE}. Add it to the repo or update CONTEXT_FILE env var." >&2
             exit 1
           fi
-
-      - name: Cap context file size
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          path = os.environ["CONTEXT_FILE"]
-          lim = int(os.environ["CONTEXT_CHAR_LIMIT"])
-          with open(path, "r", encoding="utf-8", errors="replace") as f:
-            txt = f.read()
-          if len(txt) > lim:
-            txt = txt[:lim] + "\n\n[Context truncated by workflow]\n"
-          os.makedirs("vet", exist_ok=True)
-          with open("vet/context.capped.md", "w", encoding="utf-8") as out:
-            out.write(txt)
-          PY
 
       # -------------------------
       # Verification
@@ -95,7 +81,7 @@ jobs:
           exit 0
 
       - name: Early exit comment if fully vetted
-        if: steps.vet_locked.outputs.status == '0'
+        if: github.event_name == 'pull_request' && steps.vet_locked.outputs.status == '0'
         uses: actions/github-script@v7
         with:
           script: |
@@ -188,51 +174,43 @@ jobs:
             fi
           done < vet/cases.tsv
 
-      - name: Cap diff sizes (avoid huge prompts)
-        if: steps.vet_import.outputs.has_cases == 'true'
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import glob, os
-          lim = int(os.environ["DIFF_CHAR_LIMIT"])
-          os.makedirs("vet/diffs.capped", exist_ok=True)
-          for path in sorted(glob.glob("vet/diffs/*.txt")):
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-              txt = f.read()
-            if len(txt) > lim:
-              txt = txt[:lim] + "\n\n[Diff truncated by workflow]\n"
-            out = os.path.join("vet/diffs.capped", os.path.basename(path))
-            with open(out, "w", encoding="utf-8") as w:
-              w.write(txt)
-          PY
-
       # -------------------------
       # Reasoning setup (codex-action once)
       # -------------------------
       - name: Initialize Codex environment (single run)
+        id: codex_init
         if: steps.vet_import.outputs.has_cases == 'true'
+        continue-on-error: true
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_KEY }}
           model: ${{ env.CODEX_MODEL }}
           prompt: "init"
           output-file: vet/_codex-init.json
+          allow-bots: "true"
           safety-strategy: drop-sudo
           sandbox: workspace-write
 
-      - name: Build prompt template
+      - name: Capture Codex init status
+        id: codex_init_status
         if: steps.vet_import.outputs.has_cases == 'true'
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.codex_init.outcome }}" = "success" ]; then
+            echo "codex_init_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "codex_init_ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build prompt template
+        if: steps.vet_import.outputs.has_cases == 'true' && steps.codex_init_status.outputs.codex_init_ok == 'true'
         run: |
           set -euo pipefail
           cat > vet/prompt-template.md <<'EOF'
           You are a Rust supply-chain security auditor.
 
           Task:
-          - Assess ONLY the code changes shown in the provided diff for supply-chain/security risk.
-          - Ignore dependency list changes and any new/removed transitive crates mentioned by the diff tooling or feature flags unless accompanied by direct code changes that implement risky behavior.
-          - If the diff references code you cannot see, do not speculate—base your decision only on what is in the diff.
-
-          Be conservative: if you cannot determine safety from the diff, mark unvetted.
+          - Follow the policy context below. If the diff references code you cannot see, do not speculate—base your decision only on what is in the diff.
 
           Output MUST be ONLY JSON (no prose, no markdown, no code fences), with this exact format:
           {
@@ -244,39 +222,20 @@ jobs:
           EOF
 
       - name: Build per-crate prompt files
-        if: steps.vet_import.outputs.has_cases == 'true'
+        if: steps.vet_import.outputs.has_cases == 'true' && steps.codex_init_status.outputs.codex_init_ok == 'true'
         run: |
           set -euo pipefail
           i=0
           while IFS=$'\t' read -r crate old new; do
             i=$((i+1))
             slug="$(printf '%s__%s__%s' "$crate" "$old" "$new" | tr '/: ' '___' )"
-            diff_file="vet/diffs.capped/${i}__${slug}.txt"
+            diff_file="vet/diffs/${i}__${slug}.txt"
             prompt_file="vet/prompts/${i}__${slug}.md"
-
-            if [ ! -s "$diff_file" ]; then
-              # Still create a prompt file for consistent handling downstream
-              {
-                cat vet/prompt-template.md
-                echo
-                cat vet/context.capped.md
-                echo
-                echo "CASE:"
-                echo "crate: ${crate}"
-                echo "old: ${old}"
-                echo "new: ${new}"
-                echo
-                echo "DIFF:"
-                echo "(missing diff file)"
-                echo
-              } > "$prompt_file"
-              continue
-            fi
 
             {
               cat vet/prompt-template.md
               echo
-              cat vet/context.capped.md
+              cat "${CONTEXT_FILE}"
               echo
               echo "CASE:"
               echo "crate: ${crate}"
@@ -284,14 +243,22 @@ jobs:
               echo "new: ${new}"
               echo
               echo "DIFF:"
-              cat "$diff_file"
-              echo
             } > "$prompt_file"
+
+            if [ -s "$diff_file" ]; then
+              cat "$diff_file" >> "$prompt_file"
+              echo >> "$prompt_file"
+            else
+              echo "(missing diff file)" >> "$prompt_file"
+              echo >> "$prompt_file"
+            fi
           done < vet/cases.tsv
 
       - name: Run Codex sequentially per crate (CLI loop)
         id: reason
         if: steps.vet_import.outputs.has_cases == 'true'
+        env:
+          CODEX_INIT_OK: ${{ steps.codex_init_status.outputs.codex_init_ok || 'false' }}
         run: |
           set -euo pipefail
 
@@ -303,6 +270,14 @@ jobs:
             slug="$(printf '%s__%s__%s' "$crate" "$old" "$new" | tr '/: ' '___' )"
             prompt_file="vet/prompts/${idx}__${slug}.md"
             out_file="vet/decisions/${idx}__${slug}.raw.json"
+            err_file="vet/decisions/${idx}__${slug}.stderr.txt"
+
+            if [ "${CODEX_INIT_OK}" != "true" ]; then
+              jq -nc --arg crate "$crate" --arg version "$new" \
+                --arg description "Codex initialization unavailable or blocked; requires manual review." \
+                '{crate:$crate,version:$version,status:"unvetted",description:$description}' >> vet/decisions.jsonl
+              continue
+            fi
 
             if [ ! -s "$prompt_file" ]; then
               jq -nc --arg crate "$crate" --arg version "$new" \
@@ -320,13 +295,18 @@ jobs:
               --output-last-message "$out_file" \
               --model "${CODEX_MODEL}" \
               --sandbox "workspace-write" \
-              < "$prompt_file"
+              < "$prompt_file" \
+              2> "$err_file"
             st=$?
             set -e
 
             if [ "$st" -ne 0 ] || [ ! -s "$out_file" ]; then
+              description="Codex execution failed or produced no output; requires manual review."
+              if [ -s "$err_file" ] && grep -qiE 'context|maximum context|context length|prompt too long|input too large|max tokens|token limit' "$err_file"; then
+                description="Context too large for model; requires manual review."
+              fi
               jq -nc --arg crate "$crate" --arg version "$new" \
-                --arg description "Codex execution failed or produced no output; requires manual review." \
+                --arg description "$description" \
                 '{crate:$crate,version:$version,status:"unvetted",description:$description}' >> vet/decisions.jsonl
               continue
             fi
@@ -362,7 +342,7 @@ jobs:
           set -euo pipefail
           source "$HOME/.cargo/env"
 
-          who="dependabot-vet-bot <actions@github.com>"
+          who="vetting-bot <actions@github.com>"
 
           jq -c '.[] | select(.status=="vetted")' vet/decisions.json | while read -r row; do
             crate="$(echo "$row" | jq -r '.crate')"
@@ -388,51 +368,70 @@ jobs:
           exit 0
 
       # -------------------------
-      # Commit & push (even if some crates unvetted)
+      # Patch artifact publication
       # -------------------------
-      - name: Commit audit changes if any
-        id: commit
+      - name: Generate auto-vet patch
+        id: patch
+        if: always()
         run: |
           set -euo pipefail
 
-          if git diff --quiet; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+          patch_path="vet/auto-vet.patch"
+
+          if git diff --quiet -- supply-chain; then
+            echo "has_patch=false" >> "$GITHUB_OUTPUT"
+            echo "patch_path=" >> "$GITHUB_OUTPUT"
+            echo "patch_bytes=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git config user.name "dependabot-vet-bot"
-          git config user.email "actions@github.com"
+          git diff --binary --patch -- supply-chain > "$patch_path"
 
-          git add -A supply-chain 2>/dev/null || true
-          git commit -m "chore(vet): apply automated audits" || true
+          if [ ! -s "$patch_path" ]; then
+            echo "Expected patch file at $patch_path, but it was empty." >&2
+            exit 1
+          fi
 
-          sha="$(git rev-parse HEAD)"
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          patch_bytes="$(wc -c < "$patch_path" | tr -d '[:space:]')"
+          echo "has_patch=true" >> "$GITHUB_OUTPUT"
+          echo "patch_path=$patch_path" >> "$GITHUB_OUTPUT"
+          echo "patch_bytes=$patch_bytes" >> "$GITHUB_OUTPUT"
 
-      - name: Push commit back to PR branch (best effort)
-        id: push
+      - name: Upload auto-vet patch artifact
+        id: upload_patch
+        if: github.event_name == 'pull_request' && steps.patch.outputs.has_patch == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dependabot-auto-vet-patch-pr-${{ github.event.pull_request.number }}
+          path: ${{ steps.patch.outputs.patch_path }}
+          if-no-files-found: error
+          retention-days: ${{ env.RETENTION_DAYS }}
+
+      - name: Expose patch outputs
+        id: patch_meta
+        if: always()
         run: |
-          set +e
-          if [ "${{ steps.commit.outputs.changed }}" != "true" ]; then
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          set -euo pipefail
+
+          generated="${{ steps.patch.outputs.has_patch || 'false' }}"
+          uploaded="false"
+          if [ "${{ steps.upload_patch.outcome || 'skipped' }}" = "success" ]; then
+            uploaded="true"
           fi
 
-          branch="${{ github.event.pull_request.head.ref }}"
-          git push origin "HEAD:$branch"
-          st=$?
-          if [ "$st" -eq 0 ]; then
-            echo "pushed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-          fi
-          exit 0
+          echo "generated=$generated" >> "$GITHUB_OUTPUT"
+          echo "uploaded=$uploaded" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=dependabot-auto-vet-patch-pr-${{ github.event.pull_request.number || 'manual' }}" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=${{ steps.upload_patch.outputs.artifact-id || '' }}" >> "$GITHUB_OUTPUT"
+          echo "artifact_url=${{ steps.upload_patch.outputs.artifact-url || '' }}" >> "$GITHUB_OUTPUT"
+          echo "run_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          echo "retention_days=${{ env.RETENTION_DAYS }}" >> "$GITHUB_OUTPUT"
 
       # -------------------------
       # PR Comment (consolidated)
       # -------------------------
       - name: Comment summary on PR
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
@@ -444,10 +443,15 @@ jobs:
 
             const hasCases = `${{ steps.vet_import.outputs.has_cases || 'true' }}` === 'true';
             const importChanged = `${{ steps.detect_import_changes.outputs.import_changed || 'false' }}` === 'true';
+            const codexInitOk = `${{ steps.codex_init_status.outputs.codex_init_ok || 'false' }}` === 'true';
 
-            const changed = `${{ steps.commit.outputs.changed || 'false' }}` === 'true';
-            const pushed = `${{ steps.push.outputs.pushed || 'false' }}` === 'true';
-            const sha = `${{ steps.commit.outputs.sha || '' }}`.trim();
+            const patchGenerated = `${{ steps.patch_meta.outputs.generated || 'false' }}` === 'true';
+            const patchUploaded = `${{ steps.patch_meta.outputs.uploaded || 'false' }}` === 'true';
+            const artifactName = `${{ steps.patch_meta.outputs.artifact_name || '' }}`.trim();
+            const artifactId = `${{ steps.patch_meta.outputs.artifact_id || '' }}`.trim();
+            const artifactUrl = `${{ steps.patch_meta.outputs.artifact_url || '' }}`.trim();
+            const runUrl = `${{ steps.patch_meta.outputs.run_url || '' }}`.trim();
+            const retentionDays = `${{ steps.patch_meta.outputs.retention_days || '' }}`.trim();
             const vetAfterStatus = `${{ steps.verify_after.outputs.status }}`.trim();
 
             const lines = [];
@@ -457,20 +461,54 @@ jobs:
             lines.push(`- **Vetted (auto-certified):** ${vetted.length}`);
             lines.push(`- **Unvetted (needs manual review):** ${unvetted.length}`);
             if (hasCases) {
+              lines.push(`- **Codex reasoning:** ${codexInitOk ? 'active' : 'fallback mode (manual review required)'}`);
               lines.push(`- **cargo vet --locked after apply:** ${vetAfterStatus === '0' ? '✅ pass' : `❌ fail (exit ${vetAfterStatus})`}`);
             }
             lines.push('');
 
-            if (changed) {
-              lines.push(`- **Audit files updated:** yes`);
-              if (sha) lines.push(`- **Commit:** ${sha}`);
-              lines.push(`- **Pushed to PR branch:** ${pushed ? 'yes' : 'no (push may be restricted for this actor/branch)'}`);
+            if (patchGenerated) {
+              lines.push(`- **Patch generated:** yes`);
+              lines.push(`- **Artifact uploaded:** ${patchUploaded ? 'yes' : 'no'}`);
+              if (artifactName) lines.push(`- **Artifact name:** ${artifactName}`);
+              if (artifactId) lines.push(`- **Artifact ID:** ${artifactId}`);
+              if (retentionDays) lines.push(`- **Retention:** ${retentionDays} days`);
+              if (artifactUrl) {
+                lines.push(`- **Artifact download:** ${artifactUrl}`);
+              } else if (runUrl) {
+                lines.push(`- **Workflow run:** ${runUrl}`);
+              }
             } else {
-              lines.push(`- **Audit files updated:** no changes to commit`);
+              lines.push(`- **Patch generated:** no audit files were produced`);
             }
 
             if (!hasCases) {
               lines.push(`- **cargo vet import updates:** ${importChanged ? 'detected (no diffs required)' : 'none detected'}`);
+            }
+
+            lines.push('');
+            lines.push('CI did not commit anything. Review the patch locally and create the final signed commit yourself.');
+
+            if (patchUploaded) {
+              const downloadUrl = artifactUrl || '<artifact-download-url>';
+              lines.push('');
+              lines.push('### Apply the patch locally');
+              lines.push('The patch artifact is attached to this workflow run as a zip archive. Download it, extract `auto-vet.patch`, review the result, then create your signed commit.');
+              if (!artifactUrl && runUrl) {
+                lines.push(`If direct artifact download is unavailable here, open the workflow run and download the artifact from there: ${runUrl}`);
+              }
+              lines.push('');
+              lines.push('```bash');
+              lines.push('git checkout <pr-branch>');
+              lines.push('curl -L \\');
+              lines.push('  -H "Authorization: Bearer <github-token>" \\');
+              lines.push('  -o auto-vet-artifact.zip \\');
+              lines.push(`  ${downloadUrl}`);
+              lines.push('unzip -p auto-vet-artifact.zip auto-vet.patch > auto-vet.patch');
+              lines.push('git apply --index auto-vet.patch');
+              lines.push('git status');
+              lines.push('git commit -S -m "chore(vet): apply automated audits"');
+              lines.push('git push');
+              lines.push('```');
             }
 
             if (vetted.length) {
@@ -495,6 +533,12 @@ jobs:
               issue_number: context.issue.number,
               body: lines.join('\n')
             });
+
+      - name: Fail if patch publication did not complete
+        if: github.event_name == 'pull_request' && steps.patch_meta.outputs.generated == 'true' && steps.patch_meta.outputs.uploaded != 'true'
+        run: |
+          echo "Auto-vet patch generation succeeded, but the patch artifact was not uploaded."
+          exit 1
 
       # Optional: fail the job if anything unvetted remain
       - name: Fail if unvetted remain (optional gate)

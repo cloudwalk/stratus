@@ -51,6 +51,7 @@ use crate::eth::executor::Executor;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::follower::importer::ImporterConsensus;
+use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
 use crate::eth::primitives::Address;
@@ -97,6 +98,7 @@ use crate::ext::parse_duration;
 use crate::ext::to_json_string;
 use crate::ext::to_json_value;
 use crate::infra::build_info;
+use crate::infra::kafka::KafkaConfig;
 use crate::infra::metrics;
 use crate::infra::tracing::SpanExt;
 use crate::log_and_err;
@@ -306,6 +308,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_async_method("stratus_initImporter", stratus_init_importer)?;
     module.register_method("stratus_shutdownImporter", stratus_shutdown_importer)?;
     module.register_async_method("stratus_changeMinerMode", stratus_change_miner_mode)?;
+    module.register_async_method("stratus_emitBlockEvents", stratus_emit_block_events)?;
 
     // stratus state
     module.register_method("stratus_version", stratus_version)?;
@@ -757,6 +760,29 @@ fn stratus_enable_restart_on_unhealthy(_: Params<'_>, _: &RpcContext, ext: &Exte
     ext.authentication().auth_admin()?;
     GlobalState::set_restart_on_unhealthy(true);
     Ok(GlobalState::restart_on_unhealthy())
+}
+
+/// Emit the kafka events for the transactions in a block on-demand.
+async fn stratus_emit_block_events(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<(), StratusError> {
+    ext.authentication().auth_admin()?;
+    let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (_, kafka_config_override) = next_rpc_param_or_default::<Option<KafkaConfig>>(params)?;
+
+    let Some(block) = ctx.server.storage.read_block(filter)? else {
+        return Err(StorageError::BlockNotFound { filter }.into());
+    };
+
+    let kafka_config = kafka_config_override.as_ref().or(ctx.server.app_config.kafka_config.as_ref());
+    let Some(kafka_connector) = kafka_config.map(|inner| inner.init()).transpose()? else {
+        return Err(StateError::Misconfigured {
+            details: "kafka configuration is not set",
+        }
+        .into());
+    };
+
+    send_block_to_kafka(&Some(kafka_connector), &block).await?;
+
+    Ok(())
 }
 
 // -----------------------------------------------------------------------------
@@ -1241,6 +1267,12 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
     if not(GlobalState::is_transactions_enabled()) {
         tracing::warn!(%tx_hash, "failed to execute eth_sendRawTransaction because transactions are disabled");
         return Err(StateError::TransactionsDisabled.into());
+    }
+
+    // HOTFIX: this is a temporary stopgap measure to prevent type 4 transactions which currently cause the followers to crash
+    if tx.transaction_info.tx_type.is_some_and(|t| t > 3) {
+        tracing::warn!(%tx_hash, "rejecting unsuported transaction type");
+        return Err(RpcError::ParameterInvalid.into());
     }
 
     // execute locally or forward to leader

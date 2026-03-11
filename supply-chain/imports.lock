@@ -293,13 +293,6 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-core]]
-version = "0.45.0"
-when = "2025-10-08"
-user-id = 12434
-user-login = "getsentry-bot"
-user-name = "Sentry Bot"
-
-[[publisher.sentry-core]]
 version = "0.46.1"
 when = "2026-01-07"
 user-id = 12434
@@ -321,22 +314,8 @@ user-login = "getsentry-bot"
 user-name = "Sentry Bot"
 
 [[publisher.sentry-tracing]]
-version = "0.45.0"
-when = "2025-10-08"
-user-id = 12434
-user-login = "getsentry-bot"
-user-name = "Sentry Bot"
-
-[[publisher.sentry-tracing]]
 version = "0.46.1"
 when = "2026-01-07"
-user-id = 12434
-user-login = "getsentry-bot"
-user-name = "Sentry Bot"
-
-[[publisher.sentry-types]]
-version = "0.45.0"
-when = "2025-10-08"
 user-id = 12434
 user-login = "getsentry-bot"
 user-name = "Sentry Bot"
@@ -398,8 +377,8 @@ user-login = "Darksonn"
 user-name = "Alice Ryhl"
 
 [[publisher.tokio-util]]
-version = "0.7.17"
-when = "2025-11-02"
+version = "0.7.18"
+when = "2026-01-04"
 user-id = 6741
 user-login = "Darksonn"
 user-name = "Alice Ryhl"

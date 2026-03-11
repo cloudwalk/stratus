@@ -113,6 +113,12 @@ delta = "1.0.38 -> 1.0.41"
 notes = "Reviewed changelog/doc updates plus src/account.rs import cleanup (Vec now behind serde); no functional changes beyond unused import fix."
 
 [[audits.alloy-rpc-types-trace]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "1.0.41"
+notes = "1.0.38 -> 1.0.41 diff reviewed via cargo vet diff --mode local. Additive API/tests/changelog updates; no unsafe/build script/network/filesystem behavior introduced in this crate diff."
+
+[[audits.alloy-rpc-types-trace]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "1.0.24 -> 1.0.38"
@@ -283,6 +289,16 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "0.18.2 -> 0.18.3"
 notes = "0.18.3 removes demo examples, derives Default for MultiProgressAlignment/ProgressFinish, and adds ProgressBar::set_elapsed which rewinds the start Instant via checked_sub; no unsafe code touched."
+
+[[audits.log]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
+criteria = "safe-to-deploy"
+version = "0.4.29"
+notes = """
+Safety: no new I/O or network paths; no build.rs or proc-macros; unsafe usage unchanged.
+Dependencies/features: switches optional serde support to serde_core 1.0 with a compatibility alias; bumps value-bag to 1.12 and sval/sval_ref to 2.16; optional feature gating unchanged.
+Main change: serde support rename plus small FromStr/Key/Value lifetime cleanups; MSRV raised to 1.68; behavior otherwise stable.
+"""
 
 [[audits.num-bigint-dig]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -491,23 +507,11 @@ criteria = "safe-to-deploy"
 delta = "1.16.0 -> 1.17.2"
 notes = "Reviewed 1.16.0->1.17.2: functions depending on reciprocal division now marked unsafe and call sites updated; MSRV bumped, serde_core split; added ark-ff 0.5 support and minor API cleanups. Unsafe blocks guarded by explicit precondition checks; no new ambient capabilities."
 
-[[audits.rustls-platform-verifier]]
-who = "dependabot-vet-bot <actions@github.com>"
+[[audits.serde_json]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
-version = "0.6.2"
-notes = "Reviewed the code diff: library now threads an explicit CryptoProvider into existing platform verifiers, Android context handling adds a scoped `unsafe_clone` with clear lifetime constraints, and other changes remain within tests/examples (network/FS access only in opt-in example). No expanded ambient capabilities or new unsafe behavior affecting the shipped verifier were observed."
-
-[[audits.security-framework]]
-who = "dependabot-vet-bot <actions@github.com>"
-criteria = "safe-to-deploy"
-version = "3.5.1"
-notes = "Diff primarily adds keychain option builders, refactors existing wrappers, and adjusts tests; it does not introduce new unsafe patterns, dynamic execution paths, or additional network/filesystem access beyond existing Apple Security Framework FFI usage."
-
-[[audits.security-framework-sys]]
-who = "dependabot-vet-bot <actions@github.com>"
-criteria = "safe-to-deploy"
-version = "2.15.0"
-notes = "Diff only adds new CFStringRef extern constants and configuration metadata without introducing new unsafe logic or capability changes."
+version = "1.0.149"
+notes = "1.0.145 -> 1.0.149 reviewed via cargo vet diff --mode local. Main change is float formatting backend switch from ryu to zmij plus parser/format normalization and tests; no new unsafe blocks, network/filesystem access, proc-macro, or suspicious build-time behavior in serde_json diff."
 
 [[audits.syn-solidity]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -568,11 +572,11 @@ criteria = "safe-to-deploy"
 version = "0.32.0"
 notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
 
-[[audits.uuid]]
-who = "dependabot-vet-bot <actions@github.com>"
+[[audits.zmij]]
+who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
-version = "1.19.0"
-notes = "Changes are limited to edition metadata updates, import refactors (e.g., switching to serde_core), and formatting; no new unsafe blocks, I/O, or expanded execution paths appear in the diff."
+version = "1.0.21"
+notes = "1.0.20 -> 1.0.21 reviewed via cargo vet diff --mode local. Changes are version/docs/CI updates and internal pow10 table generation refactor; no added network/filesystem/process execution surfaces and no suspicious supply-chain behavior observed."
 
 [[trusted.async-trait]]
 criteria = "safe-to-deploy"

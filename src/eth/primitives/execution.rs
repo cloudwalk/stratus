@@ -422,20 +422,24 @@ mod tests {
 
     #[test]
     fn test_compare_with_receipt_topic_content_mismatch() {
-        // Create a topic
-        let topic_value = B256::default();
-        let different_topic = B256::default();
+        // Create two genuinely different topics
+        let topic_value = B256::from([1u8; 32]);
+        let different_topic = B256::from([2u8; 32]);
 
-        // Create a mock log with the topic
+        // Create a mock log with only topic0 set (clear others to avoid length mismatch)
         let mut log1: Log = Faker.fake();
         log1.topic0 = Some(topic_value.into());
+        log1.topic1 = None;
+        log1.topic2 = None;
+        log1.topic3 = None;
+        log1.data = vec![].into();
 
         // Create execution with that log
         let mut execution: EvmExecution = Faker.fake();
         execution.result = ExecutionResult::Success;
         execution.logs = vec![log1];
 
-        // Create receipt log with different topic content
+        // Create receipt log with same number of topics but different content
         let mut receipt_log = alloy_rpc_types_eth::Log::<alloy_primitives::LogData>::default();
         let topics = vec![different_topic];
         receipt_log.inner.data = alloy_primitives::LogData::new_unchecked(topics, alloy_primitives::Bytes::default());
@@ -449,8 +453,9 @@ mod tests {
             panic!("expected be legacy!")
         }
 
-        // Verify comparison fails
-        assert!(execution.compare_with_receipt(&receipt).is_err());
+        // Verify comparison fails due to topic content mismatch
+        let err = execution.compare_with_receipt(&receipt).unwrap_err();
+        assert!(err.to_string().contains("log topic content mismatch"));
     }
 
     #[test]
