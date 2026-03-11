@@ -507,6 +507,24 @@ criteria = "safe-to-deploy"
 delta = "1.16.0 -> 1.17.2"
 notes = "Reviewed 1.16.0->1.17.2: functions depending on reciprocal division now marked unsafe and call sites updated; MSRV bumped, serde_core split; added ark-ff 0.5 support and minor API cleanups. Unsafe blocks guarded by explicit precondition checks; no new ambient capabilities."
 
+[[audits.rustls-platform-verifier]]
+who = "vetting-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "0.6.2"
+notes = "Reviewed the JNI refactor: the sole new unsafe `JNIEnv::unsafe_clone` stays confined to the local frame and isn’t exposed outside the closure, preserving prior invariants. No other library code paths gained filesystem, network, or execution-sensitive behavior."
+
+[[audits.security-framework]]
+who = "vetting-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "3.5.1"
+notes = "Changes add keychain option APIs, extend password utilities, and add a guarded runtime lookup for SecTrustEvaluateWithError without introducing new filesystem, network, or high-risk unsafe behavior beyond the controlled dlsym pointer handling shown in the diff."
+
+[[audits.security-framework-sys]]
+who = "vetting-bot <actions@github.com>"
+criteria = "safe-to-deploy"
+version = "2.15.0"
+notes = "Observed only new extern CFStringRef bindings (authentication UI and synchronizable constants) with existing patterns; no additional unsafe behavior, build logic, or capability changes introduced in the diff."
+
 [[audits.serde_json]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"

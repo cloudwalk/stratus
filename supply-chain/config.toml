@@ -1372,14 +1372,6 @@ criteria = "safe-to-deploy"
 version = "2.11.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.security-framework]]
-version = "3.3.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.security-framework-sys]]
-version = "2.14.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.semver]]
 version = "0.11.0"
 criteria = "safe-to-deploy"
