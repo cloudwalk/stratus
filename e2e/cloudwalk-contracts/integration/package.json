@@ -1,12 +1,12 @@
 {
     "name": "hardhat-project",
     "devDependencies": {
-        "@nomicfoundation/hardhat-toolbox": "^7.0.0",
-        "@openzeppelin/hardhat-upgrades": "^1.28.0",
+        "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+        "@openzeppelin/hardhat-upgrades": "3.3.0",
         "@trivago/prettier-plugin-sort-imports": "^4.3.0",
         "axios": "^1.6.7",
         "ethers": "^6.9.0",
-        "hardhat": "^3.1.12",
+        "hardhat": "^2.19.2",
         "prettier": "^3.1.1",
         "undici": "^6.21.1",
         "web3-types": "^1.3.1",
