@@ -1,6 +1,12 @@
 
 # cargo-vet audits file
 
+[[audits.actix-http]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "3.11.1 -> 3.12.1"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
 [[audits.alloy-consensus]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -187,6 +193,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.41 -> 1.2.1"
 notes = "No new unsafe or capability access; serde tag/alias refactor only."
 
+[[audits.block-buffer]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.10.4 -> 0.12.0"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
 [[audits.c-kzg]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -233,11 +245,29 @@ criteria = "safe-to-deploy"
 delta = "1.15.0 -> 1.17.0"
 notes = "Reviewed 1.15.0->1.17.0: removes runtime hex re-export dependency; new encode_to_str APIs reuse encode_to_slice and only call from_utf8_unchecked_mut after length/ascii validation; serde module now uses serde_core alias; no new I/O or FFI and unsafe surface otherwise unchanged."
 
+[[audits.const-oid]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.9.6 -> 0.10.2"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
 [[audits.const_format]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "0.2.34 -> 0.2.35"
 notes = "Bumps arrayvec crate from 0.5.1 to 0.7.0 and includes the required changes."
+
+[[audits.crypto-common]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.1.6 -> 0.2.1"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
+[[audits.digest]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.10.7 -> 0.11.3"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
 
 [[audits.hex-literal]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -259,6 +289,18 @@ Main change: repository moved to github.com/djc/hostname with doc badge updates;
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "2.2.0 -> 2.3.0"
+
+[[audits.hybrid-array]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+version = "0.4.10"
+notes = "Reviewed source for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
+[[audits.id-arena]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "2.2.1 -> 2.3.0"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
 
 [[audits.indicatif]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -287,6 +329,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 delta = "0.8.4 -> 0.8.6"
 notes = "Reviewed 0.8.4->0.8.6: Cargo manifest now explicitly lists lib/tests and disables auto targets; removes byteorder dep, reorders feature table. Code changes limited to import cleanups, alloc::vec usage, and calling rand::Rng::r#gen; no algorithmic or unsafe changes."
+
+[[audits.num-conv]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.2.0 -> 0.2.1"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
 
 [[audits.opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -362,6 +410,24 @@ notes = """
 
 Assessment: Low-risk patch, implementation consistent with prior vetted version. Safe to deploy.
 """
+
+[[audits.r-efi]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "5.3.0 -> 6.0.0"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
+[[audits.rand]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.9.2 -> 0.9.4"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
+[[audits.rand_core]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.10.0 -> 0.10.1"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
 
 [[audits.rapidhash]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -495,6 +561,12 @@ criteria = "safe-to-deploy"
 version = "1.0.149"
 notes = "1.0.145 -> 1.0.149 reviewed via cargo vet diff --mode local. Main change is float formatting backend switch from ryu to zmij plus parser/format normalization and tests; no new unsafe blocks, network/filesystem access, proc-macro, or suspicious build-time behavior in serde_json diff."
 
+[[audits.sha1]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.10.6 -> 0.11.0"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
 [[audits.syn-solidity]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -547,6 +619,30 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.32.0"
 notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
+
+[[audits.wit-bindgen]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.50.0 -> 0.51.0"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
+[[audits.wit-bindgen-core]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.50.0 -> 0.51.0"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
+[[audits.wit-bindgen-rust]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.50.0 -> 0.51.0"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
+[[audits.wit-bindgen-rust-macro]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.50.0 -> 0.51.0"
+notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
 
 [[audits.zmij]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
