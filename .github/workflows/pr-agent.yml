@@ -37,7 +37,8 @@ env:
     * When editing StratusStorage pay attention to the transient_state_lock contract, "Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block"
 jobs:
   pr_agent_job:
-    if: ${{ github.event.sender.type != 'Bot' }} &&
+    if: >
+      github.event.sender.type != 'Bot' &&
       (github.event_name != 'issue_comment' ||
       github.event.comment.author_association == 'MEMBER' ||
       github.event.comment.author_association == 'OWNER')
