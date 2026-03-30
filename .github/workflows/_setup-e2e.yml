@@ -41,58 +41,45 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88
-
       - name: Rust Cache - Restore shared key
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.CACHE_PATH }}
           restore-keys: ${{ env.CACHE_SHARED_KEY }}
           key: ${{ env.CACHE_SHARED_KEY }}
-
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
-
       - name: Set up Just
         uses: extractions/setup-just@v2
-
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: .tool-versions
-
       - name: Install npm
         run: npm install -g npm@10.8.2
-
       - name: Install docker-compose
         run: sudo apt-get install docker-compose -y
-
       - name: Install jq
         run: sudo apt-get install jq -y
-
       - name: Install cargo tools
         # run: cargo install killport@1.1.0 wait-service@0.3.1
         run: |
           cargo install killport
           cargo install wait-service
-
       - name: Set up dependencies
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov@0.6.14
-
       - name: Install Python 3.12
         uses: actions/setup-python@v4
         with:
           python-version: "3.12"
-
       - name: Install Poetry
         run: curl -sSL https://install.python-poetry.org | python3 -
-
       - name: Run e2e tests
         run: ${{ inputs.justfile_env }} just run-test ${{ inputs.justfile_recipe }} ${{ inputs.justfile_args }}
         env:
@@ -100,12 +87,3 @@ jobs:
           RUST_LOG: error
           RELEASE: 0
           RUST_BACKTRACE: 1
-
-      - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          fail_ci_if_error: true
-          files: target/llvm-cov/codecov/${{ inputs.justfile_recipe }}.info
-          token: ${{ secrets.CODECOV_TOKEN }}
-          flags: ${{ inputs.justfile_recipe }}
-          name: ${{ inputs.justfile_recipe }}
