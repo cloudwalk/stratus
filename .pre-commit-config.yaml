@@ -16,7 +16,7 @@ repos:
   - repo: local
     hooks:
       - id: just-lint
-        name: cargo fmt
+        name: just lint-check
         entry: just lint-check -2025-05-22
         language: system
         types: [rust]
