@@ -15,17 +15,9 @@ repos:
 
   - repo: local
     hooks:
-      - id: cargo-fmt
+      - id: just-lint
         name: cargo fmt
-        entry: cargo +nightly fmt --all -- --check
+        entry: just lint-check -2025-05-22
         language: system
         types: [rust]
         pass_filenames: false
-
-      - id: cargo-clippy
-        name: cargo clippy
-        entry: cargo +nightly clippy --all-targets -- -D warnings -A clippy::unwrap_used -A clippy::expect_used -A clippy::panic
-        language: system
-        types: [rust]
-        pass_filenames: false
-        stages: [manual]
