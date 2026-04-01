@@ -1,5 +1,3 @@
-[![codecov](https://codecov.io/github/cloudwalk/stratus/graph/badge.svg?token=D1795GHLG6)](https://codecov.io/github/cloudwalk/stratus)
-
 # Stratus ☁️
 
 Welcome to Stratus, the cutting-edge EVM-compatible ledger and JSON-RPC server. This projects has 3 focuses of optimization:
