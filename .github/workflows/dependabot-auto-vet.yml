@@ -10,7 +10,7 @@ jobs:
   vet:
     if: >
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && github.actor == 'dependabot[bot]')
+      github.event_name == 'pull_request'
 
     runs-on: ubuntu-22.04
     permissions:
