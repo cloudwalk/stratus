@@ -83,7 +83,7 @@ async fn receive_with_timeout<T>(rx: &mut mpsc::Receiver<T>) -> anyhow::Result<O
 }
 
 /// Send block transactions to Kafka
-async fn send_block_to_kafka(kafka_connector: &Option<KafkaConnector>, block: &Block) -> anyhow::Result<()> {
+pub async fn send_block_to_kafka(kafka_connector: &Option<KafkaConnector>, block: &Block) -> anyhow::Result<()> {
     if let Some(kafka_conn) = kafka_connector {
         let events = block
             .transactions
