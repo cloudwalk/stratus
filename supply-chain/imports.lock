@@ -147,8 +147,8 @@ user-login = "cuviper"
 user-name = "Josh Stone"
 
 [[publisher.indexmap]]
-version = "2.12.1"
-when = "2025-11-20"
+version = "2.13.1"
+when = "2026-04-02"
 user-id = 539
 user-login = "cuviper"
 user-name = "Josh Stone"
@@ -903,7 +903,7 @@ notes = "one use of unsafe to call windows specific api to get console handle."
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
 delta = "0.46.0 -> 0.50.1"
-notes = "Lots of stylistic/rust-related chanegs, plus new features, but nothing out of the ordrinary."
+notes = "Lots of stylistic/rust-related changes, plus new features, but nothing out of the ordrinary."
 
 [[audits.bytecode-alliance.audits.num-traits]]
 who = "Andrew Brown <andrew.brown@intel.com>"
