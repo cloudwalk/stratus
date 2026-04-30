@@ -903,7 +903,7 @@ notes = "one use of unsafe to call windows specific api to get console handle."
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
 delta = "0.46.0 -> 0.50.1"
-notes = "Lots of stylistic/rust-related chanegs, plus new features, but nothing out of the ordrinary."
+notes = "Lots of stylistic/rust-related changes, plus new features, but nothing out of the ordrinary."
 
 [[audits.bytecode-alliance.audits.num-traits]]
 who = "Andrew Brown <andrew.brown@intel.com>"
