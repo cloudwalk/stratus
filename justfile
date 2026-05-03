@@ -164,12 +164,13 @@ importer-offline-test *args="":
 # Test: run rust tests
 test:
     #!/bin/bash
-    mkdir -p target/llvm-cov/codecov
     source <(just coverage-env)
     cargo test
-    mkdir -p target/llvm-cov/codecov
-    cargo llvm-cov report --html --ignore-filename-regex data_migration.rs
-    cargo llvm-cov report --lcov --output-path target/llvm-cov/codecov/rust_tests.info --ignore-filename-regex data_migration.rs
+    if command -v cargo-llvm-cov >/dev/null 2>&1; then
+        mkdir -p target/llvm-cov/reports
+        cargo llvm-cov report --html --ignore-filename-regex data_migration.rs
+        cargo llvm-cov report --lcov --output-path target/llvm-cov/reports/rust_tests.info --ignore-filename-regex data_migration.rs
+    fi
 
 
 # Test: Execute Rust doc tests
@@ -180,7 +181,9 @@ test-doc name="":
 run-test recipe="" *args="":
     #!/bin/bash
     echo "Running test {{recipe}}"
-    cargo llvm-cov clean --workspace
+    if command -v cargo-llvm-cov >/dev/null 2>&1; then
+        cargo llvm-cov clean --workspace
+    fi
     source <(just coverage-env)
     just {{recipe}} {{args}}
     result_code=$?
@@ -189,10 +192,12 @@ run-test recipe="" *args="":
     killport 3001 -s sigterm
     echo "Sleeping for 10 seconds"
     sleep 10
-    echo "Generating reports"
-    mkdir -p target/llvm-cov/codecov
-    cargo llvm-cov report --html --ignore-filename-regex data_migration.rs
-    cargo llvm-cov report --lcov --output-path target/llvm-cov/codecov/{{recipe}}.info --ignore-filename-regex data_migration.rs
+    if command -v cargo-llvm-cov >/dev/null 2>&1; then
+        echo "Generating reports"
+        mkdir -p target/llvm-cov/reports
+        cargo llvm-cov report --html --ignore-filename-regex data_migration.rs
+        cargo llvm-cov report --lcov --output-path target/llvm-cov/reports/{{recipe}}.info --ignore-filename-regex data_migration.rs
+    fi
     exit $result_code
 
 # ------------------------------------------------------------------------------
@@ -566,6 +571,9 @@ e2e-genesis:
 
 coverage-env:
     #!/usr/bin/env bash
+    if ! command -v cargo-llvm-cov >/dev/null 2>&1; then
+        exit 0
+    fi
     COVERAGE_FLAGS=$(env -u RUSTFLAGS cargo llvm-cov show-env 2>/dev/null | grep "^RUSTFLAGS=" | cut -d"'" -f2)
     CURRENT_RUSTFLAGS="${RUSTFLAGS:-}"
     if ! echo "$CURRENT_RUSTFLAGS" | grep -F -- "$COVERAGE_FLAGS" > /dev/null; then \

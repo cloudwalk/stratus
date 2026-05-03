@@ -13,7 +13,7 @@ def convert_hex_bytes_to_hex_strings(block_dict):
             result[key] = '0x' + value.hex()
         elif isinstance(value, list):
             result[key] = [
-                '0x' + item.hex() if isinstance(item, (bytes, HexBytes)) else item 
+                '0x' + item.hex() if isinstance(item, (bytes, HexBytes)) else item
                 for item in value
             ]
         elif isinstance(value, int):
@@ -25,16 +25,16 @@ def convert_hex_bytes_to_hex_strings(block_dict):
 def get_full_transaction_details(w3, tx_hash):
     """Get transaction details."""
     tx = w3.eth.get_transaction(tx_hash)
-    
+
     # Converter para dict e aplicar a conversão de HexBytes
     tx_dict = convert_hex_bytes_to_hex_strings(tx.__dict__)
-    
+
     # Remover campos internos do Web3
     if '_name' in tx_dict:
         del tx_dict['_name']
     if '_parent' in tx_dict:
         del tx_dict['_parent']
-        
+
     return tx_dict
 
 def normalize_ethereum_address(value):
@@ -62,14 +62,14 @@ def normalize_block(block):
         'sha3Uncles', 'receiptsRoot', 'transactions', 'baseFeePerGas',
         'totalDifficulty', 'transactionsRoot'
     ]
-    
+
     # Transaction fields to normalize
     tx_fields = [
         'r', 's', 'v', 'to', 'gas', 'from', 'hash', 'type',
         'input', 'nonce', 'value', 'chainId', 'gasPrice',
         'blockHash', 'blockNumber', 'transactionIndex'
     ]
-    
+
     normalized = {}
     for field in block_fields:
         if field in block:
@@ -91,7 +91,7 @@ def normalize_block(block):
                 # Then normalize hex values
                 value = normalize_hex_value(value)
                 normalized[field] = value
-    
+
     return normalized
 
 def find_differences(dict1, dict2, path=""):
@@ -133,16 +133,16 @@ def check_blocks(w3, conn, start_block, end_block):
         try:
             block_rpc = w3.eth.get_block(block_num)
             rpc_block = block_rpc.__dict__.copy()
-            
+
             # Buscar detalhes completos para cada transação
             full_transactions = []
             for tx_hash in block_rpc.transactions:
                 tx_details = get_full_transaction_details(w3, tx_hash)
                 full_transactions.append(tx_details)
-            
+
             rpc_block['transactions'] = full_transactions
             rpc_block = convert_hex_bytes_to_hex_strings(rpc_block)
-            
+
             # Remove campos internos do Web3
             if '_name' in rpc_block:
                 del rpc_block['_name']
@@ -157,11 +157,11 @@ def check_blocks(w3, conn, start_block, end_block):
                 all_successful = False
             else:
                 db_block = result[0]
-                
+
                 # Normalizar ambos os blocos antes de comparar
                 normalized_rpc = normalize_block(rpc_block)
                 normalized_db = normalize_block(db_block)
-                
+
                 if normalized_rpc != normalized_db:
                     print(f"[ERROR] Block {block_num}: content mismatch")
                     differences = find_differences(normalized_rpc, normalized_db)
@@ -193,7 +193,7 @@ def main():
     pg_user     = os.getenv("POSTGRES_USER", "postgres")
     pg_password = os.getenv("POSTGRES_PASSWORD", "password")
     pg_db       = os.getenv("POSTGRES_DB", "my_database")
-    
+
     # Ethereum RPC configuration
     eth_rpc_url = os.getenv("ETH_RPC_URL", "http://localhost:8545")
 

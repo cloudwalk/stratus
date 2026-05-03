@@ -3,12 +3,12 @@ pragma solidity ^0.8.0;
 
 contract TestContractBlockTimestamp {
     event TimestampRecorded(uint256 timestamp, uint256 blockNumber);
-    
+
     struct TimeRecord {
         uint256 timestamp;
         uint256 blockNumber;
     }
-    
+
     TimeRecord[] public records;
 
     /// @dev Records current block timestamp and number

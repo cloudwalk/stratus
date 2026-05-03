@@ -366,6 +366,12 @@ criteria = "safe-to-deploy"
 version = "0.31.0"
 notes = "Reviewed 0.30.0->0.31.0: propagates parent remote flag, skips on_start for non-recording spans, restores async BatchSpanProcessor concurrency limits; no unsafe."
 
+[[audits.prettyplease]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+version = "0.2.36"
+notes = "Reviewed for security-sensitive behavior only. Crate is a syn/proc-macro2 pretty-printer; library code has no ambient filesystem/network/process access or suspicious exfiltration behavior. Build script only reads Cargo package version metadata."
+
 [[audits.prost]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -625,6 +631,12 @@ who = "Rodrigo Bronzelle"
 criteria = "safe-to-deploy"
 delta = "0.50.0 -> 0.51.0"
 notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
+[[audits.wit-bindgen]]
+who = "Rodrigo Bronzelle"
+criteria = "safe-to-deploy"
+delta = "0.51.0 -> 0.57.1"
+notes = "Reviewed for security-sensitive behavior only. Changes are async/no_std runtime support, map abstractions, feature wiring, examples, and expected ABI symbol updates; no suspicious backdoors, private-data exfiltration, or unexpected filesystem/network/process access found."
 
 [[audits.wit-bindgen-core]]
 who = "Rodrigo Bronzelle"
