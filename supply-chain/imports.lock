@@ -342,8 +342,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.tokio]]
-version = "1.48.0"
-when = "2025-10-14"
+version = "1.49.0"
+when = "2026-01-03"
 user-id = 6741
 user-login = "Darksonn"
 user-name = "Alice Ryhl"
@@ -903,7 +903,7 @@ notes = "one use of unsafe to call windows specific api to get console handle."
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
 delta = "0.46.0 -> 0.50.1"
-notes = "Lots of stylistic/rust-related chanegs, plus new features, but nothing out of the ordrinary."
+notes = "Lots of stylistic/rust-related changes, plus new features, but nothing out of the ordrinary."
 
 [[audits.bytecode-alliance.audits.num-traits]]
 who = "Andrew Brown <andrew.brown@intel.com>"
@@ -968,6 +968,12 @@ change.
 who = "Chris Fallin <chris@cfallin.org>"
 criteria = "safe-to-deploy"
 delta = "0.3.29 -> 0.3.32"
+
+[[audits.bytecode-alliance.audits.rand_xorshift]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+delta = "0.3.0 -> 0.4.0"
+notes = "Minor updates for a new `rand` crate version, nothing awry."
 
 [[audits.bytecode-alliance.audits.raw-cpuid]]
 who = "Alex Crichton <alex@alexcrichton.com>"
@@ -1098,6 +1104,15 @@ who = "Pat Hickey <phickey@fastly.com>"
 criteria = "safe-to-deploy"
 version = "0.2.4"
 notes = "Implements a concurrency primitive with atomics, and is not obviously incorrect"
+
+[[audits.bytecode-alliance.audits.unarray]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+version = "0.1.4"
+notes = """
+Crate is sound, albeit leaky, and not actively malicious. Probably not the best
+crate to use in practice but it's suitable for testing dependencies.
+"""
 
 [[audits.bytecode-alliance.audits.utf-8]]
 who = "Chris Fallin <chris@cfallin.org>"
@@ -3694,6 +3709,12 @@ notes = """
 Refactors code handling paths to source files, but AFAICT none of the affected
 code involves filesystem access.
 """
+aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
+
+[[audits.zcash.audits.rand_xorshift]]
+who = "Sean Bowe <ewillbefull@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.3.0"
 aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.rustc-demangle]]
