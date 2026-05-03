@@ -139,6 +139,12 @@ when = "2025-11-20"
 user-id = 55123
 user-login = "rust-lang-owner"
 
+[[publisher.hashbrown]]
+version = "0.17.0"
+when = "2026-04-09"
+user-id = 55123
+user-login = "rust-lang-owner"
+
 [[publisher.indexmap]]
 version = "1.9.3"
 when = "2023-03-24"
@@ -147,8 +153,8 @@ user-login = "cuviper"
 user-name = "Josh Stone"
 
 [[publisher.indexmap]]
-version = "2.13.1"
-when = "2026-04-02"
+version = "2.14.0"
+when = "2026-04-09"
 user-id = 539
 user-login = "cuviper"
 user-name = "Josh Stone"
