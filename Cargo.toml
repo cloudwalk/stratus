@@ -41,7 +41,7 @@ sugars = "=3.0.1"
 thiserror = "=2.0.18"
 uuid = { version = "=1.18.1", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
-libc = "=0.2.180"
+libc = "=0.2.186"
 
 # async
 tokio = { version = "=1.49.0", features = [
