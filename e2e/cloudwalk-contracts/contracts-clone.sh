@@ -28,7 +28,9 @@ clone() {
 
     log "Installing dependencies: $repo"
     corepack enable
-    if ! corepack pnpm -C "$target" install; then
+    # Run pnpm install from inside the cloned repo so corepack picks up the
+    # correct pnpm version from its package.json (packageManager field).
+    if ! (cd "$target" && corepack pnpm install); then
         log "Dependencies install failed. Removing folder and exiting."
         rm -rf "$target"
         return 1
