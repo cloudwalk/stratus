@@ -16,6 +16,7 @@ clone() {
 
     if [ -d "$target" ]; then
         log "Updating: $repo"
+        git -C "$target" checkout -- pnpm-workspace.yaml 2>/dev/null || true
         git -C "$target" pull
     else
         log "Cloning: $repo"
@@ -30,7 +31,10 @@ clone() {
     corepack enable
     # pnpm v10+ blocks build scripts by default. Allow all packages to run
     # their build scripts so native deps like keccak and secp256k1 compile.
-    grep -q 'onlyBuiltDependencies' "$target/.npmrc" 2>/dev/null || echo 'onlyBuiltDependencies[]=*' >> "$target/.npmrc"
+    if [ -f "$target/pnpm-workspace.yaml" ]; then
+        grep -q 'onlyBuiltDependencies' "$target/pnpm-workspace.yaml" 2>/dev/null ||
+            printf '\nonlyBuiltDependencies:\n  - "*"\n' >>"$target/pnpm-workspace.yaml"
+    fi
     if ! corepack pnpm -C "$target" install; then
         log "Dependencies install failed. Removing folder and exiting."
         rm -rf "$target"
