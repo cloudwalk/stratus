@@ -28,6 +28,9 @@ clone() {
 
     log "Installing dependencies: $repo"
     corepack enable
+    # pnpm v10+ blocks build scripts by default. Allow all packages to run
+    # their build scripts so native deps like keccak and secp256k1 compile.
+    grep -q 'onlyBuiltDependencies' "$target/.npmrc" 2>/dev/null || echo 'onlyBuiltDependencies[]=*' >> "$target/.npmrc"
     if ! corepack pnpm -C "$target" install; then
         log "Dependencies install failed. Removing folder and exiting."
         rm -rf "$target"
