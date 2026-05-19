@@ -49,16 +49,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Rust Nightly
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@5b842231ba77f5c045dba54ac5560fed2db780e2 # nightly
         with:
           toolchain: nightly-2025-05-22
           components: rustfmt, clippy
 
       - name: Rust Cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.CACHE_PATH }}
           restore-keys: ${{ env.CACHE_SHARED_KEY }}
@@ -68,7 +68,7 @@ jobs:
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Set up Just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
 
       - name: Just lint-check
         run: just lint-check -2025-05-22
@@ -84,18 +84,18 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .tool-versions
 
       - name: Set up Just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
 
       - name: Set up shfmt
-        uses: mfinelli/setup-shfmt@v3.0.1
+        uses: mfinelli/setup-shfmt@c35fe75ed300d20f8c48f1fc730a7e86056aefc1 # v3.0.1
         with:
           version: v3.9.0
 

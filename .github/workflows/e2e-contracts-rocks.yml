@@ -48,7 +48,7 @@ jobs:
       cache-key: ${{ steps.cache-key.outputs.key }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Calculate and set cache key
         id: cache-key
@@ -58,12 +58,12 @@ jobs:
           echo "key=$CACHE_KEY" >> $GITHUB_OUTPUT
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: 1.88
 
       - name: Rust Cache - Restore workflow cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.CACHE_PATH }}
           key: ${{ env.CACHE_KEY }}
@@ -76,7 +76,7 @@ jobs:
         run: cargo install killport@1.1.0 wait-service@0.3.1 || true
 
       - name: Set up dependencies
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2
         with:
           tool: cargo-llvm-cov@0.6.14
 
@@ -87,7 +87,7 @@ jobs:
           cargo build --features dev
 
       - name: Rust Cache - Save workflow cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: ${{ env.CACHE_KEY }}
           path: ${{ env.CACHE_PATH }}
@@ -102,12 +102,12 @@ jobs:
 
     steps:
       - name: Checkout brlc-monorepo repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: cloudwalk/brlc-monorepo
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .tool-versions
 
@@ -135,19 +135,19 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: 1.88
 
       - name: Rust Restore Cache
         id: cache-cargo
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: ${{ needs.setup_cache.outputs.cache-key }}
           restore-keys: ${{ env.CACHE_SHARED_KEY }}
@@ -157,10 +157,10 @@ jobs:
         run: cargo install killport@1.1.0 wait-service@0.3.1 || true
 
       - name: Set up Just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .tool-versions
 
