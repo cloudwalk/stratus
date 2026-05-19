@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: true
@@ -82,7 +82,7 @@ jobs:
 
       - name: Early exit comment if fully vetted
         if: github.event_name == 'pull_request' && steps.vet_locked.outputs.status == '0'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
         with:
           script: |
             const body = [
@@ -181,7 +181,7 @@ jobs:
         id: codex_init
         if: steps.vet_import.outputs.has_cases == 'true'
         continue-on-error: true
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@a26d2d4d8b78a694338b8e3715c3630254340b2c # v1
         with:
           openai-api-key: ${{ secrets.OPENAI_KEY }}
           model: ${{ env.CODEX_MODEL }}
@@ -432,7 +432,7 @@ jobs:
       # -------------------------
       - name: Comment summary on PR
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.0.1
         with:
           script: |
             const fs = require('fs');

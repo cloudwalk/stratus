@@ -22,7 +22,7 @@ hash_hasher = "=2.0.4"
 hex_fmt = "=0.3.0"
 hex-literal = "=1.1.0"
 humantime = "=2.3.0"
-indexmap = { version = "=2.12.1", features = ["serde"] }
+indexmap = { version = "=2.14.0", features = ["serde"] }
 itertools = "=0.14.0"
 nanoid = "=0.4.0"
 oneshot = "=0.1.12"
@@ -41,7 +41,7 @@ sugars = "=3.0.1"
 thiserror = "=2.0.18"
 uuid = { version = "=1.18.1", features = ["v7"]}
 stratus_macros = { path = "./crates/stratus_macros" }
-libc = "=0.2.180"
+libc = "=0.2.186"
 
 # async
 tokio = { version = "=1.49.0", features = [
