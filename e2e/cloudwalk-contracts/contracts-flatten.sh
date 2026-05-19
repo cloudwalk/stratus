@@ -31,7 +31,7 @@ flatten() {
 
     # Flatten
 
-    pnpm -C ../brlc-monorepo run flatten:contract "$contract_project" "$contract".sol $target_file
+    (cd ../brlc-monorepo && corepack pnpm run flatten:contract "$contract_project" "$contract".sol "$target_file")
 
     # Leave the repository folder
     cd $root
