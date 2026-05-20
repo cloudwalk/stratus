@@ -245,6 +245,34 @@ criteria = "safe-to-deploy"
 delta = "1.15.0 -> 1.17.0"
 notes = "Reviewed 1.15.0->1.17.0: removes runtime hex re-export dependency; new encode_to_str APIs reuse encode_to_slice and only call from_utf8_unchecked_mut after length/ascii validation; serde module now uses serde_core alias; no new I/O or FFI and unsafe surface otherwise unchanged."
 
+[[audits.const-hex]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "1.17.0 -> 1.19.0"
+notes = """
+Reviewed 1.17.0 -> 1.19.0 diff via cargo vet diff --mode local.
+
+Scope: SIMD decode optimization, serde refactor, uppercase prefix support.
+
+Unsafe / Soundness:
+- All new unsafe blocks are confined to SIMD intrinsics (AVX2, SSE2, NEON, wasm32 SIMD, portable-simd) behind runtime CPU feature detection (has_avx2, has_sse2, has_neon, etc.).
+- New single-pass SIMD decode uses Muła & Langdale's Algorithm #3, a well-known and published approach for validating hex during SIMD decode. Invalid bytes produce nibble values > 15, detected via saturating-add MSB check. The logic is mathematically sound and documented inline with citations.
+- generic::decode_maybe_check simplified: removed macro, direct get_unchecked calls with preconditions unchanged (output.len() == input.len() / 2).
+- No new ambient capabilities or FFI.
+
+Network / File I/O / Process:
+- None introduced. const-hex remains a pure computational library.
+
+Dependencies:
+- hex-simd 0.8 added only as dev-dependency (benchmarks/tests); does not affect production builds.
+
+Behavioral changes:
+- strip_prefix now accepts both 0x and 0X prefixes (minor additive feature).
+- serde serialize functions now use serializer.collect_str + format_args! instead of serialize_str with intermediate String; this removes the alloc feature gate requirement and is a pure optimization.
+- Added no_prefix serde submodule for serialization without 0x prefix.
+- All existing public APIs behaviorally unchanged.
+"""
+
 [[audits.const-oid]]
 who = "Rodrigo Bronzelle"
 criteria = "safe-to-deploy"
