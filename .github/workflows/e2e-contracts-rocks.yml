@@ -76,7 +76,7 @@ jobs:
         run: cargo install killport@1.1.0 wait-service@0.3.1 || true
 
       - name: Set up dependencies
-        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2.79.2
         with:
           tool: cargo-llvm-cov@0.6.14
 
@@ -102,7 +102,7 @@ jobs:
 
     steps:
       - name: Checkout brlc-monorepo repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: cloudwalk/brlc-monorepo
 
@@ -157,7 +157,7 @@ jobs:
         run: cargo install killport@1.1.0 wait-service@0.3.1 || true
 
       - name: Set up Just
-        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2.0.0
 
       - name: Install Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0

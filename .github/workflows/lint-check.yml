@@ -68,7 +68,7 @@ jobs:
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
 
       - name: Set up Just
-        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2.0.0
 
       - name: Just lint-check
         run: just lint-check -2025-05-22
@@ -92,7 +92,7 @@ jobs:
           node-version-file: .tool-versions
 
       - name: Set up Just
-        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2.0.0
 
       - name: Set up shfmt
         uses: mfinelli/setup-shfmt@c35fe75ed300d20f8c48f1fc730a7e86056aefc1 # v3.0.1
