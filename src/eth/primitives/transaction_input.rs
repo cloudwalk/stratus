@@ -79,6 +79,25 @@ pub struct TransactionInput {
     pub signature: Signature,
 }
 
+impl TransactionInput {
+    /// Recovers the signer from the transaction signature using ECDSA recovery.
+    ///
+    /// This must be called after constructing a TransactionInput to ensure the signer
+    /// is derived from the same canonical fields regardless of the origin.
+    pub fn recover_signer(&mut self) -> anyhow::Result<()> {
+        let alloy_tx: AlloyTransaction = self.clone().into();
+        let signer: Address = match alloy_tx.inner.inner().recover_signer() {
+            Ok(signer) => Address::from(signer),
+            Err(e) => {
+                tracing::warn!(reason = ?e, "failed to recover transaction signer");
+                bail!("Transaction signer cannot be recovered. Check the transaction signature is valid.");
+            }
+        };
+        self.execution_info.signer = signer;
+        Ok(())
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Serialization / Deserialization
 // -----------------------------------------------------------------------------
@@ -86,14 +105,17 @@ pub struct TransactionInput {
 impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         fn convert_tx(envelope: TxEnvelope) -> Result<TransactionInput, rlp::DecoderError> {
-            TransactionInput::try_from(alloy_rpc_types_eth::Transaction {
-                inner: envelope.try_into_recovered().map_err(|_| rlp::DecoderError::Custom("signature error"))?,
+            let mut tx_input = TransactionInput::try_from(alloy_rpc_types_eth::Transaction {
+                inner: Recovered::new_unchecked(envelope, alloy_primitives::Address::ZERO),
                 block_hash: None,
                 block_number: None,
                 transaction_index: None,
                 effective_gas_price: None,
             })
-            .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))
+            .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))?;
+
+            tx_input.recover_signer().map_err(|_| rlp::DecoderError::Custom("failed to recover signer"))?;
+            Ok(tx_input)
         }
 
         let raw_bytes = rlp.as_raw();
@@ -126,7 +148,9 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value.0)
+        let mut tx_input = try_from_alloy_transaction(value.0)?;
+        tx_input.recover_signer()?;
+        Ok(tx_input)
     }
 }
 
@@ -134,20 +158,13 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value)
+        let mut tx_input = try_from_alloy_transaction(value)?;
+        tx_input.recover_signer()?;
+        Ok(tx_input)
     }
 }
 
 fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow::Result<TransactionInput> {
-    // extract signer
-    let signer: Address = match value.inner.recover_signer() {
-        Ok(signer) => Address::from(signer),
-        Err(e) => {
-            tracing::warn!(reason = ?e, "failed to recover transaction signer");
-            bail!("Transaction signer cannot be recovered. Check the transaction signature is valid.");
-        }
-    };
-
     // Get signature components from the envelope
     let signature = value.inner.signature();
     let signature = Signature {
@@ -156,6 +173,9 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         v: if signature.v() { U64::ONE } else { U64::ZERO },
     };
 
+    // Build TransactionInput with a placeholder signer.
+    // The actual signer must be recovered via `recover_signer` after construction
+    // to ensure leader and follower use the same ECDSA recovery path.
     Ok(TransactionInput {
         transaction_info: TransactionInfo {
             tx_type: Some(U64::from(value.inner.tx_type() as u8)),
@@ -164,7 +184,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         execution_info: ExecutionInfo {
             chain_id: value.inner.chain_id().map(Into::into),
             nonce: Nonce::from(value.inner.nonce()),
-            signer,
+            signer: Address::ZERO,
             to: match value.inner.kind() {
                 TxKind::Call(addr) => Some(Address::from(addr)),
                 TxKind::Create => None,
