@@ -80,19 +80,15 @@ pub struct TransactionInput {
 }
 
 impl TransactionInput {
-    /// Recovers the signer from the transaction signature using ECDSA recovery.
+    /// Recovers the signer from the original transaction envelope using ECDSA recovery.
     ///
     /// This must be called after constructing a TransactionInput to ensure the signer
-    /// is derived from the same canonical fields regardless of the origin.
-    pub fn recover_signer(&mut self) -> anyhow::Result<()> {
-        let alloy_tx: AlloyTransaction = self.clone().into();
-        let signer_raw = alloy_tx
-            .inner
-            .inner()
+    /// is derived from the same recovery path regardless of the origin.
+    fn recover_signer(&mut self, envelope: &TxEnvelope) -> anyhow::Result<()> {
+        let signer = envelope
             .recover_signer()
             .context("Transaction signer cannot be recovered. Check the transaction signature is valid.")?;
-        let signer = Address::from(signer_raw);
-        self.execution_info.signer = signer;
+        self.execution_info.signer = Address::from(signer);
         Ok(())
     }
 }
@@ -104,8 +100,8 @@ impl TransactionInput {
 impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         fn convert_tx(envelope: TxEnvelope) -> Result<TransactionInput, rlp::DecoderError> {
-            let mut tx_input = TransactionInput::try_from(alloy_rpc_types_eth::Transaction {
-                inner: Recovered::new_unchecked(envelope, alloy_primitives::Address::ZERO),
+            let mut tx_input = try_from_alloy_transaction(alloy_rpc_types_eth::Transaction {
+                inner: Recovered::new_unchecked(envelope.clone(), alloy_primitives::Address::ZERO),
                 block_hash: None,
                 block_number: None,
                 transaction_index: None,
@@ -113,7 +109,9 @@ impl Decodable for TransactionInput {
             })
             .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))?;
 
-            tx_input.recover_signer().map_err(|_| rlp::DecoderError::Custom("failed to recover signer"))?;
+            tx_input
+                .recover_signer(&envelope)
+                .map_err(|_| rlp::DecoderError::Custom("failed to recover signer"))?;
             Ok(tx_input)
         }
 
@@ -147,8 +145,9 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
+        let envelope = value.0.inner.inner().clone();
         let mut tx_input = try_from_alloy_transaction(value.0)?;
-        tx_input.recover_signer()?;
+        tx_input.recover_signer(&envelope)?;
         Ok(tx_input)
     }
 }
@@ -157,8 +156,9 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
+        let envelope = value.inner.inner().clone();
         let mut tx_input = try_from_alloy_transaction(value)?;
-        tx_input.recover_signer()?;
+        tx_input.recover_signer(&envelope)?;
         Ok(tx_input)
     }
 }
