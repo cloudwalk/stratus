@@ -15,7 +15,7 @@ use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
-use anyhow::bail;
+use anyhow::Context;
 use display_json::DebugAsJson;
 use rlp::Decodable;
 
@@ -86,13 +86,12 @@ impl TransactionInput {
     /// is derived from the same canonical fields regardless of the origin.
     pub fn recover_signer(&mut self) -> anyhow::Result<()> {
         let alloy_tx: AlloyTransaction = self.clone().into();
-        let signer: Address = match alloy_tx.inner.inner().recover_signer() {
-            Ok(signer) => Address::from(signer),
-            Err(e) => {
-                tracing::warn!(reason = ?e, "failed to recover transaction signer");
-                bail!("Transaction signer cannot be recovered. Check the transaction signature is valid.");
-            }
-        };
+        let signer_raw = alloy_tx
+            .inner
+            .inner()
+            .recover_signer()
+            .context("Transaction signer cannot be recovered. Check the transaction signature is valid.")?;
+        let signer = Address::from(signer_raw);
         self.execution_info.signer = signer;
         Ok(())
     }
