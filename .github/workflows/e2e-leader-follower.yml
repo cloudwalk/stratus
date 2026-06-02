@@ -144,6 +144,8 @@ jobs:
           sudo apt-get install -y docker-compose
       - name: Clone BRLCToken repository
         run: just contracts-clone
+        env:
+          BRLC_MONOREPO_TOKEN: ${{ secrets.BRLC_MONOREPO_TOKEN }}
       - name: Flatten BRLCToken contract
         run: just contracts-flatten token BRLCToken
       - name: Run e2e tests
