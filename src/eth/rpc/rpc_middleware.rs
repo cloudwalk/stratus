@@ -406,7 +406,7 @@ impl TransactionTracingIdentifiers {
             hash: Some(decoded_tx.transaction_info.hash),
             contract: codegen::contract_name(&decoded_tx.execution_info.to),
             function: codegen::function_sig(&decoded_tx.execution_info.input),
-            from: Some(decoded_tx.execution_info.signer),
+            from: decoded_tx.execution_info.signer.address(),
             to: decoded_tx.execution_info.to,
             nonce: Some(decoded_tx.execution_info.nonce),
         })

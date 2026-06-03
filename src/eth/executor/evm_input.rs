@@ -87,7 +87,7 @@ impl EvmInput {
     /// Creates from a transaction that was sent to Stratus with `eth_sendRawTransaction` or during Importing.
     pub fn from_eth_transaction(input: &ExecutionInfo, block_number: BlockNumber, block_timestamp: UnixTime) -> Self {
         Self {
-            from: input.signer,
+            from: input.signer.address().unwrap(),
             to: input.to,
             value: input.value,
             data: input.input.clone(),

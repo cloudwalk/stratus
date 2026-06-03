@@ -16,6 +16,7 @@ use crate::eth::primitives::ExecutionInfo;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::MinedData;
 use crate::eth::primitives::Signature;
+use crate::eth::primitives::Signer;
 use crate::eth::primitives::TransactionInfo;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::logs_bloom::LogsBloom;
@@ -84,7 +85,7 @@ impl From<TransactionExecution> for TransactionInput {
             execution_info: ExecutionInfo {
                 chain_id: value.evm_input.chain_id,
                 nonce: value.evm_input.nonce.unwrap_or_default(),
-                signer: value.evm_input.from,
+                signer: Signer::Recovered(value.evm_input.from),
                 to: value.evm_input.to,
                 value: value.evm_input.value,
                 input: value.evm_input.data,

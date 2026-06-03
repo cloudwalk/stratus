@@ -83,6 +83,100 @@ export class Account implements Addressable {
             accessList: [],
         });
     }
+
+    async signFullFieldsLegacy(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            gasPrice: 2000000000,
+            gasLimit,
+            nonce,
+            type: 0,
+            data: "0xdeadbeef",
+        });
+    }
+
+    async signFullFieldsEIP2930(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            gasPrice: 2000000000,
+            gasLimit,
+            nonce,
+            type: 1,
+            data: "0xdeadbeef",
+            accessList: [
+                {
+                    address: "0x0000000000000000000000000000000000000001",
+                    storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000001"],
+                },
+            ],
+        });
+    }
+
+    async signFullFieldsEIP1559(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            maxFeePerGas: 2000000000,
+            maxPriorityFeePerGas: 1000000000,
+            gasLimit,
+            nonce,
+            type: 2,
+            data: "0xdeadbeef",
+            accessList: [
+                {
+                    address: "0x0000000000000000000000000000000000000001",
+                    storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000001"],
+                },
+            ],
+        });
+    }
+
+    async signFullFieldsEIP4844(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            maxFeePerGas: 2000000000,
+            maxPriorityFeePerGas: 1000000000,
+            gasLimit,
+            nonce,
+            type: 3,
+            data: "0xdeadbeef",
+            accessList: [
+                {
+                    address: "0x0000000000000000000000000000000000000001",
+                    storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000001"],
+                },
+            ],
+            maxFeePerBlobGas: 1000000000,
+            blobVersionedHashes: [],
+        });
+    }
 }
 
 export const ALICE = new Account(
