@@ -479,6 +479,12 @@ notes = """
 Assessment: Low-risk patch, implementation consistent with prior vetted version. Safe to deploy.
 """
 
+[[audits.quick_cache]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.6.18 -> 0.6.22"
+notes = "Bug fixes for cache capacity edge-case and JoinFuture::poll race condition. New entry/try_* APIs and optional crossbeam-utils backend are additive. All unsafe usage is localized to existing internal performance paths with documented safety invariants. No advisories, no FFI, no build scripts, no proc-macros."
+
 [[audits.r-efi]]
 who = "Rodrigo Bronzelle"
 criteria = "safe-to-deploy"
