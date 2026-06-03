@@ -205,6 +205,18 @@ criteria = "safe-to-deploy"
 delta = "2.1.1 -> 2.1.5"
 notes = "Reviewed 2.1.1->2.1.5: FK20 setup zero-inits, audit info, no new unsafe beyond existing C bindings."
 
+[[audits.cargo-platform]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.1.9 -> 0.3.2"
+notes = "Benign feature additions (raw identifiers in cfg expressions, boolean cfg literals, keyword warnings) and a dependency optimization (serde -> serde_core). No unsafe code, no network/IO, no build scripts. No advisories."
+
+[[audits.cargo_metadata]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.20.0 -> 0.23.1"
+notes = "Ergonomic improvements (newtype wrappers, env_remove helper), stabilization of build_directory metadata field, routine dependency bumps. No unsafe, no build scripts, no new network/IO. No advisories."
+
 [[audits.chrono]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -363,6 +375,12 @@ who = "Rodrigo Bronzelle"
 criteria = "safe-to-deploy"
 delta = "0.2.0 -> 0.2.1"
 notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
+
+[[audits.objc2-io-kit]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.3.1"
+notes = "Auto-generated FFI binding crate to Apple's IOKit framework from the well-known objc2 ecosystem. No build scripts, no proc macros. All unsafe code is standard FFI declarations and objc2 trait implementations. No advisories."
 
 [[audits.opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -607,6 +625,12 @@ criteria = "safe-to-deploy"
 delta = "1.3.0 -> 1.4.1"
 notes = "Reviewed 1.3.0->1.4.1: adds transient keyword support and doc cfg cleanup; no unsafe."
 
+[[audits.sysinfo]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.34.2 -> 0.37.2"
+notes = "Read-only system-information crate. Delta is bug fixes, new read-only APIs, and adoption of objc2-io-kit bindings. Unsafe footprint largely unchanged (mostly #[unsafe(no_mangle)] edition syntax changes). No advisories."
+
 [[audits.tempfile]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -653,6 +677,72 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.32.0"
 notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
+
+[[audits.vergen]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "9.0.6 -> 9.1.0"
+notes = "Workspace-wide version alignment and Rust 2024 edition migration. No logic changes to core functions. Unsafe usage is only env::set_var() wrapped in unsafe {} to comply with Rust 2024 semantics, behind a non-default feature. No advisories."
+
+[[audits.vergen-gitcl]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "1.0.8 -> 9.1.0"
+notes = "Workspace-wide version alignment, not a breaking API change. Zero logic changes to run_cmd, git entry computation, or dirty/local offset logic. Only import reordering, lint updates for Rust 2024, and build.rs simplification. No advisories."
+
+[[audits.vergen-lib]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.1.6 -> 9.1.0"
+notes = "Workspace-wide edition-2024 synchronization. Only meaningful delta is unsafe { env::set_var(...) } required by Rust 2024 semantics, behind a non-default feature. No new dependencies, no network/IO. No advisories."
+
+[[audits.windows]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.61.3"
+notes = "Massive diff is almost entirely auto-generated Windows API bindings from ECMA-335 metadata, which is the normal mode of operation. Manual code additions are small, safe convenience wrappers. Replaced windows-targets binary blobs with windows-link (native raw-dylib), a net security improvement. No advisories."
+
+[[audits.windows-collections]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = "Thin in-memory adapter bridging Rust collections to Windows Runtime interfaces. No manual unsafe blocks. Unsafe surface limited to standard auto-generated COM bindings. No build scripts, no network/IO. No advisories."
+
+[[audits.windows-core]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.61.2"
+notes = "Restructuring to adopt windows-link and eliminate windows-targets. Unsafe footprint dropped by ~50% (435 -> 223 occurrences). Removed unsafe wrappers (heap.rs, delay_load.rs, waiter.rs). event.rs refactored from manual unsafe memory management to safe Arc + RwLock. No advisories."
+
+[[audits.windows-future]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.2.1"
+notes = "Official Microsoft WinRT async interface wrappers. No build scripts, no proc macros. Unsafe code is limited to auto-generated COM vtables and well-documented Win32 sync API calls. No advisories."
+
+[[audits.windows-implement]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.60.2"
+notes = "Proc-macro crate refactoring: split monolithic lib.rs into gen.rs and tests.rs. Added opt-in Agile = true/false attribute for COM implementations. No new dependencies. No unsafe in the macro itself. No advisories."
+
+[[audits.windows-interface]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.59.3"
+notes = "Proc-macro refactoring of COM vtable generation. Simplified dispatch logic by removing Impl associated type. No new unsafe in macro source, no new dependencies, no build scripts. No advisories."
+
+[[audits.windows-numerics]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = "Small math library with 3 localized FFI calls to documented Windows system DLLs (d2d1.dll). No build scripts, no proc macros, no network/IO, no crypto. No advisories."
+
+[[audits.windows-threading]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.1.0"
+notes = "Thin no_std wrapper over standard Windows thread pool APIs (kernel32.dll). All unsafe is tightly scoped to FFI calls. Safe public API enforces Send/Sync/'static. No build scripts, no proc macros. No advisories."
 
 [[audits.wit-bindgen]]
 who = "Rodrigo Bronzelle"
