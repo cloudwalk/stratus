@@ -267,6 +267,12 @@ Supply-Chain Integrity Risk:
 Conclusion:
 Based on the available evidence, the update of 'chrono' from 0.4.42 to 0.4.43 does not introduce observable supply-chain or security risks within the evaluated scope."""
 
+[[audits.clap_lex]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.7.5 -> 1.1.0"
+notes = "Only runtime code change is explicit lifetime annotations in public API signatures, with zero runtime behavior change. No new unsafe, network, IO, crypto, build scripts, or proc-macros. No advisories."
+
 [[audits.console]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
