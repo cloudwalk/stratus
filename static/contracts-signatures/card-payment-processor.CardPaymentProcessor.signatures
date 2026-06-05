@@ -96,6 +96,8 @@ b6f86ddb: CardPaymentProcessor_PaymentStatusInappropriate(uint8)
 93b738c7: CardPaymentProcessor_RevocationLimitReached(uint8)
 dc7d2a3b: CardPaymentProcessor_SubsidizedPaymentWithNonZeroRefundAmount()
 9a6eae47: CardPaymentProcessor_TokenAddressZero()
+1d164e36: SafeTreasury_SourceNotTreasury(address)
+820d4d59: SafeTreasury_TreasuryTokenMismatch(address,address,address)
 
 Event signatures:
 917c251bb231c4b997a420bebe47edad5c20e70715da16c38e9b2e172e44ab92: Blocklisted(address)
