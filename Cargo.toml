@@ -36,7 +36,7 @@ rustc-hash = "=2.1.1"
 smallvec = "=1.15.1"
 static_assertions = "=1.1.0"
 strum = { version = "=0.27.2", features = ["derive"] }
-quick_cache = "=0.6.18"
+quick_cache = "=0.6.22"
 sugars = "=3.0.1"
 thiserror = "=2.0.18"
 uuid = { version = "=1.18.1", features = ["v7"]}
@@ -74,7 +74,7 @@ futures-channel = "=0.3.31"
 # ethereum / rpc
 ethabi = "=18.0.0"
 rlp = "=0.6.1"
-alloy-trie = "=0.9.1"
+alloy-trie = "=0.9.5"
 revm-inspectors = { version = "=0.31.2", features = ["js-tracer"] }
 alloy-rpc-types-trace = "=1.0.41"
 alloy-rpc-types-eth = "=1.0.41"

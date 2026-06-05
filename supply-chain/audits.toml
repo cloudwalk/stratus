@@ -181,6 +181,40 @@ criteria = "safe-to-deploy"
 delta = "1.2.0 -> 1.4.1"
 notes = "Reviewed 1.2.0->1.4.1: panic messages synced, topic padding fix, feature gating; no unsafe additions."
 
+[[audits.alloy-trie]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io>"
+criteria = "safe-to-deploy"
+delta = "0.9.1 -> 0.9.5"
+notes = """
+Reviewed 0.9.1 -> 0.9.5 diff via cargo vet diff --mode local.
+
+Scope: RlpNode internal rewrite, TrieMask additions, proof error refactoring, dependency cleanup.
+
+Unsafe / Soundness:
+- RlpNode rewritten from ArrayVec<u8, 33> to manual { len: u8, buf: [MaybeUninit<u8>; 33] }. This introduces new unsafe blocks, all sound:
+  - from_raw: ptr::copy_nonoverlapping guarded by `len <= MAX` (33).
+  - word_rlp: ptr::copy_nonoverlapping of 32 bytes at offset 1 within a 33-byte buffer; size is fixed and statically safe.
+  - as_slice / as_mut_slice: slice::from_raw_parts(_mut) using self.len, which is always <= MAX and tracks initialized bytes.
+  - Clone: ptr::read(self) is safe because the struct contains only Copy/trivially-copyable types (u8 + [MaybeUninit<u8>; 33]).
+  - No risk of buffer overflow, use-after-free, or reading uninitialized memory beyond tracked length.
+- All other changes are safe Rust with no new unsafe.
+
+Network / File I/O / Process:
+- None. alloy-trie remains a pure data-structure/algorithm crate.
+
+Dependencies:
+- Removed arrayvec dependency (replaced by manual MaybeUninit).
+- Added thiserror v2 for derive-based Error impls (replaces manual Display/Error).
+- proptest-derive bumped 0.5 -> 0.7 (dev-only).
+- criterion bumped 2.10 -> 4.3 (dev-only, codspeed compat).
+
+Behavioral changes:
+- TrieMask: added `len()`, `iter()` for efficient set-bit iteration, bit-shift ops (Shl/Shr), and BitXor. All additive, existing APIs unchanged.
+- ordered_trie_root_encoded: new function for pre-encoded items (e.g. EIP-2718 transactions). Pure algorithmic addition.
+- KECCAK_EMPTY now re-exported from alloy-primitives instead of locally defined — no behavior change.
+- sort_unstable_by changed to sort_unstable_by_key in a few places (clippy fix, no behavior change).
+"""
+
 [[audits.alloy-tx-macros]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -456,6 +490,12 @@ notes = """
 
 Assessment: Low-risk patch, implementation consistent with prior vetted version. Safe to deploy.
 """
+
+[[audits.quick_cache]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.6.18 -> 0.6.22"
+notes = "Bug fixes for cache capacity edge-case and JoinFuture::poll race condition. New entry/try_* APIs and optional crossbeam-utils backend are additive. All unsafe usage is localized to existing internal performance paths with documented safety invariants. No advisories, no FFI, no build scripts, no proc-macros."
 
 [[audits.r-efi]]
 who = "Rodrigo Bronzelle"

@@ -13,6 +13,9 @@ metrics! {
     "Number of JSON-RPC requests that finished."
     histogram_duration rpc_requests_finished{client, method, contract, function, result, result_code, success},
 
+    "Response size in bytes for JSON-RPC responses."
+    histogram_counter rpc_response_size{client, method},
+
     "Number of JSON-RPC subscriptions active right now."
     gauge rpc_subscriptions_active{subscription, client}
 }
