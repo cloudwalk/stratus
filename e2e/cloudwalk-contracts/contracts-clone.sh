@@ -19,10 +19,20 @@ clone() {
         git -C "$target" pull
     else
         log "Cloning: $repo"
-        if ! git clone https://github.com/cloudwalk/"$repo".git -b main "$target"; then
-            log "Clone failed. Removing folder and exiting."
-            rm -rf "$target"
-            return 1
+        if [ -n "${BRLC_MONOREPO_TOKEN:-}" ]; then
+            # Authenticated clone using the PAT. GitHub Actions masks secrets
+            # in logs, so the token is redacted if echoed in error output.
+            if ! git clone "https://x-access-token:${BRLC_MONOREPO_TOKEN}@github.com/cloudwalk/${repo}.git" -b main "$target"; then
+                log "Clone failed. Removing folder and exiting."
+                rm -rf "$target"
+                return 1
+            fi
+        else
+            if ! git clone "https://github.com/cloudwalk/${repo}.git" -b main "$target"; then
+                log "Clone failed. Removing folder and exiting."
+                rm -rf "$target"
+                return 1
+            fi
         fi
     fi
 

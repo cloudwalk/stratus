@@ -373,6 +373,8 @@ impl Future for RpcResponse<'_> {
                     error_code,
                     response.is_success(),
                 );
+
+                metrics::inc_rpc_response_size(response.as_json().get().len(), &*resp.client, resp.method.clone());
             }
 
             // drop span because maybe jsonrpsee is keeping it alive
