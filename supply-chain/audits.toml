@@ -428,6 +428,18 @@ criteria = "safe-to-deploy"
 version = "0.31.0"
 notes = "Reviewed 0.30.0->0.31.0: propagates parent remote flag, skips on_start for non-recording spans, restores async BatchSpanProcessor concurrency limits; no unsafe."
 
+[[audits.pin-project]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "1.1.10 -> 1.1.13"
+notes = "Three patch releases with only benign changes: release immutability metadata, documentation fixes, and Clippy lint suppression in generated Drop impls. No unsafe code (#![forbid(unsafe_code)] still present). No build scripts, no new dependencies. No advisories."
+
+[[audits.pin-project-internal]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "1.1.10 -> 1.1.13"
+notes = "Proc-macro changes are lint attribute adjustments, let else / is_some_and syntax modernization, and derive macro reordering. #![forbid(unsafe_code)] still present. No build scripts. No advisories."
+
 [[audits.prettyplease]]
 who = "Rodrigo Bronzelle"
 criteria = "safe-to-deploy"
