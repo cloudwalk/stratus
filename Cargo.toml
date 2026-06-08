@@ -96,7 +96,7 @@ bytes = "=1.11.1"
 log = "=0.4.29"
 metrics = "=0.24.2"
 metrics-exporter-prometheus = { version = "=0.17.2", optional = true }
-opentelemetry = "=0.31.0"
+opentelemetry = "=0.32.0"
 opentelemetry_sdk = { version = "=0.31.0", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "=0.31.0", features = [
     "http-proto",
