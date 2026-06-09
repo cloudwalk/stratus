@@ -15,7 +15,7 @@ use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
-use anyhow::bail;
+use anyhow::Context;
 use display_json::DebugAsJson;
 use rlp::Decodable;
 
@@ -39,13 +39,60 @@ pub struct TransactionInfo {
     pub hash: Hash,
 }
 
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Signer {
+    Recovered(Address),
+    Unrecovered,
+}
+
+impl Default for Signer {
+    fn default() -> Self {
+        Self::Unrecovered
+    }
+}
+
+impl Signer {
+    pub fn address(&self) -> Option<Address> {
+        match self {
+            Self::Recovered(addr) => Some(*addr),
+            Self::Unrecovered => None,
+        }
+    }
+
+    pub fn is_recovered(&self) -> bool {
+        matches!(self, Self::Recovered(_))
+    }
+}
+
+impl std::fmt::Display for Signer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Recovered(addr) => write!(f, "{addr}"),
+            Self::Unrecovered => write!(f, "<unrecovered>"),
+        }
+    }
+}
+
+impl std::fmt::Debug for Signer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
+}
+
+#[cfg(test)]
+impl fake::Dummy<fake::Faker> for Signer {
+    fn dummy_with_rng<R: fake::Rng + ?Sized>(_: &fake::Faker, rng: &mut R) -> Self {
+        Self::Recovered(fake::Dummy::dummy_with_rng(&fake::Faker, rng))
+    }
+}
+
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionInfo {
     #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_option::<ChainId>()"))]
     pub chain_id: Option<ChainId>,
     pub nonce: Nonce,
-    pub signer: Address,
+    pub signer: Signer,
     #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_option::<Address>()"))]
     pub to: Option<Address>,
     pub value: Wei,
@@ -79,6 +126,29 @@ pub struct TransactionInput {
     pub signature: Signature,
 }
 
+impl TransactionInput {
+    /// Returns the recovered signer address.
+    ///
+    /// # Panics
+    /// Panics if the signer has not been recovered. All construction paths
+    /// call `recover_signer` before returning, so this is safe in practice.
+    pub fn signer(&self) -> Address {
+        self.execution_info.signer.address().unwrap()
+    }
+
+    /// Recovers the signer from the original transaction envelope using ECDSA recovery.
+    ///
+    /// This must be called after constructing a TransactionInput to ensure the signer
+    /// is derived from the same recovery path regardless of the origin.
+    fn recover_signer(&mut self, envelope: &TxEnvelope) -> anyhow::Result<()> {
+        let signer = envelope
+            .recover_signer()
+            .context("Transaction signer cannot be recovered. Check the transaction signature is valid.")?;
+        self.execution_info.signer = Signer::Recovered(Address::from(signer));
+        Ok(())
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Serialization / Deserialization
 // -----------------------------------------------------------------------------
@@ -86,14 +156,19 @@ pub struct TransactionInput {
 impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         fn convert_tx(envelope: TxEnvelope) -> Result<TransactionInput, rlp::DecoderError> {
-            TransactionInput::try_from(alloy_rpc_types_eth::Transaction {
-                inner: envelope.try_into_recovered().map_err(|_| rlp::DecoderError::Custom("signature error"))?,
+            let mut tx_input = try_from_alloy_transaction(alloy_rpc_types_eth::Transaction {
+                inner: Recovered::new_unchecked(envelope.clone(), alloy_primitives::Address::ZERO),
                 block_hash: None,
                 block_number: None,
                 transaction_index: None,
                 effective_gas_price: None,
             })
-            .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))
+            .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))?;
+
+            tx_input
+                .recover_signer(&envelope)
+                .map_err(|_| rlp::DecoderError::Custom("failed to recover signer"))?;
+            Ok(tx_input)
         }
 
         let raw_bytes = rlp.as_raw();
@@ -126,7 +201,10 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value.0)
+        let envelope = value.0.inner.inner().clone();
+        let mut tx_input = try_from_alloy_transaction(value.0)?;
+        tx_input.recover_signer(&envelope)?;
+        Ok(tx_input)
     }
 }
 
@@ -134,20 +212,14 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
-        try_from_alloy_transaction(value)
+        let envelope = value.inner.inner().clone();
+        let mut tx_input = try_from_alloy_transaction(value)?;
+        tx_input.recover_signer(&envelope)?;
+        Ok(tx_input)
     }
 }
 
 fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow::Result<TransactionInput> {
-    // extract signer
-    let signer: Address = match value.inner.recover_signer() {
-        Ok(signer) => Address::from(signer),
-        Err(e) => {
-            tracing::warn!(reason = ?e, "failed to recover transaction signer");
-            bail!("Transaction signer cannot be recovered. Check the transaction signature is valid.");
-        }
-    };
-
     // Get signature components from the envelope
     let signature = value.inner.signature();
     let signature = Signature {
@@ -156,6 +228,9 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         v: if signature.v() { U64::ONE } else { U64::ZERO },
     };
 
+    // Build TransactionInput with an unrecovered signer.
+    // The actual signer must be recovered via `recover_signer` after construction
+    // to ensure leader and follower use the same ECDSA recovery path.
     Ok(TransactionInput {
         transaction_info: TransactionInfo {
             tx_type: Some(U64::from(value.inner.tx_type() as u8)),
@@ -164,7 +239,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         execution_info: ExecutionInfo {
             chain_id: value.inner.chain_id().map(Into::into),
             nonce: Nonce::from(value.inner.nonce()),
-            signer,
+            signer: Signer::Unrecovered,
             to: match value.inner.kind() {
                 TxKind::Call(addr) => Some(Address::from(addr)),
                 TxKind::Create => None,
@@ -184,6 +259,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
 
 impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
+        let signer = value.signer();
         let signature = value.signature.into();
 
         let tx_type = value.transaction_info.tx_type.map(|t| t.as_u64()).unwrap_or(0);
@@ -276,7 +352,7 @@ impl From<TransactionInput> for AlloyTransaction {
         };
 
         Self {
-            inner: Recovered::new_unchecked(inner, value.execution_info.signer.into()),
+            inner: Recovered::new_unchecked(inner, signer.into()),
             block_hash: None,
             block_number: None,
             transaction_index: None,

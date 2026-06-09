@@ -388,7 +388,7 @@ impl Executor {
                 if tx_input.execution_info.nonce != sender.nonce {
                     bail!(
                         "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
-                        tx_input.execution_info.signer,
+                        tx_input.signer(),
                         tx_input.execution_info.nonce,
                         sender.nonce
                     );
@@ -450,7 +450,7 @@ impl Executor {
         // track
         Span::with(|s| {
             s.rec_str("tx_hash", &tx.transaction_info.hash);
-            s.rec_str("tx_from", &tx.execution_info.signer);
+            s.rec_str("tx_from", &tx.signer());
             s.rec_opt("tx_to", &tx.execution_info.to);
             s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
@@ -475,7 +475,7 @@ impl Executor {
     /// Executes a transaction until it reaches the max number of attempts.
     fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, max_attempts: usize) -> Result<(), StratusError> {
         // validate
-        if tx_input.execution_info.signer.is_zero() {
+        if !tx_input.execution_info.signer.is_recovered() || tx_input.signer().is_zero() {
             return Err(TransactionError::FromZeroAddress.into());
         }
 
@@ -489,7 +489,7 @@ impl Executor {
                 "executor::local_transaction_attempt",
                 %attempt,
                 tx_hash = %tx_input.transaction_info.hash,
-                tx_from = %tx_input.execution_info.signer,
+                tx_from = %tx_input.signer(),
                 tx_to = tracing::field::Empty,
                 tx_nonce = %tx_input.execution_info.nonce
             )
@@ -507,7 +507,7 @@ impl Executor {
                 %attempt,
                 tx_hash = %tx_input.transaction_info.hash,
                 tx_nonce = %tx_input.execution_info.nonce,
-                tx_signer = %tx_input.execution_info.signer,
+                tx_signer = %tx_input.signer(),
                 tx_to = ?tx_input.execution_info.to,
                 tx_data_len = %tx_input.execution_info.input.len(),
                 tx_data = %tx_input.execution_info.input,
