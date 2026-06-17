@@ -795,6 +795,11 @@ who = "Droid (cargo-vet automation)"
 criteria = "safe-to-deploy"
 version = "0.1.0"
 notes = "Thin no_std wrapper over standard Windows thread pool APIs (kernel32.dll). All unsafe is tightly scoped to FFI calls. Safe public API enforces Send/Sync/'static. No build scripts, no proc macros. No advisories."
+[[audits.uuid]]
+who = "Claude / cargo-vet auditor"
+criteria = "safe-to-deploy"
+delta = "1.18.1 -> 1.23.3"
+notes = "Reviewed uuid 1.18.1 -> 1.23.3 via cargo vet diff and upstream sources. Changes are maintenance/bug-fix release spanning 1.19.0-1.23.3: edition 2021, dependency updates (getrandom 0.3->0.4, rand 0.9->0.10, serde renamed to serde_core alias), v7 monotonicity/counter correctness fixes, parser panic fix, and removal of uuid-macro-internal proc-macro in favor of a declarative const macro. No new unsafe code; the existing unsafe is unchanged and limited to ASCII hex formatting transmutes. No network/filesystem/process I/O, build scripts, or crypto changes. No RustSec advisories. MSRV raised to 1.85.0; project uses Rust 1.88. Breaking changes (serde adapter strictness, deprecated Context/ContextV1, Timestamp::from_gregorian_time) are not used in stratus. Project only uses Uuid::now_v7() and Uuid::nil() via uuid v7 feature."
 
 [[audits.wit-bindgen]]
 who = "Rodrigo Bronzelle"
