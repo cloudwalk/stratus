@@ -91,6 +91,9 @@ impl From<TransactionExecution> for TransactionInput {
                 input: value.evm_input.data,
                 gas_limit: value.evm_input.gas_limit,
                 gas_price: value.evm_input.gas_price,
+                max_priority_fee_per_gas: 0,
+                max_fee_per_blob_gas: 0,
+                blob_versioned_hashes: Vec::new(),
             },
             signature: value.signature,
         }

@@ -99,6 +99,10 @@ pub struct ExecutionInfo {
     pub input: Bytes,
     pub gas_limit: Gas,
     pub gas_price: u128,
+    pub max_priority_fee_per_gas: u128,
+    pub max_fee_per_blob_gas: u128,
+    #[cfg_attr(test, dummy(expr = "Vec::new()"))]
+    pub blob_versioned_hashes: Vec<Hash>,
 }
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -266,6 +270,13 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
             input: Bytes::from(value.inner.input().clone()),
             gas_limit: Gas::from(value.inner.gas_limit()),
             gas_price: value.inner.max_fee_per_gas(),
+            max_priority_fee_per_gas: value.inner.max_priority_fee_per_gas().unwrap_or_default(),
+            max_fee_per_blob_gas: value.inner.max_fee_per_blob_gas().unwrap_or_default(),
+            blob_versioned_hashes: value
+                .inner
+                .blob_versioned_hashes()
+                .map(|hashes| hashes.iter().copied().map(Hash::from).collect())
+                .unwrap_or_default(),
         },
         signature,
     })
@@ -305,7 +316,7 @@ impl From<TransactionInput> for AlloyTransaction {
                     chain_id: value.execution_info.chain_id.unwrap_or_default().into(),
                     nonce: value.execution_info.nonce.into(),
                     max_fee_per_gas: value.execution_info.gas_price,
-                    max_priority_fee_per_gas: value.execution_info.gas_price,
+                    max_priority_fee_per_gas: value.execution_info.max_priority_fee_per_gas,
                     gas_limit: value.execution_info.gas_limit.into(),
                     to: TxKind::from(value.execution_info.to.map(Into::into)),
                     value: value.execution_info.value.into(),
@@ -322,14 +333,14 @@ impl From<TransactionInput> for AlloyTransaction {
                     chain_id: value.execution_info.chain_id.unwrap_or_default().into(),
                     nonce: value.execution_info.nonce.into(),
                     max_fee_per_gas: value.execution_info.gas_price,
-                    max_priority_fee_per_gas: value.execution_info.gas_price,
+                    max_priority_fee_per_gas: value.execution_info.max_priority_fee_per_gas,
                     gas_limit: value.execution_info.gas_limit.into(),
                     to: value.execution_info.to.map(Into::into).unwrap_or_default(),
                     value: value.execution_info.value.into(),
                     input: value.execution_info.input.clone().into(),
                     access_list: AccessList::default(),
-                    blob_versioned_hashes: Vec::new(),
-                    max_fee_per_blob_gas: 0u64.into(),
+                    blob_versioned_hashes: value.execution_info.blob_versioned_hashes.iter().copied().map(Into::into).collect(),
+                    max_fee_per_blob_gas: value.execution_info.max_fee_per_blob_gas,
                 }),
                 signature,
                 value.transaction_info.hash.into(),
@@ -342,7 +353,7 @@ impl From<TransactionInput> for AlloyTransaction {
                     nonce: value.execution_info.nonce.into(),
                     gas_limit: value.execution_info.gas_limit.into(),
                     max_fee_per_gas: value.execution_info.gas_price,
-                    max_priority_fee_per_gas: value.execution_info.gas_price,
+                    max_priority_fee_per_gas: value.execution_info.max_priority_fee_per_gas,
                     to: value.execution_info.to.map(Into::into).unwrap_or_default(),
                     value: value.execution_info.value.into(),
                     input: value.execution_info.input.clone().into(),
