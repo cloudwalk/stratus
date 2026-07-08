@@ -16,7 +16,6 @@ use crate::eth::primitives::ExecutionInfo;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::MinedData;
 use crate::eth::primitives::Signature;
-use crate::eth::primitives::Signer;
 use crate::eth::primitives::TransactionInfo;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::logs_bloom::LogsBloom;
@@ -28,6 +27,7 @@ use crate::ext::RuintExt;
 pub struct TransactionExecution {
     pub info: TransactionInfo,
     pub signature: Signature,
+    pub execution_info: ExecutionInfo,
     pub evm_input: EvmInput,
     pub result: EvmExecutionResult,
 }
@@ -82,19 +82,7 @@ impl From<TransactionExecution> for TransactionInput {
     fn from(value: TransactionExecution) -> Self {
         Self {
             transaction_info: value.info,
-            execution_info: ExecutionInfo {
-                chain_id: value.evm_input.chain_id,
-                nonce: value.evm_input.nonce.unwrap_or_default(),
-                signer: Signer::Recovered(value.evm_input.from),
-                to: value.evm_input.to,
-                value: value.evm_input.value,
-                input: value.evm_input.data,
-                gas_limit: value.evm_input.gas_limit,
-                gas_price: value.evm_input.gas_price,
-                max_priority_fee_per_gas: 0,
-                max_fee_per_blob_gas: 0,
-                blob_versioned_hashes: Vec::new(),
-            },
+            execution_info: value.execution_info,
             signature: value.signature,
         }
     }

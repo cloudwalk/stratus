@@ -20,6 +20,7 @@ use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::types::execution_result::ExecutionResultBuilder;
 use crate::ext::OptionExt;
 use crate::ext::RuintExt;
+use serde_json;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
@@ -36,19 +37,21 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
         Self {
             input: TransactionInputRocksdb {
                 tx_type: execution.info.tx_type.map(|inner| inner.as_u64() as u8),
-                chain_id: execution.evm_input.chain_id.map_into(),
+                chain_id: execution.execution_info.chain_id.map_into(),
                 hash: execution.info.hash.into(),
-                nonce: execution.evm_input.nonce.unwrap_or_default().into(),
-                signer: execution.evm_input.from.into(),
+                nonce: execution.execution_info.nonce.into(),
+                signer: execution.execution_info.signer.address().unwrap_or(execution.evm_input.from).into(),
                 from: execution.evm_input.from.into(),
-                to: execution.evm_input.to.map_into(),
-                value: execution.evm_input.value.into(),
-                input: execution.evm_input.data.clone().into(),
-                gas_limit: execution.evm_input.gas_limit.into(),
-                gas_price: execution.evm_input.gas_price.into(),
-                max_priority_fee_per_gas: 0.into(),
-                max_fee_per_blob_gas: 0.into(),
-                blob_versioned_hashes: Vec::new(),
+                to: execution.execution_info.to.map_into(),
+                value: execution.execution_info.value.into(),
+                input: execution.execution_info.input.clone().into(),
+                gas_limit: execution.execution_info.gas_limit.into(),
+                gas_price: execution.execution_info.gas_price.into(),
+                max_priority_fee_per_gas: execution.execution_info.max_priority_fee_per_gas.into(),
+                max_fee_per_blob_gas: execution.execution_info.max_fee_per_blob_gas.into(),
+                blob_versioned_hashes: execution.execution_info.blob_versioned_hashes.iter().copied().map(HashRocksdb::from).collect(),
+                access_list: serde_json::to_vec(&execution.execution_info.access_list).unwrap_or_default(),
+                authorization_list: serde_json::to_vec(&execution.execution_info.authorization_list).unwrap_or_default(),
                 v: execution.signature.v.as_u64(),
                 r: execution.signature.r.into_limbs(),
                 s: execution.signature.s.into_limbs(),
@@ -103,6 +106,7 @@ impl TransactionMined {
         let execution = TransactionExecution {
             info: input.transaction_info,
             signature: input.signature,
+            execution_info: input.execution_info,
             evm_input,
             result: evm_result,
         };

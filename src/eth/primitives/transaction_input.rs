@@ -103,6 +103,10 @@ pub struct ExecutionInfo {
     pub max_fee_per_blob_gas: u128,
     #[cfg_attr(test, dummy(expr = "Vec::new()"))]
     pub blob_versioned_hashes: Vec<Hash>,
+    #[cfg_attr(test, dummy(expr = "AccessList::default()"))]
+    pub access_list: AccessList,
+    #[cfg_attr(test, dummy(expr = "Vec::new()"))]
+    pub authorization_list: Vec<alloy_eips::eip7702::SignedAuthorization>,
 }
 
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -277,6 +281,8 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
                 .blob_versioned_hashes()
                 .map(|hashes| hashes.iter().copied().map(Hash::from).collect())
                 .unwrap_or_default(),
+            access_list: value.inner.access_list().cloned().unwrap_or_default(),
+            authorization_list: value.inner.authorization_list().map(|list| list.to_vec()).unwrap_or_default(),
         },
         signature,
     })
@@ -304,7 +310,7 @@ impl From<TransactionInput> for AlloyTransaction {
                     to: TxKind::from(value.execution_info.to.map(Into::into)),
                     value: value.execution_info.value.into(),
                     input: value.execution_info.input.clone().into(),
-                    access_list: AccessList::default(),
+                    access_list: value.execution_info.access_list.clone(),
                 },
                 signature,
                 value.transaction_info.hash.into(),
@@ -321,7 +327,7 @@ impl From<TransactionInput> for AlloyTransaction {
                     to: TxKind::from(value.execution_info.to.map(Into::into)),
                     value: value.execution_info.value.into(),
                     input: value.execution_info.input.clone().into(),
-                    access_list: AccessList::default(),
+                    access_list: value.execution_info.access_list.clone(),
                 },
                 signature,
                 value.transaction_info.hash.into(),
@@ -338,7 +344,7 @@ impl From<TransactionInput> for AlloyTransaction {
                     to: value.execution_info.to.map(Into::into).unwrap_or_default(),
                     value: value.execution_info.value.into(),
                     input: value.execution_info.input.clone().into(),
-                    access_list: AccessList::default(),
+                    access_list: value.execution_info.access_list.clone(),
                     blob_versioned_hashes: value.execution_info.blob_versioned_hashes.iter().copied().map(Into::into).collect(),
                     max_fee_per_blob_gas: value.execution_info.max_fee_per_blob_gas,
                 }),
@@ -357,8 +363,8 @@ impl From<TransactionInput> for AlloyTransaction {
                     to: value.execution_info.to.map(Into::into).unwrap_or_default(),
                     value: value.execution_info.value.into(),
                     input: value.execution_info.input.clone().into(),
-                    access_list: AccessList::default(),
-                    authorization_list: Vec::new(),
+                    access_list: value.execution_info.access_list.clone(),
+                    authorization_list: value.execution_info.authorization_list.clone(),
                 },
                 signature,
                 value.transaction_info.hash.into(),
