@@ -187,9 +187,7 @@ impl Decodable for TransactionInput {
             })
             .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))?;
 
-            tx_input
-                .recover_signer()
-                .map_err(|_| rlp::DecoderError::Custom("failed to recover signer"))?;
+            tx_input.recover_signer().map_err(|_| rlp::DecoderError::Custom("failed to recover signer"))?;
             Ok(tx_input)
         }
 
