@@ -129,22 +129,44 @@ pub struct TransactionInput {
 impl TransactionInput {
     /// Returns the recovered signer address.
     ///
-    /// # Panics
-    /// Panics if the signer has not been recovered. All construction paths
-    /// call `recover_signer` before returning, so this is safe in practice.
+    /// If the signer has not been recovered yet, this method recovers it on demand
+    /// from the transaction fields and logs a warning so that missing recovery calls
+    /// are visible.
     pub fn signer(&self) -> Address {
-        self.execution_info.signer.address().unwrap()
+        if let Some(addr) = self.execution_info.signer.address() {
+            return addr;
+        }
+
+        tracing::warn!(tx_hash = %self.transaction_info.hash, "Transaction signer was not recovered before accessing it; recovering on demand");
+        match self.recover_signer_address() {
+            Ok(addr) => addr,
+            Err(e) => {
+                tracing::error!(tx_hash = %self.transaction_info.hash, error = ?e, "failed to recover transaction signer on demand");
+                Address::ZERO
+            }
+        }
     }
 
-    /// Recovers the signer from the original transaction envelope using ECDSA recovery.
-    ///
-    /// This must be called after constructing a TransactionInput to ensure the signer
-    /// is derived from the same recovery path regardless of the origin.
-    fn recover_signer(&mut self, envelope: &TxEnvelope) -> anyhow::Result<()> {
-        let signer = envelope
+    /// Recovers the signer address from the transaction fields already stored in this input.
+    fn recover_signer_address(&self) -> anyhow::Result<Address> {
+        let alloy_tx: AlloyTransaction = self.clone().into();
+        let signer = alloy_tx
+            .inner
+            .inner()
             .recover_signer()
             .context("Transaction signer cannot be recovered. Check the transaction signature is valid.")?;
-        self.execution_info.signer = Signer::Recovered(Address::from(signer));
+        Ok(Address::from(signer))
+    }
+
+    /// Recovers the signer from the transaction fields already present in this input
+    /// and stores it for subsequent accesses.
+    fn recover_signer(&mut self) -> anyhow::Result<()> {
+        if self.execution_info.signer.is_recovered() {
+            return Ok(());
+        }
+
+        let signer = self.recover_signer_address()?;
+        self.execution_info.signer = Signer::Recovered(signer);
         Ok(())
     }
 }
@@ -166,7 +188,7 @@ impl Decodable for TransactionInput {
             .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))?;
 
             tx_input
-                .recover_signer(&envelope)
+                .recover_signer()
                 .map_err(|_| rlp::DecoderError::Custom("failed to recover signer"))?;
             Ok(tx_input)
         }
@@ -201,9 +223,8 @@ impl TryFrom<ExternalTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: ExternalTransaction) -> anyhow::Result<Self> {
-        let envelope = value.0.inner.inner().clone();
         let mut tx_input = try_from_alloy_transaction(value.0)?;
-        tx_input.recover_signer(&envelope)?;
+        tx_input.recover_signer()?;
         Ok(tx_input)
     }
 }
@@ -212,9 +233,8 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
     type Error = anyhow::Error;
 
     fn try_from(value: AlloyTransaction) -> anyhow::Result<Self> {
-        let envelope = value.inner.inner().clone();
         let mut tx_input = try_from_alloy_transaction(value)?;
-        tx_input.recover_signer(&envelope)?;
+        tx_input.recover_signer()?;
         Ok(tx_input)
     }
 }
@@ -259,7 +279,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
 
 impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
-        let signer = value.signer();
+        let signer = value.execution_info.signer.address().unwrap_or_default();
         let signature = value.signature.into();
 
         let tx_type = value.transaction_info.tx_type.map(|t| t.as_u64()).unwrap_or(0);

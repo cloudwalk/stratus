@@ -347,7 +347,7 @@ impl Executor {
 
         let tx_input: TransactionInput = tx.try_into()?;
         let (pending_block, _) = self.storage.read_pending_block_header();
-        let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_block.number, *pending_block.timestamp);
+        let mut evm_input = EvmInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
@@ -475,7 +475,7 @@ impl Executor {
     /// Executes a transaction until it reaches the max number of attempts.
     fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, max_attempts: usize) -> Result<(), StratusError> {
         // validate
-        if !tx_input.execution_info.signer.is_recovered() || tx_input.signer().is_zero() {
+        if tx_input.signer().is_zero() {
             return Err(TransactionError::FromZeroAddress.into());
         }
 
@@ -500,7 +500,7 @@ impl Executor {
 
             // prepare evm input
             let (pending_header, _) = self.storage.read_pending_block_header();
-            let evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_header.number, *pending_header.timestamp);
+            let evm_input = EvmInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::debug!(

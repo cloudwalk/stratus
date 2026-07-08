@@ -96,10 +96,11 @@ impl TransactionMined {
             metrics: EvmExecutionMetrics::default(),
         };
 
+        let evm_input = EvmInput::from_eth_transaction(&input, block_number.into(), other.execution.block_timestamp.into());
         let execution = TransactionExecution {
             info: input.transaction_info,
             signature: input.signature,
-            evm_input: EvmInput::from_eth_transaction(&input.execution_info, block_number.into(), other.execution.block_timestamp.into()),
+            evm_input,
             result: evm_result,
         };
 

@@ -177,6 +177,32 @@ export class Account implements Addressable {
             blobVersionedHashes: [],
         });
     }
+
+    async signFullFieldsEIP7702(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            maxFeePerGas: 2000000000,
+            maxPriorityFeePerGas: 1000000000,
+            gasLimit,
+            nonce,
+            type: 4,
+            data: "0xdeadbeef",
+            accessList: [
+                {
+                    address: "0x0000000000000000000000000000000000000001",
+                    storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000001"],
+                },
+            ],
+            authorizationList: [],
+        });
+    }
 }
 
 export const ALICE = new Account(

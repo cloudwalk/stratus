@@ -7,12 +7,12 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
-use crate::eth::primitives::ExecutionInfo;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::ReadKind;
@@ -85,19 +85,19 @@ pub struct EvmInput {
 
 impl EvmInput {
     /// Creates from a transaction that was sent to Stratus with `eth_sendRawTransaction` or during Importing.
-    pub fn from_eth_transaction(input: &ExecutionInfo, block_number: BlockNumber, block_timestamp: UnixTime) -> Self {
+    pub fn from_eth_transaction(input: &TransactionInput, block_number: BlockNumber, block_timestamp: UnixTime) -> Self {
         Self {
-            from: input.signer.address().unwrap(),
-            to: input.to,
-            value: input.value,
-            data: input.input.clone(),
-            gas_limit: input.gas_limit,
-            gas_price: input.gas_price,
-            nonce: Some(input.nonce),
+            from: input.signer(),
+            to: input.execution_info.to,
+            value: input.execution_info.value,
+            data: input.execution_info.input.clone(),
+            gas_limit: input.execution_info.gas_limit,
+            gas_price: input.execution_info.gas_price,
+            nonce: Some(input.execution_info.nonce),
             block_number,
             block_timestamp,
             point_in_time: PointInTime::Pending,
-            chain_id: input.chain_id,
+            chain_id: input.execution_info.chain_id,
             kind: ReadKind::Transaction,
         }
     }

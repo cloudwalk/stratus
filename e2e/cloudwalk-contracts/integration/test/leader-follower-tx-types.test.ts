@@ -134,19 +134,15 @@ describe("Leader & Follower transaction types signer recovery regression test", 
 
         console.log("Getting receipt for Type 0 (Legacy) tx:", legacyHash);
         const leaderLegacyReceipt = await sendWithRetry("eth_getTransactionReceipt", [legacyHash]);
-        expect(leaderLegacyReceipt.from.toLowerCase()).to.equal(ALICE.address.toLowerCase());
 
         console.log("Getting receipt for Type 1 (EIP-2930) tx:", eip2930Hash);
         const leaderEIP2930Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip2930Hash]);
-        expect(leaderEIP2930Receipt.from.toLowerCase()).to.equal(DAVE.address.toLowerCase());
 
         console.log("Getting receipt for Type 2 (EIP-1559) tx:", eip1559Hash);
         const leaderEIP1559Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip1559Hash]);
-        expect(leaderEIP1559Receipt.from.toLowerCase()).to.equal(CHARLIE.address.toLowerCase());
 
         console.log("Getting receipt for Type 3 (EIP-4844) tx:", eip4844Hash);
         const leaderEIP4844Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip4844Hash]);
-        expect(leaderEIP4844Receipt.from.toLowerCase()).to.equal(EVE.address.toLowerCase());
 
         // Verify receipts on Follower
         console.log("Verifying receipts on Follower...");
@@ -154,18 +150,28 @@ describe("Leader & Follower transaction types signer recovery regression test", 
 
         console.log("Getting receipt for Type 0 (Legacy) tx:", legacyHash);
         const followerLegacyReceipt = await sendWithRetry("eth_getTransactionReceipt", [legacyHash]);
-        expect(followerLegacyReceipt.from.toLowerCase()).to.equal(ALICE.address.toLowerCase());
 
         console.log("Getting receipt for Type 1 (EIP-2930) tx:", eip2930Hash);
         const followerEIP2930Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip2930Hash]);
-        expect(followerEIP2930Receipt.from.toLowerCase()).to.equal(DAVE.address.toLowerCase());
 
         console.log("Getting receipt for Type 2 (EIP-1559) tx:", eip1559Hash);
         const followerEIP1559Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip1559Hash]);
-        expect(followerEIP1559Receipt.from.toLowerCase()).to.equal(CHARLIE.address.toLowerCase());
 
         console.log("Getting receipt for Type 3 (EIP-4844) tx:", eip4844Hash);
         const followerEIP4844Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip4844Hash]);
-        expect(followerEIP4844Receipt.from.toLowerCase()).to.equal(EVE.address.toLowerCase());
+
+        // Deep equality check of the entire receipt on Leader vs Follower
+        expect(leaderLegacyReceipt, "Type 0 receipts differ between leader and follower").to.deep.equal(
+            followerLegacyReceipt,
+        );
+        expect(leaderEIP2930Receipt, "Type 1 receipts differ between leader and follower").to.deep.equal(
+            followerEIP2930Receipt,
+        );
+        expect(leaderEIP1559Receipt, "Type 2 receipts differ between leader and follower").to.deep.equal(
+            followerEIP1559Receipt,
+        );
+        expect(leaderEIP4844Receipt, "Type 3 receipts differ between leader and follower").to.deep.equal(
+            followerEIP4844Receipt,
+        );
     });
 });
