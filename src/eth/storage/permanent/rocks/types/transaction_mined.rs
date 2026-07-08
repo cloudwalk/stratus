@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use serde_json;
+
 use super::block_number::BlockNumberRocksdb;
 use super::execution::ExecutionRocksdb;
 use super::hash::HashRocksdb;
@@ -20,7 +22,6 @@ use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::types::execution_result::ExecutionResultBuilder;
 use crate::ext::OptionExt;
 use crate::ext::RuintExt;
-use serde_json;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]

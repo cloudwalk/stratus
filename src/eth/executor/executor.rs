@@ -379,13 +379,7 @@ impl Executor {
                     return Err(e);
                 };
 
-                TransactionExecution::new(
-                    tx_input.transaction_info,
-                    tx_input.signature,
-                    tx_input.execution_info,
-                    evm_input,
-                    evm_execution,
-                )
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_execution)
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -408,13 +402,7 @@ impl Executor {
                 evm_input.gas_limit = tx_input.execution_info.gas_limit;
                 evm_input.gas_price = tx_input.execution_info.gas_price;
 
-                TransactionExecution::new(
-                    tx_input.transaction_info,
-                    tx_input.signature,
-                    tx_input.execution_info,
-                    evm_input,
-                    evm_result,
-                )
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_result)
             }
         };
 
