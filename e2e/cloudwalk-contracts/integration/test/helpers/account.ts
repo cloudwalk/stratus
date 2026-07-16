@@ -117,12 +117,7 @@ export class Account implements Addressable {
             nonce,
             type: 1,
             data: "0xdeadbeef",
-            accessList: [
-                {
-                    address: "0x0000000000000000000000000000000000000001",
-                    storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000001"],
-                },
-            ],
+            accessList: [],
         });
     }
 
@@ -137,17 +132,12 @@ export class Account implements Addressable {
             value: amount,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000,
-            maxPriorityFeePerGas: 1000000000,
+            maxPriorityFeePerGas: 0,
             gasLimit,
             nonce,
             type: 2,
             data: "0xdeadbeef",
-            accessList: [
-                {
-                    address: "0x0000000000000000000000000000000000000001",
-                    storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000001"],
-                },
-            ],
+            accessList: [],
         });
     }
 
@@ -162,18 +152,13 @@ export class Account implements Addressable {
             value: amount,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000,
-            maxPriorityFeePerGas: 1000000000,
+            maxPriorityFeePerGas: 0,
             gasLimit,
             nonce,
             type: 3,
             data: "0xdeadbeef",
-            accessList: [
-                {
-                    address: "0x0000000000000000000000000000000000000001",
-                    storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000001"],
-                },
-            ],
-            maxFeePerBlobGas: 1000000000,
+            accessList: [],
+            maxFeePerBlobGas: 0,
             blobVersionedHashes: [],
         });
     }
@@ -189,17 +174,12 @@ export class Account implements Addressable {
             value: amount,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000,
-            maxPriorityFeePerGas: 1000000000,
+            maxPriorityFeePerGas: 0,
             gasLimit,
             nonce,
             type: 4,
             data: "0xdeadbeef",
-            accessList: [
-                {
-                    address: "0x0000000000000000000000000000000000000001",
-                    storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000001"],
-                },
-            ],
+            accessList: [],
             authorizationList: [],
         });
     }

@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { keccak256 } from "ethers";
 
-import { ALICE, BOB, CHARLIE, DAVE, EVE } from "./helpers/account";
+import { ALICE, BOB, CHARLIE, DAVE, EVE, FERDIE } from "./helpers/account";
 import {
     sendAndGetFullResponse,
     sendWithRetry,
@@ -9,7 +9,7 @@ import {
     waitForFollowerToSyncWithLeader,
 } from "./helpers/rpc";
 
-describe("Leader & Follower transaction types signer recovery regression test", function () {
+describe("Leader & Follower transaction types signer recovery regression test (fields supported by Stratus)", function () {
     it("Validate initial Leader and Follower health", async function () {
         updateProviderUrl("stratus");
         const leaderHealth = await sendWithRetry("stratus_health", []);
@@ -21,7 +21,7 @@ describe("Leader & Follower transaction types signer recovery regression test", 
     });
 
     let legacyHash: string;
-    it("Send Type 0 (Legacy) transaction with all signature fields to Leader", async function () {
+    it("Send Type 0 (Legacy) transaction with fields supported by Stratus to Leader", async function () {
         updateProviderUrl("stratus");
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [ALICE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
@@ -34,7 +34,7 @@ describe("Leader & Follower transaction types signer recovery regression test", 
     });
 
     let eip2930Hash: string;
-    it("Send Type 1 (EIP-2930) transaction with non-empty access list to Leader", async function () {
+    it("Send Type 1 (EIP-2930) transaction with fields supported by Stratus to Leader", async function () {
         updateProviderUrl("stratus");
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [DAVE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
@@ -47,7 +47,7 @@ describe("Leader & Follower transaction types signer recovery regression test", 
     });
 
     let eip1559Hash: string;
-    it("Send Type 2 (EIP-1559) transaction with non-empty access list and distinct fee fields to Leader", async function () {
+    it("Send Type 2 (EIP-1559) transaction with fields supported by Stratus to Leader", async function () {
         updateProviderUrl("stratus");
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [CHARLIE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
@@ -60,7 +60,8 @@ describe("Leader & Follower transaction types signer recovery regression test", 
     });
 
     let eip4844Hash: string;
-    it("Send Type 3 (EIP-4844) transaction with all blob and access list fields to Leader", async function () {
+    let eip7702Hash: string;
+    it("Send Type 3 (EIP-4844) transaction with fields supported by Stratus to Leader", async function () {
         updateProviderUrl("stratus");
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [EVE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
@@ -72,11 +73,23 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         expect(response.data.result).to.equal(eip4844Hash);
     });
 
+    it("Send Type 4 (EIP-7702) transaction with fields supported by Stratus to Leader", async function () {
+        updateProviderUrl("stratus");
+        const nonceHex = await sendWithRetry("eth_getTransactionCount", [FERDIE.address, "latest"]);
+        const nonce = parseInt(nonceHex, 16);
+        console.log("FERDIE nonce (hex):", nonceHex, "FERDIE nonce (decimal):", nonce);
+        const signedTx = await FERDIE.signFullFieldsEIP7702(BOB.address, 1, nonce);
+        eip7702Hash = keccak256(signedTx);
+        console.log("Type 4 (EIP-7702) transaction hash:", eip7702Hash);
+        const response = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
+        expect(response.data.result).to.equal(eip7702Hash);
+    });
+
     it("Wait for Follower to sync with Leader", async function () {
         await waitForFollowerToSyncWithLeader();
     });
 
-    it("Preserves correct signer for all transaction types with full signature fields on both Leader and Follower", async function () {
+    it("Preserves consistent signer for all supported transaction types on both Leader and Follower", async function () {
         // Verify on Leader
         console.log("Verifying transactions on Leader...");
         updateProviderUrl("stratus");
@@ -100,6 +113,11 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         const leaderEIP4844Tx = await sendWithRetry("eth_getTransactionByHash", [eip4844Hash]);
         expect(leaderEIP4844Tx.from.toLowerCase()).to.equal(EVE.address.toLowerCase());
         expect(leaderEIP4844Tx.type).to.equal("0x3");
+
+        console.log("Getting Type 4 (EIP-7702) tx:", eip7702Hash);
+        const leaderEIP7702Tx = await sendWithRetry("eth_getTransactionByHash", [eip7702Hash]);
+        expect(leaderEIP7702Tx.from.toLowerCase()).to.equal(FERDIE.address.toLowerCase());
+        expect(leaderEIP7702Tx.type).to.equal("0x4");
 
         // Wait for follower to sync
         await waitForFollowerToSyncWithLeader();
@@ -128,6 +146,11 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         expect(followerEIP4844Tx.from.toLowerCase()).to.equal(EVE.address.toLowerCase());
         expect(followerEIP4844Tx.type).to.equal("0x3");
 
+        console.log("Getting Type 4 (EIP-7702) tx:", eip7702Hash);
+        const followerEIP7702Tx = await sendWithRetry("eth_getTransactionByHash", [eip7702Hash]);
+        expect(followerEIP7702Tx.from.toLowerCase()).to.equal(FERDIE.address.toLowerCase());
+        expect(followerEIP7702Tx.type).to.equal("0x4");
+
         // Verify receipts on Leader
         console.log("Verifying receipts on Leader...");
         updateProviderUrl("stratus");
@@ -143,6 +166,9 @@ describe("Leader & Follower transaction types signer recovery regression test", 
 
         console.log("Getting receipt for Type 3 (EIP-4844) tx:", eip4844Hash);
         const leaderEIP4844Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip4844Hash]);
+
+        console.log("Getting receipt for Type 4 (EIP-7702) tx:", eip7702Hash);
+        const leaderEIP7702Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip7702Hash]);
 
         // Verify receipts on Follower
         console.log("Verifying receipts on Follower...");
@@ -160,6 +186,9 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         console.log("Getting receipt for Type 3 (EIP-4844) tx:", eip4844Hash);
         const followerEIP4844Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip4844Hash]);
 
+        console.log("Getting receipt for Type 4 (EIP-7702) tx:", eip7702Hash);
+        const followerEIP7702Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip7702Hash]);
+
         // Deep equality check of the entire receipt on Leader vs Follower
         expect(leaderLegacyReceipt, "Type 0 receipts differ between leader and follower").to.deep.equal(
             followerLegacyReceipt,
@@ -172,6 +201,9 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         );
         expect(leaderEIP4844Receipt, "Type 3 receipts differ between leader and follower").to.deep.equal(
             followerEIP4844Receipt,
+        );
+        expect(leaderEIP7702Receipt, "Type 4 receipts differ between leader and follower").to.deep.equal(
+            followerEIP7702Receipt,
         );
     });
 });

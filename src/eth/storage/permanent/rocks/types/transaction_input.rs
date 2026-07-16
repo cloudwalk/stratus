@@ -2,7 +2,6 @@ use std::fmt::Debug;
 
 use alloy_primitives::U64;
 use alloy_primitives::U256;
-use serde_json;
 
 use super::address::AddressRocksdb;
 use super::bytes::BytesRocksdb;
@@ -34,11 +33,6 @@ pub struct TransactionInputRocksdb {
     pub input: BytesRocksdb,
     pub gas_limit: GasRocksdb,
     pub gas_price: WeiRocksdb,
-    pub max_priority_fee_per_gas: WeiRocksdb,
-    pub max_fee_per_blob_gas: WeiRocksdb,
-    pub blob_versioned_hashes: Vec<HashRocksdb>,
-    pub access_list: Vec<u8>,
-    pub authorization_list: Vec<u8>,
     pub v: u64,
     pub r: [u64; 4],
     pub s: [u64; 4],
@@ -58,11 +52,6 @@ impl From<TransactionInput> for TransactionInputRocksdb {
             input: BytesRocksdb::from(item.execution_info.input),
             gas_limit: GasRocksdb::from(item.execution_info.gas_limit),
             gas_price: WeiRocksdb::from(item.execution_info.gas_price),
-            max_priority_fee_per_gas: WeiRocksdb::from(item.execution_info.max_priority_fee_per_gas),
-            max_fee_per_blob_gas: WeiRocksdb::from(item.execution_info.max_fee_per_blob_gas),
-            blob_versioned_hashes: item.execution_info.blob_versioned_hashes.iter().copied().map(HashRocksdb::from).collect(),
-            access_list: serde_json::to_vec(&item.execution_info.access_list).unwrap_or_default(),
-            authorization_list: serde_json::to_vec(&item.execution_info.authorization_list).unwrap_or_default(),
             v: item.signature.v.as_u64(),
             r: item.signature.r.into_limbs(),
             s: item.signature.s.into_limbs(),
@@ -86,11 +75,6 @@ impl From<TransactionInputRocksdb> for TransactionInput {
                 input: item.input.into(),
                 gas_limit: item.gas_limit.into(),
                 gas_price: item.gas_price.into(),
-                max_priority_fee_per_gas: item.max_priority_fee_per_gas.into(),
-                max_fee_per_blob_gas: item.max_fee_per_blob_gas.into(),
-                blob_versioned_hashes: item.blob_versioned_hashes.iter().copied().map(Into::into).collect(),
-                access_list: serde_json::from_slice(&item.access_list).unwrap_or_default(),
-                authorization_list: serde_json::from_slice(&item.authorization_list).unwrap_or_default(),
             },
             signature: Signature {
                 v: U64::from(item.v),

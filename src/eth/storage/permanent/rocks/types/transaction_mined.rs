@@ -1,7 +1,5 @@
 use std::fmt::Debug;
 
-use serde_json;
-
 use super::block_number::BlockNumberRocksdb;
 use super::execution::ExecutionRocksdb;
 use super::hash::HashRocksdb;
@@ -48,11 +46,6 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
                 input: execution.execution_info.input.clone().into(),
                 gas_limit: execution.execution_info.gas_limit.into(),
                 gas_price: execution.execution_info.gas_price.into(),
-                max_priority_fee_per_gas: execution.execution_info.max_priority_fee_per_gas.into(),
-                max_fee_per_blob_gas: execution.execution_info.max_fee_per_blob_gas.into(),
-                blob_versioned_hashes: execution.execution_info.blob_versioned_hashes.iter().copied().map(HashRocksdb::from).collect(),
-                access_list: serde_json::to_vec(&execution.execution_info.access_list).unwrap_or_default(),
-                authorization_list: serde_json::to_vec(&execution.execution_info.authorization_list).unwrap_or_default(),
                 v: execution.signature.v.as_u64(),
                 r: execution.signature.r.into_limbs(),
                 s: execution.signature.s.into_limbs(),
