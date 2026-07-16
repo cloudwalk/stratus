@@ -256,7 +256,7 @@ impl RpcServiceT for RpcMiddleware {
 
         let id = request.id.to_string();
 
-        let future_response = reject_unknown_client(&client, request.id.clone()).unwrap_or(Box::pin(self.service.call(request)));
+        let future_response = reject_client(&client, request.id.clone()).unwrap_or(Box::pin(self.service.call(request)));
         RpcResponse {
             client,
             id,
@@ -269,9 +269,16 @@ impl RpcServiceT for RpcMiddleware {
 }
 
 /// Returns an error JSON-RPC response if the client is not allowed to perform the current operation.
-fn reject_unknown_client<'a>(client: &RpcClientApp, id: Id<'_>) -> Option<BoxFuture<'a, MethodResponse>> {
+fn reject_client<'a>(client: &RpcClientApp, id: Id<'_>) -> Option<BoxFuture<'a, MethodResponse>> {
+    // reject unidentified clients when unknown clients are disabled
     if client.is_unknown() && !GlobalState::is_unknown_client_enabled() {
         return Some(Box::pin(StratusError::RPC(RpcError::ClientMissing).to_response_future(id)));
+    }
+    // reject explicitly blocked clients
+    if GlobalState::is_client_blocked(client) {
+        return Some(Box::pin(
+            StratusError::RPC(RpcError::ClientBlocked { client: client.to_string() }).to_response_future(id),
+        ));
     }
     None
 }
