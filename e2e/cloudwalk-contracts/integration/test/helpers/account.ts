@@ -60,7 +60,7 @@ export class Account implements Addressable {
             value: amount,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000, // 2 gwei
-            maxPriorityFeePerGas: 2000000000, // 2 gwei
+            maxPriorityFeePerGas: 0, // must match the value used in TransactionInput::to_tx_envelope
             gasLimit,
             nonce,
         });
