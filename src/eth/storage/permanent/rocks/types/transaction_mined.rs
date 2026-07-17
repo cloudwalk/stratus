@@ -39,7 +39,7 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
                 chain_id: execution.execution_info.chain_id.map_into(),
                 hash: execution.info.hash.into(),
                 nonce: execution.execution_info.nonce.into(),
-                signer: execution.execution_info.signer.address().unwrap_or(execution.evm_input.from).into(),
+                signer: execution.evm_input.from.into(),
                 from: execution.evm_input.from.into(),
                 to: execution.execution_info.to.map_into(),
                 value: execution.execution_info.value.into(),

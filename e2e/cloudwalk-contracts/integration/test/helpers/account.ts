@@ -60,7 +60,7 @@ export class Account implements Addressable {
             value: amount,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000, // 2 gwei
-            maxPriorityFeePerGas: 0, // must match the value used in TransactionInput::to_tx_envelope
+            maxPriorityFeePerGas: 2000000000,
             gasLimit,
             nonce,
         });
@@ -132,7 +132,7 @@ export class Account implements Addressable {
             value: amount,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000,
-            maxPriorityFeePerGas: 0,
+            maxPriorityFeePerGas: 2000000000,
             gasLimit,
             nonce,
             type: 2,
@@ -152,7 +152,7 @@ export class Account implements Addressable {
             value: amount,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000,
-            maxPriorityFeePerGas: 0,
+            maxPriorityFeePerGas: 2000000000,
             gasLimit,
             nonce,
             type: 3,
@@ -174,7 +174,7 @@ export class Account implements Addressable {
             value: amount,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000,
-            maxPriorityFeePerGas: 0,
+            maxPriorityFeePerGas: 2000000000,
             gasLimit,
             nonce,
             type: 4,

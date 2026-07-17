@@ -359,7 +359,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
 
 impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
-        let signer = value.execution_info.signer.address().unwrap_or_default();
+        let signer = value.signer();
         let inner = value.to_tx_envelope();
 
         Self {
