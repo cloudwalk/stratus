@@ -626,7 +626,7 @@ export async function createEIP1559Transaction(account: Account) {
         to: BOB.address,
         value: toHex(TEST_TRANSFER),
         maxFeePerGas: toHex(2),
-        maxPriorityFeePerGas: toHex(0), // must match the value used in TransactionInput::to_tx_envelope
+        maxPriorityFeePerGas: toHex(2),
         gasLimit: toHex(21000),
         nonce: toHex(await sendGetNonce(account)),
         chainId: parseInt(CHAIN_ID, 16),
@@ -642,13 +642,13 @@ export async function createEIP4844Transaction(account: Account) {
         to: BOB.address,
         value: toHex(TEST_TRANSFER),
         maxFeePerGas: toHex(2),
-        maxPriorityFeePerGas: toHex(0), // must match the value used in TransactionInput::to_tx_envelope
+        maxPriorityFeePerGas: toHex(2),
         gasLimit: toHex(21000),
         nonce: toHex(await sendGetNonce(account)),
         chainId: parseInt(CHAIN_ID, 16),
         type: 3,
         blobVersionedHashes: [],
-        maxFeePerBlobGas: toHex(0), // must match the value used in TransactionInput::to_tx_envelope
+        maxFeePerBlobGas: toHex(0),
     };
 
     return await account.signer().signTransaction(tx);
