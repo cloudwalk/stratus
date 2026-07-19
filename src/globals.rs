@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::LazyLock;
 use std::sync::atomic::AtomicBool;
@@ -19,6 +20,7 @@ use crate::alias::JsonValue;
 use crate::config;
 use crate::config::StratusConfig;
 use crate::config::WithCommonConfig;
+use crate::eth::rpc::RpcClientApp;
 use crate::eth::rpc::RpcContext;
 use crate::ext::not;
 use crate::ext::spawn_signal_handler;
@@ -59,6 +61,9 @@ where
 
         // Set the unknown_client_enabled value
         GlobalState::set_unknown_client_enabled(common.unknown_client_enabled);
+
+        // Set the blocked clients
+        GlobalState::init_blocked_clients(&common.blocked_clients);
 
         // init tokio
         let tokio = common.init_tokio_runtime().expect("failed to init tokio runtime");
@@ -126,6 +131,9 @@ static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Unknown clients can interact with the application?
 static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Clients that are blocked from interacting with the application.
+static BLOCKED_CLIENTS: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
 /// Current node mode.
 static NODE_MODE: Mutex<NodeMode> = Mutex::new(NodeMode::Follower);
@@ -280,6 +288,60 @@ impl GlobalState {
     }
 
     // -------------------------------------------------------------------------
+    // Blocked Clients
+    // -------------------------------------------------------------------------
+
+    /// Initializes the blocked clients set from configuration. Names are normalized the same way as incoming client identification.
+    pub fn init_blocked_clients(names: &[String]) {
+        let mut blocked = BLOCKED_CLIENTS.lock();
+        for name in names {
+            if let RpcClientApp::Identified(normalized) = RpcClientApp::parse(name) {
+                blocked.insert(normalized);
+            }
+        }
+    }
+
+    /// Adds a client to the blocked clients set. Returns the normalized name when added.
+    pub fn add_blocked_client(name: &str) -> Option<String> {
+        match RpcClientApp::parse(name) {
+            RpcClientApp::Identified(normalized) => {
+                BLOCKED_CLIENTS.lock().insert(normalized.clone());
+                Some(normalized)
+            }
+            RpcClientApp::Unknown => None,
+        }
+    }
+
+    /// Removes a client from the blocked clients set. Returns whether it was present.
+    pub fn remove_blocked_client(name: &str) -> bool {
+        match RpcClientApp::parse(name) {
+            RpcClientApp::Identified(normalized) => BLOCKED_CLIENTS.lock().remove(&normalized),
+            RpcClientApp::Unknown => false,
+        }
+    }
+
+    /// Clears the blocked clients set.
+    pub fn clear_blocked_clients() {
+        BLOCKED_CLIENTS.lock().clear();
+    }
+
+    /// Checks if a client is blocked.
+    pub fn is_client_blocked(client: &RpcClientApp) -> bool {
+        match client {
+            RpcClientApp::Identified(name) => BLOCKED_CLIENTS.lock().contains(name),
+            RpcClientApp::Unknown => false,
+        }
+    }
+
+    /// Returns the list of blocked clients (normalized names).
+    pub fn list_blocked_clients() -> Vec<String> {
+        let blocked = BLOCKED_CLIENTS.lock();
+        let mut list: Vec<String> = blocked.iter().cloned().collect();
+        list.sort();
+        list
+    }
+
+    // -------------------------------------------------------------------------
     // Node Mode
     // -------------------------------------------------------------------------
 
@@ -332,6 +394,7 @@ impl GlobalState {
             "transactions_enabled": Self::is_transactions_enabled(),
             "miner_paused": ctx.server.miner.is_paused(),
             "unknown_client_enabled": Self::is_unknown_client_enabled(),
+            "blocked_clients": Self::list_blocked_clients(),
             "start_time": start_time.format("%d/%m/%Y %H:%M UTC").to_string(),
             "elapsed_time": elapsed_time,
         })
