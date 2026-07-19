@@ -117,6 +117,11 @@ pub struct CommonConfig {
     /// Enables or disables unknown client interactions.
     #[arg(long = "unknown-client-enabled", env = "UNKNOWN_CLIENT_ENABLED", default_value = "true")]
     pub unknown_client_enabled: bool,
+
+    /// Comma-separated list of client names that are blocked from interacting with the application.
+    /// Client names are matched the same way as the `app`/`client` identification headers/params.
+    #[arg(long = "blocked-clients", env = "BLOCKED_CLIENTS", value_delimiter = ',')]
+    pub blocked_clients: Vec<String>,
 }
 
 impl WithCommonConfig for CommonConfig {

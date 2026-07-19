@@ -38,6 +38,10 @@ pub enum RpcError {
     #[error_code = 3]
     ClientMissing,
 
+    #[error("denied because client is blocked.")]
+    #[error_code = 11]
+    ClientBlocked { client: String },
+
     #[error("failed to decode {rust_type} parameter.")]
     #[error_code = 4]
     ParameterDecodeError { rust_type: &'static str, decode_error: String },
@@ -293,6 +297,7 @@ impl StratusError {
             // RPC
             Self::RPC(RpcError::BlockFilterInvalid { filter }) => to_json_value(filter),
             Self::RPC(RpcError::ParameterDecodeError { decode_error, .. }) => to_json_value(decode_error),
+            Self::RPC(RpcError::ClientBlocked { client }) => to_json_value(client),
 
             // Transaction
             Self::RPC(RpcError::TransactionInvalid { decode_error }) => to_json_value(decode_error),
@@ -308,7 +313,8 @@ impl StratusError {
     }
 
     pub fn to_response_future<'a>(self, id: Id<'_>) -> ResponseFuture<BoxFuture<'a, MethodResponse>, MethodResponse> {
-        let response = ResponsePayload::<()>::error(StratusError::RPC(RpcError::ClientMissing));
+        let error: ErrorObjectOwned = self.into();
+        let response = ResponsePayload::<()>::error(error);
         let method_response = MethodResponse::response(id, response, u32::MAX as usize);
         ResponseFuture::ready(method_response)
     }

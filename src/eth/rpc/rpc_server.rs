@@ -301,6 +301,9 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_method("stratus_disableMiner", stratus_disable_miner)?;
     module.register_method("stratus_enableUnknownClients", stratus_enable_unknown_clients)?;
     module.register_method("stratus_disableUnknownClients", stratus_disable_unknown_clients)?;
+    module.register_method("stratus_blockClient", stratus_block_client)?;
+    module.register_method("stratus_unblockClient", stratus_unblock_client)?;
+    module.register_method("stratus_clearBlockedClients", stratus_clear_blocked_clients)?;
     module.register_method("stratus_enableRestartOnUnhealthy", stratus_enable_restart_on_unhealthy)?;
     module.register_method("stratus_disableRestartOnUnhealthy", stratus_disable_restart_on_unhealthy)?;
     module.register_async_method("stratus_changeToLeader", stratus_change_to_leader)?;
@@ -720,6 +723,26 @@ fn stratus_disable_unknown_clients(_: Params<'_>, _: &RpcContext, ext: &Extensio
     ext.authentication().auth_admin()?;
     GlobalState::set_unknown_client_enabled(false);
     Ok(GlobalState::is_unknown_client_enabled())
+}
+
+fn stratus_block_client(params: Params<'_>, _: &RpcContext, ext: &Extensions) -> Result<Vec<String>, StratusError> {
+    ext.authentication().auth_admin()?;
+    let (_, client) = next_rpc_param::<String>(params.sequence())?;
+    GlobalState::add_blocked_client(&client);
+    Ok(GlobalState::list_blocked_clients())
+}
+
+fn stratus_unblock_client(params: Params<'_>, _: &RpcContext, ext: &Extensions) -> Result<Vec<String>, StratusError> {
+    ext.authentication().auth_admin()?;
+    let (_, client) = next_rpc_param::<String>(params.sequence())?;
+    GlobalState::remove_blocked_client(&client);
+    Ok(GlobalState::list_blocked_clients())
+}
+
+fn stratus_clear_blocked_clients(_: Params<'_>, _: &RpcContext, ext: &Extensions) -> Result<Vec<String>, StratusError> {
+    ext.authentication().auth_admin()?;
+    GlobalState::clear_blocked_clients();
+    Ok(GlobalState::list_blocked_clients())
 }
 
 fn stratus_enable_transactions(_: Params<'_>, _: &RpcContext, ext: &Extensions) -> Result<bool, StratusError> {
