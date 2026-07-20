@@ -625,8 +625,8 @@ export async function createEIP1559Transaction(account: Account) {
     const tx = {
         to: BOB.address,
         value: toHex(TEST_TRANSFER),
-        maxFeePerGas: toHex(2),
-        maxPriorityFeePerGas: toHex(2),
+        maxFeePerGas: toHex(1),
+        maxPriorityFeePerGas: toHex(1),
         gasLimit: toHex(21000),
         nonce: toHex(await sendGetNonce(account)),
         chainId: parseInt(CHAIN_ID, 16),
@@ -641,8 +641,8 @@ export async function createEIP4844Transaction(account: Account) {
     const tx = {
         to: BOB.address,
         value: toHex(TEST_TRANSFER),
-        maxFeePerGas: toHex(2),
-        maxPriorityFeePerGas: toHex(2),
+        maxFeePerGas: toHex(1),
+        maxPriorityFeePerGas: toHex(1),
         gasLimit: toHex(21000),
         nonce: toHex(await sendGetNonce(account)),
         chainId: parseInt(CHAIN_ID, 16),

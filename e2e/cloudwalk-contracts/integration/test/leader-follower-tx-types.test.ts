@@ -9,7 +9,7 @@ import {
     waitForFollowerToSyncWithLeader,
 } from "./helpers/rpc";
 
-describe("Leader & Follower transaction types signer recovery regression test (fields supported by Stratus)", function () {
+describe("Leader & Follower transaction types signer recovery regression test", function () {
     it("Validate initial Leader and Follower health", async function () {
         updateProviderUrl("stratus");
         const leaderHealth = await sendWithRetry("stratus_health", []);
@@ -21,7 +21,7 @@ describe("Leader & Follower transaction types signer recovery regression test (f
     });
 
     let legacyHash: string;
-    it("Send Type 0 (Legacy) transaction with fields supported by Stratus to Leader", async function () {
+    it("Send Type 0 (Legacy) transaction with all transaction fields to Leader", async function () {
         updateProviderUrl("stratus");
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [ALICE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
@@ -34,7 +34,7 @@ describe("Leader & Follower transaction types signer recovery regression test (f
     });
 
     let eip2930Hash: string;
-    it("Send Type 1 (EIP-2930) transaction with fields supported by Stratus to Leader", async function () {
+    it("Send Type 1 (EIP-2930) transaction with all transaction fields to Leader", async function () {
         updateProviderUrl("stratus");
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [DAVE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
@@ -47,7 +47,7 @@ describe("Leader & Follower transaction types signer recovery regression test (f
     });
 
     let eip1559Hash: string;
-    it("Send Type 2 (EIP-1559) transaction with fields supported by Stratus to Leader", async function () {
+    it("Send Type 2 (EIP-1559) transaction with all transaction fields to Leader", async function () {
         updateProviderUrl("stratus");
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [CHARLIE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
@@ -61,7 +61,7 @@ describe("Leader & Follower transaction types signer recovery regression test (f
 
     let eip4844Hash: string;
     let eip7702Hash: string;
-    it("Send Type 3 (EIP-4844) transaction with fields supported by Stratus to Leader", async function () {
+    it("Send Type 3 (EIP-4844) transaction with all transaction fields to Leader", async function () {
         updateProviderUrl("stratus");
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [EVE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
@@ -73,7 +73,7 @@ describe("Leader & Follower transaction types signer recovery regression test (f
         expect(response.data.result).to.equal(eip4844Hash);
     });
 
-    it("Send Type 4 (EIP-7702) transaction with fields supported by Stratus to Leader", async function () {
+    it("Send Type 4 (EIP-7702) transaction with all transaction fields to Leader", async function () {
         updateProviderUrl("stratus");
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [FERDIE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);

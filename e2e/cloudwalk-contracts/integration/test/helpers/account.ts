@@ -1,4 +1,15 @@
-import { Addressable, BigNumberish, Signer, Wallet } from "ethers";
+import {
+    Addressable,
+    BigNumberish,
+    Signer,
+    SigningKey,
+    Wallet,
+    concat,
+    encodeRlp,
+    getAddress,
+    keccak256,
+    toBeArray,
+} from "ethers";
 
 import { CHAIN_ID_DEC, ETHERJS } from "./rpc";
 
@@ -117,7 +128,7 @@ export class Account implements Addressable {
             nonce,
             type: 1,
             data: "0xdeadbeef",
-            accessList: [],
+            accessList: ACCESS_LIST,
         });
     }
 
@@ -137,7 +148,7 @@ export class Account implements Addressable {
             nonce,
             type: 2,
             data: "0xdeadbeef",
-            accessList: [],
+            accessList: ACCESS_LIST,
         });
     }
 
@@ -157,9 +168,9 @@ export class Account implements Addressable {
             nonce,
             type: 3,
             data: "0xdeadbeef",
-            accessList: [],
-            maxFeePerBlobGas: 0,
-            blobVersionedHashes: [],
+            accessList: ACCESS_LIST,
+            maxFeePerBlobGas: 1,
+            blobVersionedHashes: [BLOB_VERSIONED_HASH],
         });
     }
 
@@ -179,8 +190,8 @@ export class Account implements Addressable {
             nonce,
             type: 4,
             data: "0xdeadbeef",
-            accessList: [],
-            authorizationList: [],
+            accessList: ACCESS_LIST,
+            authorizationList: [createAuthorization(ALICE.privateKey, counterParty, 0)],
         });
     }
 }
@@ -214,6 +225,27 @@ export const FERDIE = new Account(
     "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
     "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
 );
+
+const ACCESS_LIST = [
+    {
+        address: BOB.address,
+        storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000000"],
+    },
+];
+
+const BLOB_VERSIONED_HASH = "0x0100000000000000000000000000000000000000000000000000000000000000";
+
+function createAuthorization(privateKey: string, delegate: string, nonce: number = 0) {
+    const address = getAddress(delegate);
+    const digest = keccak256(concat(["0x05", encodeRlp([toBeArray(CHAIN_ID_DEC), address, toBeArray(nonce)])]));
+    const signature = new SigningKey(privateKey).sign(digest);
+    return {
+        chainId: CHAIN_ID_DEC,
+        address,
+        nonce,
+        signature,
+    };
+}
 
 export const TEST_ACCOUNTS = [ALICE, BOB, CHARLIE, DAVE, EVE, FERDIE];
 
