@@ -140,4 +140,23 @@ macro_rules! metrics_impl_fn_inc {
             }
         }
     };
+    (gauge_no_auto_label  $name:ident $group:ident $($label:ident)*) => {
+        paste::paste! {
+            #[allow(clippy::too_many_arguments)]
+            #[doc = "Set `" $name "` gauge. Does not carry the automatic `node_mode` label."]
+            pub fn [<set_ $name>](n: u64, $( $label: impl Into<super::MetricLabelValue> ),*) {
+                let labels = super::into_labels(
+                    vec![
+                        ("group", stringify!($group).into()),
+
+                        $(
+                            (stringify!($label), $label.into()),
+                        )*
+                    ]
+                );
+                let gauge = metrics::gauge!(stringify!([<stratus_$name>]), labels);
+                gauge.set(n as f64);
+            }
+        }
+    };
 }

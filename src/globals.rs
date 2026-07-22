@@ -110,6 +110,10 @@ pub enum NodeMode {
     FakeLeader,
 }
 
+impl NodeMode {
+    pub const ALL: [NodeMode; 3] = [NodeMode::Leader, NodeMode::Follower, NodeMode::FakeLeader];
+}
+
 // -----------------------------------------------------------------------------
 // Global state
 // -----------------------------------------------------------------------------
