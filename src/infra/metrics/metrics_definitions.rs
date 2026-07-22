@@ -75,7 +75,7 @@ metrics! {
     histogram_duration storage_finish_pending_block{storage, success},
 
     "Time executing storage save_block operation."
-    histogram_duration storage_save_block{storage, size_by_tx, size_by_gas, success},
+    histogram_duration storage_save_block{storage, tens_of_millions_gas_used, success},
 
     "Time executing storage reset operation."
     histogram_duration storage_reset{storage, success},
@@ -90,6 +90,15 @@ metrics! {
 
     "Time to import one block."
     histogram_duration import_online_mined_block{},
+
+    "Time to fetch one block."
+    histogram_duration import_online_fetched_block{},
+
+    "Time to post-process one fetched block."
+    histogram_duration import_online_post_process_block{},
+
+    "Total time to fetch and post-process one block."
+    histogram_duration import_online_fetch_and_post_process_block{},
 
     "Number of transactions imported."
     counter importer_online_transactions_total{},

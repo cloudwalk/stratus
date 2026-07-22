@@ -5,8 +5,6 @@ use async_trait::async_trait;
 use crate::GlobalState;
 use crate::eth::executor::Executor;
 use crate::eth::follower::importer::importers::ImporterWorker;
-#[cfg(feature = "metrics")]
-use crate::eth::follower::importer::record_import_metrics;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::CommitItem;
@@ -14,8 +12,6 @@ use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalReceipt;
 use crate::eth::primitives::ExternalReceipts;
 use crate::infra::kafka::KafkaConnector;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 use crate::log_and_err;
 
 pub struct ReexecutionWorker {
@@ -28,34 +24,15 @@ pub struct ReexecutionWorker {
 impl ImporterWorker for ReexecutionWorker {
     type DataType = (ExternalBlock, Vec<ExternalReceipt>);
 
-    async fn import(&self, (block, receipts): Self::DataType) -> anyhow::Result<()> {
+    async fn import(&self, (block, receipts): Self::DataType) -> anyhow::Result<usize> {
         const TASK_NAME: &str = "block-executor";
 
-        #[cfg(feature = "metrics")]
-        let (start, block_number, block_tx_len, receipts_len) = (metrics::now(), block.number(), block.transactions.len(), receipts.len());
+        let receipts_len = receipts.len();
 
         if let Err(e) = self.executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts)) {
             let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
             return log_and_err!(reason = e, message);
         };
-
-        // statistics
-        #[cfg(feature = "metrics")]
-        {
-            use crate::ext::DisplayExt;
-            use crate::utils::calculate_tps;
-
-            let duration = start.elapsed();
-            let tps = calculate_tps(duration, block_tx_len);
-
-            tracing::info!(
-                tps,
-                %block_number,
-                duration = %duration.to_string_ext(),
-                %receipts_len,
-                "reexecuted external block",
-            );
-        }
 
         let (mined_block, changes) = match self.miner.mine_external(block) {
             Ok((mined_block, changes)) => {
@@ -80,9 +57,6 @@ impl ImporterWorker for ReexecutionWorker {
             }
         }
 
-        #[cfg(feature = "metrics")]
-        record_import_metrics(receipts_len, start);
-
-        Ok(())
+        Ok(receipts_len)
     }
 }

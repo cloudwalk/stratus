@@ -162,12 +162,12 @@ where
     }
 
     #[allow(dead_code)]
-    pub fn iter_start(&self) -> RocksCfIter<K, V> {
+    pub fn iter_start(&self) -> RocksCfIter<'_, K, V> {
         let iter = self.db.iterator_cf(&self.column_family, IteratorMode::Start);
         RocksCfIter::new(iter, &self.column_family_name)
     }
 
-    pub fn iter_from(&self, start_key: K, direction: rocksdb::Direction) -> Result<RocksCfIter<K, V>> {
+    pub fn iter_from(&self, start_key: K, direction: rocksdb::Direction) -> Result<RocksCfIter<'_, K, V>> {
         let serialized_key = self.serialize_key_with_context(&start_key)?;
 
         let iter = self.db.iterator_cf(&self.column_family, IteratorMode::From(&serialized_key, direction));
