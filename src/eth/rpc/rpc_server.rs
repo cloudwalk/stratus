@@ -350,6 +350,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("stratus_call", stratus_call)?;
     module.register_blocking_method("stratus_getTransactionResult", stratus_get_transaction_result)?;
     module.register_blocking_method("debug_traceTransaction", debug_trace_transaction)?;
+    module.register_blocking_method("debug_traceCall", debug_trace_call)?;
 
     // logs
     module.register_blocking_method("eth_getLogs", eth_get_logs)?;
@@ -1222,6 +1223,38 @@ fn debug_trace_transaction(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extens
         }
         Err(err) => {
             tracing::warn!(?err, "error executing debug_traceTransaction");
+            Err(err)
+        }
+    }
+}
+
+fn debug_trace_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!("rpc::debug_traceCall", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
+
+    // parse params
+    let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
+    let (params, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
+    let (_, opts) = next_rpc_param_or_default::<Option<GethDebugTracingOptions>>(params)?;
+
+    // track
+    Span::with(|s| {
+        s.rec_opt("tx_from", &call.from);
+        s.rec_opt("tx_to", &call.to);
+        s.rec_str("filter", &filter);
+    });
+    tracing::info!(%filter, "executing debug_traceCall");
+
+    // execute
+    let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
+    match ctx.server.executor.trace_call(call, point_in_time, opts) {
+        Ok(result) => {
+            tracing::info!("executed debug_traceCall successfully");
+            Ok(enhance_trace_with_decoded_info(&result))
+        }
+        Err(err) => {
+            tracing::warn!(?err, "error executing debug_traceCall");
             Err(err)
         }
     }

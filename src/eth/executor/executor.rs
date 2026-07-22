@@ -632,12 +632,27 @@ impl Executor {
         let tracer_type = opts.tracer.clone();
 
         timed(|| {
-            self.evms.inspect(InspectorInput {
+            self.evms.inspect(InspectorInput::Transaction {
                 tx_hash,
                 opts,
                 trace_unsuccessful_only,
             })
         })
         .with(|m| metrics::inc_evm_inspect(m.elapsed, serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned())))
+    }
+
+    /// Traces a call that was never signed or broadcast, without requiring it to be mined first (`debug_traceCall`).
+    pub fn trace_call(&self, call: CallInput, point_in_time: PointInTime, opts: Option<GethDebugTracingOptions>) -> Result<GethTrace, StratusError> {
+        Span::with(|s| {
+            s.rec_opt("from", &call.from);
+            s.rec_opt("to", &call.to);
+        });
+
+        tracing::info!(%point_in_time, "inspecting call");
+        let opts = opts.unwrap_or_default();
+        let tracer_type = opts.tracer.clone();
+
+        timed(|| self.evms.inspect(InspectorInput::Call { call, point_in_time, opts }))
+            .with(|m| metrics::inc_evm_inspect(m.elapsed, serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned())))
     }
 }
