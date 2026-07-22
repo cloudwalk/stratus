@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use tokio::task::yield_now;
 
 use crate::eth::follower::importer::EXTERNAL_RPC_CURRENT_BLOCK;
+use crate::eth::follower::importer::record_fetch_metrics;
 use crate::eth::follower::importer::should_shutdown;
 use crate::eth::primitives::BlockNumber;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
@@ -51,14 +52,23 @@ pub trait DataFetcher: Send + Sync + Sized {
             let mut tasks = Vec::with_capacity(blocks_to_fetch as usize);
             while blocks_to_fetch > 0 {
                 blocks_to_fetch -= 1;
-                tasks.push(self.fetch(importer_block_number));
+                tasks.push({
+                    let this = &self;
+                    async move {
+                        let start = std::time::Instant::now();
+                        let fetched_data = this.fetch(importer_block_number).await;
+                        (fetched_data, start.elapsed())
+                    }
+                });
                 importer_block_number = importer_block_number.next_block_number();
             }
 
             // keep fetching in order
             let mut tasks = futures::stream::iter(tasks).buffered(PARALLEL_BLOCKS);
-            while let Some(fetched_data) = tasks.next().await {
+            while let Some((fetched_data, fetch_duration)) = tasks.next().await {
+                let pp_start = std::time::Instant::now();
                 let processed = self.post_process(fetched_data).await?;
+                record_fetch_metrics(fetch_duration, pp_start.elapsed());
                 if backlog_tx.send(processed).await.is_err() {
                     warn_task_rx_closed(TASK_NAME);
                     return Ok(());

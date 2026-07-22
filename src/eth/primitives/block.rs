@@ -42,36 +42,6 @@ impl Block {
         Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
     }
 
-    /// Calculates block size label by the number of transactions.
-    pub fn label_size_by_transactions(&self) -> &'static str {
-        match self.transactions.len() {
-            0 => "0",
-            1..=5 => "1-5",
-            6..=10 => "6-10",
-            11..=15 => "11-15",
-            16..=20 => "16-20",
-            _ => "20+",
-        }
-    }
-
-    /// Calculates block size label by consumed gas.
-    pub fn label_size_by_gas(&self) -> &'static str {
-        match self.header.gas_used.as_u64() {
-            0 => "0",
-            1..=1_000_000 => "0-1M",
-            1_000_001..=2_000_000 => "1M-2M",
-            2_000_001..=3_000_000 => "2M-3M",
-            3_000_001..=4_000_000 => "3M-4M",
-            4_000_001..=5_000_000 => "4M-5M",
-            5_000_001..=6_000_000 => "5M-6M",
-            6_000_001..=7_000_000 => "6M-7M",
-            7_000_001..=8_000_000 => "7M-8M",
-            8_000_001..=9_000_000 => "8M-9M",
-            9_000_001..=10_000_000 => "9M-10M",
-            _ => "10M+",
-        }
-    }
-
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
         let alloy_block: AlloyBlockAlloyTransaction = self.into();
@@ -139,6 +109,7 @@ impl From<PendingBlock> for Block {
         for (tx_idx, execution) in txs.into_iter().enumerate() {
             let log_count = execution.result.execution.logs.len() as u64;
             let transaction_mined = TransactionMined::from_execution(execution, block.hash(), (tx_idx as u64).into(), log_index);
+            block.header.gas_used += transaction_mined.execution.result.execution.gas_used;
             block.transactions.push(transaction_mined);
             log_index += Index(log_count);
         }

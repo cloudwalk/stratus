@@ -117,10 +117,8 @@ fn parse_client_app(headers: &HeaderMap<HeaderValue>, uri: &Uri) -> RpcClientApp
         let mut path_parts = path.split('/');
         while let Some(part) = path_parts.next() {
             if part == "app" || part == "client" {
-                match path_parts.next() {
-                    Some(name) => return Some(RpcClientApp::parse(name)),
-                    None => return None,
-                }
+                let name = path_parts.next()?;
+                return Some(RpcClientApp::parse(name));
             }
         }
         None

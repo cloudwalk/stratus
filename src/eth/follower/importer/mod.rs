@@ -97,10 +97,24 @@ pub async fn send_block_to_kafka(kafka_connector: &Option<KafkaConnector>, block
 
 /// Record metrics for imported block
 #[cfg(feature = "metrics")]
-fn record_import_metrics(block_tx_len: usize, start: std::time::Instant) {
+fn record_import_metrics(block_tx_len: usize, duration: std::time::Duration) {
     metrics::inc_n_importer_online_transactions_total(block_tx_len as u64);
-    metrics::inc_import_online_mined_block(start.elapsed());
+    metrics::inc_import_online_mined_block(duration);
 }
+
+#[cfg(not(feature = "metrics"))]
+fn record_import_metrics(_block_tx_len: usize, _duration: std::time::Duration) {}
+
+/// Record metrics for fetched block
+#[cfg(feature = "metrics")]
+fn record_fetch_metrics(fetch_duration: std::time::Duration, post_process_duration: std::time::Duration) {
+    metrics::inc_import_online_fetched_block(fetch_duration);
+    metrics::inc_import_online_post_process_block(post_process_duration);
+    metrics::inc_import_online_fetch_and_post_process_block(fetch_duration + post_process_duration);
+}
+
+#[cfg(not(feature = "metrics"))]
+fn record_fetch_metrics(_fetch_duration: std::time::Duration, _post_process_duration: std::time::Duration) {}
 
 // -----------------------------------------------------------------------------
 // Number fetcher

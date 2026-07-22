@@ -508,9 +508,10 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_genesis_block", block_number = %block_number).entered();
         tracing::debug!(storage = %label::PERM, "saving genesis block");
+        let tens_of_millions_gas_used = block.header.gas_used.as_u64() / 10_000_000;
 
         timed(|| self.perm.save_genesis_block(block, accounts, changes)).with(|m| {
-            metrics::inc_storage_save_block(m.elapsed, label::PERM, "genesis", "genesis", m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, tens_of_millions_gas_used, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to save genesis block");
             }
@@ -551,8 +552,7 @@ impl StratusStorage {
             return Err(StorageError::BlockConflict { number: block_number });
         }
 
-        // save block
-        let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
+        let tens_of_millions_gas_used = block.header.gas_used.as_u64() / 10_000_000;
 
         timed(|| {
             let guard = self.transient_state_lock.write();
@@ -562,7 +562,7 @@ impl StratusStorage {
             Ok(())
         })
         .with(|m| {
-            metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, tens_of_millions_gas_used, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, %block_number, "failed to save block");
             }
