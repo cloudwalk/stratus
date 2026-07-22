@@ -508,9 +508,10 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_genesis_block", block_number = %block_number).entered();
         tracing::debug!(storage = %label::PERM, "saving genesis block");
+        let tens_of_millions_gas_used = block.header.gas_used.as_u64() / 10_000_000;
 
         timed(|| self.perm.save_genesis_block(block, accounts, changes)).with(|m| {
-            metrics::inc_storage_save_block(m.elapsed, label::PERM, "genesis", m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, tens_of_millions_gas_used, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to save genesis block");
             }
