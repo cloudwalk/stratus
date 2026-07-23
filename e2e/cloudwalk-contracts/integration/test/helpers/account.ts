@@ -1,4 +1,15 @@
-import { Addressable, BigNumberish, Signer, Wallet } from "ethers";
+import {
+    Addressable,
+    BigNumberish,
+    Signer,
+    SigningKey,
+    Wallet,
+    concat,
+    encodeRlp,
+    getAddress,
+    keccak256,
+    toBeArray,
+} from "ethers";
 
 import { CHAIN_ID_DEC, ETHERJS } from "./rpc";
 
@@ -60,7 +71,7 @@ export class Account implements Addressable {
             value: amount,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000, // 2 gwei
-            maxPriorityFeePerGas: 2000000000, // 2 gwei
+            maxPriorityFeePerGas: 2000000000,
             gasLimit,
             nonce,
         });
@@ -81,6 +92,106 @@ export class Account implements Addressable {
             nonce,
             type: 1,
             accessList: [],
+        });
+    }
+
+    async signFullFieldsLegacy(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            gasPrice: 2000000000,
+            gasLimit,
+            nonce,
+            type: 0,
+            data: "0xdeadbeef",
+        });
+    }
+
+    async signFullFieldsEIP2930(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            gasPrice: 2000000000,
+            gasLimit,
+            nonce,
+            type: 1,
+            data: "0xdeadbeef",
+            accessList: ACCESS_LIST,
+        });
+    }
+
+    async signFullFieldsEIP1559(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            maxFeePerGas: 2000000000,
+            maxPriorityFeePerGas: 2000000000,
+            gasLimit,
+            nonce,
+            type: 2,
+            data: "0xdeadbeef",
+            accessList: ACCESS_LIST,
+        });
+    }
+
+    async signFullFieldsEIP4844(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            maxFeePerGas: 2000000000,
+            maxPriorityFeePerGas: 2000000000,
+            gasLimit,
+            nonce,
+            type: 3,
+            data: "0xdeadbeef",
+            accessList: ACCESS_LIST,
+            maxFeePerBlobGas: 1,
+            blobVersionedHashes: [BLOB_VERSIONED_HASH],
+        });
+    }
+
+    async signFullFieldsEIP7702(
+        counterParty: string,
+        amount: BigNumberish,
+        nonce: number = 0,
+        gasLimit: BigNumberish = 1_000_000,
+    ): Promise<string> {
+        return await this.signer().signTransaction({
+            to: counterParty,
+            value: amount,
+            chainId: CHAIN_ID_DEC,
+            maxFeePerGas: 2000000000,
+            maxPriorityFeePerGas: 2000000000,
+            gasLimit,
+            nonce,
+            type: 4,
+            data: "0xdeadbeef",
+            accessList: ACCESS_LIST,
+            authorizationList: [createAuthorization(ALICE.privateKey, counterParty, 0)],
         });
     }
 }
@@ -114,6 +225,27 @@ export const FERDIE = new Account(
     "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
     "0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
 );
+
+const ACCESS_LIST = [
+    {
+        address: BOB.address,
+        storageKeys: ["0x0000000000000000000000000000000000000000000000000000000000000000"],
+    },
+];
+
+const BLOB_VERSIONED_HASH = "0x0100000000000000000000000000000000000000000000000000000000000000";
+
+function createAuthorization(privateKey: string, delegate: string, nonce: number = 0) {
+    const address = getAddress(delegate);
+    const digest = keccak256(concat(["0x05", encodeRlp([toBeArray(CHAIN_ID_DEC), address, toBeArray(nonce)])]));
+    const signature = new SigningKey(privateKey).sign(digest);
+    return {
+        chainId: CHAIN_ID_DEC,
+        address,
+        nonce,
+        signature,
+    };
+}
 
 export const TEST_ACCOUNTS = [ALICE, BOB, CHARLIE, DAVE, EVE, FERDIE];
 

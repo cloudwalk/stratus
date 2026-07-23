@@ -8,14 +8,13 @@ use alloy_consensus::TxEip7702;
 use alloy_consensus::TxEnvelope;
 use alloy_consensus::TxLegacy;
 use alloy_consensus::transaction::Recovered;
-use alloy_consensus::transaction::SignerRecoverable;
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::Signature as AlloySignature;
 use alloy_primitives::TxKind;
 use alloy_primitives::U64;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::AccessList;
-use anyhow::bail;
+use anyhow::Context;
 use display_json::DebugAsJson;
 use rlp::Decodable;
 
@@ -39,13 +38,60 @@ pub struct TransactionInfo {
     pub hash: Hash,
 }
 
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Signer {
+    Recovered(Address),
+    Unrecovered,
+}
+
+impl Default for Signer {
+    fn default() -> Self {
+        Self::Unrecovered
+    }
+}
+
+impl Signer {
+    pub fn address(&self) -> Option<Address> {
+        match self {
+            Self::Recovered(addr) => Some(*addr),
+            Self::Unrecovered => None,
+        }
+    }
+
+    pub fn is_recovered(&self) -> bool {
+        matches!(self, Self::Recovered(_))
+    }
+}
+
+impl std::fmt::Display for Signer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Recovered(addr) => write!(f, "{addr}"),
+            Self::Unrecovered => write!(f, "<unrecovered>"),
+        }
+    }
+}
+
+impl std::fmt::Debug for Signer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
+}
+
+#[cfg(test)]
+impl fake::Dummy<fake::Faker> for Signer {
+    fn dummy_with_rng<R: fake::Rng + ?Sized>(_: &fake::Faker, rng: &mut R) -> Self {
+        Self::Recovered(fake::Dummy::dummy_with_rng(&fake::Faker, rng))
+    }
+}
+
 #[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct ExecutionInfo {
     #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_option::<ChainId>()"))]
     pub chain_id: Option<ChainId>,
     pub nonce: Nonce,
-    pub signer: Address,
+    pub signer: Signer,
     #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_option::<Address>()"))]
     pub to: Option<Address>,
     pub value: Wei,
@@ -79,6 +125,132 @@ pub struct TransactionInput {
     pub signature: Signature,
 }
 
+impl TransactionInput {
+    /// Returns the recovered signer address.
+    ///
+    /// If the signer has not been recovered yet, this method recovers it on demand
+    /// from the transaction fields and logs a warning so that missing recovery calls
+    /// are visible.
+    pub fn signer(&self) -> Address {
+        if let Some(addr) = self.execution_info.signer.address() {
+            return addr;
+        }
+
+        tracing::warn!(tx_hash = %self.transaction_info.hash, "Transaction signer was not recovered before accessing it; recovering on demand");
+        match self.recover_signer_address() {
+            Ok(addr) => addr,
+            Err(e) => {
+                tracing::error!(tx_hash = %self.transaction_info.hash, error = ?e, "failed to recover transaction signer on demand");
+                Address::ZERO
+            }
+        }
+    }
+
+    /// Recovers the signer address from the transaction fields already stored in this input.
+    fn recover_signer_address(&self) -> anyhow::Result<Address> {
+        let inner = self.to_tx_envelope();
+        let prehash = inner.signature_hash();
+        let signature: AlloySignature = self.signature.clone().into();
+        let signer = signature
+            .recover_address_from_prehash(&prehash)
+            .context("Transaction signer cannot be recovered. Check the transaction signature is valid.")?;
+        Ok(Address::from(signer))
+    }
+
+    /// Builds a TxEnvelope from the transaction fields stored in this input.
+    fn to_tx_envelope(&self) -> TxEnvelope {
+        let signature: AlloySignature = self.signature.clone().into();
+        let tx_hash = self.transaction_info.hash.into();
+
+        match self.transaction_info.tx_type.map(|t| t.as_u64()).unwrap_or(0) {
+            // EIP-2930
+            1 => TxEnvelope::Eip2930(Signed::new_unchecked(
+                TxEip2930 {
+                    chain_id: self.execution_info.chain_id.unwrap_or_default().into(),
+                    nonce: self.execution_info.nonce.into(),
+                    gas_price: self.execution_info.gas_price,
+                    gas_limit: self.execution_info.gas_limit.into(),
+                    to: TxKind::from(self.execution_info.to.map(Into::into)),
+                    value: self.execution_info.value.into(),
+                    input: self.execution_info.input.clone().into(),
+                    access_list: AccessList::default(),
+                },
+                signature,
+                tx_hash,
+            )),
+
+            // EIP-1559
+            2 => TxEnvelope::Eip1559(Signed::new_unchecked(
+                TxEip1559 {
+                    chain_id: self.execution_info.chain_id.unwrap_or_default().into(),
+                    nonce: self.execution_info.nonce.into(),
+                    max_fee_per_gas: self.execution_info.gas_price,
+                    max_priority_fee_per_gas: self.execution_info.gas_price,
+                    gas_limit: self.execution_info.gas_limit.into(),
+                    to: TxKind::from(self.execution_info.to.map(Into::into)),
+                    value: self.execution_info.value.into(),
+                    input: self.execution_info.input.clone().into(),
+                    access_list: AccessList::default(),
+                },
+                signature,
+                tx_hash,
+            )),
+
+            // EIP-4844
+            3 => TxEnvelope::Eip4844(Signed::new_unchecked(
+                TxEip4844Variant::TxEip4844(TxEip4844 {
+                    chain_id: self.execution_info.chain_id.unwrap_or_default().into(),
+                    nonce: self.execution_info.nonce.into(),
+                    max_fee_per_gas: self.execution_info.gas_price,
+                    max_priority_fee_per_gas: self.execution_info.gas_price,
+                    gas_limit: self.execution_info.gas_limit.into(),
+                    to: self.execution_info.to.map(Into::into).unwrap_or_default(),
+                    value: self.execution_info.value.into(),
+                    input: self.execution_info.input.clone().into(),
+                    access_list: AccessList::default(),
+                    blob_versioned_hashes: Vec::default(),
+                    max_fee_per_blob_gas: 0,
+                }),
+                signature,
+                tx_hash,
+            )),
+
+            // EIP-7702
+            4 => TxEnvelope::Eip7702(Signed::new_unchecked(
+                TxEip7702 {
+                    chain_id: self.execution_info.chain_id.unwrap_or_default().into(),
+                    nonce: self.execution_info.nonce.into(),
+                    gas_limit: self.execution_info.gas_limit.into(),
+                    max_fee_per_gas: self.execution_info.gas_price,
+                    max_priority_fee_per_gas: self.execution_info.gas_price,
+                    to: self.execution_info.to.map(Into::into).unwrap_or_default(),
+                    value: self.execution_info.value.into(),
+                    input: self.execution_info.input.clone().into(),
+                    access_list: AccessList::default(),
+                    authorization_list: Vec::default(),
+                },
+                signature,
+                tx_hash,
+            )),
+
+            // Legacy (default)
+            _ => TxEnvelope::Legacy(Signed::new_unchecked(
+                TxLegacy {
+                    chain_id: self.execution_info.chain_id.map(Into::into),
+                    nonce: self.execution_info.nonce.into(),
+                    gas_price: self.execution_info.gas_price,
+                    gas_limit: self.execution_info.gas_limit.into(),
+                    to: TxKind::from(self.execution_info.to.map(Into::into)),
+                    value: self.execution_info.value.into(),
+                    input: self.execution_info.input.clone().into(),
+                },
+                signature,
+                tx_hash,
+            )),
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Serialization / Deserialization
 // -----------------------------------------------------------------------------
@@ -86,14 +258,16 @@ pub struct TransactionInput {
 impl Decodable for TransactionInput {
     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
         fn convert_tx(envelope: TxEnvelope) -> Result<TransactionInput, rlp::DecoderError> {
-            TransactionInput::try_from(alloy_rpc_types_eth::Transaction {
-                inner: envelope.try_into_recovered().map_err(|_| rlp::DecoderError::Custom("signature error"))?,
+            let tx_input = try_from_alloy_transaction(alloy_rpc_types_eth::Transaction {
+                inner: Recovered::new_unchecked(envelope, alloy_primitives::Address::ZERO),
                 block_hash: None,
                 block_number: None,
                 transaction_index: None,
                 effective_gas_price: None,
             })
-            .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))
+            .map_err(|_| rlp::DecoderError::Custom("failed to convert transaction"))?;
+
+            Ok(tx_input)
         }
 
         let raw_bytes = rlp.as_raw();
@@ -139,15 +313,6 @@ impl TryFrom<AlloyTransaction> for TransactionInput {
 }
 
 fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow::Result<TransactionInput> {
-    // extract signer
-    let signer: Address = match value.inner.recover_signer() {
-        Ok(signer) => Address::from(signer),
-        Err(e) => {
-            tracing::warn!(reason = ?e, "failed to recover transaction signer");
-            bail!("Transaction signer cannot be recovered. Check the transaction signature is valid.");
-        }
-    };
-
     // Get signature components from the envelope
     let signature = value.inner.signature();
     let signature = Signature {
@@ -156,7 +321,11 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         v: if signature.v() { U64::ONE } else { U64::ZERO },
     };
 
-    Ok(TransactionInput {
+    // Build the TransactionInput from the fields we currently support, leaving the
+    // signer unrecovered. We intentionally ignore any signer that may
+    // already be present in the source AlloyTransaction so that the leader and the follower always derive the same address
+    // from the same set of saved fields.
+    let mut tx_input = TransactionInput {
         transaction_info: TransactionInfo {
             tx_type: Some(U64::from(value.inner.tx_type() as u8)),
             hash: Hash::from(*value.inner.tx_hash()),
@@ -164,7 +333,7 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
         execution_info: ExecutionInfo {
             chain_id: value.inner.chain_id().map(Into::into),
             nonce: Nonce::from(value.inner.nonce()),
-            signer,
+            signer: Signer::Unrecovered,
             to: match value.inner.kind() {
                 TxKind::Call(addr) => Some(Address::from(addr)),
                 TxKind::Create => None,
@@ -175,7 +344,13 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
             gas_price: value.inner.max_fee_per_gas(),
         },
         signature,
-    })
+    };
+
+    // Recover the signer from the envelope reconstructed using the saved fields.
+    let recovered_signer = tx_input.recover_signer_address()?;
+    tx_input.execution_info.signer = Signer::Recovered(recovered_signer);
+
+    Ok(tx_input)
 }
 
 // -----------------------------------------------------------------------------
@@ -184,99 +359,11 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
 
 impl From<TransactionInput> for AlloyTransaction {
     fn from(value: TransactionInput) -> Self {
-        let signature = value.signature.into();
-
-        let tx_type = value.transaction_info.tx_type.map(|t| t.as_u64()).unwrap_or(0);
-
-        let inner = match tx_type {
-            // EIP-2930
-            1 => TxEnvelope::Eip2930(Signed::new_unchecked(
-                TxEip2930 {
-                    chain_id: value.execution_info.chain_id.unwrap_or_default().into(),
-                    nonce: value.execution_info.nonce.into(),
-                    gas_price: value.execution_info.gas_price,
-                    gas_limit: value.execution_info.gas_limit.into(),
-                    to: TxKind::from(value.execution_info.to.map(Into::into)),
-                    value: value.execution_info.value.into(),
-                    input: value.execution_info.input.clone().into(),
-                    access_list: AccessList::default(),
-                },
-                signature,
-                value.transaction_info.hash.into(),
-            )),
-
-            // EIP-1559
-            2 => TxEnvelope::Eip1559(Signed::new_unchecked(
-                TxEip1559 {
-                    chain_id: value.execution_info.chain_id.unwrap_or_default().into(),
-                    nonce: value.execution_info.nonce.into(),
-                    max_fee_per_gas: value.execution_info.gas_price,
-                    max_priority_fee_per_gas: value.execution_info.gas_price,
-                    gas_limit: value.execution_info.gas_limit.into(),
-                    to: TxKind::from(value.execution_info.to.map(Into::into)),
-                    value: value.execution_info.value.into(),
-                    input: value.execution_info.input.clone().into(),
-                    access_list: AccessList::default(),
-                },
-                signature,
-                value.transaction_info.hash.into(),
-            )),
-
-            // EIP-4844
-            3 => TxEnvelope::Eip4844(Signed::new_unchecked(
-                TxEip4844Variant::TxEip4844(TxEip4844 {
-                    chain_id: value.execution_info.chain_id.unwrap_or_default().into(),
-                    nonce: value.execution_info.nonce.into(),
-                    max_fee_per_gas: value.execution_info.gas_price,
-                    max_priority_fee_per_gas: value.execution_info.gas_price,
-                    gas_limit: value.execution_info.gas_limit.into(),
-                    to: value.execution_info.to.map(Into::into).unwrap_or_default(),
-                    value: value.execution_info.value.into(),
-                    input: value.execution_info.input.clone().into(),
-                    access_list: AccessList::default(),
-                    blob_versioned_hashes: Vec::new(),
-                    max_fee_per_blob_gas: 0u64.into(),
-                }),
-                signature,
-                value.transaction_info.hash.into(),
-            )),
-
-            // EIP-7702
-            4 => TxEnvelope::Eip7702(Signed::new_unchecked(
-                TxEip7702 {
-                    chain_id: value.execution_info.chain_id.unwrap_or_default().into(),
-                    nonce: value.execution_info.nonce.into(),
-                    gas_limit: value.execution_info.gas_limit.into(),
-                    max_fee_per_gas: value.execution_info.gas_price,
-                    max_priority_fee_per_gas: value.execution_info.gas_price,
-                    to: value.execution_info.to.map(Into::into).unwrap_or_default(),
-                    value: value.execution_info.value.into(),
-                    input: value.execution_info.input.clone().into(),
-                    access_list: AccessList::default(),
-                    authorization_list: Vec::new(),
-                },
-                signature,
-                value.transaction_info.hash.into(),
-            )),
-
-            // Legacy (default)
-            _ => TxEnvelope::Legacy(Signed::new_unchecked(
-                TxLegacy {
-                    chain_id: value.execution_info.chain_id.map(Into::into),
-                    nonce: value.execution_info.nonce.into(),
-                    gas_price: value.execution_info.gas_price,
-                    gas_limit: value.execution_info.gas_limit.into(),
-                    to: TxKind::from(value.execution_info.to.map(Into::into)),
-                    value: value.execution_info.value.into(),
-                    input: value.execution_info.input.clone().into(),
-                },
-                signature,
-                value.transaction_info.hash.into(),
-            )),
-        };
+        let signer = value.signer();
+        let inner = value.to_tx_envelope();
 
         Self {
-            inner: Recovered::new_unchecked(inner, value.execution_info.signer.into()),
+            inner: Recovered::new_unchecked(inner, signer.into()),
             block_hash: None,
             block_number: None,
             transaction_index: None,
