@@ -100,12 +100,6 @@ mod resolve {
     }
 
     impl<'a> MinedPointInTime<'a> {
-        /// Creates a `Mined` point with no guard, for callers that just want the latest state
-        /// without staleness checking.
-        pub fn latest() -> Self {
-            Self::Latest(Seal(SealPrivate), None)
-        }
-
         fn mined(guard: Option<RwLockReadGuard<'a, ()>>) -> Self {
             Self::Latest(Seal(SealPrivate), guard)
         }
@@ -472,13 +466,9 @@ impl StratusStorage {
         let _span = tracing::info_span!("storage::save_accounts").entered();
 
         // keep only accounts that does not exist in permanent storage
-        let mut missing_accounts = Vec::new();
-        for account in accounts {
-            let perm_account = self.perm.read_account(account.address, &MinedPointInTime::latest())?;
-            if perm_account.is_none() {
-                missing_accounts.push(account);
-            }
-        }
+        let addresses: Vec<Address> = accounts.iter().map(|a| a.address).collect();
+        let existing: std::collections::HashSet<Address> = self.perm.read_accounts(addresses)?.into_iter().map(|(addr, _)| addr).collect();
+        let missing_accounts: Vec<Account> = accounts.into_iter().filter(|a| !existing.contains(&a.address)).collect();
 
         tracing::debug!(storage = %label::PERM, accounts = ?missing_accounts, "saving initial accounts");
         timed(|| self.perm.save_accounts(missing_accounts)).with(|m| {
