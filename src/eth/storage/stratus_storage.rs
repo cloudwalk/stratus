@@ -275,7 +275,8 @@ impl StratusStorage {
         match kind {
             ReadKind::Call(state) => {
                 let guard = self.transient_state_lock.read();
-                // Calls on latest or pending can read from the latest cache
+                // Calls on latest or pending can read from the latest cache iff the initial state is still in front of
+                // the mined state
                 let is_valid = state >= (self.read_mined_block_number(), TxCount::Full);
                 (is_valid, (is_valid).then_some(guard))
             }
