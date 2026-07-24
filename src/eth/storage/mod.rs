@@ -5,6 +5,7 @@ use cache::CacheConfig;
 pub use cache::StorageCache;
 pub use permanent::PermanentStorageConfig;
 pub use permanent::RocksPermanentStorage;
+pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
 pub use temporary::TemporaryStorageConfig;
