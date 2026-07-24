@@ -267,7 +267,7 @@ impl StratusStorage {
         })
     }
 
-    // For calls, this function returns a guard if latest is safe to read
+    // For calls, this function returns a guard if latest is safe to read (for pending executions assumes pending cache was read beforehand)
     fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> (bool, Option<RwLockReadGuard<'_, ()>>) {
         if matches!(point_in_time, PointInTime::MinedPast(_)) {
             return (false, None);
@@ -275,8 +275,8 @@ impl StratusStorage {
         match kind {
             ReadKind::Call((block_number, _)) => {
                 let guard = self.transient_state_lock.read();
-                // Check if the provided block number is less than or equal to the mined block number
-                let is_valid = block_number <= self.read_mined_block_number();
+                // Calls on latest or pending can read from the latest cache
+                let is_valid = block_number >= self.read_mined_block_number();
                 (is_valid, (is_valid).then_some(guard))
             }
             _ => (true, None),
@@ -396,6 +396,9 @@ impl StratusStorage {
         let (slot, found_in_perm) = 'query: {
             if point_in_time == PointInTime::Pending {
                 // tx can read from pending cache
+                // NOTE: there is a small improvement we can make here if we track the pending block number when execution starts
+                // we can abort a transaction that started in the boundary between two blocks early during a read. Currently we
+                // only check if that happened when we're saving the execution.
                 if matches!(kind, ReadKind::Transaction)
                     && let Some(slot) = self._read_slot_pending_cache(address, index)
                 {
@@ -838,5 +841,97 @@ impl StratusStorage {
                 None => Err(StorageError::BlockNotFound { filter: block_filter }),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eth::executor::EvmExecutionResult;
+    use crate::eth::executor::EvmInput;
+    use crate::eth::primitives::ExecutionAccountChanges;
+    use crate::eth::primitives::ExecutionInfo;
+    use crate::eth::primitives::ExecutionResult;
+    use crate::eth::primitives::Signature;
+    use crate::eth::primitives::SlotValue;
+    use crate::eth::primitives::TransactionInfo;
+    use crate::eth::primitives::Wei;
+
+    /// Mines a block applying `changes`
+    fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) -> BlockNumber {
+        let (header, _) = storage.read_pending_block_header();
+        let evm_input = EvmInput::from_eth_transaction(&ExecutionInfo::default(), header.number, *header.timestamp);
+
+        let mut result = EvmExecutionResult::default();
+        result.execution.result = ExecutionResult::Success;
+        result.execution.changes = changes;
+
+        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
+        storage.save_execution(tx).expect("save execution");
+
+        let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
+        storage.save_block(block.into(), block_changes).expect("save block");
+
+        storage.read_mined_block_number()
+    }
+
+    /// An `eth_call` pinned to a block that is no longer the latest must read the historical
+    /// state at its captured block, not the current latest state.
+    #[test]
+    fn read_slot_for_call_pinned_to_older_block_must_not_read_latest_state() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        let address = Address::new([0xAA; 20]);
+        let index = SlotIndex::ZERO;
+
+        // Mine a block setting slot S = 100. The eth_call captures this block.
+        let mut changes1 = ExecutionChanges::default();
+        changes1.slots.insert((address, index), SlotValue::from([100u64, 0, 0, 0]));
+        let call_block = mine_block(&storage, changes1);
+
+        // A new block is mined while the call is in flight, changing the slot to 200.
+        let mut changes2 = ExecutionChanges::default();
+        changes2.slots.insert((address, index), SlotValue::from([200u64, 0, 0, 0]));
+        let latest = mine_block(&storage, changes2);
+        assert_ne!(call_block, latest);
+
+        // The in-flight call (pinned to the first block) reads the slot.
+        let slot = storage
+            .read_slot(address, index, PointInTime::Mined, ReadKind::Call((call_block, TxCount::Full)))
+            .expect("read slot");
+
+        // Must reflect the first block (100), not the freshly mined latest (200).
+        assert_eq!(slot.value, SlotValue::from([100u64, 0, 0, 0]));
+    }
+
+    #[test]
+    fn read_account_for_call_pinned_to_older_block_must_not_read_latest_state() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        let address = Address::new([0xBB; 20]);
+
+        // Mine a block setting the account balance to 100. The eth_call captures this block.
+        let mut changes1 = ExecutionChanges::default();
+        changes1.accounts.insert(
+            address,
+            ExecutionAccountChanges::from_changed(Account::new_with_balance(address, Wei::from(100u64))),
+        );
+        let call_block = mine_block(&storage, changes1);
+
+        // A new block is mined while the call is in flight, changing the balance to 200.
+        let mut changes2 = ExecutionChanges::default();
+        changes2.accounts.insert(
+            address,
+            ExecutionAccountChanges::from_changed(Account::new_with_balance(address, Wei::from(200u64))),
+        );
+        let latest = mine_block(&storage, changes2);
+        assert_ne!(call_block, latest);
+
+        let account = storage
+            .read_account(address, PointInTime::Mined, ReadKind::Call((call_block, TxCount::Full)))
+            .expect("read account");
+
+        // Must reflect the first block (100), not the freshly mined latest (200).
+        assert_eq!(account.balance, Wei::from(100u64));
     }
 }
