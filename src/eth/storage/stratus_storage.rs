@@ -48,6 +48,25 @@ mod label {
     pub(super) const CACHE: &str = "cache";
 }
 
+/// Read guard for [`StratusStorage::transient_state_lock`] that releases the lock **fairly** on drop.
+/// Option so we can take RwLockReadGuard without unsafe. Alternatively we could use ManuallyDrop::take
+/// in an usafe block.
+pub struct TransientStateGuard<'a>(Option<RwLockReadGuard<'a, ()>>);
+
+impl<'a> TransientStateGuard<'a> {
+    fn new(guard: RwLockReadGuard<'a, ()>) -> Self {
+        Self(Some(guard))
+    }
+}
+
+impl<'a> Drop for TransientStateGuard<'a> {
+    fn drop(&mut self) {
+        if let Some(guard) = self.0.take() {
+            RwLockReadGuard::unlock_fair(guard);
+        }
+    }
+}
+
 /// Proxy that simplifies interaction with permanent and temporary storages.
 ///
 /// Additionaly it tracks metrics that are independent of the storage implementation.
@@ -268,13 +287,13 @@ impl StratusStorage {
     }
 
     // For calls, this function returns a guard if latest is safe to read (for pending executions assumes pending cache was read beforehand)
-    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> (bool, Option<RwLockReadGuard<'_, ()>>) {
+    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> (bool, Option<TransientStateGuard<'_>>) {
         if matches!(point_in_time, PointInTime::MinedPast(_)) {
             return (false, None);
         }
         match kind {
             ReadKind::Call(state) => {
-                let guard = self.transient_state_lock.read();
+                let guard = TransientStateGuard::new(self.transient_state_lock.read());
                 // Calls on latest or pending can read from the latest cache iff the initial state is still in front of
                 // the mined state
                 let is_valid = state >= (self.read_mined_block_number(), TxCount::Full);
@@ -302,7 +321,7 @@ impl StratusStorage {
                 }
             }
 
-            let (is_valid, guard) = self._latest_is_valid(point_in_time, kind);
+            let (is_valid, _guard) = self._latest_is_valid(point_in_time, kind);
             if is_valid {
                 if let Some(account) = self._read_account_latest_cache(address) {
                     return Ok(account);
@@ -310,15 +329,14 @@ impl StratusStorage {
             } else if let ReadKind::Call((block_number, _)) = kind
                 && !matches!(point_in_time, PointInTime::MinedPast(_))
             {
-                point_in_time = PointInTime::MinedPast(block_number);
+                point_in_time = PointInTime::MinedPast(match point_in_time {
+                    PointInTime::Pending => block_number.prev().unwrap_or_default(),
+                    _ => block_number,
+                });
             }
 
             // always read from perm if necessary
-            let ret = (self._read_account_perm(address, point_in_time)?, true);
-            if let Some(inner) = guard {
-                RwLockReadGuard::unlock_fair(inner);
-            }
-            ret
+            (self._read_account_perm(address, point_in_time)?, true)
         };
 
         match (point_in_time, found_in_perm) {
@@ -412,7 +430,7 @@ impl StratusStorage {
                 }
             }
 
-            let (is_valid, guard) = self._latest_is_valid(point_in_time, kind);
+            let (is_valid, _guard) = self._latest_is_valid(point_in_time, kind);
             if is_valid {
                 if let Some(slot) = self._read_slot_latest_cache(address, index) {
                     return Ok(slot);
@@ -420,15 +438,14 @@ impl StratusStorage {
             } else if let ReadKind::Call((block_number, _)) = kind
                 && !matches!(point_in_time, PointInTime::MinedPast(_))
             {
-                point_in_time = PointInTime::MinedPast(block_number);
+                point_in_time = PointInTime::MinedPast(match point_in_time {
+                    PointInTime::Pending => block_number.prev().unwrap_or_default(),
+                    _ => block_number,
+                });
             }
 
             // always read from perm if necessary
-            let ret = (self._read_slot_perm(address, index, point_in_time)?, true);
-            if let Some(inner) = guard {
-                RwLockReadGuard::unlock_fair(inner);
-            }
-            ret
+            (self._read_slot_perm(address, index, point_in_time)?, true)
         };
 
         match (point_in_time, found_in_perm) {
