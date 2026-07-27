@@ -26,7 +26,7 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [ALICE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
         console.log("ALICE nonce (hex):", nonceHex, "ALICE nonce (decimal):", nonce);
-        const signedTx = await ALICE.signFullFieldsLegacy(BOB.address, 1, nonce);
+        const signedTx = await ALICE.signFullFieldsLegacy(BOB.address, nonce);
         legacyHash = keccak256(signedTx);
         console.log("Type 0 (Legacy) transaction hash:", legacyHash);
         const response = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
@@ -39,7 +39,7 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [DAVE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
         console.log("DAVE nonce (hex):", nonceHex, "DAVE nonce (decimal):", nonce);
-        const signedTx = await DAVE.signFullFieldsEIP2930(ALICE.address, 1, nonce);
+        const signedTx = await DAVE.signFullFieldsEIP2930(ALICE.address, nonce);
         eip2930Hash = keccak256(signedTx);
         console.log("Type 1 (EIP-2930) transaction hash:", eip2930Hash);
         const response = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
@@ -52,7 +52,7 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [CHARLIE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
         console.log("CHARLIE nonce (hex):", nonceHex, "CHARLIE nonce (decimal):", nonce);
-        const signedTx = await CHARLIE.signFullFieldsEIP1559(BOB.address, 1, nonce);
+        const signedTx = await CHARLIE.signFullFieldsEIP1559(BOB.address, nonce);
         eip1559Hash = keccak256(signedTx);
         console.log("Type 2 (EIP-1559) transaction hash:", eip1559Hash);
         const response = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
@@ -66,7 +66,7 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [EVE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
         console.log("EVE nonce (hex):", nonceHex, "EVE nonce (decimal):", nonce);
-        const signedTx = await EVE.signFullFieldsEIP4844(BOB.address, 1, nonce);
+        const signedTx = await EVE.signFullFieldsEIP4844(BOB.address, nonce);
         eip4844Hash = keccak256(signedTx);
         console.log("Type 3 (EIP-4844) transaction hash:", eip4844Hash);
         const response = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
@@ -78,7 +78,7 @@ describe("Leader & Follower transaction types signer recovery regression test", 
         const nonceHex = await sendWithRetry("eth_getTransactionCount", [FERDIE.address, "latest"]);
         const nonce = parseInt(nonceHex, 16);
         console.log("FERDIE nonce (hex):", nonceHex, "FERDIE nonce (decimal):", nonce);
-        const signedTx = await FERDIE.signFullFieldsEIP7702(BOB.address, 1, nonce);
+        const signedTx = await FERDIE.signFullFieldsEIP7702(BOB.address, nonce);
         eip7702Hash = keccak256(signedTx);
         console.log("Type 4 (EIP-7702) transaction hash:", eip7702Hash);
         const response = await sendAndGetFullResponse("eth_sendRawTransaction", [signedTx]);
