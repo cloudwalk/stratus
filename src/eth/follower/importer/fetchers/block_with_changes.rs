@@ -10,6 +10,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::infra::BlockchainClient;
 
 pub struct BlockWithChangesFetcher {
@@ -19,7 +20,7 @@ pub struct BlockWithChangesFetcher {
 
 #[async_trait]
 impl DataFetcher for BlockWithChangesFetcher {
-    type FetchedType = (Block, BlockChangesRocksdb);
+    type FetchedType = (BlockRocksdb, BlockChangesRocksdb);
     type PostProcessType = (Block, ExecutionChanges);
 
     async fn fetch(&self, block_number: BlockNumber) -> Self::FetchedType {
@@ -31,6 +32,6 @@ impl DataFetcher for BlockWithChangesFetcher {
         let storage = Arc::clone(&self.storage);
         let (block, changes) = data;
         let changes = create_execution_changes(&storage, changes)?;
-        Ok((block, changes))
+        Ok((block.into(), changes))
     }
 }

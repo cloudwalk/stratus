@@ -35,6 +35,7 @@ use super::rocks_db::create_or_open_db;
 use super::types::AccountRocksdb;
 use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
+use super::types::BlockRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
@@ -404,6 +405,13 @@ impl RocksStorageState {
     pub fn read_block(&self, selection: BlockFilter) -> Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
+        let block = self.read_block_rocks(selection);
+        block.map(|block_option| block_option.map(|block| block.into()))
+    }
+
+    pub fn read_block_rocks(&self, selection: BlockFilter) -> Result<Option<BlockRocksdb>> {
+        tracing::debug!(?selection, "reading block");
+
         let block = match selection {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
@@ -423,7 +431,7 @@ impl RocksStorageState {
                 .transpose()
                 .map(|nested_opt| nested_opt.flatten()),
         };
-        block.map(|block_option| block_option.map(|block| block.into_inner().into()))
+        block.map(|block_option| block_option.map(|block| block.into_inner()))
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
@@ -630,11 +638,11 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>> {
-        let Some(block_wo_changes) = self.read_block(selection)? else {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
+        let Some(block_wo_changes) = self.read_block_rocks(selection)? else {
             return Ok(None);
         };
-        let changes = self.block_changes.get(&block_wo_changes.number().into())?;
+        let changes = self.block_changes.get(&block_wo_changes.header.number)?;
         Ok(Some((block_wo_changes, changes.map(|changes| changes.into_inner()).unwrap_or_default())))
     }
 }
