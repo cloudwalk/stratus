@@ -403,26 +403,8 @@ impl RocksStorageState {
     pub fn read_block(&self, selection: BlockFilter) -> Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
-        let block = match selection {
-            BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
-            BlockFilter::Earliest => self.blocks_by_number.first_value(),
-            BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
-            BlockFilter::Hash(block_hash) =>
-                if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
-                    self.blocks_by_number.get(&block_number)
-                } else {
-                    Ok(None)
-                },
-            BlockFilter::Timestamp(timestamp) => self
-                .blocks_by_timestamp
-                .iter_from(timestamp.timestamp.into(), timestamp.mode.into())?
-                .next()
-                .transpose()?
-                .map(|inner| self.blocks_by_number.get(&inner.1))
-                .transpose()
-                .map(|nested_opt| nested_opt.flatten()),
-        };
-        block.map(|block_option| block_option.map(|block| block.into_inner().into()))
+        let block = self.read_block_rocks(selection);
+        block.map(|block_option| block_option.map(|block| block.into()))
     }
 
     pub fn read_block_rocks(&self, selection: BlockFilter) -> Result<Option<BlockRocksdb>> {
