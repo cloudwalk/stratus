@@ -222,7 +222,7 @@ mod resolve {
                         MinedPointInTime::mined_past(target)
                     }
                 }
-                _ => MinedPointInTime::mined(None),
+                ReadKind::Transaction | ReadKind::RPC => MinedPointInTime::mined(None),
             }
         }
     }
