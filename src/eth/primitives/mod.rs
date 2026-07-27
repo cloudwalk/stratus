@@ -105,6 +105,7 @@ pub use timestamp_filter::BlockTimestampSeekMode;
 pub use transaction_execution::TransactionExecution;
 pub use transaction_input::ExecutionInfo;
 pub use transaction_input::Signature;
+pub use transaction_input::Signer;
 pub use transaction_input::TransactionInfo;
 pub use transaction_input::TransactionInput;
 pub use transaction_mined::MinedData;
