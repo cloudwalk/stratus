@@ -97,13 +97,12 @@ export class Account implements Addressable {
 
     async signFullFieldsLegacy(
         counterParty: string,
-        amount: BigNumberish,
         nonce: number = 0,
         gasLimit: BigNumberish = 1_000_000,
     ): Promise<string> {
         return await this.signer().signTransaction({
             to: counterParty,
-            value: amount,
+            value: 0,
             chainId: CHAIN_ID_DEC,
             gasPrice: 2000000000,
             gasLimit,
@@ -115,13 +114,12 @@ export class Account implements Addressable {
 
     async signFullFieldsEIP2930(
         counterParty: string,
-        amount: BigNumberish,
         nonce: number = 0,
         gasLimit: BigNumberish = 1_000_000,
     ): Promise<string> {
         return await this.signer().signTransaction({
             to: counterParty,
-            value: amount,
+            value: 0,
             chainId: CHAIN_ID_DEC,
             gasPrice: 2000000000,
             gasLimit,
@@ -134,13 +132,12 @@ export class Account implements Addressable {
 
     async signFullFieldsEIP1559(
         counterParty: string,
-        amount: BigNumberish,
         nonce: number = 0,
         gasLimit: BigNumberish = 1_000_000,
     ): Promise<string> {
         return await this.signer().signTransaction({
             to: counterParty,
-            value: amount,
+            value: 0,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000,
             maxPriorityFeePerGas: 2000000000,
@@ -154,13 +151,12 @@ export class Account implements Addressable {
 
     async signFullFieldsEIP4844(
         counterParty: string,
-        amount: BigNumberish,
         nonce: number = 0,
         gasLimit: BigNumberish = 1_000_000,
     ): Promise<string> {
         return await this.signer().signTransaction({
             to: counterParty,
-            value: amount,
+            value: 0,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000,
             maxPriorityFeePerGas: 2000000000,
@@ -176,13 +172,12 @@ export class Account implements Addressable {
 
     async signFullFieldsEIP7702(
         counterParty: string,
-        amount: BigNumberish,
         nonce: number = 0,
         gasLimit: BigNumberish = 1_000_000,
     ): Promise<string> {
         return await this.signer().signTransaction({
             to: counterParty,
-            value: amount,
+            value: 0,
             chainId: CHAIN_ID_DEC,
             maxFeePerGas: 2000000000,
             maxPriorityFeePerGas: 2000000000,
