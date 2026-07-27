@@ -12,6 +12,7 @@ use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
 use crate::eth::primitives::ExecutionInfo;
 use crate::eth::primitives::Signature;
+use crate::eth::primitives::Signer;
 use crate::eth::primitives::TransactionInfo;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
@@ -44,8 +45,8 @@ impl From<TransactionInput> for TransactionInputRocksdb {
             chain_id: item.execution_info.chain_id.map_into(),
             hash: HashRocksdb::from(item.transaction_info.hash),
             nonce: NonceRocksdb::from(item.execution_info.nonce),
-            signer: AddressRocksdb::from(item.execution_info.signer),
-            from: AddressRocksdb::from(item.execution_info.signer), // TODO: remove redundant field (requires reprocessing)
+            signer: AddressRocksdb::from(item.signer()),
+            from: AddressRocksdb::from(item.signer()), // TODO: remove redundant field (requires reprocessing)
             to: item.execution_info.to.map(AddressRocksdb::from),
             value: WeiRocksdb::from(item.execution_info.value),
             input: BytesRocksdb::from(item.execution_info.input),
@@ -68,7 +69,7 @@ impl From<TransactionInputRocksdb> for TransactionInput {
             execution_info: ExecutionInfo {
                 chain_id: item.chain_id.map_into(),
                 nonce: item.nonce.into(),
-                signer: item.signer.into(),
+                signer: Signer::Recovered(item.signer.into()),
                 to: item.to.map(Into::into),
                 value: item.value.into(),
                 input: item.input.into(),

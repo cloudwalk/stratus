@@ -1071,18 +1071,19 @@ mod tests {
     use crate::eth::primitives::Signature;
     use crate::eth::primitives::SlotValue;
     use crate::eth::primitives::TransactionInfo;
+    use crate::eth::primitives::TransactionInput;
     use crate::eth::primitives::Wei;
 
     /// Mines a block applying `changes`
     fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) -> BlockNumber {
         let (header, _) = storage.read_pending_block_header();
-        let evm_input = EvmInput::from_eth_transaction(&ExecutionInfo::default(), header.number, *header.timestamp);
+        let evm_input = EvmInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
         let mut result = EvmExecutionResult::default();
         result.execution.result = ExecutionResult::Success;
         result.execution.changes = changes;
 
-        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
+        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
         storage.save_execution(tx).expect("save execution");
 
         let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");

@@ -347,7 +347,7 @@ impl Executor {
 
         let tx_input: TransactionInput = tx.try_into()?;
         let (pending_block, _) = self.storage.read_pending_block_header();
-        let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_block.number, *pending_block.timestamp);
+        let mut evm_input = EvmInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
@@ -379,7 +379,7 @@ impl Executor {
                     return Err(e);
                 };
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_execution)
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_execution)
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -388,7 +388,7 @@ impl Executor {
                 if tx_input.execution_info.nonce != sender.nonce {
                     bail!(
                         "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
-                        tx_input.execution_info.signer,
+                        tx_input.signer(),
                         tx_input.execution_info.nonce,
                         sender.nonce
                     );
@@ -402,7 +402,7 @@ impl Executor {
                 evm_input.gas_limit = tx_input.execution_info.gas_limit;
                 evm_input.gas_price = tx_input.execution_info.gas_price;
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result)
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_result)
             }
         };
 
@@ -450,7 +450,7 @@ impl Executor {
         // track
         Span::with(|s| {
             s.rec_str("tx_hash", &tx.transaction_info.hash);
-            s.rec_str("tx_from", &tx.execution_info.signer);
+            s.rec_str("tx_from", &tx.signer());
             s.rec_opt("tx_to", &tx.execution_info.to);
             s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
@@ -475,7 +475,7 @@ impl Executor {
     /// Executes a transaction until it reaches the max number of attempts.
     fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, max_attempts: usize) -> Result<(), StratusError> {
         // validate
-        if tx_input.execution_info.signer.is_zero() {
+        if tx_input.signer().is_zero() {
             return Err(TransactionError::FromZeroAddress.into());
         }
 
@@ -489,7 +489,7 @@ impl Executor {
                 "executor::local_transaction_attempt",
                 %attempt,
                 tx_hash = %tx_input.transaction_info.hash,
-                tx_from = %tx_input.execution_info.signer,
+                tx_from = %tx_input.signer(),
                 tx_to = tracing::field::Empty,
                 tx_nonce = %tx_input.execution_info.nonce
             )
@@ -500,14 +500,14 @@ impl Executor {
 
             // prepare evm input
             let (pending_header, _) = self.storage.read_pending_block_header();
-            let evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_header.number, *pending_header.timestamp);
+            let evm_input = EvmInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::debug!(
                 %attempt,
                 tx_hash = %tx_input.transaction_info.hash,
                 tx_nonce = %tx_input.execution_info.nonce,
-                tx_signer = %tx_input.execution_info.signer,
+                tx_signer = %tx_input.signer(),
                 tx_to = ?tx_input.execution_info.to,
                 tx_data_len = %tx_input.execution_info.input.len(),
                 tx_data = %tx_input.execution_info.input,
@@ -519,7 +519,13 @@ impl Executor {
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new(tx_input.transaction_info.clone(), tx_input.signature.clone(), evm_input, evm_result);
+            let tx_execution = TransactionExecution::new(
+                tx_input.transaction_info.clone(),
+                tx_input.signature.clone(),
+                tx_input.execution_info.clone(),
+                evm_input,
+                evm_result,
+            );
             #[cfg(feature = "metrics")]
             let tx_metrics = tx_execution.metrics();
             #[cfg(feature = "metrics")]

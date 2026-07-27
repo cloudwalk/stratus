@@ -36,16 +36,16 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
         Self {
             input: TransactionInputRocksdb {
                 tx_type: execution.info.tx_type.map(|inner| inner.as_u64() as u8),
-                chain_id: execution.evm_input.chain_id.map_into(),
+                chain_id: execution.execution_info.chain_id.map_into(),
                 hash: execution.info.hash.into(),
-                nonce: execution.evm_input.nonce.unwrap_or_default().into(),
+                nonce: execution.execution_info.nonce.into(),
                 signer: execution.evm_input.from.into(),
                 from: execution.evm_input.from.into(),
-                to: execution.evm_input.to.map_into(),
-                value: execution.evm_input.value.into(),
-                input: execution.evm_input.data.clone().into(),
-                gas_limit: execution.evm_input.gas_limit.into(),
-                gas_price: execution.evm_input.gas_price.into(),
+                to: execution.execution_info.to.map_into(),
+                value: execution.execution_info.value.into(),
+                input: execution.execution_info.input.clone().into(),
+                gas_limit: execution.execution_info.gas_limit.into(),
+                gas_price: execution.execution_info.gas_price.into(),
                 v: execution.signature.v.as_u64(),
                 r: execution.signature.r.into_limbs(),
                 s: execution.signature.s.into_limbs(),
@@ -96,10 +96,12 @@ impl TransactionMined {
             metrics: EvmExecutionMetrics::default(),
         };
 
+        let evm_input = EvmInput::from_eth_transaction(&input, block_number.into(), other.execution.block_timestamp.into());
         let execution = TransactionExecution {
             info: input.transaction_info,
             signature: input.signature,
-            evm_input: EvmInput::from_eth_transaction(&input.execution_info, block_number.into(), other.execution.block_timestamp.into()),
+            execution_info: input.execution_info,
+            evm_input,
             result: evm_result,
         };
 
