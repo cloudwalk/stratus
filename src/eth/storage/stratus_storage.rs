@@ -78,6 +78,7 @@ mod resolve {
     use super::StratusStorage;
     use super::TxCount;
     use super::label;
+    use crate::infra::metrics::MetricLabelValue;
 
     /// Prevents construction of [`MinedPointInTime`] outside this module.
     /// `Seal` is public (so the enum variants can be pattern-matched) but cannot be constructed
@@ -94,9 +95,11 @@ mod resolve {
     ///
     /// The [`Seal`] field makes both variants impossible to construct outside this module,
     /// while still allowing pattern matching externally.
-    #[derive(Debug)]
+    #[derive(Debug, strum::Display)]
     pub enum MinedPointInTime<'a> {
+        #[strum(to_string = "latest")]
         Latest(Seal, Option<RwLockReadGuard<'a, ()>>),
+        #[strum(to_string = "past")]
         Past(Seal, BlockNumber),
     }
 
@@ -107,14 +110,6 @@ mod resolve {
 
         fn mined_past(number: BlockNumber) -> Self {
             Self::Past(Seal(SealPrivate), number)
-        }
-
-        /// Returns the [`PointInTime`] this resolved point corresponds to.
-        pub fn as_point_in_time(&self) -> PointInTime {
-            match self {
-                Self::Latest(_, _) => PointInTime::Mined,
-                Self::Past(_, number) => PointInTime::MinedPast(*number),
-            }
         }
 
         /// Returns `true` if this is the `Mined` (latest) point.
@@ -131,18 +126,18 @@ mod resolve {
         }
     }
 
+    impl From<MinedPointInTime<'_>> for MetricLabelValue {
+        fn from(value: MinedPointInTime<'_>) -> Self {
+            Self::Some(value.to_string())
+        }
+    }
+
     /// Unlocks the guard fairly when dropped.
     impl<'a> Drop for MinedPointInTime<'a> {
         fn drop(&mut self) {
             if let Some(guard) = self.take_guard() {
                 RwLockReadGuard::unlock_fair(guard);
             }
-        }
-    }
-
-    impl<'a> std::fmt::Display for MinedPointInTime<'a> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            self.as_point_in_time().fmt(f)
         }
     }
 
@@ -276,11 +271,16 @@ mod resolve {
             match resolved {
                 super::Resolved::Miss(mut point) => {
                     assert!(!point.is_mined(), "stale call should not read latest");
-                    assert_eq!(
-                        point.as_point_in_time(),
-                        PointInTime::MinedPast(BlockNumber::from(mined_at_start)),
-                        "stale Partial call should downgrade to MinedPast(b.prev())"
-                    );
+                    match &point {
+                        super::MinedPointInTime::Past(_, number) => {
+                            assert_eq!(
+                                *number,
+                                BlockNumber::from(mined_at_start),
+                                "stale Partial call should downgrade to MinedPast(b.prev())"
+                            );
+                        }
+                        other => panic!("expected Past, got {other:?}"),
+                    }
                     assert!(point.take_guard().is_none(), "no guard for historical read");
                 }
                 other => panic!("expected Miss, got {other:?}"),
@@ -317,11 +317,12 @@ mod resolve {
             match resolved {
                 super::Resolved::Miss(mut point) => {
                     assert!(!point.is_mined(), "stale call should not read latest");
-                    assert_eq!(
-                        point.as_point_in_time(),
-                        PointInTime::MinedPast(call_block),
-                        "stale Full call should downgrade to MinedPast(block_number), not prev()"
-                    );
+                    match &point {
+                        super::MinedPointInTime::Past(_, number) => {
+                            assert_eq!(*number, call_block, "stale Full call should downgrade to MinedPast(block_number), not prev()");
+                        }
+                        other => panic!("expected Past, got {other:?}"),
+                    }
                     assert!(point.take_guard().is_none(), "no guard for historical read");
                 }
                 other => panic!("expected Miss, got {other:?}"),
