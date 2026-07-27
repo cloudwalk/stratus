@@ -8,17 +8,12 @@ pub enum CacheSetting {
     Disabled,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum DbConfig {
     OptimizedPointLookUp,
     HistoricalData,
+    #[default]
     Default,
-}
-
-impl Default for DbConfig {
-    fn default() -> Self {
-        Self::Default
-    }
 }
 
 impl DbConfig {

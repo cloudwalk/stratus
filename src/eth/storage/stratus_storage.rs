@@ -48,6 +48,25 @@ mod label {
     pub(super) const CACHE: &str = "cache";
 }
 
+/// Read guard for [`StratusStorage::transient_state_lock`] that releases the lock **fairly** on drop.
+/// Option so we can take RwLockReadGuard without unsafe. Alternatively we could use ManuallyDrop::take
+/// in an usafe block.
+pub struct TransientStateGuard<'a>(Option<RwLockReadGuard<'a, ()>>);
+
+impl<'a> TransientStateGuard<'a> {
+    fn new(guard: RwLockReadGuard<'a, ()>) -> Self {
+        Self(Some(guard))
+    }
+}
+
+impl<'a> Drop for TransientStateGuard<'a> {
+    fn drop(&mut self) {
+        if let Some(guard) = self.0.take() {
+            RwLockReadGuard::unlock_fair(guard);
+        }
+    }
+}
+
 /// Proxy that simplifies interaction with permanent and temporary storages.
 ///
 /// Additionaly it tracks metrics that are independent of the storage implementation.
@@ -267,16 +286,17 @@ impl StratusStorage {
         })
     }
 
-    // For calls, this function returns a guard if latest is safe to read
-    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> (bool, Option<RwLockReadGuard<'_, ()>>) {
+    // For calls, this function returns a guard if latest is safe to read (for pending executions assumes pending cache was read beforehand)
+    fn _latest_is_valid(&self, point_in_time: PointInTime, kind: ReadKind) -> (bool, Option<TransientStateGuard<'_>>) {
         if matches!(point_in_time, PointInTime::MinedPast(_)) {
             return (false, None);
         }
         match kind {
-            ReadKind::Call((block_number, _)) => {
-                let guard = self.transient_state_lock.read();
-                // Check if the provided block number is less than or equal to the mined block number
-                let is_valid = block_number <= self.read_mined_block_number();
+            ReadKind::Call(state) => {
+                let guard = TransientStateGuard::new(self.transient_state_lock.read());
+                // Calls on latest or pending can read from the latest cache iff the initial state is still in front of
+                // the mined state
+                let is_valid = state >= (self.read_mined_block_number(), TxCount::Full);
                 (is_valid, (is_valid).then_some(guard))
             }
             _ => (true, None),
@@ -301,7 +321,7 @@ impl StratusStorage {
                 }
             }
 
-            let (is_valid, guard) = self._latest_is_valid(point_in_time, kind);
+            let (is_valid, _guard) = self._latest_is_valid(point_in_time, kind);
             if is_valid {
                 if let Some(account) = self._read_account_latest_cache(address) {
                     return Ok(account);
@@ -309,15 +329,14 @@ impl StratusStorage {
             } else if let ReadKind::Call((block_number, _)) = kind
                 && !matches!(point_in_time, PointInTime::MinedPast(_))
             {
-                point_in_time = PointInTime::MinedPast(block_number);
+                point_in_time = PointInTime::MinedPast(match point_in_time {
+                    PointInTime::Pending => block_number.prev().unwrap_or_default(),
+                    _ => block_number,
+                });
             }
 
             // always read from perm if necessary
-            let ret = (self._read_account_perm(address, point_in_time)?, true);
-            if let Some(inner) = guard {
-                RwLockReadGuard::unlock_fair(inner);
-            }
-            ret
+            (self._read_account_perm(address, point_in_time)?, true)
         };
 
         match (point_in_time, found_in_perm) {
@@ -396,6 +415,9 @@ impl StratusStorage {
         let (slot, found_in_perm) = 'query: {
             if point_in_time == PointInTime::Pending {
                 // tx can read from pending cache
+                // NOTE: there is a small improvement we can make here if we track the pending block number when execution starts
+                // we can abort a transaction that started in the boundary between two blocks early during a read. Currently we
+                // only check if that happened when we're saving the execution.
                 if matches!(kind, ReadKind::Transaction)
                     && let Some(slot) = self._read_slot_pending_cache(address, index)
                 {
@@ -408,7 +430,7 @@ impl StratusStorage {
                 }
             }
 
-            let (is_valid, guard) = self._latest_is_valid(point_in_time, kind);
+            let (is_valid, _guard) = self._latest_is_valid(point_in_time, kind);
             if is_valid {
                 if let Some(slot) = self._read_slot_latest_cache(address, index) {
                     return Ok(slot);
@@ -416,15 +438,14 @@ impl StratusStorage {
             } else if let ReadKind::Call((block_number, _)) = kind
                 && !matches!(point_in_time, PointInTime::MinedPast(_))
             {
-                point_in_time = PointInTime::MinedPast(block_number);
+                point_in_time = PointInTime::MinedPast(match point_in_time {
+                    PointInTime::Pending => block_number.prev().unwrap_or_default(),
+                    _ => block_number,
+                });
             }
 
             // always read from perm if necessary
-            let ret = (self._read_slot_perm(address, index, point_in_time)?, true);
-            if let Some(inner) = guard {
-                RwLockReadGuard::unlock_fair(inner);
-            }
-            ret
+            (self._read_slot_perm(address, index, point_in_time)?, true)
         };
 
         match (point_in_time, found_in_perm) {
@@ -508,9 +529,10 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_genesis_block", block_number = %block_number).entered();
         tracing::debug!(storage = %label::PERM, "saving genesis block");
+        let tens_of_millions_gas_used = block.header.gas_used.as_u64() / 10_000_000;
 
         timed(|| self.perm.save_genesis_block(block, accounts, changes)).with(|m| {
-            metrics::inc_storage_save_block(m.elapsed, label::PERM, "genesis", "genesis", m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, tens_of_millions_gas_used, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to save genesis block");
             }
@@ -551,8 +573,7 @@ impl StratusStorage {
             return Err(StorageError::BlockConflict { number: block_number });
         }
 
-        // save block
-        let (label_size_by_tx, label_size_by_gas) = (block.label_size_by_transactions(), block.label_size_by_gas());
+        let tens_of_millions_gas_used = block.header.gas_used.as_u64() / 10_000_000;
 
         timed(|| {
             let guard = self.transient_state_lock.write();
@@ -562,7 +583,7 @@ impl StratusStorage {
             Ok(())
         })
         .with(|m| {
-            metrics::inc_storage_save_block(m.elapsed, label::PERM, label_size_by_tx, label_size_by_gas, m.result.is_ok());
+            metrics::inc_storage_save_block(m.elapsed, label::PERM, tens_of_millions_gas_used, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, %block_number, "failed to save block");
             }
@@ -838,5 +859,97 @@ impl StratusStorage {
                 None => Err(StorageError::BlockNotFound { filter: block_filter }),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eth::executor::EvmExecutionResult;
+    use crate::eth::executor::EvmInput;
+    use crate::eth::primitives::ExecutionAccountChanges;
+    use crate::eth::primitives::ExecutionInfo;
+    use crate::eth::primitives::ExecutionResult;
+    use crate::eth::primitives::Signature;
+    use crate::eth::primitives::SlotValue;
+    use crate::eth::primitives::TransactionInfo;
+    use crate::eth::primitives::Wei;
+
+    /// Mines a block applying `changes`
+    fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) -> BlockNumber {
+        let (header, _) = storage.read_pending_block_header();
+        let evm_input = EvmInput::from_eth_transaction(&ExecutionInfo::default(), header.number, *header.timestamp);
+
+        let mut result = EvmExecutionResult::default();
+        result.execution.result = ExecutionResult::Success;
+        result.execution.changes = changes;
+
+        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
+        storage.save_execution(tx).expect("save execution");
+
+        let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
+        storage.save_block(block.into(), block_changes).expect("save block");
+
+        storage.read_mined_block_number()
+    }
+
+    /// An `eth_call` pinned to a block that is no longer the latest must read the historical
+    /// state at its captured block, not the current latest state.
+    #[test]
+    fn read_slot_for_call_pinned_to_older_block_must_not_read_latest_state() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        let address = Address::new([0xAA; 20]);
+        let index = SlotIndex::ZERO;
+
+        // Mine a block setting slot S = 100. The eth_call captures this block.
+        let mut changes1 = ExecutionChanges::default();
+        changes1.slots.insert((address, index), SlotValue::from([100u64, 0, 0, 0]));
+        let call_block = mine_block(&storage, changes1);
+
+        // A new block is mined while the call is in flight, changing the slot to 200.
+        let mut changes2 = ExecutionChanges::default();
+        changes2.slots.insert((address, index), SlotValue::from([200u64, 0, 0, 0]));
+        let latest = mine_block(&storage, changes2);
+        assert_ne!(call_block, latest);
+
+        // The in-flight call (pinned to the first block) reads the slot.
+        let slot = storage
+            .read_slot(address, index, PointInTime::Mined, ReadKind::Call((call_block, TxCount::Full)))
+            .expect("read slot");
+
+        // Must reflect the first block (100), not the freshly mined latest (200).
+        assert_eq!(slot.value, SlotValue::from([100u64, 0, 0, 0]));
+    }
+
+    #[test]
+    fn read_account_for_call_pinned_to_older_block_must_not_read_latest_state() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        let address = Address::new([0xBB; 20]);
+
+        // Mine a block setting the account balance to 100. The eth_call captures this block.
+        let mut changes1 = ExecutionChanges::default();
+        changes1.accounts.insert(
+            address,
+            ExecutionAccountChanges::from_changed(Account::new_with_balance(address, Wei::from(100u64))),
+        );
+        let call_block = mine_block(&storage, changes1);
+
+        // A new block is mined while the call is in flight, changing the balance to 200.
+        let mut changes2 = ExecutionChanges::default();
+        changes2.accounts.insert(
+            address,
+            ExecutionAccountChanges::from_changed(Account::new_with_balance(address, Wei::from(200u64))),
+        );
+        let latest = mine_block(&storage, changes2);
+        assert_ne!(call_block, latest);
+
+        let account = storage
+            .read_account(address, PointInTime::Mined, ReadKind::Call((call_block, TxCount::Full)))
+            .expect("read account");
+
+        // Must reflect the first block (100), not the freshly mined latest (200).
+        assert_eq!(account.balance, Wei::from(100u64));
     }
 }
