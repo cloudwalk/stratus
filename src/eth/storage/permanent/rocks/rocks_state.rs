@@ -35,6 +35,7 @@ use super::rocks_db::create_or_open_db;
 use super::types::AccountRocksdb;
 use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
+use super::types::BlockRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
@@ -424,6 +425,31 @@ impl RocksStorageState {
         block.map(|block_option| block_option.map(|block| block.into_inner().into()))
     }
 
+    pub fn read_block_rocks(&self, selection: BlockFilter) -> Result<Option<BlockRocksdb>> {
+        tracing::debug!(?selection, "reading block");
+
+        let block = match selection {
+            BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
+            BlockFilter::Earliest => self.blocks_by_number.first_value(),
+            BlockFilter::Number(block_number) => self.blocks_by_number.get(&block_number.into()),
+            BlockFilter::Hash(block_hash) =>
+                if let Some(block_number) = self.blocks_by_hash.get(&block_hash.into())? {
+                    self.blocks_by_number.get(&block_number)
+                } else {
+                    Ok(None)
+                },
+            BlockFilter::Timestamp(timestamp) => self
+                .blocks_by_timestamp
+                .iter_from(timestamp.timestamp.into(), timestamp.mode.into())?
+                .next()
+                .transpose()?
+                .map(|inner| self.blocks_by_number.get(&inner.1))
+                .transpose()
+                .map(|nested_opt| nested_opt.flatten()),
+        };
+        block.map(|block_option| block_option.map(|block| block.into_inner()))
+    }
+
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
         let mut write_batch = WriteBatch::default();
 
@@ -628,11 +654,11 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>> {
-        let Some(block_wo_changes) = self.read_block(selection)? else {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
+        let Some(block_wo_changes) = self.read_block_rocks(selection)? else {
             return Ok(None);
         };
-        let changes = self.block_changes.get(&block_wo_changes.number().into())?;
+        let changes = self.block_changes.get(&block_wo_changes.header.number)?;
         Ok(Some((block_wo_changes, changes.map(|changes| changes.into_inner()).unwrap_or_default())))
     }
 }

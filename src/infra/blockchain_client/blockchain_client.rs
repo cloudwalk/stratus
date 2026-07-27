@@ -18,7 +18,6 @@ use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalBlockWithReceipts;
@@ -29,6 +28,7 @@ use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::RpcClientApp;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::to_json_value;
 use crate::infra::tracing::TracingExt;
@@ -173,13 +173,13 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number with changes.
-    pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(Block, BlockChangesRocksdb)>> {
+    pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
         tracing::debug!(%block_number, "fetching block with changes");
 
         let number = to_json_value(block_number);
         let result = self
             .http
-            .request::<Option<(Block, BlockChangesRocksdb)>, _>("stratus_getBlockWithChanges", [number])
+            .request::<Option<(BlockRocksdb, BlockChangesRocksdb)>, _>("stratus_getBlockWithChanges", [number])
             .await;
 
         match result {
