@@ -515,7 +515,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, %address, "reading account");
         let account = timed(|| self.perm.read_account(address, &mined_point)).with(|m| {
             if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_account(m.elapsed, label::PERM, mined_point.to_string());
+                metrics::inc_storage_read_account(m.elapsed, label::PERM, mined_point);
             }
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read account from permanent storage");
@@ -607,7 +607,7 @@ impl StratusStorage {
         tracing::debug!(storage = %label::PERM, %address, %index, %mined_point, "reading slot");
         let slot = timed(|| self.perm.read_slot(address, index, &mined_point)).with(|m| {
             if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_slot(m.elapsed, label::PERM, mined_point.to_string());
+                metrics::inc_storage_read_slot(m.elapsed, label::PERM, mined_point);
             }
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read slot from permanent storage");
