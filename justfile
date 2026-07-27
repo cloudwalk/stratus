@@ -360,6 +360,10 @@ _e2e-leader-follower-up-impl test="brlc" use_block_changes_replication="false":
         export ENABLE_BLOCK_CHANGES_REPLICATION=false
     fi
 
+    if [ "{{test}}" = "tx-types" ]; then
+        export EXECUTOR_REJECT_NOT_CONTRACT=false
+    fi
+
     # Start Stratus with follower flag
     just e2e-follower {{test}} {{use_block_changes_replication}}
 
