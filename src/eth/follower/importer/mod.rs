@@ -224,6 +224,7 @@ fn should_shutdown(task_name: &str) -> bool {
     GlobalState::is_shutdown_warn(task_name) || GlobalState::is_importer_shutdown_warn(task_name)
 }
 
+/// Create the complete execution changes for a block. Unchanged values are read from the storage to complete the struct.
 fn create_execution_changes(storage: &Arc<StratusStorage>, changes: BlockChangesRocksdb) -> anyhow::Result<ExecutionChanges> {
     let addresses = changes.account_changes.keys().copied().map_into().collect_vec();
     let accounts = storage.perm.read_accounts(addresses)?;

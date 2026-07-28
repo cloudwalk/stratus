@@ -43,6 +43,9 @@ impl BlockChangesRocksdb {
         }
     }
 
+    /// Creates the INCOMPLETE account changes. Since if the bytecode/nonce/balance was not changed for
+    /// an account it is set to None, the resulting change is Self { changed: false, ..Default::default() }
+    /// operations that rely on knowing the original value (eg. updating the "latest" cache) can give wrong results.
     pub fn to_incomplete_execution_changes(self) -> ExecutionChanges {
         let accounts = self
             .account_changes
