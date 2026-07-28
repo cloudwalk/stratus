@@ -21,6 +21,7 @@ use crate::GlobalState;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::Incomplete;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::DisplayExt;
@@ -228,17 +229,7 @@ fn should_shutdown(task_name: &str) -> bool {
 fn create_execution_changes(storage: &Arc<StratusStorage>, changes: BlockChangesRocksdb) -> anyhow::Result<ExecutionChanges> {
     let addresses = changes.account_changes.keys().copied().map_into().collect_vec();
     let accounts = storage.perm.read_accounts(addresses)?;
-    let mut exec_changes = changes.to_incomplete_execution_changes();
-    for (addr, acc) in accounts {
-        match exec_changes.accounts.entry(addr) {
-            std::collections::hash_map::Entry::Occupied(mut entry) => {
-                let item = entry.get_mut();
-                item.apply_original(acc);
-            }
-            std::collections::hash_map::Entry::Vacant(_) => unreachable!("we got the addresses from the changes"),
-        }
-    }
-    Ok(exec_changes)
+    Ok(ExecutionChanges::<Incomplete>::from(changes).complete(accounts))
 }
 
 // -----------------------------------------------------------------------------

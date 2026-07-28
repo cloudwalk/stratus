@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::marker::PhantomData;
 
 use alloy_primitives::B256;
 use anyhow::Ok;
@@ -20,19 +21,106 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
+use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::ext::OptionExt;
 use crate::ext::not;
 use crate::log_and_err;
 
+/// Stage marker: changes may still contain `Default` placeholders for fields the external block
+/// did not touch. Must be [`ExecutionChanges::complete`]-d before consumption. (eg. on Block replication)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+pub struct Incomplete;
+
+/// Stage marker: every value is final (either changed by the block or filled with the original
+/// account from perm). Safe to consume.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+pub struct Complete;
+
 #[serde_as]
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
-#[cfg_attr(test, derive(fake::Dummy))]
-pub struct ExecutionChanges {
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExecutionChanges<Stage = Complete> {
     pub accounts: HashMap<Address, ExecutionAccountChanges, hash_hasher::HashBuildHasher>,
     #[serde_as(as = "Vec<(_, _)>")]
     pub slots: HashMap<(Address, SlotIndex), SlotValue, hash_hasher::HashBuildHasher>,
+    // Private on purpose: only this module can build an `ExecutionChanges`, so the stage can
+    // only advance through `new_incomplete` / `complete` / `default`.
+    _stage: PhantomData<Stage>,
 }
 
-impl ExecutionChanges {
+impl Default for ExecutionChanges<Complete> {
+    fn default() -> Self {
+        Self {
+            accounts: HashMap::default(),
+            slots: HashMap::default(),
+            _stage: PhantomData,
+        }
+    }
+}
+
+#[cfg(test)]
+impl fake::Dummy<fake::Faker> for ExecutionChanges<Complete> {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &fake::Faker, rng: &mut R) -> Self {
+        Self {
+            accounts: fake::Dummy::dummy_with_rng(faker, rng),
+            slots: fake::Dummy::dummy_with_rng(faker, rng),
+            _stage: PhantomData,
+        }
+    }
+}
+
+/// Creates the INCOMPLETE account changes. Since if the bytecode/nonce/balance was not changed for
+/// an account it is set to None, the resulting change is Self { changed: false, ..Default::default() }
+/// operations that rely on knowing the original value (eg. updating the "latest" cache) can give wrong results.
+impl From<BlockChangesRocksdb> for ExecutionChanges<Incomplete> {
+    fn from(value: BlockChangesRocksdb) -> Self {
+        let accounts = value
+            .account_changes
+            .into_iter()
+            .map(|(address, changes)| {
+                (
+                    address.into(),
+                    ExecutionAccountChanges {
+                        nonce: changes.nonce.into(),
+                        balance: changes.balance.into(),
+                        bytecode: changes.bytecode.map(|inner| inner.map_into()).into(),
+                    },
+                )
+            })
+            .collect();
+        let slots = value
+            .slot_changes
+            .into_iter()
+            .map(|((addr, idx), value)| ((addr.into(), idx.into()), value.into()))
+            .collect();
+
+        Self {
+            accounts,
+            slots,
+            _stage: PhantomData,
+        }
+    }
+}
+
+impl ExecutionChanges<Incomplete> {
+    /// Fills `Default` placeholders with the original account state read from perm, advancing to
+    /// [`Complete`]. The only way to turn an `Incomplete` into `Complete`.
+    pub fn complete(self, originals: impl IntoIterator<Item = (Address, Account)>) -> ExecutionChanges<Complete> {
+        let mut accounts = self.accounts;
+        for (address, original) in originals {
+            match accounts.entry(address) {
+                std::collections::hash_map::Entry::Occupied(mut entry) => entry.get_mut().apply_original(original),
+                std::collections::hash_map::Entry::Vacant(_) => unreachable!("originals must come from the changed accounts"),
+            }
+        }
+        ExecutionChanges {
+            accounts,
+            slots: self.slots,
+            _stage: PhantomData,
+        }
+    }
+}
+
+impl ExecutionChanges<Complete> {
     pub fn insert(&mut self, account: Account, slots: Vec<Slot>) {
         let address = account.address;
         match self.accounts.entry(address) {
@@ -50,7 +138,7 @@ impl ExecutionChanges {
         }
     }
 
-    pub fn merge(&mut self, other: ExecutionChanges) {
+    pub fn merge(&mut self, other: ExecutionChanges<Complete>) {
         for (address, changes) in other.accounts {
             match self.accounts.entry(address) {
                 std::collections::hash_map::Entry::Occupied(mut entry) => {

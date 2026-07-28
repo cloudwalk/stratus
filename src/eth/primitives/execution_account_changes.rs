@@ -103,7 +103,7 @@ impl ExecutionAccountChanges {
         }
     }
 
-    pub fn apply_original(&mut self, original_account: Account) {
+    pub(crate) fn apply_original(&mut self, original_account: Account) {
         self.nonce.apply_original(original_account.nonce);
         self.balance.apply_original(original_account.balance);
         self.bytecode.apply_original(original_account.bytecode);
