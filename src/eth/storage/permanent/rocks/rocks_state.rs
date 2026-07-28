@@ -53,12 +53,12 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::cf_versions::CfBlockChangesValue;
 use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
@@ -324,13 +324,13 @@ impl RocksStorageState {
         Ok(logs_result)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> Result<Option<Slot>> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, point: &MinedPointInTime<'_>) -> Result<Option<Slot>> {
         if address.is_coinbase() {
             return Ok(None);
         }
 
-        match point_in_time {
-            PointInTime::Mined | PointInTime::Pending => {
+        match point {
+            MinedPointInTime::Latest(_, _) => {
                 let query_params = (address.into(), index.into());
 
                 let Some(account_slot_value) = self.account_slots.get(&query_params)? else {
@@ -342,7 +342,8 @@ impl RocksStorageState {
                     value: account_slot_value.into_inner().into(),
                 }))
             }
-            PointInTime::MinedPast(block_number) => {
+            MinedPointInTime::Past(_, block_number) => {
+                let block_number = *block_number;
                 tracing::debug!(?address, ?index, ?block_number, "searching slot");
 
                 let key = (address.into(), (index).into(), block_number.into());
@@ -362,13 +363,13 @@ impl RocksStorageState {
         }
     }
 
-    pub fn read_account(&self, address: Address, point_in_time: PointInTime) -> Result<Option<Account>> {
+    pub fn read_account(&self, address: Address, point: &MinedPointInTime<'_>) -> Result<Option<Account>> {
         if address.is_coinbase() || address.is_zero() {
             return Ok(None);
         }
 
-        match point_in_time {
-            PointInTime::Mined | PointInTime::Pending => {
+        match point {
+            MinedPointInTime::Latest(_, _) => {
                 let Some(inner_account) = self.accounts.get(&address.into())? else {
                     tracing::trace!(%address, "account not found");
                     return Ok(None);
@@ -378,7 +379,8 @@ impl RocksStorageState {
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
             }
-            PointInTime::MinedPast(block_number) => {
+            MinedPointInTime::Past(_, block_number) => {
+                let block_number = *block_number;
                 tracing::debug!(?address, ?block_number, "searching account");
 
                 let key = (address.into(), block_number.into());

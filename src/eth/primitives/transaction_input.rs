@@ -38,16 +38,11 @@ pub struct TransactionInfo {
     pub hash: Hash,
 }
 
-#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub enum Signer {
     Recovered(Address),
+    #[default]
     Unrecovered,
-}
-
-impl Default for Signer {
-    fn default() -> Self {
-        Self::Unrecovered
-    }
 }
 
 impl Signer {

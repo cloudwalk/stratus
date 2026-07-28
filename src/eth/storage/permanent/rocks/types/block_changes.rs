@@ -2,15 +2,12 @@ use std::collections::HashMap;
 
 use serde_with::serde_as;
 
-use crate::eth::primitives::ExecutionAccountChanges;
-use crate::eth::primitives::ExecutionChanges;
 use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
 use crate::eth::storage::permanent::rocks::types::SlotIndexRocksdb;
 use crate::eth::storage::permanent::rocks::types::SlotValueRocksdb;
 use crate::eth::storage::permanent::rocks::types::bytecode::BytecodeRocksdb;
 use crate::eth::storage::permanent::rocks::types::nonce::NonceRocksdb;
 use crate::eth::storage::permanent::rocks::types::wei::WeiRocksdb;
-use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, PartialEq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize, Default)]
 #[cfg_attr(test, derive(fake::Dummy))]
@@ -41,29 +38,6 @@ impl BlockChangesRocksdb {
             account_changes: HashMap::with_capacity_and_hasher(capacity, hash_hasher::HashBuildHasher::default()),
             slot_changes: HashMap::default(),
         }
-    }
-
-    pub fn to_incomplete_execution_changes(self) -> ExecutionChanges {
-        let accounts = self
-            .account_changes
-            .into_iter()
-            .map(|(address, changes)| {
-                (
-                    address.into(),
-                    ExecutionAccountChanges {
-                        nonce: changes.nonce.into(),
-                        balance: changes.balance.into(),
-                        bytecode: changes.bytecode.map(|inner| inner.map_into()).into(),
-                    },
-                )
-            })
-            .collect();
-        let slots = self
-            .slot_changes
-            .into_iter()
-            .map(|((addr, idx), value)| ((addr.into(), idx.into()), value.into()))
-            .collect();
-        ExecutionChanges { accounts, slots }
     }
 }
 
