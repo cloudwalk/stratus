@@ -12,6 +12,7 @@ pub use temporary::TemporaryStorageConfig;
 
 mod cache;
 pub mod permanent;
+mod resolve_pending;
 mod stratus_storage;
 mod temporary;
 
