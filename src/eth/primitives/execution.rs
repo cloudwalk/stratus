@@ -28,12 +28,11 @@ use crate::log_and_err;
 
 /// Stage marker: changes may still contain `Default` placeholders for fields the external block
 /// did not touch. Must be [`ExecutionChanges::complete`]-d before consumption. (eg. on Block replication)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Incomplete;
 
 /// Stage marker: every value is final (either changed by the block or filled with the original
 /// account from perm). Safe to consume.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Complete;
 
 #[serde_as]
