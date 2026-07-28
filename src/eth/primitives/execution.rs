@@ -42,8 +42,6 @@ pub struct ExecutionChanges<Stage = Complete> {
     pub accounts: HashMap<Address, ExecutionAccountChanges, hash_hasher::HashBuildHasher>,
     #[serde_as(as = "Vec<(_, _)>")]
     pub slots: HashMap<(Address, SlotIndex), SlotValue, hash_hasher::HashBuildHasher>,
-    // Private on purpose: only this module can build an `ExecutionChanges`, so the stage can
-    // only advance through `new_incomplete` / `complete` / `default`.
     _stage: PhantomData<Stage>,
 }
 
