@@ -556,7 +556,7 @@ impl StratusStorage {
                             return Ok(account);
                         }
                     }
-                    break 'query (self._read_account_perm(address, mined_point)?, true, is_historical);
+                    (self._read_account_perm(address, mined_point)?, true, is_historical)
                 }
             }
         };
@@ -648,7 +648,7 @@ impl StratusStorage {
                             return Ok(slot);
                         }
                     }
-                    break 'query (self._read_slot_perm(address, index, mined_point)?, true, is_historical);
+                    (self._read_slot_perm(address, index, mined_point)?, true, is_historical)
                 }
             }
         };
