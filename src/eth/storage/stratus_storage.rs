@@ -138,12 +138,13 @@ impl EntityRead for Account {
     fn read_perm(s: &StratusStorage, address: Address, point: MinedPointInTime<'_>) -> Result<Self, StorageError> {
         tracing::debug!(storage = %label::PERM, %address, "reading account");
         let account = timed(|| s.perm.read_account(address, &point)).with(|m| {
-            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_account(m.elapsed, label::PERM, point);
-            }
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read account from permanent storage");
-            }
+            m.result
+                .as_ref()
+                .inspect(|opt| {
+                    opt.is_some().then(|| metrics::inc_storage_read_account(m.elapsed, label::PERM, point));
+                })
+                .inspect_err(|err| tracing::error!(reason = ?err, "failed to read account from permanent storage"))
+                .ok();
         })?;
         Ok(match account {
             Some(account) => {
@@ -206,12 +207,13 @@ impl EntityRead for Slot {
         let (address, index) = key;
         tracing::debug!(storage = %label::PERM, %address, %index, %point, "reading slot");
         let slot = timed(|| s.perm.read_slot(address, index, &point)).with(|m| {
-            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_slot(m.elapsed, label::PERM, point);
-            }
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read slot from permanent storage");
-            }
+            m.result
+                .as_ref()
+                .inspect(|opt| {
+                    opt.is_some().then(|| metrics::inc_storage_read_account(m.elapsed, label::PERM, point));
+                })
+                .inspect_err(|err| tracing::error!(reason = ?err, "failed to read account from permanent storage"))
+                .ok();
         })?;
         Ok(match slot {
             Some(slot) => {
