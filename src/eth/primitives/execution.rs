@@ -28,7 +28,7 @@ use crate::log_and_err;
 
 /// Stage marker: changes may still contain `Default` placeholders for fields the external block
 /// did not touch. Must be [`ExecutionChanges::complete`]-d before consumption. (eg. on Block replication)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Incomplete;
 
 /// Stage marker: every value is final (either changed by the block or filled with the original
@@ -37,22 +37,12 @@ pub struct Incomplete;
 pub struct Complete;
 
 #[serde_as]
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub struct ExecutionChanges<Stage = Complete> {
     pub accounts: HashMap<Address, ExecutionAccountChanges, hash_hasher::HashBuildHasher>,
     #[serde_as(as = "Vec<(_, _)>")]
     pub slots: HashMap<(Address, SlotIndex), SlotValue, hash_hasher::HashBuildHasher>,
     _stage: PhantomData<Stage>,
-}
-
-impl Default for ExecutionChanges<Complete> {
-    fn default() -> Self {
-        Self {
-            accounts: HashMap::default(),
-            slots: HashMap::default(),
-            _stage: PhantomData,
-        }
-    }
 }
 
 #[cfg(test)]
