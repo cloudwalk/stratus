@@ -8,6 +8,7 @@ use super::permanent::rocks::types::BlockRocksdb;
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
 use crate::eth::primitives::Account;
+use crate::eth::primitives::AccountOriginalsReader;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockFilter;
@@ -60,6 +61,12 @@ pub struct StratusStorage {
     transient_state_lock: parking_lot::RwLock<()>,
     #[cfg(feature = "dev")]
     perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
+}
+
+impl AccountOriginalsReader for StratusStorage {
+    fn read_accounts(&self, addresses: Vec<Address>) -> anyhow::Result<Vec<(Address, Account)>> {
+        Ok(self.perm.read_accounts(addresses)?)
+    }
 }
 
 pub use resolve::MinedPointInTime;

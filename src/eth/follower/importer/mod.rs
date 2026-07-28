@@ -12,7 +12,6 @@ use std::time::Duration;
 use anyhow::bail;
 pub use importer_config::ImporterConfig;
 pub use importer_supervisor::ImporterConsensus;
-use itertools::Itertools;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tracing::Span;
@@ -227,9 +226,7 @@ fn should_shutdown(task_name: &str) -> bool {
 
 /// Create the complete execution changes for a block. Unchanged values are read from the storage to complete the struct.
 fn create_execution_changes(storage: &Arc<StratusStorage>, changes: BlockChangesRocksdb) -> anyhow::Result<ExecutionChanges> {
-    let addresses = changes.account_changes.keys().copied().map_into().collect_vec();
-    let accounts = storage.perm.read_accounts(addresses)?;
-    Ok(ExecutionChanges::<Incomplete>::from(changes).complete(accounts))
+    ExecutionChanges::<Incomplete>::from(changes).complete(storage.as_ref())
 }
 
 // -----------------------------------------------------------------------------

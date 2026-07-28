@@ -101,22 +101,30 @@ impl From<BlockChangesRocksdb> for ExecutionChanges<Incomplete> {
     }
 }
 
+/// Reads the original state of accounts from permanent storage.
+pub trait AccountOriginalsReader {
+    /// Returns the original accounts for the given addresses.
+    fn read_accounts(&self, addresses: Vec<Address>) -> anyhow::Result<Vec<(Address, Account)>>;
+}
+
 impl ExecutionChanges<Incomplete> {
-    /// Fills `Default` placeholders with the original account state read from perm, advancing to
-    /// [`Complete`]. The only way to turn an `Incomplete` into `Complete`.
-    pub fn complete(self, originals: impl IntoIterator<Item = (Address, Account)>) -> ExecutionChanges<Complete> {
+    /// Reads the original account state from `storage` and fills every `Default` placeholder,
+    /// advancing to [`Complete`]. The only way to turn an `Incomplete` into `Complete`.
+    pub fn complete(self, storage: &impl AccountOriginalsReader) -> anyhow::Result<ExecutionChanges<Complete>> {
+        let addresses = self.accounts.keys().copied().collect::<Vec<_>>();
+        let originals = storage.read_accounts(addresses)?;
         let mut accounts = self.accounts;
         for (address, original) in originals {
             match accounts.entry(address) {
                 std::collections::hash_map::Entry::Occupied(mut entry) => entry.get_mut().apply_original(original),
-                std::collections::hash_map::Entry::Vacant(_) => unreachable!("originals must come from the changed accounts"),
+                std::collections::hash_map::Entry::Vacant(_) => unreachable!("originals come from the changed accounts"),
             }
         }
-        ExecutionChanges {
+        Ok(ExecutionChanges {
             accounts,
             slots: self.slots,
             _stage: PhantomData,
-        }
+        })
     }
 }
 

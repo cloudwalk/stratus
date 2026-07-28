@@ -60,6 +60,7 @@ pub use chain_id::ChainId;
 pub use difficulty::Difficulty;
 pub use ecdsa_rs::EcdsaRs;
 pub use ecdsa_v::EcdsaV;
+pub use execution::AccountOriginalsReader;
 pub use execution::Complete;
 pub use execution::EvmExecution;
 pub use execution::ExecutionChanges;
