@@ -210,9 +210,9 @@ impl EntityRead for Slot {
             m.result
                 .as_ref()
                 .inspect(|opt| {
-                    opt.is_some().then(|| metrics::inc_storage_read_account(m.elapsed, label::PERM, point));
+                    opt.is_some().then(|| metrics::inc_storage_read_slot(m.elapsed, label::PERM, point));
                 })
-                .inspect_err(|err| tracing::error!(reason = ?err, "failed to read account from permanent storage"))
+                .inspect_err(|err| tracing::error!(reason = ?err, "failed to read slot from permanent storage"))
                 .ok();
         })?;
         Ok(match slot {
