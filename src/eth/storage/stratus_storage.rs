@@ -74,17 +74,14 @@ pub use resolve_pending::MinedPointInTime;
 /// Pending-state resolution
 mod resolve_pending {
     use super::Account;
-    use super::Address;
     use super::BlockNumber;
     use super::PointInTime;
     use super::ReadKind;
     use super::RwLockReadGuard;
     use super::Slot;
-    use super::SlotIndex;
     use super::StorageError;
     use super::StratusStorage;
     use super::TxCount;
-    use super::label;
     use crate::infra::metrics::MetricLabelValue;
 
     /// Prevents construction of [`MinedPointInTime`] outside this module.
@@ -117,11 +114,6 @@ mod resolve_pending {
 
         fn mined_past(number: BlockNumber) -> Self {
             Self::Past(Seal(SealPrivate), number)
-        }
-
-        /// Returns `true` if this is the `Mined` (latest) point.
-        pub fn is_mined(&self) -> bool {
-            matches!(self, Self::Latest(_, _))
         }
 
         /// Extracts the read guard if present, leaving `Mined(None)` in its place.
@@ -159,61 +151,33 @@ mod resolve_pending {
         Miss(MinedPointInTime<'a>),
     }
 
+    /// Pending-state resolution, generic over the entity being read.
+    pub(super) trait Resolve: super::EntityRead {
+        fn resolve(s: &StratusStorage, pit: PointInTime, key: Self::Key, kind: ReadKind) -> Result<Resolved<'_, Self>, StorageError> {
+            if pit == PointInTime::Pending {
+                if matches!(kind, ReadKind::Transaction)
+                    && let Some(value) = Self::read_pending_cache(s, key)
+                {
+                    return Ok(Resolved::PendingCache(value));
+                }
+                if let Some(value) = Self::read_temp(s, key, kind)? {
+                    return Ok(Resolved::Temp(value));
+                }
+            }
+            Ok(Resolved::Miss(s.resolve_mined_point(pit, kind)))
+        }
+    }
+
+    impl Resolve for Account {}
+
+    impl Resolve for Slot {}
+
     impl StratusStorage {
-        /// Resolves pending state for a slot read.
-        /// Returns [`Resolved::Miss`] if no valid pending slot was found.
-        pub(super) fn resolve_slot(
-            &self,
-            point_in_time: PointInTime,
-            address: Address,
-            index: SlotIndex,
-            kind: ReadKind,
-        ) -> Result<Resolved<'_, Slot>, StorageError> {
-            // MinedPast is historical and immutable
-            if let PointInTime::MinedPast(number) = point_in_time {
-                return Ok(Resolved::Miss(MinedPointInTime::mined_past(number)));
+        /// Determines the mined point-in-time for a read.
+        fn resolve_mined_point(&self, pit: PointInTime, kind: ReadKind) -> MinedPointInTime<'_> {
+            if let PointInTime::MinedPast(number) = pit {
+                return MinedPointInTime::mined_past(number);
             }
-
-            if point_in_time == PointInTime::Pending {
-                if matches!(kind, ReadKind::Transaction)
-                    && let Some(slot) = self._read_slot_pending_cache(address, index)
-                {
-                    return Ok(Resolved::PendingCache(slot));
-                }
-                if let Some(slot) = self._read_slot_temp(address, index, kind)? {
-                    tracing::debug!(storage = %label::TEMP, %address, %index, value = %slot.value, "slot found in temporary storage");
-                    return Ok(Resolved::Temp(slot));
-                }
-            }
-
-            Ok(Resolved::Miss(self.resolve_mined_staleness(kind)))
-        }
-
-        /// Resolves pending state for an account read.
-        /// Returns [`Resolved::Miss`] if no valid pending account was found.
-        pub(super) fn resolve_account(&self, point_in_time: PointInTime, address: Address, kind: ReadKind) -> Result<Resolved<'_, Account>, StorageError> {
-            if let PointInTime::MinedPast(number) = point_in_time {
-                return Ok(Resolved::Miss(MinedPointInTime::mined_past(number)));
-            }
-
-            if point_in_time == PointInTime::Pending {
-                if matches!(kind, ReadKind::Transaction)
-                    && let Some(account) = self._read_account_pending_cache(address)
-                {
-                    return Ok(Resolved::PendingCache(account));
-                }
-                if let Some(account) = self._read_account_temp(address, kind)? {
-                    tracing::debug!(storage = %label::TEMP, %address, ?account, "account found in temporary storage");
-                    return Ok(Resolved::Temp(account));
-                }
-            }
-            Ok(Resolved::Miss(self.resolve_mined_staleness(kind)))
-        }
-
-        /// Determines the mined point-in-time and whether a read guard is needed for a `Call` kind.
-        /// The mined state `(<latest block>, TxCount::Full)` is stale for a call if it is newer (gt)
-        /// than the state the call is running on (`(BlockNumber, TxCount)`).
-        fn resolve_mined_staleness(&self, kind: ReadKind) -> MinedPointInTime<'_> {
             match kind {
                 ReadKind::Call((block_number, tx_count)) => {
                     let guard = self.transient_state_lock.read();
@@ -237,9 +201,11 @@ mod resolve_pending {
     #[cfg(test)]
     mod tests {
         use super::super::StratusStorage;
+        use super::Resolve;
         use crate::eth::primitives::Address;
         use crate::eth::primitives::BlockNumber;
         use crate::eth::primitives::PointInTime;
+        use crate::eth::primitives::Slot;
         use crate::eth::primitives::SlotIndex;
         use crate::eth::storage::ReadKind;
         use crate::eth::storage::TxCount;
@@ -260,10 +226,13 @@ mod resolve_pending {
 
             // At call start: block 6 is still pending (mined=5). Latest (block 5) is a safe base.
             // resolve_slot should return Miss(Mined(Some(guard))).
-            let resolved = storage.resolve_slot(PointInTime::Pending, address, index, kind).expect("resolve_slot");
+            let resolved = Slot::resolve(&storage, PointInTime::Pending, (address, index), kind).expect("resolve_slot");
             match resolved {
                 super::Resolved::Miss(mut point) => {
-                    assert!(point.is_mined(), "should read latest mined base while block is still pending");
+                    assert!(
+                        matches!(point, super::MinedPointInTime::Latest(_, _)),
+                        "should read latest mined base while block is still pending"
+                    );
                     assert!(point.take_guard().is_some(), "guard should be held for valid latest read");
                 }
                 other => panic!("expected Miss, got {other:?}"),
@@ -274,10 +243,10 @@ mod resolve_pending {
 
             // The call is now stale: reading "latest" would observe block 6's aggregate state,
             // not the tx-0 base. resolve_slot should downgrade to MinedPast(5) = b.prev() with no guard.
-            let resolved = storage.resolve_slot(PointInTime::Pending, address, index, kind).expect("resolve_slot");
+            let resolved = Slot::resolve(&storage, PointInTime::Pending, (address, index), kind).expect("resolve_slot");
             match resolved {
                 super::Resolved::Miss(mut point) => {
-                    assert!(!point.is_mined(), "stale call should not read latest");
+                    assert!(!matches!(point, super::MinedPointInTime::Latest(_, _)), "stale call should not read latest");
                     match &point {
                         super::MinedPointInTime::Past(_, number) => {
                             assert_eq!(
@@ -307,10 +276,13 @@ mod resolve_pending {
 
             let kind = ReadKind::Call((call_block, TxCount::Full));
 
-            let resolved = storage.resolve_slot(PointInTime::Mined, address, index, kind).expect("resolve_slot");
+            let resolved = Slot::resolve(&storage, PointInTime::Mined, (address, index), kind).expect("resolve_slot");
             match resolved {
                 super::Resolved::Miss(mut point) => {
-                    assert!(point.is_mined(), "Full call should read latest while block is the mined tip");
+                    assert!(
+                        matches!(point, super::MinedPointInTime::Latest(_, _)),
+                        "Full call should read latest while block is the mined tip"
+                    );
                     assert!(point.take_guard().is_some(), "guard should be held for valid latest read");
                 }
                 other => panic!("expected Miss, got {other:?}"),
@@ -320,10 +292,10 @@ mod resolve_pending {
             storage.set_mined_block_number(BlockNumber::from(6u64));
 
             // Stale: b=5 < mined=6. Full → MinedPast(5), NOT MinedPast(4).
-            let resolved = storage.resolve_slot(PointInTime::Mined, address, index, kind).expect("resolve_slot");
+            let resolved = Slot::resolve(&storage, PointInTime::Mined, (address, index), kind).expect("resolve_slot");
             match resolved {
                 super::Resolved::Miss(mut point) => {
-                    assert!(!point.is_mined(), "stale call should not read latest");
+                    assert!(!matches!(point, super::MinedPointInTime::Latest(_, _)), "stale call should not read latest");
                     match &point {
                         super::MinedPointInTime::Past(_, number) => {
                             assert_eq!(*number, call_block, "stale Full call should downgrade to MinedPast(block_number), not prev()");
@@ -355,10 +327,12 @@ enum FoundAt {
 trait EntityRead: Sized + Clone {
     type Key: Copy;
 
-    /// Resolves pending state for `key`, returning where the value came from (or a mined miss).
-    fn resolve(s: &StratusStorage, pit: PointInTime, key: Self::Key, kind: ReadKind) -> Result<resolve_pending::Resolved<'_, Self>, StorageError>;
+    /// Reads the pending (current block) value from the cache, if present.
+    fn read_pending_cache(s: &StratusStorage, key: Self::Key) -> Option<Self>;
     /// Reads the latest (mined tip) value from the cache, if present.
     fn read_latest_cache(s: &StratusStorage, key: Self::Key) -> Option<Self>;
+    /// Reads from temporary (pending) storage.
+    fn read_temp(s: &StratusStorage, key: Self::Key, kind: ReadKind) -> Result<Option<Self>, StorageError>;
     /// Reads from permanent storage at the resolved mined point.
     fn read_perm(s: &StratusStorage, key: Self::Key, point: MinedPointInTime<'_>) -> Result<Self, StorageError>;
     /// Caches the value as a pending entry, if not already cached.
@@ -370,8 +344,25 @@ trait EntityRead: Sized + Clone {
 impl EntityRead for Account {
     type Key = Address;
 
-    fn resolve(s: &StratusStorage, pit: PointInTime, address: Address, kind: ReadKind) -> Result<resolve_pending::Resolved<'_, Self>, StorageError> {
-        s.resolve_account(pit, address, kind)
+    fn read_pending_cache(s: &StratusStorage, address: Address) -> Option<Self> {
+        timed(|| s.cache.get_account(address)).with(|m| {
+            if m.result.is_some() {
+                tracing::debug!(storage = %label::CACHE, %address, "account found in cache");
+                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Pending);
+            }
+        })
+    }
+
+    fn read_temp(s: &StratusStorage, address: Address, kind: ReadKind) -> Result<Option<Self>, StorageError> {
+        tracing::debug!(storage = %label::TEMP, %address, "reading account");
+        timed(|| s.temp.read_account(address, kind)).with(|m| {
+            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
+                metrics::inc_storage_read_account(m.elapsed, label::TEMP, PointInTime::Pending);
+            }
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read account from temporary storage");
+            }
+        })
     }
 
     fn read_latest_cache(s: &StratusStorage, address: Address) -> Option<Self> {
@@ -417,9 +408,27 @@ impl EntityRead for Account {
 impl EntityRead for Slot {
     type Key = (Address, SlotIndex);
 
-    fn resolve(s: &StratusStorage, pit: PointInTime, key: (Address, SlotIndex), kind: ReadKind) -> Result<resolve_pending::Resolved<'_, Self>, StorageError> {
+    fn read_pending_cache(s: &StratusStorage, key: (Address, SlotIndex)) -> Option<Self> {
         let (address, index) = key;
-        s.resolve_slot(pit, address, index, kind)
+        timed(|| s.cache.get_slot(address, index)).with(|m| {
+            if m.result.is_some() {
+                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
+                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Pending);
+            }
+        })
+    }
+
+    fn read_temp(s: &StratusStorage, key: (Address, SlotIndex), kind: ReadKind) -> Result<Option<Self>, StorageError> {
+        let (address, index) = key;
+        tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
+        timed(|| s.temp.read_slot(address, index, kind)).with(|m| {
+            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
+                metrics::inc_storage_read_slot(m.elapsed, label::TEMP, PointInTime::Pending);
+            }
+            if let Err(ref e) = m.result {
+                tracing::error!(reason = ?e, "failed to read slot from temporary storage");
+            }
+        })
     }
 
     fn read_latest_cache(s: &StratusStorage, key: (Address, SlotIndex)) -> Option<Self> {
@@ -616,29 +625,8 @@ impl StratusStorage {
         })
     }
 
-    fn _read_account_pending_cache(&self, address: Address) -> Option<Account> {
-        timed(|| self.cache.get_account(address)).with(|m| {
-            if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, "account found in cache");
-                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Pending);
-            }
-        })
-    }
-
-    fn _read_account_temp(&self, address: Address, kind: ReadKind) -> Result<Option<Account>, StorageError> {
-        tracing::debug!(storage = %label::TEMP, %address, "reading account");
-        timed(|| self.temp.read_account(address, kind)).with(|m| {
-            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_account(m.elapsed, label::TEMP, PointInTime::Pending);
-            }
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read account from temporary storage");
-            }
-        })
-    }
-
     /// Generic read algorithm shared by [`read_account`] and [`read_slot`].
-    fn read<E: EntityRead>(&self, key: E::Key, target_point_in_time: PointInTime, kind: ReadKind) -> Result<E, StorageError> {
+    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, target_point_in_time: PointInTime, kind: ReadKind) -> Result<E, StorageError> {
         let (value, found_at) = 'query: {
             match E::resolve(self, target_point_in_time, key, kind)? {
                 resolve_pending::Resolved::PendingCache(value) => break 'query (value, FoundAt::Cache),
@@ -685,27 +673,6 @@ impl StratusStorage {
         #[cfg(feature = "tracing")]
         let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
         self.read::<Account>(address, point_in_time, kind)
-    }
-
-    fn _read_slot_pending_cache(&self, address: Address, index: SlotIndex) -> Option<Slot> {
-        timed(|| self.cache.get_slot(address, index)).with(|m| {
-            if m.result.is_some() {
-                tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
-                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Pending);
-            }
-        })
-    }
-
-    fn _read_slot_temp(&self, address: Address, index: SlotIndex, kind: ReadKind) -> Result<Option<Slot>, StorageError> {
-        tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
-        timed(|| self.temp.read_slot(address, index, kind)).with(|m| {
-            if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_slot(m.elapsed, label::TEMP, PointInTime::Pending);
-            }
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to read slot from temporary storage");
-            }
-        })
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime, kind: ReadKind) -> Result<Slot, StorageError> {
