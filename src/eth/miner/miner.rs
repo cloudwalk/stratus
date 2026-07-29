@@ -278,9 +278,15 @@ impl Miner {
 
         // mine block
         let (block, changes) = self.storage.finish_pending_block()?;
+        assert!(
+            block.header.number.is_zero() || block.header.parent_hash.is_some(),
+            "non-genesis pending block must contain its parent hash"
+        );
+        let mut block: Block = block.into();
+        block.apply_default_hash();
         Span::with(|s| s.rec_str("block_number", &block.header.number));
 
-        Ok((block.into(), changes))
+        Ok((block, changes))
     }
 
     pub fn commit(&self, item: CommitItem, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {

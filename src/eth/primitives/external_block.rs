@@ -51,6 +51,11 @@ impl ExternalBlock {
         self.0.header.inner.timestamp.into()
     }
 
+    /// Returns the parent block hash.
+    pub fn parent_hash(&self) -> Hash {
+        Hash::from(self.0.header.inner.parent_hash)
+    }
+
     /// Returns the block author.
     pub fn author(&self) -> Address {
         self.0.header.inner.beneficiary.into()
