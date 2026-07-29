@@ -1,6 +1,7 @@
 use display_json::DebugAsJson;
 
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::UnixTimeNow;
 
 /// Header of the pending block being mined.
@@ -8,6 +9,7 @@ use crate::eth::primitives::UnixTimeNow;
 pub struct PendingBlockHeader {
     pub number: BlockNumber,
     pub timestamp: UnixTimeNow,
+    pub parent_hash: Option<Hash>,
 }
 
 impl PendingBlockHeader {

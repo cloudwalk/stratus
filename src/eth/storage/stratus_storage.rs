@@ -356,6 +356,10 @@ impl StratusStorage {
         self.temp.set_pending_from_external(block);
     }
 
+    pub fn set_pending_parent_hash(&self, parent_hash: Hash) {
+        self.temp.set_pending_parent_hash(parent_hash);
+    }
+
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::set_mined_block_number", %block_number).entered();
@@ -520,6 +524,7 @@ impl StratusStorage {
 
     pub fn save_block(&self, block: Block, changes: ExecutionChanges) -> Result<(), StorageError> {
         let block_number = block.number();
+        let block_hash = block.hash();
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
@@ -569,6 +574,7 @@ impl StratusStorage {
         })?;
 
         self.set_mined_block_number(block_number);
+        self.set_pending_parent_hash(block_hash);
 
         Ok(())
     }
@@ -868,7 +874,9 @@ mod tests {
         storage.save_execution(tx).expect("save execution");
 
         let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
-        storage.save_block(block.into(), block_changes).expect("save block");
+        let mut block: Block = block.into();
+        block.apply_default_hash();
+        storage.save_block(block, block_changes).expect("save block");
 
         storage.read_mined_block_number()
     }

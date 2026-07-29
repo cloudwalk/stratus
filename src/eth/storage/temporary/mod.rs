@@ -6,6 +6,7 @@ use clap::Parser;
 use display_json::DebugAsJson;
 
 use super::RocksPermanentStorage;
+use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 
 // -----------------------------------------------------------------------------
@@ -23,7 +24,18 @@ impl TemporaryStorageConfig {
     pub fn init(&self, perm_storage: &RocksPermanentStorage) -> anyhow::Result<InMemoryTemporaryStorage> {
         tracing::info!(config = ?self, "creating temporary storage");
         let pending_block_number = compute_pending_block_number(perm_storage)?;
-        Ok(InMemoryTemporaryStorage::new(pending_block_number))
+        let storage = InMemoryTemporaryStorage::new(pending_block_number);
+
+        if let Some(parent_number) = pending_block_number.prev() {
+            let filter = BlockFilter::Number(parent_number);
+            let parent_hash = perm_storage
+                .read_block(filter)?
+                .ok_or_else(|| anyhow::anyhow!("parent block {parent_number} not found while initializing temporary storage"))?
+                .hash();
+            storage.set_pending_parent_hash(parent_hash);
+        }
+
+        Ok(storage)
     }
 }
 

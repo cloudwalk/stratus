@@ -53,6 +53,11 @@ impl InmemoryTransactionTemporaryStorage {
         let mut pending_block = self.pending_block.write();
         pending_block.block.header.number = block.number();
         pending_block.block.header.timestamp = block.timestamp().into();
+        pending_block.block.header.parent_hash = Some(block.parent_hash());
+    }
+
+    pub fn set_pending_parent_hash(&self, parent_hash: Hash) {
+        self.pending_block.write().block.header.parent_hash = Some(parent_hash);
     }
 
     // -------------------------------------------------------------------------
@@ -238,5 +243,25 @@ impl InmemoryTransactionTemporaryStorage {
         self.pending_block.write().reset();
         *self.latest_block.write() = None;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parent_hash_is_carried_by_pending_state() {
+        let storage = InmemoryTransactionTemporaryStorage::new(BlockNumber::ONE);
+        assert_eq!(storage.read_pending_block_header().0.parent_hash, None);
+
+        let parent_hash = Hash::new([1; 32]);
+        storage.set_pending_parent_hash(parent_hash);
+        let (finished, _) = storage.finish_pending_block().expect("pending block should finish");
+        assert_eq!(finished.header.parent_hash, Some(parent_hash));
+
+        assert_eq!(storage.read_pending_block_header().0.parent_hash, None);
+        storage.set_pending_parent_hash(parent_hash);
+        assert_eq!(storage.read_pending_block_header().0.parent_hash, Some(parent_hash));
     }
 }
