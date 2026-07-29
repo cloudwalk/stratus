@@ -46,7 +46,7 @@ impl ImporterWorker for FakeLeaderWorker {
                 }
             }
         }
-        let (block, changes, miner_guard) = mine_local_retry(&self.miner);
+        let (mined_block, changes, miner_guard) = mine_local_retry(&self.miner);
         if changes != expected_changes {
             tracing::error!(?changes, ?expected_changes, "execution changes result mismatch between leader and fake leader");
             bail!("execution changes mismatch between leader and fake leader")
@@ -56,13 +56,13 @@ impl ImporterWorker for FakeLeaderWorker {
         // `changes` and `metrics` (replaced with `Default::default()` on the way back). Build a
         // normalized copy of the locally-mined block so the comparison checks fields that actually
         // survive replication, leaving the original untouched for commit.
-        let normalized_block = normalize_for_replication_compare(&block);
-        if normalized_block != expected_block {
-            tracing::error!(?normalized_block, ?expected_block, "block mismatch between leader and fake leader");
+        let normalized_mined_block = normalize_for_replication_compare(&mined_block);
+        if normalized_mined_block != expected_block {
+            tracing::error!(?normalized_mined_block, ?expected_block, "block mismatch between leader and fake leader");
             bail!("block mismatch between leader and fake leader")
         }
 
-        commit_retry(&self.miner, block, changes, miner_guard);
+        commit_retry(&self.miner, mined_block, changes, miner_guard);
         Ok(block_tx_len)
     }
 }
