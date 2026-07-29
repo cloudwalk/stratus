@@ -15,6 +15,7 @@ use crate::infra::tracing::warn_task_rx_closed;
 
 pub mod block_with_changes;
 pub mod block_with_receipts;
+pub mod fake_leader;
 
 /// Number of blocks that are downloaded in parallel.
 const PARALLEL_BLOCKS: usize = 3;

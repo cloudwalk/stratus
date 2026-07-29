@@ -27,6 +27,7 @@ use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
+use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
@@ -353,7 +354,11 @@ impl StratusStorage {
     }
 
     pub fn set_pending_from_external(&self, block: &ExternalBlock) {
-        self.temp.set_pending_from_external(block);
+        self.temp.set_pending_header(block.number(), block.timestamp());
+    }
+
+    pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
+        self.temp.set_pending_header(number, timestamp);
     }
 
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {

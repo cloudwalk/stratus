@@ -16,6 +16,7 @@ use crate::eth::follower::importer::LATEST_FETCHED_BLOCK_TIME;
 use crate::eth::follower::importer::fetchers::DataFetcher;
 use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
 use crate::eth::follower::importer::fetchers::block_with_receipts::BlockWithReceiptsFetcher;
+use crate::eth::follower::importer::fetchers::fake_leader::FakeLeaderFetcher;
 use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::follower::importer::importers::execution::ReexecutionWorker;
 use crate::eth::follower::importer::importers::fake_leader::FakeLeaderWorker;
@@ -32,7 +33,7 @@ use crate::infra::metrics;
 use crate::utils::DropTimer;
 
 type ReexecutionFollower = ImporterSupervisor<BlockWithReceiptsFetcher, ReexecutionWorker>;
-type FakeLeader = ImporterSupervisor<BlockWithReceiptsFetcher, FakeLeaderWorker>;
+type FakeLeader = ImporterSupervisor<FakeLeaderFetcher, FakeLeaderWorker>;
 type ReplicationFollower = ImporterSupervisor<BlockWithChangesFetcher, ReplicationWorker>;
 
 pub struct ImporterSupervisor<Fetcher, Importer>
@@ -59,10 +60,17 @@ impl ReexecutionFollower {
 }
 
 impl FakeLeader {
-    fn new(executor: Arc<Executor>, miner: Arc<Miner>, chain: Arc<BlockchainClient>) -> Self {
-        let importer = FakeLeaderWorker { executor, miner };
+    fn new(executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>) -> Self {
+        let importer = FakeLeaderWorker {
+            executor,
+            miner,
+            storage: Arc::clone(&storage),
+        };
 
-        let fetcher = BlockWithReceiptsFetcher { chain: Arc::clone(&chain) };
+        let fetcher = FakeLeaderFetcher {
+            block_with_receipts_fetcher: BlockWithReceiptsFetcher { chain: Arc::clone(&chain) },
+            block_with_changes_fetcher: BlockWithChangesFetcher { storage, chain },
+        };
 
         Self { fetcher, importer }
     }
@@ -126,7 +134,7 @@ pub async fn start_importer(
                 .await?;
         }
         ImporterMode::FakeLeader =>
-            FakeLeader::new(executor, miner, Arc::clone(&chain))
+            FakeLeader::new(executor, miner, storage, Arc::clone(&chain))
                 .run(resume_from, sync_interval, chain)
                 .await?,
     }
