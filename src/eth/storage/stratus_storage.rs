@@ -984,7 +984,12 @@ mod tests {
         let second = mine_block(&storage, ExecutionChanges::default());
         assert_ne!(first, second);
 
-        let read = |number| storage.read_block(BlockFilter::Number(number)).expect("read block").expect("block should exist");
+        let read = |number| {
+            storage
+                .read_block(BlockFilter::Number(number))
+                .expect("read block")
+                .expect("block should exist")
+        };
 
         assert_eq!(read(second).header.parent_hash, read(first).hash());
     }
