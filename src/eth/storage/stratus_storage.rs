@@ -382,8 +382,8 @@ impl StratusStorage {
 
     /// Reads the hash of a mined block, falling back to the permanent storage on a cache miss.
     ///
-    /// A miss is expected only for blocks mined before this process started, since sealing a block
-    /// publishes its hash and the cache holds far more blocks than `BLOCKHASH` can reach.
+    /// Misses are expected for blocks mined before this process started, since sealing a block is
+    /// what publishes its hash.
     pub fn read_block_hash(&self, number: BlockNumber) -> Result<Option<Hash>, StorageError> {
         if let Some(hash) = self.cache.get_block_hash(number) {
             tracing::debug!(storage = %label::CACHE, %number, "block hash found in cache");
@@ -572,10 +572,6 @@ impl StratusStorage {
         })
     }
 
-    /// Saves a mined block.
-    ///
-    /// Chaining the next pending block to it is responsibility of the caller, because only the
-    /// caller knows the block identity before it is saved.
     pub fn save_block(&self, block: Block, changes: ExecutionChanges) -> Result<(), StorageError> {
         let block_number = block.number();
 
