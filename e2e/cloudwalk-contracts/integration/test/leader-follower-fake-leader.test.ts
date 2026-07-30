@@ -12,11 +12,7 @@ import { getTransactionByHashUntilConfirmed, sendAndGetFullResponse, sendWithRet
 // `Block`. Only if both match does it commit the block.
 //
 // This test asserts the desired end state: a transaction sent to the leader must be re-executed
-// and replicated onto the fake leader. It is expected to FAIL today because the consistency
-// comparison bails on the first block carrying a transaction (the locally-mined `changes` carry
-// read-only accounts that the leader's `BlockChangesRocksdb` never has), which kills the importer
-// task and prevents the transaction from ever landing on the fake leader. Once the comparison is
-// fixed, the transaction must appear here.
+// and replicated onto the fake leader.
 describe("Leader & Fake Leader integration test", function () {
     it("Validate Leader state and health", async function () {
         updateProviderUrl("stratus");
@@ -58,11 +54,6 @@ describe("Leader & Fake Leader integration test", function () {
         // The fake leader imports the leader's block, re-executes the transaction locally, mines a
         // block and compares it against the leader's replicated data. If the check passes the
         // block is committed and the transaction becomes visible here.
-        //
-        // Today this fails: the comparison `changes != expected_changes` bails on the first block
-        // with a transaction (locally-mined changes contain read-only accounts the leader's
-        // `BlockChangesRocksdb` never has), killing the importer task so the tx never lands. Once
-        // fixed, the transaction must appear on the fake leader.
         updateProviderUrl("stratus-fake-leader");
         const confirmed = await waitForTransactionOnFakeLeader(txHash, 30);
         expect(confirmed, "transaction was not replicated to the fake leader").to.equal(true);
