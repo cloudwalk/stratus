@@ -143,6 +143,10 @@ pub enum StorageError {
     #[error_code = 8]
     BlockNotFound { filter: BlockFilter },
 
+    #[error("unexpected storage error: {msg}")]
+    #[error_code = 9]
+    Unexpected { msg: String },
+
     #[error("parent hash conflict at block {number} between local ({local}) and external ({external}) chains.")]
     #[error_code = 10]
     ParentHashConflict { number: BlockNumber, local: Hash, external: Hash },
@@ -150,10 +154,6 @@ pub enum StorageError {
     #[error("parent of block {number} is unknown, so the block cannot be chained.")]
     #[error_code = 11]
     ParentHashMissing { number: BlockNumber },
-
-    #[error("unexpected storage error: {msg}")]
-    #[error_code = 9]
-    Unexpected { msg: String },
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
