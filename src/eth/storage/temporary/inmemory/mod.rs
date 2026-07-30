@@ -49,12 +49,12 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.set_pending_block_header(block_number)
     }
 
-    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
-        self.transaction_storage.set_pending_from_external(block);
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) -> Result<(), StorageError> {
+        self.transaction_storage.set_pending_from_external(block)
     }
 
-    pub fn set_pending_parent_hash(&self, parent_hash: Hash) {
-        self.transaction_storage.set_pending_parent_hash(parent_hash);
+    pub fn set_pending_parent_hash(&self, parent_number: BlockNumber, parent_hash: Hash) {
+        self.transaction_storage.set_pending_parent_hash(parent_number, parent_hash);
     }
 
     pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {

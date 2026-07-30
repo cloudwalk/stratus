@@ -49,15 +49,37 @@ impl InmemoryTransactionTemporaryStorage {
         }
     }
 
-    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
+    /// Prepares the pending block to receive an external block, rejecting it when the external chain
+    /// does not continue from the block mined locally.
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) -> Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
+
+        if let Some(local_parent_hash) = pending_block.block.header.parent_hash
+            && pending_block.block.header.number == block.number()
+            && local_parent_hash != block.parent_hash()
+        {
+            return Err(StorageError::ParentHashConflict {
+                number: block.number(),
+                local: local_parent_hash,
+                external: block.parent_hash(),
+            });
+        }
+
         pending_block.block.header.number = block.number();
         pending_block.block.header.timestamp = block.timestamp().into();
-        pending_block.block.header.parent_hash = Some(block.parent_hash());
+
+        Ok(())
     }
 
-    pub fn set_pending_parent_hash(&self, parent_hash: Hash) {
-        self.pending_block.write().block.header.parent_hash = Some(parent_hash);
+    /// Chains the pending block to `parent_number`.
+    ///
+    /// Hashes from blocks that are not the pending block parent are ignored, because blocks can be
+    /// saved long after they were mined when mining and saving run in separate threads.
+    pub fn set_pending_parent_hash(&self, parent_number: BlockNumber, parent_hash: Hash) {
+        let mut pending_block = self.pending_block.write();
+        if pending_block.block.header.number == parent_number.next_block_number() {
+            pending_block.block.header.parent_hash = Some(parent_hash);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -256,12 +278,24 @@ mod tests {
         assert_eq!(storage.read_pending_block_header().0.parent_hash, None);
 
         let parent_hash = Hash::new([1; 32]);
-        storage.set_pending_parent_hash(parent_hash);
+        storage.set_pending_parent_hash(BlockNumber::ZERO, parent_hash);
         let (finished, _) = storage.finish_pending_block().expect("pending block should finish");
         assert_eq!(finished.header.parent_hash, Some(parent_hash));
 
         assert_eq!(storage.read_pending_block_header().0.parent_hash, None);
-        storage.set_pending_parent_hash(parent_hash);
+        storage.set_pending_parent_hash(BlockNumber::ONE, parent_hash);
+        assert_eq!(storage.read_pending_block_header().0.parent_hash, Some(parent_hash));
+    }
+
+    #[test]
+    fn parent_hash_from_a_block_that_is_not_the_pending_parent_is_ignored() {
+        let storage = InmemoryTransactionTemporaryStorage::new(BlockNumber::from(10_u64));
+
+        storage.set_pending_parent_hash(BlockNumber::from(5_u64), Hash::new([1; 32]));
+        assert_eq!(storage.read_pending_block_header().0.parent_hash, None);
+
+        let parent_hash = Hash::new([2; 32]);
+        storage.set_pending_parent_hash(BlockNumber::from(9_u64), parent_hash);
         assert_eq!(storage.read_pending_block_header().0.parent_hash, Some(parent_hash));
     }
 }

@@ -95,7 +95,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
         let genesis_hash = genesis_block.hash();
         storage.save_genesis_block(genesis_block, initial_accounts, ExecutionChanges::default())?;
         storage.finish_pending_block()?;
-        storage.set_pending_parent_hash(genesis_hash);
+        storage.set_pending_parent_hash(BlockNumber::ZERO, genesis_hash);
         block_start = BlockNumber::from(1);
     }
 
