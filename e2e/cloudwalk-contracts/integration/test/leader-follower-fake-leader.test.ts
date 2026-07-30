@@ -2,7 +2,12 @@ import { expect } from "chai";
 import { keccak256 } from "ethers";
 
 import { ALICE, BOB } from "./helpers/account";
-import { getTransactionByHashUntilConfirmed, sendAndGetFullResponse, sendWithRetry, updateProviderUrl } from "./helpers/rpc";
+import {
+    getTransactionByHashUntilConfirmed,
+    sendAndGetFullResponse,
+    sendWithRetry,
+    updateProviderUrl,
+} from "./helpers/rpc";
 
 // Leader & Fake Leader integration test.
 //
