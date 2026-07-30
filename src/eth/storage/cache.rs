@@ -1,5 +1,3 @@
-use std::hash::Hash;
-
 use clap::Parser;
 use display_json::DebugAsJson;
 use indexmap::Equivalent;
@@ -11,7 +9,9 @@ use rustc_hash::FxBuildHasher;
 
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
@@ -21,6 +21,7 @@ pub struct StorageCache {
     account_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
     account_latest_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
     slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
+    block_hash_cache: Cache<BlockNumber, Hash, UnitWeighter, FxBuildHasher>,
 }
 
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
@@ -40,6 +41,14 @@ pub struct CacheConfig {
     /// Capacity of slot history cache
     #[arg(long = "slot-history-cache-capacity", env = "SLOT_HISTORY_CACHE_CAPACITY", default_value = "100000")]
     pub slot_history_cache_capacity: usize,
+
+    /// Capacity of the block hash cache.
+    ///
+    /// Sized to the 256 blocks reachable by `BLOCKHASH`, which is the only window the opcode can
+    /// read. Lowering it makes the opcode fall back to reading whole blocks from the permanent
+    /// storage.
+    #[arg(long = "block-hash-cache-capacity", env = "BLOCK_HASH_CACHE_CAPACITY", default_value = "256")]
+    pub block_hash_cache_capacity: usize,
 }
 
 impl CacheConfig {
@@ -79,6 +88,13 @@ impl StorageCache {
                 FxBuildHasher,
                 DefaultLifecycle::default(),
             ),
+            block_hash_cache: Cache::with(
+                config.block_hash_cache_capacity,
+                config.block_hash_cache_capacity as u64,
+                UnitWeighter,
+                FxBuildHasher,
+                DefaultLifecycle::default(),
+            ),
         }
     }
 
@@ -87,6 +103,7 @@ impl StorageCache {
         self.account_cache.clear();
         self.account_latest_cache.clear();
         self.slot_latest_cache.clear();
+        self.block_hash_cache.clear();
     }
 
     pub fn cache_slot_if_missing(&self, address: Address, slot: Slot) {
@@ -145,6 +162,18 @@ impl StorageCache {
     pub fn get_slot_latest(&self, address: Address, index: SlotIndex) -> Option<Slot> {
         self.slot_latest_cache.get(&(address, index)).map(|value| Slot { value, index })
     }
+
+    pub fn cache_block_hash(&self, number: BlockNumber, hash: Hash) {
+        self.block_hash_cache.insert(number, hash);
+    }
+
+    pub fn cache_block_hash_if_missing(&self, number: BlockNumber, hash: Hash) {
+        self.block_hash_cache.insert_if_missing(number, hash);
+    }
+
+    pub fn get_block_hash(&self, number: BlockNumber) -> Option<Hash> {
+        self.block_hash_cache.get(&number)
+    }
 }
 
 trait CacheExt<Key, Val> {
@@ -153,7 +182,7 @@ trait CacheExt<Key, Val> {
 
 impl<Key, Val, We, B, L> CacheExt<Key, Val> for Cache<Key, Val, We, B, L>
 where
-    Key: Hash + Equivalent<Key> + ToOwned<Owned = Key> + std::cmp::Eq,
+    Key: std::hash::Hash + Equivalent<Key> + ToOwned<Owned = Key> + std::cmp::Eq,
     Val: Clone,
     We: quick_cache::Weighter<Key, Val> + Clone,
     B: std::hash::BuildHasher + Clone,

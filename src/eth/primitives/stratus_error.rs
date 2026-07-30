@@ -147,6 +147,10 @@ pub enum StorageError {
     #[error_code = 10]
     ParentHashConflict { number: BlockNumber, local: Hash, external: Hash },
 
+    #[error("parent of block {number} is unknown, so the block cannot be chained.")]
+    #[error_code = 11]
+    ParentHashMissing { number: BlockNumber },
+
     #[error("unexpected storage error: {msg}")]
     #[error_code = 9]
     Unexpected { msg: String },
