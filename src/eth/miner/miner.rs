@@ -238,13 +238,20 @@ impl Miner {
 
         // mine block
         let (pending_block, changes) = self.storage.finish_pending_block()?;
-        let mut block: Block = pending_block.into();
+        let parent_hash = pending_block
+            .header
+            .parent_hash
+            .ok_or_else(|| anyhow!("pending block {} does not contain its parent hash", pending_block.header.number))?;
+        let mut block = Block::from_pending(pending_block, parent_hash);
 
         Span::with(|s| s.rec_str("block_number", &block.header.number));
         block.apply_external(&external_block);
 
         match external_block == block {
-            true => Ok((block, changes)),
+            true => {
+                self.storage.set_pending_parent_hash(block.number(), block.hash());
+                Ok((block, changes))
+            }
             false => Err(anyhow!(
                 "mismatching block info:\n\tlocal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}\n\texternal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}",
                 block.number(),
@@ -277,13 +284,19 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let (block, changes) = self.storage.finish_pending_block()?;
-        assert!(
-            block.header.number.is_zero() || block.header.parent_hash.is_some(),
-            "non-genesis pending block must contain its parent hash"
-        );
-        let mut block: Block = block.into();
-        block.apply_default_hash();
+        let (pending_block, changes) = self.storage.finish_pending_block()?;
+        let parent_hash = match pending_block.header.parent_hash {
+            Some(parent_hash) => parent_hash,
+            // the genesis block is the only one allowed to be mined without a known parent
+            None if pending_block.header.number.is_zero() => Hash::ZERO,
+            None =>
+                return Err(StorageError::Unexpected {
+                    msg: format!("pending block {} does not contain its parent hash", pending_block.header.number),
+                }),
+        };
+
+        let block = Block::from_pending(pending_block, parent_hash);
+        self.storage.set_pending_parent_hash(block.number(), block.hash());
         Span::with(|s| s.rec_str("block_number", &block.header.number));
 
         Ok((block, changes))
@@ -294,6 +307,7 @@ impl Miner {
             CommitItem::Block(block) => self.commit_block(block, changes),
             CommitItem::ReplicationBlock(block) => {
                 self.storage.finish_pending_block()?;
+                self.storage.set_pending_parent_hash(block.number(), block.hash());
                 self.commit_block(block, changes)
             }
         }

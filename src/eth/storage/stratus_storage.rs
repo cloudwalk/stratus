@@ -352,12 +352,12 @@ impl StratusStorage {
         })
     }
 
-    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
-        self.temp.set_pending_from_external(block);
+    pub fn set_pending_from_external(&self, block: &ExternalBlock) -> Result<(), StorageError> {
+        self.temp.set_pending_from_external(block)
     }
 
-    pub fn set_pending_parent_hash(&self, parent_hash: Hash) {
-        self.temp.set_pending_parent_hash(parent_hash);
+    pub fn set_pending_parent_hash(&self, parent_number: BlockNumber, parent_hash: Hash) {
+        self.temp.set_pending_parent_hash(parent_number, parent_hash);
     }
 
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
@@ -574,7 +574,7 @@ impl StratusStorage {
         })?;
 
         self.set_mined_block_number(block_number);
-        self.set_pending_parent_hash(block_hash);
+        self.set_pending_parent_hash(block_number, block_hash);
 
         Ok(())
     }
@@ -873,9 +873,9 @@ mod tests {
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
         storage.save_execution(tx).expect("save execution");
 
-        let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
-        let mut block: Block = block.into();
-        block.apply_default_hash();
+        let (pending_block, block_changes) = storage.finish_pending_block().expect("finish pending block");
+        let parent_hash = pending_block.header.parent_hash.unwrap_or(Hash::ZERO);
+        let block = Block::from_pending(pending_block, parent_hash);
         storage.save_block(block, block_changes).expect("save block");
 
         storage.read_mined_block_number()

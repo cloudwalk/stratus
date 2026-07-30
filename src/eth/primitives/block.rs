@@ -45,6 +45,32 @@ impl Block {
         block
     }
 
+    /// Converts a finished pending block into a mined block chained to `parent_hash`.
+    ///
+    /// The resulting block is hashed and the hash is stamped on all of its transactions.
+    pub fn from_pending(pending: PendingBlock, parent_hash: Hash) -> Block {
+        let mut block = Block::new(pending.header.number, *pending.header.timestamp);
+        block.header.parent_hash = parent_hash;
+
+        let txs: Vec<TransactionExecution> = pending.transactions.into_values().collect();
+        block.transactions.reserve(txs.len());
+        block.header.size = Size::from(txs.len() as u64);
+
+        let mut log_index = Index::ZERO;
+        for (tx_idx, execution) in txs.into_iter().enumerate() {
+            let log_count = execution.result.execution.logs.len() as u64;
+            let transaction_mined = TransactionMined::from_execution(execution, Hash::ZERO, (tx_idx as u64).into(), log_index);
+            block.header.gas_used += transaction_mined.execution.result.execution.gas_used;
+            block.transactions.push(transaction_mined);
+            log_index += Index(log_count);
+        }
+
+        block.calculate_transaction_root();
+        block.apply_default_hash();
+
+        block
+    }
+
     /// Serializes itself to JSON-RPC block format with full transactions included.
     pub fn to_json_rpc_with_full_transactions(self) -> JsonValue {
         let alloy_block: AlloyBlockAlloyTransaction = self.into();
@@ -122,7 +148,6 @@ impl Block {
 
     pub fn apply_external(&mut self, external_block: &ExternalBlock) {
         assert!(*self.header.timestamp == external_block.header.timestamp);
-        // The reexecutor trusts the imported parent hash stored in the pending block.
 
         let external_hash = external_block.hash();
         let default_hash = self.calculate_hash_default();
@@ -136,29 +161,6 @@ impl Block {
         }
 
         self.apply_hash(external_hash);
-    }
-}
-
-impl From<PendingBlock> for Block {
-    fn from(value: PendingBlock) -> Self {
-        let mut block = Block::new(value.header.number, *value.header.timestamp);
-        block.header.parent_hash = value.header.parent_hash.unwrap_or(Hash::ZERO);
-        let txs: Vec<TransactionExecution> = value.transactions.into_values().collect();
-        block.transactions.reserve(txs.len());
-        block.header.size = Size::from(txs.len() as u64);
-
-        let mut log_index = Index::ZERO;
-        for (tx_idx, execution) in txs.into_iter().enumerate() {
-            let log_count = execution.result.execution.logs.len() as u64;
-            let transaction_mined = TransactionMined::from_execution(execution, block.hash(), (tx_idx as u64).into(), log_index);
-            block.header.gas_used += transaction_mined.execution.result.execution.gas_used;
-            block.transactions.push(transaction_mined);
-            log_index += Index(log_count);
-        }
-
-        Self::calculate_transaction_root(&mut block);
-
-        block
     }
 }
 

@@ -15,6 +15,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::ext::to_json_value;
 
@@ -141,6 +142,10 @@ pub enum StorageError {
     #[error("block not found using filter: {filter}")]
     #[error_code = 8]
     BlockNotFound { filter: BlockFilter },
+
+    #[error("parent hash conflict at block {number} between local ({local}) and external ({external}) chains.")]
+    #[error_code = 10]
+    ParentHashConflict { number: BlockNumber, local: Hash, external: Hash },
 
     #[error("unexpected storage error: {msg}")]
     #[error_code = 9]

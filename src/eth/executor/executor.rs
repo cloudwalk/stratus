@@ -301,7 +301,7 @@ impl Executor {
         let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
         tracing::info!(block_number = %block.number(), "reexecuting external block");
 
-        self.storage.set_pending_from_external(&block);
+        self.storage.set_pending_from_external(&block)?;
 
         // track pending block
         let block_number = block.number();
