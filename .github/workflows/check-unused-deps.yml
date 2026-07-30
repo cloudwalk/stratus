@@ -44,7 +44,7 @@ jobs:
       - name: Set up Rust Nightly
         uses: dtolnay/rust-toolchain@5b842231ba77f5c045dba54ac5560fed2db780e2 # nightly
         with:
-          toolchain: nightly-2025-05-22
+          toolchain: nightly-2026-05-08
           components: rustfmt, clippy
 
       - name: Rust Cache
@@ -61,4 +61,4 @@ jobs:
         uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
 
       - name: Check for unused dependencies
-        run: just check-unused-deps -2025-05-22
+        run: just check-unused-deps -2026-05-08
