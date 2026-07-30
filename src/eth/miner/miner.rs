@@ -420,7 +420,7 @@ pub mod interval_miner {
         warn_task_rx_closed(TASK_NAME);
     }
 
-    pub fn mine_local_retry(miner: &Miner) -> (Block, ExecutionChanges, MutexGuard<()>) {
+    pub fn mine_local_retry(miner: &Miner) -> (Block, ExecutionChanges, MutexGuard<'_, ()>) {
         let guard = miner.locks.mine_and_commit.lock();
         loop {
             match miner.mine_local() {
