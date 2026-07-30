@@ -61,15 +61,11 @@ impl ReexecutionFollower {
 
 impl FakeLeader {
     fn new(executor: Arc<Executor>, miner: Arc<Miner>, storage: Arc<StratusStorage>, chain: Arc<BlockchainClient>) -> Self {
-        let importer = FakeLeaderWorker {
-            executor,
-            miner,
-            storage: Arc::clone(&storage),
-        };
+        let importer = FakeLeaderWorker { executor, miner, storage };
 
         let fetcher = FakeLeaderFetcher {
             block_with_receipts_fetcher: BlockWithReceiptsFetcher { chain: Arc::clone(&chain) },
-            block_with_changes_fetcher: BlockWithChangesFetcher { storage, chain },
+            block_with_changes_fetcher: BlockWithChangesFetcher { chain },
         };
 
         Self { fetcher, importer }
@@ -78,9 +74,13 @@ impl FakeLeader {
 
 impl ReplicationFollower {
     fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, chain: Arc<BlockchainClient>, kafka_connector: Option<KafkaConnector>) -> Self {
-        let importer = ReplicationWorker { miner, kafka_connector };
+        let importer = ReplicationWorker {
+            miner,
+            kafka_connector,
+            storage,
+        };
 
-        let fetcher = BlockWithChangesFetcher { chain, storage };
+        let fetcher = BlockWithChangesFetcher { chain };
 
         Self { fetcher, importer }
     }

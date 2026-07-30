@@ -19,10 +19,6 @@ use tracing::Span;
 use crate::GlobalState;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Incomplete;
-use crate::eth::storage::StratusStorage;
-use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::ext::traced_sleep;
@@ -224,11 +220,6 @@ fn should_shutdown(task_name: &str) -> bool {
     GlobalState::is_shutdown_warn(task_name) || GlobalState::is_importer_shutdown_warn(task_name)
 }
 
-/// Create the complete execution changes for a block. Unchanged values are read from the storage to complete the struct.
-fn create_execution_changes(storage: &Arc<StratusStorage>, changes: BlockChangesRocksdb) -> anyhow::Result<ExecutionChanges> {
-    ExecutionChanges::<Incomplete>::from(changes).complete(storage.as_ref())
-}
-
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
@@ -269,5 +260,149 @@ where
                 traced_sleep(RETRY_DELAY, SleepReason::RetryBackoff).await;
             }
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use hash_hasher::HashBuildHasher;
+
+    use crate::eth::executor::EvmExecutionResult;
+    use crate::eth::executor::EvmInput;
+    use crate::eth::follower::importer::fetchers::DataFetcher;
+    use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
+    use crate::eth::follower::importer::importers::ImporterWorker;
+    use crate::eth::follower::importer::importers::replication::ReplicationWorker;
+    use crate::eth::miner::Miner;
+    use crate::eth::miner::MinerMode;
+    use crate::eth::primitives::Account;
+    use crate::eth::primitives::Address;
+    use crate::eth::primitives::Block;
+    use crate::eth::primitives::BlockNumber;
+    use crate::eth::primitives::ExecutionAccountChanges;
+    use crate::eth::primitives::ExecutionChanges;
+    use crate::eth::primitives::ExecutionInfo;
+    use crate::eth::primitives::ExecutionResult;
+    use crate::eth::primitives::PointInTime;
+    use crate::eth::primitives::Signature;
+    use crate::eth::primitives::TransactionExecution;
+    use crate::eth::primitives::TransactionInfo;
+    use crate::eth::primitives::TransactionInput;
+    use crate::eth::primitives::UnixTime;
+    use crate::eth::primitives::Wei;
+    use crate::eth::storage::ReadKind;
+    use crate::eth::storage::StratusStorage;
+    use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
+    use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
+    use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+    use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
+    use crate::infra::BlockchainClient;
+
+    /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
+    fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) {
+        let (header, _) = storage.read_pending_block_header();
+        let evm_input = EvmInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
+
+        let mut result = EvmExecutionResult::default();
+        result.execution.result = ExecutionResult::Success;
+        result.execution.changes = changes;
+
+        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
+        storage.save_execution(tx).expect("save execution");
+
+        let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
+        storage.save_block(block.into(), block_changes).expect("save block");
+    }
+
+    /// Builds `ExecutionChanges` that set `address`'s balance to `balance` (nonce/bytecode untouched).
+    fn balance_changes(address: Address, balance: Wei) -> ExecutionChanges {
+        let mut changes = ExecutionChanges::default();
+        changes
+            .accounts
+            .insert(address, ExecutionAccountChanges::from_changed(Account::new_with_balance(address, balance)));
+        changes
+    }
+
+    /// Builds the leader-side `BlockChangesRocksdb` for a block where `address` had its nonce
+    /// changed but its balance left untouched (balance entry is `None`).
+    fn block_changes_nonce_only(address: Address) -> BlockChangesRocksdb {
+        let mut account_changes = HashMap::with_hasher(HashBuildHasher::default());
+        account_changes.insert(
+            AddressRocksdb::from(address),
+            AccountChangesRocksdb {
+                balance: None,
+                nonce: Some(5u64.into()),
+                bytecode: None,
+            },
+        );
+        BlockChangesRocksdb {
+            account_changes,
+            slot_changes: HashMap::with_hasher(HashBuildHasher::default()),
+        }
+    }
+
+    /// Replication importer (`BlockWithChangesFetcher` + `ReplicationWorker`) must commit changes
+    /// whose unchanged account fields reflect the block's pre-state, not whatever happens to be
+    /// latest in permanent storage when the fetcher post-processes the block.
+    ///
+    /// The fetcher pipeline runs ahead of the importer: block N is post-processed while the
+    /// importer has only committed up to block N-k. Completion must therefore happen at import
+    /// time (when perm is caught up to block N-1), not at post-process time. `FakeLeaderWorker`
+    /// already does this via `expected_changes.complete(self.storage.as_ref())`; `ReplicationWorker`
+    /// must do the same.
+    ///
+    /// This test drives the combo at the importer level: `post_process` produces
+    /// `ExecutionChanges<Incomplete>` (perm-independent), then `ReplicationWorker::import` must
+    /// complete them against the now-caught-up perm. It fails to compile until `ReplicationWorker`
+    /// accepts `ExecutionChanges<Incomplete>` and completes internally; once it does, the assertion
+    /// passes (committed `200` = block 3's pre-state).
+    #[tokio::test]
+    async fn replication_importer_commits_stale_completed_changes_when_fetcher_runs_ahead() {
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
+        let miner = Arc::new(Miner::new(Arc::clone(&storage), MinerMode::External));
+        let worker = ReplicationWorker {
+            miner,
+            kafka_connector: None,
+            storage: Arc::clone(&storage),
+        };
+        // `post_process` never touches the chain; the client only satisfies the fetcher's `chain` field.
+        let chain = Arc::new(BlockchainClient::new_without_health_check("http://127.0.0.1:9/").expect("build test client"));
+        let fetcher = BlockWithChangesFetcher { chain };
+
+        let address = Address::new([0xCC; 20]);
+
+        // Block 1: B.balance = 100. permanent storage is now at block 1.
+        mine_block(&storage, balance_changes(address, Wei::from(100u64)));
+
+        // The fetcher post-processes block 3 while the importer is still at block 1 (fetcher ahead).
+        // Block 3 changed B's nonce but left its balance untouched (balance entry is `None`).
+        // `post_process` returns `ExecutionChanges<Incomplete>` — it does NOT read perm, so the
+        // fetcher being ahead does not corrupt the changes.
+        let fetched_3 = (
+            BlockRocksdb::from(Block::new(BlockNumber::from(3u64), UnixTime::from(0u64))),
+            block_changes_nonce_only(address),
+        );
+        let (block_3, changes_3) = fetcher.post_process(fetched_3).await.expect("post_process");
+
+        // Intervening block 2: B.balance = 200. This is the correct pre-state for block 3.
+        // permanent storage is now at block 2.
+        mine_block(&storage, balance_changes(address, Wei::from(200u64)));
+
+        // The importer imports block 3. `ReplicationWorker::import` must complete `changes_3`
+        // (Incomplete) against perm at import time, when perm is caught up to block 2 (200).
+        worker.import((block_3, changes_3)).await.expect("import");
+
+        // Block 3 did not change B.balance, so the committed value must equal block 3's pre-state
+        // (block 2 = 200). Completing at import time (perm caught up) yields 200; completing at
+        // post-process time (perm behind) would yield the stale 100.
+        let account = storage.read_account(address, PointInTime::Mined, ReadKind::Transaction).expect("read account");
+        assert_eq!(
+            account.balance,
+            Wei::from(200u64),
+            "replication importer did not complete changes against the block's pre-state"
+        );
     }
 }

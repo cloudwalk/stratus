@@ -8,16 +8,19 @@ use crate::eth::miner::Miner;
 use crate::eth::miner::miner::CommitItem;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::Incomplete;
+use crate::eth::storage::StratusStorage;
 use crate::infra::kafka::KafkaConnector;
 
 pub struct ReplicationWorker {
     pub miner: Arc<Miner>,
+    pub storage: Arc<StratusStorage>,
     pub kafka_connector: Option<KafkaConnector>,
 }
 
 #[async_trait]
 impl ImporterWorker for ReplicationWorker {
-    type DataType = (Block, ExecutionChanges);
+    type DataType = (Block, ExecutionChanges<Incomplete>);
 
     async fn import(&self, (block, changes): Self::DataType) -> anyhow::Result<usize> {
         tracing::info!(block_number = %block.number(), "received block with changes");
@@ -26,7 +29,8 @@ impl ImporterWorker for ReplicationWorker {
 
         send_block_to_kafka(&self.kafka_connector, &block).await?;
 
-        self.miner.commit(CommitItem::ReplicationBlock(block), changes)?;
+        let completed_changes = changes.complete(self.storage.as_ref())?;
+        self.miner.commit(CommitItem::ReplicationBlock(block), completed_changes)?;
 
         Ok(block_tx_len)
     }

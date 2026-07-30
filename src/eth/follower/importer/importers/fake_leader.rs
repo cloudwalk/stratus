@@ -47,8 +47,14 @@ impl ImporterWorker for FakeLeaderWorker {
             }
         }
         let (mined_block, changes, miner_guard) = mine_local_retry(&self.miner);
-        if changes != expected_changes {
-            tracing::error!(?changes, ?expected_changes, "execution changes result mismatch between leader and fake leader");
+
+        let completed_expected_changes = expected_changes.complete(self.storage.as_ref())?;
+        if changes != completed_expected_changes {
+            tracing::error!(
+                ?changes,
+                ?completed_expected_changes,
+                "execution changes result mismatch between leader and fake leader"
+            );
             bail!("execution changes mismatch between leader and fake leader")
         }
 
