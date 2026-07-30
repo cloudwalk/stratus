@@ -49,7 +49,6 @@ impl InmemoryTransactionTemporaryStorage {
         }
     }
 
-    /// Prepares the pending block to receive an external block.
     pub fn set_pending_from_external(&self, block: &ExternalBlock) {
         let mut pending_block = self.pending_block.write();
         pending_block.block.header.number = block.number();
