@@ -1,10 +1,13 @@
 use std::mem;
+use std::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
 use std::sync::Arc;
 
 #[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
+use anyhow::anyhow;
 use anyhow::bail;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
@@ -114,7 +117,7 @@ impl Evms {
     fn spawn(storage: Arc<StratusStorage>, config: &ExecutorConfig) -> Self {
         // function executed by evm threads
         fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<EvmTask>, kind: EvmKind) {
-            let mut evm = Evm::new(storage, config, kind);
+            let mut evm = Evm::new(Arc::clone(&storage), config.clone(), kind);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
@@ -124,7 +127,15 @@ impl Evms {
 
                 // execute
                 let _enter = task.span.enter();
-                let result = evm.execute(task.input);
+
+                let result = catch_unwind(AssertUnwindSafe(|| evm.execute(task.input)))
+                    .inspect_err(|panic_err| {
+                        tracing::error!(?panic_err, "executor panicked; recreating EVM");
+                        evm = Evm::new(Arc::clone(&storage), config.clone(), kind);
+                    })
+                    .map_err(|_| StratusError::from(anyhow!("executor panicked")))
+                    .flatten();
+
                 if let Err(e) = task.response_tx.send(result) {
                     tracing::error!(reason = ?e, "failed to send evm task execution result");
                 }
