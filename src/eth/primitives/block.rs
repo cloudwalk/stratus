@@ -2,6 +2,7 @@ use alloy_primitives::B256;
 use alloy_primitives::keccak256;
 use alloy_rpc_types_eth::BlockTransactions;
 use alloy_trie::root::ordered_trie_root;
+use anyhow::bail;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
@@ -131,7 +132,11 @@ impl Block {
     }
 
     pub fn calculate_hash_default(&self) -> Hash {
-        self.calculate_hash_v2()
+        if self.number().is_zero() {
+            self.calculate_hash_v1()
+        } else {
+            self.calculate_hash_v2()
+        }
     }
 
     pub fn apply_hash(&mut self, hash: Hash) {
@@ -146,7 +151,7 @@ impl Block {
         self.apply_hash(hash);
     }
 
-    pub fn apply_external(&mut self, external_block: &ExternalBlock) {
+    pub fn apply_external(&mut self, external_block: &ExternalBlock) -> anyhow::Result<()> {
         assert!(*self.header.timestamp == external_block.header.timestamp);
 
         let external_hash = external_block.hash();
@@ -154,13 +159,13 @@ impl Block {
         if external_hash != default_hash {
             // TODO: Remove the V1 hash arm after every node has been upgraded.
             let v1_hash = self.calculate_hash_v1();
-            assert!(
-                external_hash == v1_hash,
-                "invalid external block hash: imported={external_hash} default={default_hash} v1={v1_hash}"
-            );
+            if external_hash != v1_hash {
+                bail!("invalid external block hash: imported={external_hash} default={default_hash} v1={v1_hash}");
+            }
         }
 
         self.apply_hash(external_hash);
+        Ok(())
     }
 }
 
@@ -247,25 +252,35 @@ mod tests {
 
         let mut v2_block = block.clone();
         v2_block.header.hash = Hash::ZERO;
-        v2_block.apply_external(&external_block(&block, block.hash()));
+        v2_block
+            .apply_external(&external_block(&block, block.hash()))
+            .expect("V2 hash should be accepted");
         assert_eq!(v2_block.hash(), block.hash());
 
         let v1_hash = block.calculate_hash_v1();
         let mut v1_block = block.clone();
         v1_block.header.hash = Hash::ZERO;
-        v1_block.apply_external(&external_block(&block, v1_hash));
+        v1_block.apply_external(&external_block(&block, v1_hash)).expect("V1 hash should be accepted");
         assert_eq!(v1_block.hash(), v1_hash);
 
         let mut invalid_block = block.clone();
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            invalid_block.apply_external(&external_block(&block, Hash::ZERO));
-        }));
-        assert!(result.is_err());
+        let error = invalid_block
+            .apply_external(&external_block(&block, Hash::ZERO))
+            .expect_err("invalid hash should be rejected");
+        assert!(error.to_string().contains("invalid external block hash"));
     }
 
     #[test]
     fn genesis_uses_legacy_hash() {
         let genesis = Block::genesis();
+        assert_eq!(genesis.hash(), BlockNumber::ZERO.hash());
+    }
+
+    #[test]
+    fn sealed_genesis_uses_legacy_hash() {
+        let pending = PendingBlock::new_at_now(BlockNumber::ZERO);
+        let genesis = Block::from_pending(pending, Hash::ZERO);
+
         assert_eq!(genesis.hash(), BlockNumber::ZERO.hash());
     }
 }

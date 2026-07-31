@@ -242,7 +242,7 @@ impl Miner {
         let mut block = Block::from_pending(pending_block, parent_hash);
 
         Span::with(|s| s.rec_str("block_number", &block.header.number));
-        block.apply_external(&external_block);
+        block.apply_external(&external_block)?;
 
         match external_block == block {
             true => {
