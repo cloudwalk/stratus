@@ -64,6 +64,10 @@ impl Block {
         self.header.hash
     }
 
+    pub fn timestamp(&self) -> UnixTime {
+        self.header.timestamp
+    }
+
     pub fn create_log_messages(&self) -> Vec<LogMessage> {
         let mut log_messages = vec![];
         for (transaction_index, tx) in self.transactions.iter().enumerate() {
