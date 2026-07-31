@@ -516,11 +516,15 @@ impl DatabaseRef for RevmSession {
 
     /// Resolves a block hash for the `BLOCKHASH` opcode.
     ///
-    /// Blocks outside the 256 block window are filtered by the interpreter before reaching here, so
-    /// an unknown block means it is not part of the chain and resolves to zero, as in Ethereum.
+    /// The interpreter only asks for blocks inside the 256 block window that precedes the block
+    /// being executed, so every request here is for a block that was already mined. Failing to
+    /// resolve it means the node lost track of its own chain, which must not be served as zero.
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
-        let hash = self.storage.read_block_hash(BlockNumber::from(number))?;
-        Ok(hash.map(Into::into).unwrap_or(B256::ZERO))
+        let number = BlockNumber::from(number);
+        match self.storage.read_block_hash(number)? {
+            Some(hash) => Ok(hash.into()),
+            None => Err(StorageError::BlockHashMissing { number }.into()),
+        }
     }
 
     fn code_by_hash_ref(&self, _code_hash: B256) -> Result<revm::state::Bytecode, Self::Error> {

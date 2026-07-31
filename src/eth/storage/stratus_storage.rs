@@ -302,7 +302,7 @@ impl StratusStorage {
             account_cache_capacity: 20000,
             account_history_cache_capacity: 20000,
             slot_history_cache_capacity: 100000,
-            block_hash_cache_capacity: 256,
+            block_hash_cache_capacity: super::cache::MIN_BLOCK_HASH_CACHE_CAPACITY,
         }
         .init();
 
@@ -407,7 +407,8 @@ impl StratusStorage {
             return Ok(Hash::ZERO);
         };
 
-        self.read_block_hash(parent_number)?.ok_or(StorageError::ParentHashMissing { number })
+        self.read_block_hash(parent_number)?
+            .ok_or(StorageError::BlockHashMissing { number: parent_number })
     }
 
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
@@ -940,7 +941,10 @@ mod tests {
         assert_eq!(storage.read_parent_hash(BlockNumber::ZERO).expect("read parent hash"), Hash::ZERO);
 
         let err = storage.read_parent_hash(BlockNumber::from(10_u64)).expect_err("parent should be unknown");
-        assert!(matches!(err, StorageError::ParentHashMissing { .. }));
+        assert!(matches!(
+            err,
+            StorageError::BlockHashMissing { number } if number == BlockNumber::from(9_u64)
+        ));
     }
 
     /// Mining and saving can run in separate threads, so a block must be chainable as soon as it is
