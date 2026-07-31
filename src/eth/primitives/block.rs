@@ -152,7 +152,13 @@ impl Block {
     }
 
     pub fn apply_external(&mut self, external_block: &ExternalBlock) -> anyhow::Result<()> {
-        assert!(*self.header.timestamp == external_block.header.timestamp);
+        if *self.header.timestamp != external_block.header.timestamp {
+            bail!(
+                "mismatching block timestamp: local={} external={}",
+                *self.header.timestamp,
+                external_block.header.timestamp
+            );
+        }
 
         let external_hash = external_block.hash();
         let default_hash = self.calculate_hash_default();
