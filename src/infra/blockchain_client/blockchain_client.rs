@@ -18,6 +18,7 @@ use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalBlockWithReceipts;
@@ -179,11 +180,15 @@ impl BlockchainClient {
         let number = to_json_value(block_number);
         let result = self
             .http
-            .request::<Option<(BlockRocksdb, BlockChangesRocksdb)>, _>("stratus_getBlockWithChanges", [number])
+            // The leader currently in production (commit 7c7d831) returns a
+            // primitive `Block` instead of `BlockRocksdb` for this method, and
+            // its `Block` shape predates the `execution_info` field. Decode it
+            // through the 7c7d831-compat type and convert to `BlockRocksdb`.
+            .request::<Option<(super::compat_block::CompatBlock, BlockChangesRocksdb)>, _>("stratus_getBlockWithChanges", [number])
             .await;
 
         match result {
-            Ok(block) => Ok(block),
+            Ok(block) => Ok(block.map(|(compat_block, changes)| (BlockRocksdb::from(Block::from(compat_block)), changes))),
             Err(e) => log_and_err!(reason = e, "failed to fetch block with changes"),
         }
     }
