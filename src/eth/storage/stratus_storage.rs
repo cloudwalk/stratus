@@ -302,6 +302,7 @@ impl StratusStorage {
             account_cache_capacity: 20000,
             account_history_cache_capacity: 20000,
             slot_history_cache_capacity: 100000,
+            block_hash_cache_capacity: 256,
         }
         .init();
 
@@ -352,12 +353,61 @@ impl StratusStorage {
         })
     }
 
+    /// Prepares the pending block to receive an external block, rejecting it when the external chain
+    /// does not continue from the chain mined locally.
     pub fn set_pending_from_external(&self, block: &ExternalBlock) -> Result<(), StorageError> {
-        self.temp.set_pending_from_external(block)
+        if let Some(parent_number) = block.number().prev()
+            && let Some(local_parent_hash) = self.read_block_hash(parent_number)?
+            && local_parent_hash != block.parent_hash()
+        {
+            return Err(StorageError::ParentHashConflict {
+                number: block.number(),
+                local: local_parent_hash,
+                external: block.parent_hash(),
+            });
+        }
+
+        self.temp.set_pending_from_external(block);
+        Ok(())
     }
 
-    pub fn set_pending_parent_hash(&self, parent_number: BlockNumber, parent_hash: Hash) {
-        self.temp.set_pending_parent_hash(parent_number, parent_hash);
+    /// Publishes the identity of a block that was just sealed.
+    ///
+    /// This must happen at seal time rather than at save time: mining and saving can run in separate
+    /// threads, so the next block may be sealed while this one is still on its way to the permanent
+    /// storage, and it would find no parent to chain to.
+    pub fn publish_block_hash(&self, number: BlockNumber, hash: Hash) {
+        self.cache.cache_block_hash(number, hash);
+    }
+
+    /// Reads the hash of a mined block, falling back to the permanent storage on a cache miss.
+    ///
+    /// A miss is expected only for blocks mined before this process started, since sealing a block
+    /// publishes its hash and the cache holds far more blocks than `BLOCKHASH` can reach.
+    pub fn read_block_hash(&self, number: BlockNumber) -> Result<Option<Hash>, StorageError> {
+        if let Some(hash) = self.cache.get_block_hash(number) {
+            tracing::debug!(storage = %label::CACHE, %number, "block hash found in cache");
+            return Ok(Some(hash));
+        }
+
+        let Some(block) = self.read_block(BlockFilter::Number(number))? else {
+            return Ok(None);
+        };
+
+        let hash = block.hash();
+        self.cache.cache_block_hash_if_missing(number, hash);
+        Ok(Some(hash))
+    }
+
+    /// Reads the hash that a block must chain to.
+    ///
+    /// Genesis is the only block allowed to have no parent.
+    pub fn read_parent_hash(&self, number: BlockNumber) -> Result<Hash, StorageError> {
+        let Some(parent_number) = number.prev() else {
+            return Ok(Hash::ZERO);
+        };
+
+        self.read_block_hash(parent_number)?.ok_or(StorageError::ParentHashMissing { number })
     }
 
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
@@ -522,9 +572,12 @@ impl StratusStorage {
         })
     }
 
+    /// Saves a mined block.
+    ///
+    /// Chaining the next pending block to it is responsibility of the caller, because only the
+    /// caller knows the block identity before it is saved.
     pub fn save_block(&self, block: Block, changes: ExecutionChanges) -> Result<(), StorageError> {
         let block_number = block.number();
-        let block_hash = block.hash();
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
@@ -574,7 +627,6 @@ impl StratusStorage {
         })?;
 
         self.set_mined_block_number(block_number);
-        self.set_pending_parent_hash(block_number, block_hash);
 
         Ok(())
     }
@@ -809,7 +861,10 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
+        let genesis_number = genesis_block.number();
+        let genesis_hash = genesis_block.hash();
         self.save_block(genesis_block, ExecutionChanges::default())?;
+        self.publish_block_hash(genesis_number, genesis_hash);
 
         // accounts
         self.save_accounts(genesis_accounts)?;
@@ -874,11 +929,68 @@ mod tests {
         storage.save_execution(tx).expect("save execution");
 
         let (pending_block, block_changes) = storage.finish_pending_block().expect("finish pending block");
-        let parent_hash = pending_block.header.parent_hash.unwrap_or(Hash::ZERO);
+        let parent_hash = storage.read_parent_hash(pending_block.header.number).expect("read parent hash");
         let block = Block::from_pending(pending_block, parent_hash);
+        storage.publish_block_hash(block.number(), block.hash());
         storage.save_block(block, block_changes).expect("save block");
 
         storage.read_mined_block_number()
+    }
+
+    #[test]
+    fn genesis_is_the_only_block_allowed_to_have_no_parent() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        assert_eq!(storage.read_parent_hash(BlockNumber::ZERO).expect("read parent hash"), Hash::ZERO);
+
+        let err = storage.read_parent_hash(BlockNumber::from(10_u64)).expect_err("parent should be unknown");
+        assert!(matches!(err, StorageError::ParentHashMissing { .. }));
+    }
+
+    /// Mining and saving can run in separate threads, so a block must be chainable as soon as it is
+    /// sealed, before it reaches the permanent storage.
+    #[test]
+    fn block_hash_is_readable_before_the_block_is_saved() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        let number = BlockNumber::from(7_u64);
+        let hash = Hash::new([7; 32]);
+        storage.publish_block_hash(number, hash);
+
+        assert_eq!(storage.read_block_hash(number).expect("read block hash"), Some(hash));
+        assert_eq!(storage.read_parent_hash(number.next_block_number()).expect("read parent hash"), hash);
+        assert!(storage.read_block(BlockFilter::Number(number)).expect("read block").is_none());
+    }
+
+    #[test]
+    fn block_hash_falls_back_to_permanent_storage_when_the_cache_is_cold() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        let number = mine_block(&storage, ExecutionChanges::default());
+        let hash = storage
+            .read_block(BlockFilter::Number(number))
+            .expect("read block")
+            .expect("mined block should exist")
+            .hash();
+
+        // simulates a restart, where nothing was published by this process
+        storage.cache.clear();
+
+        assert_eq!(storage.read_block_hash(number).expect("read block hash"), Some(hash));
+        assert_eq!(storage.read_parent_hash(number.next_block_number()).expect("read parent hash"), hash);
+    }
+
+    #[test]
+    fn mined_blocks_are_chained_to_their_parent() {
+        let storage = StratusStorage::new_test().expect("failed to build test storage");
+
+        let first = mine_block(&storage, ExecutionChanges::default());
+        let second = mine_block(&storage, ExecutionChanges::default());
+        assert_ne!(first, second);
+
+        let read = |number| storage.read_block(BlockFilter::Number(number)).expect("read block").expect("block should exist");
+
+        assert_eq!(read(second).header.parent_hash, read(first).hash());
     }
 
     /// An `eth_call` pinned to a block that is no longer the latest must read the historical

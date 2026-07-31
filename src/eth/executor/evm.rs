@@ -54,6 +54,7 @@ use crate::eth::executor::ExecutorConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
@@ -487,8 +488,8 @@ impl Database for RevmSession {
         Ok(slot.value.into())
     }
 
-    fn block_hash(&mut self, _: u64) -> Result<B256, StratusError> {
-        Err(anyhow!("block hash opcode not implemented").into())
+    fn block_hash(&mut self, number: u64) -> Result<B256, StratusError> {
+        self.block_hash_ref(number)
     }
 }
 
@@ -513,8 +514,13 @@ impl DatabaseRef for RevmSession {
         Ok(slot.value.into())
     }
 
-    fn block_hash_ref(&self, _: u64) -> Result<B256, Self::Error> {
-        Err(anyhow!("block hash opcode not implemented").into())
+    /// Resolves a block hash for the `BLOCKHASH` opcode.
+    ///
+    /// Blocks outside the 256 block window are filtered by the interpreter before reaching here, so
+    /// an unknown block means it is not part of the chain and resolves to zero, as in Ethereum.
+    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+        let hash = self.storage.read_block_hash(BlockNumber::from(number))?;
+        Ok(hash.map(Into::into).unwrap_or(B256::ZERO))
     }
 
     fn code_by_hash_ref(&self, _code_hash: B256) -> Result<revm::state::Bytecode, Self::Error> {
