@@ -538,12 +538,12 @@ impl StratusStorage {
         self.temp.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self) -> Result<(PendingBlock, ExecutionChanges), StorageError> {
+    pub fn finish_pending_block(&self, expected_number: BlockNumber) -> Result<(PendingBlock, ExecutionChanges), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::finish_pending_block", block_number = tracing::field::Empty).entered();
         tracing::debug!(storage = %label::TEMP, "finishing pending block");
 
-        let result = timed(|| self.temp.finish_pending_block()).with(|m| {
+        let result = timed(|| self.temp.finish_pending_block(expected_number)).with(|m| {
             metrics::inc_storage_finish_pending_block(m.elapsed, label::TEMP, m.result.is_ok());
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to finish pending block");
@@ -925,8 +925,8 @@ mod tests {
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
         storage.save_execution(tx).expect("save execution");
 
-        let (pending_block, block_changes) = storage.finish_pending_block().expect("finish pending block");
-        let parent_hash = storage.read_parent_hash(pending_block.header.number).expect("read parent hash");
+        let parent_hash = storage.read_parent_hash(header.number).expect("read parent hash");
+        let (pending_block, block_changes) = storage.finish_pending_block(header.number).expect("finish pending block");
         let block = Block::from_pending(pending_block, parent_hash);
         storage.publish_block_hash(block.number(), block.hash());
         storage.save_block(block, block_changes).expect("save block");

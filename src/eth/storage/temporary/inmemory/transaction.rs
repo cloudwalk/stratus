@@ -107,8 +107,20 @@ impl InmemoryTransactionTemporaryStorage {
         (*pending_block).clone()
     }
 
-    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
+    pub fn finish_pending_block(&self, expected_number: BlockNumber) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
         let pending_block = self.pending_block.upgradable_read();
+        let actual_number = pending_block.block.header.number;
+        // Mining resolves the parent hash from an earlier snapshot of the pending number. A writer
+        // can change that number before this guard is acquired, so reject the stale snapshot rather
+        // than finishing a different block with the original block's parent hash. The upgradable
+        // guard keeps this check atomic with the replacement below.
+        if actual_number != expected_number {
+            return Err(StorageError::PendingNumberConflict {
+                new: expected_number,
+                pending: actual_number,
+            });
+        }
+
         let changes = pending_block.block_changes.clone();
 
         // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
@@ -238,5 +250,28 @@ impl InmemoryTransactionTemporaryStorage {
         self.pending_block.write().reset();
         *self.latest_block.write() = None;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_expected_number_does_not_finish_pending_block() {
+        let actual_number = BlockNumber::from(10_u64);
+        let expected_number = BlockNumber::from(9_u64);
+        let storage = InmemoryTransactionTemporaryStorage::new(actual_number);
+
+        let error = storage
+            .finish_pending_block(expected_number)
+            .expect_err("stale expected number should be rejected");
+
+        assert!(matches!(
+            error,
+            StorageError::PendingNumberConflict { new, pending } if new == expected_number && pending == actual_number
+        ));
+        assert_eq!(storage.read_pending_block_header().0.number, actual_number);
+        assert!(storage.latest_block.read().is_none());
     }
 }

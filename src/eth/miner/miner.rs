@@ -237,8 +237,9 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let (pending_block, changes) = self.storage.finish_pending_block()?;
-        let parent_hash = self.storage.read_parent_hash(pending_block.header.number)?;
+        let expected_number = external_block.number();
+        let parent_hash = self.storage.read_parent_hash(expected_number)?;
+        let (pending_block, changes) = self.storage.finish_pending_block(expected_number)?;
         let mut block = Block::from_pending(pending_block, parent_hash);
 
         Span::with(|s| s.rec_str("block_number", &block.header.number));
@@ -281,8 +282,9 @@ impl Miner {
         let _mine_lock = self.locks.mine.lock();
 
         // mine block
-        let (pending_block, changes) = self.storage.finish_pending_block()?;
-        let parent_hash = self.storage.read_parent_hash(pending_block.header.number)?;
+        let pending_number = self.storage.read_pending_block_header().0.number;
+        let parent_hash = self.storage.read_parent_hash(pending_number)?;
+        let (pending_block, changes) = self.storage.finish_pending_block(pending_number)?;
 
         let block = Block::from_pending(pending_block, parent_hash);
         self.storage.publish_block_hash(block.number(), block.hash());
@@ -295,7 +297,7 @@ impl Miner {
         match item {
             CommitItem::Block(block) => self.commit_block(block, changes),
             CommitItem::ReplicationBlock(block) => {
-                self.storage.finish_pending_block()?;
+                self.storage.finish_pending_block(block.number())?;
                 self.storage.publish_block_hash(block.number(), block.hash());
                 self.commit_block(block, changes)
             }
@@ -492,5 +494,73 @@ mod interval_miner_ticker {
                 break;
             };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fake::Fake;
+    use fake::Faker;
+
+    use super::*;
+    use crate::eth::primitives::BlockNumber;
+
+    fn storage_with_missing_parent() -> (Arc<StratusStorage>, ExternalBlock) {
+        let storage = Arc::new(StratusStorage::new_test().expect("create test storage"));
+        let mut external_block: ExternalBlock = Faker.fake();
+        external_block.0.header.inner.number = 10;
+        storage.set_pending_from_external(&external_block).expect("set disconnected pending block");
+        (storage, external_block)
+    }
+
+    #[test]
+    fn local_mining_does_not_finish_a_block_with_a_missing_parent() {
+        let (storage, _) = storage_with_missing_parent();
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::Automine);
+
+        let error = miner.mine_local().expect_err("mining should reject a missing parent");
+
+        assert!(matches!(
+            error,
+            StorageError::BlockHashMissing { number } if number == BlockNumber::from(9_u64)
+        ));
+        assert_eq!(storage.read_pending_block_header().0.number, BlockNumber::from(10_u64));
+    }
+
+    #[test]
+    fn external_mining_does_not_finish_a_block_with_a_missing_parent() {
+        let (storage, external_block) = storage_with_missing_parent();
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::External);
+
+        let error = miner.mine_external(external_block).expect_err("mining should reject a missing parent");
+
+        assert!(matches!(
+            error.downcast_ref::<StorageError>(),
+            Some(StorageError::BlockHashMissing { number }) if *number == BlockNumber::from(9_u64)
+        ));
+        assert_eq!(storage.read_pending_block_header().0.number, BlockNumber::from(10_u64));
+    }
+
+    #[test]
+    fn external_mining_requires_pending_number_to_match_external_block() {
+        let storage = Arc::new(StratusStorage::new_test().expect("create test storage"));
+        storage
+            .save_genesis_block(Block::genesis(), Vec::new(), ExecutionChanges::default())
+            .expect("save genesis block");
+
+        let mut external_block: ExternalBlock = Faker.fake();
+        external_block.0.header.inner.number = 1;
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::External);
+
+        let error = miner
+            .mine_external(external_block)
+            .expect_err("mining should reject a different pending number");
+
+        assert!(matches!(
+            error.downcast_ref::<StorageError>(),
+            Some(StorageError::PendingNumberConflict { new, pending })
+                if *new == BlockNumber::ONE && *pending == BlockNumber::ZERO
+        ));
+        assert_eq!(storage.read_pending_block_header().0.number, BlockNumber::ZERO);
     }
 }

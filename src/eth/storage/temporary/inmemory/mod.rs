@@ -62,9 +62,10 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
+    pub fn finish_pending_block(&self, expected_number: BlockNumber) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
+        let finished_block = self.transaction_storage.finish_pending_block(expected_number)?;
         self.call_storage.retain_recent_blocks();
-        self.transaction_storage.finish_pending_block()
+        Ok(finished_block)
     }
 
     pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
