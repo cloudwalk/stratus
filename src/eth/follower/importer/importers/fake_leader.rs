@@ -7,6 +7,7 @@ use crate::GlobalState;
 use crate::eth::executor::Executor;
 use crate::eth::follower::importer::fetchers::DataFetcher;
 use crate::eth::follower::importer::fetchers::fake_leader::FakeLeaderFetcher;
+use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::interval_miner::commit_retry;
@@ -22,6 +23,12 @@ pub struct FakeLeaderWorker {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
     pub storage: Arc<StratusStorage>,
+}
+
+impl ImportData for <FakeLeaderWorker as ImporterWorker>::DataType {
+    fn block_number(&self) -> crate::eth::primitives::BlockNumber {
+        self.0.block_number()
+    }
 }
 
 #[async_trait]

@@ -4,6 +4,7 @@ use async_trait::async_trait;
 
 use crate::GlobalState;
 use crate::eth::executor::Executor;
+use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
@@ -18,6 +19,12 @@ pub struct ReexecutionWorker {
     pub executor: Arc<Executor>,
     pub miner: Arc<Miner>,
     pub kafka_connector: Option<KafkaConnector>,
+}
+
+impl ImportData for <ReexecutionWorker as ImporterWorker>::DataType {
+    fn block_number(&self) -> crate::eth::primitives::BlockNumber {
+        self.0.number()
+    }
 }
 
 #[async_trait]

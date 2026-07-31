@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
@@ -16,6 +17,12 @@ pub struct ReplicationWorker {
     pub miner: Arc<Miner>,
     pub storage: Arc<StratusStorage>,
     pub kafka_connector: Option<KafkaConnector>,
+}
+
+impl ImportData for <ReplicationWorker as ImporterWorker>::DataType {
+    fn block_number(&self) -> crate::eth::primitives::BlockNumber {
+        self.0.number()
+    }
 }
 
 #[async_trait]

@@ -91,14 +91,20 @@ where
     Fetcher: DataFetcher + 'static,
     Importer: ImporterWorker<DataType = Fetcher::PostProcessType> + 'static,
 {
-    async fn run(self, resume_from: BlockNumber, sync_interval: Duration, chain: Arc<BlockchainClient>) -> anyhow::Result<()> {
+    async fn run(
+        self,
+        resume_from: BlockNumber,
+        sync_interval: Duration,
+        chain: Arc<BlockchainClient>,
+        stop_at_block: Option<BlockNumber>,
+    ) -> anyhow::Result<()> {
         let _timer = DropTimer::start("importer-online::run_importer_online");
 
         // Spawn common tasks: number fetcher
         let number_fetcher_task = spawn("importer::number-fetcher", start_number_fetcher(Arc::clone(&chain), sync_interval));
 
         let (backlog_tx, backlog_rx) = mpsc::channel(10_000);
-        let importer_task = spawn("importer::importer", self.importer.run(backlog_rx));
+        let importer_task = spawn("importer::importer", self.importer.run(backlog_rx, stop_at_block));
 
         let fetcher_task = spawn("importer::fetcher", self.fetcher.run(backlog_tx, resume_from));
 
@@ -111,6 +117,7 @@ where
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn start_importer(
     importer_mode: ImporterMode,
     storage: Arc<StratusStorage>,
@@ -119,23 +126,24 @@ pub async fn start_importer(
     chain: Arc<BlockchainClient>,
     kafka_connector: Option<KafkaConnector>,
     sync_interval: Duration,
+    stop_at_block: Option<BlockNumber>,
 ) -> anyhow::Result<()> {
     let resume_from: BlockNumber = storage.read_block_number_to_resume_import()?;
 
     match importer_mode {
         ImporterMode::BlockWithChanges => {
             ReplicationFollower::new(storage, miner, Arc::clone(&chain), kafka_connector)
-                .run(resume_from, sync_interval, chain)
+                .run(resume_from, sync_interval, chain, stop_at_block)
                 .await?;
         }
         ImporterMode::ReexecutionFollower => {
             ReexecutionFollower::new(executor, miner, Arc::clone(&chain), kafka_connector)
-                .run(resume_from, sync_interval, chain)
+                .run(resume_from, sync_interval, chain, stop_at_block)
                 .await?;
         }
         ImporterMode::FakeLeader =>
             FakeLeader::new(executor, miner, storage, Arc::clone(&chain))
-                .run(resume_from, sync_interval, chain)
+                .run(resume_from, sync_interval, chain, stop_at_block)
                 .await?,
     }
     Ok(())
