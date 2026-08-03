@@ -47,7 +47,11 @@ impl BlockNumber {
     ///
     /// Assumes that self is the lower-end of the range.
     pub fn count_to(self, higher_end: impl Into<u64>) -> u64 {
-        higher_end.into().saturating_sub(self.as_u64()) + 1
+        higher_end.into().saturating_sub(self.as_u64()).saturating_add(1)
+    }
+
+    pub fn as_i128(&self) -> i128 {
+        self.0.try_into().unwrap()
     }
 
     pub fn as_i64(&self) -> i64 {

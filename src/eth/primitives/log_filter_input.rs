@@ -14,6 +14,8 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::RpcError;
+use crate::eth::primitives::StratusError;
 use crate::eth::storage::StratusStorage;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
@@ -42,7 +44,7 @@ pub struct LogFilterInput {
 
 impl LogFilterInput {
     /// Parses itself into a filter that can be applied in produced log events or to query the storage.
-    pub fn parse(self, storage: &Arc<StratusStorage>) -> anyhow::Result<LogFilter> {
+    pub fn parse(self, storage: &Arc<StratusStorage>) -> anyhow::Result<LogFilter, StratusError> {
         let original_input = self.clone();
 
         // parse point-in-time
@@ -69,6 +71,16 @@ impl LogFilterInput {
             PointInTime::Mined => None,
             PointInTime::MinedPast(number) => Some(number),
         };
+
+        if let Some(to_block) = to
+            && to_block < from
+        {
+            return Err(RpcError::BlockRangeInvalid {
+                actual: to_block.as_i128() - from.as_i128(),
+                max: None,
+            }
+            .into());
+        }
 
         Ok(LogFilter {
             from_block: from,
