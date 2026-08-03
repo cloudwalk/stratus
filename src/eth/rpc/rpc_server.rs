@@ -622,6 +622,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
             .ok()
             .is_some_and(|val| val == "1" || val == "true"),
+        stop_at_block: None,
     };
 
     importer_config.init_follower_importer(ctx).await

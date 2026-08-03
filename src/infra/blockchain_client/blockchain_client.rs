@@ -313,3 +313,25 @@ impl BlockchainClient {
         }
     }
 }
+
+#[cfg(test)]
+impl BlockchainClient {
+    /// Test-only constructor that builds an HTTP-only client without performing the health check.
+    ///
+    /// Intended for tests that need a `BlockchainClient` to satisfy a struct field (e.g. a fetcher's
+    /// `chain`) but only exercise code paths that never issue real RPC calls (such as
+    /// `BlockWithChangesFetcher::post_process`, which only converts already-fetched data).
+    #[cfg(test)]
+    pub(crate) fn new_without_health_check(http_url: &str) -> anyhow::Result<Self> {
+        let timeout = Duration::from_secs(1);
+        let http = Self::build_http_client(http_url, timeout, 1024)?;
+        Ok(Self {
+            http,
+            http_url: http_url.to_owned(),
+            ws: None,
+            ws_url: None,
+            timeout,
+            max_response_size_bytes: 1024,
+        })
+    }
+}

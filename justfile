@@ -138,6 +138,16 @@ stratus-follower-test *args="":
     LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features $FEATURES -- --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
+# Bin: Stratus main service as fake leader (imports blocks like a follower, executes/mines locally like a leader)
+stratus-fake-leader-test *args="":
+    #!/bin/bash
+    source <(just coverage-env)
+    FEATURES="dev"
+    echo "fake-leader features: " $FEATURES
+    cargo build --features $FEATURES
+    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features $FEATURES -- --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
+    just _wait_for_stratus 3001
+
 # Bin: Download external RPC blocks and receipts to temporary storage
 rpc-downloader *args="":
     cargo {{nightly_flag}} run --bin rpc-downloader {{release_flag}} -- {{args}}
@@ -431,6 +441,42 @@ e2e-leader-follower-down:
 
     # Delete zeppelin directory
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
+
+# E2E: Fake Leader (imports from leader, executes/mines locally)
+e2e-fake-leader test="fake-leader":
+    #!/bin/bash
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-fake-leader-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+
+_e2e-leader-fake-leader-up-impl test="fake-leader":
+    #!/bin/bash
+
+    mkdir e2e_logs
+
+    # Start Stratus with leader flag
+    just e2e-leader
+
+    # Start Stratus with fake-leader flag (imports from leader, executes/mines locally)
+    just e2e-fake-leader {{test}}
+
+    if [ -d e2e/cloudwalk-contracts ]; then
+    (
+        cd e2e/cloudwalk-contracts/integration
+        npm install
+        npx hardhat test test/leader-follower-{{test}}.test.ts --bail --network stratus --show-stack-traces
+        if [ $? -ne 0 ]; then
+            just _log "Tests failed"
+            exit 1
+        else
+            just _log "Tests passed successfully"
+            exit 0
+        fi
+    )
+    fi
+
+# E2E: Leader & Fake Leader Up
+e2e-leader-fake-leader-up test="fake-leader":
+    just _e2e-leader-fake-leader-up-impl {{test}}
+    just e2e-leader-follower-down
 
 # E2E: RPC Downloader test
 e2e-rpc-downloader:

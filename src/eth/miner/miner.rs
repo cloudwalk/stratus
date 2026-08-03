@@ -297,6 +297,7 @@ impl Miner {
         match item {
             CommitItem::Block(block) => self.commit_block(block, changes),
             CommitItem::ReplicationBlock(block) => {
+                self.storage.set_pending_header(block.number(), block.timestamp());
                 self.storage.finish_pending_block(block.number())?;
                 self.storage.publish_block_hash(block.number(), block.hash());
                 self.commit_block(block, changes)
@@ -388,11 +389,14 @@ pub mod interval_miner {
     use std::sync::mpsc::RecvTimeoutError;
     use std::time::Duration;
 
+    use parking_lot::MutexGuard;
     use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
     use crate::eth::miner::Miner;
     use crate::eth::miner::miner::CommitItem;
+    use crate::eth::primitives::Block;
+    use crate::eth::primitives::ExecutionChanges;
     use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
 
@@ -421,26 +425,25 @@ pub mod interval_miner {
 
             // mine
             tracing::info!(lag_us = %tick.elapsed().as_micros(), "interval mining block");
-            mine_and_commit(&miner);
+            let (block, changes, miner_guard) = mine_local_retry(&miner);
+            commit_retry(&miner, block, changes, miner_guard);
         }
         warn_task_rx_closed(TASK_NAME);
     }
 
-    #[inline(always)]
-    pub fn mine_and_commit(miner: &Miner) {
-        let _mine_and_commit_lock = miner.locks.mine_and_commit.lock();
-
-        // mine
-        let (block, changes) = loop {
+    pub fn mine_local_retry(miner: &Miner) -> (Block, ExecutionChanges, MutexGuard<'_, ()>) {
+        let guard = miner.locks.mine_and_commit.lock();
+        loop {
             match miner.mine_local() {
-                Ok(block) => break block,
+                Ok((block, changes)) => break (block, changes, guard),
                 Err(e) => {
                     tracing::error!(reason = ?e, "failed to mine block");
                 }
             }
-        };
+        }
+    }
 
-        // commit
+    pub fn commit_retry(miner: &Miner, block: Block, changes: ExecutionChanges, _miner_guard: MutexGuard<()>) {
         loop {
             match miner.commit(CommitItem::Block(block.clone()), changes.clone()) {
                 Ok(_) => break,

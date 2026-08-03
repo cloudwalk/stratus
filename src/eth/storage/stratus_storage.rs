@@ -27,6 +27,7 @@ use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
+use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
@@ -367,8 +368,12 @@ impl StratusStorage {
             });
         }
 
-        self.temp.set_pending_from_external(block);
+        self.set_pending_header(block.number(), block.timestamp());
         Ok(())
+    }
+
+    pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
+        self.temp.set_pending_header(number, timestamp);
     }
 
     /// Publishes the identity of a block that was just sealed.
