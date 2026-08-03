@@ -20,6 +20,7 @@ use crate::eth::primitives::Block;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::Gas;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
@@ -84,11 +85,16 @@ impl ImporterWorker for FakeLeaderWorker {
     }
 }
 
-/// Builds a copy of `block` with per-tx fields that do not survive `Block -> BlockRocksdb -> Block`
-/// replication reset to their defaults, so it can be compared against the leader's replicated
-/// block for equivalence. Does not mutate the input.
+/// Builds a copy of `block` with fields that do not survive `Block -> BlockRocksdb -> Block`
+/// replication (or are version-skewed vs. the leader) reset to their defaults, so it can be
+/// compared against the leader's replicated block for equivalence. Does not mutate the input.
+///
+/// `header.gas_used` is zeroed because the leader in production (commit `7c7d831`) predates
+/// PR #2549, which started summing per-tx gas into the header. The fake leader computes the real
+/// value, so comparing it directly trips on the version skew rather than a real divergence.
 fn normalize_for_replication_compare(block: &Block) -> Block {
     let mut normalized = block.clone();
+    normalized.header.gas_used = Gas::ZERO;
     for tx in &mut normalized.transactions {
         tx.execution.result.execution.changes = ExecutionChanges::default();
         tx.execution.result.metrics = EvmExecutionMetrics::default();
