@@ -21,6 +21,7 @@ use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Gas;
+use crate::eth::primitives::Index;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionError;
@@ -76,7 +77,8 @@ impl ImporterWorker for FakeLeaderWorker {
         // survive replication, leaving the original untouched for commit.
         let normalized_mined_block = normalize_for_replication_compare(&mined_block);
         if normalized_mined_block != expected_block {
-            tracing::error!(?normalized_mined_block, ?expected_block, "block mismatch between leader and fake leader");
+            let diff = diff_blocks(&normalized_mined_block, &expected_block);
+            tracing::error!(diff = %diff, "block mismatch between leader and fake leader");
             bail!("block mismatch between leader and fake leader")
         }
 
@@ -98,8 +100,66 @@ fn normalize_for_replication_compare(block: &Block) -> Block {
     for tx in &mut normalized.transactions {
         tx.execution.result.execution.changes = ExecutionChanges::default();
         tx.execution.result.metrics = EvmExecutionMetrics::default();
+        // `first_log_index` does not survive `Block -> BlockRocksdb -> Block`: the rocks type
+        // reconstructs it from the first log's index, defaulting to `ZERO` for txs with no logs
+        // (`transaction_mined.rs`), whereas the freshly mined block carries the running cumulative
+        // value. Normalize logless txs to `ZERO` to match the round-tripped leader block.
+        if tx.execution.result.execution.logs.is_empty() {
+            tx.mined_data.first_log_index = Index::ZERO;
+        }
     }
     normalized
+}
+
+/// Builds a compact, human-readable diff of two [`Block`]s. Unlike logging the full
+/// `?normalized_mined_block` / `?expected_block` (which dumps every transaction, log and bytecode,
+/// blowing past log size limits), this only emits leaves whose value actually differs.
+///
+/// Fields already neutralized by [`normalize_for_replication_compare`] (per-tx `changes`,
+/// `metrics`, logless `first_log_index`, `header.gas_used`) compare equal and thus do not appear.
+fn diff_blocks(fake: &Block, leader: &Block) -> String {
+    let fake_v = serde_json::to_value(fake).unwrap_or(serde_json::Value::Null);
+    let leader_v = serde_json::to_value(leader).unwrap_or(serde_json::Value::Null);
+    let mut out = String::new();
+    diff_json("", &fake_v, &leader_v, &mut out);
+    if out.is_empty() {
+        out.push_str("<no field-level diff; Block PartialEq disagrees but no leaf differs>");
+    }
+    out
+}
+
+/// Recursively diffs two JSON values, appending one line per differing leaf in the form
+/// `path: fake=<..> leader=<..>` (or `only in fake`/`only in leader`/`len mismatch`).
+fn diff_json(path: &str, fake: &serde_json::Value, leader: &serde_json::Value, out: &mut String) {
+    use serde_json::Value;
+    match (fake, leader) {
+        (Value::Object(a), Value::Object(b)) =>
+            for key in a.keys().chain(b.keys()) {
+                let child = if path.is_empty() { key.clone() } else { format!("{path}.{key}") };
+                match (a.get(key), b.get(key)) {
+                    (Some(av), Some(bv)) => diff_json(&child, av, bv, out),
+                    (Some(av), None) => {
+                        let _ = writeln!(out, "{child}: only in fake = {av}");
+                    }
+                    (None, Some(bv)) => {
+                        let _ = writeln!(out, "{child}: only in leader = {bv}");
+                    }
+                    (None, None) => {}
+                }
+            },
+        (Value::Array(a), Value::Array(b)) => {
+            if a.len() != b.len() {
+                let _ = writeln!(out, "{path}: len mismatch fake={} leader={}", a.len(), b.len());
+            }
+            for (i, (av, bv)) in a.iter().zip(b.iter()).enumerate() {
+                diff_json(&format!("{path}[{i}]"), av, bv, out);
+            }
+        }
+        (a, b) =>
+            if a != b {
+                let _ = writeln!(out, "{path}: fake={a} leader={b}");
+            },
+    }
 }
 
 /// Builds a compact, human-readable diff of two completed [`ExecutionChanges`].
