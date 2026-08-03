@@ -147,6 +147,10 @@ impl ExecutionChanges<Complete> {
         }
         self.slots.extend(other.slots);
     }
+
+    pub fn retain_modified(&mut self) {
+        self.accounts.retain(|_, changes| changes.is_modified());
+    }
 }
 
 /// Output of a transaction executed in the EVM.
