@@ -1,5 +1,6 @@
 //! In-memory storage implementations.
 
+pub use self::transaction::PendingBlockGuard;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -48,6 +49,10 @@ impl InMemoryTemporaryStorage {
 
     pub(crate) fn read_latest_sealed(&self) -> BlockReference {
         self.transaction_storage.read_latest_sealed()
+    }
+
+    pub fn pending_block_guard(&self) -> PendingBlockGuard<'_> {
+        self.transaction_storage.pending_block_guard()
     }
 
     #[cfg(feature = "dev")]

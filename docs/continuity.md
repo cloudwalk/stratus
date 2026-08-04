@@ -32,7 +32,7 @@ These are not independent chains. Permanent progress must always be an ordered p
 
 ## Guarded sealing
 
-`PendingBlockGuard` wraps the miner's `pending_block` mutex. Its private field makes it a typed capability: pending-state APIs cannot be called without owning the correct mutex.
+`PendingBlockGuard` wraps temporary storage's `pending_session` mutex, colocated with `InMemoryChainState`. Its private field makes it a typed capability: pending-state APIs cannot be called without owning the correct mutex.
 
 One guard spans the complete pending-block session:
 
@@ -46,7 +46,7 @@ set pending header
 
 The snapshot is used to calculate and validate without destroying pending state. If validation fails, pending remains unchanged. Once validation succeeds, `finish_pending_block` uses `std::mem::replace` to move the original pending state into `latest_sealed`, attaches the final hash, and creates the next pending state.
 
-The move and hash update happen while both temporary locks are held. Another pending session cannot start until `PendingBlockGuard` is dropped.
+Pending and latest sealed state share one `RwLock<InMemoryChainState>`, so the move, hash update, and next-pending creation are one atomic write. Another pending session cannot start until `PendingBlockGuard` is dropped.
 
 Local synchronous modes also retain the existing `mine_and_commit` mutex from sealing through persistence. It guarantees that concurrent local triggers cannot seal blocks in one order and race to save them in another order. Offline importer does not use this mutex; its single executor, FIFO channel, and single saver provide ordering.
 

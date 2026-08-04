@@ -27,7 +27,6 @@ use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::miner::Miner;
-use crate::eth::miner::miner::PendingBlockGuard;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
@@ -47,6 +46,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::primitives::UnixTime;
+use crate::eth::storage::PendingBlockGuard;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
 #[cfg(feature = "metrics")]

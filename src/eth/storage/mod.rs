@@ -8,6 +8,7 @@ pub use permanent::RocksPermanentStorage;
 pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
+pub use temporary::PendingBlockGuard;
 pub use temporary::TemporaryStorageConfig;
 
 mod cache;

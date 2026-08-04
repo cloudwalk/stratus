@@ -2,7 +2,6 @@ use tracing::Span;
 
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
-use crate::eth::miner::miner::PendingBlockGuard;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::AccountOriginalsReader;
 use crate::eth::primitives::Address;
@@ -36,6 +35,7 @@ use crate::eth::primitives::Wei;
 use crate::eth::primitives::test_accounts;
 use crate::eth::storage::BlockReference;
 use crate::eth::storage::InMemoryTemporaryStorage;
+use crate::eth::storage::PendingBlockGuard;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StorageCache;
@@ -392,6 +392,10 @@ impl StratusStorage {
     /// Prepares the guarded pending state to receive an external block.
     pub fn set_pending_from_external(&self, guard: &PendingBlockGuard<'_>, block: &ExternalBlock) {
         self.set_pending_header(guard, block.number(), block.timestamp());
+    }
+
+    pub fn pending_block_guard(&self) -> PendingBlockGuard<'_> {
+        self.temp.pending_block_guard()
     }
 
     pub fn set_pending_header(&self, _guard: &PendingBlockGuard<'_>, number: BlockNumber, timestamp: UnixTime) {

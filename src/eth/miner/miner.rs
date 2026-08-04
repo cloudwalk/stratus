@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use anyhow::anyhow;
 use parking_lot::Mutex;
-use parking_lot::MutexGuard;
 use parking_lot::RwLock;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::broadcast;
@@ -25,6 +24,7 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::BlockReference;
+use crate::eth::storage::PendingBlockGuard;
 use crate::eth::storage::StratusStorage;
 use crate::ext::DisplayExt;
 use crate::ext::not;
@@ -80,14 +80,8 @@ pub struct Miner {
 /// Locks used in operations that mutate state.
 #[derive(Default)]
 pub struct MinerLocks {
-    save_execution: Mutex<()>,
     pub mine_and_commit: Mutex<()>,
-    pending_block: Mutex<()>,
     commit: Mutex<()>,
-}
-
-pub struct PendingBlockGuard<'a> {
-    _guard: MutexGuard<'a, ()>,
 }
 
 impl Miner {
@@ -107,9 +101,7 @@ impl Miner {
     }
 
     pub fn pending_block_guard(&self) -> PendingBlockGuard<'_> {
-        PendingBlockGuard {
-            _guard: self.locks.pending_block.lock(),
-        }
+        self.storage.pending_block_guard()
     }
 
     #[cfg(feature = "dev")]
@@ -219,9 +211,6 @@ impl Miner {
     pub fn save_execution(&self, tx_execution: TransactionExecution) -> Result<(), StratusError> {
         // Check if automine is enabled
         let is_automine = self.mode().is_automine();
-
-        // if automine is enabled, only one transaction can enter the block at a time.
-        let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
 
         if is_automine {
             let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
