@@ -1,76 +1,126 @@
 # Block continuity
 
-## Chain progress
+## Progress model
 
-Stratus tracks two in-memory chain tips:
+Stratus tracks two process-local block references:
 
-- `latest_sealed` is the execution tip. Temporary storage advances it whenever a block is sealed and uses it to build the next block header.
-- `last_saved` is the durable tip. It advances only after permanent storage successfully saves a block.
+- `latest_sealed` is the execution tip. Temporary storage owns its complete in-memory state and final hash. It is the parent used to build the next header.
+- `last_saved` is the durable tip. `StratusStorage` stores only its block number and hash because the complete block and state already live in RocksDB.
 
-Both tips contain the block number and hash. On a populated database they are initialized from the latest permanent block. On an empty database, temporary storage starts from the canonical sealed genesis while `last_saved` remains empty until genesis is persisted. During normal leader and follower operation they usually advance together. The offline importer can seal blocks faster than it saves them, so `latest_sealed` may be far ahead of `last_saved`.
+On a populated database, both are initialized from the latest permanent block. On an empty database, temporary storage starts from the canonical sealed genesis while `last_saved` remains empty until genesis is persisted.
+
+Normal leader and follower flows seal and save sequentially, so the tips usually match. The offline importer deliberately pipelines execution and persistence, allowing `latest_sealed` to run ahead.
 
 ```mermaid
 flowchart LR
-    subgraph permanent["Permanent storage"]
-        direction LR
-        P0["Block N-1<br/>persisted"] --> P1["Block N<br/>last_saved"]
+    subgraph durable [Permanent progress]
+        P0["Block N-1"] --> P1["Block N: last_saved"]
     end
 
-    subgraph temporary["Temporary sealed chain"]
-        direction LR
-        T1["Block N+1<br/>sealed, unsaved"] --> T2["Block N+2<br/>sealed, unsaved"]
-        T2 --> T3["Block N+3<br/>latest_sealed"]
+    subgraph backlog [Offline FIFO backlog]
+        Q1["Block N+1"] --> Q2["Block N+2"]
     end
 
-    P1 --> T1
+    T["Block N+3: latest_sealed"]
+    P1 --> Q1
+    Q2 --> T
 ```
 
-Sealing uses `latest_sealed.hash` as the next header's `parent_hash`, then advances `latest_sealed` to the newly sealed block. This operation does not decide what belongs to the durable chain.
 
-`save_block` is the universal continuity boundary for leader mining, follower reexecution, and follower replication. Before saving block `N`, it validates in memory that:
+
+These are not independent chains. Permanent progress must always be an ordered prefix of sealed progress.
+
+## Guarded sealing
+
+`PendingBlockGuard` wraps the miner's `pending_block` mutex. Its private field makes it a typed capability: pending-state APIs cannot be called without owning the correct mutex.
+
+One guard spans the complete pending-block session:
+
+```text
+set pending header
+→ execute and save transactions
+→ snapshot pending state
+→ calculate and validate the final block hash
+→ finish pending state
+```
+
+The snapshot is used to calculate and validate without destroying pending state. If validation fails, pending remains unchanged. Once validation succeeds, `finish_pending_block` uses `std::mem::replace` to move the original pending state into `latest_sealed`, attaches the final hash, and creates the next pending state.
+
+The move and hash update happen while both temporary locks are held. Another pending session cannot start until `PendingBlockGuard` is dropped.
+
+Local synchronous modes also retain the existing `mine_and_commit` mutex from sealing through persistence. It guarantees that concurrent local triggers cannot seal blocks in one order and race to save them in another order. Offline importer does not use this mutex; its single executor, FIFO channel, and single saver provide ordering.
+
+## Saving and continuity
+
+`save_block` is the authoritative continuity boundary for leader mining, follower reexecution, follower replication, fake leader, and offline import.
+
+Before saving block `N`, it validates:
 
 ```text
 N == last_saved.number + 1
 N.parent_hash == last_saved.hash
 ```
 
-Permanent storage is written only after those checks pass. `last_saved` advances to `N` only after the write succeeds. No permanent-storage read is required during saving.
+RocksDB is written only after these checks pass. `last_saved` advances only after the write succeeds, and no permanent read is required during each save.
 
-If the process restarts, sealed-but-unsaved work is discarded. Both tips are restored from the durable permanent tip and the unsaved range is executed again.
+Online follower modes perform the same check as a read-only preflight before emitting Kafka events. `save_block` repeats it authoritatively before persistence.
 
-## Block-hash cache
+External reexecution calculates the block locally and accepts the external V2 hash or the temporary V1 compatibility hash. Replication receives a prebuilt block, but both modes still pass through the universal saved-chain continuity check.
 
-The block-hash cache is independent of chain progress. Neither sealing nor saving uses it to decide the parent or validate continuity.
+If the process restarts, sealed-but-unsaved work is discarded. The durable tip is loaded from RocksDB, temporary state resumes from it, and the unsaved range is executed again.
+
+## Block-hash lookup
+
+The block-hash cache does not determine chain progress or parent continuity. Its normal role is accelerating the EVM `BLOCKHASH` opcode.
 
 ```mermaid
 flowchart LR
-    EVM["EVM BLOCKHASH"] --> Cache["Block-hash cache"]
-    Cache -->|hit| Result["Block hash"]
-    Cache -->|miss| Permanent["Permanent storage"]
+    EVM["EVM BLOCKHASH"] --> TempCheck{"Latest sealed and unsaved?"}
+    TempCheck -->|"yes"| Result["Block hash"]
+    TempCheck -->|"no"| Cache["Block-hash cache"]
+    Cache -->|"hit"| Result
+    Cache -->|"miss"| Permanent["Permanent storage"]
     Permanent --> Result
 
-    Offline["Offline importer<br/>sealed, unsaved hashes"] -. "temporary workaround" .-> Cache
+    Queue["Offline sealed backlog"] -. "temporary workaround" .-> Cache
 ```
 
-Its normal purpose is to accelerate the `BLOCKHASH` opcode, with permanent storage as the source on a cache miss.
 
-The offline importer is a temporary exception: execution can run ahead of persistence, so hashes of sealed-but-unsaved blocks exist only in memory. The importer currently publishes those hashes into the cache so `BLOCKHASH` can resolve them before they are saved.
 
-This importer dependency is a workaround, not part of the chain-continuity model. When the offline importer is removed, remove the workaround and reduce the block-hash cache to the size needed only for opcode performance.
+Lookup order is:
 
-## Temporary storage naming
+1. The latest sealed block, but only while it is ahead of `last_saved`.
+2. The block-hash cache.
+3. Permanent storage.
 
-`InmemoryTransactionTemporaryStorage` and its `transaction_storage` field are misleading names. The component does not represent one Ethereum transaction or a database transaction. It owns block-level execution state:
+The normal cache default is 256 entries and administrators may set it to zero. Importer-offline always adds capacity for its bounded sealed-but-unsaved backlog:
 
-- The pending block header, all transaction executions, and their aggregated account and slot changes.
-- The latest finished block state and its hash, used while building the next block.
-- The transition that moves the pending block to latest and creates the next pending block.
+```text
+configured capacity + batch_size × (queue_size + 2)
+```
 
-For example, an interval-mined pending block can accumulate many Ethereum transactions in this storage. When that block is sealed, the entire pending state—not an individual transaction—becomes `latest_block`.
+The extra two batches cover one batch being built by the executor and one being processed by the saver.
 
-A future focused refactor should rename it to something that reflects this responsibility. Suitable options include:
+Older unsaved offline blocks are temporarily dependent on this cache because permanent storage cannot serve them yet. Remove this workaround when importer-offline is removed.
 
-- `InMemoryBlockStateStorage` with a `block_storage` field.
-- `InMemoryExecutionStateStorage` with an `execution_storage` field.
+## Lock roles
 
-`InMemoryBlockStateStorage` is preferred because pending/latest block ownership is the component's defining responsibility.
+- `PendingBlockGuard`: serializes temporary pending-header, execution-save, and seal operations.
+- `TransactionGuard`: lets fake leader hold the executor transaction mutex before miner locks, matching RPC lock order and preventing deadlock.
+- `mine_and_commit`: preserves seal-to-save ordering for synchronous local modes.
+- `commit`: serializes permanent writes.
+- `last_saved`: serializes durable continuity validation and advancement.
+- `transient_state_lock`: preserves consistency between permanent writes and latest account/slot caches.
+
+##  TODO: Temporary storage naming
+
+`InmemoryTransactionTemporaryStorage` and `transaction_storage` are misleading names. This component does not represent one Ethereum transaction or a database transaction. It owns:
+
+- The pending block header and all transaction executions.
+- Aggregated pending account and slot changes.
+- The latest sealed block state and hash.
+- The transition from pending to latest sealed.
+
+For example, an interval-mined pending block can contain many Ethereum transactions. When sealed, the complete pending state becomes `latest_sealed`; an individual transaction does not.
+
+A future focused refactor should rename it. Preferred naming is `InMemoryBlockStateStorage` with a `block_storage` field. `InMemoryExecutionStateStorage` with `execution_storage` is another reasonable option.
