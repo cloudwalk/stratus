@@ -48,7 +48,7 @@ impl InmemoryTransactionTemporaryStorage {
                 block_changes: ExecutionChanges::default(),
             }),
             latest_sealed: RwLock::new(InMemorySealedBlock {
-                state: InMemoryTemporaryStorageState::new(latest_sealed.number),
+                state: InMemoryTemporaryStorageState::new_sealed(latest_sealed.number),
                 hash: latest_sealed.hash,
             }),
         }
@@ -247,7 +247,7 @@ impl InmemoryTransactionTemporaryStorage {
         let genesis = BlockReference::genesis();
         self.pending_block.write().reset();
         *self.latest_sealed.write() = InMemorySealedBlock {
-            state: InMemoryTemporaryStorageState::new(genesis.number),
+            state: InMemoryTemporaryStorageState::new_sealed(genesis.number),
             hash: genesis.hash,
         };
         Ok(())

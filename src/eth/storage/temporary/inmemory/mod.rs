@@ -142,6 +142,14 @@ impl InMemoryTemporaryStorageState {
         }
     }
 
+    /// Creates state for a block that is already sealed without advancing the development clock.
+    pub fn new_sealed(block_number: BlockNumber) -> Self {
+        Self {
+            block: PendingBlock::new_at(block_number, UnixTime::ZERO),
+            block_changes: ExecutionChanges::default(),
+        }
+    }
+
     pub fn reset(&mut self) {
         self.block = PendingBlock::new_at_now(1.into());
         self.block_changes = ExecutionChanges::default();
