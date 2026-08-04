@@ -35,22 +35,33 @@ impl ImporterWorker for ReexecutionWorker {
         const TASK_NAME: &str = "block-executor";
 
         let receipts_len = receipts.len();
+        let (mined_block, changes) = {
+            let pending_guard = self.miner.pending_block_guard();
 
-        if let Err(e) = self.executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts)) {
-            let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
-            return log_and_err!(reason = e, message);
-        };
-
-        let (mined_block, changes) = match self.miner.mine_external(block) {
-            Ok((mined_block, changes)) => {
-                tracing::info!(number = %mined_block.number(), "mined external block");
-                (mined_block, changes)
-            }
-            Err(e) => {
-                let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+            if let Err(e) = self
+                .executor
+                .execute_external_block(&pending_guard, block.clone(), ExternalReceipts::from(receipts))
+            {
+                let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
                 return log_and_err!(reason = e, message);
+            };
+
+            match self.miner.mine_external_with_guard(block, &pending_guard) {
+                Ok((mined_block, changes)) => {
+                    tracing::info!(number = %mined_block.number(), "mined external block");
+                    (mined_block, changes)
+                }
+                Err(e) => {
+                    let message = GlobalState::shutdown_from(TASK_NAME, "failed to mine external block");
+                    return log_and_err!(reason = e, message);
+                }
             }
         };
+
+        if let Err(e) = self.miner.validate_next_saved_block(&mined_block) {
+            let message = GlobalState::shutdown_from(TASK_NAME, "external block failed continuity preflight");
+            return log_and_err!(reason = e, message);
+        }
 
         send_block_to_kafka(&self.kafka_connector, &mined_block).await?;
 

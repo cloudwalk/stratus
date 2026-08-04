@@ -7,7 +7,7 @@ Stratus tracks two in-memory chain tips:
 - `latest_sealed` is the execution tip. Temporary storage advances it whenever a block is sealed and uses it to build the next block header.
 - `last_saved` is the durable tip. It advances only after permanent storage successfully saves a block.
 
-Both tips contain the block number and hash. They are initialized from the latest permanent block at startup. During normal leader and follower operation they usually advance together. The offline importer can seal blocks faster than it saves them, so `latest_sealed` may be far ahead of `last_saved`.
+Both tips contain the block number and hash. On a populated database they are initialized from the latest permanent block. On an empty database, temporary storage starts from the canonical sealed genesis while `last_saved` remains empty until genesis is persisted. During normal leader and follower operation they usually advance together. The offline importer can seal blocks faster than it saves them, so `latest_sealed` may be far ahead of `last_saved`.
 
 ```mermaid
 flowchart LR
@@ -57,3 +57,20 @@ Its normal purpose is to accelerate the `BLOCKHASH` opcode, with permanent stora
 The offline importer is a temporary exception: execution can run ahead of persistence, so hashes of sealed-but-unsaved blocks exist only in memory. The importer currently publishes those hashes into the cache so `BLOCKHASH` can resolve them before they are saved.
 
 This importer dependency is a workaround, not part of the chain-continuity model. When the offline importer is removed, remove the workaround and reduce the block-hash cache to the size needed only for opcode performance.
+
+## Temporary storage naming
+
+`InmemoryTransactionTemporaryStorage` and its `transaction_storage` field are misleading names. The component does not represent one Ethereum transaction or a database transaction. It owns block-level execution state:
+
+- The pending block header, all transaction executions, and their aggregated account and slot changes.
+- The latest finished block state and its hash, used while building the next block.
+- The transition that moves the pending block to latest and creates the next pending block.
+
+For example, an interval-mined pending block can accumulate many Ethereum transactions in this storage. When that block is sealed, the entire pending state—not an individual transaction—becomes `latest_block`.
+
+A future focused refactor should rename it to something that reflects this responsibility. Suitable options include:
+
+- `InMemoryBlockStateStorage` with a `block_storage` field.
+- `InMemoryExecutionStateStorage` with an `execution_storage` field.
+
+`InMemoryBlockStateStorage` is preferred because pending/latest block ownership is the component's defining responsibility.

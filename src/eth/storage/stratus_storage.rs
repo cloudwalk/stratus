@@ -2,6 +2,7 @@ use tracing::Span;
 
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
+use crate::eth::miner::miner::PendingBlockGuard;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::AccountOriginalsReader;
 use crate::eth::primitives::Address;
@@ -28,10 +29,12 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionStage;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::UnixTimeNow;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::test_accounts;
+use crate::eth::storage::BlockReference;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::RocksPermanentStorage;
@@ -40,7 +43,6 @@ use crate::eth::storage::TxCount;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::storage::resolve_pending;
-use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
 use crate::infra::tracing::SpanExt;
@@ -58,6 +60,7 @@ pub struct StratusStorage {
     temp: InMemoryTemporaryStorage,
     cache: StorageCache,
     pub perm: RocksPermanentStorage,
+    last_saved: parking_lot::Mutex<Option<BlockReference>>,
     // CONTRACT: Always acquire a lock when reading slots or accounts from latest (cache OR perm) and when saving a block
     pub(super) transient_state_lock: parking_lot::RwLock<()>,
     #[cfg(feature = "dev")]
@@ -240,6 +243,35 @@ impl EntityRead for Slot {
 }
 
 impl StratusStorage {
+    fn validate_saved_continuity(last_saved: Option<BlockReference>, block: &Block) -> Result<(), StorageError> {
+        let block_number = block.number();
+        let (expected_number, expected_parent_hash) = match last_saved {
+            None => (BlockNumber::ZERO, Hash::ZERO),
+            Some(parent) => (parent.number.next_block_number(), parent.hash),
+        };
+
+        if block_number != expected_number {
+            return Err(StorageError::MinedNumberConflict {
+                new: block_number,
+                mined: expected_number.prev().unwrap_or_default(),
+            });
+        }
+
+        if block.header.parent_hash != expected_parent_hash {
+            return Err(StorageError::ParentHashConflict {
+                number: block_number,
+                local: expected_parent_hash,
+                external: block.header.parent_hash,
+            });
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_next_saved_block(&self, block: &Block) -> Result<(), StorageError> {
+        Self::validate_saved_continuity(*self.last_saved.lock(), block)
+    }
+
     /// Creates a new storage with the specified temporary and permanent implementations.
     pub fn new(
         temp: InMemoryTemporaryStorage,
@@ -247,10 +279,13 @@ impl StratusStorage {
         cache: StorageCache,
         #[cfg(feature = "dev")] perm_config: crate::eth::storage::permanent::PermanentStorageConfig,
     ) -> Result<Self, StorageError> {
+        let last_saved = perm.read_chain_tip()?;
+
         let this = Self {
             temp,
             cache,
             perm,
+            last_saved: parking_lot::Mutex::new(last_saved),
             transient_state_lock: parking_lot::RwLock::new(()),
             #[cfg(feature = "dev")]
             perm_config,
@@ -259,7 +294,7 @@ impl StratusStorage {
         // create genesis block and accounts if necessary
         #[cfg(feature = "dev")]
         if !this.has_genesis()? {
-            this.reset_to_genesis()?;
+            this.reset_to_genesis_inner()?;
         }
 
         Ok(this)
@@ -282,7 +317,7 @@ impl StratusStorage {
 
         use crate::eth::storage::cache::CacheConfig;
 
-        let temp = InMemoryTemporaryStorage::new(0.into());
+        let temp = InMemoryTemporaryStorage::new(BlockReference::genesis());
 
         // Create a temporary directory for RocksDB
         let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
@@ -303,7 +338,7 @@ impl StratusStorage {
             account_cache_capacity: 20000,
             account_history_cache_capacity: 20000,
             slot_history_cache_capacity: 100000,
-            block_hash_cache_capacity: super::cache::MIN_BLOCK_HASH_CACHE_CAPACITY,
+            block_hash_cache_capacity: super::cache::DEFAULT_BLOCK_HASH_CACHE_CAPACITY,
         }
         .init();
 
@@ -354,26 +389,17 @@ impl StratusStorage {
         })
     }
 
-    /// Prepares the pending block to receive an external block, rejecting it when the external chain
-    /// does not continue from the chain mined locally.
-    pub fn set_pending_from_external(&self, block: &ExternalBlock) -> Result<(), StorageError> {
-        if let Some(parent_number) = block.number().prev()
-            && let Some(local_parent_hash) = self.read_block_hash(parent_number)?
-            && local_parent_hash != block.parent_hash()
-        {
-            return Err(StorageError::ParentHashConflict {
-                number: block.number(),
-                local: local_parent_hash,
-                external: block.parent_hash(),
-            });
-        }
-
-        self.set_pending_header(block.number(), block.timestamp());
-        Ok(())
+    /// Prepares the guarded pending state to receive an external block.
+    pub fn set_pending_from_external(&self, guard: &PendingBlockGuard<'_>, block: &ExternalBlock) {
+        self.set_pending_header(guard, block.number(), block.timestamp());
     }
 
-    pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
+    pub fn set_pending_header(&self, _guard: &PendingBlockGuard<'_>, number: BlockNumber, timestamp: UnixTime) {
         self.temp.set_pending_header(number, timestamp);
+    }
+
+    pub fn read_pending_parent_hash(&self, _guard: &PendingBlockGuard<'_>) -> Hash {
+        self.temp.read_latest_sealed().hash
     }
 
     /// Publishes the identity of a block that was just sealed.
@@ -390,6 +416,18 @@ impl StratusStorage {
     /// Misses are expected for blocks mined before this process started, since sealing a block is
     /// what publishes its hash.
     pub fn read_block_hash(&self, number: BlockNumber) -> Result<Option<Hash>, StorageError> {
+        let last_saved = *self.last_saved.lock();
+        let latest = self.temp.read_latest_sealed();
+        if latest.number == number
+            && match last_saved {
+                None => true,
+                Some(saved) => latest.number > saved.number,
+            }
+        {
+            tracing::debug!(storage = %label::TEMP, %number, "unsaved block hash found in temporary storage");
+            return Ok(Some(latest.hash));
+        }
+
         if let Some(hash) = self.cache.get_block_hash(number) {
             tracing::debug!(storage = %label::CACHE, %number, "block hash found in cache");
             return Ok(Some(hash));
@@ -402,18 +440,6 @@ impl StratusStorage {
         let hash = block.hash();
         self.cache.cache_block_hash_if_missing(number, hash);
         Ok(Some(hash))
-    }
-
-    /// Reads the hash that a block must chain to.
-    ///
-    /// Genesis is the only block allowed to have no parent.
-    pub fn read_parent_hash(&self, number: BlockNumber) -> Result<Hash, StorageError> {
-        let Some(parent_number) = number.prev() else {
-            return Ok(Hash::ZERO);
-        };
-
-        self.read_block_hash(parent_number)?
-            .ok_or(StorageError::BlockHashMissing { number: parent_number })
     }
 
     pub fn set_mined_block_number(&self, block_number: BlockNumber) {
@@ -508,7 +534,7 @@ impl StratusStorage {
     // Blocks
     // -------------------------------------------------------------------------
 
-    pub fn save_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
+    pub fn save_execution(&self, _guard: &PendingBlockGuard<'_>, tx: TransactionExecution) -> Result<(), StorageError> {
         let changes = tx.result.execution.changes.clone();
 
         #[cfg(feature = "tracing")]
@@ -543,27 +569,27 @@ impl StratusStorage {
         self.temp.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self, expected_number: BlockNumber) -> Result<(PendingBlock, ExecutionChanges), StorageError> {
-        #[cfg(feature = "tracing")]
-        let _span = tracing::info_span!("storage::finish_pending_block", block_number = tracing::field::Empty).entered();
-        tracing::debug!(storage = %label::TEMP, "finishing pending block");
+    pub fn pending_block_to_seal(&self, _guard: &PendingBlockGuard<'_>) -> (PendingBlock, ExecutionChanges) {
+        self.temp.pending_block_to_seal()
+    }
 
-        let result = timed(|| self.temp.finish_pending_block(expected_number)).with(|m| {
-            metrics::inc_storage_finish_pending_block(m.elapsed, label::TEMP, m.result.is_ok());
-            if let Err(ref e) = m.result {
-                tracing::error!(reason = ?e, "failed to finish pending block");
-            }
+    pub(crate) fn finish_pending_block(&self, _guard: &PendingBlockGuard<'_>, block: BlockReference, timestamp: UnixTimeNow) {
+        #[cfg(feature = "tracing")]
+        let _span = tracing::info_span!("storage::finish_pending_block", block_number = %block.number).entered();
+        tracing::debug!(storage = %label::TEMP, block_number = %block.number, "finishing pending block");
+
+        timed(|| self.temp.finish_pending_block(block, timestamp)).with(|m| {
+            metrics::inc_storage_finish_pending_block(m.elapsed, label::TEMP, true);
         });
 
-        if let Ok((ref block, _)) = result {
-            Span::with(|s| s.rec_str("block_number", &block.header.number));
-        }
-
-        result
+        Span::with(|s| s.rec_str("block_number", &block.number));
     }
 
     pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, changes: ExecutionChanges) -> Result<(), StorageError> {
         let block_number = block.number();
+        let block_reference = BlockReference::from(&block);
+        let mut last_saved = self.last_saved.lock();
+        Self::validate_saved_continuity(*last_saved, &block)?;
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_genesis_block", block_number = %block_number).entered();
@@ -575,25 +601,23 @@ impl StratusStorage {
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to save genesis block");
             }
-        })
+        })?;
+
+        *last_saved = Some(block_reference);
+        self.set_mined_block_number(block_number);
+        Ok(())
     }
 
     pub fn save_block(&self, block: Block, changes: ExecutionChanges) -> Result<(), StorageError> {
         let block_number = block.number();
+        let block_reference = BlockReference::from(&block);
+        let mut last_saved = self.last_saved.lock();
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_block", block_number = %block.number()).entered();
         tracing::debug!(storage = %label::PERM, block_number = %block_number, transactions_len = %block.transactions.len(), ?changes, "saving block");
 
-        // check mined number
-        let mined_number = self.read_mined_block_number();
-        if not(block_number.is_zero()) && block_number != mined_number.next_block_number() {
-            tracing::error!(%block_number, %mined_number, "failed to save block because mismatch with mined block number");
-            return Err(StorageError::MinedNumberConflict {
-                new: block_number,
-                mined: mined_number,
-            });
-        }
+        Self::validate_saved_continuity(*last_saved, &block)?;
 
         // check pending number
         let pending_header = self.read_pending_block_header();
@@ -603,13 +627,6 @@ impl StratusStorage {
                 new: block_number,
                 pending: pending_header.0.number,
             });
-        }
-
-        // check mined block
-        let existing_block = self.read_block(BlockFilter::Number(block_number))?;
-        if existing_block.is_some() {
-            tracing::error!(%block_number, %mined_number, "failed to save block because block with the same number already exists in the permanent storage");
-            return Err(StorageError::BlockConflict { number: block_number });
         }
 
         let tens_of_millions_gas_used = block.header.gas_used.as_u64() / 10_000_000;
@@ -628,6 +645,7 @@ impl StratusStorage {
             }
         })?;
 
+        *last_saved = Some(block_reference);
         self.set_mined_block_number(block_number);
 
         Ok(())
@@ -761,10 +779,15 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     #[cfg(feature = "dev")]
+    pub(crate) fn reset_to_genesis(&self, _guard: &PendingBlockGuard<'_>) -> Result<(), StorageError> {
+        self.reset_to_genesis_inner()
+    }
+
+    #[cfg(feature = "dev")]
     /// Resets the storage to the genesis state.
     /// If a genesis.json file is available, it will be used.
     /// Otherwise, it will use the default genesis configuration.
-    pub fn reset_to_genesis(&self) -> Result<(), StorageError> {
+    fn reset_to_genesis_inner(&self) -> Result<(), StorageError> {
         tracing::info!("resetting storage to genesis state");
 
         self.cache.clear();
@@ -780,6 +803,7 @@ impl StratusStorage {
                 tracing::error!(reason = ?e, "failed to reset permanent storage");
             }
         })?;
+        *self.last_saved.lock() = None;
 
         // reset temp
         tracing::debug!(storage = %label::TEMP, "reseting temporary storage");
@@ -817,6 +841,8 @@ impl StratusStorage {
             tracing::info!("using default genesis block");
             Block::genesis()
         };
+        let genesis_hash = genesis_block.hash();
+        self.publish_block_hash(BlockNumber::ZERO, genesis_hash);
         // Try to load genesis.json from the path specified in GenesisFileConfig
         // or use default genesis configuration
         let (genesis_accounts, genesis_slots) = if let Some(genesis_path) = &self.perm_config.genesis_file.genesis_path {
@@ -863,10 +889,7 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
-        let genesis_number = genesis_block.number();
-        let genesis_hash = genesis_block.hash();
         self.save_block(genesis_block, ExecutionChanges::default())?;
-        self.publish_block_hash(genesis_number, genesis_hash);
 
         // accounts
         self.save_accounts(genesis_accounts)?;
@@ -906,9 +929,13 @@ impl StratusStorage {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::eth::executor::EvmExecutionResult;
     use crate::eth::executor::EvmInput;
+    use crate::eth::miner::Miner;
+    use crate::eth::miner::MinerMode;
     use crate::eth::primitives::ExecutionAccountChanges;
     use crate::eth::primitives::ExecutionInfo;
     use crate::eth::primitives::ExecutionResult;
@@ -918,8 +945,22 @@ mod tests {
     use crate::eth::primitives::TransactionInput;
     use crate::eth::primitives::Wei;
 
+    fn initialize_genesis(storage: &Arc<StratusStorage>) -> Block {
+        if let Some(genesis) = storage.read_block(BlockFilter::Number(BlockNumber::ZERO)).unwrap() {
+            return genesis;
+        }
+
+        let genesis = Block::genesis();
+        storage
+            .save_genesis_block(genesis.clone(), Vec::new(), ExecutionChanges::default())
+            .expect("save genesis block");
+        genesis
+    }
+
     /// Mines a block applying `changes`
-    fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) -> BlockNumber {
+    fn mine_block(storage: &Arc<StratusStorage>, changes: ExecutionChanges) -> BlockNumber {
+        initialize_genesis(storage);
+        let miner = Miner::new(Arc::clone(storage), MinerMode::Automine);
         let (header, _) = storage.read_pending_block_header();
         let evm_input = EvmInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
@@ -928,48 +969,44 @@ mod tests {
         result.execution.changes = changes;
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
-        storage.save_execution(tx).expect("save execution");
-
-        let parent_hash = storage.read_parent_hash(header.number).expect("read parent hash");
-        let (pending_block, block_changes) = storage.finish_pending_block(header.number).expect("finish pending block");
-        let block = Block::from_pending(pending_block, parent_hash);
-        storage.publish_block_hash(block.number(), block.hash());
+        let pending_guard = miner.pending_block_guard();
+        storage.save_execution(&pending_guard, tx).expect("save execution");
+        let (block, block_changes) = miner.mine_local_with_guard(&pending_guard).expect("mine block");
+        drop(pending_guard);
         storage.save_block(block, block_changes).expect("save block");
 
         storage.read_mined_block_number()
-    }
-
-    #[test]
-    fn genesis_is_the_only_block_allowed_to_have_no_parent() {
-        let storage = StratusStorage::new_test().expect("failed to build test storage");
-
-        assert_eq!(storage.read_parent_hash(BlockNumber::ZERO).expect("read parent hash"), Hash::ZERO);
-
-        let err = storage.read_parent_hash(BlockNumber::from(10_u64)).expect_err("parent should be unknown");
-        assert!(matches!(
-            err,
-            StorageError::BlockHashMissing { number } if number == BlockNumber::from(9_u64)
-        ));
     }
 
     /// Mining and saving can run in separate threads, so a block must be chainable as soon as it is
     /// sealed, before it reaches the permanent storage.
     #[test]
     fn block_hash_is_readable_before_the_block_is_saved() {
-        let storage = StratusStorage::new_test().expect("failed to build test storage");
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
 
         let number = BlockNumber::from(7_u64);
         let hash = Hash::new([7; 32]);
         storage.publish_block_hash(number, hash);
 
         assert_eq!(storage.read_block_hash(number).expect("read block hash"), Some(hash));
-        assert_eq!(storage.read_parent_hash(number.next_block_number()).expect("read parent hash"), hash);
         assert!(storage.read_block(BlockFilter::Number(number)).expect("read block").is_none());
     }
 
     #[test]
+    fn latest_unsaved_hash_survives_cache_clear() {
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::External);
+        initialize_genesis(&storage);
+        let (block, _) = miner.mine_local().expect("seal block");
+        storage.clear_cache();
+
+        assert_eq!(storage.read_block_hash(block.number()).expect("read unsaved hash"), Some(block.hash()));
+        assert!(storage.read_block(BlockFilter::Number(block.number())).unwrap().is_none());
+    }
+
+    #[test]
     fn block_hash_falls_back_to_permanent_storage_when_the_cache_is_cold() {
-        let storage = StratusStorage::new_test().expect("failed to build test storage");
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
 
         let number = mine_block(&storage, ExecutionChanges::default());
         let hash = storage
@@ -982,12 +1019,11 @@ mod tests {
         storage.cache.clear();
 
         assert_eq!(storage.read_block_hash(number).expect("read block hash"), Some(hash));
-        assert_eq!(storage.read_parent_hash(number.next_block_number()).expect("read parent hash"), hash);
     }
 
     #[test]
     fn mined_blocks_are_chained_to_their_parent() {
-        let storage = StratusStorage::new_test().expect("failed to build test storage");
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
 
         let first = mine_block(&storage, ExecutionChanges::default());
         let second = mine_block(&storage, ExecutionChanges::default());
@@ -1003,11 +1039,121 @@ mod tests {
         assert_eq!(read(second).header.parent_hash, read(first).hash());
     }
 
+    #[test]
+    fn save_block_rejects_wrong_parent_without_advancing_last_saved() {
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::Automine);
+        let genesis = initialize_genesis(&storage);
+        let (block, changes) = miner.mine_local().expect("seal block");
+
+        let mut invalid = block.clone();
+        invalid.header.parent_hash = Hash::ZERO;
+        invalid.apply_default_hash();
+        let error = storage.save_block(invalid, changes.clone()).expect_err("wrong parent should be rejected");
+        assert!(matches!(
+            error,
+            StorageError::ParentHashConflict { number, local, external }
+                if number == BlockNumber::ONE && local == genesis.hash() && external == Hash::ZERO
+        ));
+
+        storage.save_block(block, changes).expect("valid block should still save");
+        assert_eq!(
+            *storage.last_saved.lock(),
+            Some(BlockReference {
+                number: BlockNumber::ONE,
+                hash: storage.read_block(BlockFilter::Number(BlockNumber::ONE)).unwrap().unwrap().hash(),
+            })
+        );
+    }
+
+    #[test]
+    fn sealed_tip_can_run_ahead_of_saved_tip() {
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::External);
+        initialize_genesis(&storage);
+
+        let (first, first_changes) = miner.mine_local().expect("seal first block");
+        let (second, second_changes) = miner.mine_local().expect("seal second block");
+
+        assert_eq!(second.header.parent_hash, first.hash());
+        assert_eq!(storage.temp.read_latest_sealed(), BlockReference::from(&second));
+        assert_eq!(
+            *storage.last_saved.lock(),
+            Some(BlockReference {
+                number: BlockNumber::ZERO,
+                hash: Block::genesis().hash(),
+            })
+        );
+
+        storage.save_block(first, first_changes).expect("save first block");
+        storage.save_block(second, second_changes).expect("save second block");
+    }
+
+    #[test]
+    fn startup_preloads_legacy_saved_tip_for_next_parent() {
+        use crate::eth::storage::cache::CacheConfig;
+
+        let rocks_dir = tempfile::tempdir().expect("create rocks directory");
+        let rocks_prefix = rocks_dir.path().join("preloaded-tip").to_string_lossy().into_owned();
+        let perm = RocksPermanentStorage::new(
+            Some(rocks_prefix.clone()),
+            std::time::Duration::from_secs(240),
+            super::super::permanent::RocksCfCacheConfig::default(),
+            true,
+            None,
+            1024,
+        )
+        .expect("create permanent storage");
+
+        let genesis = Block::genesis();
+        perm.save_genesis_block(genesis.clone(), Vec::new(), ExecutionChanges::default())
+            .expect("save genesis");
+        let mut legacy = Block::new(BlockNumber::ONE, UnixTime::from(1_u64));
+        legacy.header.parent_hash = genesis.hash();
+        legacy.apply_hash(legacy.calculate_hash_v1());
+        perm.save_block(legacy.clone(), ExecutionChanges::default()).expect("save legacy block");
+        perm.set_mined_block_number(BlockNumber::ONE);
+
+        let temp = InMemoryTemporaryStorage::new(BlockReference::from(&legacy));
+        let cache = CacheConfig {
+            slot_cache_capacity: 1,
+            account_cache_capacity: 1,
+            account_history_cache_capacity: 1,
+            slot_history_cache_capacity: 1,
+            block_hash_cache_capacity: 256,
+        }
+        .init();
+        let storage = Arc::new(
+            StratusStorage::new(
+                temp,
+                perm,
+                cache,
+                #[cfg(feature = "dev")]
+                super::super::permanent::PermanentStorageConfig {
+                    rocks_path_prefix: Some(rocks_prefix),
+                    rocks_shutdown_timeout: std::time::Duration::from_secs(240),
+                    rocks_cf_cache: super::super::permanent::RocksCfCacheConfig::default(),
+                    rocks_disable_sync_write: false,
+                    rocks_cf_size_metrics_interval: None,
+                    genesis_file: crate::config::GenesisFileConfig::default(),
+                    rocks_file_descriptors_limit: 1024,
+                },
+            )
+            .expect("create storage"),
+        );
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::Automine);
+
+        let (block, _) = miner.mine_local().expect("seal next block");
+
+        assert_eq!(block.number(), BlockNumber::from(2_u64));
+        assert_eq!(block.header.parent_hash, legacy.hash());
+    }
+
     /// An `eth_call` pinned to a block that is no longer the latest must read the historical
     /// state at its captured block, not the current latest state.
     #[test]
     fn read_slot_for_call_pinned_to_older_block_must_not_read_latest_state() {
-        let storage = StratusStorage::new_test().expect("failed to build test storage");
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
 
         let address = Address::new([0xAA; 20]);
         let index = SlotIndex::ZERO;
@@ -1034,7 +1180,7 @@ mod tests {
 
     #[test]
     fn read_account_for_call_pinned_to_older_block_must_not_read_latest_state() {
-        let storage = StratusStorage::new_test().expect("failed to build test storage");
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
 
         let address = Address::new([0xBB; 20]);
 

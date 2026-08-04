@@ -2,8 +2,6 @@
 
 use parking_lot::RwLock;
 use parking_lot::RwLockUpgradableReadGuard;
-#[cfg(not(feature = "dev"))]
-use parking_lot::RwLockWriteGuard;
 
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
@@ -23,27 +21,44 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
-#[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTimeNow;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::BlockReference;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
+
+#[derive(Debug, Clone)]
+pub struct InMemorySealedBlock {
+    pub state: InMemoryTemporaryStorageState,
+    pub hash: Hash,
+}
 
 #[derive(Debug)]
 pub struct InmemoryTransactionTemporaryStorage {
     pub pending_block: RwLock<InMemoryTemporaryStorageState>,
-    pub latest_block: RwLock<Option<InMemoryTemporaryStorageState>>,
+    pub latest_sealed: RwLock<InMemorySealedBlock>,
 }
 
 impl InmemoryTransactionTemporaryStorage {
-    pub fn new(block_number: BlockNumber) -> Self {
+    pub fn new(latest_sealed: BlockReference) -> Self {
         Self {
             pending_block: RwLock::new(InMemoryTemporaryStorageState {
-                block: PendingBlock::new_at_now(block_number),
+                block: PendingBlock::new_at_now(latest_sealed.number.next_block_number()),
                 block_changes: ExecutionChanges::default(),
             }),
-            latest_block: RwLock::new(None),
+            latest_sealed: RwLock::new(InMemorySealedBlock {
+                state: InMemoryTemporaryStorageState::new(latest_sealed.number),
+                hash: latest_sealed.hash,
+            }),
+        }
+    }
+
+    pub(super) fn read_latest_sealed(&self) -> BlockReference {
+        let latest = self.latest_sealed.read();
+        BlockReference {
+            number: latest.state.block.header.number,
+            hash: latest.hash,
         }
     }
 
@@ -100,57 +115,36 @@ impl InmemoryTransactionTemporaryStorage {
         self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
-    pub fn clone_pending_state(&self) -> InMemoryTemporaryStorageState {
+    pub fn pending_block_to_seal(&self) -> (PendingBlock, ExecutionChanges) {
         let pending_block = self.pending_block.read();
-        (*pending_block).clone()
+        let block = pending_block.block.clone();
+
+        // This has to happen before creating the next state because UnixTimeNow::default() may change the offset.
+        #[cfg(feature = "dev")]
+        let block = {
+            let mut block = block;
+            // Update the timestamp only if evm_setNextBlockTimestamp was called.
+            if UnixTime::evm_set_next_block_timestamp_was_called() {
+                block.header.timestamp = UnixTimeNow::default();
+            }
+            block
+        };
+
+        (block, pending_block.block_changes.clone())
     }
 
-    pub fn finish_pending_block(&self, expected_number: BlockNumber) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
-        let pending_block = self.pending_block.upgradable_read();
-        let actual_number = pending_block.block.header.number;
-        // Mining resolves the parent hash from an earlier snapshot of the pending number. A writer
-        // can change that number before this guard is acquired, so reject the stale snapshot rather
-        // than finishing a different block with the original block's parent hash. The upgradable
-        // guard keeps this check atomic with the replacement below.
-        if actual_number != expected_number {
-            return Err(StorageError::PendingNumberConflict {
-                new: expected_number,
-                pending: actual_number,
-            });
-        }
+    pub(super) fn finish_pending_block(&self, block: BlockReference, timestamp: UnixTimeNow) {
+        let next_state = InMemoryTemporaryStorageState::new(block.number.next_block_number());
+        let mut pending_block = self.pending_block.write();
+        let mut latest_sealed = self.latest_sealed.write();
 
-        let changes = pending_block.block_changes.clone();
-
-        // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
-        #[cfg(feature = "dev")]
-        let finished_block = {
-            let mut finished_block = pending_block.block.clone();
-            // Update block timestamp only if evm_setNextBlockTimestamp was called,
-            // otherwise keep the original timestamp from pending block creation
-            if UnixTime::evm_set_next_block_timestamp_was_called() {
-                finished_block.header.timestamp = UnixTimeNow::default();
-            }
-            finished_block
+        debug_assert_eq!(pending_block.block.header.number, block.number);
+        let mut finished_state = std::mem::replace(&mut *pending_block, next_state);
+        finished_state.block.header.timestamp = timestamp;
+        *latest_sealed = InMemorySealedBlock {
+            state: finished_state,
+            hash: block.hash,
         };
-
-        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
-
-        let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
-        let mut latest = self.latest_block.write();
-
-        *latest = Some(std::mem::replace(&mut *pending_block, next_state));
-
-        drop(pending_block);
-
-        #[cfg(not(feature = "dev"))]
-        let finished_block = {
-            let latest = RwLockWriteGuard::<Option<InMemoryTemporaryStorageState>>::downgrade(latest);
-
-            #[allow(clippy::expect_used)]
-            latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone()
-        };
-
-        Ok((finished_block, changes))
     }
 
     pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
@@ -169,10 +163,12 @@ impl InmemoryTransactionTemporaryStorage {
         Ok(match self.pending_block.read().block_changes.accounts.get(&address) {
             Some(pending_account) => Some(pending_account.clone().to_account(address)),
             None => self
-                .latest_block
+                .latest_sealed
                 .read()
-                .as_ref()
-                .and_then(|latest| latest.block_changes.accounts.get(&address))
+                .state
+                .block_changes
+                .accounts
+                .get(&address)
                 .map(|account| account.clone().to_account(address)),
         })
     }
@@ -181,10 +177,13 @@ impl InmemoryTransactionTemporaryStorage {
         Ok(match self.pending_block.read().block_changes.slots.get(&(address, index)) {
             Some(pending_value) => Some(Slot::new(index, *pending_value)),
             None => self
-                .latest_block
+                .latest_sealed
                 .read()
-                .as_ref()
-                .and_then(|latest| latest.block_changes.slots.get(&(address, index)).map(|value| Slot::new(index, *value))),
+                .state
+                .block_changes
+                .slots
+                .get(&(address, index))
+                .map(|value| Slot::new(index, *value)),
         })
     }
 
@@ -245,31 +244,12 @@ impl InmemoryTransactionTemporaryStorage {
     // Global state
     // -------------------------------------------------------------------------
     pub fn reset(&self) -> anyhow::Result<(), StorageError> {
+        let genesis = BlockReference::genesis();
         self.pending_block.write().reset();
-        *self.latest_block.write() = None;
+        *self.latest_sealed.write() = InMemorySealedBlock {
+            state: InMemoryTemporaryStorageState::new(genesis.number),
+            hash: genesis.hash,
+        };
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stale_expected_number_does_not_finish_pending_block() {
-        let actual_number = BlockNumber::from(10_u64);
-        let expected_number = BlockNumber::from(9_u64);
-        let storage = InmemoryTransactionTemporaryStorage::new(actual_number);
-
-        let error = storage
-            .finish_pending_block(expected_number)
-            .expect_err("stale expected number should be rejected");
-
-        assert!(matches!(
-            error,
-            StorageError::PendingNumberConflict { new, pending } if new == expected_number && pending == actual_number
-        ));
-        assert_eq!(storage.read_pending_block_header().0.number, actual_number);
-        assert!(storage.latest_block.read().is_none());
     }
 }

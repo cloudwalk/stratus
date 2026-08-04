@@ -56,8 +56,14 @@ fn main() -> anyhow::Result<()> {
     global_services.runtime.block_on(run(global_services.config))
 }
 
-async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
+async fn run(mut config: ImporterOfflineConfig) -> anyhow::Result<()> {
     let _timer = DropTimer::start("importer-offline");
+
+    // The executor can seal one batch while the bounded channel is full and the saver is processing
+    // another one. Those unsaved hashes must remain available when imported transactions execute
+    // BLOCKHASH. This is a temporary requirement of the pipelined offline importer.
+    let unsaved_hash_capacity = config.block_saver_batch_size.saturating_mul(config.block_saver_queue_size.saturating_add(2));
+    config.storage.cache.block_hash_cache_capacity = config.storage.cache.block_hash_cache_capacity.saturating_add(unsaved_hash_capacity);
 
     // init services
     let rpc_storage = config.rpc_storage.init().await?;
@@ -93,9 +99,8 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
     if block_start.is_zero() && !storage.has_genesis()? {
         let genesis_block = Block::genesis();
         let genesis_hash = genesis_block.hash();
-        storage.save_genesis_block(genesis_block, initial_accounts, ExecutionChanges::default())?;
-        storage.finish_pending_block(BlockNumber::ZERO)?;
         storage.publish_block_hash(BlockNumber::ZERO, genesis_hash);
+        storage.save_genesis_block(genesis_block, initial_accounts, ExecutionChanges::default())?;
         block_start = BlockNumber::from(1);
     }
 
@@ -240,8 +245,10 @@ fn run_external_block_executor(
                     return Ok(());
                 }
 
-                executor.execute_external_block(block.clone(), ExternalReceipts::from(receipts))?;
-                let mined_block = miner.mine_external(block)?;
+                let pending_guard = miner.pending_block_guard();
+                executor.execute_external_block(&pending_guard, block.clone(), ExternalReceipts::from(receipts))?;
+                let mined_block = miner.mine_external_with_guard(block, &pending_guard)?;
+                drop(pending_guard);
                 executed_batch.push(mined_block);
             }
 

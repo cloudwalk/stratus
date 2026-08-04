@@ -302,7 +302,18 @@ mod tests {
     use crate::infra::BlockchainClient;
 
     /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
-    fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) {
+    fn initialize_genesis(storage: &StratusStorage) {
+        if storage.has_genesis().expect("read genesis") {
+            return;
+        }
+
+        let genesis = Block::genesis();
+        storage
+            .save_genesis_block(genesis, Vec::new(), ExecutionChanges::default())
+            .expect("save genesis");
+    }
+
+    fn seal_block(storage: &StratusStorage, miner: &Miner, changes: ExecutionChanges) -> (Block, ExecutionChanges) {
         let (header, _) = storage.read_pending_block_header();
         let evm_input = EvmInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
@@ -311,13 +322,17 @@ mod tests {
         result.execution.changes = changes;
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
-        storage.save_execution(tx).expect("save execution");
+        let pending_guard = miner.pending_block_guard();
+        storage.save_execution(&pending_guard, tx).expect("save execution");
+        let (block, block_changes) = miner.mine_local_with_guard(&pending_guard).expect("mine block");
+        drop(pending_guard);
+        (block, block_changes)
+    }
 
-        let parent_hash = storage.read_parent_hash(header.number).expect("read parent hash");
-        let (pending_block, block_changes) = storage.finish_pending_block(header.number).expect("finish pending block");
-        let block = Block::from_pending(pending_block, parent_hash);
-        storage.publish_block_hash(block.number(), block.hash());
-        storage.save_block(block, block_changes).expect("save block");
+    fn mine_block(storage: &StratusStorage, miner: &Miner, changes: ExecutionChanges) -> Block {
+        let (block, block_changes) = seal_block(storage, miner, changes);
+        storage.save_block(block.clone(), block_changes).expect("save block");
+        block
     }
 
     /// Builds `ExecutionChanges` that set `address`'s balance to `balance` (nonce/bytecode untouched).
@@ -376,23 +391,26 @@ mod tests {
         let fetcher = BlockWithChangesFetcher { chain };
 
         let address = Address::new([0xCC; 20]);
+        initialize_genesis(&storage);
 
         // Block 1: B.balance = 100. permanent storage is now at block 1.
-        mine_block(&storage, balance_changes(address, Wei::from(100u64)));
+        mine_block(&storage, &worker.miner, balance_changes(address, Wei::from(100u64)));
 
         // The fetcher post-processes block 3 while the importer is still at block 1 (fetcher ahead).
         // Block 3 changed B's nonce but left its balance untouched (balance entry is `None`).
         // `post_process` returns `ExecutionChanges<Incomplete>` — it does NOT read perm, so the
         // fetcher being ahead does not corrupt the changes.
-        let fetched_3 = (
-            BlockRocksdb::from(Block::new(BlockNumber::from(3u64), UnixTime::from(0u64))),
-            block_changes_nonce_only(address),
-        );
+        // Seal intervening block 2 without saving it yet. This is the correct pre-state for block 3.
+        let (block_2, block_2_changes) = seal_block(&storage, &worker.miner, balance_changes(address, Wei::from(200u64)));
+
+        let mut block_3 = Block::new(BlockNumber::from(3u64), UnixTime::from(0u64));
+        block_3.header.parent_hash = block_2.hash();
+        block_3.apply_default_hash();
+        let fetched_3 = (BlockRocksdb::from(block_3), block_changes_nonce_only(address));
         let (block_3, changes_3) = fetcher.post_process(fetched_3).await.expect("post_process");
 
-        // Intervening block 2: B.balance = 200. This is the correct pre-state for block 3.
-        // permanent storage is now at block 2.
-        mine_block(&storage, balance_changes(address, Wei::from(200u64)));
+        // The saver catches permanent storage up to block 2 after block 3 was already post-processed.
+        storage.save_block(block_2, block_2_changes).expect("save block 2");
 
         // The importer imports block 3. `ReplicationWorker::import` must complete `changes_3`
         // (Incomplete) against perm at import time, when perm is caught up to block 2 (200).

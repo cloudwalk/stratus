@@ -22,9 +22,32 @@ use clap::Parser;
 use display_json::DebugAsJson;
 pub use temporary::compute_pending_block_number;
 
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::StratusError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BlockReference {
+    pub number: BlockNumber,
+    pub hash: Hash,
+}
+
+impl BlockReference {
+    pub fn genesis() -> Self {
+        Self::from(&Block::genesis())
+    }
+}
+
+impl From<&Block> for BlockReference {
+    fn from(block: &Block) -> Self {
+        Self {
+            number: block.number(),
+            hash: block.hash(),
+        }
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Config

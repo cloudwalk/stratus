@@ -16,9 +16,8 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
 
-/// Lower bound for the block hash cache, large enough to cover the block saver backlog of the
-/// offline importer, which mines much further ahead than it saves.
-pub const MIN_BLOCK_HASH_CACHE_CAPACITY: usize = 8192;
+/// Default cache capacity covers the complete history window reachable by `BLOCKHASH`.
+pub const DEFAULT_BLOCK_HASH_CACHE_CAPACITY: usize = 256;
 
 pub struct StorageCache {
     slot_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
@@ -48,11 +47,8 @@ pub struct CacheConfig {
 
     /// Capacity of the block hash cache.
     ///
-    /// Must hold the 256 blocks reachable by `BLOCKHASH` plus every block that was sealed but not
-    /// saved yet, because mining and saving run in separate threads and an evicted hash that has
-    /// not reached the permanent storage cannot be read back. Values below
-    /// [`MIN_BLOCK_HASH_CACHE_CAPACITY`] are raised to it.
-    #[arg(long = "block-hash-cache-capacity", env = "BLOCK_HASH_CACHE_CAPACITY", default_value_t = MIN_BLOCK_HASH_CACHE_CAPACITY)]
+    /// The offline importer raises this value to cover its sealed-but-unsaved backlog.
+    #[arg(long = "block-hash-cache-capacity", env = "BLOCK_HASH_CACHE_CAPACITY", default_value_t = DEFAULT_BLOCK_HASH_CACHE_CAPACITY)]
     pub block_hash_cache_capacity: usize,
 }
 
@@ -64,8 +60,6 @@ impl CacheConfig {
 
 impl StorageCache {
     pub fn new(config: &CacheConfig) -> Self {
-        let block_hash_cache_capacity = config.block_hash_cache_capacity.max(MIN_BLOCK_HASH_CACHE_CAPACITY);
-
         Self {
             slot_cache: Cache::with(
                 config.slot_cache_capacity,
@@ -96,8 +90,8 @@ impl StorageCache {
                 DefaultLifecycle::default(),
             ),
             block_hash_cache: Cache::with(
-                block_hash_cache_capacity,
-                block_hash_cache_capacity as u64,
+                config.block_hash_cache_capacity,
+                config.block_hash_cache_capacity as u64,
                 UnitWeighter,
                 FxBuildHasher,
                 DefaultLifecycle::default(),
@@ -211,24 +205,31 @@ where
 mod tests {
     use super::*;
 
-    /// Blocks are sealed long before they are saved, so a configuration that undersizes the block
-    /// hash cache would drop hashes that cannot be read back from the permanent storage yet.
     #[test]
-    fn block_hash_cache_is_never_smaller_than_the_minimum() {
+    fn block_hash_cache_uses_configured_capacity() {
         let cache = CacheConfig {
             slot_cache_capacity: 1,
             account_cache_capacity: 1,
             account_history_cache_capacity: 1,
             slot_history_cache_capacity: 1,
-            block_hash_cache_capacity: 1,
+            block_hash_cache_capacity: 7,
         }
         .init();
 
-        let hash_of = |number: u64| Hash::new([number as u8; 32]);
-        for number in 0..MIN_BLOCK_HASH_CACHE_CAPACITY as u64 {
-            cache.cache_block_hash(BlockNumber::from(number), hash_of(number));
-        }
+        assert_eq!(cache.block_hash_cache.capacity(), 7);
+    }
 
-        assert_eq!(cache.get_block_hash(BlockNumber::ZERO), Some(hash_of(0)));
+    #[test]
+    fn block_hash_cache_can_be_disabled() {
+        let cache = CacheConfig {
+            slot_cache_capacity: 1,
+            account_cache_capacity: 1,
+            account_history_cache_capacity: 1,
+            slot_history_cache_capacity: 1,
+            block_hash_cache_capacity: 0,
+        }
+        .init();
+
+        assert_eq!(cache.block_hash_cache.capacity(), 0);
     }
 }

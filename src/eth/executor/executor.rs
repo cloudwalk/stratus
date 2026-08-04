@@ -11,6 +11,7 @@ use anyhow::anyhow;
 use anyhow::bail;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
+use parking_lot::MutexGuard;
 use tracing::Span;
 use tracing::debug_span;
 #[cfg(feature = "tracing")]
@@ -26,6 +27,7 @@ use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::miner::Miner;
+use crate::eth::miner::miner::PendingBlockGuard;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
@@ -259,6 +261,10 @@ pub struct ExecutorLocks {
     transaction: Mutex<()>,
 }
 
+pub(crate) struct TransactionGuard<'a> {
+    _guard: MutexGuard<'a, ()>,
+}
+
 pub struct Executor {
     /// Executor inner locks.
     locks: ExecutorLocks,
@@ -285,6 +291,12 @@ impl Executor {
         }
     }
 
+    pub(crate) fn transaction_guard(&self) -> TransactionGuard<'_> {
+        TransactionGuard {
+            _guard: self.locks.transaction.lock(),
+        }
+    }
+
     // -------------------------------------------------------------------------
     // External transactions
     // -------------------------------------------------------------------------
@@ -292,7 +304,7 @@ impl Executor {
     /// Reexecutes an external block locally and imports it to the temporary storage.
     ///
     /// Returns the remaining receipts that were not consumed by the execution.
-    pub fn execute_external_block(&self, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<()> {
+    pub fn execute_external_block(&self, guard: &PendingBlockGuard<'_>, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), EvmExecutionMetrics::default());
@@ -301,7 +313,7 @@ impl Executor {
         let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
         tracing::info!(block_number = %block.number(), "reexecuting external block");
 
-        self.storage.set_pending_from_external(&block)?;
+        self.storage.set_pending_from_external(guard, &block);
 
         // track pending block
         let block_number = block.number();
@@ -312,6 +324,7 @@ impl Executor {
         for tx in block_transactions.into_transactions() {
             let receipt = receipts.try_remove(tx.hash())?;
             self.execute_external_transaction(
+                guard,
                 tx,
                 receipt,
                 block_number,
@@ -338,6 +351,7 @@ impl Executor {
     /// to facilitate re-execution of parallel transactions that failed
     fn execute_external_transaction(
         &self,
+        guard: &PendingBlockGuard<'_>,
         tx: ExternalTransaction,
         receipt: ExternalReceipt,
         block_number: BlockNumber,
@@ -426,7 +440,7 @@ impl Executor {
         }
 
         // persist state
-        self.miner.save_execution(tx_execution)?;
+        self.miner.save_execution_with_guard(guard, tx_execution)?;
 
         // track metrics
         #[cfg(feature = "metrics")]
@@ -475,7 +489,7 @@ impl Executor {
         let _transaction_lock = self.locks.transaction.lock();
 
         // execute transaction
-        let tx_execution = self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS);
+        let tx_execution = self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS, None);
 
         #[cfg(feature = "metrics")]
         metrics::inc_executor_local_transaction(start.elapsed(), tx_execution.is_ok(), contract, function);
@@ -483,8 +497,23 @@ impl Executor {
         tx_execution
     }
 
+    pub(crate) fn execute_local_transaction_with_guards(
+        &self,
+        _transaction_guard: &TransactionGuard<'_>,
+        pending_guard: &PendingBlockGuard<'_>,
+        tx: TransactionInput,
+    ) -> Result<(), StratusError> {
+        const INFINITE_ATTEMPTS: usize = usize::MAX;
+        self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS, Some(pending_guard))
+    }
+
     /// Executes a transaction until it reaches the max number of attempts.
-    fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, max_attempts: usize) -> Result<(), StratusError> {
+    fn execute_local_transaction_attempts(
+        &self,
+        tx_input: TransactionInput,
+        max_attempts: usize,
+        guard: Option<&PendingBlockGuard<'_>>,
+    ) -> Result<(), StratusError> {
         // validate
         if tx_input.signer().is_zero() {
             return Err(TransactionError::FromZeroAddress.into());
@@ -552,7 +581,11 @@ impl Executor {
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
             }
 
-            match self.miner.save_execution(tx_execution) {
+            let save_result = match guard {
+                Some(guard) => self.miner.save_execution_with_guard(guard, tx_execution),
+                None => self.miner.save_execution(tx_execution),
+            };
+            match save_result {
                 Ok(_) => {
                     // track metrics
                     #[cfg(feature = "metrics")]

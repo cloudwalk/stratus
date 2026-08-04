@@ -16,8 +16,10 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::UnixTimeNow;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::BlockReference;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::call::InMemoryCallTemporaryStorage;
@@ -28,20 +30,24 @@ mod transaction;
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {
-    pub transaction_storage: InmemoryTransactionTemporaryStorage,
+    transaction_storage: InmemoryTransactionTemporaryStorage,
     pub call_storage: InMemoryCallTemporaryStorage,
 }
 
 impl InMemoryTemporaryStorage {
-    pub fn new(block_number: BlockNumber) -> Self {
+    pub(crate) fn new(latest_sealed: BlockReference) -> Self {
         Self {
-            transaction_storage: InmemoryTransactionTemporaryStorage::new(block_number),
+            transaction_storage: InmemoryTransactionTemporaryStorage::new(latest_sealed),
             call_storage: InMemoryCallTemporaryStorage::new(),
         }
     }
 
     pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
         self.transaction_storage.read_pending_block_header()
+    }
+
+    pub(crate) fn read_latest_sealed(&self) -> BlockReference {
+        self.transaction_storage.read_latest_sealed()
     }
 
     #[cfg(feature = "dev")]
@@ -62,10 +68,13 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self, expected_number: BlockNumber) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
-        let finished_block = self.transaction_storage.finish_pending_block(expected_number)?;
+    pub fn pending_block_to_seal(&self) -> (PendingBlock, ExecutionChanges) {
+        self.transaction_storage.pending_block_to_seal()
+    }
+
+    pub(crate) fn finish_pending_block(&self, block: BlockReference, timestamp: UnixTimeNow) {
+        self.transaction_storage.finish_pending_block(block, timestamp);
         self.call_storage.retain_recent_blocks();
-        Ok(finished_block)
     }
 
     pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
