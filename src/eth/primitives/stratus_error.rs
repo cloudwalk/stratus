@@ -31,9 +31,9 @@ pub enum RpcError {
     #[error_code = 1]
     BlockFilterInvalid { filter: BlockFilter },
 
-    #[error("denied because will fetch data from {actual} blocks, but the max allowed is {max}.")]
+    #[error("denied because will fetch data from {actual} blocks, but the max allowed is {max:?} and min allowed is 1.")]
     #[error_code = 2]
-    BlockRangeInvalid { actual: u64, max: u64 },
+    BlockRangeInvalid { actual: i128, max: Option<u64> },
 
     #[error("denied because client did not identify itself.")]
     #[error_code = 3]

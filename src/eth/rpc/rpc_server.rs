@@ -1369,10 +1369,10 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     tracing::info!(?filter, filter_event = %event_name, "reading logs");
 
     // check range
-    if blocks_in_range > MAX_BLOCK_RANGE {
+    if blocks_in_range > MAX_BLOCK_RANGE || blocks_in_range == 0 {
         return Err(RpcError::BlockRangeInvalid {
-            actual: blocks_in_range,
-            max: MAX_BLOCK_RANGE,
+            actual: blocks_in_range as i128,
+            max: Some(MAX_BLOCK_RANGE),
         }
         .into());
     }

@@ -14,6 +14,8 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogTopic;
 use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::RpcError;
+use crate::eth::primitives::StratusError;
 use crate::eth::storage::StratusStorage;
 
 /// JSON-RPC input used in methods like `eth_getLogs` and `eth_subscribe`.
@@ -42,7 +44,7 @@ pub struct LogFilterInput {
 
 impl LogFilterInput {
     /// Parses itself into a filter that can be applied in produced log events or to query the storage.
-    pub fn parse(self, storage: &Arc<StratusStorage>) -> anyhow::Result<LogFilter> {
+    pub fn parse(self, storage: &Arc<StratusStorage>) -> anyhow::Result<LogFilter, StratusError> {
         let original_input = self.clone();
 
         // parse point-in-time
@@ -69,6 +71,16 @@ impl LogFilterInput {
             PointInTime::Mined => None,
             PointInTime::MinedPast(number) => Some(number),
         };
+
+        if let Some(to_block) = to
+            && to_block < from
+        {
+            return Err(RpcError::BlockRangeInvalid {
+                actual: to_block.as_i128() - from.as_i128(),
+                max: None,
+            }
+            .into());
+        }
 
         Ok(LogFilter {
             from_block: from,
@@ -144,5 +156,45 @@ mod tests {
         let result: LogFilterInput = serde_json::from_str(input).unwrap();
         let expected = LogFilterInput::default();
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn parse_rejects_negative_block_range() {
+        use crate::eth::primitives::BlockNumber;
+
+        let storage = Arc::new(StratusStorage::new_test().unwrap());
+
+        let input = LogFilterInput {
+            from_block: Some(BlockFilter::Number(BlockNumber::from(10u32))),
+            to_block: Some(BlockFilter::Number(BlockNumber::from(5u32))),
+            ..LogFilterInput::default()
+        };
+
+        let err = input.parse(&storage).unwrap_err();
+        match err {
+            StratusError::RPC(RpcError::BlockRangeInvalid { actual, max }) => {
+                // to (5) - from (10) = -5
+                assert_eq!(actual, -5_i128);
+                assert_eq!(max, None);
+            }
+            other => panic!("expected BlockRangeInvalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_accepts_valid_block_range() {
+        use crate::eth::primitives::BlockNumber;
+
+        let storage = Arc::new(StratusStorage::new_test().unwrap());
+
+        let input = LogFilterInput {
+            from_block: Some(BlockFilter::Number(BlockNumber::from(5u32))),
+            to_block: Some(BlockFilter::Number(BlockNumber::from(10u32))),
+            ..LogFilterInput::default()
+        };
+
+        let filter = input.parse(&storage).unwrap();
+        assert_eq!(filter.from_block, BlockNumber::from(5u32));
+        assert_eq!(filter.to_block, Some(BlockNumber::from(10u32)));
     }
 }
