@@ -30,6 +30,7 @@ use super::cf_versions::CfTransactionsValue;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_config::CacheSetting;
+use super::rocks_config::ColumnFamilyConfig;
 use super::rocks_config::DbConfig;
 use super::rocks_db::create_or_open_db;
 use super::types::AccountRocksdb;
@@ -81,25 +82,25 @@ cfg_if::cfg_if! {
     }
 }
 
-pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap<&'static str, Options> {
+pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap<&'static str, ColumnFamilyConfig> {
     // Helper function to create cache setting from size
     let cache_setting_from_size = |size: usize| -> CacheSetting { CacheSetting::Enabled(size) };
 
     btmap! {
-        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cache_setting_from_size(cf_cache_config.accounts)),
-        "accounts_history" => DbConfig::HistoricalData.to_options(cache_setting_from_size(cf_cache_config.accounts_history)),
-        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cache_setting_from_size(cf_cache_config.account_slots)),
-        "account_slots_history" => DbConfig::HistoricalData.to_options(cache_setting_from_size(cf_cache_config.account_slots_history)),
-        "transactions" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.transactions)),
-        "blocks_by_number" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_number)),
-        "blocks_by_hash" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_hash)),
-        "blocks_by_timestamp" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_timestamp)),
-        "block_changes" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.block_changes)),
+        "accounts" => ColumnFamilyConfig::new(DbConfig::OptimizedPointLookUp, cache_setting_from_size(cf_cache_config.accounts)),
+        "accounts_history" => ColumnFamilyConfig::new(DbConfig::HistoricalData, cache_setting_from_size(cf_cache_config.accounts_history)),
+        "account_slots" => ColumnFamilyConfig::new(DbConfig::OptimizedPointLookUp, cache_setting_from_size(cf_cache_config.account_slots)),
+        "account_slots_history" => ColumnFamilyConfig::new(DbConfig::HistoricalData, cache_setting_from_size(cf_cache_config.account_slots_history)),
+        "transactions" => ColumnFamilyConfig::new(DbConfig::Default, cache_setting_from_size(cf_cache_config.transactions)),
+        "blocks_by_number" => ColumnFamilyConfig::new(DbConfig::Default, cache_setting_from_size(cf_cache_config.blocks_by_number)),
+        "blocks_by_hash" => ColumnFamilyConfig::new(DbConfig::Default, cache_setting_from_size(cf_cache_config.blocks_by_hash)),
+        "blocks_by_timestamp" => ColumnFamilyConfig::new(DbConfig::Default, cache_setting_from_size(cf_cache_config.blocks_by_timestamp)),
+        "block_changes" => ColumnFamilyConfig::new(DbConfig::Default, cache_setting_from_size(cf_cache_config.block_changes)),
     }
 }
 
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
-fn new_cf_ref<'a, K, V>(db: &'a Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, Options>) -> Result<RocksCfRef<'a, K, V>>
+fn new_cf_ref<'a, K, V>(db: &'a Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, ColumnFamilyConfig>) -> Result<RocksCfRef<'a, K, V>>
 where
     K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
     V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,

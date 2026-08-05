@@ -8,20 +8,22 @@ use rocksdb::DB;
 use rocksdb::Options;
 
 use super::rocks_config::CacheSetting;
+use super::rocks_config::ColumnFamilyConfig;
 use super::rocks_config::DbConfig;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
-const CURRENT_STATE_COLUMN_FAMILIES: [&str; 2] = ["accounts", "account_slots"];
-const PREPOPULATE_BLOCK_CACHE_ON_FLUSH: &str = "{prepopulate_block_cache=kFlushOnly;}";
+fn enable_populate_on_flush_current_state_caches(db: &DB, cf_configs: &BTreeMap<&'static str, ColumnFamilyConfig>) -> anyhow::Result<()> {
+    const PREPOPULATE_BLOCK_CACHE_ON_FLUSH: &str = "{prepopulate_block_cache=kFlushOnly;}";
 
-fn enable_populate_on_flush_current_state_caches(db: &DB) -> anyhow::Result<()> {
-    for name in CURRENT_STATE_COLUMN_FAMILIES {
-        let column_family = db.cf_handle(name).with_context(|| format!("column family '{name}' must exist"))?;
-        db.set_options_cf(&column_family, &[("block_based_table_factory", PREPOPULATE_BLOCK_CACHE_ON_FLUSH)])
-            .with_context(|| format!("enabling block-cache prepopulation for column family '{name}'"))?;
-    }
-    Ok(())
+    cf_configs.iter().try_for_each(|(name, config)| {
+        if matches!(config.db_config, DbConfig::OptimizedPointLookUp) {
+            let column_family = db.cf_handle(name).with_context(|| format!("column family '{name}' must exist"))?;
+            db.set_options_cf(&column_family, &[("block_based_table_factory", PREPOPULATE_BLOCK_CACHE_ON_FLUSH)])
+                .with_context(|| format!("enabling block-cache prepopulation for column family '{name}'"))?;
+        }
+        Ok(())
+    })
 }
 
 /// Open (or create) the Database with the configs applied to all column families.
@@ -30,13 +32,9 @@ fn enable_populate_on_flush_current_state_caches(db: &DB) -> anyhow::Result<()> 
 ///
 /// The returned `Options` **need** to be stored to refer to the DB metrics!
 #[tracing::instrument(skip_all, fields(path = ?path.as_ref()))]
-pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static str, Options>) -> anyhow::Result<(&'static Arc<DB>, Options)> {
+pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static str, ColumnFamilyConfig>) -> anyhow::Result<(&'static Arc<DB>, Options)> {
     let path = path.as_ref();
-
-    tracing::debug!("creating settings for each column family");
-    let cf_config_iter = cf_configs.iter().map(|(name, opts)| (*name, opts.clone()));
-
-    tracing::debug!("generating options for column families");
+    let cf_config_iter = cf_configs.iter().map(|(name, config)| (*name, config.to_options()));
     let db_opts = DbConfig::Default.to_options(CacheSetting::Disabled);
 
     if !path.exists() {
@@ -56,7 +54,7 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static 
         }
     };
 
-    enable_populate_on_flush_current_state_caches(&db)?;
+    enable_populate_on_flush_current_state_caches(&db, cf_configs)?;
 
     let waited_for = instant.elapsed();
     tracing::info!(?waited_for, db_path = ?path, "successfully opened RocksDB");
