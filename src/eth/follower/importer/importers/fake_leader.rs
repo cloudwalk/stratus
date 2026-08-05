@@ -38,14 +38,11 @@ impl ImporterWorker for FakeLeaderWorker {
         let block_tx_len = block.transactions.len();
         let transaction_guard = self.executor.transaction_guard();
         let mine_and_commit_guard = self.miner.locks.mine_and_commit.lock();
-        let pending_guard = self.miner.pending_block_guard();
-        self.storage.set_pending_from_external(&pending_guard, &block);
+        let session = self.miner.pending_session();
+        session.set_pending_from_external(&block);
         for tx in block.0.transactions.into_transactions() {
             tracing::info!(?tx, "executing tx as fake miner");
-            if let Err(e) = self
-                .executor
-                .execute_local_transaction_with_guards(&transaction_guard, &pending_guard, tx.try_into()?)
-            {
+            if let Err(e) = self.executor.execute_local_transaction_in_session(&transaction_guard, &session, tx.try_into()?) {
                 match e {
                     StratusError::Transaction(TransactionError::Nonce { transaction: _, account: _ }) => {
                         tracing::warn!(reason = ?e, "transaction failed, was this node restarted?");
@@ -58,13 +55,7 @@ impl ImporterWorker for FakeLeaderWorker {
                 }
             }
         }
-        let (mined_block, changes) = loop {
-            match self.miner.mine_local_with_guard(&pending_guard) {
-                Ok(block) => break block,
-                Err(e) => tracing::error!(reason = ?e, "failed to mine block"),
-            }
-        };
-        drop(pending_guard);
+        let (mined_block, changes) = session.seal_local();
         drop(transaction_guard);
 
         let completed_expected_changes = expected_changes.complete(self.storage.as_ref())?;

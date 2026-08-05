@@ -322,11 +322,9 @@ mod tests {
         result.execution.changes = changes;
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
-        let pending_guard = miner.pending_block_guard();
-        storage.save_execution(&pending_guard, tx).expect("save execution");
-        let (block, block_changes) = miner.mine_local_with_guard(&pending_guard).expect("mine block");
-        drop(pending_guard);
-        (block, block_changes)
+        let session = miner.pending_session();
+        session.append_execution(tx).expect("save execution");
+        session.seal_local()
     }
 
     fn mine_block(storage: &StratusStorage, miner: &Miner, changes: ExecutionChanges) -> Block {

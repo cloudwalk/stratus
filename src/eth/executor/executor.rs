@@ -27,6 +27,7 @@ use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::miner::Miner;
+use crate::eth::miner::miner::PendingSession;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
@@ -46,7 +47,6 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::primitives::UnixTime;
-use crate::eth::storage::PendingBlockGuard;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
 #[cfg(feature = "metrics")]
@@ -304,7 +304,7 @@ impl Executor {
     /// Reexecutes an external block locally and imports it to the temporary storage.
     ///
     /// Returns the remaining receipts that were not consumed by the execution.
-    pub fn execute_external_block(&self, guard: &PendingBlockGuard<'_>, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<()> {
+    pub fn execute_external_block(&self, session: &PendingSession<'_>, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
         let (start, mut block_metrics) = (metrics::now(), EvmExecutionMetrics::default());
@@ -313,7 +313,7 @@ impl Executor {
         let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
         tracing::info!(block_number = %block.number(), "reexecuting external block");
 
-        self.storage.set_pending_from_external(guard, &block);
+        session.set_pending_from_external(&block);
 
         // track pending block
         let block_number = block.number();
@@ -324,7 +324,7 @@ impl Executor {
         for tx in block_transactions.into_transactions() {
             let receipt = receipts.try_remove(tx.hash())?;
             self.execute_external_transaction(
-                guard,
+                session,
                 tx,
                 receipt,
                 block_number,
@@ -351,7 +351,7 @@ impl Executor {
     /// to facilitate re-execution of parallel transactions that failed
     fn execute_external_transaction(
         &self,
-        guard: &PendingBlockGuard<'_>,
+        session: &PendingSession<'_>,
         tx: ExternalTransaction,
         receipt: ExternalReceipt,
         block_number: BlockNumber,
@@ -440,7 +440,7 @@ impl Executor {
         }
 
         // persist state
-        self.miner.save_execution_with_guard(guard, tx_execution)?;
+        session.append_execution(tx_execution)?;
 
         // track metrics
         #[cfg(feature = "metrics")]
@@ -497,14 +497,14 @@ impl Executor {
         tx_execution
     }
 
-    pub(crate) fn execute_local_transaction_with_guards(
+    pub(crate) fn execute_local_transaction_in_session(
         &self,
         _transaction_guard: &TransactionGuard<'_>,
-        pending_guard: &PendingBlockGuard<'_>,
+        session: &PendingSession<'_>,
         tx: TransactionInput,
     ) -> Result<(), StratusError> {
         const INFINITE_ATTEMPTS: usize = usize::MAX;
-        self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS, Some(pending_guard))
+        self.execute_local_transaction_attempts(tx, INFINITE_ATTEMPTS, Some(session))
     }
 
     /// Executes a transaction until it reaches the max number of attempts.
@@ -512,7 +512,7 @@ impl Executor {
         &self,
         tx_input: TransactionInput,
         max_attempts: usize,
-        guard: Option<&PendingBlockGuard<'_>>,
+        session: Option<&PendingSession<'_>>,
     ) -> Result<(), StratusError> {
         // validate
         if tx_input.signer().is_zero() {
@@ -581,8 +581,8 @@ impl Executor {
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
             }
 
-            let save_result = match guard {
-                Some(guard) => self.miner.save_execution_with_guard(guard, tx_execution),
+            let save_result = match session {
+                Some(session) => session.append_execution(tx_execution),
                 None => self.miner.save_execution(tx_execution),
             };
             match save_result {

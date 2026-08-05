@@ -32,9 +32,9 @@ These are not independent chains. Permanent progress must always be an ordered p
 
 ## Guarded sealing
 
-`PendingBlockGuard` wraps temporary storage's `pending_session` mutex, colocated with `InMemoryChainState`. Its private field makes it a typed capability: pending-state APIs cannot be called without owning the correct mutex.
+`PendingSession` owns a `PendingBlockGuard`, which wraps temporary storage's `pending_session` mutex colocated with `InMemoryChainState`. Callers use session methods instead of manually pairing lock-acquiring methods with variants that accept an existing guard.
 
-One guard spans the complete pending-block session:
+One session spans the complete pending-block lifecycle:
 
 ```text
 set pending header
@@ -46,7 +46,7 @@ set pending header
 
 The snapshot is used to calculate and validate without destroying pending state. If validation fails, pending remains unchanged. Once validation succeeds, `finish_pending_block` uses `std::mem::replace` to move the original pending state into `latest_sealed`, attaches the final hash, and creates the next pending state.
 
-Pending and latest sealed state share one `RwLock<InMemoryChainState>`, so the move, hash update, and next-pending creation are one atomic write. Another pending session cannot start until `PendingBlockGuard` is dropped.
+Pending and latest sealed state share one `RwLock<InMemoryChainState>`, so the move, hash update, and next-pending creation are one atomic write. Another pending session cannot start until `PendingSession` is dropped or consumed by sealing.
 
 Local synchronous modes also retain the existing `mine_and_commit` mutex from sealing through persistence. It guarantees that concurrent local triggers cannot seal blocks in one order and race to save them in another order. Offline importer does not use this mutex; its single executor, FIFO channel, and single saver provide ordering.
 
@@ -105,7 +105,8 @@ Older unsaved offline blocks are temporarily dependent on this cache because per
 
 ## Lock roles
 
-- `PendingBlockGuard`: serializes temporary pending-header, execution-save, and seal operations.
+- `PendingSession`: exposes pending-header setup, execution append, and sealing under one temporary-storage session lock.
+- `PendingBlockGuard`: private capability held by `PendingSession` and passed only to lower storage layers.
 - `TransactionGuard`: lets fake leader hold the executor transaction mutex before miner locks, matching RPC lock order and preventing deadlock.
 - `mine_and_commit`: preserves seal-to-save ordering for synchronous local modes.
 - `commit`: serializes permanent writes.

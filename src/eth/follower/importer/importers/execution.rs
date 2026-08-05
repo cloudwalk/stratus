@@ -36,17 +36,14 @@ impl ImporterWorker for ReexecutionWorker {
 
         let receipts_len = receipts.len();
         let (mined_block, changes) = {
-            let pending_guard = self.miner.pending_block_guard();
+            let session = self.miner.pending_session();
 
-            if let Err(e) = self
-                .executor
-                .execute_external_block(&pending_guard, block.clone(), ExternalReceipts::from(receipts))
-            {
+            if let Err(e) = self.executor.execute_external_block(&session, block.clone(), ExternalReceipts::from(receipts)) {
                 let message = GlobalState::shutdown_from(TASK_NAME, "failed to reexecute external block");
                 return log_and_err!(reason = e, message);
             };
 
-            match self.miner.mine_external_with_guard(block, &pending_guard) {
+            match session.seal_external(block) {
                 Ok((mined_block, changes)) => {
                     tracing::info!(number = %mined_block.number(), "mined external block");
                     (mined_block, changes)

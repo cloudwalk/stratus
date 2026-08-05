@@ -973,10 +973,9 @@ mod tests {
         result.execution.changes = changes;
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
-        let pending_guard = miner.pending_block_guard();
-        storage.save_execution(&pending_guard, tx).expect("save execution");
-        let (block, block_changes) = miner.mine_local_with_guard(&pending_guard).expect("mine block");
-        drop(pending_guard);
+        let session = miner.pending_session();
+        session.append_execution(tx).expect("save execution");
+        let (block, block_changes) = session.seal_local();
         storage.save_block(block, block_changes).expect("save block");
 
         storage.read_mined_block_number()

@@ -245,10 +245,9 @@ fn run_external_block_executor(
                     return Ok(());
                 }
 
-                let pending_guard = miner.pending_block_guard();
-                executor.execute_external_block(&pending_guard, block.clone(), ExternalReceipts::from(receipts))?;
-                let mined_block = miner.mine_external_with_guard(block, &pending_guard)?;
-                drop(pending_guard);
+                let session = miner.pending_session();
+                executor.execute_external_block(&session, block.clone(), ExternalReceipts::from(receipts))?;
+                let mined_block = session.seal_external(block)?;
                 executed_batch.push(mined_block);
             }
 
