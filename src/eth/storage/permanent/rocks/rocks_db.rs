@@ -12,6 +12,18 @@ use super::rocks_config::DbConfig;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 
+const CURRENT_STATE_COLUMN_FAMILIES: [&str; 2] = ["accounts", "account_slots"];
+const PREPOPULATE_BLOCK_CACHE_ON_FLUSH: &str = "{prepopulate_block_cache=kFlushOnly;}";
+
+fn enable_populate_on_flush_current_state_caches(db: &DB) -> anyhow::Result<()> {
+    for name in CURRENT_STATE_COLUMN_FAMILIES {
+        let column_family = db.cf_handle(name).with_context(|| format!("column family '{name}' must exist"))?;
+        db.set_options_cf(&column_family, &[("block_based_table_factory", PREPOPULATE_BLOCK_CACHE_ON_FLUSH)])
+            .with_context(|| format!("enabling block-cache prepopulation for column family '{name}'"))?;
+    }
+    Ok(())
+}
+
 /// Open (or create) the Database with the configs applied to all column families.
 ///
 /// This function creates all the CFs in the database.
@@ -43,6 +55,8 @@ pub fn create_or_open_db(path: impl AsRef<Path>, cf_configs: &BTreeMap<&'static 
             open_db().context("trying to open RocksDB a second time, after repairing")?
         }
     };
+
+    enable_populate_on_flush_current_state_caches(&db)?;
 
     let waited_for = instant.elapsed();
     tracing::info!(?waited_for, db_path = ?path, "successfully opened RocksDB");
