@@ -2,9 +2,9 @@
 
 ## Progress model
 
-Stratus tracks two process-local block references:
+Stratus tracks two process-local progress tips:
 
-- `latest_sealed` is the execution tip. Temporary storage owns its complete in-memory state and final hash. It is the parent used to build the next header.
+- `latest_sealed` is the execution tip. Temporary storage owns its latest in-process state overlay and final hash. Its hash is the parent used to build the next header; after startup, the durable underlying state still comes from RocksDB.
 - `last_saved` is the durable tip. `StratusStorage` stores only its block number and hash because the complete block and state already live in RocksDB.
 
 On a populated database, both are initialized from the latest permanent block. On an empty database, temporary storage starts from the canonical sealed genesis while `last_saved` remains empty until genesis is persisted.
@@ -26,9 +26,28 @@ flowchart LR
     Q2 --> T
 ```
 
-
-
 These are not independent chains. Permanent progress must always be an ordered prefix of sealed progress.
+
+## Hash schemes
+
+Genesis retains the legacy V1 hash:
+
+```text
+V1 = keccak256(number as 8-byte big-endian)
+```
+
+Locally sealed non-genesis blocks use V2:
+
+```text
+V2 = keccak256(
+    number as 8-byte big-endian
+    || timestamp as 8-byte big-endian
+    || transactions_root
+    || parent_hash
+)
+```
+
+Reexecution validates that the imported hash is V2 or the temporary V1 compatibility hash. Replication receives a prebuilt block and relies on the universal saved-chain continuity checks.
 
 ## Guarded sealing
 
@@ -37,14 +56,16 @@ These are not independent chains. Permanent progress must always be an ordered p
 One session spans the complete pending-block lifecycle:
 
 ```text
-set pending header
+set pending header when importing
 → execute and save transactions
 → snapshot pending state
-→ calculate and validate the final block hash
+→ build the block and determine its final hash
 → finish pending state
 ```
 
-The snapshot is used to calculate and validate without destroying pending state. If validation fails, pending remains unchanged. Once validation succeeds, `finish_pending_block` uses `std::mem::replace` to move the original pending state into `latest_sealed`, attaches the final hash, and creates the next pending state.
+Local sealing and reexecution use the snapshot to build a block without destroying pending state. Local sealing calculates V2; reexecution validates the external V2 or V1 hash. If external validation fails, pending remains unchanged. Replication skips this snapshot-and-build step because it receives a complete block.
+
+Once the block is accepted, `finish_pending_block` uses `std::mem::replace` to move the original pending state into `latest_sealed`, attaches the final hash, and creates the next pending state.
 
 Pending and latest sealed state share one `RwLock<InMemoryChainState>`, so the move, hash update, and next-pending creation are one atomic write. Another pending session cannot start until `PendingSession` is dropped or consumed by sealing.
 
@@ -85,8 +106,6 @@ flowchart LR
     Queue["Offline sealed backlog"] -. "temporary workaround" .-> Cache
 ```
 
-
-
 Lookup order is:
 
 1. The latest sealed block, but only while it is ahead of `last_saved`.
@@ -113,7 +132,7 @@ Older unsaved offline blocks are temporarily dependent on this cache because per
 - `last_saved`: serializes durable continuity validation and advancement.
 - `transient_state_lock`: preserves consistency between permanent writes and latest account/slot caches.
 
-##  TODO: Temporary storage naming
+## TODO: Temporary storage naming
 
 `InmemoryTransactionTemporaryStorage` and `transaction_storage` are misleading names. This component does not represent one Ethereum transaction or a database transaction. It owns:
 
