@@ -45,7 +45,7 @@ fn print_build_directives() {
     // used in signatures codegen
     println!("cargo:rerun-if-changed=static/");
     // used by alloy sol! bindings
-    println!("cargo:rerun-if-changed=static/contracts-abi/Multicall3.json");
+    println!("cargo:rerun-if-changed=static/contracts-abi/");
     // retrigger database compile-time checks
     println!("cargo:rerun-if-changed=.sqlx/");
     // client scopes configuration
