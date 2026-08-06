@@ -426,7 +426,7 @@ async fn stratus_health(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> R
 
 #[cfg(feature = "dev")]
 fn stratus_reset(_: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    ctx.server.storage.reset_to_genesis()?;
+    ctx.server.miner.reset_to_genesis()?;
     Ok(to_json_value(true))
 }
 

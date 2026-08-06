@@ -23,6 +23,8 @@ use crate::eth::primitives::LogMessage;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::storage::BlockReference;
+use crate::eth::storage::PendingBlockGuard;
 use crate::eth::storage::StratusStorage;
 use crate::ext::DisplayExt;
 use crate::ext::not;
@@ -78,10 +80,93 @@ pub struct Miner {
 /// Locks used in operations that mutate state.
 #[derive(Default)]
 pub struct MinerLocks {
-    save_execution: Mutex<()>,
     pub mine_and_commit: Mutex<()>,
-    mine: Mutex<()>,
     commit: Mutex<()>,
+}
+
+pub struct PendingSession<'a> {
+    miner: &'a Miner,
+    guard: PendingBlockGuard<'a>,
+}
+
+impl PendingSession<'_> {
+    pub(crate) fn set_pending_from_external(&self, block: &ExternalBlock) {
+        self.miner.storage.set_pending_from_external(&self.guard, block);
+    }
+
+    pub(crate) fn append_execution(&self, tx_execution: TransactionExecution) -> Result<(), StratusError> {
+        let tx_hash = tx_execution.info.hash;
+
+        #[cfg(feature = "tracing")]
+        let _span = info_span!("miner::save_execution", %tx_hash).entered();
+
+        self.miner.storage.save_execution(&self.guard, tx_execution)?;
+
+        if self.miner.has_pending_tx_subscribers() {
+            self.miner.send_pending_tx_notification(&Some(tx_hash));
+        }
+
+        Ok(())
+    }
+
+    pub fn seal_external(self, external_block: ExternalBlock) -> anyhow::Result<(Block, ExecutionChanges)> {
+        #[cfg(feature = "tracing")]
+        let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
+
+        let parent_hash = self.miner.storage.read_pending_parent_hash(&self.guard);
+        let (pending_block, changes) = self.miner.storage.pending_block_to_seal(&self.guard);
+        let timestamp = pending_block.header.timestamp.clone();
+        let mut block = Block::from_pending(pending_block, parent_hash);
+
+        Span::with(|s| s.rec_str("block_number", &block.header.number));
+        let external_parent_hash = external_block.parent_hash();
+        block.apply_external(&external_block)?;
+        // Preserve the imported parent so save_block can validate continuity against last_saved.
+        // V2 already commits to this field; the assignment is relevant to the temporary V1 fallback.
+        block.header.parent_hash = external_parent_hash;
+
+        match external_block == block {
+            true => {
+                self.miner.storage.finish_pending_block(&self.guard, BlockReference::from(&block), timestamp);
+                self.miner.storage.publish_block_hash(block.number(), block.hash());
+                Ok((block, changes))
+            }
+            false => Err(anyhow!(
+                "mismatching block info:\n\tlocal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}\n\texternal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}",
+                block.number(),
+                block.header.timestamp,
+                block.hash(),
+                external_block.number(),
+                external_block.timestamp(),
+                external_block.hash()
+            )),
+        }
+    }
+
+    pub(crate) fn seal_local(self) -> (Block, ExecutionChanges) {
+        let parent_hash = self.miner.storage.read_pending_parent_hash(&self.guard);
+        let (pending_block, changes) = self.miner.storage.pending_block_to_seal(&self.guard);
+        let timestamp = pending_block.header.timestamp.clone();
+        let block = Block::from_pending(pending_block, parent_hash);
+        self.miner.storage.finish_pending_block(&self.guard, BlockReference::from(&block), timestamp);
+        self.miner.storage.publish_block_hash(block.number(), block.hash());
+        Span::with(|s| s.rec_str("block_number", &block.header.number));
+
+        (block, changes)
+    }
+
+    fn seal_replication(self, block: &Block) {
+        self.miner.storage.set_pending_header(&self.guard, block.number(), block.timestamp());
+        self.miner
+            .storage
+            .finish_pending_block(&self.guard, BlockReference::from(block), block.timestamp().into());
+        self.miner.storage.publish_block_hash(block.number(), block.hash());
+    }
+
+    #[cfg(feature = "dev")]
+    fn reset_to_genesis(&self) -> Result<(), StorageError> {
+        self.miner.storage.reset_to_genesis(&self.guard)
+    }
 }
 
 impl Miner {
@@ -98,6 +183,21 @@ impl Miner {
             shutdown_signal: Mutex::new(STRATUS_SHUTDOWN_SIGNAL.child_token()),
             interval_joinset: AsyncMutex::new(None),
         }
+    }
+
+    pub fn pending_session(&self) -> PendingSession<'_> {
+        PendingSession {
+            miner: self,
+            guard: self.storage.pending_block_guard(),
+        }
+    }
+
+    #[cfg(feature = "dev")]
+    pub fn reset_to_genesis(&self) -> Result<(), StorageError> {
+        let _mine_and_commit_guard = self.locks.mine_and_commit.lock();
+        let session = self.pending_session();
+        let _commit_guard = self.locks.commit.lock();
+        session.reset_to_genesis()
     }
 
     /// Spawns a new thread that keep mining blocks in the specified interval.
@@ -197,72 +297,27 @@ impl Miner {
 
     /// Persists a transaction execution.
     pub fn save_execution(&self, tx_execution: TransactionExecution) -> Result<(), StratusError> {
-        let tx_hash = tx_execution.info.hash;
-
-        // track
-        #[cfg(feature = "tracing")]
-        let _span = info_span!("miner::save_execution", %tx_hash).entered();
-
         // Check if automine is enabled
         let is_automine = self.mode().is_automine();
 
-        // if automine is enabled, only one transaction can enter the block at a time.
-        let _save_execution_lock = if is_automine { Some(self.locks.save_execution.lock()) } else { None };
-
-        // save execution to temporary storage
-        self.storage.save_execution(tx_execution)?;
-
-        // notify
-        if self.has_pending_tx_subscribers() {
-            self.send_pending_tx_notification(&Some(tx_hash));
-        }
-
-        // if automine is enabled, automatically mines a block
         if is_automine {
-            self.mine_local_and_commit()?;
+            let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
+            let session = self.pending_session();
+            session.append_execution(tx_execution)?;
+            let (block, changes) = session.seal_local();
+            self.commit(CommitItem::Block(block), changes)?;
+        } else {
+            self.pending_session().append_execution(tx_execution)?;
         }
 
         Ok(())
-    }
-
-    /// Mines external block and external transactions.
-    ///
-    /// Local transactions are not allowed to be part of the block.
-    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<(Block, ExecutionChanges)> {
-        // track
-        #[cfg(feature = "tracing")]
-        let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
-
-        // lock
-        let _mine_lock = self.locks.mine.lock();
-
-        // mine block
-        let (pending_block, changes) = self.storage.finish_pending_block()?;
-        let mut block: Block = pending_block.into();
-
-        Span::with(|s| s.rec_str("block_number", &block.header.number));
-        block.apply_external(&external_block);
-
-        match external_block == block {
-            true => Ok((block, changes)),
-            false => Err(anyhow!(
-                "mismatching block info:\n\tlocal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}\n\texternal:\n\t\tnumber: {:?}\n\t\ttimestamp: {:?}\n\t\thash: {:?}",
-                block.number(),
-                block.header.timestamp,
-                block.hash(),
-                external_block.number(),
-                external_block.timestamp(),
-                external_block.hash()
-            )),
-        }
     }
 
     /// Same as [`Self::mine_local`], but automatically commits the block instead of returning it.
     /// mainly used when is_automine is enabled.
     pub fn mine_local_and_commit(&self) -> anyhow::Result<(), StorageError> {
         let _mine_and_commit_lock = self.locks.mine_and_commit.lock();
-
-        let (block, changes) = self.mine_local()?;
+        let (block, changes) = self.pending_session().seal_local();
         self.commit(CommitItem::Block(block), changes)
     }
 
@@ -273,22 +328,18 @@ impl Miner {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
 
-        // lock
-        let _mine_lock = self.locks.mine.lock();
+        Ok(self.pending_session().seal_local())
+    }
 
-        // mine block
-        let (block, changes) = self.storage.finish_pending_block()?;
-        Span::with(|s| s.rec_str("block_number", &block.header.number));
-
-        Ok((block.into(), changes))
+    pub(crate) fn validate_next_saved_block(&self, block: &Block) -> Result<(), StorageError> {
+        self.storage.validate_next_saved_block(block)
     }
 
     pub fn commit(&self, item: CommitItem, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
         match item {
             CommitItem::Block(block) => self.commit_block(block, changes),
             CommitItem::ReplicationBlock(block) => {
-                self.storage.set_pending_header(block.number(), block.timestamp());
-                self.storage.finish_pending_block()?;
+                self.pending_session().seal_replication(&block);
                 self.commit_block(block, changes)
             }
         }
@@ -486,5 +537,104 @@ mod interval_miner_ticker {
                 break;
             };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fake::Fake;
+    use fake::Faker;
+
+    use super::*;
+    use crate::eth::primitives::BlockNumber;
+
+    fn initialize_genesis(storage: &Arc<StratusStorage>) -> Block {
+        if let Some(genesis) = storage.read_block(crate::eth::primitives::BlockFilter::Number(BlockNumber::ZERO)).unwrap() {
+            return genesis;
+        }
+
+        let genesis = Block::genesis();
+        storage
+            .save_genesis_block(genesis.clone(), Vec::new(), ExecutionChanges::default())
+            .expect("save genesis block");
+        genesis
+    }
+
+    #[test]
+    fn local_mining_uses_latest_sealed_hash_when_cache_is_empty() {
+        let storage = Arc::new(StratusStorage::new_test().expect("create test storage"));
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::Automine);
+        let genesis = initialize_genesis(&storage);
+        storage.clear_cache();
+
+        let (block, _) = miner.mine_local().expect("mine local block");
+
+        assert_eq!(block.number(), BlockNumber::ONE);
+        assert_eq!(block.header.parent_hash, genesis.hash());
+    }
+
+    #[test]
+    fn invalid_external_hash_does_not_advance_pending_block() {
+        let storage = Arc::new(StratusStorage::new_test().expect("create test storage"));
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::External);
+        initialize_genesis(&storage);
+
+        let mut external_block: ExternalBlock = Faker.fake();
+        external_block.0.header.inner.number = 1;
+        external_block.0.header.hash = alloy_primitives::B256::ZERO;
+
+        let session = miner.pending_session();
+        session.set_pending_from_external(&external_block);
+        session.seal_external(external_block).expect_err("invalid external hash should be rejected");
+
+        assert_eq!(storage.read_pending_block_header().0.number, BlockNumber::ONE);
+    }
+
+    #[test]
+    fn legacy_external_parent_is_validated_when_saved() {
+        let storage = Arc::new(StratusStorage::new_test().expect("create test storage"));
+        let miner = Miner::new(Arc::clone(&storage), MinerMode::External);
+        let genesis = initialize_genesis(&storage);
+
+        let mut external_block: ExternalBlock = Faker.fake();
+        external_block.0.header.inner.number = 1;
+        external_block.0.header.inner.parent_hash = alloy_primitives::B256::ZERO;
+        external_block.0.header.hash = BlockNumber::ONE.hash().into();
+        external_block.0.transactions = alloy_rpc_types_eth::BlockTransactions::Full(Vec::new());
+
+        let session = miner.pending_session();
+        session.set_pending_from_external(&external_block);
+        let (block, changes) = session.seal_external(external_block).expect("legacy hash should be accepted while importing");
+
+        assert!(matches!(
+            miner.validate_next_saved_block(&block),
+            Err(StorageError::ParentHashConflict { number, local, external })
+                if number == BlockNumber::ONE && local == genesis.hash() && external == Hash::ZERO
+        ));
+        let error = storage.save_block(block, changes).expect_err("disconnected external parent should be rejected");
+        assert!(matches!(
+            error,
+            StorageError::ParentHashConflict { number, local, external }
+                if number == BlockNumber::ONE && local == genesis.hash() && external == Hash::ZERO
+        ));
+    }
+
+    #[test]
+    fn pending_session_serializes_pending_writers() {
+        let storage = Arc::new(StratusStorage::new_test().expect("create test storage"));
+        let miner = Arc::new(Miner::new(storage, MinerMode::External));
+        let first_session = miner.pending_session();
+        let (acquired_tx, acquired_rx) = std::sync::mpsc::channel();
+
+        let other_miner = Arc::clone(&miner);
+        let handle = std::thread::spawn(move || {
+            let _session = other_miner.pending_session();
+            acquired_tx.send(()).expect("notify guard acquisition");
+        });
+
+        assert!(acquired_rx.recv_timeout(Duration::from_millis(20)).is_err());
+        drop(first_session);
+        acquired_rx.recv_timeout(Duration::from_secs(1)).expect("second writer should acquire guard");
+        handle.join().expect("join guard thread");
     }
 }

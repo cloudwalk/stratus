@@ -15,6 +15,7 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::ext::to_json_value;
 
@@ -145,6 +146,14 @@ pub enum StorageError {
     #[error("unexpected storage error: {msg}")]
     #[error_code = 9]
     Unexpected { msg: String },
+
+    #[error("parent hash conflict at block {number} between local ({local}) and external ({external}) chains.")]
+    #[error_code = 10]
+    ParentHashConflict { number: BlockNumber, local: Hash, external: Hash },
+
+    #[error("hash of block {number} is unknown.")]
+    #[error_code = 11]
+    BlockHashMissing { number: BlockNumber },
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]

@@ -68,13 +68,13 @@ impl BlockHeader {
     pub fn new(number: BlockNumber, timestamp: UnixTime) -> Self {
         Self {
             number,
-            hash: number.hash(),
+            hash: Hash::ZERO,
             transactions_root: HASH_EMPTY_TRIE,
             gas_used: Gas::ZERO,
             gas_limit: Gas::ZERO,
             bloom: LogsBloom::default(),
             timestamp,
-            parent_hash: number.prev().map(|n| n.hash()).unwrap_or(Hash::ZERO),
+            parent_hash: Hash::ZERO,
             author: Address::default(),
             extra_data: Bytes::default(),
             miner: Address::default(),
@@ -223,18 +223,15 @@ mod tests {
     use crate::eth::primitives::UnixTime;
 
     #[test]
-    fn block_header_hash_calculation() {
+    fn block_header_hash_starts_zero() {
         let header = BlockHeader::new(BlockNumber::ZERO, UnixTime::from(1234567890));
-        assert_eq!(header.hash.to_string(), "0x011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce");
+        assert_eq!(header.hash, Hash::ZERO);
     }
 
     #[test]
-    fn block_header_parent_hash() {
+    fn block_header_parent_hash_starts_zero() {
         let header = BlockHeader::new(BlockNumber::ONE, UnixTime::from(1234567891));
-        assert_eq!(
-            header.parent_hash.to_string(),
-            "0x011b4d03dd8c01f1049143cf9c4c817e4b167f1d1b83e5c6f0f10d89ba1e7bce"
-        );
+        assert_eq!(header.parent_hash, Hash::ZERO);
     }
 
     #[test]

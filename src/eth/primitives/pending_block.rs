@@ -5,6 +5,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::UnixTime;
 
 /// Block that is being mined and receiving updates.
 #[derive(DebugAsJson, Clone, Default, serde::Serialize)]
@@ -19,6 +20,17 @@ impl PendingBlock {
     pub fn new_at_now(number: BlockNumber) -> Self {
         Self {
             header: PendingBlockHeader::new_at_now(number),
+            transactions: IndexMap::new(),
+        }
+    }
+
+    /// Creates a new pending block with an explicit timestamp.
+    pub fn new_at(number: BlockNumber, timestamp: UnixTime) -> Self {
+        Self {
+            header: PendingBlockHeader {
+                number,
+                timestamp: timestamp.into(),
+            },
             transactions: IndexMap::new(),
         }
     }

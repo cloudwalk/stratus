@@ -21,6 +21,7 @@ import { Numbers } from "web3-types";
 import { WebSocket } from "ws";
 
 import {
+    TestBlockHash,
     TestContractBalances,
     TestContractBlockTimestamp,
     TestContractCounter,
@@ -233,6 +234,12 @@ export async function deployTestEvmInput(): Promise<TestEvmInput> {
 // Deploys the "TestBlockTimestamp" contract.
 export async function deployTestContractBlockTimestamp(): Promise<TestContractBlockTimestamp> {
     const testContractFactory = await ethers.getContractFactory("TestContractBlockTimestamp");
+    return await testContractFactory.connect(CHARLIE.signer()).deploy();
+}
+
+// Deploys the "TestBlockHash" contract.
+export async function deployTestBlockHash(): Promise<TestBlockHash> {
+    const testContractFactory = await ethers.getContractFactory("TestBlockHash");
     return await testContractFactory.connect(CHARLIE.signer()).deploy();
 }
 

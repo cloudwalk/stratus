@@ -1,4 +1,5 @@
 pub use inmemory::InMemoryTemporaryStorage;
+pub use inmemory::PendingBlockGuard;
 
 mod inmemory;
 
@@ -22,16 +23,36 @@ impl TemporaryStorageConfig {
     /// Initializes temporary storage implementation.
     pub fn init(&self, perm_storage: &RocksPermanentStorage) -> anyhow::Result<InMemoryTemporaryStorage> {
         tracing::info!(config = ?self, "creating temporary storage");
-        let pending_block_number = compute_pending_block_number(perm_storage)?;
-        Ok(InMemoryTemporaryStorage::new(pending_block_number))
+        Ok(InMemoryTemporaryStorage::new(perm_storage.read_chain_tip()?))
     }
 }
 
 pub fn compute_pending_block_number(perm_storage: &RocksPermanentStorage) -> anyhow::Result<BlockNumber> {
-    let mined_block_number = perm_storage.read_mined_block_number();
-    Ok(if !perm_storage.has_genesis()? && mined_block_number == BlockNumber::ZERO {
-        BlockNumber::ZERO
-    } else {
-        mined_block_number + 1
-    })
+    Ok(perm_storage
+        .read_chain_tip()?
+        .map_or(BlockNumber::ZERO, |saved_tip| saved_tip.number.next_block_number()))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::eth::storage::permanent::RocksCfCacheConfig;
+
+    #[test]
+    fn empty_permanent_storage_initializes_pending_genesis() {
+        let rocks_dir = tempfile::tempdir().expect("create rocks directory");
+        let rocks_prefix = rocks_dir.path().join("empty-chain").to_string_lossy().into_owned();
+        let permanent = RocksPermanentStorage::new(Some(rocks_prefix), Duration::from_secs(240), RocksCfCacheConfig::default(), true, None, 1024)
+            .expect("create permanent storage");
+
+        let temporary = TemporaryStorageConfig {}.init(&permanent).expect("create temporary storage");
+
+        assert_eq!(temporary.read_pending_block_header().0.number, BlockNumber::ZERO);
+        assert_eq!(
+            compute_pending_block_number(&permanent).expect("compute pending block number"),
+            BlockNumber::ZERO
+        );
+    }
 }
