@@ -1,4 +1,5 @@
 use alloy_sol_types::SolCall;
+use alloy_sol_types::SolInterface;
 use alloy_sol_types::sol;
 
 use crate::eth::codegen;
@@ -9,11 +10,10 @@ use crate::eth::primitives::Bytes;
 use crate::eth::primitives::MulticallError;
 
 pub const MAX_MULTICALL_LOGGED_SUBCALLS: usize = 32;
-pub const MULTICALL_CONTRACT_NAME: ContractName = "Multicall";
+pub const MULTICALL_CONTRACT_NAME: ContractName = "Multicall3";
 
-const DISPATCHER_CONTRACT_NAME: &str = "Dispatcher";
-const DISPATCHER_ADDRESS: Address = Address::new([
-    0x59, 0x7f, 0x68, 0x99, 0xe7, 0xbb, 0x00, 0x77, 0xf1, 0x56, 0xed, 0x64, 0xfd, 0x14, 0x35, 0x2c, 0x25, 0x76, 0x65, 0x1b,
+const MULTICALL_ADDRESS: Address = Address::new([
+    0xca, 0x11, 0xbd, 0xe0, 0x59, 0x77, 0xb3, 0x63, 0x11, 0x67, 0x02, 0x88, 0x62, 0xbe, 0x2a, 0x17, 0x39, 0x76, 0xca, 0x11,
 ]);
 
 sol!(Multicall, "static/contracts-abi/Multicall3.json");
@@ -42,7 +42,7 @@ impl MulticallInfo {
         Self {
             kind,
             parent_to,
-            parent_contract: DISPATCHER_CONTRACT_NAME,
+            parent_contract: MULTICALL_CONTRACT_NAME,
             parent_function: codegen::function_sig(parent_input),
             total_subcalls: subcalls.len(),
             subcalls,
@@ -54,7 +54,7 @@ impl MulticallInfo {
         Self {
             kind,
             parent_to,
-            parent_contract: DISPATCHER_CONTRACT_NAME,
+            parent_contract: MULTICALL_CONTRACT_NAME,
             parent_function: codegen::function_sig(parent_input),
             total_subcalls: 0,
             subcalls: Vec::new(),
@@ -108,7 +108,7 @@ impl MulticallSubcall {
 }
 
 pub fn is_multicall_contract(to: Address) -> bool {
-    if to != DISPATCHER_ADDRESS {
+    if to != MULTICALL_ADDRESS {
         return false;
     }
     true
@@ -118,16 +118,29 @@ pub fn decode_multicall(to: Address, input: &Bytes) -> Option<MulticallInfo> {
     if !is_multicall_contract(to) {
         return None;
     }
-    let selector = input.as_ref().get(..4)?.try_into().ok()?;
-    let kind = kind_from_selector(selector)?;
 
-    match decode_multicall_payload(kind, input.as_ref()) {
-        Ok(subcalls) => Some(MulticallInfo::new(kind, to, input, subcalls)),
-        Err(decode_error) => Some(MulticallInfo::from_decode_error(kind, to, input, decode_error)),
-    }
+    let decoded = match Multicall::MulticallCalls::abi_decode(input.as_ref()) {
+        Ok(decoded) => decoded,
+        Err(alloy_sol_types::Error::UnknownSelector { .. }) => return None,
+        Err(decode_error) => {
+            let selector = input.as_ref().get(..4)?.try_into().ok()?;
+            let kind = kind_from_aggregate_selector(selector)?;
+            return Some(MulticallInfo::from_decode_error(kind, to, input, decode_error.into()));
+        }
+    };
+
+    let (kind, subcalls) = match decoded {
+        Multicall::MulticallCalls::aggregate(call) => (MulticallKind::Aggregate, subcalls_from_aggregate(call)),
+        Multicall::MulticallCalls::tryAggregate(call) => (MulticallKind::TryAggregate, subcalls_from_try_aggregate(call)),
+        Multicall::MulticallCalls::aggregate3(call) => (MulticallKind::Aggregate3, subcalls_from_aggregate3(call)),
+        Multicall::MulticallCalls::aggregate3Value(call) => (MulticallKind::Aggregate3Value, subcalls_from_aggregate3_value(call)),
+        _ => return None,
+    };
+
+    Some(MulticallInfo::new(kind, to, input, subcalls))
 }
 
-fn kind_from_selector(selector: [u8; 4]) -> Option<MulticallKind> {
+fn kind_from_aggregate_selector(selector: [u8; 4]) -> Option<MulticallKind> {
     match selector {
         Multicall::aggregateCall::SELECTOR => Some(MulticallKind::Aggregate),
         Multicall::tryAggregateCall::SELECTOR => Some(MulticallKind::TryAggregate),
@@ -137,49 +150,32 @@ fn kind_from_selector(selector: [u8; 4]) -> Option<MulticallKind> {
     }
 }
 
-fn decode_multicall_payload(kind: MulticallKind, input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, MulticallError> {
-    match kind {
-        MulticallKind::Aggregate => decode_aggregate(input),
-        MulticallKind::TryAggregate => decode_try_aggregate(input),
-        MulticallKind::Aggregate3 => decode_aggregate3(input),
-        MulticallKind::Aggregate3Value => decode_aggregate3_value(input),
-    }
-}
-
-fn decode_aggregate(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, MulticallError> {
-    let call = Multicall::aggregateCall::abi_decode(input)?;
-    Ok(call
-        .calls
+fn subcalls_from_aggregate(call: Multicall::aggregateCall) -> Vec<MulticallSubcall> {
+    call.calls
         .into_iter()
         .enumerate()
         .map(|(index, call)| MulticallSubcall::new(index, decode_address(call.target), call.callData.into(), None, None))
-        .collect())
+        .collect()
 }
 
-fn decode_try_aggregate(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, MulticallError> {
-    let call = Multicall::tryAggregateCall::abi_decode(input)?;
-    Ok(call
-        .calls
+fn subcalls_from_try_aggregate(call: Multicall::tryAggregateCall) -> Vec<MulticallSubcall> {
+    call.calls
         .into_iter()
         .enumerate()
         .map(|(index, subcall)| MulticallSubcall::new(index, decode_address(subcall.target), subcall.callData.into(), Some(!call.requireSuccess), None))
-        .collect())
+        .collect()
 }
 
-fn decode_aggregate3(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, MulticallError> {
-    let call = Multicall::aggregate3Call::abi_decode(input)?;
-    Ok(call
-        .calls
+fn subcalls_from_aggregate3(call: Multicall::aggregate3Call) -> Vec<MulticallSubcall> {
+    call.calls
         .into_iter()
         .enumerate()
         .map(|(index, subcall)| MulticallSubcall::new(index, decode_address(subcall.target), subcall.callData.into(), Some(subcall.allowFailure), None))
-        .collect())
+        .collect()
 }
 
-fn decode_aggregate3_value(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, MulticallError> {
-    let call = Multicall::aggregate3ValueCall::abi_decode(input)?;
-    Ok(call
-        .calls
+fn subcalls_from_aggregate3_value(call: Multicall::aggregate3ValueCall) -> Vec<MulticallSubcall> {
+    call.calls
         .into_iter()
         .enumerate()
         .map(|(index, subcall)| {
@@ -191,7 +187,7 @@ fn decode_aggregate3_value(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>
                 Some(subcall.value.to_string()),
             )
         })
-        .collect())
+        .collect()
 }
 
 fn decode_address(address: alloy_primitives::Address) -> Address {
@@ -211,8 +207,8 @@ mod tests {
         function transfer(address,uint256) external returns (bool);
     }
 
-    fn dispatcher() -> Address {
-        Address::from_str("0x597F6899E7BB0077f156ED64fd14352c2576651b").unwrap()
+    fn multicall() -> Address {
+        Address::from_str("0xca11bde05977b3631167028862be2a173976ca11").unwrap()
     }
 
     fn brlc() -> Address {
@@ -247,9 +243,9 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(dispatcher(), &input).unwrap();
+        let info = decode_multicall(multicall(), &input).unwrap();
 
-        assert_eq!(info.parent_contract, "Dispatcher");
+        assert_eq!(info.parent_contract, "Multicall3");
         assert_eq!(info.parent_function, "aggregate((address,bytes)[])");
         assert_eq!(info.total_subcalls, 1);
         assert_eq!(info.decode_error, None);
@@ -278,7 +274,7 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(dispatcher(), &input).unwrap();
+        let info = decode_multicall(multicall(), &input).unwrap();
 
         assert_eq!(info.parent_function, "tryAggregate(bool,(address,bytes)[])");
         assert_eq!(info.subcalls[0].allow_failure, Some(true));
@@ -297,7 +293,7 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(dispatcher(), &input).unwrap();
+        let info = decode_multicall(multicall(), &input).unwrap();
 
         assert_eq!(info.parent_function, "aggregate3((address,bool,bytes)[])");
         assert_eq!(info.subcalls[0].allow_failure, Some(true));
@@ -317,7 +313,7 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(dispatcher(), &input).unwrap();
+        let info = decode_multicall(multicall(), &input).unwrap();
 
         assert_eq!(info.parent_function, "aggregate3Value((address,bool,uint256,bytes)[])");
         assert_eq!(info.subcalls[0].allow_failure, Some(false));
@@ -325,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn decode_returns_none_for_non_dispatcher() {
+    fn decode_returns_none_for_non_multicall() {
         let input = Bytes(Multicall::aggregateCall { calls: Vec::new() }.abi_encode());
 
         assert!(!is_multicall_contract(brlc()));
@@ -336,14 +332,14 @@ mod tests {
     fn decode_returns_none_for_unknown_selector() {
         let input = Bytes(vec![0xff, 0xff, 0xff, 0xff]);
 
-        assert!(decode_multicall(dispatcher(), &input).is_none());
+        assert!(decode_multicall(multicall(), &input).is_none());
     }
 
     #[test]
     fn decode_returns_error_for_malformed_known_selector() {
         let input = Bytes(Vec::from(Multicall::aggregateCall::SELECTOR));
 
-        let info = decode_multicall(dispatcher(), &input).unwrap();
+        let info = decode_multicall(multicall(), &input).unwrap();
 
         assert!(info.decode_error.is_some());
         assert!(info.decode_error.as_deref().unwrap().contains("invalid multicall ABI"));
@@ -363,7 +359,7 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(dispatcher(), &input).unwrap();
+        let info = decode_multicall(multicall(), &input).unwrap();
 
         assert_eq!(info.subcalls[0].contract, "unknown");
         assert_eq!(info.subcalls[0].function, "missing");
@@ -379,7 +375,7 @@ mod tests {
             .collect();
         let input = Bytes(Multicall::aggregateCall { calls }.abi_encode());
 
-        let info = decode_multicall(dispatcher(), &input).unwrap();
+        let info = decode_multicall(multicall(), &input).unwrap();
 
         assert_eq!(info.total_subcalls, 40);
         assert_eq!(info.logged_subcalls_count(), 32);
