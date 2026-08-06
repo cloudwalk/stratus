@@ -51,7 +51,9 @@ impl Block {
     /// The resulting block is hashed and the hash is stamped on all of its transactions.
     pub fn from_pending(pending: PendingBlock, parent_hash: Hash) -> Block {
         let mut block = Block::new(pending.header.number, *pending.header.timestamp);
-        block.header.parent_hash = parent_hash;
+        if !block.number().is_zero() {
+            block.header.parent_hash = parent_hash;
+        }
 
         let txs: Vec<TransactionExecution> = pending.transactions.into_values().collect();
         block.transactions.reserve(txs.len());
@@ -289,8 +291,9 @@ mod tests {
     #[test]
     fn sealed_genesis_uses_legacy_hash() {
         let pending = PendingBlock::new_at_now(BlockNumber::ZERO);
-        let genesis = Block::from_pending(pending, Hash::ZERO);
+        let genesis = Block::from_pending(pending, Hash::new([1; 32]));
 
         assert_eq!(genesis.hash(), BlockNumber::ZERO.hash());
+        assert_eq!(genesis.header.parent_hash, Hash::ZERO);
     }
 }

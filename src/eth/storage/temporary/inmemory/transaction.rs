@@ -53,12 +53,17 @@ pub struct InmemoryTransactionTemporaryStorage {
 }
 
 impl InmemoryTransactionTemporaryStorage {
-    pub fn new(latest_sealed: BlockReference) -> Self {
+    pub fn new(saved_tip: Option<BlockReference>) -> Self {
+        let pending_block_number = saved_tip.map_or(BlockNumber::ZERO, |tip| tip.number.next_block_number());
+        // Keep the canonical genesis reference available for flows that persist genesis directly,
+        // but do not advance the pending block until genesis actually exists in permanent storage.
+        let latest_sealed = saved_tip.unwrap_or_else(BlockReference::genesis);
+
         Self {
             pending_session: Mutex::new(()),
             state: RwLock::new(InMemoryChainState {
                 pending_block: InMemoryTemporaryStorageState {
-                    block: PendingBlock::new_at_now(latest_sealed.number.next_block_number()),
+                    block: PendingBlock::new_at_now(pending_block_number),
                     block_changes: ExecutionChanges::default(),
                 },
                 latest_sealed: InMemorySealedBlock {

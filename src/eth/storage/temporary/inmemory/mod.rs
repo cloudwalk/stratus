@@ -36,9 +36,9 @@ pub struct InMemoryTemporaryStorage {
 }
 
 impl InMemoryTemporaryStorage {
-    pub(crate) fn new(latest_sealed: BlockReference) -> Self {
+    pub(crate) fn new(saved_tip: Option<BlockReference>) -> Self {
         Self {
-            transaction_storage: InmemoryTransactionTemporaryStorage::new(latest_sealed),
+            transaction_storage: InmemoryTransactionTemporaryStorage::new(saved_tip),
             call_storage: InMemoryCallTemporaryStorage::new(),
         }
     }
@@ -158,5 +158,26 @@ impl InMemoryTemporaryStorageState {
     pub fn reset(&mut self) {
         self.block = PendingBlock::new_at_now(1.into());
         self.block_changes = ExecutionChanges::default();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_chain_starts_with_genesis_pending() {
+        let storage = InMemoryTemporaryStorage::new(None);
+
+        assert_eq!(storage.read_pending_block_header().0.number, BlockNumber::ZERO);
+    }
+
+    #[test]
+    fn saved_tip_starts_with_its_successor_pending() {
+        let genesis = BlockReference::genesis();
+        let storage = InMemoryTemporaryStorage::new(Some(genesis));
+
+        assert_eq!(storage.read_latest_sealed(), genesis);
+        assert_eq!(storage.read_pending_block_header().0.number, BlockNumber::ONE);
     }
 }

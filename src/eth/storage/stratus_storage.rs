@@ -317,7 +317,7 @@ impl StratusStorage {
 
         use crate::eth::storage::cache::CacheConfig;
 
-        let temp = InMemoryTemporaryStorage::new(BlockReference::genesis());
+        let temp = InMemoryTemporaryStorage::new(Some(BlockReference::genesis()));
 
         // Create a temporary directory for RocksDB
         let rocks_dir = tempdir().expect("Failed to create temporary directory for tests");
@@ -1134,7 +1134,7 @@ mod tests {
         perm.save_block(legacy.clone(), ExecutionChanges::default()).expect("save legacy block");
         perm.set_mined_block_number(BlockNumber::ONE);
 
-        let temp = InMemoryTemporaryStorage::new(BlockReference::from(&legacy));
+        let temp = InMemoryTemporaryStorage::new(Some(BlockReference::from(&legacy)));
         let cache = CacheConfig {
             slot_cache_capacity: 1,
             account_cache_capacity: 1,

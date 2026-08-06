@@ -7,7 +7,7 @@ Stratus tracks two process-local progress tips:
 - `latest_sealed` is the execution tip. Temporary storage owns its latest in-process state overlay and final hash. Its hash is the parent used to build the next header; after startup, the durable underlying state still comes from RocksDB.
 - `last_saved` is the durable tip. `StratusStorage` stores only its block number and hash because the complete block and state already live in RocksDB.
 
-On a populated database, both are initialized from the latest permanent block. On an empty database, temporary storage starts from the canonical sealed genesis while `last_saved` remains empty until genesis is persisted.
+On a populated database, both are initialized from the latest permanent block. On an empty database, temporary storage keeps the canonical genesis reference, but its pending block remains block 0 and `last_saved` remains empty until genesis is imported or persisted.
 
 Normal leader and follower flows seal and save sequentially, so the tips usually match. The offline importer deliberately pipelines execution and persistence, allowing `latest_sealed` to run ahead.
 
