@@ -232,8 +232,8 @@ impl RpcServiceT for RpcMiddleware {
             rpc_tx_from = %tx.as_ref().and_then(|tx|tx.from).or_empty(),
             rpc_tx_to = %tx.as_ref().and_then(|tx|tx.to).or_empty(),
             rpc_tx_multicall_total = %tx.as_ref().map(|tx| tx.multicall_total()).unwrap_or_default(),
-            rpc_tx_multicall_logged = %tx.as_ref().map(|tx| tx.multicall_logged()).unwrap_or_default(),
-            rpc_tx_multicall_calls = %tx.as_ref().map(|tx| tx.multicall_calls_json()).unwrap_or_default(),
+            rpc_tx_multicall_logged = %tx.as_ref().map(|tx| tx.multicall_logged_subcalls_count()).unwrap_or_default(),
+            rpc_tx_multicall_subcalls = %tx.as_ref().map(|tx| tx.multicall_subcalls_json()).unwrap_or_default(),
             rpc_tx_multicall_decode_error = %tx.as_ref().map(|tx| tx.multicall_decode_error()).unwrap_or_default(),
             is_admin = %is_admin,
             "rpc request"
@@ -247,24 +247,18 @@ impl RpcServiceT for RpcMiddleware {
             metrics::inc_rpc_requests_started(
                 &client,
                 &method,
-                tx_ref.map(|tx| tx.contract),
-                tx_ref.map(|tx| tx.function),
+                tx_ref.map(|tx| tx.metric_contract()),
+                tx_ref.map(|tx| tx.metric_function()),
                 request_type.to_string(),
             );
             if let Some(multicall) = tx_ref.and_then(|tx| tx.multicall.as_ref()) {
-                if let Some(error) = multicall.decode_error_metric_label() {
-                    metrics::inc_rpc_multicall_decode_errors(&client, &method, multicall.parent_contract, multicall.parent_function, error);
-                }
-
                 let req_type = request_type.to_string();
-                for call in &multicall.calls {
-                    metrics::inc_rpc_multicall_subcalls_started(
+                for subcall in multicall.logged_subcalls() {
+                    metrics::inc_rpc_requests_started(
                         &client,
                         &method,
-                        multicall.parent_contract,
-                        multicall.parent_function,
-                        call.metric_contract(),
-                        call.function,
+                        subcall.metric_contract(),
+                        subcall.metric_function(multicall.parent_function),
                         &req_type,
                     );
                 }
@@ -373,8 +367,8 @@ impl Future for RpcResponse<'_> {
                     rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
                     rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
                     rpc_tx_multicall_total = %resp.tx.as_ref().map(|tx| tx.multicall_total()).unwrap_or_default(),
-                    rpc_tx_multicall_logged = %resp.tx.as_ref().map(|tx| tx.multicall_logged()).unwrap_or_default(),
-                    rpc_tx_multicall_calls = %resp.tx.as_ref().map(|tx| tx.multicall_calls_json()).unwrap_or_default(),
+                    rpc_tx_multicall_logged = %resp.tx.as_ref().map(|tx| tx.multicall_logged_subcalls_count()).unwrap_or_default(),
+                    rpc_tx_multicall_subcalls = %resp.tx.as_ref().map(|tx| tx.multicall_subcalls_json()).unwrap_or_default(),
                     rpc_tx_multicall_decode_error = %resp.tx.as_ref().map(|tx| tx.multicall_decode_error()).unwrap_or_default(),
                     %rpc_result,
                     rpc_success = %response_success,
@@ -405,22 +399,21 @@ impl Future for RpcResponse<'_> {
                     elapsed,
                     &*resp.client,
                     resp.method.clone(),
-                    tx_ref.map(|tx| tx.contract),
-                    tx_ref.map(|tx| tx.function),
+                    tx_ref.map(|tx| tx.metric_contract()),
+                    tx_ref.map(|tx| tx.metric_function()),
                     rpc_result,
                     error_code,
                     response.is_success(),
                 );
                 if let Some(multicall) = tx_ref.and_then(|tx| tx.multicall.as_ref()) {
                     let rpc_result = rpc_result.to_owned();
-                    for call in &multicall.calls {
-                        metrics::inc_rpc_multicall_subcalls_finished(
+                    for subcall in multicall.logged_subcalls() {
+                        metrics::inc_rpc_requests_finished(
+                            elapsed,
                             &*resp.client,
                             resp.method.clone(),
-                            multicall.parent_contract,
-                            multicall.parent_function,
-                            call.metric_contract(),
-                            call.function,
+                            subcall.metric_contract(),
+                            subcall.metric_function(multicall.parent_function),
                             &rpc_result,
                             error_code,
                             response.is_success(),
@@ -466,7 +459,11 @@ impl TransactionTracingIdentifiers {
             from: decoded_tx.execution_info.signer.address(),
             to: decoded_tx.execution_info.to,
             nonce: Some(decoded_tx.execution_info.nonce),
-            multicall: multicall::decode_multicall(decoded_tx.execution_info.to, &decoded_tx.execution_info.input),
+            multicall: decoded_tx
+                .execution_info
+                .to
+                .filter(|to| multicall::is_multicall_contract(*to))
+                .and_then(|to| multicall::decode_multicall(to, &decoded_tx.execution_info.input)),
         })
     }
 
@@ -481,7 +478,10 @@ impl TransactionTracingIdentifiers {
             from: call.from,
             to: call.to,
             nonce: None,
-            multicall: multicall::decode_multicall(call.to, &call.data),
+            multicall: call
+                .to
+                .filter(|to| multicall::is_multicall_contract(*to))
+                .and_then(|to| multicall::decode_multicall(to, &call.data)),
         })
     }
 
@@ -504,7 +504,7 @@ impl TransactionTracingIdentifiers {
         span.rec_str("rpc_tx_contract", &self.contract);
         span.rec_str("rpc_tx_function", &self.function);
         span.rec_str("rpc_tx_multicall_total", &self.multicall_total());
-        span.rec_str("rpc_tx_multicall_logged", &self.multicall_logged());
+        span.rec_str("rpc_tx_multicall_logged", &self.multicall_logged_subcalls_count());
         span.rec_str("rpc_tx_multicall_decode_error", &self.multicall_decode_error());
 
         if let Some(tx_hash) = self.hash {
@@ -525,15 +525,28 @@ impl TransactionTracingIdentifiers {
         self.multicall.as_ref().map(|m| m.total_subcalls).unwrap_or_default()
     }
 
-    fn multicall_logged(&self) -> usize {
-        self.multicall.as_ref().map(|m| m.logged_subcalls()).unwrap_or_default()
+    fn multicall_logged_subcalls_count(&self) -> usize {
+        self.multicall.as_ref().map(|m| m.logged_subcalls_count()).unwrap_or_default()
     }
 
-    fn multicall_calls_json(&self) -> String {
-        self.multicall.as_ref().map(|m| to_json_string(&m.logged_calls())).unwrap_or_default()
+    fn multicall_subcalls_json(&self) -> String {
+        self.multicall.as_ref().map(|m| to_json_string(&m.logged_subcalls())).unwrap_or_default()
     }
 
     fn multicall_decode_error(&self) -> &str {
         self.multicall.as_ref().and_then(|m| m.decode_error.as_deref()).unwrap_or_default()
+    }
+
+    #[cfg(feature = "metrics")]
+    fn metric_contract(&self) -> ContractName {
+        match self.multicall {
+            Some(_) => multicall::MULTICALL_CONTRACT_NAME,
+            None => self.contract,
+        }
+    }
+
+    #[cfg(feature = "metrics")]
+    fn metric_function(&self) -> SoliditySignature {
+        self.function
     }
 }

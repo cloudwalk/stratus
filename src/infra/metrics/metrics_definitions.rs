@@ -16,15 +16,6 @@ metrics! {
     "Response size in bytes for JSON-RPC responses."
     histogram_counter rpc_response_size{client, method},
 
-    "Number of nested subcalls inside multicall RPC requests that started."
-    counter rpc_multicall_subcalls_started{client, method, parent_contract, parent_function, contract, function, req_type},
-
-    "Number of nested subcalls inside multicall RPC requests that finished."
-    counter rpc_multicall_subcalls_finished{client, method, parent_contract, parent_function, contract, function, result, result_code, success},
-
-    "Number of multicall payloads that matched a known selector but failed ABI decoding."
-    counter rpc_multicall_decode_errors{client, method, parent_contract, parent_function, error},
-
     "Number of JSON-RPC subscriptions active right now."
     gauge rpc_subscriptions_active{subscription, client}
 }
@@ -166,10 +157,7 @@ metrics! {
     histogram_counter executor_local_call_slot_reads{contract, function},
 
     "Gas spent executing a local call."
-    histogram_counter executor_local_call_gas{contract, function},
-
-    "Number of nested subcalls inside multicall EVM executions."
-    counter executor_multicall_subcalls{kind, parent_contract, parent_function, contract, function, success}
+    histogram_counter executor_local_call_gas{contract, function}
 }
 
 metrics! {

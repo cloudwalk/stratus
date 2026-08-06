@@ -6402,6 +6402,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-eth",
  "alloy-rpc-types-trace",
+ "alloy-sol-types",
  "alloy-trie",
  "anyhow",
  "async-trait",
