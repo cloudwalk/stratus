@@ -26,6 +26,8 @@ use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::evm::EvmKind;
 use crate::eth::miner::Miner;
+#[cfg(feature = "metrics")]
+use crate::eth::multicall;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
@@ -357,6 +359,10 @@ impl Executor {
         tracing::info!(%block_number, tx_hash = %tx.hash(), "reexecuting external transaction");
 
         let tx_input: TransactionInput = tx.try_into()?;
+        #[cfg(feature = "metrics")]
+        let multicall_to = tx_input.execution_info.to;
+        #[cfg(feature = "metrics")]
+        let multicall_input = tx_input.execution_info.input.clone();
         let (pending_block, _) = self.storage.read_pending_block_header();
         let mut evm_input = EvmInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
 
@@ -437,6 +443,7 @@ impl Executor {
             metrics::inc_executor_external_transaction_account_reads(tx_metrics.account_reads, tx_contract, tx_function);
             metrics::inc_executor_external_transaction_slot_reads(tx_metrics.slot_reads, tx_contract, tx_function);
             metrics::inc_executor_external_transaction_gas(tx_gas.as_u64() as usize, tx_contract, tx_function);
+            multicall::record_executor_multicall_subcalls("external_transaction", multicall_to, &multicall_input, receipt.is_success());
         }
 
         Ok(())
@@ -542,6 +549,8 @@ impl Executor {
             #[cfg(feature = "metrics")]
             let gas_used = tx_execution.result.execution.gas_used;
             #[cfg(feature = "metrics")]
+            let evm_success = !matches!(&tx_execution.result.execution.result, ExecutionResult::Reverted { .. });
+            #[cfg(feature = "metrics")]
             let function = codegen::function_sig(&tx_input.execution_info.input);
             #[cfg(feature = "metrics")]
             let contract = codegen::contract_name(&tx_input.execution_info.to);
@@ -560,6 +569,12 @@ impl Executor {
                         metrics::inc_executor_local_transaction_account_reads(tx_metrics.account_reads, contract, function);
                         metrics::inc_executor_local_transaction_slot_reads(tx_metrics.slot_reads, contract, function);
                         metrics::inc_executor_local_transaction_gas(gas_used.as_u64() as usize, true, contract, function);
+                        multicall::record_executor_multicall_subcalls(
+                            "local_transaction",
+                            tx_input.execution_info.to,
+                            &tx_input.execution_info.input,
+                            evm_success,
+                        );
                     }
                     return Ok(());
                 }
@@ -635,6 +650,7 @@ impl Executor {
                     metrics::inc_executor_local_call(start.elapsed(), false, contract, function);
                 }
             }
+            multicall::record_executor_multicall_subcalls("local_call", call_input.to, &call_input.data, evm_result.is_ok());
         }
 
         let execution = evm_result?.execution;

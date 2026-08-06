@@ -29,6 +29,8 @@ use crate::alias::JsonValue;
 use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
 use crate::eth::codegen::SoliditySignature;
+use crate::eth::multicall;
+use crate::eth::multicall::MulticallInfo;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
@@ -167,6 +169,9 @@ impl RpcServiceT for RpcMiddleware {
             rpc_tx_nonce = field::Empty,
             rpc_tx_contract = field::Empty,
             rpc_tx_function = field::Empty,
+            rpc_tx_multicall_total = field::Empty,
+            rpc_tx_multicall_logged = field::Empty,
+            rpc_tx_multicall_decode_error = field::Empty,
             rpc_req_type = request_type.to_string()
         );
         let middleware_enter = span.enter();
@@ -226,6 +231,10 @@ impl RpcServiceT for RpcMiddleware {
             rpc_tx_function = %tx.as_ref().map(|tx|tx.function).or_empty(),
             rpc_tx_from = %tx.as_ref().and_then(|tx|tx.from).or_empty(),
             rpc_tx_to = %tx.as_ref().and_then(|tx|tx.to).or_empty(),
+            rpc_tx_multicall_total = %tx.as_ref().map(|tx| tx.multicall_total()).unwrap_or_default(),
+            rpc_tx_multicall_logged = %tx.as_ref().map(|tx| tx.multicall_logged()).unwrap_or_default(),
+            rpc_tx_multicall_calls = %tx.as_ref().map(|tx| tx.multicall_calls_json()).unwrap_or_default(),
+            rpc_tx_multicall_decode_error = %tx.as_ref().map(|tx| tx.multicall_decode_error()).unwrap_or_default(),
             is_admin = %is_admin,
             "rpc request"
         );
@@ -242,6 +251,24 @@ impl RpcServiceT for RpcMiddleware {
                 tx_ref.map(|tx| tx.function),
                 request_type.to_string(),
             );
+            if let Some(multicall) = tx_ref.and_then(|tx| tx.multicall.as_ref()) {
+                if let Some(error) = multicall.decode_error_metric_label() {
+                    metrics::inc_rpc_multicall_decode_errors(&client, &method, multicall.parent_contract, multicall.parent_function, error);
+                }
+
+                let req_type = request_type.to_string();
+                for call in &multicall.calls {
+                    metrics::inc_rpc_multicall_subcalls_started(
+                        &client,
+                        &method,
+                        multicall.parent_contract,
+                        multicall.parent_function,
+                        call.metric_contract(),
+                        call.function,
+                        &req_type,
+                    );
+                }
+            }
 
             // active requests
             if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
@@ -345,6 +372,10 @@ impl Future for RpcResponse<'_> {
                     rpc_tx_function = %resp.tx.as_ref().map(|tx|tx.function).or_empty(),
                     rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
                     rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
+                    rpc_tx_multicall_total = %resp.tx.as_ref().map(|tx| tx.multicall_total()).unwrap_or_default(),
+                    rpc_tx_multicall_logged = %resp.tx.as_ref().map(|tx| tx.multicall_logged()).unwrap_or_default(),
+                    rpc_tx_multicall_calls = %resp.tx.as_ref().map(|tx| tx.multicall_calls_json()).unwrap_or_default(),
+                    rpc_tx_multicall_decode_error = %resp.tx.as_ref().map(|tx| tx.multicall_decode_error()).unwrap_or_default(),
                     %rpc_result,
                     rpc_success = %response_success,
                     duration_us = %elapsed.as_micros(),
@@ -380,6 +411,22 @@ impl Future for RpcResponse<'_> {
                     error_code,
                     response.is_success(),
                 );
+                if let Some(multicall) = tx_ref.and_then(|tx| tx.multicall.as_ref()) {
+                    let rpc_result = rpc_result.to_owned();
+                    for call in &multicall.calls {
+                        metrics::inc_rpc_multicall_subcalls_finished(
+                            &*resp.client,
+                            resp.method.clone(),
+                            multicall.parent_contract,
+                            multicall.parent_function,
+                            call.metric_contract(),
+                            call.function,
+                            &rpc_result,
+                            error_code,
+                            response.is_success(),
+                        );
+                    }
+                }
 
                 metrics::inc_rpc_response_size(response.as_json().get().len(), &*resp.client, resp.method.clone());
             }
@@ -405,6 +452,7 @@ struct TransactionTracingIdentifiers {
     pub from: Option<Address>,
     pub to: Option<Address>,
     pub nonce: Option<Nonce>,
+    pub multicall: Option<MulticallInfo>,
 }
 
 impl TransactionTracingIdentifiers {
@@ -418,6 +466,7 @@ impl TransactionTracingIdentifiers {
             from: decoded_tx.execution_info.signer.address(),
             to: decoded_tx.execution_info.to,
             nonce: Some(decoded_tx.execution_info.nonce),
+            multicall: multicall::decode_multicall(decoded_tx.execution_info.to, &decoded_tx.execution_info.input),
         })
     }
 
@@ -432,6 +481,7 @@ impl TransactionTracingIdentifiers {
             from: call.from,
             to: call.to,
             nonce: None,
+            multicall: multicall::decode_multicall(call.to, &call.data),
         })
     }
 
@@ -446,12 +496,16 @@ impl TransactionTracingIdentifiers {
             from: None,
             to: None,
             nonce: None,
+            multicall: None,
         })
     }
 
     pub fn record_span(&self, span: Span) {
         span.rec_str("rpc_tx_contract", &self.contract);
         span.rec_str("rpc_tx_function", &self.function);
+        span.rec_str("rpc_tx_multicall_total", &self.multicall_total());
+        span.rec_str("rpc_tx_multicall_logged", &self.multicall_logged());
+        span.rec_str("rpc_tx_multicall_decode_error", &self.multicall_decode_error());
 
         if let Some(tx_hash) = self.hash {
             span.rec_str("rpc_tx_hash", &tx_hash);
@@ -465,5 +519,21 @@ impl TransactionTracingIdentifiers {
         if let Some(tx_nonce) = self.nonce {
             span.rec_str("rpc_tx_nonce", &tx_nonce);
         }
+    }
+
+    fn multicall_total(&self) -> usize {
+        self.multicall.as_ref().map(|m| m.total_subcalls).unwrap_or_default()
+    }
+
+    fn multicall_logged(&self) -> usize {
+        self.multicall.as_ref().map(|m| m.logged_subcalls()).unwrap_or_default()
+    }
+
+    fn multicall_calls_json(&self) -> String {
+        self.multicall.as_ref().map(|m| to_json_string(&m.logged_calls())).unwrap_or_default()
+    }
+
+    fn multicall_decode_error(&self) -> &str {
+        self.multicall.as_ref().and_then(|m| m.decode_error.as_deref()).unwrap_or_default()
     }
 }
