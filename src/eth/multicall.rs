@@ -16,30 +16,7 @@ const DISPATCHER_ADDRESS: Address = Address::new([
     0x59, 0x7f, 0x68, 0x99, 0xe7, 0xbb, 0x00, 0x77, 0xf1, 0x56, 0xed, 0x64, 0xfd, 0x14, 0x35, 0x2c, 0x25, 0x76, 0x65, 0x1b,
 ]);
 
-sol! {
-    struct Call {
-        address target;
-        bytes callData;
-    }
-
-    struct Call3 {
-        address target;
-        bool allowFailure;
-        bytes callData;
-    }
-
-    struct Call3Value {
-        address target;
-        bool allowFailure;
-        uint256 value;
-        bytes callData;
-    }
-
-    function aggregate(Call[] calls) external;
-    function tryAggregate(bool requireSuccess, Call[] calls) external;
-    function aggregate3(Call3[] calls) external;
-    function aggregate3Value(Call3Value[] calls) external;
-}
+sol!(Multicall, "static/contracts-abi/Multicall3.json");
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum MulticallKind {
@@ -152,10 +129,10 @@ pub fn decode_multicall(to: Address, input: &Bytes) -> Option<MulticallInfo> {
 
 fn kind_from_selector(selector: [u8; 4]) -> Option<MulticallKind> {
     match selector {
-        aggregateCall::SELECTOR => Some(MulticallKind::Aggregate),
-        tryAggregateCall::SELECTOR => Some(MulticallKind::TryAggregate),
-        aggregate3Call::SELECTOR => Some(MulticallKind::Aggregate3),
-        aggregate3ValueCall::SELECTOR => Some(MulticallKind::Aggregate3Value),
+        Multicall::aggregateCall::SELECTOR => Some(MulticallKind::Aggregate),
+        Multicall::tryAggregateCall::SELECTOR => Some(MulticallKind::TryAggregate),
+        Multicall::aggregate3Call::SELECTOR => Some(MulticallKind::Aggregate3),
+        Multicall::aggregate3ValueCall::SELECTOR => Some(MulticallKind::Aggregate3Value),
         _ => None,
     }
 }
@@ -170,7 +147,7 @@ fn decode_multicall_payload(kind: MulticallKind, input: &[u8]) -> anyhow::Result
 }
 
 fn decode_aggregate(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, MulticallError> {
-    let call = aggregateCall::abi_decode(input)?;
+    let call = Multicall::aggregateCall::abi_decode(input)?;
     Ok(call
         .calls
         .into_iter()
@@ -180,7 +157,7 @@ fn decode_aggregate(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, Multi
 }
 
 fn decode_try_aggregate(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, MulticallError> {
-    let call = tryAggregateCall::abi_decode(input)?;
+    let call = Multicall::tryAggregateCall::abi_decode(input)?;
     Ok(call
         .calls
         .into_iter()
@@ -190,7 +167,7 @@ fn decode_try_aggregate(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, M
 }
 
 fn decode_aggregate3(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, MulticallError> {
-    let call = aggregate3Call::abi_decode(input)?;
+    let call = Multicall::aggregate3Call::abi_decode(input)?;
     Ok(call
         .calls
         .into_iter()
@@ -200,7 +177,7 @@ fn decode_aggregate3(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, Mult
 }
 
 fn decode_aggregate3_value(input: &[u8]) -> anyhow::Result<Vec<MulticallSubcall>, MulticallError> {
-    let call = aggregate3ValueCall::abi_decode(input)?;
+    let call = Multicall::aggregate3ValueCall::abi_decode(input)?;
     Ok(call
         .calls
         .into_iter()
@@ -261,8 +238,8 @@ mod tests {
     #[test]
     fn decode_aggregate_with_one_call() {
         let input = Bytes(
-            aggregateCall {
-                calls: vec![Call {
+            Multicall::aggregateCall {
+                calls: vec![Multicall3::Call {
                     target: alloy_address(brlc()),
                     callData: transfer_input().into(),
                 }],
@@ -291,9 +268,9 @@ mod tests {
     #[test]
     fn decode_try_aggregate_sets_global_allow_failure() {
         let input = Bytes(
-            tryAggregateCall {
+            Multicall::tryAggregateCall {
                 requireSuccess: false,
-                calls: vec![Call {
+                calls: vec![Multicall3::Call {
                     target: alloy_address(brlc()),
                     callData: transfer_input().into(),
                 }],
@@ -310,8 +287,8 @@ mod tests {
     #[test]
     fn decode_aggregate3_sets_per_call_allow_failure() {
         let input = Bytes(
-            aggregate3Call {
-                calls: vec![Call3 {
+            Multicall::aggregate3Call {
+                calls: vec![Multicall3::Call3 {
                     target: alloy_address(brlc()),
                     allowFailure: true,
                     callData: transfer_input().into(),
@@ -329,8 +306,8 @@ mod tests {
     #[test]
     fn decode_aggregate3_value_sets_value() {
         let input = Bytes(
-            aggregate3ValueCall {
-                calls: vec![Call3Value {
+            Multicall::aggregate3ValueCall {
+                calls: vec![Multicall3::Call3Value {
                     target: alloy_address(brlc()),
                     allowFailure: false,
                     value: U256::from(123),
@@ -349,7 +326,7 @@ mod tests {
 
     #[test]
     fn decode_returns_none_for_non_dispatcher() {
-        let input = Bytes(aggregateCall { calls: Vec::new() }.abi_encode());
+        let input = Bytes(Multicall::aggregateCall { calls: Vec::new() }.abi_encode());
 
         assert!(!is_multicall_contract(brlc()));
         assert!(decode_multicall(brlc(), &input).is_none());
@@ -364,7 +341,7 @@ mod tests {
 
     #[test]
     fn decode_returns_error_for_malformed_known_selector() {
-        let input = Bytes(Vec::from(aggregateCall::SELECTOR));
+        let input = Bytes(Vec::from(Multicall::aggregateCall::SELECTOR));
 
         let info = decode_multicall(dispatcher(), &input).unwrap();
 
@@ -377,8 +354,8 @@ mod tests {
     #[test]
     fn decode_unknown_target_and_empty_input_to_existing_labels() {
         let input = Bytes(
-            aggregateCall {
-                calls: vec![Call {
+            Multicall::aggregateCall {
+                calls: vec![Multicall3::Call {
                     target: alloy_address(unknown_address()),
                     callData: Vec::new().into(),
                 }],
@@ -395,12 +372,12 @@ mod tests {
     #[test]
     fn logged_subcalls_are_bounded_to_32_but_total_keeps_full_count() {
         let calls = (0..40)
-            .map(|_| Call {
+            .map(|_| Multicall3::Call {
                 target: alloy_address(brlc()),
                 callData: transfer_input().into(),
             })
             .collect();
-        let input = Bytes(aggregateCall { calls }.abi_encode());
+        let input = Bytes(Multicall::aggregateCall { calls }.abi_encode());
 
         let info = decode_multicall(dispatcher(), &input).unwrap();
 
