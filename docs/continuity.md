@@ -96,7 +96,7 @@ The block-hash cache does not determine chain progress or parent continuity. Its
 
 ```mermaid
 flowchart LR
-    EVM["EVM BLOCKHASH"] --> TempCheck{"Latest sealed and unsaved?"}
+    EVM["EVM BLOCKHASH"] --> TempCheck{"Is it the latest sealed block?"}
     TempCheck -->|"yes"| Result["Block hash"]
     TempCheck -->|"no"| Cache["Block-hash cache"]
     Cache -->|"hit"| Result
@@ -108,9 +108,11 @@ flowchart LR
 
 Lookup order is:
 
-1. The latest sealed block, but only while it is ahead of `last_saved`.
+1. The latest sealed block, whether or not it was already saved.
 2. The block-hash cache.
 3. Permanent storage.
+
+The first step does not consult `last_saved`. A sealed block keeps its hash when it is persisted, so the sealed tip is authoritative for its own number either way. Reading it would otherwise put the `BLOCKHASH` opcode behind the whole block saving critical section, which holds `last_saved` across the RocksDB write.
 
 The normal cache default is 256 entries and administrators may set it to zero. Importer-offline always adds capacity for its bounded sealed-but-unsaved backlog:
 

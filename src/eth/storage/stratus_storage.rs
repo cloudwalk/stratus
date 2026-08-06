@@ -415,20 +415,16 @@ impl StratusStorage {
         self.cache.cache_block_hash(number, hash);
     }
 
-    /// Reads the hash of a mined block, falling back to the permanent storage on a cache miss.
+    /// Reads the hash of a mined block from the latest sealed block, the cache or the permanent storage.
     ///
-    /// Misses are expected for blocks mined before this process started, since sealing a block is
-    /// what publishes its hash.
+    /// The latest sealed block answers for its own number whether or not it already reached the
+    /// permanent storage, so the saved tip is never consulted here and this stays off the block
+    /// saving critical section. Cache misses are expected for blocks mined before this process
+    /// started, since sealing a block is what publishes its hash.
     pub fn read_block_hash(&self, number: BlockNumber) -> Result<Option<Hash>, StorageError> {
-        let last_saved = *self.last_saved.lock();
         let latest = self.temp.read_latest_sealed();
-        if latest.number == number
-            && match last_saved {
-                None => true,
-                Some(saved) => latest.number > saved.number,
-            }
-        {
-            tracing::debug!(storage = %label::TEMP, %number, "unsaved block hash found in temporary storage");
+        if latest.number == number {
+            tracing::debug!(storage = %label::TEMP, %number, "block hash found in temporary storage");
             return Ok(Some(latest.hash));
         }
 
@@ -1011,7 +1007,9 @@ mod tests {
     fn block_hash_falls_back_to_permanent_storage_when_the_cache_is_cold() {
         let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
 
+        // the second block keeps the first one behind the sealed tip, so it cannot be answered from temporary storage
         let number = mine_block(&storage, ExecutionChanges::default());
+        mine_block(&storage, ExecutionChanges::default());
         let hash = storage
             .read_block(BlockFilter::Number(number))
             .expect("read block")
@@ -1021,6 +1019,25 @@ mod tests {
         // simulates a restart, where nothing was published by this process
         storage.cache.clear();
 
+        assert_eq!(storage.read_block_hash(number).expect("read block hash"), Some(hash));
+    }
+
+    /// The sealed tip keeps answering for its own number after it is saved, so the block saving
+    /// critical section never has to be consulted to resolve it.
+    #[test]
+    fn latest_saved_hash_is_served_from_temporary_storage() {
+        let storage = Arc::new(StratusStorage::new_test().expect("failed to build test storage"));
+
+        let number = mine_block(&storage, ExecutionChanges::default());
+        let hash = storage
+            .read_block(BlockFilter::Number(number))
+            .expect("read block")
+            .expect("mined block should exist")
+            .hash();
+
+        storage.cache.clear();
+
+        assert_eq!(storage.temp.read_latest_sealed(), BlockReference { number, hash });
         assert_eq!(storage.read_block_hash(number).expect("read block hash"), Some(hash));
     }
 
