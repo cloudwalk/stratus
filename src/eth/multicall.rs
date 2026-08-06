@@ -273,8 +273,9 @@ fn expect_tuple(token: Token, field: &'static str) -> MulticallDecodeResult<Vec<
 
 fn expect_address(token: Option<&Token>, field: &'static str) -> MulticallDecodeResult<Address> {
     match token {
-        Some(Token::Address(address)) =>
-            Address::try_from(address.as_bytes().to_vec()).map_err(|source| MulticallDecodeError::InvalidAddress { field, source }),
+        Some(Token::Address(address)) => {
+            Address::try_from(address.as_bytes().to_vec()).map_err(|source| MulticallDecodeError::InvalidAddress { field, source })
+        }
         _ => Err(MulticallDecodeError::UnexpectedToken { expected: "address", field }),
     }
 }
@@ -309,7 +310,7 @@ pub fn record_executor_multicall_subcalls(kind: &'static str, to: Option<Address
         return;
     }
 
-    for call in &multicall.calls {
+    for call in multicall.logged_calls() {
         metrics::inc_executor_multicall_subcalls(
             kind,
             multicall.parent_contract,
