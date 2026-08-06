@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use clap::Parser;
 use display_json::DebugAsJson;
 use indexmap::Equivalent;
@@ -15,8 +17,9 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
+use crate::eth::storage::block_hash_ring::BlockHashRing;
 
-/// Default cache capacity covers the complete history window reachable by `BLOCKHASH`.
+/// Default capacity covers the complete history window reachable by `BLOCKHASH`.
 pub const DEFAULT_BLOCK_HASH_CACHE_CAPACITY: usize = 256;
 
 pub struct StorageCache {
@@ -24,7 +27,7 @@ pub struct StorageCache {
     account_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
     account_latest_cache: Cache<Address, Account, UnitWeighter, FxBuildHasher>,
     slot_latest_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
-    block_hash_cache: Cache<BlockNumber, Hash, UnitWeighter, FxBuildHasher>,
+    block_hashes: BlockHashRing,
 }
 
 #[derive(DebugAsJson, Clone, Parser, serde::Serialize)]
@@ -45,7 +48,10 @@ pub struct CacheConfig {
     #[arg(long = "slot-history-cache-capacity", env = "SLOT_HISTORY_CACHE_CAPACITY", default_value = "100000")]
     pub slot_history_cache_capacity: usize,
 
-    /// Capacity of the block hash cache.
+    /// Number of the most recent block hashes kept in memory.
+    ///
+    /// Zero is raised to one, which keeps nothing worth having: the only block a single slot can
+    /// hold is the sealed tip, and `BLOCKHASH` already reads that one from temporary storage.
     ///
     /// The offline importer raises this value to cover its sealed-but-unsaved backlog.
     #[arg(long = "block-hash-cache-capacity", env = "BLOCK_HASH_CACHE_CAPACITY", default_value_t = DEFAULT_BLOCK_HASH_CACHE_CAPACITY)]
@@ -89,13 +95,7 @@ impl StorageCache {
                 FxBuildHasher,
                 DefaultLifecycle::default(),
             ),
-            block_hash_cache: Cache::with(
-                config.block_hash_cache_capacity,
-                config.block_hash_cache_capacity as u64,
-                UnitWeighter,
-                FxBuildHasher,
-                DefaultLifecycle::default(),
-            ),
+            block_hashes: BlockHashRing::new(NonZeroUsize::new(config.block_hash_cache_capacity).unwrap_or(NonZeroUsize::MIN)),
         }
     }
 
@@ -104,7 +104,7 @@ impl StorageCache {
         self.account_cache.clear();
         self.account_latest_cache.clear();
         self.slot_latest_cache.clear();
-        self.block_hash_cache.clear();
+        self.block_hashes.clear();
     }
 
     pub fn cache_slot_if_missing(&self, address: Address, slot: Slot) {
@@ -165,15 +165,11 @@ impl StorageCache {
     }
 
     pub fn cache_block_hash(&self, number: BlockNumber, hash: Hash) {
-        self.block_hash_cache.insert(number, hash);
-    }
-
-    pub fn cache_block_hash_if_missing(&self, number: BlockNumber, hash: Hash) {
-        self.block_hash_cache.insert_if_missing(number, hash);
+        self.block_hashes.insert(number, hash);
     }
 
     pub fn get_block_hash(&self, number: BlockNumber) -> Option<Hash> {
-        self.block_hash_cache.get(&number)
+        self.block_hashes.get(number)
     }
 }
 
@@ -201,35 +197,66 @@ where
     }
 }
 
+/// Retention itself is covered by the block-hash ring. These only check that the configuration
+/// reaches it and that clearing the cache reaches it too.
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn block_hash_cache_uses_configured_capacity() {
-        let cache = CacheConfig {
+    fn cache_holding_block_hashes(capacity: usize) -> StorageCache {
+        CacheConfig {
             slot_cache_capacity: 1,
             account_cache_capacity: 1,
             account_history_cache_capacity: 1,
             slot_history_cache_capacity: 1,
-            block_hash_cache_capacity: 7,
+            block_hash_cache_capacity: capacity,
         }
-        .init();
+        .init()
+    }
 
-        assert_eq!(cache.block_hash_cache.capacity(), 7);
+    fn publish(cache: &StorageCache, number: u64) -> Hash {
+        let hash = Hash::new([number as u8; 32]);
+        cache.cache_block_hash(BlockNumber::from(number), hash);
+        hash
+    }
+
+    fn read(cache: &StorageCache, number: u64) -> Option<Hash> {
+        cache.get_block_hash(BlockNumber::from(number))
     }
 
     #[test]
-    fn block_hash_cache_can_be_disabled() {
-        let cache = CacheConfig {
-            slot_cache_capacity: 1,
-            account_cache_capacity: 1,
-            account_history_cache_capacity: 1,
-            slot_history_cache_capacity: 1,
-            block_hash_cache_capacity: 0,
-        }
-        .init();
+    fn block_hashes_are_retained_up_to_the_configured_capacity() {
+        let cache = cache_holding_block_hashes(2);
 
-        assert_eq!(cache.block_hash_cache.capacity(), 0);
+        publish(&cache, 1);
+        let second = publish(&cache, 2);
+        let third = publish(&cache, 3);
+
+        assert_eq!(read(&cache, 1), None);
+        assert_eq!(read(&cache, 2), Some(second));
+        assert_eq!(read(&cache, 3), Some(third));
+    }
+
+    #[test]
+    fn clearing_the_cache_drops_published_block_hashes() {
+        let cache = cache_holding_block_hashes(2);
+        publish(&cache, 1);
+
+        cache.clear();
+
+        assert_eq!(read(&cache, 1), None);
+    }
+
+    /// A single slot only ever answers for the sealed tip, which the temporary storage already
+    /// serves, so raising zero to one costs an operator asking for no cache nothing but 48 bytes.
+    #[test]
+    fn a_zero_capacity_is_raised_to_a_single_slot() {
+        let cache = cache_holding_block_hashes(0);
+
+        publish(&cache, 1);
+        let second = publish(&cache, 2);
+
+        assert_eq!(read(&cache, 1), None);
+        assert_eq!(read(&cache, 2), Some(second));
     }
 }

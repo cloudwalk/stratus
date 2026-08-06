@@ -114,13 +114,15 @@ Lookup order is:
 
 The first step does not consult `last_saved`. A sealed block keeps its hash when it is persisted, so the sealed tip is authoritative for its own number either way. Reading it would otherwise put the `BLOCKHASH` opcode behind the whole block saving critical section, which holds `last_saved` across the RocksDB write.
 
-The normal cache default is 256 entries and administrators may set it to zero. Importer-offline always adds capacity for its bounded sealed-but-unsaved backlog:
+The cache is a fixed ring indexed by `number % capacity`, not a general purpose cache. Block numbers are dense and published in order, so the ring retains exactly the most recent `capacity` blocks, and two numbers share a slot only when they are `capacity` apart. Nothing inside the window can be evicted, including a hash that is published and never read. That matters because a general purpose cache does the opposite: it spreads entries over independently sized shards and evicts the never read ones first, which is exactly what a freshly sealed hash is.
+
+The default is 256 entries, matching the `BLOCKHASH` window. Administrators may shrink it, and a configured zero is raised to a single slot: that slot can only ever hold the sealed tip, which is answered from temporary storage before the ring is consulted, so it is a cache in name only. Importer-offline always adds capacity for its bounded sealed-but-unsaved backlog:
 
 ```text
 configured capacity + batch_size × (queue_size + 2)
 ```
 
-The extra two batches cover one batch being built by the executor and one being processed by the saver.
+The extra two batches cover one batch being built by the executor and one being processed by the saver. Sizing the ring this way is what makes the unsaved backlog unevictable rather than merely likely to survive.
 
 Older unsaved offline blocks are temporarily dependent on this cache because permanent storage cannot serve them yet. Remove this workaround when importer-offline is removed.
 

@@ -11,6 +11,7 @@ pub use temporary::InMemoryTemporaryStorage;
 pub use temporary::PendingBlockGuard;
 pub use temporary::TemporaryStorageConfig;
 
+mod block_hash_ring;
 mod cache;
 pub mod permanent;
 mod resolve_pending;

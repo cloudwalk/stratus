@@ -438,7 +438,7 @@ impl StratusStorage {
         };
 
         let hash = block.hash();
-        self.cache.cache_block_hash_if_missing(number, hash);
+        self.cache.cache_block_hash(number, hash);
         Ok(Some(hash))
     }
 
