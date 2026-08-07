@@ -5,12 +5,14 @@ use cache::CacheConfig;
 pub use cache::StorageCache;
 pub use permanent::PermanentStorageConfig;
 pub use permanent::RocksPermanentStorage;
+pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
 pub use temporary::TemporaryStorageConfig;
 
 mod cache;
 pub mod permanent;
+mod resolve_pending;
 mod stratus_storage;
 mod temporary;
 

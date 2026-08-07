@@ -471,7 +471,7 @@ impl Database for RevmSession {
     }
 
     fn code_by_hash(&mut self, _: B256) -> Result<RevmBytecode, StratusError> {
-        todo!()
+        Err(anyhow!("code by hash opcode not implemented").into())
     }
 
     fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> Result<U256, StratusError> {
@@ -488,7 +488,7 @@ impl Database for RevmSession {
     }
 
     fn block_hash(&mut self, _: u64) -> Result<B256, StratusError> {
-        todo!()
+        Err(anyhow!("block hash opcode not implemented").into())
     }
 }
 
@@ -514,11 +514,11 @@ impl DatabaseRef for RevmSession {
     }
 
     fn block_hash_ref(&self, _: u64) -> Result<B256, Self::Error> {
-        todo!()
+        Err(anyhow!("block hash opcode not implemented").into())
     }
 
     fn code_by_hash_ref(&self, _code_hash: B256) -> Result<revm::state::Bytecode, Self::Error> {
-        unimplemented!()
+        Err(anyhow!("code by hash opcode not implemented").into())
     }
 }
 

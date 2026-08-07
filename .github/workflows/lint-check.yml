@@ -54,7 +54,7 @@ jobs:
       - name: Set up Rust Nightly
         uses: dtolnay/rust-toolchain@5b842231ba77f5c045dba54ac5560fed2db780e2 # nightly
         with:
-          toolchain: nightly-2025-05-22
+          toolchain: nightly-2026-05-08
           components: rustfmt, clippy
 
       - name: Rust Cache
@@ -71,7 +71,7 @@ jobs:
         uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
 
       - name: Just lint-check
-        run: just lint-check -2025-05-22
+        run: just lint-check -2026-05-08
 
   e2e_lint:
     name: E2E Lint
@@ -87,7 +87,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Install Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .tool-versions
 

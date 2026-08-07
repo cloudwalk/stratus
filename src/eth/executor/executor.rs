@@ -1,10 +1,13 @@
 use std::mem;
+use std::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
 use std::sync::Arc;
 
 #[cfg(feature = "metrics")]
 use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
+use anyhow::anyhow;
 use anyhow::bail;
 use cfg_if::cfg_if;
 use parking_lot::Mutex;
@@ -114,7 +117,7 @@ impl Evms {
     fn spawn(storage: Arc<StratusStorage>, config: &ExecutorConfig) -> Self {
         // function executed by evm threads
         fn evm_loop(task_name: &str, storage: Arc<StratusStorage>, config: ExecutorConfig, task_rx: crossbeam_channel::Receiver<EvmTask>, kind: EvmKind) {
-            let mut evm = Evm::new(storage, config, kind);
+            let mut evm = Evm::new(Arc::clone(&storage), config.clone(), kind);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
@@ -124,7 +127,15 @@ impl Evms {
 
                 // execute
                 let _enter = task.span.enter();
-                let result = evm.execute(task.input);
+
+                let result = catch_unwind(AssertUnwindSafe(|| evm.execute(task.input)))
+                    .inspect_err(|panic_err| {
+                        tracing::error!(?panic_err, "executor panicked; recreating EVM");
+                        evm = Evm::new(Arc::clone(&storage), config.clone(), kind);
+                    })
+                    .map_err(|_| StratusError::from(anyhow!("executor panicked")))
+                    .flatten();
+
                 if let Err(e) = task.response_tx.send(result) {
                     tracing::error!(reason = ?e, "failed to send evm task execution result");
                 }
@@ -347,7 +358,7 @@ impl Executor {
 
         let tx_input: TransactionInput = tx.try_into()?;
         let (pending_block, _) = self.storage.read_pending_block_header();
-        let mut evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_block.number, *pending_block.timestamp);
+        let mut evm_input = EvmInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
@@ -379,7 +390,7 @@ impl Executor {
                     return Err(e);
                 };
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_execution)
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_execution)
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -388,7 +399,7 @@ impl Executor {
                 if tx_input.execution_info.nonce != sender.nonce {
                     bail!(
                         "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
-                        tx_input.execution_info.signer,
+                        tx_input.signer(),
                         tx_input.execution_info.nonce,
                         sender.nonce
                     );
@@ -402,7 +413,7 @@ impl Executor {
                 evm_input.gas_limit = tx_input.execution_info.gas_limit;
                 evm_input.gas_price = tx_input.execution_info.gas_price;
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result)
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_result)
             }
         };
 
@@ -450,7 +461,7 @@ impl Executor {
         // track
         Span::with(|s| {
             s.rec_str("tx_hash", &tx.transaction_info.hash);
-            s.rec_str("tx_from", &tx.execution_info.signer);
+            s.rec_str("tx_from", &tx.signer());
             s.rec_opt("tx_to", &tx.execution_info.to);
             s.rec_str("tx_nonce", &tx.execution_info.nonce);
         });
@@ -475,7 +486,7 @@ impl Executor {
     /// Executes a transaction until it reaches the max number of attempts.
     fn execute_local_transaction_attempts(&self, tx_input: TransactionInput, max_attempts: usize) -> Result<(), StratusError> {
         // validate
-        if tx_input.execution_info.signer.is_zero() {
+        if tx_input.signer().is_zero() {
             return Err(TransactionError::FromZeroAddress.into());
         }
 
@@ -489,7 +500,7 @@ impl Executor {
                 "executor::local_transaction_attempt",
                 %attempt,
                 tx_hash = %tx_input.transaction_info.hash,
-                tx_from = %tx_input.execution_info.signer,
+                tx_from = %tx_input.signer(),
                 tx_to = tracing::field::Empty,
                 tx_nonce = %tx_input.execution_info.nonce
             )
@@ -500,14 +511,14 @@ impl Executor {
 
             // prepare evm input
             let (pending_header, _) = self.storage.read_pending_block_header();
-            let evm_input = EvmInput::from_eth_transaction(&tx_input.execution_info, pending_header.number, *pending_header.timestamp);
+            let evm_input = EvmInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::debug!(
                 %attempt,
                 tx_hash = %tx_input.transaction_info.hash,
                 tx_nonce = %tx_input.execution_info.nonce,
-                tx_signer = %tx_input.execution_info.signer,
+                tx_signer = %tx_input.signer(),
                 tx_to = ?tx_input.execution_info.to,
                 tx_data_len = %tx_input.execution_info.input.len(),
                 tx_data = %tx_input.execution_info.input,
@@ -519,7 +530,13 @@ impl Executor {
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new(tx_input.transaction_info.clone(), tx_input.signature.clone(), evm_input, evm_result);
+            let tx_execution = TransactionExecution::new(
+                tx_input.transaction_info.clone(),
+                tx_input.signature.clone(),
+                tx_input.execution_info.clone(),
+                evm_input,
+                evm_result,
+            );
             #[cfg(feature = "metrics")]
             let tx_metrics = tx_execution.metrics();
             #[cfg(feature = "metrics")]
@@ -586,6 +603,8 @@ impl Executor {
                 EvmInput::from_pending_block(call_input.clone(), pending_header, tx_count)
             }
             point_in_time => {
+                // NOTE: this read is way more expensive that what we theoritaclly need, we only need to get the timestamp
+                // and block number, however this is not possible in the current rocksdb configuration.
                 let Some(block) = self.storage.read_block(point_in_time.into())? else {
                     return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
                 };

@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering;
 use chrono::DateTime;
 use chrono::Utc;
 use parking_lot::Mutex;
+use parking_lot::RwLock;
 use sentry::ClientInitGuard;
 use serde::Deserialize;
 use serde::Serialize;
@@ -133,7 +134,7 @@ static TRANSACTIONS_ENABLED: AtomicBool = AtomicBool::new(true);
 static UNKNOWN_CLIENT_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Clients that are blocked from interacting with the application.
-static BLOCKED_CLIENTS: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
+static BLOCKED_CLIENTS: LazyLock<RwLock<HashSet<String>>> = LazyLock::new(|| RwLock::new(HashSet::new()));
 
 /// Current node mode.
 static NODE_MODE: Mutex<NodeMode> = Mutex::new(NodeMode::Follower);
@@ -293,7 +294,7 @@ impl GlobalState {
 
     /// Initializes the blocked clients set from configuration. Names are normalized the same way as incoming client identification.
     pub fn init_blocked_clients(names: &[String]) {
-        let mut blocked = BLOCKED_CLIENTS.lock();
+        let mut blocked = BLOCKED_CLIENTS.write();
         for name in names {
             if let RpcClientApp::Identified(normalized) = RpcClientApp::parse(name) {
                 blocked.insert(normalized);
@@ -305,7 +306,7 @@ impl GlobalState {
     pub fn add_blocked_client(name: &str) -> Option<String> {
         match RpcClientApp::parse(name) {
             RpcClientApp::Identified(normalized) => {
-                BLOCKED_CLIENTS.lock().insert(normalized.clone());
+                BLOCKED_CLIENTS.write().insert(normalized.clone());
                 Some(normalized)
             }
             RpcClientApp::Unknown => None,
@@ -315,27 +316,27 @@ impl GlobalState {
     /// Removes a client from the blocked clients set. Returns whether it was present.
     pub fn remove_blocked_client(name: &str) -> bool {
         match RpcClientApp::parse(name) {
-            RpcClientApp::Identified(normalized) => BLOCKED_CLIENTS.lock().remove(&normalized),
+            RpcClientApp::Identified(normalized) => BLOCKED_CLIENTS.write().remove(&normalized),
             RpcClientApp::Unknown => false,
         }
     }
 
     /// Clears the blocked clients set.
     pub fn clear_blocked_clients() {
-        BLOCKED_CLIENTS.lock().clear();
+        BLOCKED_CLIENTS.write().clear();
     }
 
     /// Checks if a client is blocked.
     pub fn is_client_blocked(client: &RpcClientApp) -> bool {
         match client {
-            RpcClientApp::Identified(name) => BLOCKED_CLIENTS.lock().contains(name),
+            RpcClientApp::Identified(name) => BLOCKED_CLIENTS.read().contains(name),
             RpcClientApp::Unknown => false,
         }
     }
 
     /// Returns the list of blocked clients (normalized names).
     pub fn list_blocked_clients() -> Vec<String> {
-        let blocked = BLOCKED_CLIENTS.lock();
+        let blocked = BLOCKED_CLIENTS.read();
         let mut list: Vec<String> = blocked.iter().cloned().collect();
         list.sort();
         list

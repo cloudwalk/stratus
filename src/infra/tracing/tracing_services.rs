@@ -128,6 +128,8 @@ where
             timestamp: Utc::now(),
             level: meta.level().as_serde(),
             target: meta.target(),
+            file: meta.file(),
+            line: meta.line(),
             thread: std::thread::current(),
             fields,
             context,
@@ -137,11 +139,12 @@ where
     }
 }
 
-#[derive(derive_new::new)]
 struct TracingLog<'a> {
     timestamp: DateTime<Utc>,
     level: SerializeLevel<'a>,
     target: &'a str,
+    file: Option<&'a str>,
+    line: Option<u32>,
     thread: Thread,
     // fields: SerializeFieldMap<'a, Event<'a>>,
     fields: JsonValue,
@@ -153,10 +156,12 @@ impl Serialize for TracingLog<'_> {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("TracingLog", 7)?;
+        let mut state = serializer.serialize_struct("TracingLog", 9)?;
         state.serialize_field("timestamp", &self.timestamp)?;
         state.serialize_field("level", &self.level)?;
         state.serialize_field("target", self.target)?;
+        state.serialize_field("file", &self.file)?;
+        state.serialize_field("line", &self.line)?;
         state.serialize_field("threadId", &format!("{:?}", self.thread.id()))?;
         state.serialize_field("threadName", self.thread.name().unwrap_or_default())?;
         state.serialize_field("fields", &self.fields)?;

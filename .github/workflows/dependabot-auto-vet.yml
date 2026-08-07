@@ -18,7 +18,6 @@ jobs:
       pull-requests: write
 
     env:
-      RUST_TOOLCHAIN: "1.89"
       CARGO_VET_VERSION: "0.10.0"
       CODEX_MODEL: "gpt-5-codex"
       CRITERIA: "safe-to-deploy"
@@ -40,9 +39,7 @@ jobs:
       - name: Set up Rust
         run: |
           set -euo pipefail
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "${RUST_TOOLCHAIN}"
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          source "$HOME/.cargo/env"
+          rustup show
           rustc --version
           cargo --version
 

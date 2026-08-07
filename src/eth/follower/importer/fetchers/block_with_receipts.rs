@@ -52,8 +52,8 @@ impl DataFetcher for BlockWithReceiptsFetcher {
         }
 
         // Stably sort transactions and receipts by transaction_index
-        transactions.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
-        receipts.sort_by(|a, b| a.transaction_index.cmp(&b.transaction_index));
+        transactions.sort_by_key(|a| a.transaction_index);
+        receipts.sort_by_key(|a| a.transaction_index);
 
         // perform additional checks on the transaction index
         for window in transactions.windows(2) {
