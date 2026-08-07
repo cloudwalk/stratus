@@ -22,8 +22,7 @@ pub fn now() -> Instant {
 // Executor pool busy workers gauge
 // -----------------------------------------------------------------------------
 
-/// Per-pool counters backing the `executor_workers_busy` gauge. One static per
-/// pool keeps each counter addressable by name.
+/// Per-pool counters backing the `executor_workers_busy` gauge.
 static EXECUTOR_WORKERS_BUSY_TRANSACTION: AtomicU64 = AtomicU64::new(0);
 static EXECUTOR_WORKERS_BUSY_CALL_PRESENT: AtomicU64 = AtomicU64::new(0);
 static EXECUTOR_WORKERS_BUSY_CALL_PAST: AtomicU64 = AtomicU64::new(0);
@@ -40,8 +39,8 @@ impl EvmKind {
         }
     }
 
-    /// Marks a worker in the given executor pool as busy and updates the
-    /// `executor_workers_busy` gauge.
+    /// Marks a worker in the given executor pool as busy and updates the `executor_workers_busy` gauge.
+    /// Returns a guard that when dropped decrements the busy worker count and updates the gauge.
     pub fn mark_executor_pool_busy(&self) -> BusyGuard {
         let busy = self.executor_workers_busy_counter().fetch_add(1, Ordering::Relaxed) + 1;
         set_executor_workers_busy(busy, *self);
