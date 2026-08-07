@@ -156,14 +156,11 @@ impl Evms {
                     return;
                 }
 
-                metrics::mark_executor_pool_busy(kind);
-
+                let _guard = kind.mark_executor_pool_busy();
                 if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&mut evm) {
                     tracing::error!(?panic_err, "executor panicked; recreating EVM");
                     evm = Evm::new(Arc::clone(&storage), config.clone(), kind);
                 }
-
-                metrics::mark_executor_pool_free(kind);
             }
             warn_task_tx_closed(task_name);
         }
