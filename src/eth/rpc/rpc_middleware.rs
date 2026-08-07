@@ -171,7 +171,6 @@ impl RpcServiceT for RpcMiddleware {
             rpc_tx_function = field::Empty,
             rpc_tx_multicall_total = field::Empty,
             rpc_tx_multicall_logged = field::Empty,
-            rpc_tx_multicall_decode_error = field::Empty,
             rpc_req_type = request_type.to_string()
         );
         let middleware_enter = span.enter();
@@ -221,23 +220,40 @@ impl RpcServiceT for RpcMiddleware {
                 tx.record_span(s);
             }
         });
-        tracing::info!(
-            rpc_client = %client,
-            rpc_id = %request.id,
-            rpc_method = %method,
-            rpc_params = %to_json_string(&request.params),
-            rpc_tx_hash = %tx.as_ref().and_then(|tx|tx.hash).or_empty(),
-            rpc_tx_contract = %tx.as_ref().map(|tx|tx.contract).or_empty(),
-            rpc_tx_function = %tx.as_ref().map(|tx|tx.function).or_empty(),
-            rpc_tx_from = %tx.as_ref().and_then(|tx|tx.from).or_empty(),
-            rpc_tx_to = %tx.as_ref().and_then(|tx|tx.to).or_empty(),
-            rpc_tx_multicall_total = %tx.as_ref().map(|tx| tx.multicall_total()).unwrap_or_default(),
-            rpc_tx_multicall_logged = %tx.as_ref().map(|tx| tx.multicall_logged_subcalls_count()).unwrap_or_default(),
-            rpc_tx_multicall_subcalls = %tx.as_ref().map(|tx| tx.multicall_subcalls_json()).unwrap_or_default(),
-            rpc_tx_multicall_decode_error = %tx.as_ref().map(|tx| tx.multicall_decode_error()).unwrap_or_default(),
-            is_admin = %is_admin,
-            "rpc request"
-        );
+        if let Some(tx) = tx.as_ref()
+            && let Some(multicall) = tx.multicall.as_ref()
+        {
+            tracing::info!(
+                rpc_client = %client,
+                rpc_id = %request.id,
+                rpc_method = %method,
+                rpc_params = %to_json_string(&request.params),
+                rpc_tx_hash = %tx.hash.or_empty(),
+                rpc_tx_contract = %tx.contract,
+                rpc_tx_function = %tx.function,
+                rpc_tx_from = %tx.from.or_empty(),
+                rpc_tx_to = %tx.to.or_empty(),
+                rpc_tx_multicall_total = %multicall.total_subcalls,
+                rpc_tx_multicall_logged = %multicall.logged_subcalls_count(),
+                rpc_tx_multicall_subcalls = %to_json_string(&multicall.logged_subcalls()),
+                is_admin = %is_admin,
+                "rpc request"
+            );
+        } else {
+            tracing::info!(
+                rpc_client = %client,
+                rpc_id = %request.id,
+                rpc_method = %method,
+                rpc_params = %to_json_string(&request.params),
+                rpc_tx_hash = %tx.as_ref().and_then(|tx|tx.hash).or_empty(),
+                rpc_tx_contract = %tx.as_ref().map(|tx|tx.contract).or_empty(),
+                rpc_tx_function = %tx.as_ref().map(|tx|tx.function).or_empty(),
+                rpc_tx_from = %tx.as_ref().and_then(|tx|tx.from).or_empty(),
+                rpc_tx_to = %tx.as_ref().and_then(|tx|tx.to).or_empty(),
+                is_admin = %is_admin,
+                "rpc request"
+            );
+        }
 
         // track metrics
         #[cfg(feature = "metrics")]
@@ -247,20 +263,16 @@ impl RpcServiceT for RpcMiddleware {
             metrics::inc_rpc_requests_started(
                 &client,
                 &method,
-                tx_ref.map(|tx| tx.metric_contract()),
-                tx_ref.map(|tx| tx.metric_function()),
+                tx_ref.map(|tx| tx.contract),
+                tx_ref.map(|tx| tx.function),
                 request_type.to_string(),
             );
-            if let Some(multicall) = tx_ref.and_then(|tx| tx.multicall.as_ref()) {
+            if let Some(tx) = tx_ref
+                && let Some(multicall) = tx.multicall.as_ref()
+            {
                 let req_type = request_type.to_string();
                 for subcall in multicall.logged_subcalls() {
-                    metrics::inc_rpc_requests_started(
-                        &client,
-                        &method,
-                        subcall.metric_contract(),
-                        subcall.metric_function(multicall.parent_function),
-                        &req_type,
-                    );
+                    metrics::inc_rpc_requests_started(&client, &method, subcall.metric_contract(), subcall.metric_function(tx.function), &req_type);
                 }
             }
 
@@ -356,25 +368,44 @@ impl Future for RpcResponse<'_> {
             // only log rpc_result if log level is not info
             let rpc_result = if matches!(level, Level::INFO) { Default::default() } else { &response_result };
             let log_tracing_event = || {
-                event_with!(
-                    level,
-                    rpc_client = %resp.client,
-                    rpc_id = %resp.id,
-                    rpc_method = %resp.method,
-                    rpc_tx_hash = %resp.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
-                    rpc_tx_contract = %resp.tx.as_ref().map(|tx|tx.contract).or_empty(),
-                    rpc_tx_function = %resp.tx.as_ref().map(|tx|tx.function).or_empty(),
-                    rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
-                    rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
-                    rpc_tx_multicall_total = %resp.tx.as_ref().map(|tx| tx.multicall_total()).unwrap_or_default(),
-                    rpc_tx_multicall_logged = %resp.tx.as_ref().map(|tx| tx.multicall_logged_subcalls_count()).unwrap_or_default(),
-                    rpc_tx_multicall_subcalls = %resp.tx.as_ref().map(|tx| tx.multicall_subcalls_json()).unwrap_or_default(),
-                    rpc_tx_multicall_decode_error = %resp.tx.as_ref().map(|tx| tx.multicall_decode_error()).unwrap_or_default(),
-                    %rpc_result,
-                    rpc_success = %response_success,
-                    duration_us = %elapsed.as_micros(),
-                    "rpc response"
-                );
+                if let Some(tx) = resp.tx.as_ref()
+                    && let Some(multicall) = tx.multicall.as_ref()
+                {
+                    event_with!(
+                        level,
+                        rpc_client = %resp.client,
+                        rpc_id = %resp.id,
+                        rpc_method = %resp.method,
+                        rpc_tx_hash = %tx.hash.or_empty(),
+                        rpc_tx_contract = %tx.contract,
+                        rpc_tx_function = %tx.function,
+                        rpc_tx_from = %tx.from.or_empty(),
+                        rpc_tx_to = %tx.to.or_empty(),
+                        rpc_tx_multicall_total = %multicall.total_subcalls,
+                        rpc_tx_multicall_logged = %multicall.logged_subcalls_count(),
+                        rpc_tx_multicall_subcalls = %to_json_string(&multicall.logged_subcalls()),
+                        %rpc_result,
+                        rpc_success = %response_success,
+                        duration_us = %elapsed.as_micros(),
+                        "rpc response"
+                    );
+                } else {
+                    event_with!(
+                        level,
+                        rpc_client = %resp.client,
+                        rpc_id = %resp.id,
+                        rpc_method = %resp.method,
+                        rpc_tx_hash = %resp.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
+                        rpc_tx_contract = %resp.tx.as_ref().map(|tx|tx.contract).or_empty(),
+                        rpc_tx_function = %resp.tx.as_ref().map(|tx|tx.function).or_empty(),
+                        rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
+                        rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
+                        %rpc_result,
+                        rpc_success = %response_success,
+                        duration_us = %elapsed.as_micros(),
+                        "rpc response"
+                    );
+                }
             };
 
             sentry::configure_scope(|scope| {
@@ -399,13 +430,15 @@ impl Future for RpcResponse<'_> {
                     elapsed,
                     &*resp.client,
                     resp.method.clone(),
-                    tx_ref.map(|tx| tx.metric_contract()),
-                    tx_ref.map(|tx| tx.metric_function()),
+                    tx_ref.map(|tx| tx.contract),
+                    tx_ref.map(|tx| tx.function),
                     rpc_result,
                     error_code,
                     response.is_success(),
                 );
-                if let Some(multicall) = tx_ref.and_then(|tx| tx.multicall.as_ref()) {
+                if let Some(tx) = tx_ref
+                    && let Some(multicall) = tx.multicall.as_ref()
+                {
                     let rpc_result = rpc_result.to_owned();
                     for subcall in multicall.logged_subcalls() {
                         metrics::inc_rpc_requests_finished(
@@ -413,7 +446,7 @@ impl Future for RpcResponse<'_> {
                             &*resp.client,
                             resp.method.clone(),
                             subcall.metric_contract(),
-                            subcall.metric_function(multicall.parent_function),
+                            subcall.metric_function(tx.function),
                             &rpc_result,
                             error_code,
                             response.is_success(),
@@ -459,11 +492,7 @@ impl TransactionTracingIdentifiers {
             from: decoded_tx.execution_info.signer.address(),
             to: decoded_tx.execution_info.to,
             nonce: Some(decoded_tx.execution_info.nonce),
-            multicall: decoded_tx
-                .execution_info
-                .to
-                .filter(|to| multicall::is_multicall_contract(*to))
-                .and_then(|to| multicall::decode_multicall(to, &decoded_tx.execution_info.input)),
+            multicall: decode_multicall_if_supported(decoded_tx.execution_info.to, &decoded_tx.execution_info.input),
         })
     }
 
@@ -478,10 +507,7 @@ impl TransactionTracingIdentifiers {
             from: call.from,
             to: call.to,
             nonce: None,
-            multicall: call
-                .to
-                .filter(|to| multicall::is_multicall_contract(*to))
-                .and_then(|to| multicall::decode_multicall(to, &call.data)),
+            multicall: decode_multicall_if_supported(call.to, &call.data),
         })
     }
 
@@ -503,9 +529,10 @@ impl TransactionTracingIdentifiers {
     pub fn record_span(&self, span: Span) {
         span.rec_str("rpc_tx_contract", &self.contract);
         span.rec_str("rpc_tx_function", &self.function);
-        span.rec_str("rpc_tx_multicall_total", &self.multicall_total());
-        span.rec_str("rpc_tx_multicall_logged", &self.multicall_logged_subcalls_count());
-        span.rec_str("rpc_tx_multicall_decode_error", &self.multicall_decode_error());
+        if let Some(multicall) = &self.multicall {
+            span.rec_str("rpc_tx_multicall_total", &multicall.total_subcalls);
+            span.rec_str("rpc_tx_multicall_logged", &multicall.logged_subcalls_count());
+        }
 
         if let Some(tx_hash) = self.hash {
             span.rec_str("rpc_tx_hash", &tx_hash);
@@ -520,33 +547,15 @@ impl TransactionTracingIdentifiers {
             span.rec_str("rpc_tx_nonce", &tx_nonce);
         }
     }
+}
 
-    fn multicall_total(&self) -> usize {
-        self.multicall.as_ref().map(|m| m.total_subcalls).unwrap_or_default()
+fn decode_multicall_if_supported(to: Option<Address>, input: &Bytes) -> Option<MulticallInfo> {
+    let is_supported_multicall = to.is_some_and(multicall::is_multicall_contract) && multicall::is_multicall_subcall_method(input);
+    if !is_supported_multicall {
+        return None;
     }
 
-    fn multicall_logged_subcalls_count(&self) -> usize {
-        self.multicall.as_ref().map(|m| m.logged_subcalls_count()).unwrap_or_default()
-    }
-
-    fn multicall_subcalls_json(&self) -> String {
-        self.multicall.as_ref().map(|m| to_json_string(&m.logged_subcalls())).unwrap_or_default()
-    }
-
-    fn multicall_decode_error(&self) -> &str {
-        self.multicall.as_ref().and_then(|m| m.decode_error.as_deref()).unwrap_or_default()
-    }
-
-    #[cfg(feature = "metrics")]
-    fn metric_contract(&self) -> ContractName {
-        match self.multicall {
-            Some(_) => multicall::MULTICALL_CONTRACT_NAME,
-            None => self.contract,
-        }
-    }
-
-    #[cfg(feature = "metrics")]
-    fn metric_function(&self) -> SoliditySignature {
-        self.function
-    }
+    multicall::decode_multicall(input)
+        .inspect_err(|err| tracing::error!(reason = ?err, "failed to decode multicall input"))
+        .ok()
 }
