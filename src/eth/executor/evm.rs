@@ -60,6 +60,7 @@ use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
+use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::MinedData;
@@ -68,7 +69,6 @@ use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::StratusStorage;
 use crate::ext::OptionExt;
@@ -94,7 +94,22 @@ pub struct Evm {
 #[derive(Clone, Copy)]
 pub enum EvmKind {
     Transaction,
-    Call,
+    CallPast,
+    CallPresent,
+    Inspect,
+}
+
+impl EvmKind {
+    fn is_call(&self) -> bool {
+        match self {
+            EvmKind::Transaction => false,
+            EvmKind::CallPast | EvmKind::CallPresent | EvmKind::Inspect => true,
+        }
+    }
+
+    fn is_transaction(&self) -> bool {
+        !self.is_call()
+    }
 }
 
 impl Evm {
@@ -145,12 +160,12 @@ impl Evm {
             Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)?),
 
             // nonce errors
-            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(TransactionError::Nonce {
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(ExecutorError::Nonce {
                 transaction: tx.into(),
                 account: state.into(),
             }
             .into()),
-            Err(EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state })) => Err(TransactionError::Nonce {
+            Err(EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state })) => Err(ExecutorError::Nonce {
                 transaction: tx.into(),
                 account: state.into(),
             }
@@ -165,7 +180,7 @@ impl Evm {
             // unexpected errors
             Err(e) => {
                 tracing::warn!(reason = ?e, "evm transaction error");
-                Err(TransactionError::EvmFailed(e.to_string()).into())
+                Err(ExecutorError::EvmFailed(e.to_string()).into())
             }
         };
 
@@ -187,13 +202,13 @@ impl Evm {
             .modify_cfg_chained(|cfg_env| {
                 cfg_env.chain_id = chain_id;
                 cfg_env.spec = spec;
-                cfg_env.tx_chain_id_check = matches!(kind, EvmKind::Transaction);
+                cfg_env.tx_chain_id_check = kind.is_transaction();
                 cfg_env.limit_contract_initcode_size = None;
-                cfg_env.disable_nonce_check = matches!(kind, EvmKind::Call);
+                cfg_env.disable_nonce_check = kind.is_call();
                 cfg_env.max_blobs_per_tx = None;
                 cfg_env.tx_gas_limit_cap = None;
                 cfg_env.blob_base_fee_update_fraction = None;
-                cfg_env.disable_eip3607 = matches!(kind, EvmKind::Call);
+                cfg_env.disable_eip3607 = kind.is_call();
                 cfg_env.limit_contract_code_size = Some(usize::MAX);
                 cfg_env.memory_limit = (1 << 32) - 1;
                 cfg_env.disable_balance_check = false;
@@ -455,7 +470,7 @@ impl Database for RevmSession {
             && self.input.is_contract_call()
         {
             if self.config.executor_reject_not_contract {
-                return Err(TransactionError::AccountNotContract { address: to_address }.into());
+                return Err(ExecutorError::AccountNotContract { address: to_address }.into());
             } else {
                 tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
             }

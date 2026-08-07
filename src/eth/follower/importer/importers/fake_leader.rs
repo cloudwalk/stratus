@@ -15,8 +15,8 @@ use crate::eth::miner::miner::interval_miner::mine_local_retry;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionChanges;
+use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionError;
 use crate::eth::storage::StratusStorage;
 
 pub struct FakeLeaderWorker {
@@ -42,7 +42,7 @@ impl ImporterWorker for FakeLeaderWorker {
             tracing::info!(?tx, "executing tx as fake miner");
             if let Err(e) = self.executor.execute_local_transaction(tx.try_into()?) {
                 match e {
-                    StratusError::Transaction(TransactionError::Nonce { transaction: _, account: _ }) => {
+                    StratusError::Executor(ExecutorError::Nonce { transaction: _, account: _ }) => {
                         tracing::warn!(reason = ?e, "transaction failed, was this node restarted?");
                     }
                     _ => {
