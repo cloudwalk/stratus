@@ -5,6 +5,7 @@ use alloy_rpc_types_trace::geth::CallFrame;
 use alloy_rpc_types_trace::geth::FourByteFrame;
 use alloy_rpc_types_trace::geth::GethDebugBuiltInTracerType;
 use alloy_rpc_types_trace::geth::GethDebugTracerType;
+use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::NoopFrame;
 use alloy_rpc_types_trace::geth::call::FlatCallFrame;
@@ -55,15 +56,18 @@ use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::MinedData;
 use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::RpcError;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
@@ -213,14 +217,24 @@ impl Evm {
         RevmEvm::new(ctx, EthInstructions::new_mainnet(), EthPrecompiles::default())
     }
 
-    /// Execute a transaction using a tracer.
+    /// Execute a transaction or a synthetic call using a tracer.
     pub fn inspect(&mut self, input: InspectorInput) -> Result<GethTrace, StratusError> {
-        let InspectorInput {
-            tx_hash,
-            opts,
-            trace_unsuccessful_only,
-        } = input;
-        let tracer_type = opts.tracer.ok_or_else(|| anyhow!("no tracer type provided"))?;
+        match input {
+            InspectorInput::Transaction {
+                tx_hash,
+                opts,
+                trace_unsuccessful_only,
+            } => self.inspect_transaction(tx_hash, opts, trace_unsuccessful_only),
+            InspectorInput::Call { call, point_in_time, opts } => self.inspect_call(call, point_in_time, opts),
+        }
+    }
+
+    /// Re-executes an already-mined transaction, looked up by hash, wrapped in the requested tracer.
+    ///
+    /// Because Stratus only stores state at block boundaries, every transaction before the target one in the
+    /// same block is replayed first, to reconstruct the exact mid-block state the target transaction saw.
+    fn inspect_transaction(&mut self, tx_hash: Hash, opts: GethDebugTracingOptions, trace_unsuccessful_only: bool) -> Result<GethTrace, StratusError> {
+        let tracer_type = opts.tracer.clone().ok_or_else(|| anyhow!("no tracer type provided"))?;
 
         if matches!(tracer_type, GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer)) {
             return Ok(NoopFrame::default().into());
@@ -271,7 +285,7 @@ impl Evm {
         let mut cache_db = CacheDB::new(&self.evm.journaled_state.database);
         let mut evm = Self::create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db, self.kind);
 
-        // Execute all transactions before target tx_hash
+        // Execute all transactions before target tx_hash, to reconstruct the mid-block state it saw.
         for tx in block.transactions.into_iter() {
             if tx.info.hash == tx_hash {
                 break;
@@ -283,6 +297,68 @@ impl Evm {
             let tx = std::mem::take(&mut evm.tx);
             evm.transact_commit(tx)?;
         }
+
+        Self::run_tracer(tracer_type, opts, spec, self.kind, cache_db, inspect_input, tx_info)
+    }
+
+    /// Executes a synthetic call that was never signed or broadcast, wrapped in the requested tracer, against a
+    /// chosen point in time. Unlike [`Self::inspect_transaction`], there is no real position in a block to
+    /// reconstruct, so the call runs directly against the resolved state boundary — same as [`Self::execute`]
+    /// does for `eth_call`, just with a tracer attached.
+    fn inspect_call(&mut self, call: CallInput, point_in_time: PointInTime, opts: GethDebugTracingOptions) -> Result<GethTrace, StratusError> {
+        let tracer_type = opts.tracer.clone().ok_or_else(|| anyhow!("no tracer type provided"))?;
+
+        if matches!(tracer_type, GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::NoopTracer)) {
+            return Ok(NoopFrame::default().into());
+        }
+
+        let inspect_input: EvmInput = match point_in_time {
+            PointInTime::Pending => {
+                let (pending_header, tx_count) = self.evm.journaled_state.database.storage.read_pending_block_header();
+                EvmInput::from_pending_block(call, pending_header, tx_count)
+            }
+            point_in_time => {
+                let Some(block) = self.evm.journaled_state.database.storage.read_block(point_in_time.into())? else {
+                    return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
+                };
+                EvmInput::from_mined_block(call, block, point_in_time)
+            }
+        };
+
+        let tx_info = TransactionInfo {
+            block_hash: None,
+            hash: None,
+            index: None,
+            block_number: Some(inspect_input.block_number.as_u64()),
+            base_fee: None,
+        };
+
+        // point the base session at the resolved state boundary — no replay needed, this is the only execution
+        self.evm.journaled_state.database.reset(EvmInput {
+            point_in_time: inspect_input.point_in_time,
+            ..Default::default()
+        });
+
+        let spec = self.evm.cfg.spec;
+        let cache_db = CacheDB::new(&self.evm.journaled_state.database);
+
+        Self::run_tracer(tracer_type, opts, spec, self.kind, cache_db, inspect_input, tx_info)
+    }
+
+    /// Runs `inspect_input` through the EVM wrapped in the inspector implied by `tracer_type`, against `cache_db`.
+    ///
+    /// Shared by [`Self::inspect_transaction`] (where `cache_db` already has preceding transactions committed
+    /// into it) and [`Self::inspect_call`] (where `cache_db` is empty and reads fall straight through to storage).
+    fn run_tracer(
+        tracer_type: GethDebugTracerType,
+        opts: GethDebugTracingOptions,
+        spec: SpecId,
+        kind: EvmKind,
+        mut cache_db: CacheDB<&RevmSession>,
+        inspect_input: EvmInput,
+        tx_info: TransactionInfo,
+    ) -> Result<GethTrace, StratusError> {
+        let evm = Self::create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db, kind);
 
         let trace_result: GethTrace = match tracer_type {
             GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => {
