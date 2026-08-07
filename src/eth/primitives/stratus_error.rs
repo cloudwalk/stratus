@@ -72,6 +72,17 @@ pub enum RpcError {
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
+#[major_error_code = 8000]
+pub enum MulticallError {
+    #[error("invalid multicall ABI: {source}")]
+    #[error_code = 1]
+    InvalidInput {
+        #[from]
+        source: alloy_sol_types::Error,
+    },
+}
+
+#[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 2000]
 pub enum TransactionError {
     #[error("function selector was not recognized: account at {address} is not a contract.")]
@@ -253,6 +264,9 @@ pub enum StratusError {
 
     #[error(transparent)]
     State(#[from] StateError),
+
+    #[error(transparent)]
+    Multicall(#[from] MulticallError),
 }
 
 impl ErrorCode for StratusError {
@@ -265,6 +279,7 @@ impl ErrorCode for StratusError {
             Self::Consensus(err) => err.error_code(),
             Self::Unexpected(err) => err.error_code(),
             Self::State(err) => err.error_code(),
+            Self::Multicall(err) => err.error_code(),
         }
     }
 
@@ -278,6 +293,7 @@ impl ErrorCode for StratusError {
             5 => ConsensusError::str_repr_from_err_code(code),
             6 => UnexpectedError::str_repr_from_err_code(code),
             7 => StateError::str_repr_from_err_code(code),
+            8 => MulticallError::str_repr_from_err_code(code),
             _ => None,
         }
     }
@@ -307,6 +323,9 @@ impl StratusError {
 
             // Unexpected
             Self::Unexpected(UnexpectedError::Unexpected(e)) => JsonValue::String(e.to_string()),
+
+            // Multicall
+            Self::Multicall(e) => JsonValue::String(e.to_string()),
 
             _ => JsonValue::Null,
         }
