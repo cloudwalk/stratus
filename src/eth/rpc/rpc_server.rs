@@ -242,6 +242,11 @@ impl Server {
         let is_healthy = self.health().await;
         GlobalState::set_health(is_healthy);
         metrics::set_consensus_is_ready(if is_healthy { 1u64 } else { 0u64 });
+
+        let current_mode = GlobalState::get_node_mode();
+        for mode in NodeMode::ALL {
+            metrics::set_node_mode(u64::from(mode == current_mode), mode.to_string());
+        }
     }
 
     fn read_importer(&self) -> Option<Arc<ImporterConsensus>> {
@@ -529,6 +534,8 @@ async fn stratus_change_to_leader(_: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     ctx.server.storage.clear_cache();
     tracing::info!("node mode changed to leader successfully, cache cleared");
 
+    ctx.server.update_health().await;
+
     Ok(json!(true))
 }
 
@@ -582,10 +589,13 @@ async fn stratus_change_to_follower(params: Params<'_>, ctx: Arc<RpcContext>, ex
         Err(e) => {
             tracing::error!(reason = ?e, "failed to initialize importer, reverting node mode to leader");
             GlobalState::set_node_mode(NodeMode::Leader);
+            ctx.server.update_health().await;
             return Err(e);
         }
     }
     tracing::info!("node mode changed to follower successfully");
+
+    ctx.server.update_health().await;
 
     Ok(json!(true))
 }

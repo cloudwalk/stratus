@@ -43,7 +43,7 @@ impl Metric {
         match self.kind {
             "counter" => describe_counter!(self.name, self.description),
             "histogram_duration" | "histogram_counter" => describe_histogram!(self.name, self.description),
-            "gauge" => describe_gauge!(self.name, self.description),
+            "gauge" | "gauge_no_auto_label" => describe_gauge!(self.name, self.description),
             _ => {}
         }
     }

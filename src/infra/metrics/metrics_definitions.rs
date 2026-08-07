@@ -244,7 +244,10 @@ metrics! {
     histogram_duration consensus_forward{},
 
     "The readiness of Stratus."
-    gauge consensus_is_ready{}
+    gauge_no_auto_label consensus_is_ready{},
+
+    "Current node mode: 1 for the active mode, 0 for the others."
+    gauge_no_auto_label node_mode{mode}
 }
 
 // Kafka Metrics
