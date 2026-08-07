@@ -60,15 +60,18 @@ use crate::infra::tracing::warn_task_tx_closed;
 // Evm task
 // -----------------------------------------------------------------------------
 
-pub struct EvmTask<T: Task> {
+pub struct EvmTask<T: Task + Send> {
     pub span: Span,
     task: T,
 }
 
-impl<T: Task + Send> EvmTask<T> {
-    fn new(task: T) -> Self {
+impl<T: Task + Send> From<T> for EvmTask<T> {
+    fn from(task: T) -> Self {
         Self { span: Span::current(), task }
     }
+}
+
+impl<T: Task + Send> EvmTask<T> {
     fn execute(self, evm: &mut Evm) -> anyhow::Result<(), StratusError> {
         let _enter = self.span.enter();
         catch_unwind(AssertUnwindSafe(|| self.task.execute(evm))).map_err(|err| ExecutorError::Panic { err: anyhow!("{err:?}") }.into())
@@ -206,7 +209,7 @@ impl Evms {
     fn execute(&self, evm_input: EvmInput, route: EvmRoute) -> Result<EvmExecutionResult, StratusError> {
         let (execution_tx, execution_rx) = oneshot::channel::<Result<EvmExecutionResult, StratusError>>();
 
-        let task = EvmTask::new(ExecutionTask::new(evm_input, execution_tx));
+        let task = ExecutionTask::new(evm_input, execution_tx).into();
         let _ = match route {
             EvmRoute::Transaction => self.tx.send(task),
             EvmRoute::CallPresent => self.call_present.send(task),
@@ -221,7 +224,7 @@ impl Evms {
 
     fn inspect(&self, input: InspectorInput) -> Result<GethTrace, StratusError> {
         let (inspector_tx, inspector_rx) = oneshot::channel::<Result<GethTrace, StratusError>>();
-        let task = EvmTask::new(InspectionTask::new(input, inspector_tx));
+        let task = InspectionTask::new(input, inspector_tx).into();
         let _ = self.inspector.send(task);
         match inspector_rx.recv() {
             Ok(result) => result,
