@@ -98,7 +98,6 @@ impl Task for InspectionTask {
     }
 }
 
-#[derive(Debug)]
 pub struct ExecutionTask {
     pub input: EvmInput,
     pub response_tx: oneshot::Sender<Result<EvmExecutionResult, StratusError>>,
