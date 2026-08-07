@@ -1,4 +1,4 @@
-name: E2E Leader & Follower
+name: E2E Leader & Fake Leader
 
 permissions:
   contents: read
@@ -31,7 +31,7 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
-  CACHE_KEY_CONTEXT: v1-cargo-leader-follower-tests
+  CACHE_KEY_CONTEXT: v1-cargo-leader-fake-leader-tests
   CACHE_PATH: |
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
@@ -42,7 +42,7 @@ env:
 
 jobs:
   setup_cache:
-    name: Setup Cache for E2E Leader & Follower tests
+    name: Setup Cache for E2E Leader & Fake Leader tests
     runs-on: ubuntu-22.04
     outputs:
       cache-key: ${{ steps.cache-key.outputs.key }}
@@ -82,20 +82,14 @@ jobs:
         with:
           key: ${{ env.CACHE_KEY }}
           path: ${{ env.CACHE_PATH }}
-  leader_follower_test:
-    strategy:
-      fail-fast: false
-      matrix:
-        test:
-          [brlc, importer, miner, change, deploy, kafka, health, tx-types]
-        use_block_changes_replication: [false, true]
-    name: "E2E Leader & Follower on ${{ matrix.test }} (Replication: ${{ matrix.use_block_changes_replication }})"
+  leader_fake_leader_test:
+    name: "E2E Leader & Fake Leader on fake-leader"
     needs: setup_cache
     runs-on: ubuntu-22.04
     timeout-minutes: 45
 
     concurrency:
-      group: ${{ github.workflow }}-${{ matrix.test }}-${{ matrix.use_block_changes_replication }}-${{ github.ref || github.run_id }}
+      group: ${{ github.workflow }}-fake-leader-${{ github.ref || github.run_id }}
       cancel-in-progress: true
 
     steps:
@@ -115,7 +109,7 @@ jobs:
       - name: Set up Just
         uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
       - name: Install Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .tool-versions
       - name: Install npm
@@ -127,17 +121,6 @@ jobs:
         if: ${{ steps.cache-cargo.outputs.cache-hit != 'true' }}
         with:
           tool: cargo-llvm-cov@0.6.14
-      - name: Install Python 3.12
-        uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # v4
-        with:
-          python-version: "3.12"
-      - name: Install Poetry
-        run: curl -sSL https://install.python-poetry.org | python3 -
-      - name: Install Docker Compose
-        if: matrix.test == 'kafka'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker-compose
       - name: Clone BRLCToken repository
         run: just contracts-clone
         env:
@@ -145,7 +128,7 @@ jobs:
       - name: Flatten BRLCToken contract
         run: just contracts-flatten token BRLCToken
       - name: Run e2e tests
-        run: just run-test e2e-leader-follower-up ${{ matrix.test }} ${{ matrix.use_block_changes_replication }}
+        run: just run-test e2e-leader-fake-leader-up fake-leader
         env:
           CARGO_PROFILE_RELEASE_DEBUG: 0
           RUST_LOG: error

@@ -12,6 +12,7 @@ use crate::eth::follower::importer::ImporterMode;
 use crate::eth::follower::importer::importer_supervisor::ImporterConsensus;
 use crate::eth::follower::importer::importer_supervisor::start_importer;
 use crate::eth::miner::Miner;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ConsensusError;
 use crate::eth::primitives::ImporterError;
 use crate::eth::primitives::StateError;
@@ -53,6 +54,10 @@ pub struct ImporterConfig {
     /// Enable replication of block changes
     #[arg(long = "enable-block-changes-replication", env = "ENABLE_BLOCK_CHANGES_REPLICATION", default_value = "false")]
     pub enable_block_changes_replication: bool,
+
+    /// Specify the block to stop importing. (useful for validating a follower db against a fake leader)
+    #[arg(long = "stop-at-block", env = "STOP_AT_BLOCK")]
+    pub stop_at_block: Option<BlockNumber>,
 }
 
 impl ImporterConfig {
@@ -109,7 +114,16 @@ impl ImporterConfig {
 
         spawn(
             TASK_NAME,
-            start_importer(importer_mode, storage, executor, miner, chain, kafka_connector, self.sync_interval),
+            start_importer(
+                importer_mode,
+                storage,
+                executor,
+                miner,
+                chain,
+                kafka_connector,
+                self.sync_interval,
+                self.stop_at_block,
+            ),
         );
 
         Ok(Some(consensus))

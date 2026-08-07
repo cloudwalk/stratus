@@ -18,7 +18,6 @@ use crate::alias::AlloyBytes;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::ExternalBlockWithReceipts;
@@ -29,6 +28,7 @@ use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::Wei;
 use crate::eth::rpc::RpcClientApp;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::ext::DisplayExt;
 use crate::ext::to_json_value;
 use crate::infra::tracing::TracingExt;
@@ -173,13 +173,13 @@ impl BlockchainClient {
     }
 
     /// Fetches a block by number with changes.
-    pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(Block, BlockChangesRocksdb)>> {
+    pub async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
         tracing::debug!(%block_number, "fetching block with changes");
 
         let number = to_json_value(block_number);
         let result = self
             .http
-            .request::<Option<(Block, BlockChangesRocksdb)>, _>("stratus_getBlockWithChanges", [number])
+            .request::<Option<(BlockRocksdb, BlockChangesRocksdb)>, _>("stratus_getBlockWithChanges", [number])
             .await;
 
         match result {
@@ -311,5 +311,27 @@ impl BlockchainClient {
                 Err(e) => return log_and_err!(reason = e, "failed to subscribe to newHeads event"),
             }
         }
+    }
+}
+
+#[cfg(test)]
+impl BlockchainClient {
+    /// Test-only constructor that builds an HTTP-only client without performing the health check.
+    ///
+    /// Intended for tests that need a `BlockchainClient` to satisfy a struct field (e.g. a fetcher's
+    /// `chain`) but only exercise code paths that never issue real RPC calls (such as
+    /// `BlockWithChangesFetcher::post_process`, which only converts already-fetched data).
+    #[cfg(test)]
+    pub(crate) fn new_without_health_check(http_url: &str) -> anyhow::Result<Self> {
+        let timeout = Duration::from_secs(1);
+        let http = Self::build_http_client(http_url, timeout, 1024)?;
+        Ok(Self {
+            http,
+            http_url: http_url.to_owned(),
+            ws: None,
+            ws_url: None,
+            timeout,
+            max_response_size_bytes: 1024,
+        })
     }
 }

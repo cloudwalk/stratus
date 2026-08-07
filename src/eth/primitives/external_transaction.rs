@@ -123,7 +123,7 @@ impl Dummy<Faker> for ExternalTransaction {
 
         let r = U256::from(rng.next_u64());
         let s = U256::from(rng.next_u64());
-        let v = rng.next_u64() % 2 == 0;
+        let v = rng.next_u64().is_multiple_of(2);
         let signature = Signature::new(r, s, v);
 
         let hash: Hash = faker.fake_with_rng(rng);

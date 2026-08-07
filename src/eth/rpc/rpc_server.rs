@@ -623,6 +623,7 @@ async fn stratus_init_importer(params: Params<'_>, ctx: Arc<RpcContext>, ext: Ex
         enable_block_changes_replication: std::env::var("ENABLE_BLOCK_CHANGES_REPLICATION")
             .ok()
             .is_some_and(|val| val == "1" || val == "true"),
+        stop_at_block: None,
     };
 
     importer_config.init_follower_importer(ctx).await
@@ -1315,7 +1316,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
     // track
     Span::with(|s| {
         s.rec_str("tx_hash", &tx_hash);
-        s.rec_str("tx_from", &tx.execution_info.signer);
+        s.rec_str("tx_from", &tx.signer());
         s.rec_opt("tx_to", &tx.execution_info.to);
         s.rec_str("tx_nonce", &tx.execution_info.nonce);
     });
@@ -1326,6 +1327,7 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
     }
 
     // HOTFIX: this is a temporary stopgap measure to prevent type 4 transactions which currently cause the followers to crash
+    #[cfg(not(feature = "dev"))]
     if tx.transaction_info.tx_type.is_some_and(|t| t > 3) {
         tracing::warn!(%tx_hash, "rejecting unsuported transaction type");
         return Err(RpcError::ParameterInvalid.into());
@@ -1400,10 +1402,10 @@ fn eth_get_logs(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     tracing::info!(?filter, filter_event = %event_name, "reading logs");
 
     // check range
-    if blocks_in_range > MAX_BLOCK_RANGE {
+    if blocks_in_range > MAX_BLOCK_RANGE || blocks_in_range == 0 {
         return Err(RpcError::BlockRangeInvalid {
-            actual: blocks_in_range,
-            max: MAX_BLOCK_RANGE,
+            actual: blocks_in_range as i128,
+            max: Some(MAX_BLOCK_RANGE),
         }
         .into());
     }

@@ -8,6 +8,7 @@ use anyhow::bail;
 
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
+use super::types::BlockRocksdb;
 use crate::GlobalState;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
@@ -22,13 +23,13 @@ use crate::eth::primitives::LogFilter;
 use crate::eth::primitives::LogMessage;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
-use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::SleepReason;
 use crate::ext::spawn;
@@ -153,9 +154,9 @@ impl RocksPermanentStorage {
     // State operations
     // -------------------------------------------------------------------------
 
-    pub fn read_account(&self, address: Address, point_in_time: PointInTime) -> anyhow::Result<Option<Account>, StorageError> {
+    pub fn read_account(&self, address: Address, point: &MinedPointInTime<'_>) -> anyhow::Result<Option<Account>, StorageError> {
         self.state
-            .read_account(address, point_in_time)
+            .read_account(address, point)
             .map_err(|err| StorageError::RocksError { err })
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to read account in RocksPermanent");
@@ -166,9 +167,9 @@ impl RocksPermanentStorage {
         self.state.read_accounts(addresses).map_err(|err| StorageError::RocksError { err })
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> anyhow::Result<Option<Slot>, StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, point: &MinedPointInTime<'_>) -> anyhow::Result<Option<Slot>, StorageError> {
         self.state
-            .read_slot(address, index, point_in_time)
+            .read_slot(address, index, point)
             .map_err(|err| StorageError::RocksError { err })
             .inspect_err(|e| {
                 tracing::error!(reason = ?e, "failed to read slot in RocksPermanent");
@@ -185,7 +186,7 @@ impl RocksPermanentStorage {
         block.map_err(|err| StorageError::RocksError { err })
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(Block, BlockChangesRocksdb)>, StorageError> {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>, StorageError> {
         let result = self.state.read_block_with_changes(selection).inspect_err(|e| {
             tracing::error!(reason = ?e, "failed to read block with changes in RocksPermanent");
         });

@@ -47,7 +47,11 @@ impl BlockNumber {
     ///
     /// Assumes that self is the lower-end of the range.
     pub fn count_to(self, higher_end: impl Into<u64>) -> u64 {
-        higher_end.into().saturating_sub(self.as_u64()) + 1
+        higher_end.into().saturating_sub(self.as_u64()).saturating_add(1)
+    }
+
+    pub fn as_i128(&self) -> i128 {
+        self.0.try_into().unwrap()
     }
 
     pub fn as_i64(&self) -> i64 {
@@ -179,5 +183,37 @@ impl From<BlockNumber> for U256 {
 impl From<BlockNumber> for [u8; 8] {
     fn from(block_number: BlockNumber) -> Self {
         block_number.as_u64().to_be_bytes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn count_to_includes_both_endpoints() {
+        assert_eq!(BlockNumber::ZERO.count_to(0u64), 1);
+        assert_eq!(BlockNumber::from(10u32).count_to(10u64), 1);
+        assert_eq!(BlockNumber::from(10u32).count_to(14u64), 5);
+    }
+
+    #[test]
+    fn count_to_saturates_instead_of_overflowing_at_max() {
+        // Before the saturating_add fix, ZERO.count_to(u64::MAX) would wrap around to 0.
+        let result = BlockNumber::ZERO.count_to(u64::MAX);
+        assert_eq!(result, u64::MAX);
+    }
+
+    #[test]
+    fn count_to_saturates_when_higher_end_below_self() {
+        // saturating_sub clamps to 0, then +1 => 1 (never underflows).
+        assert_eq!(BlockNumber::from(10u32).count_to(5u64), 1);
+    }
+
+    #[test]
+    fn as_i128_roundtrips() {
+        assert_eq!(BlockNumber::ZERO.as_i128(), 0);
+        assert_eq!(BlockNumber::from(10u32).as_i128(), 10);
+        assert_eq!(BlockNumber::MAX.as_i128(), i64::MAX as i128);
     }
 }

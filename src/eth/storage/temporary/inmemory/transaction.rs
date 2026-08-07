@@ -12,7 +12,6 @@ use crate::eth::primitives::BlockNumber;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExternalBlock;
 use crate::eth::primitives::Hash;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Nonce;
@@ -23,7 +22,6 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
-#[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTimeNow;
@@ -49,10 +47,10 @@ impl InmemoryTransactionTemporaryStorage {
         }
     }
 
-    pub fn set_pending_from_external(&self, block: &ExternalBlock) {
+    pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
         let mut pending_block = self.pending_block.write();
-        pending_block.block.header.number = block.number();
-        pending_block.block.header.timestamp = block.timestamp().into();
+        pending_block.block.header.number = number;
+        pending_block.block.header.timestamp = timestamp.into();
     }
 
     // -------------------------------------------------------------------------
@@ -81,11 +79,7 @@ impl InmemoryTransactionTemporaryStorage {
         if tx.evm_input != &pending_block.block.header {
             let actual_input = tx.evm_input.clone();
             let tx_input: TransactionInput = tx.into();
-            let expected_input = EvmInput::from_eth_transaction(
-                &tx_input.execution_info,
-                pending_block.block.header.number,
-                *pending_block.block.header.timestamp,
-            );
+            let expected_input = EvmInput::from_eth_transaction(&tx_input, pending_block.block.header.number, *pending_block.block.header.timestamp);
             return Err(StorageError::EvmInputMismatch {
                 expected: Box::new(expected_input),
                 actual: Box::new(actual_input),
