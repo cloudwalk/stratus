@@ -1,3 +1,6 @@
+#[cfg(feature = "metrics")]
+use std::time::Duration;
+
 use alloy_primitives::FixedBytes;
 use alloy_sol_types::SolCall;
 use alloy_sol_types::SolInterface;
@@ -8,6 +11,10 @@ use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+#[cfg(feature = "metrics")]
+use crate::eth::rpc::RpcClientApp;
+#[cfg(feature = "metrics")]
+use crate::infra::metrics;
 
 pub const MAX_MULTICALL_LOGGED_SUBCALLS: usize = 32;
 pub const MULTICALL_CONTRACT_NAME: ContractName = "Multicall3";
@@ -23,10 +30,52 @@ pub struct MulticallInfo {
 }
 
 impl MulticallInfo {
-    fn new(subcalls: Vec<MulticallSubcall>) -> Self {
+    pub fn new(to: Option<Address>, input: &Bytes) -> Option<Self> {
+        if !to.is_some_and(is_multicall_contract) {
+            return None;
+        }
+
+        decode_multicall(input)
+            .inspect_err(|err| tracing::error!(reason = ?err, "failed to decode multicall input"))
+            .ok()
+    }
+
+    fn from_subcalls(subcalls: Vec<MulticallSubcall>) -> Self {
         Self {
             total_subcalls: subcalls.len(),
             subcalls,
+        }
+    }
+
+    #[cfg(feature = "metrics")]
+    pub fn inc_rpc_requests_started(&self, client: &RpcClientApp, method: &str, parent_function: codegen::SoliditySignature, req_type: &str) {
+        for subcall in self.logged_subcalls() {
+            metrics::inc_rpc_requests_started(client, method, subcall.metric_contract(), subcall.metric_function(parent_function), req_type);
+        }
+    }
+
+    #[cfg(feature = "metrics")]
+    pub fn inc_rpc_requests_finished(
+        &self,
+        elapsed: Duration,
+        client: &RpcClientApp,
+        method: &str,
+        parent_function: codegen::SoliditySignature,
+        rpc_result: &str,
+        result_code: i32,
+        success: bool,
+    ) {
+        for subcall in self.logged_subcalls() {
+            metrics::inc_rpc_requests_finished(
+                elapsed,
+                client,
+                method,
+                subcall.metric_contract(),
+                subcall.metric_function(parent_function),
+                rpc_result,
+                result_code,
+                success,
+            );
         }
     }
 
@@ -45,12 +94,12 @@ impl TryFrom<Multicall::MulticallCalls> for MulticallInfo {
 
     fn try_from(value: Multicall::MulticallCalls) -> Result<Self, Self::Error> {
         match value {
-            Multicall::MulticallCalls::aggregate(call) => Ok(Self::new(subcalls_from_calls(call.calls, None))),
-            Multicall::MulticallCalls::tryAggregate(call) => Ok(Self::new(subcalls_from_calls(call.calls, Some(!call.requireSuccess)))),
-            Multicall::MulticallCalls::aggregate3(call) => Ok(Self::new(subcalls_from_call3(call.calls))),
-            Multicall::MulticallCalls::aggregate3Value(call) => Ok(Self::new(subcalls_from_call3_value(call.calls))),
-            Multicall::MulticallCalls::blockAndAggregate(call) => Ok(Self::new(subcalls_from_calls(call.calls, None))),
-            Multicall::MulticallCalls::tryBlockAndAggregate(call) => Ok(Self::new(subcalls_from_calls(call.calls, Some(!call.requireSuccess)))),
+            Multicall::MulticallCalls::aggregate(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, None))),
+            Multicall::MulticallCalls::tryAggregate(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, Some(!call.requireSuccess)))),
+            Multicall::MulticallCalls::aggregate3(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, None))),
+            Multicall::MulticallCalls::aggregate3Value(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, None))),
+            Multicall::MulticallCalls::blockAndAggregate(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, None))),
+            Multicall::MulticallCalls::tryBlockAndAggregate(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, Some(!call.requireSuccess)))),
             _ => anyhow::bail!("unsupported multicall function"),
         }
     }
@@ -116,72 +165,84 @@ pub fn decode_multicall(input: &Bytes) -> anyhow::Result<MulticallInfo> {
     decoded.try_into()
 }
 
-fn subcalls_from_calls(calls: Vec<Multicall3::Call>, allow_failure: Option<bool>) -> Vec<MulticallSubcall> {
-    calls
-        .into_iter()
-        .enumerate()
-        .map(|(index, call)| MulticallSubcall::new(index, call.target.into(), call.callData.into(), allow_failure, None))
-        .collect()
-}
+trait MulticallCall {
+    fn target(&self) -> Address;
 
-fn subcalls_from_call3(calls: Vec<Multicall3::Call3>) -> Vec<MulticallSubcall> {
-    calls
-        .into_iter()
-        .enumerate()
-        .map(|(index, call)| MulticallSubcall::new(index, call.target.into(), call.callData.into(), Some(call.allowFailure), None))
-        .collect()
-}
+    fn data(&self) -> &[u8];
 
-fn subcalls_from_call3_value(calls: Vec<Multicall3::Call3Value>) -> Vec<MulticallSubcall> {
-    calls
-        .into_iter()
-        .enumerate()
-        .map(|(index, call)| {
-            MulticallSubcall::new(
-                index,
-                call.target.into(),
-                call.callData.into(),
-                Some(call.allowFailure),
-                Some(call.value.to_string()),
-            )
-        })
-        .collect()
-}
-
-#[cfg(test)]
-fn alloy_address(address: Address) -> alloy_primitives::Address {
-    address.into()
-}
-
-#[cfg(test)]
-fn multicall_address() -> Address {
-    MULTICALL_ADDRESS
-}
-
-#[cfg(test)]
-fn brlc_address() -> Address {
-    Address::BRLC
-}
-
-#[cfg(test)]
-fn unknown_address() -> Address {
-    Address::new([0x11; 20])
-}
-
-#[cfg(test)]
-fn transfer_input() -> Vec<u8> {
-    use alloy_primitives::U256;
-    use alloy_sol_types::sol;
-
-    sol! {
-        function transfer(address,uint256) external returns (bool);
+    fn allow_failure(&self) -> Option<bool> {
+        None
     }
 
-    transferCall {
-        _0: alloy_address(unknown_address()),
-        _1: U256::from(100),
+    fn value(&self) -> Option<String> {
+        None
     }
-    .abi_encode()
+
+    fn into_multicall_subcall(self, index: usize, allow_failure: Option<bool>) -> MulticallSubcall
+    where
+        Self: Sized,
+    {
+        MulticallSubcall::new(
+            index,
+            self.target(),
+            self.data().to_vec(),
+            allow_failure.or_else(|| self.allow_failure()),
+            self.value(),
+        )
+    }
+}
+
+impl MulticallCall for Multicall3::Call {
+    fn target(&self) -> Address {
+        self.target.into()
+    }
+
+    fn data(&self) -> &[u8] {
+        self.callData.as_ref()
+    }
+}
+
+impl MulticallCall for Multicall3::Call3 {
+    fn target(&self) -> Address {
+        self.target.into()
+    }
+
+    fn data(&self) -> &[u8] {
+        self.callData.as_ref()
+    }
+
+    fn allow_failure(&self) -> Option<bool> {
+        Some(self.allowFailure)
+    }
+}
+
+impl MulticallCall for Multicall3::Call3Value {
+    fn target(&self) -> Address {
+        self.target.into()
+    }
+
+    fn data(&self) -> &[u8] {
+        self.callData.as_ref()
+    }
+
+    fn allow_failure(&self) -> Option<bool> {
+        Some(self.allowFailure)
+    }
+
+    fn value(&self) -> Option<String> {
+        Some(self.value.to_string())
+    }
+}
+
+fn subcalls_from_calls<T>(calls: Vec<T>, allow_failure: Option<bool>) -> Vec<MulticallSubcall>
+where
+    T: MulticallCall,
+{
+    calls
+        .into_iter()
+        .enumerate()
+        .map(|(index, call)| call.into_multicall_subcall(index, allow_failure))
+        .collect()
 }
 
 #[cfg(test)]
@@ -189,6 +250,36 @@ mod tests {
     use alloy_primitives::U256;
 
     use super::*;
+
+    fn alloy_address(address: Address) -> alloy_primitives::Address {
+        address.into()
+    }
+
+    fn multicall_address() -> Address {
+        MULTICALL_ADDRESS
+    }
+
+    fn brlc_address() -> Address {
+        Address::BRLC
+    }
+
+    fn unknown_address() -> Address {
+        Address::new([0x11; 20])
+    }
+
+    fn transfer_input() -> Vec<u8> {
+        use alloy_sol_types::sol;
+
+        sol! {
+            function transfer(address,uint256) external returns (bool);
+        }
+
+        transferCall {
+            _0: alloy_address(unknown_address()),
+            _1: U256::from(100),
+        }
+        .abi_encode()
+    }
 
     #[test]
     fn decode_aggregate_with_one_call() {
