@@ -30,6 +30,12 @@ use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
 use crate::eth::codegen::SoliditySignature;
 use crate::eth::multicall::MulticallInfo;
+#[cfg(feature = "metrics")]
+use crate::eth::multicall::MulticallRpcRequestsFinishedMetrics;
+#[cfg(feature = "metrics")]
+use crate::eth::multicall::MulticallRpcRequestsStartedMetrics;
+#[cfg(feature = "metrics")]
+use crate::eth::multicall::MulticallRpcResponseMetrics;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
@@ -256,7 +262,7 @@ impl RpcServiceT for RpcMiddleware {
                 && let Some(multicall) = tx.multicall.as_ref()
             {
                 let req_type = request_type.to_string();
-                multicall.inc_rpc_requests_started(&client, &method, tx.function, &req_type);
+                MulticallInfo::inc_rpc_requests_started(MulticallRpcRequestsStartedMetrics::new(multicall, &client, &method, tx.function, &req_type));
             }
 
             // active requests
@@ -406,7 +412,13 @@ impl Future for RpcResponse<'_> {
                 if let Some(tx) = tx_ref
                     && let Some(multicall) = tx.multicall.as_ref()
                 {
-                    multicall.inc_rpc_requests_finished(elapsed, resp.client, resp.method, tx.function, rpc_result, error_code, response.is_success());
+                    MulticallInfo::inc_rpc_requests_finished(MulticallRpcRequestsFinishedMetrics::new(
+                        multicall,
+                        resp.client,
+                        resp.method,
+                        tx.function,
+                        MulticallRpcResponseMetrics::new(elapsed, rpc_result, error_code, response.is_success()),
+                    ));
                 }
 
                 metrics::inc_rpc_response_size(response.as_json().get().len(), &*resp.client, resp.method.clone());
