@@ -2,6 +2,7 @@
 use std::time::Duration;
 
 use alloy_primitives::FixedBytes;
+#[cfg(test)]
 use alloy_sol_types::SolCall;
 use alloy_sol_types::SolInterface;
 use alloy_sol_types::sol;
@@ -35,7 +36,12 @@ impl MulticallInfo {
             return None;
         }
 
-        decode_multicall(input)
+        let decoded = (|| -> anyhow::Result<Self> {
+            let decoded = Multicall::MulticallCalls::abi_decode(input.as_ref()).map_err(crate::eth::primitives::MulticallError::from)?;
+            decoded.try_into()
+        })();
+
+        decoded
             .inspect_err(|err| tracing::error!(reason = ?err, "failed to decode multicall input"))
             .ok()
     }
@@ -142,27 +148,6 @@ impl MulticallSubcall {
 
 pub fn is_multicall_contract(to: Address) -> bool {
     to == MULTICALL_ADDRESS
-}
-
-pub fn is_multicall_subcall_method(input: &Bytes) -> bool {
-    let Some(selector) = input.as_ref().get(..4).and_then(|selector| selector.try_into().ok()) else {
-        return false;
-    };
-
-    matches!(
-        selector,
-        Multicall::aggregateCall::SELECTOR
-            | Multicall::tryAggregateCall::SELECTOR
-            | Multicall::aggregate3Call::SELECTOR
-            | Multicall::aggregate3ValueCall::SELECTOR
-            | Multicall::blockAndAggregateCall::SELECTOR
-            | Multicall::tryBlockAndAggregateCall::SELECTOR
-    )
-}
-
-pub fn decode_multicall(input: &Bytes) -> anyhow::Result<MulticallInfo> {
-    let decoded = Multicall::MulticallCalls::abi_decode(input.as_ref()).map_err(crate::eth::primitives::MulticallError::from)?;
-    decoded.try_into()
 }
 
 trait MulticallCall {
@@ -281,6 +266,10 @@ mod tests {
         .abi_encode()
     }
 
+    fn multicall_info(input: &Bytes) -> Option<MulticallInfo> {
+        MulticallInfo::new(Some(multicall_address()), input)
+    }
+
     #[test]
     fn decode_aggregate_with_one_call() {
         let input = Bytes(
@@ -293,7 +282,7 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(&input).unwrap();
+        let info = multicall_info(&input).unwrap();
 
         assert_eq!(info.total_subcalls, 1);
         assert_eq!(info.subcalls[0].index, 0);
@@ -321,7 +310,7 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(&input).unwrap();
+        let info = multicall_info(&input).unwrap();
 
         assert_eq!(info.subcalls[0].allow_failure, Some(true));
     }
@@ -339,7 +328,7 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(&input).unwrap();
+        let info = multicall_info(&input).unwrap();
 
         assert_eq!(info.subcalls[0].allow_failure, Some(true));
     }
@@ -358,7 +347,7 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(&input).unwrap();
+        let info = multicall_info(&input).unwrap();
 
         assert_eq!(info.subcalls[0].allow_failure, Some(false));
         assert_eq!(info.subcalls[0].value.as_deref(), Some("123"));
@@ -376,7 +365,7 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(&input).unwrap();
+        let info = multicall_info(&input).unwrap();
 
         assert_eq!(info.total_subcalls, 1);
         assert_eq!(info.subcalls[0].contract, "BrlcToken");
@@ -395,31 +384,23 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(&input).unwrap();
+        let info = multicall_info(&input).unwrap();
 
         assert_eq!(info.subcalls[0].allow_failure, Some(false));
     }
 
     #[test]
-    fn selector_helpers_filter_decode_candidates() {
-        let aggregate = Bytes(Multicall::aggregateCall { calls: Vec::new() }.abi_encode());
-        let get_block_number = Bytes(Multicall::getBlockNumberCall {}.abi_encode());
-        let unknown = Bytes(vec![0xff, 0xff, 0xff, 0xff]);
+    fn constructor_returns_none_for_malformed_known_selector() {
+        let input = Bytes(Vec::from(Multicall::aggregateCall::SELECTOR));
 
-        assert!(is_multicall_contract(multicall_address()));
-        assert!(!is_multicall_contract(brlc_address()));
-        assert!(is_multicall_subcall_method(&aggregate));
-        assert!(!is_multicall_subcall_method(&get_block_number));
-        assert!(!is_multicall_subcall_method(&unknown));
+        assert!(multicall_info(&input).is_none());
     }
 
     #[test]
-    fn decode_returns_error_for_malformed_known_selector() {
-        let input = Bytes(Vec::from(Multicall::aggregateCall::SELECTOR));
+    fn constructor_returns_none_for_non_multicall_contract() {
+        let input = Bytes(Multicall::aggregateCall { calls: Vec::new() }.abi_encode());
 
-        let error = decode_multicall(&input).unwrap_err();
-
-        assert!(error.to_string().contains("invalid multicall ABI"));
+        assert!(MulticallInfo::new(Some(brlc_address()), &input).is_none());
     }
 
     #[test]
@@ -434,7 +415,7 @@ mod tests {
             .abi_encode(),
         );
 
-        let info = decode_multicall(&input).unwrap();
+        let info = multicall_info(&input).unwrap();
 
         assert_eq!(info.subcalls[0].contract, "unknown");
         assert_eq!(info.subcalls[0].function, "missing");
@@ -450,7 +431,7 @@ mod tests {
             .collect();
         let input = Bytes(Multicall::aggregateCall { calls }.abi_encode());
 
-        let info = decode_multicall(&input).unwrap();
+        let info = multicall_info(&input).unwrap();
 
         assert_eq!(info.total_subcalls, 40);
         assert_eq!(info.logged_subcalls_count(), 32);

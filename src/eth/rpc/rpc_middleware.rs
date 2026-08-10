@@ -221,7 +221,7 @@ impl RpcServiceT for RpcMiddleware {
         });
 
         let tx_ref = tx.as_ref();
-        let multicall_ref = tx_ref.and_then(|tx_ref| tx_ref.multicall.as_ref());
+        let multicall_ref = tx_ref.and_then(|tx| tx.multicall.as_ref());
 
         tracing::info!(
             rpc_client = %client,
@@ -352,7 +352,7 @@ impl Future for RpcResponse<'_> {
             let rpc_result = if matches!(level, Level::INFO) { Default::default() } else { &response_result };
             let log_tracing_event = || {
                 let tx_ref = resp.tx.as_ref();
-                let multicall_ref = tx_ref.and_then(|tx_ref| tx_ref.multicall.as_ref());
+                let multicall_ref = tx_ref.and_then(|tx| tx.multicall.as_ref());
 
                 event_with!(
                     level,
