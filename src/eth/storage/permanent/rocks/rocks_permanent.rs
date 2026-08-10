@@ -29,6 +29,7 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionMined;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::BlockReference;
 use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::SleepReason;
@@ -148,6 +149,10 @@ impl RocksPermanentStorage {
     pub fn has_genesis(&self) -> Result<bool, StorageError> {
         let genesis = self.read_block(BlockFilter::Number(BlockNumber::ZERO))?;
         Ok(genesis.is_some())
+    }
+
+    pub(crate) fn read_chain_tip(&self) -> Result<Option<BlockReference>, StorageError> {
+        Ok(self.read_block(BlockFilter::Latest)?.as_ref().map(BlockReference::from))
     }
 
     // -------------------------------------------------------------------------

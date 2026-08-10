@@ -8,8 +8,10 @@ pub use permanent::RocksPermanentStorage;
 pub use stratus_storage::MinedPointInTime;
 pub use stratus_storage::StratusStorage;
 pub use temporary::InMemoryTemporaryStorage;
+pub use temporary::PendingBlockGuard;
 pub use temporary::TemporaryStorageConfig;
 
+mod block_hash_ring;
 mod cache;
 pub mod permanent;
 mod resolve_pending;
@@ -22,9 +24,32 @@ use clap::Parser;
 use display_json::DebugAsJson;
 pub use temporary::compute_pending_block_number;
 
+use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
+use crate::eth::primitives::Hash;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::StratusError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BlockReference {
+    pub number: BlockNumber,
+    pub hash: Hash,
+}
+
+impl BlockReference {
+    pub fn genesis() -> Self {
+        Self::from(&Block::genesis())
+    }
+}
+
+impl From<&Block> for BlockReference {
+    fn from(block: &Block) -> Self {
+        Self {
+            number: block.number(),
+            hash: block.hash(),
+        }
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Config

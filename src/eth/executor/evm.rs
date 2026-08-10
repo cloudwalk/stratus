@@ -54,6 +54,7 @@ use crate::eth::executor::ExecutorConfig;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
+use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
@@ -502,8 +503,8 @@ impl Database for RevmSession {
         Ok(slot.value.into())
     }
 
-    fn block_hash(&mut self, _: u64) -> Result<B256, StratusError> {
-        Err(anyhow!("block hash opcode not implemented").into())
+    fn block_hash(&mut self, number: u64) -> Result<B256, StratusError> {
+        self.block_hash_ref(number)
     }
 }
 
@@ -528,8 +529,17 @@ impl DatabaseRef for RevmSession {
         Ok(slot.value.into())
     }
 
-    fn block_hash_ref(&self, _: u64) -> Result<B256, Self::Error> {
-        Err(anyhow!("block hash opcode not implemented").into())
+    /// Resolves a block hash for the `BLOCKHASH` opcode.
+    ///
+    /// The interpreter only asks for blocks inside the 256 block window that precedes the block
+    /// being executed, so every request here is for a block that was already mined. Failing to
+    /// resolve it means the node lost track of its own chain, which must not be served as zero.
+    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+        let number = BlockNumber::from(number);
+        match self.storage.read_block_hash(number)? {
+            Some(hash) => Ok(hash.into()),
+            None => Err(StorageError::BlockHashMissing { number }.into()),
+        }
     }
 
     fn code_by_hash_ref(&self, _code_hash: B256) -> Result<revm::state::Bytecode, Self::Error> {

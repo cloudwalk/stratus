@@ -11,7 +11,6 @@ use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::interval_miner::commit_retry;
-use crate::eth::miner::miner::interval_miner::mine_local_retry;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionChanges;
@@ -37,10 +36,13 @@ impl ImporterWorker for FakeLeaderWorker {
 
     async fn import(&self, ((block, _), (expected_block, expected_changes)): Self::DataType) -> anyhow::Result<usize> {
         let block_tx_len = block.transactions.len();
-        self.storage.set_pending_from_external(&block);
+        let transaction_guard = self.executor.transaction_guard();
+        let mine_and_commit_guard = self.miner.locks.mine_and_commit.lock();
+        let session = self.miner.pending_session();
+        session.set_pending_from_external(&block);
         for tx in block.0.transactions.into_transactions() {
             tracing::info!(?tx, "executing tx as fake miner");
-            if let Err(e) = self.executor.execute_local_transaction(tx.try_into()?) {
+            if let Err(e) = self.executor.execute_local_transaction_in_session(&transaction_guard, &session, tx.try_into()?) {
                 match e {
                     StratusError::Executor(ExecutorError::Nonce { transaction: _, account: _ }) => {
                         tracing::warn!(reason = ?e, "transaction failed, was this node restarted?");
@@ -53,7 +55,8 @@ impl ImporterWorker for FakeLeaderWorker {
                 }
             }
         }
-        let (mined_block, changes, miner_guard) = mine_local_retry(&self.miner);
+        let (mined_block, changes) = session.seal_local();
+        drop(transaction_guard);
 
         let completed_expected_changes = expected_changes.complete(self.storage.as_ref())?;
         if changes != completed_expected_changes {
@@ -75,7 +78,7 @@ impl ImporterWorker for FakeLeaderWorker {
             bail!("block mismatch between leader and fake leader")
         }
 
-        commit_retry(&self.miner, mined_block, changes, miner_guard);
+        commit_retry(&self.miner, mined_block, changes, mine_and_commit_guard);
         Ok(block_tx_len)
     }
 }

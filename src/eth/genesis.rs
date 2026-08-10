@@ -295,10 +295,11 @@ impl GenesisConfig {
         header.nonce = nonce_b64.into();
 
         // Create the block
-        let block = Block {
+        let mut block = Block {
             header,
             transactions: Vec::new(),
         };
+        block.header.hash = block.calculate_hash_v1();
 
         Ok(block)
     }

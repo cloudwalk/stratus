@@ -1,9 +1,9 @@
 //! In-memory storage implementations.
 
+use parking_lot::Mutex;
+use parking_lot::MutexGuard;
 use parking_lot::RwLock;
 use parking_lot::RwLockUpgradableReadGuard;
-#[cfg(not(feature = "dev"))]
-use parking_lot::RwLockWriteGuard;
 
 use crate::eth::executor::EvmInput;
 use crate::eth::primitives::Account;
@@ -23,34 +23,75 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
-#[cfg(feature = "dev")]
 use crate::eth::primitives::UnixTimeNow;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::BlockReference;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
 
+#[derive(Debug, Clone)]
+pub struct InMemorySealedBlock {
+    pub state: InMemoryTemporaryStorageState,
+    pub hash: Hash,
+}
+
+#[derive(Debug)]
+pub struct InMemoryChainState {
+    pub pending_block: InMemoryTemporaryStorageState,
+    pub latest_sealed: InMemorySealedBlock,
+}
+
+pub struct PendingBlockGuard<'a> {
+    _guard: MutexGuard<'a, ()>,
+}
+
 #[derive(Debug)]
 pub struct InmemoryTransactionTemporaryStorage {
-    pub pending_block: RwLock<InMemoryTemporaryStorageState>,
-    pub latest_block: RwLock<Option<InMemoryTemporaryStorageState>>,
+    pending_session: Mutex<()>,
+    pub state: RwLock<InMemoryChainState>,
 }
 
 impl InmemoryTransactionTemporaryStorage {
-    pub fn new(block_number: BlockNumber) -> Self {
+    pub fn new(saved_tip: Option<BlockReference>) -> Self {
+        let pending_block_number = saved_tip.map_or(BlockNumber::ZERO, |tip| tip.number.next_block_number());
+        // Keep the canonical genesis reference available for flows that persist genesis directly,
+        // but do not advance the pending block until genesis actually exists in permanent storage.
+        let latest_sealed = saved_tip.unwrap_or_else(BlockReference::genesis);
+
         Self {
-            pending_block: RwLock::new(InMemoryTemporaryStorageState {
-                block: PendingBlock::new_at_now(block_number),
-                block_changes: ExecutionChanges::default(),
+            pending_session: Mutex::new(()),
+            state: RwLock::new(InMemoryChainState {
+                pending_block: InMemoryTemporaryStorageState {
+                    block: PendingBlock::new_at_now(pending_block_number),
+                    block_changes: ExecutionChanges::default(),
+                },
+                latest_sealed: InMemorySealedBlock {
+                    state: InMemoryTemporaryStorageState::new_sealed(latest_sealed.number),
+                    hash: latest_sealed.hash,
+                },
             }),
-            latest_block: RwLock::new(None),
+        }
+    }
+
+    pub(super) fn pending_block_guard(&self) -> PendingBlockGuard<'_> {
+        PendingBlockGuard {
+            _guard: self.pending_session.lock(),
+        }
+    }
+
+    pub(super) fn read_latest_sealed(&self) -> BlockReference {
+        let state = self.state.read();
+        BlockReference {
+            number: state.latest_sealed.state.block.header.number,
+            hash: state.latest_sealed.hash,
         }
     }
 
     pub fn set_pending_header(&self, number: BlockNumber, timestamp: UnixTime) {
-        let mut pending_block = self.pending_block.write();
-        pending_block.block.header.number = number;
-        pending_block.block.header.timestamp = timestamp.into();
+        let mut state = self.state.write();
+        state.pending_block.block.header.number = number;
+        state.pending_block.block.header.timestamp = timestamp.into();
     }
 
     // -------------------------------------------------------------------------
@@ -59,13 +100,16 @@ impl InmemoryTransactionTemporaryStorage {
 
     // Uneeded clone here, return Cow
     pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
-        let pending_block = self.pending_block.read();
-        (pending_block.block.header.clone(), (pending_block.block.transactions.len() as u64).into())
+        let state = self.state.read();
+        (
+            state.pending_block.block.header.clone(),
+            (state.pending_block.block.transactions.len() as u64).into(),
+        )
     }
 
     #[cfg(feature = "dev")]
     pub fn set_pending_block_header(&self, block_number: BlockNumber) -> anyhow::Result<(), StorageError> {
-        self.pending_block.write().block.header.number = block_number;
+        self.state.write().pending_block.block.header.number = block_number;
         Ok(())
     }
 
@@ -75,75 +119,66 @@ impl InmemoryTransactionTemporaryStorage {
 
     pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
         // check conflicts
-        let pending_block = self.pending_block.upgradable_read();
-        if tx.evm_input != &pending_block.block.header {
+        let state = self.state.upgradable_read();
+        if tx.evm_input != &state.pending_block.block.header {
             let actual_input = tx.evm_input.clone();
             let tx_input: TransactionInput = tx.into();
-            let expected_input = EvmInput::from_eth_transaction(&tx_input, pending_block.block.header.number, *pending_block.block.header.timestamp);
+            let expected_input =
+                EvmInput::from_eth_transaction(&tx_input, state.pending_block.block.header.number, *state.pending_block.block.header.timestamp);
             return Err(StorageError::EvmInputMismatch {
                 expected: Box::new(expected_input),
                 actual: Box::new(actual_input),
             });
         }
 
-        let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
+        let mut state = RwLockUpgradableReadGuard::<InMemoryChainState>::upgrade(state);
 
-        pending_block.block_changes.merge(tx.result.execution.changes.clone()); // TODO: This clone can be removed by reworking the primitives
+        state.pending_block.block_changes.merge(tx.result.execution.changes.clone()); // TODO: This clone can be removed by reworking the primitives
 
         // save execution
-        pending_block.block.push_transaction(tx);
+        state.pending_block.block.push_transaction(tx);
 
         Ok(())
     }
 
     pub fn read_pending_executions(&self) -> Vec<TransactionExecution> {
-        self.pending_block.read().block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
+        self.state.read().pending_block.block.transactions.iter().map(|(_, tx)| tx.clone()).collect()
     }
 
-    pub fn clone_pending_state(&self) -> InMemoryTemporaryStorageState {
-        let pending_block = self.pending_block.read();
-        (*pending_block).clone()
-    }
+    pub fn pending_block_to_seal(&self) -> (PendingBlock, ExecutionChanges) {
+        let state = self.state.read();
+        let block = state.pending_block.block.clone();
 
-    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
-        let pending_block = self.pending_block.upgradable_read();
-        let changes = pending_block.block_changes.clone();
-
-        // This has to happen BEFORE creating the new state, because UnixTimeNow::default() may change the offset.
+        // This has to happen before creating the next state because UnixTimeNow::default() may change the offset.
         #[cfg(feature = "dev")]
-        let finished_block = {
-            let mut finished_block = pending_block.block.clone();
-            // Update block timestamp only if evm_setNextBlockTimestamp was called,
-            // otherwise keep the original timestamp from pending block creation
+        let block = {
+            let mut block = block;
+            // Update the timestamp only if evm_setNextBlockTimestamp was called.
             if UnixTime::evm_set_next_block_timestamp_was_called() {
-                finished_block.header.timestamp = UnixTimeNow::default();
+                block.header.timestamp = UnixTimeNow::default();
             }
-            finished_block
+            block
         };
 
-        let next_state = InMemoryTemporaryStorageState::new(pending_block.block.header.number.next_block_number());
+        (block, state.pending_block.block_changes.clone())
+    }
 
-        let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
-        let mut latest = self.latest_block.write();
+    pub(super) fn finish_pending_block(&self, block: BlockReference, timestamp: UnixTimeNow) {
+        let next_state = InMemoryTemporaryStorageState::new(block.number.next_block_number());
+        let mut state = self.state.write();
 
-        *latest = Some(std::mem::replace(&mut *pending_block, next_state));
-
-        drop(pending_block);
-
-        #[cfg(not(feature = "dev"))]
-        let finished_block = {
-            let latest = RwLockWriteGuard::<Option<InMemoryTemporaryStorageState>>::downgrade(latest);
-
-            #[allow(clippy::expect_used)]
-            latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone()
+        debug_assert_eq!(state.pending_block.block.header.number, block.number);
+        let mut finished_state = std::mem::replace(&mut state.pending_block, next_state);
+        finished_state.block.header.timestamp = timestamp;
+        state.latest_sealed = InMemorySealedBlock {
+            state: finished_state,
+            hash: block.hash,
         };
-
-        Ok((finished_block, changes))
     }
 
     pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
-        let pending_block = self.pending_block.read();
-        match pending_block.block.transactions.get(&hash) {
+        let state = self.state.read();
+        match state.pending_block.block.transactions.get(&hash) {
             Some(tx) => Ok(Some(tx.clone())),
             None => Ok(None),
         }
@@ -154,25 +189,30 @@ impl InmemoryTransactionTemporaryStorage {
     // -------------------------------------------------------------------------
 
     pub fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>, StorageError> {
-        Ok(match self.pending_block.read().block_changes.accounts.get(&address) {
+        let state = self.state.read();
+        Ok(match state.pending_block.block_changes.accounts.get(&address) {
             Some(pending_account) => Some(pending_account.clone().to_account(address)),
-            None => self
-                .latest_block
-                .read()
-                .as_ref()
-                .and_then(|latest| latest.block_changes.accounts.get(&address))
+            None => state
+                .latest_sealed
+                .state
+                .block_changes
+                .accounts
+                .get(&address)
                 .map(|account| account.clone().to_account(address)),
         })
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError> {
-        Ok(match self.pending_block.read().block_changes.slots.get(&(address, index)) {
+        let state = self.state.read();
+        Ok(match state.pending_block.block_changes.slots.get(&(address, index)) {
             Some(pending_value) => Some(Slot::new(index, *pending_value)),
-            None => self
-                .latest_block
-                .read()
-                .as_ref()
-                .and_then(|latest| latest.block_changes.slots.get(&(address, index)).map(|value| Slot::new(index, *value))),
+            None => state
+                .latest_sealed
+                .state
+                .block_changes
+                .slots
+                .get(&(address, index))
+                .map(|value| Slot::new(index, *value)),
         })
     }
 
@@ -182,17 +222,17 @@ impl InmemoryTransactionTemporaryStorage {
 
     #[cfg(feature = "dev")]
     pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
-        let mut pending_block = self.pending_block.write();
-        pending_block.block_changes.slots.insert((address, slot.index), slot.value);
+        let mut state = self.state.write();
+        state.pending_block.block_changes.slots.insert((address, slot.index), slot.value);
         Ok(())
     }
 
     #[cfg(feature = "dev")]
     pub fn save_account_nonce(&self, address: Address, nonce: Nonce) -> anyhow::Result<(), StorageError> {
-        let mut pending_block = self.pending_block.write();
+        let mut state = self.state.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+        if let Some(account) = state.pending_block.block_changes.accounts.get_mut(&address) {
             account.nonce.apply(nonce);
         }
 
@@ -201,10 +241,10 @@ impl InmemoryTransactionTemporaryStorage {
 
     #[cfg(feature = "dev")]
     pub fn save_account_balance(&self, address: Address, balance: Wei) -> anyhow::Result<(), StorageError> {
-        let mut pending_block = self.pending_block.write();
+        let mut state = self.state.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+        if let Some(account) = state.pending_block.block_changes.accounts.get_mut(&address) {
             account.balance.apply(balance);
         }
 
@@ -215,10 +255,10 @@ impl InmemoryTransactionTemporaryStorage {
     pub fn save_account_code(&self, address: Address, code: Bytes) -> anyhow::Result<(), StorageError> {
         use crate::alias::RevmBytecode;
 
-        let mut pending_block = self.pending_block.write();
+        let mut state = self.state.write();
 
         // Only update if the account exists
-        if let Some(account) = pending_block.block_changes.accounts.get_mut(&address) {
+        if let Some(account) = state.pending_block.block_changes.accounts.get_mut(&address) {
             account.bytecode.apply(if code.0.is_empty() {
                 None
             } else {
@@ -233,8 +273,13 @@ impl InmemoryTransactionTemporaryStorage {
     // Global state
     // -------------------------------------------------------------------------
     pub fn reset(&self) -> anyhow::Result<(), StorageError> {
-        self.pending_block.write().reset();
-        *self.latest_block.write() = None;
+        let genesis = BlockReference::genesis();
+        let mut state = self.state.write();
+        state.pending_block.reset();
+        state.latest_sealed = InMemorySealedBlock {
+            state: InMemoryTemporaryStorageState::new_sealed(genesis.number),
+            hash: genesis.hash,
+        };
         Ok(())
     }
 }

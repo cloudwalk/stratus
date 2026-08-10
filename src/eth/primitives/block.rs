@@ -1,6 +1,8 @@
 use alloy_primitives::B256;
+use alloy_primitives::keccak256;
 use alloy_rpc_types_eth::BlockTransactions;
 use alloy_trie::root::ordered_trie_root;
+use anyhow::bail;
 use display_json::DebugAsJson;
 use itertools::Itertools;
 
@@ -39,7 +41,37 @@ impl Block {
 
     /// Constructs an empty genesis block.
     pub fn genesis() -> Block {
-        Block::new(BlockNumber::ZERO, UnixTime::from(1702568764))
+        let mut block = Block::new(BlockNumber::ZERO, UnixTime::from(1702568764));
+        block.header.hash = block.calculate_hash_v1();
+        block
+    }
+
+    /// Converts a finished pending block into a mined block chained to `parent_hash`.
+    ///
+    /// The resulting block is hashed and the hash is stamped on all of its transactions.
+    pub fn from_pending(pending: PendingBlock, parent_hash: Hash) -> Block {
+        let mut block = Block::new(pending.header.number, *pending.header.timestamp);
+        if !block.number().is_zero() {
+            block.header.parent_hash = parent_hash;
+        }
+
+        let txs: Vec<TransactionExecution> = pending.transactions.into_values().collect();
+        block.transactions.reserve(txs.len());
+        block.header.size = Size::from(txs.len() as u64);
+
+        let mut log_index = Index::ZERO;
+        for (tx_idx, execution) in txs.into_iter().enumerate() {
+            let log_count = execution.result.execution.logs.len() as u64;
+            let transaction_mined = TransactionMined::from_execution(execution, Hash::ZERO, (tx_idx as u64).into(), log_index);
+            block.header.gas_used += transaction_mined.execution.result.execution.gas_used;
+            block.transactions.push(transaction_mined);
+            log_index += Index(log_count);
+        }
+
+        block.calculate_transaction_root();
+        block.apply_default_hash();
+
+        block
     }
 
     /// Serializes itself to JSON-RPC block format with full transactions included.
@@ -92,35 +124,60 @@ impl Block {
         }
     }
 
-    pub fn apply_external(&mut self, external_block: &ExternalBlock) {
-        self.header.hash = external_block.hash();
-        assert!(*self.header.timestamp == external_block.header.timestamp);
-        for transaction in self.transactions.iter_mut() {
-            assert!(transaction.evm_input.block_timestamp == self.header.timestamp);
-            transaction.mined_data.block_hash = external_block.hash();
+    pub fn calculate_hash_v1(&self) -> Hash {
+        self.number().hash()
+    }
+
+    pub fn calculate_hash_v2(&self) -> Hash {
+        let mut input = [0_u8; 80];
+        input[0..8].copy_from_slice(&self.number().as_u64().to_be_bytes());
+        input[8..16].copy_from_slice(&self.header.timestamp.to_be_bytes());
+        input[16..48].copy_from_slice(self.header.transactions_root.as_ref());
+        input[48..80].copy_from_slice(self.header.parent_hash.as_ref());
+        keccak256(input).into()
+    }
+
+    pub fn calculate_hash_default(&self) -> Hash {
+        if self.number().is_zero() {
+            self.calculate_hash_v1()
+        } else {
+            self.calculate_hash_v2()
         }
     }
-}
 
-impl From<PendingBlock> for Block {
-    fn from(value: PendingBlock) -> Self {
-        let mut block = Block::new(value.header.number, *value.header.timestamp);
-        let txs: Vec<TransactionExecution> = value.transactions.into_values().collect();
-        block.transactions.reserve(txs.len());
-        block.header.size = Size::from(txs.len() as u64);
+    pub fn apply_hash(&mut self, hash: Hash) {
+        self.header.hash = hash;
+        for transaction in self.transactions.iter_mut() {
+            transaction.mined_data.block_hash = hash;
+        }
+    }
 
-        let mut log_index = Index::ZERO;
-        for (tx_idx, execution) in txs.into_iter().enumerate() {
-            let log_count = execution.result.execution.logs.len() as u64;
-            let transaction_mined = TransactionMined::from_execution(execution, block.hash(), (tx_idx as u64).into(), log_index);
-            block.header.gas_used += transaction_mined.execution.result.execution.gas_used;
-            block.transactions.push(transaction_mined);
-            log_index += Index(log_count);
+    pub fn apply_default_hash(&mut self) {
+        let hash = self.calculate_hash_default();
+        self.apply_hash(hash);
+    }
+
+    pub fn apply_external(&mut self, external_block: &ExternalBlock) -> anyhow::Result<()> {
+        if *self.header.timestamp != external_block.header.timestamp {
+            bail!(
+                "mismatching block timestamp: local={} external={}",
+                *self.header.timestamp,
+                external_block.header.timestamp
+            );
         }
 
-        Self::calculate_transaction_root(&mut block);
+        let external_hash = external_block.hash();
+        let default_hash = self.calculate_hash_default();
+        if external_hash != default_hash {
+            // TODO: Remove the V1 hash arm after every node has been upgraded.
+            let v1_hash = self.calculate_hash_v1();
+            if external_hash != v1_hash {
+                bail!("invalid external block hash: imported={external_hash} default={default_hash} v1={v1_hash}");
+            }
+        }
 
-        block
+        self.apply_hash(external_hash);
+        Ok(())
     }
 }
 
@@ -148,5 +205,95 @@ impl From<Block> for AlloyBlockB256 {
             transactions: BlockTransactions::Hashes(transaction_hashes),
             ..alloy_block
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fake::Fake;
+    use fake::Faker;
+
+    use super::*;
+
+    fn block_with_v2_hash() -> Block {
+        let mut block = Block::new(BlockNumber::ONE, UnixTime::from(1234567890));
+        block.header.transactions_root = Hash::new([1; 32]);
+        block.header.parent_hash = Hash::new([2; 32]);
+        block.apply_default_hash();
+        block
+    }
+
+    fn external_block(block: &Block, hash: Hash) -> ExternalBlock {
+        let mut external: ExternalBlock = Faker.fake();
+        external.0.header.inner.number = block.number().as_u64();
+        external.0.header.inner.timestamp = *block.header.timestamp;
+        external.0.header.inner.parent_hash = block.header.parent_hash.into();
+        external.0.header.hash = hash.into();
+        external.0.transactions = BlockTransactions::Full(Vec::new());
+        external
+    }
+
+    #[test]
+    fn v2_hash_depends_on_finalized_block_fields() {
+        let block = block_with_v2_hash();
+
+        let mut changed = block.clone();
+        changed.header.number = BlockNumber::from(2_u64);
+        changed.apply_default_hash();
+        assert_ne!(block.hash(), changed.hash());
+
+        changed = block.clone();
+        changed.header.timestamp = UnixTime::from(*changed.header.timestamp + 1);
+        changed.apply_default_hash();
+        assert_ne!(block.hash(), changed.hash());
+
+        changed = block.clone();
+        changed.header.transactions_root = Hash::new([3; 32]);
+        changed.apply_default_hash();
+        assert_ne!(block.hash(), changed.hash());
+
+        changed = block.clone();
+        changed.header.parent_hash = Hash::new([4; 32]);
+        changed.apply_default_hash();
+        assert_ne!(block.hash(), changed.hash());
+    }
+
+    #[test]
+    fn external_hash_must_be_v2_or_v1() {
+        let block = block_with_v2_hash();
+
+        let mut v2_block = block.clone();
+        v2_block.header.hash = Hash::ZERO;
+        v2_block
+            .apply_external(&external_block(&block, block.hash()))
+            .expect("V2 hash should be accepted");
+        assert_eq!(v2_block.hash(), block.hash());
+
+        let v1_hash = block.calculate_hash_v1();
+        let mut v1_block = block.clone();
+        v1_block.header.hash = Hash::ZERO;
+        v1_block.apply_external(&external_block(&block, v1_hash)).expect("V1 hash should be accepted");
+        assert_eq!(v1_block.hash(), v1_hash);
+
+        let mut invalid_block = block.clone();
+        let error = invalid_block
+            .apply_external(&external_block(&block, Hash::ZERO))
+            .expect_err("invalid hash should be rejected");
+        assert!(error.to_string().contains("invalid external block hash"));
+    }
+
+    #[test]
+    fn genesis_uses_legacy_hash() {
+        let genesis = Block::genesis();
+        assert_eq!(genesis.hash(), BlockNumber::ZERO.hash());
+    }
+
+    #[test]
+    fn sealed_genesis_uses_legacy_hash() {
+        let pending = PendingBlock::new_at_now(BlockNumber::ZERO);
+        let genesis = Block::from_pending(pending, Hash::new([1; 32]));
+
+        assert_eq!(genesis.hash(), BlockNumber::ZERO.hash());
+        assert_eq!(genesis.header.parent_hash, Hash::ZERO);
     }
 }

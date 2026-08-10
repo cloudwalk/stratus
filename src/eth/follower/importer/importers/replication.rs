@@ -34,6 +34,7 @@ impl ImporterWorker for ReplicationWorker {
 
         let block_tx_len = block.transactions.len();
 
+        self.storage.validate_next_saved_block(&block)?;
         send_block_to_kafka(&self.kafka_connector, &block).await?;
 
         let completed_changes = changes.complete(self.storage.as_ref())?;

@@ -1,5 +1,6 @@
 //! In-memory storage implementations.
 
+pub use self::transaction::PendingBlockGuard;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -16,8 +17,10 @@ use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::UnixTime;
+use crate::eth::primitives::UnixTimeNow;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
+use crate::eth::storage::BlockReference;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::call::InMemoryCallTemporaryStorage;
@@ -28,20 +31,28 @@ mod transaction;
 
 #[derive(Debug)]
 pub struct InMemoryTemporaryStorage {
-    pub transaction_storage: InmemoryTransactionTemporaryStorage,
+    transaction_storage: InmemoryTransactionTemporaryStorage,
     pub call_storage: InMemoryCallTemporaryStorage,
 }
 
 impl InMemoryTemporaryStorage {
-    pub fn new(block_number: BlockNumber) -> Self {
+    pub(crate) fn new(saved_tip: Option<BlockReference>) -> Self {
         Self {
-            transaction_storage: InmemoryTransactionTemporaryStorage::new(block_number),
+            transaction_storage: InmemoryTransactionTemporaryStorage::new(saved_tip),
             call_storage: InMemoryCallTemporaryStorage::new(),
         }
     }
 
     pub fn read_pending_block_header(&self) -> (PendingBlockHeader, TxCount) {
         self.transaction_storage.read_pending_block_header()
+    }
+
+    pub(crate) fn read_latest_sealed(&self) -> BlockReference {
+        self.transaction_storage.read_latest_sealed()
+    }
+
+    pub fn pending_block_guard(&self) -> PendingBlockGuard<'_> {
+        self.transaction_storage.pending_block_guard()
     }
 
     #[cfg(feature = "dev")]
@@ -62,9 +73,13 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
+    pub fn pending_block_to_seal(&self) -> (PendingBlock, ExecutionChanges) {
+        self.transaction_storage.pending_block_to_seal()
+    }
+
+    pub(crate) fn finish_pending_block(&self, block: BlockReference, timestamp: UnixTimeNow) {
+        self.transaction_storage.finish_pending_block(block, timestamp);
         self.call_storage.retain_recent_blocks();
-        self.transaction_storage.finish_pending_block()
     }
 
     pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
@@ -132,8 +147,37 @@ impl InMemoryTemporaryStorageState {
         }
     }
 
+    /// Creates state for a block that is already sealed without advancing the development clock.
+    pub fn new_sealed(block_number: BlockNumber) -> Self {
+        Self {
+            block: PendingBlock::new_at(block_number, UnixTime::ZERO),
+            block_changes: ExecutionChanges::default(),
+        }
+    }
+
     pub fn reset(&mut self) {
         self.block = PendingBlock::new_at_now(1.into());
         self.block_changes = ExecutionChanges::default();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_chain_starts_with_genesis_pending() {
+        let storage = InMemoryTemporaryStorage::new(None);
+
+        assert_eq!(storage.read_pending_block_header().0.number, BlockNumber::ZERO);
+    }
+
+    #[test]
+    fn saved_tip_starts_with_its_successor_pending() {
+        let genesis = BlockReference::genesis();
+        let storage = InMemoryTemporaryStorage::new(Some(genesis));
+
+        assert_eq!(storage.read_latest_sealed(), genesis);
+        assert_eq!(storage.read_pending_block_header().0.number, BlockNumber::ONE);
     }
 }
