@@ -100,6 +100,8 @@ impl Dummy<Faker> for ExternalBlock {
                     excess_blob_gas: None,
                     parent_beacon_block_root: None,
                     requests_hash: None,
+                    block_access_list_hash: None,
+                    slot_number: None,
                 },
                 total_difficulty: Some(U256::from(rng.next_u64())),
                 size: Some(U256::from(rng.next_u64())),

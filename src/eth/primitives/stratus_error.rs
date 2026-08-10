@@ -344,9 +344,7 @@ impl From<EVMError<StratusError>> for StratusError {
     fn from(value: EVMError<StratusError>) -> Self {
         match value {
             EVMError::Database(err) => err,
-            EVMError::Custom(err) => Self::Executor(ExecutorError::EvmFailed(err)),
-            EVMError::Header(err) => Self::Executor(ExecutorError::EvmFailed(err.to_string())),
-            EVMError::Transaction(err) => Self::Executor(ExecutorError::EvmFailed(err.to_string())),
+            err => ExecutorError::EvmFailed(err.to_string()).into(),
         }
     }
 }

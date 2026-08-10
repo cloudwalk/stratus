@@ -156,6 +156,8 @@ impl<T> From<BlockHeader> for AlloyBlock<T> {
             extra_data: AlloyBytes::default(),
             state_root: B256::from(header.state_root),
             requests_hash: None,
+            slot_number: None,
+            block_access_list_hash: None,
         };
 
         let rpc_header = AlloyHeader {

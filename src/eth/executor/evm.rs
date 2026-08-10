@@ -225,7 +225,7 @@ impl Evm {
                 tx_env.gas_priority_fee = None;
             });
 
-        RevmEvm::new(ctx, EthInstructions::new_mainnet(), EthPrecompiles::default())
+        RevmEvm::new(ctx, EthInstructions::new_mainnet_with_spec(spec), EthPrecompiles::new(spec))
     }
 
     /// Execute a transaction using a tracer.
@@ -270,6 +270,7 @@ impl Evm {
 
         let tx_info = TransactionInfo {
             block_hash: Some(block.hash().0.0.into()),
+            block_timestamp: Some(*block.timestamp()),
             hash: Some(tx_hash.0.0.into()),
             index: mined_data.map(|data| data.index.into()),
             block_number: Some(block.number().as_u64()),
@@ -315,7 +316,7 @@ impl Evm {
                 evm_with_inspector.fill_env(inspect_input);
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
                 let res = evm_with_inspector.inspect_tx(tx)?;
-                let mut trace = inspector.geth_builder().geth_call_traces(call_config, res.result.gas_used()).into();
+                let mut trace = inspector.geth_builder().geth_call_traces(call_config, res.result.tx_gas_used()).into();
                 enhance_trace_with_decoded_errors(&mut trace);
                 trace
             }
@@ -347,7 +348,7 @@ impl Evm {
                 let tx = std::mem::take(&mut evm_with_inspector.tx);
                 let res = evm_with_inspector.inspect_tx(tx)?;
                 inspector
-                    .with_transaction_gas_limit(res.result.gas_used())
+                    .with_transaction_gas_limit(res.result.tx_gas_used())
                     .into_parity_builder()
                     .into_localized_transaction_traces(tx_info)
                     .into()
@@ -360,6 +361,9 @@ impl Evm {
                 let block = std::mem::take(&mut evm_with_inspector.block);
                 let res = evm_with_inspector.inspect_tx(tx.clone())?;
                 GethTrace::JS(inspector.json_result(res, &tx, &block, &cache_db).map_err(|e| anyhow!(e.to_string()))?)
+            }
+            GethDebugTracerType::BuiltInTracer(unimplemented) => {
+                return Err(anyhow!("{unimplemented:?} not implemented").into());
             }
         };
 
@@ -559,23 +563,23 @@ fn parse_revm_execution(revm_result: ResultAndState, input: EvmInput, execution_
 
 fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
     match result {
-        RevmExecutionResult::Success { output, gas_used, logs, .. } => {
+        RevmExecutionResult::Success { output, gas, logs, .. } => {
             let result = ExecutionResult::Success;
             let output = Bytes::from(output);
             let logs = logs.into_iter().map_into().collect();
-            let gas = Gas::from(gas_used);
+            let gas = Gas::from(gas);
             (result, output, logs, gas)
         }
-        RevmExecutionResult::Revert { output, gas_used } => {
+        RevmExecutionResult::Revert { output, gas, logs: _logs } => {
             let output = Bytes::from(output);
             let result = ExecutionResult::Reverted { reason: (&output).into() };
-            let gas = Gas::from(gas_used);
+            let gas = Gas::from(gas);
             (result, output, Vec::new(), gas)
         }
-        RevmExecutionResult::Halt { reason, gas_used } => {
+        RevmExecutionResult::Halt { reason, gas, logs: _logs } => {
             let result = ExecutionResult::new_halted(format!("{reason:?}"));
             let output = Bytes::default();
-            let gas = Gas::from(gas_used);
+            let gas = Gas::from(gas);
             (result, output, Vec::new(), gas)
         }
     }
