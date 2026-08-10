@@ -604,7 +604,7 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
             "evm account"
         );
 
-        let (account_created, account_touched) = (revm_account.is_created(), revm_account.is_touched());
+        let (account_created, account_touched, account_changed) = (revm_account.is_created(), revm_account.is_touched(), revm_account.is_changed());
 
         if !(account_created || account_touched) {
             continue;
@@ -625,7 +625,9 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
             deployed_contract_address = Some(account.address);
         }
 
-        execution_changes.insert(account, account_modified_slots);
+        if account_changed || !account_modified_slots.is_empty() {
+            execution_changes.insert(account, account_modified_slots);
+        }
     }
     Ok((execution_changes, deployed_contract_address))
 }
