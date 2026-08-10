@@ -76,6 +76,13 @@ enum RequestType {
     Single,
 }
 
+#[cfg(feature = "metrics")]
+impl From<RequestType> for metrics::MetricLabelValue {
+    fn from(value: RequestType) -> Self {
+        value.to_string().into()
+    }
+}
+
 impl RpcServiceT for RpcMiddleware {
     type BatchResponse = MethodResponse;
     type MethodResponse = MethodResponse;
@@ -244,19 +251,12 @@ impl RpcServiceT for RpcMiddleware {
         #[cfg(feature = "metrics")]
         {
             // started requests
-            metrics::inc_rpc_requests_started(
-                &client,
-                &method,
-                tx_ref.map(|tx| tx.contract),
-                tx_ref.map(|tx| tx.function),
-                request_type.to_string(),
-            );
+            metrics::inc_rpc_requests_started(&client, &method, tx_ref.map(|tx| tx.contract), tx_ref.map(|tx| tx.function), request_type);
 
             if let Some(tx) = tx_ref
                 && let Some(multicall) = tx.multicall.as_ref()
             {
-                let req_type = request_type.to_string();
-                multicall.inc_rpc_requests_started(&client, &method, tx.function, &req_type);
+                multicall.record_rpc_requests_started(&client, &method, request_type);
             }
 
             // active requests
@@ -406,7 +406,7 @@ impl Future for RpcResponse<'_> {
                 if let Some(tx) = tx_ref
                     && let Some(multicall) = tx.multicall.as_ref()
                 {
-                    multicall.inc_rpc_requests_finished(elapsed, resp.client, resp.method, tx.function, rpc_result, error_code, response.is_success());
+                    multicall.record_rpc_requests_finished(elapsed, resp.client, resp.method, rpc_result, error_code, response.is_success());
                 }
 
                 metrics::inc_rpc_response_size(response.as_json().get().len(), &*resp.client, resp.method.clone());

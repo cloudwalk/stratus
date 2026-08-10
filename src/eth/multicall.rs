@@ -2,7 +2,6 @@
 use std::time::Duration;
 
 use alloy_primitives::FixedBytes;
-#[cfg(test)]
 use alloy_sol_types::SolCall;
 use alloy_sol_types::SolInterface;
 use alloy_sol_types::sol;
@@ -28,6 +27,7 @@ sol!(Multicall, "static/contracts-abi/Multicall3.json");
 pub struct MulticallInfo {
     pub total_subcalls: usize,
     pub subcalls: Vec<MulticallSubcall>,
+    pub parent_function: codegen::SoliditySignature,
 }
 
 impl MulticallInfo {
@@ -46,38 +46,36 @@ impl MulticallInfo {
             .ok()
     }
 
-    fn from_subcalls(subcalls: Vec<MulticallSubcall>) -> Self {
+    fn from_subcalls(parent_function: codegen::SoliditySignature, subcalls: Vec<MulticallSubcall>) -> Self {
         Self {
             total_subcalls: subcalls.len(),
             subcalls,
+            parent_function,
         }
     }
 
     #[cfg(feature = "metrics")]
-    pub fn inc_rpc_requests_started(&self, client: &RpcClientApp, method: &str, parent_function: codegen::SoliditySignature, req_type: &str) {
+    pub fn record_rpc_requests_started(&self, client: &RpcClientApp, method: &str, req_type: impl Into<metrics::MetricLabelValue> + Copy) {
         for subcall in self.logged_subcalls() {
-            metrics::inc_rpc_requests_started(client, method, subcall.metric_contract(), subcall.metric_function(parent_function), req_type);
+            metrics::inc_rpc_requests_started(
+                client,
+                method,
+                subcall.metric_contract(),
+                subcall.metric_function(self.parent_function),
+                req_type,
+            );
         }
     }
 
     #[cfg(feature = "metrics")]
-    pub fn inc_rpc_requests_finished(
-        &self,
-        elapsed: Duration,
-        client: &RpcClientApp,
-        method: &str,
-        parent_function: codegen::SoliditySignature,
-        rpc_result: &str,
-        result_code: i32,
-        success: bool,
-    ) {
+    pub fn record_rpc_requests_finished(&self, elapsed: Duration, client: &RpcClientApp, method: &str, rpc_result: &str, result_code: i32, success: bool) {
         for subcall in self.logged_subcalls() {
             metrics::inc_rpc_requests_finished(
                 elapsed,
                 client,
                 method,
                 subcall.metric_contract(),
-                subcall.metric_function(parent_function),
+                subcall.metric_function(self.parent_function),
                 rpc_result,
                 result_code,
                 success,
@@ -99,17 +97,23 @@ impl TryFrom<Multicall::MulticallCalls> for MulticallInfo {
     type Error = anyhow::Error;
 
     fn try_from(value: Multicall::MulticallCalls) -> Result<Self, Self::Error> {
-        let subcalls = match value {
-            Multicall::MulticallCalls::aggregate(call) => subcalls_from_calls(call.calls, None),
-            Multicall::MulticallCalls::tryAggregate(call) => subcalls_from_calls(call.calls, Some(!call.requireSuccess)),
-            Multicall::MulticallCalls::aggregate3(call) => subcalls_from_calls(call.calls, None),
-            Multicall::MulticallCalls::aggregate3Value(call) => subcalls_from_calls(call.calls, None),
-            Multicall::MulticallCalls::blockAndAggregate(call) => subcalls_from_calls(call.calls, None),
-            Multicall::MulticallCalls::tryBlockAndAggregate(call) => subcalls_from_calls(call.calls, Some(!call.requireSuccess)),
+        let (parent_function, subcalls) = match value {
+            Multicall::MulticallCalls::aggregate(call) => (Multicall::aggregateCall::SIGNATURE, subcalls_from_calls(call.calls, None)),
+            Multicall::MulticallCalls::tryAggregate(call) => (
+                Multicall::tryAggregateCall::SIGNATURE,
+                subcalls_from_calls(call.calls, Some(!call.requireSuccess)),
+            ),
+            Multicall::MulticallCalls::aggregate3(call) => (Multicall::aggregate3Call::SIGNATURE, subcalls_from_calls(call.calls, None)),
+            Multicall::MulticallCalls::aggregate3Value(call) => (Multicall::aggregate3ValueCall::SIGNATURE, subcalls_from_calls(call.calls, None)),
+            Multicall::MulticallCalls::blockAndAggregate(call) => (Multicall::blockAndAggregateCall::SIGNATURE, subcalls_from_calls(call.calls, None)),
+            Multicall::MulticallCalls::tryBlockAndAggregate(call) => (
+                Multicall::tryBlockAndAggregateCall::SIGNATURE,
+                subcalls_from_calls(call.calls, Some(!call.requireSuccess)),
+            ),
             _ => anyhow::bail!("unsupported multicall function"),
         };
 
-        Ok(Self::from_subcalls(subcalls))
+        Ok(Self::from_subcalls(parent_function, subcalls))
     }
 }
 
