@@ -84,7 +84,7 @@ pub enum MulticallError {
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 2000]
-pub enum TransactionError {
+pub enum ExecutorError {
     #[error("function selector was not recognized: account at {address} is not a contract.")]
     #[error_code = 1]
     AccountNotContract { address: Address },
@@ -116,6 +116,10 @@ pub enum TransactionError {
     #[error("transaction reverted during execution. reason: {reason}")]
     #[error_code = 8]
     RevertedCallWithReason { reason: RevertReason },
+
+    #[error("evm executor panicked, see logs for details")]
+    #[error_code = 9]
+    Panic { err: anyhow::Error },
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
@@ -248,7 +252,7 @@ pub enum StratusError {
     RPC(#[from] RpcError),
 
     #[error(transparent)]
-    Transaction(#[from] TransactionError),
+    Executor(#[from] ExecutorError),
 
     #[error(transparent)]
     Storage(#[from] StorageError),
@@ -273,7 +277,7 @@ impl ErrorCode for StratusError {
     fn error_code(&self) -> i32 {
         match self {
             Self::RPC(err) => err.error_code(),
-            Self::Transaction(err) => err.error_code(),
+            Self::Executor(err) => err.error_code(),
             Self::Storage(err) => err.error_code(),
             Self::Importer(err) => err.error_code(),
             Self::Consensus(err) => err.error_code(),
@@ -287,7 +291,7 @@ impl ErrorCode for StratusError {
         let major = code / 1000;
         match major {
             1 => RpcError::str_repr_from_err_code(code),
-            2 => TransactionError::str_repr_from_err_code(code),
+            2 => ExecutorError::str_repr_from_err_code(code),
             3 => StorageError::str_repr_from_err_code(code),
             4 => ImporterError::str_repr_from_err_code(code),
             5 => ConsensusError::str_repr_from_err_code(code),
@@ -317,9 +321,9 @@ impl StratusError {
 
             // Transaction
             Self::RPC(RpcError::TransactionInvalid { decode_error }) => to_json_value(decode_error),
-            Self::Transaction(TransactionError::EvmFailed(e)) => JsonValue::String(e.to_string()),
-            Self::Transaction(TransactionError::RevertedCall { output }) => to_json_value(output),
-            Self::Transaction(TransactionError::RevertedCallWithReason { reason }) => to_json_value(reason),
+            Self::Executor(ExecutorError::EvmFailed(e)) => JsonValue::String(e.to_string()),
+            Self::Executor(ExecutorError::RevertedCall { output }) => to_json_value(output),
+            Self::Executor(ExecutorError::RevertedCallWithReason { reason }) => to_json_value(reason),
 
             // Unexpected
             Self::Unexpected(UnexpectedError::Unexpected(e)) => JsonValue::String(e.to_string()),
@@ -359,9 +363,9 @@ impl From<EVMError<StratusError>> for StratusError {
     fn from(value: EVMError<StratusError>) -> Self {
         match value {
             EVMError::Database(err) => err,
-            EVMError::Custom(err) => Self::Transaction(TransactionError::EvmFailed(err)),
-            EVMError::Header(err) => Self::Transaction(TransactionError::EvmFailed(err.to_string())),
-            EVMError::Transaction(err) => Self::Transaction(TransactionError::EvmFailed(err.to_string())),
+            EVMError::Custom(err) => Self::Executor(ExecutorError::EvmFailed(err)),
+            EVMError::Header(err) => Self::Executor(ExecutorError::EvmFailed(err.to_string())),
+            EVMError::Transaction(err) => Self::Executor(ExecutorError::EvmFailed(err.to_string())),
         }
     }
 }
@@ -372,7 +376,7 @@ impl From<EVMError<StratusError>> for StratusError {
 impl From<StratusError> for ErrorObjectOwned {
     fn from(value: StratusError) -> Self {
         // return response from leader
-        if let StratusError::Transaction(TransactionError::LeaderFailed(response)) = value {
+        if let StratusError::Executor(ExecutorError::LeaderFailed(response)) = value {
             return response;
         }
         // generate response

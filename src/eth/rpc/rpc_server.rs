@@ -62,6 +62,7 @@ use crate::eth::primitives::ChainId;
 use crate::eth::primitives::ConsensusError;
 use crate::eth::primitives::DecodeInputError;
 use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::ImporterError;
 use crate::eth::primitives::LogFilterInput;
@@ -75,7 +76,6 @@ use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StateError;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionError;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
@@ -1145,7 +1145,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_estimateGas with failure");
-            Err(TransactionError::RevertedCall { output: result.output }.into())
+            Err(ExecutorError::RevertedCall { output: result.output }.into())
         }
 
         // internal error
@@ -1188,7 +1188,7 @@ fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed eth_call with failure");
-            Err(TransactionError::RevertedCall { output: result.output }.into())
+            Err(ExecutorError::RevertedCall { output: result.output }.into())
         }
         // internal error
         Err(e) => {
@@ -1242,7 +1242,7 @@ fn stratus_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
         // result is failure
         Ok(result) => {
             tracing::warn!(tx_output = %result.output, "executed stratus_call with failure");
-            Err(TransactionError::RevertedCallWithReason {
+            Err(ExecutorError::RevertedCallWithReason {
                 reason: (&result.output).into(),
             }
             .into())

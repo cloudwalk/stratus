@@ -6,6 +6,7 @@ mod executor;
 mod executor_config;
 
 pub use evm::Evm;
+pub use evm::EvmKind;
 pub use evm_input::EvmInput;
 pub use evm_result::EvmExecutionResult;
 pub use executor::Executor;
