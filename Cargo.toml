@@ -130,6 +130,7 @@ sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
 # Historic events processor tool
 indicatif = { version = "=0.18.3", optional = true }
+revm-state = "42.0.0"
 
 # ------------------------------------------------------------------------------
 # Platform specific dependencies

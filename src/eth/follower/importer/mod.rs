@@ -279,6 +279,7 @@ mod tests {
     use crate::eth::miner::Miner;
     use crate::eth::miner::MinerMode;
     use crate::eth::primitives::Account;
+    use crate::eth::primitives::AccountChangeValue;
     use crate::eth::primitives::Address;
     use crate::eth::primitives::Block;
     use crate::eth::primitives::BlockNumber;
@@ -300,6 +301,16 @@ mod tests {
     use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
     use crate::infra::BlockchainClient;
+
+    impl ExecutionAccountChanges {
+        pub fn from_changed(account: Account) -> Self {
+            Self {
+                nonce: AccountChangeValue::Changed(account.nonce),
+                balance: AccountChangeValue::Changed(account.balance),
+                bytecode: AccountChangeValue::Changed(account.bytecode),
+            }
+        }
+    }
 
     /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
     fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) {

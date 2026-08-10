@@ -76,6 +76,13 @@ where
     pub fn is_changed(&self) -> bool {
         matches!(self, Self::Changed(_))
     }
+
+    pub fn from_diff(original: T, current: T) -> Self {
+        match original == current {
+            true => Self::Original(current),
+            false => Self::Changed(current),
+        }
+    }
 }
 
 impl<T, U> From<Option<U>> for AccountChangeValue<T>
@@ -140,26 +147,22 @@ impl ExecutionAccountChanges {
             bytecode: self.bytecode.take_value(),
         }
     }
-
-    pub fn from_changed(account: Account) -> Self {
-        Self {
-            nonce: AccountChangeValue::Changed(account.nonce),
-            balance: AccountChangeValue::Changed(account.balance),
-            bytecode: AccountChangeValue::Changed(account.bytecode),
-        }
-    }
-
-    pub fn from_unchanged(account: Account) -> Self {
-        Self {
-            nonce: AccountChangeValue::Original(account.nonce),
-            balance: AccountChangeValue::Original(account.balance),
-            bytecode: AccountChangeValue::Original(account.bytecode),
-        }
-    }
 }
 
 impl From<(Address, ExecutionAccountChanges)> for Account {
     fn from((address, change): (Address, ExecutionAccountChanges)) -> Self {
         change.to_account(address)
+    }
+}
+
+impl From<revm_state::Account> for ExecutionAccountChanges {
+    fn from(mut value: revm_state::Account) -> Self {
+        let changed = std::mem::take(&mut value.info);
+        let original = value.original_info_mut();
+        Self {
+            nonce: AccountChangeValue::from_diff(original.nonce.into(), changed.nonce.into()),
+            balance: AccountChangeValue::from_diff(original.balance.into(), changed.balance.into()),
+            bytecode: AccountChangeValue::from_diff(original.code.take(), changed.code),
+        }
     }
 }

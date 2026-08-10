@@ -1,3 +1,4 @@
+use std::mem;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
@@ -51,13 +52,11 @@ use crate::eth::codegen;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
-use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
-use crate::eth::primitives::ExecutionAccountChanges;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutorError;
@@ -480,12 +479,6 @@ impl Database for RevmSession {
             }
         }
 
-        if !address.is_ignored()
-            && let std::collections::hash_map::Entry::Vacant(entry) = self.storage_changes.accounts.entry(address)
-        {
-            entry.insert(ExecutionAccountChanges::from_unchanged(account.clone()));
-        }
-
         Ok(Some(account.into()))
     }
 
@@ -588,7 +581,7 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
 fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChanges) -> Result<(ExecutionChanges, Option<Address>), StratusError> {
     let mut deployed_contract_address = None;
 
-    for (revm_address, revm_account) in revm_state {
+    for (revm_address, mut revm_account) in revm_state {
         let address: Address = revm_address.into();
         if address.is_ignored() {
             continue;
@@ -604,16 +597,16 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
             "evm account"
         );
 
-        let (account_created, account_touched, account_changed) = (revm_account.is_created(), revm_account.is_touched(), revm_account.is_changed());
-
-        if !(account_created || account_touched) {
+        if !(revm_account.is_created() || revm_account.is_touched()) {
             continue;
         }
 
-        // parse revm types to stratus primitives
-        let account: Account = (revm_address, revm_account.info).into();
-        let account_modified_slots: Vec<Slot> = revm_account
-            .storage
+        if revm_account.is_created() && revm_account.info.code.is_some() {
+            deployed_contract_address = Some(address);
+        }
+
+        let storage = mem::take(&mut revm_account.storage);
+        let account_modified_slots: Vec<Slot> = storage
             .into_iter()
             .filter_map(|(index, value)| match value.is_changed() {
                 true => Some(Slot::new(index.into(), value.present_value.into())),
@@ -621,12 +614,9 @@ fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChange
             })
             .collect();
 
-        if account_created && account.bytecode.is_some() {
-            deployed_contract_address = Some(account.address);
-        }
-
-        if account_changed || !account_modified_slots.is_empty() {
-            execution_changes.insert(account, account_modified_slots);
+        execution_changes.insert_slot_changes(address, account_modified_slots);
+        if revm_account.is_changed() {
+            execution_changes.insert_account_changes(address, revm_account.into());
         }
     }
     Ok((execution_changes, deployed_contract_address))
