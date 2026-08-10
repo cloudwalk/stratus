@@ -30,90 +30,6 @@ pub struct MulticallInfo {
     pub subcalls: Vec<MulticallSubcall>,
 }
 
-#[cfg(feature = "metrics")]
-struct MulticallRpcMetricsContext<'a> {
-    multicall: &'a MulticallInfo,
-    client: &'a RpcClientApp,
-    method: &'a str,
-    parent_function: codegen::SoliditySignature,
-}
-
-#[cfg(feature = "metrics")]
-impl<'a> MulticallRpcMetricsContext<'a> {
-    fn new(multicall: &'a MulticallInfo, client: &'a RpcClientApp, method: &'a str, parent_function: codegen::SoliditySignature) -> Self {
-        Self {
-            multicall,
-            client,
-            method,
-            parent_function,
-        }
-    }
-}
-
-#[cfg(feature = "metrics")]
-pub struct MulticallRpcRequestsStartedMetrics<'a> {
-    context: MulticallRpcMetricsContext<'a>,
-    req_type: &'a str,
-}
-
-#[cfg(feature = "metrics")]
-impl<'a> MulticallRpcRequestsStartedMetrics<'a> {
-    pub fn new(
-        multicall: &'a MulticallInfo,
-        client: &'a RpcClientApp,
-        method: &'a str,
-        parent_function: codegen::SoliditySignature,
-        req_type: &'a str,
-    ) -> Self {
-        Self {
-            context: MulticallRpcMetricsContext::new(multicall, client, method, parent_function),
-            req_type,
-        }
-    }
-}
-
-#[cfg(feature = "metrics")]
-pub struct MulticallRpcResponseMetrics<'a> {
-    elapsed: Duration,
-    rpc_result: &'a str,
-    result_code: i32,
-    success: bool,
-}
-
-#[cfg(feature = "metrics")]
-impl<'a> MulticallRpcResponseMetrics<'a> {
-    pub fn new(elapsed: Duration, rpc_result: &'a str, result_code: i32, success: bool) -> Self {
-        Self {
-            elapsed,
-            rpc_result,
-            result_code,
-            success,
-        }
-    }
-}
-
-#[cfg(feature = "metrics")]
-pub struct MulticallRpcRequestsFinishedMetrics<'a> {
-    context: MulticallRpcMetricsContext<'a>,
-    response_metrics: MulticallRpcResponseMetrics<'a>,
-}
-
-#[cfg(feature = "metrics")]
-impl<'a> MulticallRpcRequestsFinishedMetrics<'a> {
-    pub fn new(
-        multicall: &'a MulticallInfo,
-        client: &'a RpcClientApp,
-        method: &'a str,
-        parent_function: codegen::SoliditySignature,
-        response_metrics: MulticallRpcResponseMetrics<'a>,
-    ) -> Self {
-        Self {
-            context: MulticallRpcMetricsContext::new(multicall, client, method, parent_function),
-            response_metrics,
-        }
-    }
-}
-
 impl MulticallInfo {
     pub fn decode_opt(to: Option<Address>, input: &Bytes) -> Option<Self> {
         if !to.is_some_and(is_multicall_contract) {
@@ -138,30 +54,33 @@ impl MulticallInfo {
     }
 
     #[cfg(feature = "metrics")]
-    pub fn inc_rpc_requests_started(request_started_metrics: MulticallRpcRequestsStartedMetrics<'_>) {
-        for subcall in request_started_metrics.context.multicall.logged_subcalls() {
-            metrics::inc_rpc_requests_started(
-                request_started_metrics.context.client,
-                request_started_metrics.context.method,
-                subcall.metric_contract(),
-                subcall.metric_function(request_started_metrics.context.parent_function),
-                request_started_metrics.req_type,
-            );
+    pub fn inc_rpc_requests_started(&self, client: &RpcClientApp, method: &str, parent_function: codegen::SoliditySignature, req_type: &str) {
+        for subcall in self.logged_subcalls() {
+            metrics::inc_rpc_requests_started(client, method, subcall.metric_contract(), subcall.metric_function(parent_function), req_type);
         }
     }
 
     #[cfg(feature = "metrics")]
-    pub fn inc_rpc_requests_finished(request_finished_metrics: MulticallRpcRequestsFinishedMetrics<'_>) {
-        for subcall in request_finished_metrics.context.multicall.logged_subcalls() {
+    pub fn inc_rpc_requests_finished(
+        &self,
+        elapsed: Duration,
+        client: &RpcClientApp,
+        method: &str,
+        parent_function: codegen::SoliditySignature,
+        rpc_result: &str,
+        result_code: i32,
+        success: bool,
+    ) {
+        for subcall in self.logged_subcalls() {
             metrics::inc_rpc_requests_finished(
-                request_finished_metrics.response_metrics.elapsed,
-                request_finished_metrics.context.client,
-                request_finished_metrics.context.method,
+                elapsed,
+                client,
+                method,
                 subcall.metric_contract(),
-                subcall.metric_function(request_finished_metrics.context.parent_function),
-                request_finished_metrics.response_metrics.rpc_result,
-                request_finished_metrics.response_metrics.result_code,
-                request_finished_metrics.response_metrics.success,
+                subcall.metric_function(parent_function),
+                rpc_result,
+                result_code,
+                success,
             );
         }
     }
