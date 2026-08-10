@@ -110,7 +110,7 @@ impl EntityRead for Account {
         timed(|| s.cache.get_account(address)).with(|m| {
             if m.result.is_some() {
                 tracing::debug!(storage = %label::CACHE, %address, "account found in cache");
-                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Pending);
+                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Pending, true);
             }
         })
     }
@@ -119,7 +119,7 @@ impl EntityRead for Account {
         tracing::debug!(storage = %label::TEMP, %address, "reading account");
         timed(|| s.temp.read_account(address, kind)).with(|m| {
             if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_account(m.elapsed, label::TEMP, PointInTime::Pending);
+                metrics::inc_storage_read_account(m.elapsed, label::TEMP, PointInTime::Pending, true);
             }
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read account from temporary storage");
@@ -131,7 +131,7 @@ impl EntityRead for Account {
         timed(|| s.cache.get_account_latest(address)).with(|m| {
             if m.result.is_some() {
                 tracing::debug!(storage = %label::CACHE, %address, "account found in cache");
-                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Mined);
+                metrics::inc_storage_read_account(m.elapsed, label::CACHE, PointInTime::Mined, true);
             }
         })
     }
@@ -142,7 +142,7 @@ impl EntityRead for Account {
             m.result
                 .as_ref()
                 .inspect(|opt| {
-                    opt.is_some().then(|| metrics::inc_storage_read_account(m.elapsed, label::PERM, point));
+                    metrics::inc_storage_read_account(m.elapsed, label::PERM, point, opt.is_some());
                 })
                 .inspect_err(|err| tracing::error!(reason = ?err, "failed to read account from permanent storage"))
                 .ok();
@@ -176,7 +176,7 @@ impl EntityRead for Slot {
         timed(|| s.cache.get_slot(address, index)).with(|m| {
             if m.result.is_some() {
                 tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
-                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Pending);
+                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Pending, true);
             }
         })
     }
@@ -186,7 +186,7 @@ impl EntityRead for Slot {
         tracing::debug!(storage = %label::TEMP, %address, %index, "reading slot");
         timed(|| s.temp.read_slot(address, index, kind)).with(|m| {
             if m.result.as_ref().is_ok_and(|opt| opt.is_some()) {
-                metrics::inc_storage_read_slot(m.elapsed, label::TEMP, PointInTime::Pending);
+                metrics::inc_storage_read_slot(m.elapsed, label::TEMP, PointInTime::Pending, true);
             }
             if let Err(ref e) = m.result {
                 tracing::error!(reason = ?e, "failed to read slot from temporary storage");
@@ -199,7 +199,7 @@ impl EntityRead for Slot {
         timed(|| s.cache.get_slot_latest(address, index)).with(|m| {
             if m.result.is_some() {
                 tracing::debug!(storage = %label::CACHE, %address, slot = ?m.result, "slot found in cache");
-                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Mined);
+                metrics::inc_storage_read_slot(m.elapsed, label::CACHE, PointInTime::Mined, true);
             }
         })
     }
@@ -211,7 +211,7 @@ impl EntityRead for Slot {
             m.result
                 .as_ref()
                 .inspect(|opt| {
-                    opt.is_some().then(|| metrics::inc_storage_read_slot(m.elapsed, label::PERM, point));
+                    metrics::inc_storage_read_slot(m.elapsed, label::PERM, point, opt.is_some());
                 })
                 .inspect_err(|err| tracing::error!(reason = ?err, "failed to read slot from permanent storage"))
                 .ok();
