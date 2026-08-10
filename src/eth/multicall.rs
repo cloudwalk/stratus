@@ -31,7 +31,7 @@ pub struct MulticallInfo {
 }
 
 impl MulticallInfo {
-    pub fn new(to: Option<Address>, input: &Bytes) -> Option<Self> {
+    pub fn decode_opt(to: Option<Address>, input: &Bytes) -> Option<Self> {
         if !to.is_some_and(is_multicall_contract) {
             return None;
         }
@@ -99,15 +99,17 @@ impl TryFrom<Multicall::MulticallCalls> for MulticallInfo {
     type Error = anyhow::Error;
 
     fn try_from(value: Multicall::MulticallCalls) -> Result<Self, Self::Error> {
-        match value {
-            Multicall::MulticallCalls::aggregate(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, None))),
-            Multicall::MulticallCalls::tryAggregate(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, Some(!call.requireSuccess)))),
-            Multicall::MulticallCalls::aggregate3(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, None))),
-            Multicall::MulticallCalls::aggregate3Value(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, None))),
-            Multicall::MulticallCalls::blockAndAggregate(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, None))),
-            Multicall::MulticallCalls::tryBlockAndAggregate(call) => Ok(Self::from_subcalls(subcalls_from_calls(call.calls, Some(!call.requireSuccess)))),
+        let subcalls = match value {
+            Multicall::MulticallCalls::aggregate(call) => subcalls_from_calls(call.calls, None),
+            Multicall::MulticallCalls::tryAggregate(call) => subcalls_from_calls(call.calls, Some(!call.requireSuccess)),
+            Multicall::MulticallCalls::aggregate3(call) => subcalls_from_calls(call.calls, None),
+            Multicall::MulticallCalls::aggregate3Value(call) => subcalls_from_calls(call.calls, None),
+            Multicall::MulticallCalls::blockAndAggregate(call) => subcalls_from_calls(call.calls, None),
+            Multicall::MulticallCalls::tryBlockAndAggregate(call) => subcalls_from_calls(call.calls, Some(!call.requireSuccess)),
             _ => anyhow::bail!("unsupported multicall function"),
-        }
+        };
+
+        Ok(Self::from_subcalls(subcalls))
     }
 }
 
@@ -267,7 +269,7 @@ mod tests {
     }
 
     fn multicall_info(input: &Bytes) -> Option<MulticallInfo> {
-        MulticallInfo::new(Some(multicall_address()), input)
+        MulticallInfo::decode_opt(Some(multicall_address()), input)
     }
 
     #[test]
@@ -390,17 +392,17 @@ mod tests {
     }
 
     #[test]
-    fn constructor_returns_none_for_malformed_known_selector() {
+    fn decode_opt_returns_none_for_malformed_known_selector() {
         let input = Bytes(Vec::from(Multicall::aggregateCall::SELECTOR));
 
         assert!(multicall_info(&input).is_none());
     }
 
     #[test]
-    fn constructor_returns_none_for_non_multicall_contract() {
+    fn decode_opt_returns_none_for_non_multicall_contract() {
         let input = Bytes(Multicall::aggregateCall { calls: Vec::new() }.abi_encode());
 
-        assert!(MulticallInfo::new(Some(brlc_address()), &input).is_none());
+        assert!(MulticallInfo::decode_opt(Some(brlc_address()), &input).is_none());
     }
 
     #[test]

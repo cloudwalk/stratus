@@ -233,9 +233,9 @@ impl RpcServiceT for RpcMiddleware {
             rpc_tx_function = %tx_ref.map(|tx| tx.function).or_empty(),
             rpc_tx_from = %tx_ref.and_then(|tx| tx.from).or_empty(),
             rpc_tx_to = %tx_ref.and_then(|tx| tx.to).or_empty(),
-            rpc_tx_multicall_total = multicall_ref.map(|multicall| multicall.total_subcalls),
-            rpc_tx_multicall_logged = multicall_ref.map(|multicall| multicall.logged_subcalls_count()),
-            rpc_tx_multicall_subcalls = multicall_ref.map(|multicall| to_json_string(&multicall.logged_subcalls())),
+            rpc_tx_multicall_total = %multicall_ref.map(|multicall| multicall.total_subcalls).or_empty(),
+            rpc_tx_multicall_logged = %multicall_ref.map(|multicall| multicall.logged_subcalls_count()).or_empty(),
+            rpc_tx_multicall_subcalls = %multicall_ref.map(|multicall| to_json_string(&multicall.logged_subcalls())).or_empty(),
             is_admin = %is_admin,
             "rpc request"
         );
@@ -364,9 +364,9 @@ impl Future for RpcResponse<'_> {
                     rpc_tx_function = %tx_ref.map(|tx| tx.function).or_empty(),
                     rpc_tx_from = %tx_ref.and_then(|tx| tx.from).or_empty(),
                     rpc_tx_to = %tx_ref.and_then(|tx| tx.to).or_empty(),
-                    rpc_tx_multicall_total = multicall_ref.map(|multicall| multicall.total_subcalls),
-                    rpc_tx_multicall_logged = multicall_ref.map(|multicall| multicall.logged_subcalls_count()),
-                    rpc_tx_multicall_subcalls = multicall_ref.map(|multicall| to_json_string(&multicall.logged_subcalls())),
+                    rpc_tx_multicall_total = %multicall_ref.map(|multicall| multicall.total_subcalls).or_empty(),
+                    rpc_tx_multicall_logged = %multicall_ref.map(|multicall| multicall.logged_subcalls_count()).or_empty(),
+                    rpc_tx_multicall_subcalls = %multicall_ref.map(|multicall| to_json_string(&multicall.logged_subcalls())).or_empty(),
                     %rpc_result,
                     rpc_success = %response_success,
                     duration_us = %elapsed.as_micros(),
@@ -447,7 +447,7 @@ impl TransactionTracingIdentifiers {
             from: decoded_tx.execution_info.signer.address(),
             to: decoded_tx.execution_info.to,
             nonce: Some(decoded_tx.execution_info.nonce),
-            multicall: MulticallInfo::new(decoded_tx.execution_info.to, &decoded_tx.execution_info.input),
+            multicall: MulticallInfo::decode_opt(decoded_tx.execution_info.to, &decoded_tx.execution_info.input),
         })
     }
 
@@ -462,7 +462,7 @@ impl TransactionTracingIdentifiers {
             from: call.from,
             to: call.to,
             nonce: None,
-            multicall: MulticallInfo::new(call.to, &call.data),
+            multicall: MulticallInfo::decode_opt(call.to, &call.data),
         })
     }
 
