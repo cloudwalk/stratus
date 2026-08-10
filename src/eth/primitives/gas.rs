@@ -5,6 +5,7 @@ use display_json::DebugAsJson;
 use fake::Dummy;
 #[cfg(test)]
 use fake::Faker;
+use revm::context::result::ResultGas;
 
 use crate::ext::RuintExt;
 
@@ -33,6 +34,12 @@ impl Dummy<Faker> for Gas {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
+
+impl From<ResultGas> for Gas {
+    fn from(value: ResultGas) -> Self {
+        Self(U64::from(value.tx_gas_used()))
+    }
+}
 
 impl From<u8> for Gas {
     fn from(value: u8) -> Self {

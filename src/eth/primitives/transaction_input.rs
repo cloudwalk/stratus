@@ -257,6 +257,7 @@ impl Decodable for TransactionInput {
                 inner: Recovered::new_unchecked(envelope, alloy_primitives::Address::ZERO),
                 block_hash: None,
                 block_number: None,
+                block_timestamp: None,
                 transaction_index: None,
                 effective_gas_price: None,
             })
@@ -361,6 +362,7 @@ impl From<TransactionInput> for AlloyTransaction {
             inner: Recovered::new_unchecked(inner, signer.into()),
             block_hash: None,
             block_number: None,
+            block_timestamp: None,
             transaction_index: None,
             effective_gas_price: Some(value.execution_info.gas_price),
         }

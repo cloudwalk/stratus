@@ -29,6 +29,8 @@ use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Hash;
 #[cfg(test)]
+use crate::eth::primitives::UnixTime;
+#[cfg(test)]
 use crate::eth::primitives::Wei;
 
 #[derive(Debug, Clone, PartialEq, derive_more::Deref, serde::Serialize)]
@@ -107,6 +109,7 @@ impl Dummy<Faker> for ExternalTransaction {
         let to: Address = faker.fake_with_rng(rng);
 
         let block_hash: Hash = faker.fake_with_rng(rng);
+        let block_timestamp: UnixTime = faker.fake_with_rng(rng);
 
         let gas_price: u128 = faker.fake_with_rng(rng);
         let value: Wei = Wei::from(rng.next_u64());
@@ -133,6 +136,7 @@ impl Dummy<Faker> for ExternalTransaction {
             inner: Recovered::new_unchecked(inner_tx, to.into()),
             block_hash: Some(block_hash.into()),
             block_number: Some(rng.next_u64()),
+            block_timestamp: Some(*block_timestamp),
             transaction_index: Some(rng.next_u64()),
             effective_gas_price: Some(gas_price),
         };
