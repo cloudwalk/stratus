@@ -55,6 +55,7 @@ use crate::eth::executor::ExecutorConfig;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::Complete;
 use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionChanges;
@@ -148,7 +149,6 @@ impl Evm {
         // extract results
         let session = &mut self.evm.journaled_state.database;
         let session_input = std::mem::take(&mut session.input);
-        let session_storage_changes = std::mem::take(&mut session.storage_changes);
         let session_metrics = std::mem::take(&mut session.metrics);
         #[cfg(feature = "metrics")]
         let session_point_in_time = session.input.point_in_time;
@@ -156,7 +156,7 @@ impl Evm {
         // parse result
         let execution = match evm_result {
             // executed
-            Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)?),
+            Ok(result_and_state) => Ok(parse_revm_result_and_state(result_and_state, session_input)?),
 
             // nonce errors
             Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(ExecutorError::Nonce {
@@ -429,9 +429,6 @@ struct RevmSession {
     /// Input passed to EVM to execute the transaction.
     input: EvmInput,
 
-    /// Changes made to the storage during the execution of the transaction.
-    storage_changes: ExecutionChanges,
-
     /// Metrics collected during EVM execution.
     metrics: EvmExecutionMetrics,
 }
@@ -443,7 +440,6 @@ impl RevmSession {
             config,
             storage,
             input: EvmInput::default(),
-            storage_changes: ExecutionChanges::default(),
             metrics: EvmExecutionMetrics::default(),
         }
     }
@@ -451,7 +447,6 @@ impl RevmSession {
     /// Resets the session to be used with a new transaction.
     pub fn reset(&mut self, input: EvmInput) {
         self.input = input;
-        self.storage_changes = ExecutionChanges::default();
         self.metrics = EvmExecutionMetrics::default();
     }
 }
@@ -538,9 +533,9 @@ impl DatabaseRef for RevmSession {
 // Conversion
 // -----------------------------------------------------------------------------
 
-fn parse_revm_execution(revm_result: ResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> Result<EvmExecution, StratusError> {
+fn parse_revm_result_and_state(revm_result: ResultAndState, input: EvmInput) -> Result<EvmExecution, StratusError> {
     let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
-    let (changes, deployed_contract_address) = parse_revm_state(revm_result.state, execution_changes)?;
+    let (changes, deployed_contract_address) = parse_revm_state(revm_result.state)?;
     tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
 
     Ok(EvmExecution {
@@ -563,23 +558,26 @@ fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Ve
             let gas = Gas::from(gas);
             (result, output, logs, gas)
         }
-        RevmExecutionResult::Revert { output, gas, logs: _logs } => {
+        RevmExecutionResult::Revert { output, gas, logs } => {
             let output = Bytes::from(output);
             let result = ExecutionResult::Reverted { reason: (&output).into() };
             let gas = Gas::from(gas);
-            (result, output, Vec::new(), gas)
+            let logs = logs.into_iter().map_into().collect();
+            (result, output, logs, gas)
         }
-        RevmExecutionResult::Halt { reason, gas, logs: _logs } => {
+        RevmExecutionResult::Halt { reason, gas, logs } => {
             let result = ExecutionResult::new_halted(format!("{reason:?}"));
             let output = Bytes::default();
             let gas = Gas::from(gas);
-            (result, output, Vec::new(), gas)
+            let logs = logs.into_iter().map_into().collect();
+            (result, output, logs, gas)
         }
     }
 }
 
-fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChanges) -> Result<(ExecutionChanges, Option<Address>), StratusError> {
+fn parse_revm_state(revm_state: EvmState) -> Result<(ExecutionChanges, Option<Address>), StratusError> {
     let mut deployed_contract_address = None;
+    let mut execution_changes: ExecutionChanges<Complete> = ExecutionChanges::default();
 
     for (revm_address, mut revm_account) in revm_state {
         let address: Address = revm_address.into();
