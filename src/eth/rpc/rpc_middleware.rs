@@ -29,6 +29,7 @@ use crate::alias::JsonValue;
 use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
 use crate::eth::codegen::SoliditySignature;
+use crate::eth::multicall::MulticallInfo;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
@@ -73,6 +74,13 @@ enum RequestType {
     Batch,
     #[default]
     Single,
+}
+
+#[cfg(feature = "metrics")]
+impl From<RequestType> for metrics::MetricLabelValue {
+    fn from(value: RequestType) -> Self {
+        value.to_string().into()
+    }
 }
 
 impl RpcServiceT for RpcMiddleware {
@@ -167,6 +175,8 @@ impl RpcServiceT for RpcMiddleware {
             rpc_tx_nonce = field::Empty,
             rpc_tx_contract = field::Empty,
             rpc_tx_function = field::Empty,
+            rpc_tx_multicall_total = field::Empty,
+            rpc_tx_multicall_logged = field::Empty,
             rpc_req_type = request_type.to_string()
         );
         let middleware_enter = span.enter();
@@ -216,16 +226,23 @@ impl RpcServiceT for RpcMiddleware {
                 tx.record_span(s);
             }
         });
+
+        let tx_ref = tx.as_ref();
+        let multicall_ref = tx_ref.and_then(|tx| tx.multicall.as_ref());
+
         tracing::info!(
             rpc_client = %client,
             rpc_id = %request.id,
             rpc_method = %method,
             rpc_params = %to_json_string(&request.params),
-            rpc_tx_hash = %tx.as_ref().and_then(|tx|tx.hash).or_empty(),
-            rpc_tx_contract = %tx.as_ref().map(|tx|tx.contract).or_empty(),
-            rpc_tx_function = %tx.as_ref().map(|tx|tx.function).or_empty(),
-            rpc_tx_from = %tx.as_ref().and_then(|tx|tx.from).or_empty(),
-            rpc_tx_to = %tx.as_ref().and_then(|tx|tx.to).or_empty(),
+            rpc_tx_hash = %tx_ref.and_then(|tx| tx.hash).or_empty(),
+            rpc_tx_contract = %tx_ref.map(|tx| tx.contract).or_empty(),
+            rpc_tx_function = %tx_ref.map(|tx| tx.function).or_empty(),
+            rpc_tx_from = %tx_ref.and_then(|tx| tx.from).or_empty(),
+            rpc_tx_to = %tx_ref.and_then(|tx| tx.to).or_empty(),
+            rpc_tx_multicall_total = %multicall_ref.map(|multicall| multicall.total_subcalls).or_empty(),
+            rpc_tx_multicall_logged = %multicall_ref.map(|multicall| multicall.logged_subcalls_count()).or_empty(),
+            rpc_tx_multicall_subcalls = %multicall_ref.map(|multicall| to_json_string(&multicall.logged_subcalls())).or_empty(),
             is_admin = %is_admin,
             "rpc request"
         );
@@ -234,14 +251,13 @@ impl RpcServiceT for RpcMiddleware {
         #[cfg(feature = "metrics")]
         {
             // started requests
-            let tx_ref = tx.as_ref();
-            metrics::inc_rpc_requests_started(
-                &client,
-                &method,
-                tx_ref.map(|tx| tx.contract),
-                tx_ref.map(|tx| tx.function),
-                request_type.to_string(),
-            );
+            metrics::inc_rpc_requests_started(&client, &method, tx_ref.map(|tx| tx.contract), tx_ref.map(|tx| tx.function), request_type);
+
+            if let Some(tx) = tx_ref
+                && let Some(multicall) = tx.multicall.as_ref()
+            {
+                multicall.record_rpc_requests_started(&client, &method, request_type);
+            }
 
             // active requests
             if let Some(guard) = request.extensions.get::<ConnectionGuard>() {
@@ -335,16 +351,22 @@ impl Future for RpcResponse<'_> {
             // only log rpc_result if log level is not info
             let rpc_result = if matches!(level, Level::INFO) { Default::default() } else { &response_result };
             let log_tracing_event = || {
+                let tx_ref = resp.tx.as_ref();
+                let multicall_ref = tx_ref.and_then(|tx| tx.multicall.as_ref());
+
                 event_with!(
                     level,
                     rpc_client = %resp.client,
                     rpc_id = %resp.id,
                     rpc_method = %resp.method,
-                    rpc_tx_hash = %resp.tx.as_ref().and_then(|tx|tx.hash).or_empty(),
-                    rpc_tx_contract = %resp.tx.as_ref().map(|tx|tx.contract).or_empty(),
-                    rpc_tx_function = %resp.tx.as_ref().map(|tx|tx.function).or_empty(),
-                    rpc_tx_from = %resp.tx.as_ref().and_then(|tx|tx.from).or_empty(),
-                    rpc_tx_to = %resp.tx.as_ref().and_then(|tx|tx.to).or_empty(),
+                    rpc_tx_hash = %tx_ref.and_then(|tx| tx.hash).or_empty(),
+                    rpc_tx_contract = %tx_ref.map(|tx| tx.contract).or_empty(),
+                    rpc_tx_function = %tx_ref.map(|tx| tx.function).or_empty(),
+                    rpc_tx_from = %tx_ref.and_then(|tx| tx.from).or_empty(),
+                    rpc_tx_to = %tx_ref.and_then(|tx| tx.to).or_empty(),
+                    rpc_tx_multicall_total = %multicall_ref.map(|multicall| multicall.total_subcalls).or_empty(),
+                    rpc_tx_multicall_logged = %multicall_ref.map(|multicall| multicall.logged_subcalls_count()).or_empty(),
+                    rpc_tx_multicall_subcalls = %multicall_ref.map(|multicall| to_json_string(&multicall.logged_subcalls())).or_empty(),
                     %rpc_result,
                     rpc_success = %response_success,
                     duration_us = %elapsed.as_micros(),
@@ -381,6 +403,12 @@ impl Future for RpcResponse<'_> {
                     response.is_success(),
                 );
 
+                if let Some(tx) = tx_ref
+                    && let Some(multicall) = tx.multicall.as_ref()
+                {
+                    multicall.record_rpc_requests_finished(elapsed, resp.client, resp.method, rpc_result, error_code, response.is_success());
+                }
+
                 metrics::inc_rpc_response_size(response.as_json().get().len(), &*resp.client, resp.method.clone());
             }
 
@@ -405,6 +433,7 @@ struct TransactionTracingIdentifiers {
     pub from: Option<Address>,
     pub to: Option<Address>,
     pub nonce: Option<Nonce>,
+    pub multicall: Option<MulticallInfo>,
 }
 
 impl TransactionTracingIdentifiers {
@@ -418,6 +447,7 @@ impl TransactionTracingIdentifiers {
             from: decoded_tx.execution_info.signer.address(),
             to: decoded_tx.execution_info.to,
             nonce: Some(decoded_tx.execution_info.nonce),
+            multicall: MulticallInfo::decode_opt(decoded_tx.execution_info.to, &decoded_tx.execution_info.input),
         })
     }
 
@@ -432,6 +462,7 @@ impl TransactionTracingIdentifiers {
             from: call.from,
             to: call.to,
             nonce: None,
+            multicall: MulticallInfo::decode_opt(call.to, &call.data),
         })
     }
 
@@ -446,12 +477,17 @@ impl TransactionTracingIdentifiers {
             from: None,
             to: None,
             nonce: None,
+            multicall: None,
         })
     }
 
     pub fn record_span(&self, span: Span) {
         span.rec_str("rpc_tx_contract", &self.contract);
         span.rec_str("rpc_tx_function", &self.function);
+        if let Some(multicall) = &self.multicall {
+            span.rec_str("rpc_tx_multicall_total", &multicall.total_subcalls);
+            span.rec_str("rpc_tx_multicall_logged", &multicall.logged_subcalls_count());
+        }
 
         if let Some(tx_hash) = self.hash {
             span.rec_str("rpc_tx_hash", &tx_hash);
