@@ -1,115 +1,68 @@
+mod session;
+pub mod types;
+mod util;
+
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
-use alloy_rpc_types_trace::geth::CallFrame;
 use alloy_rpc_types_trace::geth::FourByteFrame;
 use alloy_rpc_types_trace::geth::GethDebugBuiltInTracerType;
 use alloy_rpc_types_trace::geth::GethDebugTracerType;
 use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::NoopFrame;
-use alloy_rpc_types_trace::geth::call::FlatCallFrame;
-use alloy_rpc_types_trace::geth::mux::MuxFrame;
 use anyhow::anyhow;
-use itertools::Itertools;
 use log::log_enabled;
 use revm::Context;
 use revm::Database;
-use revm::DatabaseRef;
 use revm::ExecuteCommitEvm;
 use revm::ExecuteEvm;
 use revm::InspectEvm;
-use revm::Journal;
 use revm::context::BlockEnv;
-use revm::context::CfgEnv;
 use revm::context::Evm as RevmEvm;
-use revm::context::TransactTo;
 use revm::context::TxEnv;
 use revm::context::result::EVMError;
-use revm::context::result::ExecutionResult as RevmExecutionResult;
 use revm::context::result::InvalidTransaction;
-use revm::context::result::ResultAndState;
 use revm::database::CacheDB;
 use revm::handler::EthFrame;
 use revm::handler::EthPrecompiles;
 use revm::handler::instructions::EthInstructions;
 use revm::interpreter::interpreter::EthInterpreter;
-use revm::primitives::B256;
-use revm::primitives::U256;
 use revm::primitives::hardfork::SpecId;
-use revm::state::AccountInfo;
-use revm::state::EvmState;
 use revm_inspectors::tracing::FourByteInspector;
 use revm_inspectors::tracing::MuxInspector;
 use revm_inspectors::tracing::TracingInspector;
 use revm_inspectors::tracing::TracingInspectorConfig;
 use revm_inspectors::tracing::js::JsInspector;
+use session::RevmSession;
+use types::ContextWithDB;
+pub use types::EvmKind;
+pub use types::GeneralRevm;
+use util::default_trace;
+use util::enhance_trace_with_decoded_errors;
+use util::parse_revm_result_and_state;
 
-use super::evm_input::InspectorInput;
-use crate::alias::RevmAddress;
-use crate::alias::RevmBytecode;
-use crate::eth::codegen;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
-use crate::eth::primitives::Account;
+use crate::eth::executor::evm::types::InspectorInput;
+use crate::eth::executor::evm::util::EvmExt;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::EvmExecutionMetrics;
-use crate::eth::primitives::ExecutionAccountChanges;
-use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutorError;
-use crate::eth::primitives::Gas;
-use crate::eth::primitives::Log;
 use crate::eth::primitives::MinedData;
 use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::StratusStorage;
-use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
-
-/// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
-#[cfg(feature = "dev")]
-const GAS_MAX_LIMIT: u64 = 1_000_000_000;
-#[cfg(not(feature = "dev"))]
-const GAS_MAX_LIMIT: u64 = 100_000_000;
-
-type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
-type GeneralRevm<DB> =
-    RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, (), EthInstructions<EthInterpreter<()>, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles, EthFrame>;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm {
     evm: RevmEvm<ContextWithDB, (), EthInstructions<EthInterpreter, ContextWithDB>, EthPrecompiles, EthFrame>,
     kind: EvmKind,
-}
-
-#[derive(Clone, Copy)]
-pub enum EvmKind {
-    Transaction,
-    CallPast,
-    CallPresent,
-    Inspect,
-}
-
-impl EvmKind {
-    fn is_call(&self) -> bool {
-        match self {
-            EvmKind::Transaction => false,
-            EvmKind::CallPast | EvmKind::CallPresent | EvmKind::Inspect => true,
-        }
-    }
-
-    fn is_transaction(&self) -> bool {
-        !self.is_call()
-    }
 }
 
 impl Evm {
@@ -149,7 +102,6 @@ impl Evm {
         // extract results
         let session = &mut self.evm.journaled_state.database;
         let session_input = std::mem::take(&mut session.input);
-        let session_storage_changes = std::mem::take(&mut session.storage_changes);
         let session_metrics = std::mem::take(&mut session.metrics);
         #[cfg(feature = "metrics")]
         let session_point_in_time = session.input.point_in_time;
@@ -157,7 +109,7 @@ impl Evm {
         // parse result
         let execution = match evm_result {
             // executed
-            Ok(result) => Ok(parse_revm_execution(result, session_input, session_storage_changes)?),
+            Ok(result_and_state) => Ok(parse_revm_result_and_state(result_and_state, session_input)?),
 
             // nonce errors
             Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(ExecutorError::Nonce {
@@ -368,313 +320,5 @@ impl Evm {
         };
 
         Ok(trace_result)
-    }
-}
-
-trait TxEnvExt {
-    fn fill_env(&mut self, input: EvmInput);
-}
-
-trait EvmExt<DB: Database> {
-    fn fill_env(&mut self, input: EvmInput);
-}
-
-impl<DB: Database, INSP, I, P, F> EvmExt<DB> for RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, INSP, I, P, F> {
-    fn fill_env(&mut self, input: EvmInput) {
-        self.block.fill_env(&input);
-        self.tx.fill_env(input);
-    }
-}
-
-impl TxEnvExt for TxEnv {
-    fn fill_env(&mut self, input: EvmInput) {
-        self.caller = input.from.into();
-        self.kind = match input.to {
-            Some(contract) => TransactTo::Call(contract.into()),
-            None => TransactTo::Create,
-        };
-        self.gas_limit = GAS_MAX_LIMIT;
-        self.gas_price = 0;
-        self.chain_id = input.chain_id.map_into();
-        self.nonce = input.nonce.map_into().unwrap_or_default();
-        self.data = input.data.into();
-        self.value = input.value.into();
-        self.gas_priority_fee = None;
-    }
-}
-
-trait BlockEnvExt {
-    fn fill_env(&mut self, input: &EvmInput);
-}
-
-impl BlockEnvExt for BlockEnv {
-    fn fill_env(&mut self, input: &EvmInput) {
-        self.timestamp = U256::from(*input.block_timestamp);
-        self.number = U256::from(input.block_number.as_u64());
-        self.basefee = 0;
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Database
-// -----------------------------------------------------------------------------
-
-/// Contextual data that is read or set durint the execution of a transaction in the EVM.
-struct RevmSession {
-    /// Executor configuration.
-    config: ExecutorConfig,
-
-    /// Service to communicate with the storage.
-    storage: Arc<StratusStorage>,
-
-    /// Input passed to EVM to execute the transaction.
-    input: EvmInput,
-
-    /// Changes made to the storage during the execution of the transaction.
-    storage_changes: ExecutionChanges,
-
-    /// Metrics collected during EVM execution.
-    metrics: EvmExecutionMetrics,
-}
-
-impl RevmSession {
-    /// Creates the base session to be used with REVM.
-    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
-        Self {
-            config,
-            storage,
-            input: EvmInput::default(),
-            storage_changes: ExecutionChanges::default(),
-            metrics: EvmExecutionMetrics::default(),
-        }
-    }
-
-    /// Resets the session to be used with a new transaction.
-    pub fn reset(&mut self, input: EvmInput) {
-        self.input = input;
-        self.storage_changes = ExecutionChanges::default();
-        self.metrics = EvmExecutionMetrics::default();
-    }
-}
-
-impl Database for RevmSession {
-    type Error = StratusError;
-
-    fn basic(&mut self, revm_address: RevmAddress) -> Result<Option<AccountInfo>, StratusError> {
-        self.metrics.account_reads += 1;
-
-        // retrieve account
-        let address: Address = revm_address.into();
-        let account = self.storage.read_account(address, self.input.point_in_time, self.input.kind)?;
-
-        // warn if the loaded account is the `to` account and it does not have a bytecode
-        if let Some(to_address) = self.input.to
-            && account.bytecode.is_none()
-            && address == to_address
-            && self.input.is_contract_call()
-        {
-            if self.config.executor_reject_not_contract {
-                return Err(ExecutorError::AccountNotContract { address: to_address }.into());
-            } else {
-                tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
-            }
-        }
-
-        if !address.is_ignored()
-            && let std::collections::hash_map::Entry::Vacant(entry) = self.storage_changes.accounts.entry(address)
-        {
-            entry.insert(ExecutionAccountChanges::from_unchanged(account.clone()));
-        }
-
-        Ok(Some(account.into()))
-    }
-
-    fn code_by_hash(&mut self, _: B256) -> Result<RevmBytecode, StratusError> {
-        Err(anyhow!("code by hash opcode not implemented").into())
-    }
-
-    fn storage(&mut self, revm_address: RevmAddress, revm_index: U256) -> Result<U256, StratusError> {
-        self.metrics.slot_reads += 1;
-
-        // convert slot
-        let address: Address = revm_address.into();
-        let index: SlotIndex = revm_index.into();
-
-        // load slot from storage
-        let slot = self.storage.read_slot(address, index, self.input.point_in_time, self.input.kind)?;
-
-        Ok(slot.value.into())
-    }
-
-    fn block_hash(&mut self, _: u64) -> Result<B256, StratusError> {
-        Err(anyhow!("block hash opcode not implemented").into())
-    }
-}
-
-impl DatabaseRef for RevmSession {
-    type Error = StratusError;
-
-    fn basic_ref(&self, address: revm::primitives::Address) -> Result<Option<AccountInfo>, Self::Error> {
-        // retrieve account
-        let address: Address = address.into();
-        let account = self.storage.read_account(address, self.input.point_in_time, self.input.kind)?;
-        Ok(Some(account.into()))
-    }
-
-    fn storage_ref(&self, address: revm::primitives::Address, index: U256) -> Result<U256, Self::Error> {
-        // convert slot
-        let address: Address = address.into();
-        let index: SlotIndex = index.into();
-
-        // load slot from storage
-        let slot = self.storage.read_slot(address, index, self.input.point_in_time, self.input.kind)?;
-
-        Ok(slot.value.into())
-    }
-
-    fn block_hash_ref(&self, _: u64) -> Result<B256, Self::Error> {
-        Err(anyhow!("block hash opcode not implemented").into())
-    }
-
-    fn code_by_hash_ref(&self, _code_hash: B256) -> Result<revm::state::Bytecode, Self::Error> {
-        Err(anyhow!("code by hash opcode not implemented").into())
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Conversion
-// -----------------------------------------------------------------------------
-
-fn parse_revm_execution(revm_result: ResultAndState, input: EvmInput, execution_changes: ExecutionChanges) -> Result<EvmExecution, StratusError> {
-    let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
-    let (changes, deployed_contract_address) = parse_revm_state(revm_result.state, execution_changes)?;
-    tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
-
-    Ok(EvmExecution {
-        block_timestamp: input.block_timestamp,
-        result,
-        output: tx_output,
-        logs,
-        gas_used: gas,
-        changes,
-        deployed_contract_address,
-    })
-}
-
-fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
-    match result {
-        RevmExecutionResult::Success { output, gas, logs, .. } => {
-            let result = ExecutionResult::Success;
-            let output = Bytes::from(output);
-            let logs = logs.into_iter().map_into().collect();
-            let gas = Gas::from(gas);
-            (result, output, logs, gas)
-        }
-        RevmExecutionResult::Revert { output, gas, logs: _logs } => {
-            let output = Bytes::from(output);
-            let result = ExecutionResult::Reverted { reason: (&output).into() };
-            let gas = Gas::from(gas);
-            (result, output, Vec::new(), gas)
-        }
-        RevmExecutionResult::Halt { reason, gas, logs: _logs } => {
-            let result = ExecutionResult::new_halted(format!("{reason:?}"));
-            let output = Bytes::default();
-            let gas = Gas::from(gas);
-            (result, output, Vec::new(), gas)
-        }
-    }
-}
-
-fn parse_revm_state(revm_state: EvmState, mut execution_changes: ExecutionChanges) -> Result<(ExecutionChanges, Option<Address>), StratusError> {
-    let mut deployed_contract_address = None;
-
-    for (revm_address, revm_account) in revm_state {
-        let address: Address = revm_address.into();
-        if address.is_ignored() {
-            continue;
-        }
-
-        // apply changes according to account status
-        tracing::debug!(
-            %address,
-            status = ?revm_account.status,
-            balance = %revm_account.info.balance,
-            nonce = %revm_account.info.nonce,
-            slots = %revm_account.storage.len(),
-            "evm account"
-        );
-
-        let (account_created, account_touched) = (revm_account.is_created(), revm_account.is_touched());
-
-        if !(account_created || account_touched) {
-            continue;
-        }
-
-        // parse revm types to stratus primitives
-        let account: Account = (revm_address, revm_account.info).into();
-        let account_modified_slots: Vec<Slot> = revm_account
-            .storage
-            .into_iter()
-            .filter_map(|(index, value)| match value.is_changed() {
-                true => Some(Slot::new(index.into(), value.present_value.into())),
-                false => None,
-            })
-            .collect();
-
-        if account_created && account.bytecode.is_some() {
-            deployed_contract_address = Some(account.address);
-        }
-
-        execution_changes.insert(account, account_modified_slots);
-    }
-    Ok((execution_changes, deployed_contract_address))
-}
-
-pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionExecution) -> GethTrace {
-    match tracer_type {
-        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FourByteTracer) => FourByteFrame::default().into(),
-        // HACK: Spoof empty call frame to prevent Blockscout from retrying unnecessary trace calls
-        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
-            let (typ, to) = match tx.evm_input.to {
-                Some(_) => ("CALL".to_string(), tx.evm_input.to.map_into()),
-                None => ("CREATE".to_string(), tx.result.execution.deployed_contract_address.map_into()),
-            };
-
-            CallFrame {
-                from: tx.evm_input.from.into(),
-                to,
-                typ,
-                ..Default::default()
-            }
-            .into()
-        }
-        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::MuxTracer) => MuxFrame::default().into(),
-        GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::FlatCallTracer) => FlatCallFrame::default().into(),
-        _ => NoopFrame::default().into(),
-    }
-}
-
-/// Enhances a GethTrace with decoded error information.
-fn enhance_trace_with_decoded_errors(trace: &mut GethTrace) {
-    match trace {
-        GethTrace::CallTracer(call_frame) => {
-            enhance_call_frame_errors(call_frame);
-        }
-        _ => {
-            // Other trace types don't have call frames with errors to decode
-        }
-    }
-}
-
-/// Enhances a single CallFrame and recursively enhances all nested calls.
-fn enhance_call_frame_errors(frame: &mut CallFrame) {
-    if let Some(error) = frame.error.as_ref()
-        && let Some(decoded_error) = frame.output.as_ref().and_then(|output| codegen::error_sig_opt(output))
-    {
-        frame.revert_reason = Some(format!("{error}: {decoded_error}"));
-    }
-
-    for nested_call in frame.calls.iter_mut() {
-        enhance_call_frame_errors(nested_call);
     }
 }
