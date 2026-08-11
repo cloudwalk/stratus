@@ -105,10 +105,7 @@ impl TryFrom<Multicall::MulticallCalls> for MulticallInfo {
                 Multicall::tryBlockAndAggregateCall::SIGNATURE,
                 subcalls_from_calls(call.calls, Some(!call.requireSuccess)),
             ),
-            helper_call => (
-                Multicall::MulticallCalls::signature_by_selector(helper_call.selector()).unwrap_or("unknown"),
-                Vec::new(),
-            ),
+            _non_subcall_call => return Err(MulticallError::UnsupportedFunction),
         };
 
         Ok(Self::from_subcalls(parent_function, subcalls))
@@ -401,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn unknown_selector_is_invalid_input() {
+    fn unknown_selector_is_decode_error() {
         let input = Bytes(vec![0xff; 4]);
         let err = match Multicall::MulticallCalls::abi_decode(input.as_ref()).map_err(MulticallError::from) {
             Ok(_) => panic!("expected invalid input error"),
@@ -410,19 +407,17 @@ mod tests {
 
         assert!(matches!(
             err,
-            MulticallError::InvalidInput {
+            MulticallError::DecodeError {
                 source: alloy_sol_types::Error::UnknownSelector { .. },
             }
         ));
     }
 
     #[test]
-    fn known_helper_function_decodes_with_no_subcalls() {
-        let info = MulticallInfo::try_from(Multicall::MulticallCalls::getBasefee(Multicall::getBasefeeCall {})).unwrap();
+    fn known_non_subcall_function_is_unsupported() {
+        let err = MulticallInfo::try_from(Multicall::MulticallCalls::getBasefee(Multicall::getBasefeeCall {})).unwrap_err();
 
-        assert_eq!(info.parent_function, Multicall::getBasefeeCall::SIGNATURE);
-        assert_eq!(info.total_subcalls, 0);
-        assert!(info.subcalls.is_empty());
+        assert!(matches!(err, MulticallError::UnsupportedFunction));
     }
 
     #[test]
