@@ -1,7 +1,6 @@
+mod config;
 mod evm;
-#[allow(clippy::module_inception)]
-mod executor_config;
-mod pool;
+mod evm_worker_pool;
 mod types;
 
 use std::mem;
@@ -13,10 +12,10 @@ use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
 use cfg_if::cfg_if;
+pub use config::ExecutorConfig;
 pub use evm::types::EvmExecutionResult;
 pub use evm::types::EvmInput;
 pub use evm::types::EvmKind;
-pub use executor_config::ExecutorConfig;
 use parking_lot::Mutex;
 use tracing::Span;
 use tracing::debug_span;
@@ -26,7 +25,7 @@ use tracing::info_span;
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
 use crate::eth::executor::evm::types::InspectorInput;
-use crate::eth::executor::pool::EvmWorkerPool;
+use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::types::EvmRoute;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockNumber;
