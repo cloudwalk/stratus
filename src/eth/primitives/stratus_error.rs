@@ -80,6 +80,10 @@ pub enum MulticallError {
         #[from]
         source: alloy_sol_types::Error,
     },
+
+    #[error("unsupported multicall function: {function}")]
+    #[error_code = 2]
+    UnsupportedFunction { function: &'static str },
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
