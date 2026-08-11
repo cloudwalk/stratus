@@ -213,13 +213,9 @@ impl CallExecutionInput {
             to: input.to.map_into(),
             value: input.value,
             data: input.data,
-            // gas_limit: Gas::MAX,
-            // gas_price: 0,
-            // nonce: None,
             block_number: pending_header.number,
             block_timestamp: *pending_header.timestamp,
             point_in_time: PointInTime::Pending,
-            // chain_id: None,
             kind: ReadKind::Call((pending_header.number, tx_count)),
         }
     }
@@ -231,13 +227,9 @@ impl CallExecutionInput {
             to: input.to.map_into(),
             value: input.value,
             data: input.data,
-            // gas_limit: Gas::MAX,
-            // gas_price: 0,
-            // nonce: None,
             block_number: block.number(),
             block_timestamp: block.header.timestamp,
             point_in_time,
-            // chain_id: None,
             kind: ReadKind::Call((block.number(), TxCount::Full)),
         }
     }
