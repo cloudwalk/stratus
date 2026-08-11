@@ -85,7 +85,6 @@ impl TransactionMined {
         let input = TransactionInput::from(other.input);
         let evm_result = EvmExecutionResult {
             execution: EvmExecution {
-                block_timestamp: other.execution.block_timestamp.into(),
                 result,
                 output,
                 logs,

@@ -19,7 +19,6 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
-use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::OptionExt;
@@ -154,9 +153,6 @@ impl ExecutionChanges<Complete> {
 #[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct EvmExecution {
-    /// Assumed block timestamp during the execution.
-    pub block_timestamp: UnixTime, // TODO: remove this
-
     /// Status of the execution.
     pub result: ExecutionResult,
 
@@ -178,7 +174,7 @@ pub struct EvmExecution {
 
 impl EvmExecution {
     /// Creates an execution from an external transaction that failed.
-    pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt, block_timestamp: UnixTime) -> anyhow::Result<Self> {
+    pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt) -> anyhow::Result<Self> {
         if receipt.is_success() {
             return log_and_err!("cannot create failed execution for successful transaction");
         }
@@ -198,7 +194,6 @@ impl EvmExecution {
 
         // crete execution and apply costs
         let mut execution = Self {
-            block_timestamp,
             result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
@@ -406,14 +401,10 @@ mod tests {
         inner_receipt.from = sender_address.into();
         receipt.0 = inner_receipt;
 
-        // Set timestamp
-        let timestamp = UnixTime::now();
-
         // Test the method
-        let execution = EvmExecution::from_failed_external_transaction(sender.clone(), &receipt, timestamp).unwrap();
+        let execution = EvmExecution::from_failed_external_transaction(sender.clone(), &receipt).unwrap();
 
         // Verify execution state
-        assert_eq!(execution.block_timestamp, timestamp);
         assert!(execution.is_failure());
         assert_eq!(execution.output, Bytes::default());
         assert!(execution.logs.is_empty());

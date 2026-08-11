@@ -46,13 +46,12 @@ const GAS_MAX_LIMIT: u64 = 1_000_000_000;
 #[cfg(not(feature = "dev"))]
 const GAS_MAX_LIMIT: u64 = 100_000_000;
 
-pub fn parse_revm_result_and_state(revm_result: ResultAndState, input: ExecutionInput) -> Result<EvmExecution, StratusError> {
+pub fn parse_revm_result_and_state(revm_result: ResultAndState) -> Result<EvmExecution, StratusError> {
     let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
     let (changes, deployed_contract_address) = parse_revm_state(revm_result.state)?;
     tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
 
     Ok(EvmExecution {
-        block_timestamp: input.block_timestamp,
         result,
         output: tx_output,
         logs,

@@ -45,7 +45,6 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::UnixTime;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
 #[cfg(feature = "metrics")]
@@ -111,7 +110,6 @@ impl Executor {
 
         // track pending block
         let block_number = block.number();
-        let block_timestamp = block.timestamp();
         let block_transactions = mem::take(&mut block.transactions);
 
         // determine how to execute each transaction
@@ -121,7 +119,6 @@ impl Executor {
                 tx,
                 receipt,
                 block_number,
-                block_timestamp,
                 #[cfg(feature = "metrics")]
                 &mut block_metrics,
             )?;
@@ -147,7 +144,6 @@ impl Executor {
         tx: ExternalTransaction,
         receipt: ExternalReceipt,
         block_number: BlockNumber,
-        block_timestamp: UnixTime,
         #[cfg(feature = "metrics")] block_metrics: &mut EvmExecutionMetrics,
     ) -> anyhow::Result<()> {
         // track
@@ -210,7 +206,7 @@ impl Executor {
                         sender.nonce
                     );
                 }
-                let execution = EvmExecution::from_failed_external_transaction(sender, &receipt, block_timestamp)?;
+                let execution = EvmExecution::from_failed_external_transaction(sender, &receipt)?;
                 let evm_result = EvmExecutionResult {
                     execution,
                     metrics: EvmExecutionMetrics::default(),

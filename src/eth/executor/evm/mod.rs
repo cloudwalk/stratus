@@ -96,7 +96,6 @@ impl Evm {
 
         // extract results
         let session = &mut self.evm.journaled_state.database;
-        let session_input = std::mem::take(&mut session.input);
         let session_metrics = std::mem::take(&mut session.metrics);
         #[cfg(feature = "metrics")]
         let session_point_in_time = session.input.point_in_time;
@@ -104,7 +103,7 @@ impl Evm {
         // parse result
         let execution = match evm_result {
             // executed
-            Ok(result_and_state) => Ok(parse_revm_result_and_state(result_and_state, session_input)?),
+            Ok(result_and_state) => parse_revm_result_and_state(result_and_state),
 
             // nonce errors
             Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(ExecutorError::Nonce {
