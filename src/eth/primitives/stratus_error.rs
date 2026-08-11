@@ -83,7 +83,7 @@ pub enum MulticallError {
 
     #[error("unsupported multicall function")]
     #[error_code = 2]
-    UnsupportedFunction,
+    UnsupportedMulticallFunction,
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]

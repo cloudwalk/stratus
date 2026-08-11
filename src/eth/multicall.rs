@@ -105,7 +105,7 @@ impl TryFrom<Multicall::MulticallCalls> for MulticallInfo {
                 Multicall::tryBlockAndAggregateCall::SIGNATURE,
                 subcalls_from_calls(call.calls, Some(!call.requireSuccess)),
             ),
-            _non_subcall_call => return Err(MulticallError::UnsupportedFunction),
+            _non_subcall_call => return Err(MulticallError::UnsupportedMulticallFunction),
         };
 
         Ok(Self::from_subcalls(parent_function, subcalls))
@@ -417,7 +417,7 @@ mod tests {
     fn known_non_subcall_function_is_unsupported() {
         let err = MulticallInfo::try_from(Multicall::MulticallCalls::getBasefee(Multicall::getBasefeeCall {})).unwrap_err();
 
-        assert!(matches!(err, MulticallError::UnsupportedFunction));
+        assert!(matches!(err, MulticallError::UnsupportedMulticallFunction));
     }
 
     #[test]
