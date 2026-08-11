@@ -66,6 +66,7 @@ impl From<TransactionMined> for AlloyTransaction {
         let gas_price = value.execution.evm_input.gas_price;
         let block_hash = value.mined_data.block_hash;
         let block_number = value.execution.evm_input.block_number;
+        let block_timestamp = value.execution.evm_input.block_timestamp;
         let transaction_index = value.mined_data.index;
 
         let tx_input: TransactionInput = value.into();
@@ -75,6 +76,7 @@ impl From<TransactionMined> for AlloyTransaction {
             inner,
             block_hash: Some(block_hash.into()),
             block_number: Some(block_number.as_u64()),
+            block_timestamp: Some(*block_timestamp),
             transaction_index: Some(transaction_index.into()),
             effective_gas_price: Some(gas_price),
         }
