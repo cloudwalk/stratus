@@ -31,7 +31,7 @@ metrics! {
     histogram_duration storage_read_mined_block_number{storage, success},
 
     "Time executing storage read_account operation."
-    histogram_duration storage_read_account{storage, point_in_time},
+    histogram_duration storage_read_account{storage, point_in_time, hit},
 
     "Time executing storage read_block operation."
     histogram_duration storage_read_block{storage, success},
@@ -43,7 +43,7 @@ metrics! {
     histogram_duration storage_read_logs{storage, success},
 
     "Time executing storage read_slot operation."
-    histogram_duration storage_read_slot{storage, point_in_time},
+    histogram_duration storage_read_slot{storage, point_in_time, hit},
 
     "Time executing storage read_transaction operation."
     histogram_duration storage_read_transaction{storage, success},
@@ -157,7 +157,10 @@ metrics! {
     histogram_counter executor_local_call_slot_reads{contract, function},
 
     "Gas spent executing a local call."
-    histogram_counter executor_local_call_gas{contract, function}
+    histogram_counter executor_local_call_gas{contract, function},
+
+    "Number of EVM pool workers busy executing right now."
+    gauge executor_workers_busy{pool}
 }
 
 metrics! {

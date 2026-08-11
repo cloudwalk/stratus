@@ -138,6 +138,40 @@ macro_rules! metrics_impl_fn_inc {
                 let gauge = metrics::gauge!(stringify!([<stratus_$name>]), labels);
                 gauge.set(n as f64);
             }
+
+            #[allow(clippy::too_many_arguments)]
+            #[doc = "Increment `" $name "` gauge by `n` atomically."]
+            pub fn [<inc_ $name>](n: u64, $( $label: impl Into<super::MetricLabelValue> ),*) {
+                let labels = super::into_labels(
+                    vec![
+                        ("group", stringify!($group).into()),
+                        ("node_mode", $crate::globals::GlobalState::get_node_mode().to_string().into()),
+
+                        $(
+                            (stringify!($label), $label.into()),
+                        )*
+                    ]
+                );
+                let gauge = metrics::gauge!(stringify!([<stratus_$name>]), labels);
+                gauge.increment(n as f64);
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            #[doc = "Decrement `" $name "` gauge by `n` atomically."]
+            pub fn [<dec_ $name>](n: u64, $( $label: impl Into<super::MetricLabelValue> ),*) {
+                let labels = super::into_labels(
+                    vec![
+                        ("group", stringify!($group).into()),
+                        ("node_mode", $crate::globals::GlobalState::get_node_mode().to_string().into()),
+
+                        $(
+                            (stringify!($label), $label.into()),
+                        )*
+                    ]
+                );
+                let gauge = metrics::gauge!(stringify!([<stratus_$name>]), labels);
+                gauge.decrement(n as f64);
+            }
         }
     };
     (gauge_no_auto_label  $name:ident $group:ident $($label:ident)*) => {

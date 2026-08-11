@@ -116,18 +116,19 @@ impl ExecutionChanges<Incomplete> {
 }
 
 impl ExecutionChanges<Complete> {
-    pub fn insert(&mut self, account: Account, slots: Vec<Slot>) {
-        let address = account.address;
+    pub fn insert_account_changes(&mut self, address: Address, incoming_changes: ExecutionAccountChanges) {
         match self.accounts.entry(address) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
-                let changes = entry.get_mut();
-                changes.apply_modifications(account);
+                let existing_changes = entry.get_mut();
+                existing_changes.merge(incoming_changes);
             }
             std::collections::hash_map::Entry::Vacant(entry) => {
-                entry.insert(ExecutionAccountChanges::from_changed(account));
+                entry.insert(incoming_changes);
             }
         }
+    }
 
+    pub fn insert_slot_changes(&mut self, address: Address, slots: Vec<Slot>) {
         for slot in slots {
             self.slots.insert((address, slot.index), slot.value);
         }
@@ -187,7 +188,8 @@ impl EvmExecution {
 
         // generate sender changes incrementing the nonce
         let address = sender.address;
-        let mut sender_changes = ExecutionAccountChanges::from_unchanged(sender);
+        let mut sender_changes = ExecutionAccountChanges::default();
+        sender_changes.apply_original(sender);
         let sender_next_nonce = sender_changes.nonce.next_nonce();
 
         sender_changes.nonce.apply(sender_next_nonce);
@@ -664,7 +666,8 @@ mod tests {
         let mut execution: EvmExecution = Faker.fake();
 
         // Set up execution with sender account
-        let sender_changes = ExecutionAccountChanges::from_unchanged(sender);
+        let mut sender_changes = ExecutionAccountChanges::default();
+        sender_changes.apply_original(sender);
         let mut accounts = HashMap::with_hasher(hash_hasher::HashBuildHasher::default());
         accounts.insert(sender_address, sender_changes);
         execution.changes = ExecutionChanges {

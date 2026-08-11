@@ -30,7 +30,7 @@ jobs:
     name: Vet Dependencies
     runs-on: ubuntu-22.04
     env:
-      CARGO_VET_VERSION: 0.10.0
+      CARGO_VET_VERSION: 0.10.2
     steps:
     - name: Checkout code
       uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1

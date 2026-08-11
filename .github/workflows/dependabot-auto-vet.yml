@@ -18,7 +18,7 @@ jobs:
       pull-requests: write
 
     env:
-      CARGO_VET_VERSION: "0.10.0"
+      CARGO_VET_VERSION: "0.10.2"
       CODEX_MODEL: "gpt-5-codex"
       CRITERIA: "safe-to-deploy"
       CONTEXT_FILE: "supply-chain/vet/VETTING_POLICY.md"

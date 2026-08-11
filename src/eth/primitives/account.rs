@@ -68,6 +68,7 @@ impl From<(RevmAddress, RevmAccountInfo)> for Account {
 impl From<Account> for RevmAccountInfo {
     fn from(value: Account) -> Self {
         Self {
+            account_id: None,
             nonce: value.nonce.into(),
             balance: value.balance.into(),
             code_hash: KECCAK_EMPTY,
