@@ -10,7 +10,7 @@ use stratus_macros::ErrorCode;
 
 use super::execution_result::RevertReason;
 use crate::alias::JsonValue;
-use crate::eth::executor::ExecutionInput;
+use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
@@ -129,8 +129,8 @@ pub enum StorageError {
     #[error("transaction input does not match block header")]
     #[error_code = 4]
     EvmInputMismatch {
-        expected: Box<ExecutionInput>,
-        actual: Box<ExecutionInput>,
+        expected: Box<TransactionExecutionInput>,
+        actual: Box<TransactionExecutionInput>,
     },
 
     #[error("pending number conflict between new block number ({new}) and pending block number ({pending}).")]

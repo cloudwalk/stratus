@@ -6,7 +6,7 @@ use super::hash::HashRocksdb;
 use super::index::IndexRocksdb;
 use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
-use crate::eth::executor::ExecutionInput;
+use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::MinedData;
@@ -89,7 +89,7 @@ impl TransactionMined {
             deployed_contract_address: other.execution.deployed_contract_address.map_into(),
         };
 
-        let evm_input = ExecutionInput::from_eth_transaction(&input, block_number.into(), other.execution.block_timestamp.into());
+        let evm_input = TransactionExecutionInput::from_eth_transaction(&input, block_number.into(), other.execution.block_timestamp.into());
         let execution = TransactionExecution {
             info: input.transaction_info,
             signature: input.signature,

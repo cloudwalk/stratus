@@ -36,8 +36,8 @@ use util::default_trace;
 use util::enhance_trace_with_decoded_errors;
 use util::parse_revm_result_and_state;
 
-use crate::eth::executor::ExecutionInput;
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm::util::EvmExt;
 use crate::eth::executor::evm::util::create_evm;
@@ -74,7 +74,7 @@ impl Evm {
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute(&mut self, input: ExecutionInput) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
+    pub fn execute(&mut self, input: TransactionExecutionInput) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
         // configure session
         self.evm.journaled_state.database.reset(input.clone());
 
@@ -174,8 +174,8 @@ impl Evm {
             block_number: Some(block.number().as_u64()),
             base_fee: None,
         };
-        let inspect_input: ExecutionInput = tx.evm_input;
-        self.evm.journaled_state.database.reset(ExecutionInput {
+        let inspect_input: TransactionExecutionInput = tx.evm_input;
+        self.evm.journaled_state.database.reset(TransactionExecutionInput {
             point_in_time: PointInTime::MinedPast(inspect_input.block_number.prev().unwrap_or_default()),
             ..Default::default()
         });
@@ -190,7 +190,7 @@ impl Evm {
             if tx.info.hash == tx_hash {
                 break;
             }
-            let tx_input: ExecutionInput = tx.execution.evm_input;
+            let tx_input: TransactionExecutionInput = tx.execution.evm_input;
 
             // Configure EVM state
             evm.fill_env(tx_input);

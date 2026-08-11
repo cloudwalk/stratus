@@ -798,7 +798,7 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::eth::executor::ExecutionInput;
+    use crate::eth::executor::TransactionExecutionInput;
     use crate::eth::primitives::BlockHeader;
     use crate::eth::primitives::TransactionExecution;
     use crate::eth::primitives::TransactionExecutionOutcome;
@@ -861,7 +861,7 @@ mod tests {
                 },
                 transactions: vec![TransactionMined {
                     execution: TransactionExecution {
-                        evm_input: ExecutionInput {
+                        evm_input: TransactionExecutionInput {
                             block_number: number.into(),
                             ..Faker.fake()
                         },

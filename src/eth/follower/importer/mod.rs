@@ -270,7 +270,7 @@ mod tests {
 
     use hash_hasher::HashBuildHasher;
 
-    use crate::eth::executor::ExecutionInput;
+    use crate::eth::executor::TransactionExecutionInput;
     use crate::eth::follower::importer::fetchers::DataFetcher;
     use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
     use crate::eth::follower::importer::importers::ImporterWorker;
@@ -314,7 +314,7 @@ mod tests {
     /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
     fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) {
         let (header, _) = storage.read_pending_block_header();
-        let evm_input = ExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
+        let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
         let result = TransactionExecutionOutcome {
             result: ExecutionResult::Success,

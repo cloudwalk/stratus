@@ -25,7 +25,7 @@ use revm::state::EvmState;
 
 use crate::eth::codegen;
 use crate::eth::executor::EvmKind;
-use crate::eth::executor::ExecutionInput;
+use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::GeneralRevm;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
@@ -182,22 +182,22 @@ fn enhance_call_frame_errors(frame: &mut CallFrame) {
 }
 
 pub trait TxEnvExt {
-    fn fill_env(&mut self, input: ExecutionInput);
+    fn fill_env(&mut self, input: TransactionExecutionInput);
 }
 
 pub trait EvmExt {
-    fn fill_env(&mut self, input: ExecutionInput);
+    fn fill_env(&mut self, input: TransactionExecutionInput);
 }
 
 impl<DB: Database, I> EvmExt for GeneralRevm<DB, I> {
-    fn fill_env(&mut self, input: ExecutionInput) {
+    fn fill_env(&mut self, input: TransactionExecutionInput) {
         self.block.fill_env(&input);
         self.tx.fill_env(input);
     }
 }
 
 impl TxEnvExt for TxEnv {
-    fn fill_env(&mut self, input: ExecutionInput) {
+    fn fill_env(&mut self, input: TransactionExecutionInput) {
         self.caller = input.from.into();
         self.kind = match input.to {
             Some(contract) => TransactTo::Call(contract.into()),
@@ -214,11 +214,11 @@ impl TxEnvExt for TxEnv {
 }
 
 trait BlockEnvExt {
-    fn fill_env(&mut self, input: &ExecutionInput);
+    fn fill_env(&mut self, input: &TransactionExecutionInput);
 }
 
 impl BlockEnvExt for BlockEnv {
-    fn fill_env(&mut self, input: &ExecutionInput) {
+    fn fill_env(&mut self, input: &TransactionExecutionInput) {
         self.timestamp = U256::from(*input.block_timestamp);
         self.number = U256::from(input.block_number.as_u64());
         self.basefee = 0;

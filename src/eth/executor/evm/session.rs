@@ -9,8 +9,8 @@ use revm::state::AccountInfo;
 
 use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
-use crate::eth::executor::ExecutionInput;
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutorError;
@@ -27,7 +27,7 @@ pub struct RevmSession {
     pub storage: Arc<StratusStorage>,
 
     /// Input passed to EVM to execute the transaction.
-    pub input: ExecutionInput,
+    pub input: TransactionExecutionInput,
 
     /// Metrics collected during EVM execution.
     pub metrics: EvmExecutionMetrics,
@@ -39,13 +39,13 @@ impl RevmSession {
         Self {
             config,
             storage,
-            input: ExecutionInput::default(),
+            input: TransactionExecutionInput::default(),
             metrics: EvmExecutionMetrics::default(),
         }
     }
 
     /// Resets the session to be used with a new transaction.
-    pub fn reset(&mut self, input: ExecutionInput) {
+    pub fn reset(&mut self, input: TransactionExecutionInput) {
         self.input = input;
         self.metrics = EvmExecutionMetrics::default();
     }

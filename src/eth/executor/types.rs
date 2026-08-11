@@ -5,7 +5,7 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
 use tracing::Span;
 
-use crate::eth::executor::ExecutionInput;
+use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::primitives::EvmExecutionMetrics;
@@ -20,7 +20,7 @@ pub struct EvmTask<T: Task + Send> {
 
 #[derive(derive_new::new)]
 pub struct ExecutionTask {
-    pub input: ExecutionInput,
+    pub input: TransactionExecutionInput,
     pub response_tx: oneshot::Sender<Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError>>,
 }
 

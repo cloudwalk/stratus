@@ -19,7 +19,7 @@ use display_json::DebugAsJson;
 use rlp::Decodable;
 
 use crate::alias::AlloyTransaction;
-use crate::eth::executor::ExecutionInput;
+use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
@@ -350,8 +350,8 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
     Ok(tx_input)
 }
 
-impl From<ExecutionInput> for ExecutionInfo {
-    fn from(value: ExecutionInput) -> Self {
+impl From<TransactionExecutionInput> for ExecutionInfo {
+    fn from(value: TransactionExecutionInput) -> Self {
         Self {
             chain_id: value.chain_id,
             nonce: value.nonce.unwrap_or_default(),
