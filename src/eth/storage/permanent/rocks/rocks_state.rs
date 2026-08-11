@@ -801,8 +801,8 @@ mod tests {
     use crate::eth::executor::EvmExecutionResult;
     use crate::eth::executor::ExecutionInput;
     use crate::eth::primitives::BlockHeader;
-    use crate::eth::primitives::EvmExecution;
     use crate::eth::primitives::TransactionExecution;
+    use crate::eth::primitives::TransactionExecutionOutcome;
 
     #[test]
     #[cfg(feature = "dev")]
@@ -867,11 +867,10 @@ mod tests {
                             ..Faker.fake()
                         },
                         result: EvmExecutionResult {
-                            execution: EvmExecution {
+                            execution: TransactionExecutionOutcome {
                                 logs: vec![Faker.fake(), Faker.fake()],
                                 ..Faker.fake()
                             },
-                            ..Faker.fake()
                         },
                         ..Faker.fake()
                     },

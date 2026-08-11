@@ -8,12 +8,11 @@ use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::ExecutionInput;
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::MinedData;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionExecutionOutcome;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
@@ -84,7 +83,7 @@ impl TransactionMined {
 
         let input = TransactionInput::from(other.input);
         let evm_result = EvmExecutionResult {
-            execution: EvmExecution {
+            execution: TransactionExecutionOutcome {
                 result,
                 output,
                 logs,
@@ -92,7 +91,6 @@ impl TransactionMined {
                 changes: ExecutionChanges::default(),
                 deployed_contract_address: other.execution.deployed_contract_address.map_into(),
             },
-            metrics: EvmExecutionMetrics::default(),
         };
 
         let evm_input = ExecutionInput::from_eth_transaction(&input, block_number.into(), other.execution.block_timestamp.into());

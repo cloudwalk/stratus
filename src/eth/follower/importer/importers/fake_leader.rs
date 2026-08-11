@@ -13,7 +13,6 @@ use crate::eth::miner::Miner;
 use crate::eth::miner::miner::interval_miner::commit_retry;
 use crate::eth::miner::miner::interval_miner::mine_local_retry;
 use crate::eth::primitives::Block;
-use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::StratusError;
@@ -87,7 +86,6 @@ fn normalize_for_replication_compare(block: &Block) -> Block {
     let mut normalized = block.clone();
     for tx in &mut normalized.transactions {
         tx.execution.result.execution.changes = ExecutionChanges::default();
-        tx.execution.result.metrics = EvmExecutionMetrics::default();
     }
     normalized
 }

@@ -14,6 +14,7 @@ use crate::eth::executor::types::EvmTask;
 use crate::eth::executor::types::ExecutionTask;
 use crate::eth::executor::types::InspectionTask;
 use crate::eth::executor::types::Task;
+use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::UnexpectedError;
@@ -103,8 +104,8 @@ impl EvmWorkerPool {
     }
 
     /// Executes a transaction in the specified route.
-    pub fn execute(&self, evm_input: ExecutionInput, route: EvmRoute) -> Result<EvmExecutionResult, StratusError> {
-        let (execution_tx, execution_rx) = oneshot::channel::<Result<EvmExecutionResult, StratusError>>();
+    pub fn execute(&self, evm_input: ExecutionInput, route: EvmRoute) -> Result<(EvmExecutionResult, EvmExecutionMetrics), StratusError> {
+        let (execution_tx, execution_rx) = oneshot::channel::<Result<(EvmExecutionResult, EvmExecutionMetrics), StratusError>>();
 
         let task = ExecutionTask::new(evm_input, execution_tx).into();
         let _ = match route {

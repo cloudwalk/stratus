@@ -61,7 +61,6 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::ConsensusError;
 use crate::eth::primitives::DecodeInputError;
-use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::ImporterError;
@@ -76,6 +75,7 @@ use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StateError;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionExecutionOutcome;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
@@ -1156,7 +1156,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     }
 }
 
-fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<EvmExecution, StratusError> {
+fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<TransactionExecutionOutcome, StratusError> {
     // parse params
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;

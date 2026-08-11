@@ -43,6 +43,7 @@ use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm::util::EvmExt;
 use crate::eth::executor::evm::util::create_evm;
 use crate::eth::primitives::BlockFilter;
+use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::MinedData;
@@ -51,8 +52,6 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::storage::StratusStorage;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm {
@@ -75,10 +74,7 @@ impl Evm {
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute(&mut self, input: ExecutionInput) -> Result<EvmExecutionResult, StratusError> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
+    pub fn execute(&mut self, input: ExecutionInput) -> Result<(EvmExecutionResult, EvmExecutionMetrics), StratusError> {
         // configure session
         self.evm.journaled_state.database.reset(input.clone());
 
@@ -97,8 +93,6 @@ impl Evm {
         // extract results
         let session = &mut self.evm.journaled_state.database;
         let session_metrics = std::mem::take(&mut session.metrics);
-        #[cfg(feature = "metrics")]
-        let session_point_in_time = session.input.point_in_time;
 
         // parse result
         let execution = match evm_result {
@@ -130,17 +124,7 @@ impl Evm {
             }
         };
 
-        // track metrics
-        #[cfg(feature = "metrics")]
-        {
-            metrics::inc_evm_execution(start.elapsed(), session_point_in_time, execution.is_ok());
-            metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
-        }
-
-        execution.map(|execution| EvmExecutionResult {
-            execution,
-            metrics: session_metrics,
-        })
+        execution.map(|execution| (EvmExecutionResult { execution }, session_metrics))
     }
 
     /// Execute a transaction using a tracer.

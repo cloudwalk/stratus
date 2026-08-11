@@ -9,6 +9,7 @@ use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::ExecutionInput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::types::InspectorInput;
+use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::StratusError;
 
@@ -17,26 +18,16 @@ pub struct EvmTask<T: Task + Send> {
     task: T,
 }
 
+#[derive(derive_new::new)]
 pub struct ExecutionTask {
     pub input: ExecutionInput,
-    pub response_tx: oneshot::Sender<Result<EvmExecutionResult, StratusError>>,
+    pub response_tx: oneshot::Sender<Result<(EvmExecutionResult, EvmExecutionMetrics), StratusError>>,
 }
 
-impl ExecutionTask {
-    pub fn new(input: ExecutionInput, response_tx: oneshot::Sender<Result<EvmExecutionResult, StratusError>>) -> Self {
-        Self { input, response_tx }
-    }
-}
-
+#[derive(derive_new::new)]
 pub struct InspectionTask {
     pub input: InspectorInput,
     pub response_tx: oneshot::Sender<Result<GethTrace, StratusError>>,
-}
-
-impl InspectionTask {
-    pub fn new(input: InspectorInput, response_tx: oneshot::Sender<Result<GethTrace, StratusError>>) -> Self {
-        Self { input, response_tx }
-    }
 }
 
 #[derive(Debug, Clone, Copy, strum::Display)]

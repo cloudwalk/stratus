@@ -159,24 +159,11 @@ metrics! {
     "Gas spent executing a local call."
     histogram_counter executor_local_call_gas{contract, function},
 
+    "Time executing trace_transaction"
+    histogram_duration executor_inspect{trace_type},
+
     "Number of EVM pool workers busy executing right now."
     gauge executor_workers_busy{pool}
-}
-
-metrics! {
-    group: evm,
-
-    "Time executing EVM execution."
-    histogram_duration evm_execution{point_in_time, success},
-
-    "Number of accounts read in a single EVM execution."
-    histogram_counter evm_execution_account_reads{},
-
-    "Number of slots read in a single EVM execution."
-    histogram_counter evm_execution_slot_reads{},
-
-    "Time executing trace_transaction"
-    histogram_duration evm_inspect{trace_type}
 }
 
 metrics! {

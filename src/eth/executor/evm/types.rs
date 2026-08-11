@@ -18,13 +18,12 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::TransactionExecutionOutcome;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
@@ -179,8 +178,7 @@ pub struct InspectorInput {
 #[derive(DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct EvmExecutionResult {
-    pub execution: EvmExecution,
-    pub metrics: EvmExecutionMetrics,
+    pub execution: TransactionExecutionOutcome,
 }
 
 #[derive(Clone, Copy)]

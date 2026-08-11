@@ -11,7 +11,6 @@ use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
 use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::ExecutionInput;
-use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionInfo;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::MinedData;
@@ -33,11 +32,6 @@ pub struct TransactionExecution {
 }
 
 impl TransactionExecution {
-    /// Returns the EVM execution metrics.
-    pub fn metrics(&self) -> EvmExecutionMetrics {
-        self.result.metrics
-    }
-
     pub fn create_alloy_logs(&self) -> Vec<AlloyLog> {
         self.logs()
             .iter()

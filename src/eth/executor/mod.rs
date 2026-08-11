@@ -11,7 +11,6 @@ use alloy_consensus::Transaction;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
-use cfg_if::cfg_if;
 pub use config::ExecutorConfig;
 pub use evm::types::EvmExecutionResult;
 pub use evm::types::EvmKind;
@@ -30,7 +29,6 @@ use crate::eth::executor::types::EvmRoute;
 use crate::eth::miner::Miner;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
-use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutorError;
@@ -44,6 +42,7 @@ use crate::eth::primitives::RpcError;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionExecutionOutcome;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
@@ -170,8 +169,8 @@ impl Executor {
                 let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::Transaction);
 
                 // handle re-execution result
-                let mut evm_execution = match evm_execution {
-                    Ok(inner) => inner,
+                let (mut evm_result, evm_metrics) = match evm_execution {
+                    Ok((evm_result, evm_metrics)) => (evm_result, evm_metrics),
                     Err(e) => {
                         let json_tx = to_json_string(&tx_input);
                         let json_receipt = to_json_string(&receipt);
@@ -181,18 +180,29 @@ impl Executor {
                 };
 
                 // update execution with receipt
-                evm_execution.execution.apply_receipt(&receipt)?;
+                evm_result.execution.apply_receipt(&receipt)?;
 
                 // ensure it matches receipt before saving
-                if let Err(e) = evm_execution.execution.compare_with_receipt(&receipt) {
+                if let Err(e) = evm_result.execution.compare_with_receipt(&receipt) {
                     let json_tx = to_json_string(&tx_input);
                     let json_receipt = to_json_string(&receipt);
-                    let json_execution_logs = to_json_string(&evm_execution.execution.logs);
+                    let json_execution_logs = to_json_string(&evm_result.execution.logs);
                     tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.transaction_info.hash, %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
                     return Err(e);
                 };
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_execution)
+                // track metrics
+                #[cfg(feature = "metrics")]
+                {
+                    *block_metrics += evm_metrics;
+
+                    metrics::inc_executor_external_transaction(start.elapsed(), tx_contract, tx_function);
+                    metrics::inc_executor_external_transaction_account_reads(evm_metrics.account_reads, tx_contract, tx_function);
+                    metrics::inc_executor_external_transaction_slot_reads(evm_metrics.slot_reads, tx_contract, tx_function);
+                    metrics::inc_executor_external_transaction_gas(evm_result.execution.gas_used.as_u64() as usize, tx_contract, tx_function);
+                }
+
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_result)
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -206,11 +216,8 @@ impl Executor {
                         sender.nonce
                     );
                 }
-                let execution = EvmExecution::from_failed_external_transaction(sender, &receipt)?;
-                let evm_result = EvmExecutionResult {
-                    execution,
-                    metrics: EvmExecutionMetrics::default(),
-                };
+                let execution = TransactionExecutionOutcome::from_failed_external_transaction(sender, &receipt)?;
+                let evm_result = EvmExecutionResult { execution };
 
                 evm_input.gas_limit = tx_input.execution_info.gas_limit;
                 evm_input.gas_price = tx_input.execution_info.gas_price;
@@ -219,28 +226,8 @@ impl Executor {
             }
         };
 
-        // keep metrics info to avoid cloning when saving
-        cfg_if! {
-            if #[cfg(feature = "metrics")] {
-                let tx_metrics = tx_execution.metrics();
-                let tx_gas = tx_execution.result.execution.gas_used;
-            }
-        }
-
         // persist state
         self.miner.save_execution(tx_execution)?;
-
-        // track metrics
-        #[cfg(feature = "metrics")]
-        {
-            *block_metrics += tx_metrics;
-
-            metrics::inc_executor_external_transaction(start.elapsed(), tx_contract, tx_function);
-            metrics::inc_executor_external_transaction_account_reads(tx_metrics.account_reads, tx_contract, tx_function);
-            metrics::inc_executor_external_transaction_slot_reads(tx_metrics.slot_reads, tx_contract, tx_function);
-            metrics::inc_executor_external_transaction_gas(tx_gas.as_u64() as usize, tx_contract, tx_function);
-        }
-
         Ok(())
     }
 
@@ -328,7 +315,7 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            let evm_result = self.evms.execute(evm_input.clone(), EvmRoute::Transaction)?;
+            let (evm_result, evm_metrics) = self.evms.execute(evm_input.clone(), EvmRoute::Transaction)?;
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
@@ -339,8 +326,7 @@ impl Executor {
                 evm_input,
                 evm_result,
             );
-            #[cfg(feature = "metrics")]
-            let tx_metrics = tx_execution.metrics();
+
             #[cfg(feature = "metrics")]
             let gas_used = tx_execution.result.execution.gas_used;
             #[cfg(feature = "metrics")]
@@ -359,8 +345,8 @@ impl Executor {
                     // track metrics
                     #[cfg(feature = "metrics")]
                     {
-                        metrics::inc_executor_local_transaction_account_reads(tx_metrics.account_reads, contract, function);
-                        metrics::inc_executor_local_transaction_slot_reads(tx_metrics.slot_reads, contract, function);
+                        metrics::inc_executor_local_transaction_account_reads(evm_metrics.account_reads, contract, function);
+                        metrics::inc_executor_local_transaction_slot_reads(evm_metrics.slot_reads, contract, function);
                         metrics::inc_executor_local_transaction_gas(gas_used.as_u64() as usize, true, contract, function);
                     }
                     return Ok(());
@@ -381,7 +367,7 @@ impl Executor {
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: PointInTime) -> Result<EvmExecution, StratusError> {
+    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: PointInTime) -> Result<TransactionExecutionOutcome, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -427,10 +413,10 @@ impl Executor {
             let contract = codegen::contract_name(&call_input.to);
 
             match &evm_result {
-                Ok(evm_result) => {
+                Ok((evm_result, evm_metrics)) => {
                     metrics::inc_executor_local_call(start.elapsed(), true, contract, function);
-                    metrics::inc_executor_local_call_account_reads(evm_result.metrics.account_reads, contract, function);
-                    metrics::inc_executor_local_call_slot_reads(evm_result.metrics.slot_reads, contract, function);
+                    metrics::inc_executor_local_call_account_reads(evm_metrics.account_reads, contract, function);
+                    metrics::inc_executor_local_call_slot_reads(evm_metrics.slot_reads, contract, function);
                     metrics::inc_executor_local_call_gas(evm_result.execution.gas_used.as_u64() as usize, contract, function);
                 }
                 Err(_) => {
@@ -439,7 +425,7 @@ impl Executor {
             }
         }
 
-        let execution = evm_result?.execution;
+        let execution = evm_result?.0.execution;
         Ok(execution)
     }
 
@@ -459,6 +445,6 @@ impl Executor {
                 trace_unsuccessful_only,
             })
         })
-        .with(|m| metrics::inc_evm_inspect(m.elapsed, serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned())))
+        .with(|m| metrics::inc_executor_inspect(m.elapsed, serde_json::to_string(&tracer_type).unwrap_or_else(|_| "unkown".to_owned())))
     }
 }
