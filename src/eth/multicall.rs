@@ -42,7 +42,7 @@ impl MulticallInfo {
         })();
 
         decoded
-            .inspect_err(|err| tracing::error!(reason = ?err, "failed to decode multicall input"))
+            .inspect_err(|err| tracing::warn!(reason = %err, "failed to decode multicall input"))
             .ok()
     }
 
