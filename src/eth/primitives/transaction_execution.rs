@@ -10,7 +10,7 @@ use crate::alias::AlloyLogPrimitive;
 use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
 use crate::eth::executor::EvmExecutionResult;
-use crate::eth::executor::EvmInput;
+use crate::eth::executor::ExecutionInput;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionInfo;
 use crate::eth::primitives::Log;
@@ -28,7 +28,7 @@ pub struct TransactionExecution {
     pub info: TransactionInfo,
     pub signature: Signature,
     pub execution_info: ExecutionInfo,
-    pub evm_input: EvmInput,
+    pub evm_input: ExecutionInput,
     pub result: EvmExecutionResult,
 }
 

@@ -4,7 +4,7 @@ use alloy_rpc_types_trace::geth::GethTrace;
 
 use crate::GlobalState;
 use crate::eth::executor::EvmExecutionResult;
-use crate::eth::executor::EvmInput;
+use crate::eth::executor::ExecutionInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::EvmKind;
@@ -103,7 +103,7 @@ impl EvmWorkerPool {
     }
 
     /// Executes a transaction in the specified route.
-    pub fn execute(&self, evm_input: EvmInput, route: EvmRoute) -> Result<EvmExecutionResult, StratusError> {
+    pub fn execute(&self, evm_input: ExecutionInput, route: EvmRoute) -> Result<EvmExecutionResult, StratusError> {
         let (execution_tx, execution_rx) = oneshot::channel::<Result<EvmExecutionResult, StratusError>>();
 
         let task = ExecutionTask::new(evm_input, execution_tx).into();

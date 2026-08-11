@@ -14,8 +14,8 @@ use anyhow::bail;
 use cfg_if::cfg_if;
 pub use config::ExecutorConfig;
 pub use evm::types::EvmExecutionResult;
-pub use evm::types::EvmInput;
 pub use evm::types::EvmKind;
+pub use evm::types::ExecutionInput;
 use parking_lot::Mutex;
 use tracing::Span;
 use tracing::debug_span;
@@ -164,7 +164,7 @@ impl Executor {
 
         let tx_input: TransactionInput = tx.try_into()?;
         let (pending_block, _) = self.storage.read_pending_block_header();
-        let mut evm_input = EvmInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
+        let mut evm_input = ExecutionInput::from_eth_transaction(&tx_input, pending_block.number, *pending_block.timestamp);
 
         // when transaction externally failed, create fake transaction instead of reexecuting
         let tx_execution = match receipt.is_success() {
@@ -317,7 +317,7 @@ impl Executor {
 
             // prepare evm input
             let (pending_header, _) = self.storage.read_pending_block_header();
-            let evm_input = EvmInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
+            let evm_input = ExecutionInput::from_eth_transaction(&tx_input, pending_header.number, *pending_header.timestamp);
 
             // execute transaction in evm (retry only in case of conflict, but do not retry on other failures)
             tracing::debug!(
@@ -406,7 +406,7 @@ impl Executor {
         let evm_input = match point_in_time {
             PointInTime::Pending => {
                 let (pending_header, tx_count) = self.storage.read_pending_block_header();
-                EvmInput::from_pending_block(call_input.clone(), pending_header, tx_count)
+                ExecutionInput::from_pending_block(call_input.clone(), pending_header, tx_count)
             }
             point_in_time => {
                 // NOTE: this read is way more expensive that what we theoritaclly need, we only need to get the timestamp
@@ -414,7 +414,7 @@ impl Executor {
                 let Some(block) = self.storage.read_block(point_in_time.into())? else {
                     return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
                 };
-                EvmInput::from_mined_block(call_input.clone(), block, point_in_time)
+                ExecutionInput::from_mined_block(call_input.clone(), block, point_in_time)
             }
         };
 

@@ -850,7 +850,7 @@ impl StratusStorage {
 mod tests {
     use super::*;
     use crate::eth::executor::EvmExecutionResult;
-    use crate::eth::executor::EvmInput;
+    use crate::eth::executor::ExecutionInput;
     use crate::eth::primitives::ExecutionAccountChanges;
     use crate::eth::primitives::ExecutionInfo;
     use crate::eth::primitives::ExecutionResult;
@@ -863,7 +863,7 @@ mod tests {
     /// Mines a block applying `changes`
     fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) -> BlockNumber {
         let (header, _) = storage.read_pending_block_header();
-        let evm_input = EvmInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
+        let evm_input = ExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
         let mut result = EvmExecutionResult::default();
         result.execution.result = ExecutionResult::Success;

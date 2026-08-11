@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use tracing::Span;
 
 use crate::eth::executor::EvmExecutionResult;
-use crate::eth::executor::EvmInput;
+use crate::eth::executor::ExecutionInput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::primitives::ExecutorError;
@@ -18,12 +18,12 @@ pub struct EvmTask<T: Task + Send> {
 }
 
 pub struct ExecutionTask {
-    pub input: EvmInput,
+    pub input: ExecutionInput,
     pub response_tx: oneshot::Sender<Result<EvmExecutionResult, StratusError>>,
 }
 
 impl ExecutionTask {
-    pub fn new(input: EvmInput, response_tx: oneshot::Sender<Result<EvmExecutionResult, StratusError>>) -> Self {
+    pub fn new(input: ExecutionInput, response_tx: oneshot::Sender<Result<EvmExecutionResult, StratusError>>) -> Self {
         Self { input, response_tx }
     }
 }

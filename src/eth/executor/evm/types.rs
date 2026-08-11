@@ -40,7 +40,7 @@ pub type GeneralRevm<DB, I = ()> =
 /// EVM input data. Usually derived from a transaction or call.
 #[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
-pub struct EvmInput {
+pub struct ExecutionInput {
     /// Operation party address.
     ///
     /// It can be:
@@ -100,7 +100,7 @@ pub struct EvmInput {
     pub kind: ReadKind,
 }
 
-impl EvmInput {
+impl ExecutionInput {
     /// Creates from a transaction that was sent to Stratus with `eth_sendRawTransaction` or during Importing.
     pub fn from_eth_transaction(input: &TransactionInput, block_number: BlockNumber, block_timestamp: UnixTime) -> Self {
         Self {
@@ -163,7 +163,7 @@ impl EvmInput {
     }
 }
 
-impl PartialEq<&PendingBlockHeader> for EvmInput {
+impl PartialEq<&PendingBlockHeader> for ExecutionInput {
     fn eq(&self, other: &&PendingBlockHeader) -> bool {
         self.block_number == other.number && self.block_timestamp == *other.timestamp
     }
