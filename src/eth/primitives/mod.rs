@@ -98,6 +98,7 @@ pub use stratus_error::DecodeInputError;
 pub use stratus_error::ErrorCode;
 pub use stratus_error::ExecutorError;
 pub use stratus_error::ImporterError;
+pub use stratus_error::MulticallError;
 pub use stratus_error::RpcError;
 pub use stratus_error::StateError;
 pub use stratus_error::StorageError;
