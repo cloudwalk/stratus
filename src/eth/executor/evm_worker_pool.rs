@@ -7,6 +7,7 @@ use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::EvmKind;
+use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::types::EvmRoute;
 use crate::eth::executor::types::EvmTask;
@@ -26,13 +27,13 @@ use crate::infra::tracing::warn_task_tx_closed;
 /// Manages EVM pool and communication channels.
 pub struct EvmWorkerPool {
     /// Worker for execution of transactions.
-    pub tx: crossbeam_channel::Sender<EvmTask<ExecutionTask>>,
+    pub tx: crossbeam_channel::Sender<EvmTask<ExecutionTask<TransactionExecutionInput>>>,
 
     /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from current state. Usually contains multiple EVMs.
-    pub call_present: crossbeam_channel::Sender<EvmTask<ExecutionTask>>,
+    pub call_present: crossbeam_channel::Sender<EvmTask<ExecutionTask<CallExecutionInput>>>,
 
     /// Pool for parallel execution of calls (eth_call and eth_estimateGas) reading from past state. Usually contains multiple EVMs.
-    pub call_past: crossbeam_channel::Sender<EvmTask<ExecutionTask>>,
+    pub call_past: crossbeam_channel::Sender<EvmTask<ExecutionTask<CallExecutionInput>>>,
 
     /// Pool for parallel execution of tx inspections (debug_traceTransaction). Usually contains multiple EVMs.
     pub inspector: crossbeam_channel::Sender<EvmTask<InspectionTask>>,
@@ -104,14 +105,22 @@ impl EvmWorkerPool {
     }
 
     /// Executes a transaction in the specified route.
-    pub fn execute(&self, evm_input: TransactionExecutionInput, route: EvmRoute) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
+    pub fn execute(&self, route: EvmRoute) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
         let (execution_tx, execution_rx) = oneshot::channel::<Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError>>();
 
-        let task = ExecutionTask::new(evm_input, execution_tx).into();
-        let _ = match route {
-            EvmRoute::Transaction => self.tx.send(task),
-            EvmRoute::CallPresent => self.call_present.send(task),
-            EvmRoute::CallPast => self.call_past.send(task),
+        match route {
+            EvmRoute::Transaction(input) => {
+                let task = ExecutionTask::new(input, execution_tx).into();
+                self.tx.send(task)?;
+            }
+            EvmRoute::CallPresent(input) => {
+                let task = ExecutionTask::new(input, execution_tx).into();
+                self.call_present.send(task)?;
+            }
+            EvmRoute::CallPast(input) => {
+                let task = ExecutionTask::new(input, execution_tx).into();
+                self.call_past.send(task)?;
+            }
         };
 
         match execution_rx.recv() {

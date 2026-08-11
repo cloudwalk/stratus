@@ -22,6 +22,7 @@ use tracing::info_span;
 
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
+use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::types::EvmRoute;
@@ -165,7 +166,7 @@ impl Executor {
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
-                let evm_execution = self.evms.execute(evm_input.clone(), EvmRoute::Transaction);
+                let evm_execution = self.evms.execute(EvmRoute::Transaction(evm_input.clone()));
 
                 // handle re-execution result
                 let (mut evm_result, evm_metrics) = match evm_execution {
@@ -313,7 +314,7 @@ impl Executor {
                 "executing local transaction attempt"
             );
 
-            let (evm_result, evm_metrics) = self.evms.execute(evm_input.clone(), EvmRoute::Transaction)?;
+            let (evm_result, evm_metrics) = self.evms.execute(EvmRoute::Transaction(evm_input.clone()))?; // this clone can be avoided i think
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
@@ -380,7 +381,7 @@ impl Executor {
         let evm_input = match point_in_time {
             PointInTime::Pending => {
                 let (pending_header, tx_count) = self.storage.read_pending_block_header();
-                TransactionExecutionInput::from_pending_block(call_input.clone(), pending_header, tx_count)
+                CallExecutionInput::from_pending_block(call_input.clone(), pending_header, tx_count)
             }
             point_in_time => {
                 // NOTE: this read is way more expensive that what we theoritaclly need, we only need to get the timestamp
@@ -388,15 +389,15 @@ impl Executor {
                 let Some(block) = self.storage.read_block(point_in_time.into())? else {
                     return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
                 };
-                TransactionExecutionInput::from_mined_block(call_input.clone(), block, point_in_time)
+                CallExecutionInput::from_mined_block(call_input.clone(), block, point_in_time)
             }
         };
 
         let evm_route = match point_in_time {
-            PointInTime::Pending | PointInTime::Mined => EvmRoute::CallPresent,
-            PointInTime::MinedPast(_) => EvmRoute::CallPast,
+            PointInTime::Pending | PointInTime::Mined => EvmRoute::CallPresent(evm_input),
+            PointInTime::MinedPast(_) => EvmRoute::CallPast(evm_input),
         };
-        let evm_result = self.evms.execute(evm_input, evm_route);
+        let evm_result = self.evms.execute(evm_route);
 
         // track metrics
         #[cfg(feature = "metrics")]

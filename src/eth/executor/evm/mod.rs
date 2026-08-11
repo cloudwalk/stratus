@@ -38,6 +38,7 @@ use util::parse_revm_result_and_state;
 
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm::util::EvmExt;
 use crate::eth::executor::evm::util::create_evm;
@@ -54,12 +55,12 @@ use crate::eth::primitives::TransactionExecutionOutcome;
 use crate::eth::storage::StratusStorage;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
-pub struct Evm {
-    evm: RevmEvm<ContextWithDB, (), EthInstructions<EthInterpreter, ContextWithDB>, EthPrecompiles, EthFrame>,
+pub struct Evm<Input: EvmInput> {
+    evm: RevmEvm<ContextWithDB<Input>, (), EthInstructions<EthInterpreter, ContextWithDB<Input>>, EthPrecompiles, EthFrame>,
     kind: EvmKind,
 }
 
-impl Evm {
+impl<Input: EvmInput> Evm<Input> {
     /// Creates a new instance of the Evm.
     pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig, kind: EvmKind) -> Self {
         tracing::info!(?config, "creating revm");
@@ -74,11 +75,10 @@ impl Evm {
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute(&mut self, input: TransactionExecutionInput) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
+    pub fn execute(&mut self, input: Input) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
         // configure session
         self.evm.journaled_state.database.reset(input.clone());
-
-        self.evm.fill_env(input);
+        input.fill_env(&mut self.evm);
 
         if log_enabled!(log::Level::Debug) {
             let block_env_log = self.evm.block.clone();
@@ -126,7 +126,9 @@ impl Evm {
 
         execution.map(|execution| (execution, session_metrics))
     }
+}
 
+impl Evm<TransactionExecutionInput> {
     /// Execute a transaction using a tracer.
     pub fn inspect(&mut self, input: InspectorInput) -> Result<GethTrace, StratusError> {
         let InspectorInput {

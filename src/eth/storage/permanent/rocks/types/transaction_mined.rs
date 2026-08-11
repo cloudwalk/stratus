@@ -36,7 +36,7 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
                 tx_type: execution.info.tx_type.map(|inner| inner.as_u64() as u8),
                 chain_id: execution.evm_input.chain_id.map_into(),
                 hash: execution.info.hash.into(),
-                nonce: execution.evm_input.nonce.unwrap_or_default().into(), // on the specific input type it will be non-opt
+                nonce: execution.evm_input.nonce.into(),
                 signer: execution.evm_input.from.into(),
                 from: execution.evm_input.from.into(),
                 to: execution.evm_input.to.map_into(),

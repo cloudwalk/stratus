@@ -27,6 +27,7 @@ use crate::eth::codegen;
 use crate::eth::executor::EvmKind;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::GeneralRevm;
+use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Complete;
@@ -39,12 +40,6 @@ use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionExecutionOutcome;
 use crate::ext::OptionExt;
-
-/// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
-#[cfg(feature = "dev")]
-const GAS_MAX_LIMIT: u64 = 1_000_000_000;
-#[cfg(not(feature = "dev"))]
-const GAS_MAX_LIMIT: u64 = 100_000_000;
 
 pub fn parse_revm_result_and_state(revm_result: ResultAndState) -> Result<TransactionExecutionOutcome, StratusError> {
     let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
@@ -206,7 +201,7 @@ impl TxEnvExt for TxEnv {
         self.gas_limit = GAS_MAX_LIMIT;
         self.gas_price = 0;
         self.chain_id = input.chain_id.map_into();
-        self.nonce = input.nonce.map_into().unwrap_or_default();
+        self.nonce = input.nonce.into();
         self.data = input.data.into();
         self.value = input.value.into();
         self.gas_priority_fee = None;

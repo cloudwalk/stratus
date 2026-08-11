@@ -354,7 +354,7 @@ impl From<TransactionExecutionInput> for ExecutionInfo {
     fn from(value: TransactionExecutionInput) -> Self {
         Self {
             chain_id: value.chain_id,
-            nonce: value.nonce.unwrap_or_default(),
+            nonce: value.nonce,
             signer: Signer::Recovered(value.from),
             to: value.to,
             value: value.value,

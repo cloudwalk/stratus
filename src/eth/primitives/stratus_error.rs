@@ -331,6 +331,12 @@ impl StratusError {
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
 
+impl<T> From<crossbeam_channel::SendError<T>> for StratusError {
+    fn from(_: crossbeam_channel::SendError<T>) -> Self {
+        Self::Unexpected(UnexpectedError::ChannelClosed { channel: "unkown" })
+    }
+}
+
 impl From<anyhow::Error> for StratusError {
     fn from(value: anyhow::Error) -> Self {
         Self::Unexpected(UnexpectedError::Unexpected(value))
