@@ -1,12 +1,25 @@
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use display_json::DebugAsJson;
+use revm::Context;
+use revm::Journal;
+use revm::context::BlockEnv;
+use revm::context::CfgEnv;
+use revm::context::Evm as RevmEvm;
+use revm::context::TxEnv;
+use revm::handler::EthFrame;
+use revm::handler::EthPrecompiles;
+use revm::handler::instructions::EthInstructions;
+use revm::interpreter::interpreter::EthInterpreter;
 
+use crate::eth::executor::evm::session::RevmSession;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
+use crate::eth::primitives::EvmExecution;
+use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::Gas;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
@@ -19,6 +32,10 @@ use crate::eth::storage::ReadKind;
 use crate::eth::storage::TxCount;
 use crate::ext::OptionExt;
 use crate::ext::not;
+
+pub type ContextWithDB = Context<BlockEnv, TxEnv, CfgEnv, RevmSession, Journal<RevmSession>>;
+pub type GeneralRevm<DB, I = ()> =
+    RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, I, EthInstructions<EthInterpreter, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles, EthFrame>;
 
 /// EVM input data. Usually derived from a transaction or call.
 #[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -156,4 +173,33 @@ pub struct InspectorInput {
     pub tx_hash: Hash,
     pub opts: GethDebugTracingOptions,
     pub trace_unsuccessful_only: bool,
+}
+
+/// Evm execution result.
+#[derive(DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq, Eq)]
+#[cfg_attr(test, derive(fake::Dummy))]
+pub struct EvmExecutionResult {
+    pub execution: EvmExecution,
+    pub metrics: EvmExecutionMetrics,
+}
+
+#[derive(Clone, Copy)]
+pub enum EvmKind {
+    Transaction,
+    CallPast,
+    CallPresent,
+    Inspect,
+}
+
+impl EvmKind {
+    pub fn is_call(&self) -> bool {
+        match self {
+            EvmKind::Transaction => false,
+            EvmKind::CallPast | EvmKind::CallPresent | EvmKind::Inspect => true,
+        }
+    }
+
+    pub fn is_transaction(&self) -> bool {
+        !self.is_call()
+    }
 }
