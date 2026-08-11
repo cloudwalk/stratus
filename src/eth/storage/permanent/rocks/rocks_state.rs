@@ -798,7 +798,6 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::eth::executor::EvmExecutionResult;
     use crate::eth::executor::ExecutionInput;
     use crate::eth::primitives::BlockHeader;
     use crate::eth::primitives::TransactionExecution;
@@ -866,11 +865,9 @@ mod tests {
                             block_number: number.into(),
                             ..Faker.fake()
                         },
-                        result: EvmExecutionResult {
-                            execution: TransactionExecutionOutcome {
-                                logs: vec![Faker.fake(), Faker.fake()],
-                                ..Faker.fake()
-                            },
+                        result: TransactionExecutionOutcome {
+                            logs: vec![Faker.fake(), Faker.fake()],
+                            ..Faker.fake()
                         },
                         ..Faker.fake()
                     },

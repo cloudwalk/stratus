@@ -5,13 +5,13 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::anyhow;
 use tracing::Span;
 
-use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::ExecutionInput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionExecutionOutcome;
 
 pub struct EvmTask<T: Task + Send> {
     pub span: Span,
@@ -21,7 +21,7 @@ pub struct EvmTask<T: Task + Send> {
 #[derive(derive_new::new)]
 pub struct ExecutionTask {
     pub input: ExecutionInput,
-    pub response_tx: oneshot::Sender<Result<(EvmExecutionResult, EvmExecutionMetrics), StratusError>>,
+    pub response_tx: oneshot::Sender<Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError>>,
 }
 
 #[derive(derive_new::new)]

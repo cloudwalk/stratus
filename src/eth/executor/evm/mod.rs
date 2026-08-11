@@ -36,7 +36,6 @@ use util::default_trace;
 use util::enhance_trace_with_decoded_errors;
 use util::parse_revm_result_and_state;
 
-use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::ExecutionInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::evm::types::InspectorInput;
@@ -51,6 +50,7 @@ use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionExecutionOutcome;
 use crate::eth::storage::StratusStorage;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
@@ -74,7 +74,7 @@ impl Evm {
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute(&mut self, input: ExecutionInput) -> Result<(EvmExecutionResult, EvmExecutionMetrics), StratusError> {
+    pub fn execute(&mut self, input: ExecutionInput) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
         // configure session
         self.evm.journaled_state.database.reset(input.clone());
 
@@ -124,7 +124,7 @@ impl Evm {
             }
         };
 
-        execution.map(|execution| (EvmExecutionResult { execution }, session_metrics))
+        execution.map(|execution| (execution, session_metrics))
     }
 
     /// Execute a transaction using a tracer.
@@ -150,8 +150,7 @@ impl Evm {
             .into();
 
         // CREATE transactions need to be traced for blockscout to work correctly
-        if tx.result.execution.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.result.execution.result, ExecutionResult::Success)
-        {
+        if tx.result.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.result.result, ExecutionResult::Success) {
             return Ok(default_trace(tracer_type, tx));
         }
 

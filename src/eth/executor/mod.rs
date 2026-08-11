@@ -12,7 +12,6 @@ use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
 pub use config::ExecutorConfig;
-pub use evm::types::EvmExecutionResult;
 pub use evm::types::EvmKind;
 pub use evm::types::ExecutionInput;
 use parking_lot::Mutex;
@@ -180,13 +179,13 @@ impl Executor {
                 };
 
                 // update execution with receipt
-                evm_result.execution.apply_receipt(&receipt)?;
+                evm_result.apply_receipt(&receipt)?;
 
                 // ensure it matches receipt before saving
-                if let Err(e) = evm_result.execution.compare_with_receipt(&receipt) {
+                if let Err(e) = evm_result.compare_with_receipt(&receipt) {
                     let json_tx = to_json_string(&tx_input);
                     let json_receipt = to_json_string(&receipt);
-                    let json_execution_logs = to_json_string(&evm_result.execution.logs);
+                    let json_execution_logs = to_json_string(&evm_result.logs);
                     tracing::error!(reason = ?e, %block_number, tx_hash = %tx_input.transaction_info.hash, %json_tx, %json_receipt, %json_execution_logs, "failed to reexecute external transaction");
                     return Err(e);
                 };
@@ -199,7 +198,7 @@ impl Executor {
                     metrics::inc_executor_external_transaction(start.elapsed(), tx_contract, tx_function);
                     metrics::inc_executor_external_transaction_account_reads(evm_metrics.account_reads, tx_contract, tx_function);
                     metrics::inc_executor_external_transaction_slot_reads(evm_metrics.slot_reads, tx_contract, tx_function);
-                    metrics::inc_executor_external_transaction_gas(evm_result.execution.gas_used.as_u64() as usize, tx_contract, tx_function);
+                    metrics::inc_executor_external_transaction_gas(evm_result.gas_used.as_u64() as usize, tx_contract, tx_function);
                 }
 
                 TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_result)
@@ -216,8 +215,7 @@ impl Executor {
                         sender.nonce
                     );
                 }
-                let execution = TransactionExecutionOutcome::from_failed_external_transaction(sender, &receipt)?;
-                let evm_result = EvmExecutionResult { execution };
+                let evm_result = TransactionExecutionOutcome::from_failed_external_transaction(sender, &receipt)?;
 
                 evm_input.gas_limit = tx_input.execution_info.gas_limit;
                 evm_input.gas_price = tx_input.execution_info.gas_price;
@@ -328,13 +326,13 @@ impl Executor {
             );
 
             #[cfg(feature = "metrics")]
-            let gas_used = tx_execution.result.execution.gas_used;
+            let gas_used = tx_execution.result.gas_used;
             #[cfg(feature = "metrics")]
             let function = codegen::function_sig(&tx_input.execution_info.input);
             #[cfg(feature = "metrics")]
             let contract = codegen::contract_name(&tx_input.execution_info.to);
 
-            if let ExecutionResult::Reverted { reason } = &tx_execution.result.execution.result {
+            if let ExecutionResult::Reverted { reason } = &tx_execution.result.result {
                 tracing::info!(?reason, "local transaction execution reverted");
                 #[cfg(feature = "metrics")]
                 metrics::inc_executor_local_transaction_reverts(contract, function, reason.0.as_ref());
@@ -417,7 +415,7 @@ impl Executor {
                     metrics::inc_executor_local_call(start.elapsed(), true, contract, function);
                     metrics::inc_executor_local_call_account_reads(evm_metrics.account_reads, contract, function);
                     metrics::inc_executor_local_call_slot_reads(evm_metrics.slot_reads, contract, function);
-                    metrics::inc_executor_local_call_gas(evm_result.execution.gas_used.as_u64() as usize, contract, function);
+                    metrics::inc_executor_local_call_gas(evm_result.gas_used.as_u64() as usize, contract, function);
                 }
                 Err(_) => {
                     metrics::inc_executor_local_call(start.elapsed(), false, contract, function);
@@ -425,8 +423,7 @@ impl Executor {
             }
         }
 
-        let execution = evm_result?.0.execution;
-        Ok(execution)
+        Ok(evm_result?.0)
     }
 
     pub fn trace_transaction(&self, tx_hash: Hash, opts: Option<GethDebugTracingOptions>, trace_unsuccessful_only: bool) -> Result<GethTrace, StratusError> {

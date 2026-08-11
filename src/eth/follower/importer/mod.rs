@@ -270,7 +270,6 @@ mod tests {
 
     use hash_hasher::HashBuildHasher;
 
-    use crate::eth::executor::EvmExecutionResult;
     use crate::eth::executor::ExecutionInput;
     use crate::eth::follower::importer::fetchers::DataFetcher;
     use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
@@ -290,6 +289,7 @@ mod tests {
     use crate::eth::primitives::PointInTime;
     use crate::eth::primitives::Signature;
     use crate::eth::primitives::TransactionExecution;
+    use crate::eth::primitives::TransactionExecutionOutcome;
     use crate::eth::primitives::TransactionInfo;
     use crate::eth::primitives::TransactionInput;
     use crate::eth::primitives::UnixTime;
@@ -317,9 +317,11 @@ mod tests {
         let (header, _) = storage.read_pending_block_header();
         let evm_input = ExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
-        let mut result = EvmExecutionResult::default();
-        result.execution.result = ExecutionResult::Success;
-        result.execution.changes = changes;
+        let result = TransactionExecutionOutcome {
+            result: ExecutionResult::Success,
+            changes,
+            ..Default::default()
+        };
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
         storage.save_execution(tx).expect("save execution");

@@ -6,7 +6,6 @@ use super::hash::HashRocksdb;
 use super::index::IndexRocksdb;
 use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
-use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::ExecutionInput;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Index;
@@ -51,14 +50,13 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
             },
             execution: ExecutionRocksdb::new(
                 execution.evm_input.block_timestamp.into(),
-                execution.result.execution.result.into(),
-                execution.result.execution.output.into(),
-                execution.result.execution.gas_used.into(),
-                execution.result.execution.deployed_contract_address.map_into(),
+                execution.result.result.into(),
+                execution.result.output.into(),
+                execution.result.gas_used.into(),
+                execution.result.deployed_contract_address.map_into(),
             ),
             logs: execution
                 .result
-                .execution
                 .logs
                 .into_iter()
                 .enumerate()
@@ -82,15 +80,13 @@ impl TransactionMined {
         let (result, output) = ExecutionResultBuilder((other.execution.result, other.execution.output)).build();
 
         let input = TransactionInput::from(other.input);
-        let evm_result = EvmExecutionResult {
-            execution: TransactionExecutionOutcome {
-                result,
-                output,
-                logs,
-                gas_used: other.execution.gas.into(),
-                changes: ExecutionChanges::default(),
-                deployed_contract_address: other.execution.deployed_contract_address.map_into(),
-            },
+        let evm_result = TransactionExecutionOutcome {
+            result,
+            output,
+            logs,
+            gas_used: other.execution.gas.into(),
+            changes: ExecutionChanges::default(),
+            deployed_contract_address: other.execution.deployed_contract_address.map_into(),
         };
 
         let evm_input = ExecutionInput::from_eth_transaction(&input, block_number.into(), other.execution.block_timestamp.into());

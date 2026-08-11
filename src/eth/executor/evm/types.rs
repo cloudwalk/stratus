@@ -23,7 +23,6 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::TransactionExecutionOutcome;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
@@ -172,13 +171,6 @@ pub struct InspectorInput {
     pub tx_hash: Hash,
     pub opts: GethDebugTracingOptions,
     pub trace_unsuccessful_only: bool,
-}
-
-/// Evm execution result.
-#[derive(DebugAsJson, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq, Eq)]
-#[cfg_attr(test, derive(fake::Dummy))]
-pub struct EvmExecutionResult {
-    pub execution: TransactionExecutionOutcome,
 }
 
 #[derive(Clone, Copy)]

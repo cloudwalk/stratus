@@ -1109,7 +1109,7 @@ fn stratus_get_transaction_result(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     match rpc_get_transaction_receipt(params, ctx)? {
         Some(tx) => {
             tracing::info!("transaction receipt found");
-            Ok(to_json_value(tx.to_result().execution.result))
+            Ok(to_json_value(tx.to_result().result))
         }
         None => {
             tracing::info!("transaction receipt not found");

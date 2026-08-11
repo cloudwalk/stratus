@@ -74,7 +74,7 @@ impl InMemoryCallTemporaryStorage {
         let current_tx_count = block_state.current_tx_count;
 
         // Process each account change from the transaction execution
-        for (address, change) in &tx.result.execution.changes.accounts {
+        for (address, change) in &tx.result.changes.accounts {
             if change.is_modified() {
                 // Build the account from the changes
                 let account = (*address, change.clone()).into();
@@ -83,7 +83,7 @@ impl InMemoryCallTemporaryStorage {
         }
 
         // Add slot changes
-        for ((address, slot_index), slot_value) in &tx.result.execution.changes.slots {
+        for ((address, slot_index), slot_value) in &tx.result.changes.slots {
             block_state
                 .slots
                 .entry((*address, *slot_index))

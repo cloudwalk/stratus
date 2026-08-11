@@ -9,12 +9,12 @@ use crate::alias::AlloyLogData;
 use crate::alias::AlloyLogPrimitive;
 use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
-use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::ExecutionInput;
 use crate::eth::primitives::ExecutionInfo;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::MinedData;
 use crate::eth::primitives::Signature;
+use crate::eth::primitives::TransactionExecutionOutcome;
 use crate::eth::primitives::TransactionInfo;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::logs_bloom::LogsBloom;
@@ -28,7 +28,7 @@ pub struct TransactionExecution {
     pub signature: Signature,
     pub execution_info: ExecutionInfo,
     pub evm_input: ExecutionInput,
-    pub result: EvmExecutionResult,
+    pub result: TransactionExecutionOutcome,
 }
 
 impl TransactionExecution {
@@ -54,14 +54,14 @@ impl TransactionExecution {
     /// Computes the bloom filter from execution logs.
     fn compute_bloom(&self) -> LogsBloom {
         let mut bloom = LogsBloom::default();
-        for log in self.result.execution.logs.iter() {
+        for log in self.result.logs.iter() {
             bloom.accrue_log(log);
         }
         bloom
     }
 
     pub fn logs(&self) -> &Vec<Log> {
-        &self.result.execution.logs
+        &self.result.logs
     }
 }
 
@@ -84,8 +84,8 @@ impl From<TransactionExecution> for TransactionInput {
 
 pub fn _tx_to_alloy_receipt_impl(execution: TransactionExecution, alloy_logs: Vec<AlloyLog>, mined_data: Option<MinedData>) -> AlloyReceipt {
     let receipt = Receipt {
-        status: Eip658Value::Eip658(execution.result.execution.is_success()),
-        cumulative_gas_used: execution.result.execution.gas_used.into(), // TODO: implement cumulative gas used correctly
+        status: Eip658Value::Eip658(execution.result.is_success()),
+        cumulative_gas_used: execution.result.gas_used.into(), // TODO: implement cumulative gas used correctly
         logs: alloy_logs,
     };
 
@@ -108,13 +108,13 @@ pub fn _tx_to_alloy_receipt_impl(execution: TransactionExecution, alloy_logs: Ve
         transaction_index: mined_data.map(|data| data.index.into()),
         block_hash: mined_data.map(|data| data.block_hash.into()),
         block_number: Some(execution.evm_input.block_number.as_u64()),
-        gas_used: execution.result.execution.gas_used.into(),
+        gas_used: execution.result.gas_used.into(),
         effective_gas_price: execution.evm_input.gas_price,
         blob_gas_used: None,
         blob_gas_price: None,
         from: execution.evm_input.from.into(),
         to: execution.evm_input.to.map_into(),
-        contract_address: execution.result.execution.deployed_contract_address.map_into(),
+        contract_address: execution.result.deployed_contract_address.map_into(),
     }
 }
 

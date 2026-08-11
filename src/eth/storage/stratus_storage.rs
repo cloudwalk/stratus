@@ -454,14 +454,14 @@ impl StratusStorage {
     // -------------------------------------------------------------------------
 
     pub fn save_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
-        let changes = tx.result.execution.changes.clone();
+        let changes = tx.result.changes.clone();
 
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::save_execution", tx_hash = %tx.info.hash).entered();
-        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?tx.result.execution.changes, "saving execution");
+        tracing::debug!(storage = %label::TEMP, tx_hash = %tx.info.hash, changes = ?tx.result.changes, "saving execution");
 
         // Log warning if a failed transaction has slot changes
-        if !tx.result.execution.result.is_success() {
+        if !tx.result.result.is_success() {
             let total_slot_changes: usize = changes.slots.len();
 
             if total_slot_changes > 0 {
@@ -849,13 +849,13 @@ impl StratusStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eth::executor::EvmExecutionResult;
     use crate::eth::executor::ExecutionInput;
     use crate::eth::primitives::ExecutionAccountChanges;
     use crate::eth::primitives::ExecutionInfo;
     use crate::eth::primitives::ExecutionResult;
     use crate::eth::primitives::Signature;
     use crate::eth::primitives::SlotValue;
+    use crate::eth::primitives::TransactionExecutionOutcome;
     use crate::eth::primitives::TransactionInfo;
     use crate::eth::primitives::TransactionInput;
     use crate::eth::primitives::Wei;
@@ -865,9 +865,11 @@ mod tests {
         let (header, _) = storage.read_pending_block_header();
         let evm_input = ExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
-        let mut result = EvmExecutionResult::default();
-        result.execution.result = ExecutionResult::Success;
-        result.execution.changes = changes;
+        let result = TransactionExecutionOutcome {
+            result: ExecutionResult::Success,
+            changes,
+            ..Default::default()
+        };
 
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
         storage.save_execution(tx).expect("save execution");

@@ -139,7 +139,7 @@ pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionExecution)
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
             let (typ, to) = match tx.evm_input.to {
                 Some(_) => ("CALL".to_string(), tx.evm_input.to.map_into()),
-                None => ("CREATE".to_string(), tx.result.execution.deployed_contract_address.map_into()),
+                None => ("CREATE".to_string(), tx.result.deployed_contract_address.map_into()),
             };
 
             CallFrame {

@@ -3,7 +3,6 @@ use std::sync::Arc;
 use alloy_rpc_types_trace::geth::GethTrace;
 
 use crate::GlobalState;
-use crate::eth::executor::EvmExecutionResult;
 use crate::eth::executor::ExecutionInput;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::evm::Evm;
@@ -17,6 +16,7 @@ use crate::eth::executor::types::Task;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionExecutionOutcome;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
@@ -104,8 +104,8 @@ impl EvmWorkerPool {
     }
 
     /// Executes a transaction in the specified route.
-    pub fn execute(&self, evm_input: ExecutionInput, route: EvmRoute) -> Result<(EvmExecutionResult, EvmExecutionMetrics), StratusError> {
-        let (execution_tx, execution_rx) = oneshot::channel::<Result<(EvmExecutionResult, EvmExecutionMetrics), StratusError>>();
+    pub fn execute(&self, evm_input: ExecutionInput, route: EvmRoute) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
+        let (execution_tx, execution_rx) = oneshot::channel::<Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError>>();
 
         let task = ExecutionTask::new(evm_input, execution_tx).into();
         let _ = match route {
