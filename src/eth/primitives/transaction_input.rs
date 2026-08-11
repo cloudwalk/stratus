@@ -19,6 +19,7 @@ use display_json::DebugAsJson;
 use rlp::Decodable;
 
 use crate::alias::AlloyTransaction;
+use crate::eth::executor::ExecutionInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::ChainId;
@@ -30,7 +31,7 @@ use crate::eth::primitives::Wei;
 use crate::eth::primitives::signature_component::SignatureComponent;
 use crate::ext::RuintExt;
 
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct TransactionInfo {
     #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_option_uint()"))]
@@ -95,7 +96,7 @@ pub struct ExecutionInfo {
     pub gas_price: u128,
 }
 
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct Signature {
     #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_uint()"))]
@@ -145,7 +146,7 @@ impl TransactionInput {
     fn recover_signer_address(&self) -> anyhow::Result<Address> {
         let inner = self.to_tx_envelope();
         let prehash = inner.signature_hash();
-        let signature: AlloySignature = self.signature.clone().into();
+        let signature: AlloySignature = self.signature.into();
         let signer = signature
             .recover_address_from_prehash(&prehash)
             .context("Transaction signer cannot be recovered. Check the transaction signature is valid.")?;
@@ -154,7 +155,7 @@ impl TransactionInput {
 
     /// Builds a TxEnvelope from the transaction fields stored in this input.
     fn to_tx_envelope(&self) -> TxEnvelope {
-        let signature: AlloySignature = self.signature.clone().into();
+        let signature: AlloySignature = self.signature.into();
         let tx_hash = self.transaction_info.hash.into();
 
         match self.transaction_info.tx_type.map(|t| t.as_u64()).unwrap_or(0) {
@@ -347,6 +348,21 @@ fn try_from_alloy_transaction(value: alloy_rpc_types_eth::Transaction) -> anyhow
     tx_input.execution_info.signer = Signer::Recovered(recovered_signer);
 
     Ok(tx_input)
+}
+
+impl From<ExecutionInput> for ExecutionInfo {
+    fn from(value: ExecutionInput) -> Self {
+        Self {
+            chain_id: value.chain_id,
+            nonce: value.nonce.unwrap_or_default(),
+            signer: Signer::Recovered(value.from),
+            to: value.to,
+            value: value.value,
+            input: value.data,
+            gas_limit: value.gas_limit,
+            gas_price: value.gas_price,
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------

@@ -201,7 +201,7 @@ impl Executor {
                     metrics::inc_executor_external_transaction_gas(evm_result.gas_used.as_u64() as usize, tx_contract, tx_function);
                 }
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_result)
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result)
             }
             //
             // failed external transaction, re-create from receipt without re-executing
@@ -220,7 +220,7 @@ impl Executor {
                 evm_input.gas_limit = tx_input.execution_info.gas_limit;
                 evm_input.gas_price = tx_input.execution_info.gas_price;
 
-                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, tx_input.execution_info, evm_input, evm_result)
+                TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result)
             }
         };
 
@@ -317,13 +317,7 @@ impl Executor {
 
             // save execution to temporary storage
             // in case of failure, retry if conflict or abandon if unexpected error
-            let tx_execution = TransactionExecution::new(
-                tx_input.transaction_info.clone(),
-                tx_input.signature.clone(),
-                tx_input.execution_info.clone(),
-                evm_input,
-                evm_result,
-            );
+            let tx_execution = TransactionExecution::new(tx_input.transaction_info, tx_input.signature, evm_input, evm_result);
 
             #[cfg(feature = "metrics")]
             let gas_used = tx_execution.result.gas_used;

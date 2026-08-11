@@ -851,7 +851,6 @@ mod tests {
     use super::*;
     use crate::eth::executor::ExecutionInput;
     use crate::eth::primitives::ExecutionAccountChanges;
-    use crate::eth::primitives::ExecutionInfo;
     use crate::eth::primitives::ExecutionResult;
     use crate::eth::primitives::Signature;
     use crate::eth::primitives::SlotValue;
@@ -871,7 +870,7 @@ mod tests {
             ..Default::default()
         };
 
-        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
+        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
         storage.save_execution(tx).expect("save execution");
 
         let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");

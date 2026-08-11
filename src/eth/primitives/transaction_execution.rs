@@ -10,7 +10,6 @@ use crate::alias::AlloyLogPrimitive;
 use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
 use crate::eth::executor::ExecutionInput;
-use crate::eth::primitives::ExecutionInfo;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::MinedData;
 use crate::eth::primitives::Signature;
@@ -26,7 +25,6 @@ use crate::ext::RuintExt;
 pub struct TransactionExecution {
     pub info: TransactionInfo,
     pub signature: Signature,
-    pub execution_info: ExecutionInfo,
     pub evm_input: ExecutionInput,
     pub result: TransactionExecutionOutcome,
 }
@@ -76,7 +74,7 @@ impl From<TransactionExecution> for TransactionInput {
     fn from(value: TransactionExecution) -> Self {
         Self {
             transaction_info: value.info,
-            execution_info: value.execution_info,
+            execution_info: value.evm_input.into(),
             signature: value.signature,
         }
     }
