@@ -74,7 +74,7 @@ futures-channel = "=0.3.31"
 # ethereum / rpc
 ethabi = "=18.0.0"
 rlp = "=0.6.1"
-alloy-sol-types = { version = "=1.4.1", features = ["json"] }
+alloy-sol-types = { version = "=1.6.1", features = ["json"] }
 alloy-trie = "=0.9.5"
 revm-inspectors = { version = "=0.42.0", features = ["js-tracer"] }
 alloy-rpc-types-trace = "=2.3.0"
