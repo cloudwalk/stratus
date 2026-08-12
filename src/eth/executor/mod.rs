@@ -14,6 +14,7 @@ use anyhow::bail;
 pub use config::ExecutorConfig;
 pub use evm::types::EvmKind;
 pub use evm::types::TransactionExecutionInput;
+pub use evm::types::TransactionExecutionOutput;
 use parking_lot::Mutex;
 use tracing::Span;
 use tracing::debug_span;
@@ -30,7 +31,6 @@ pub use types::ExecutorError;
 pub use types::Incomplete;
 pub use types::RevertReason;
 pub use types::TransactionExecution;
-pub use types::TransactionExecutionOutput;
 
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;

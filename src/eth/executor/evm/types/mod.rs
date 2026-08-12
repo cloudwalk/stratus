@@ -10,11 +10,13 @@ use revm::handler::instructions::EthInstructions;
 use revm::interpreter::interpreter::EthInterpreter;
 
 mod input;
+mod output;
 
 pub use input::EvmInput;
 pub use input::call_execution::CallExecutionInput;
 pub use input::inspector::InspectorInput;
 pub use input::transaction_execution::TransactionExecutionInput;
+pub use output::transaction_execution::TransactionExecutionOutput;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
 #[cfg(feature = "dev")]
