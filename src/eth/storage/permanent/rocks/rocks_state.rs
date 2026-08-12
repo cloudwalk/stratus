@@ -798,11 +798,10 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::eth::executor::EvmExecutionResult;
-    use crate::eth::executor::EvmInput;
+    use crate::eth::executor::TransactionExecutionInput;
     use crate::eth::primitives::BlockHeader;
-    use crate::eth::primitives::EvmExecution;
     use crate::eth::primitives::TransactionExecution;
+    use crate::eth::primitives::TransactionExecutionOutput;
 
     #[test]
     #[cfg(feature = "dev")]
@@ -862,15 +861,12 @@ mod tests {
                 },
                 transactions: vec![TransactionMined {
                     execution: TransactionExecution {
-                        evm_input: EvmInput {
+                        evm_input: TransactionExecutionInput {
                             block_number: number.into(),
                             ..Faker.fake()
                         },
-                        result: EvmExecutionResult {
-                            execution: EvmExecution {
-                                logs: vec![Faker.fake(), Faker.fake()],
-                                ..Faker.fake()
-                            },
+                        result: TransactionExecutionOutput {
+                            logs: vec![Faker.fake(), Faker.fake()],
                             ..Faker.fake()
                         },
                         ..Faker.fake()

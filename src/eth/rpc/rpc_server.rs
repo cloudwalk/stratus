@@ -61,7 +61,6 @@ use crate::eth::primitives::CallInput;
 use crate::eth::primitives::ChainId;
 use crate::eth::primitives::ConsensusError;
 use crate::eth::primitives::DecodeInputError;
-use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::Hash;
 use crate::eth::primitives::ImporterError;
@@ -76,6 +75,7 @@ use crate::eth::primitives::SlotValue;
 use crate::eth::primitives::StateError;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
+use crate::eth::primitives::TransactionExecutionOutput;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionStage;
 #[cfg(feature = "dev")]
@@ -89,7 +89,7 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
-use crate::eth::storage::ReadKind;
+use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
 use crate::ext::InfallibleExt;
 use crate::ext::WatchReceiverExt;
@@ -1109,7 +1109,7 @@ fn stratus_get_transaction_result(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     match rpc_get_transaction_receipt(params, ctx)? {
         Some(tx) => {
             tracing::info!("transaction receipt found");
-            Ok(to_json_value(tx.to_result().execution.result))
+            Ok(to_json_value(tx.to_result().result))
         }
         None => {
             tracing::info!("transaction receipt not found");
@@ -1134,7 +1134,14 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     tracing::info!("executing eth_estimateGas");
 
     // execute
-    match ctx.server.executor.execute_local_call(call, PointInTime::Mined) {
+    if let Some(to_address) = call.to
+        && !call.data.is_empty()
+    {
+        ctx.server
+            .executor
+            .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
+    }
+    match ctx.server.executor.execute_local_call(call, PointInTime::Latest) {
         // result is success
         Ok(result) if result.is_success() => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
@@ -1156,7 +1163,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     }
 }
 
-fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<EvmExecution, StratusError> {
+fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<TransactionExecutionOutput, StratusError> {
     // parse params
     let (params, call) = next_rpc_param::<CallInput>(params.sequence())?;
     let (_, filter) = next_rpc_param_or_default::<BlockFilter>(params)?;
@@ -1171,6 +1178,11 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<EvmExecution, St
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
+    if let Some(to_address) = call.to
+        && !call.data.is_empty()
+    {
+        ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::RPC(point_in_time))?;
+    }
     ctx.server.executor.execute_local_call(call, point_in_time)
 }
 
@@ -1300,6 +1312,14 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
         return Err(RpcError::ParameterInvalid.into());
     }
 
+    // validate that the target account is a contract before acquiring the executor lock or forwarding to the
+    // leader, so calls to non-contract accounts are rejected early
+    if let Some(to_address) = tx.execution_info.to
+        && !tx.execution_info.input.is_empty()
+    {
+        ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::Transaction)?;
+    };
+
     // execute locally or forward to leader
     match GlobalState::get_node_mode() {
         NodeMode::Leader | NodeMode::FakeLeader => match ctx.server.executor.execute_local_transaction(tx) {
@@ -1407,7 +1427,7 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     tracing::info!(%address, %filter, "reading account nonce");
 
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let account = ctx.server.storage.read_account(address, point_in_time, ReadKind::RPC)?;
+    let account = ctx.server.storage.read_account(address, ExecutionKind::RPC(point_in_time))?;
     Ok(hex_num(account.nonce))
 }
 
@@ -1429,7 +1449,7 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) ->
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let account = ctx.server.storage.read_account(address, point_in_time, ReadKind::RPC)?;
+    let account = ctx.server.storage.read_account(address, ExecutionKind::RPC(point_in_time))?;
     Ok(hex_num(account.balance))
 }
 
@@ -1450,7 +1470,7 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let account = ctx.server.storage.read_account(address, point_in_time, ReadKind::RPC)?;
+    let account = ctx.server.storage.read_account(address, ExecutionKind::RPC(point_in_time))?;
 
     Ok(account.bytecode.map(|bytecode| hex_data(bytecode.original_bytes())).unwrap_or_else(hex_null))
 }
@@ -1542,7 +1562,7 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(block_filter)?;
-    let slot = ctx.server.storage.read_slot(address, index, point_in_time, ReadKind::RPC)?;
+    let slot = ctx.server.storage.read_slot(address, index, ExecutionKind::RPC(point_in_time))?;
 
     // It must be padded, even if it is zero.
     Ok(hex_num_zero_padded(slot.value.as_u256()))

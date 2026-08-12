@@ -47,9 +47,9 @@ impl Display for BlockFilter {
 impl From<PointInTime> for BlockFilter {
     fn from(point_in_time: PointInTime) -> Self {
         match point_in_time {
-            PointInTime::Mined => Self::Latest,
+            PointInTime::Latest => Self::Latest,
             PointInTime::Pending => Self::Pending,
-            PointInTime::MinedPast(number) => Self::Number(number),
+            PointInTime::Past(number) => Self::Number(number),
         }
     }
 }

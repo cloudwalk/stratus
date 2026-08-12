@@ -5,7 +5,7 @@ use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
 use parking_lot::RwLockWriteGuard;
 
-use crate::eth::executor::EvmInput;
+use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::primitives::Account;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
@@ -79,7 +79,8 @@ impl InmemoryTransactionTemporaryStorage {
         if tx.evm_input != &pending_block.block.header {
             let actual_input = tx.evm_input.clone();
             let tx_input: TransactionInput = tx.into();
-            let expected_input = EvmInput::from_eth_transaction(&tx_input, pending_block.block.header.number, *pending_block.block.header.timestamp);
+            let expected_input =
+                TransactionExecutionInput::from_eth_transaction(&tx_input, pending_block.block.header.number, *pending_block.block.header.timestamp);
             return Err(StorageError::EvmInputMismatch {
                 expected: Box::new(expected_input),
                 actual: Box::new(actual_input),
@@ -88,7 +89,7 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        pending_block.block_changes.merge(tx.result.execution.changes.clone()); // TODO: This clone can be removed by reworking the primitives
+        pending_block.block_changes.merge(tx.result.changes.clone()); // TODO: This clone can be removed by reworking the primitives
 
         // save execution
         pending_block.block.push_transaction(tx);

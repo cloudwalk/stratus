@@ -10,21 +10,27 @@ use alloy_rpc_types_trace::geth::NoopFrame;
 use alloy_rpc_types_trace::geth::call::FlatCallFrame;
 use alloy_rpc_types_trace::geth::mux::MuxFrame;
 use itertools::Itertools;
+use revm::Context;
 use revm::Database;
 use revm::context::BlockEnv;
+use revm::context::Evm as RevmEvm;
 use revm::context::TransactTo;
 use revm::context::TxEnv;
 use revm::context::result::ExecutionResult as RevmExecutionResult;
 use revm::context::result::ResultAndState;
+use revm::handler::EthPrecompiles;
+use revm::handler::instructions::EthInstructions;
+use revm::primitives::hardfork::SpecId;
 use revm::state::EvmState;
 
 use crate::eth::codegen;
-use crate::eth::executor::EvmInput;
+use crate::eth::executor::EvmKind;
+use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::GeneralRevm;
+use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
 use crate::eth::primitives::Complete;
-use crate::eth::primitives::EvmExecution;
 use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::Gas;
@@ -32,21 +38,15 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionExecutionOutput;
 use crate::ext::OptionExt;
 
-/// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
-#[cfg(feature = "dev")]
-const GAS_MAX_LIMIT: u64 = 1_000_000_000;
-#[cfg(not(feature = "dev"))]
-const GAS_MAX_LIMIT: u64 = 100_000_000;
-
-pub fn parse_revm_result_and_state(revm_result: ResultAndState, input: EvmInput) -> Result<EvmExecution, StratusError> {
+pub fn parse_revm_result_and_state(revm_result: ResultAndState) -> Result<TransactionExecutionOutput, StratusError> {
     let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
     let (changes, deployed_contract_address) = parse_revm_state(revm_result.state)?;
     tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
 
-    Ok(EvmExecution {
-        block_timestamp: input.block_timestamp,
+    Ok(TransactionExecutionOutput {
         result,
         output: tx_output,
         logs,
@@ -134,7 +134,7 @@ pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionExecution)
         GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
             let (typ, to) = match tx.evm_input.to {
                 Some(_) => ("CALL".to_string(), tx.evm_input.to.map_into()),
-                None => ("CREATE".to_string(), tx.result.execution.deployed_contract_address.map_into()),
+                None => ("CREATE".to_string(), tx.result.deployed_contract_address.map_into()),
             };
 
             CallFrame {
@@ -177,22 +177,22 @@ fn enhance_call_frame_errors(frame: &mut CallFrame) {
 }
 
 pub trait TxEnvExt {
-    fn fill_env(&mut self, input: EvmInput);
+    fn fill_env(&mut self, input: TransactionExecutionInput);
 }
 
 pub trait EvmExt {
-    fn fill_env(&mut self, input: EvmInput);
+    fn fill_env(&mut self, input: TransactionExecutionInput);
 }
 
 impl<DB: Database, I> EvmExt for GeneralRevm<DB, I> {
-    fn fill_env(&mut self, input: EvmInput) {
+    fn fill_env(&mut self, input: TransactionExecutionInput) {
         self.block.fill_env(&input);
         self.tx.fill_env(input);
     }
 }
 
 impl TxEnvExt for TxEnv {
-    fn fill_env(&mut self, input: EvmInput) {
+    fn fill_env(&mut self, input: TransactionExecutionInput) {
         self.caller = input.from.into();
         self.kind = match input.to {
             Some(contract) => TransactTo::Call(contract.into()),
@@ -201,7 +201,7 @@ impl TxEnvExt for TxEnv {
         self.gas_limit = GAS_MAX_LIMIT;
         self.gas_price = 0;
         self.chain_id = input.chain_id.map_into();
-        self.nonce = input.nonce.map_into().unwrap_or_default();
+        self.nonce = input.nonce.into();
         self.data = input.data.into();
         self.value = input.value.into();
         self.gas_priority_fee = None;
@@ -209,13 +209,44 @@ impl TxEnvExt for TxEnv {
 }
 
 trait BlockEnvExt {
-    fn fill_env(&mut self, input: &EvmInput);
+    fn fill_env(&mut self, input: &TransactionExecutionInput);
 }
 
 impl BlockEnvExt for BlockEnv {
-    fn fill_env(&mut self, input: &EvmInput) {
+    fn fill_env(&mut self, input: &TransactionExecutionInput) {
         self.timestamp = U256::from(*input.block_timestamp);
         self.number = U256::from(input.block_number.as_u64());
         self.basefee = 0;
     }
+}
+
+pub fn create_evm<DB: Database>(chain_id: u64, spec: SpecId, db: DB, kind: EvmKind) -> GeneralRevm<DB> {
+    let ctx = Context::new(db, spec)
+        .modify_cfg_chained(|cfg_env| {
+            cfg_env.chain_id = chain_id;
+            cfg_env.spec = spec;
+            cfg_env.tx_chain_id_check = kind.is_transaction();
+            cfg_env.limit_contract_initcode_size = None;
+            cfg_env.disable_nonce_check = kind.is_call();
+            cfg_env.max_blobs_per_tx = None;
+            cfg_env.tx_gas_limit_cap = None;
+            cfg_env.blob_base_fee_update_fraction = None;
+            cfg_env.disable_eip3607 = kind.is_call();
+            cfg_env.limit_contract_code_size = Some(usize::MAX);
+            cfg_env.memory_limit = (1 << 32) - 1;
+            cfg_env.disable_balance_check = false;
+            cfg_env.disable_block_gas_limit = false;
+            cfg_env.disable_eip3541 = false;
+            cfg_env.disable_eip7623 = false;
+            cfg_env.disable_base_fee = false;
+            cfg_env.disable_fee_charge = false;
+        })
+        .modify_block_chained(|block_env: &mut BlockEnv| {
+            block_env.beneficiary = Address::COINBASE.into();
+        })
+        .modify_tx_chained(|tx_env: &mut TxEnv| {
+            tx_env.gas_priority_fee = None;
+        });
+
+    RevmEvm::new(ctx, EthInstructions::new_mainnet_with_spec(spec), EthPrecompiles::new(spec))
 }

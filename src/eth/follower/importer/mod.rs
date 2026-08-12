@@ -270,8 +270,7 @@ mod tests {
 
     use hash_hasher::HashBuildHasher;
 
-    use crate::eth::executor::EvmExecutionResult;
-    use crate::eth::executor::EvmInput;
+    use crate::eth::executor::TransactionExecutionInput;
     use crate::eth::follower::importer::fetchers::DataFetcher;
     use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
     use crate::eth::follower::importer::importers::ImporterWorker;
@@ -285,16 +284,16 @@ mod tests {
     use crate::eth::primitives::BlockNumber;
     use crate::eth::primitives::ExecutionAccountChanges;
     use crate::eth::primitives::ExecutionChanges;
-    use crate::eth::primitives::ExecutionInfo;
     use crate::eth::primitives::ExecutionResult;
     use crate::eth::primitives::PointInTime;
     use crate::eth::primitives::Signature;
     use crate::eth::primitives::TransactionExecution;
+    use crate::eth::primitives::TransactionExecutionOutput;
     use crate::eth::primitives::TransactionInfo;
     use crate::eth::primitives::TransactionInput;
     use crate::eth::primitives::UnixTime;
     use crate::eth::primitives::Wei;
-    use crate::eth::storage::ReadKind;
+    use crate::eth::storage::ExecutionKind;
     use crate::eth::storage::StratusStorage;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
@@ -315,13 +314,15 @@ mod tests {
     /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
     fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) {
         let (header, _) = storage.read_pending_block_header();
-        let evm_input = EvmInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
+        let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
-        let mut result = EvmExecutionResult::default();
-        result.execution.result = ExecutionResult::Success;
-        result.execution.changes = changes;
+        let result = TransactionExecutionOutput {
+            result: ExecutionResult::Success,
+            changes,
+            ..Default::default()
+        };
 
-        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), ExecutionInfo::default(), evm_input, result);
+        let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
         storage.save_execution(tx).expect("save execution");
 
         let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
@@ -409,7 +410,7 @@ mod tests {
         // Block 3 did not change B.balance, so the committed value must equal block 3's pre-state
         // (block 2 = 200). Completing at import time (perm caught up) yields 200; completing at
         // post-process time (perm behind) would yield the stale 100.
-        let account = storage.read_account(address, PointInTime::Mined, ReadKind::Transaction).expect("read account");
+        let account = storage.read_account(address, ExecutionKind::RPC(PointInTime::Latest)).expect("read account");
         assert_eq!(
             account.balance,
             Wei::from(200u64),

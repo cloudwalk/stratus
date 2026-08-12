@@ -224,7 +224,6 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined
     let transfers = tx
         .as_ref()
         .result
-        .execution
         .logs
         .iter()
         .filter(|log| log.topic0.is_some_and(|topic0| topic0 == TRANSFER_EVENT))
@@ -418,9 +417,9 @@ mod tests {
 
         let log_random: Log = Fake::fake(&Faker);
 
-        tx.execution.result.execution.logs.push(log_transfer1);
-        tx.execution.result.execution.logs.push(log_random);
-        tx.execution.result.execution.logs.push(log_transfer2);
+        tx.execution.result.logs.push(log_transfer1);
+        tx.execution.result.logs.push(log_random);
+        tx.execution.result.logs.push(log_transfer2);
 
         // 3. parse events
         let events = transaction_to_events(block_timestamp, Cow::Borrowed(&tx));

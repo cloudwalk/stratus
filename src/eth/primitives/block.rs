@@ -111,9 +111,9 @@ impl From<PendingBlock> for Block {
 
         let mut log_index = Index::ZERO;
         for (tx_idx, execution) in txs.into_iter().enumerate() {
-            let log_count = execution.result.execution.logs.len() as u64;
+            let log_count = execution.result.logs.len() as u64;
             let transaction_mined = TransactionMined::from_execution(execution, block.hash(), (tx_idx as u64).into(), log_index);
-            block.header.gas_used += transaction_mined.execution.result.execution.gas_used;
+            block.header.gas_used += transaction_mined.execution.result.gas_used;
             block.transactions.push(transaction_mined);
             log_index += Index(log_count);
         }

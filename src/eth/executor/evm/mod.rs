@@ -2,6 +2,7 @@ mod session;
 pub mod types;
 mod util;
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
@@ -12,82 +13,69 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::NoopFrame;
 use anyhow::anyhow;
 use log::log_enabled;
-use revm::Context;
-use revm::Database;
 use revm::ExecuteCommitEvm;
 use revm::ExecuteEvm;
 use revm::InspectEvm;
-use revm::context::BlockEnv;
-use revm::context::Evm as RevmEvm;
-use revm::context::TxEnv;
 use revm::context::result::EVMError;
 use revm::context::result::InvalidTransaction;
 use revm::database::CacheDB;
-use revm::handler::EthFrame;
-use revm::handler::EthPrecompiles;
-use revm::handler::instructions::EthInstructions;
-use revm::interpreter::interpreter::EthInterpreter;
-use revm::primitives::hardfork::SpecId;
 use revm_inspectors::tracing::FourByteInspector;
 use revm_inspectors::tracing::MuxInspector;
 use revm_inspectors::tracing::TracingInspector;
 use revm_inspectors::tracing::TracingInspectorConfig;
 use revm_inspectors::tracing::js::JsInspector;
 use session::RevmSession;
-use types::ContextWithDB;
 pub use types::EvmKind;
 pub use types::GeneralRevm;
 use util::default_trace;
 use util::enhance_trace_with_decoded_errors;
 use util::parse_revm_result_and_state;
 
-use crate::eth::executor::EvmExecutionResult;
-use crate::eth::executor::EvmInput;
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm::util::EvmExt;
-use crate::eth::primitives::Address;
+use crate::eth::executor::evm::util::create_evm;
 use crate::eth::primitives::BlockFilter;
+use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::MinedData;
-use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
+use crate::eth::primitives::TransactionExecutionOutput;
+use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
-#[cfg(feature = "metrics")]
-use crate::infra::metrics;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
-pub struct Evm {
-    evm: RevmEvm<ContextWithDB, (), EthInstructions<EthInterpreter, ContextWithDB>, EthPrecompiles, EthFrame>,
+pub struct Evm<Input: EvmInput> {
+    evm: GeneralRevm<RevmSession>,
     kind: EvmKind,
+    _input_type: PhantomData<Input>,
 }
 
-impl Evm {
+impl<Input: EvmInput> Evm<Input> {
     /// Creates a new instance of the Evm.
-    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig, kind: EvmKind) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, config: &ExecutorConfig, kind: EvmKind) -> Self {
         tracing::info!(?config, "creating revm");
 
         // configure revm
         let chain_id = config.executor_chain_id;
 
         Self {
-            evm: Self::create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage, config.clone()), kind),
+            evm: create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage), kind),
             kind,
+            _input_type: PhantomData,
         }
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute(&mut self, input: EvmInput) -> Result<EvmExecutionResult, StratusError> {
-        #[cfg(feature = "metrics")]
-        let start = metrics::now();
-
+    pub fn execute(&mut self, input: Input) -> Result<(TransactionExecutionOutput, EvmExecutionMetrics), StratusError> {
         // configure session
-        self.evm.journaled_state.database.reset(input.clone());
-
-        self.evm.fill_env(input);
+        self.evm.journaled_state.database.reset(input.kind());
+        input.fill_env(&mut self.evm);
 
         if log_enabled!(log::Level::Debug) {
             let block_env_log = self.evm.block.clone();
@@ -101,15 +89,12 @@ impl Evm {
 
         // extract results
         let session = &mut self.evm.journaled_state.database;
-        let session_input = std::mem::take(&mut session.input);
         let session_metrics = std::mem::take(&mut session.metrics);
-        #[cfg(feature = "metrics")]
-        let session_point_in_time = session.input.point_in_time;
 
         // parse result
         let execution = match evm_result {
             // executed
-            Ok(result_and_state) => Ok(parse_revm_result_and_state(result_and_state, session_input)?),
+            Ok(result_and_state) => parse_revm_result_and_state(result_and_state),
 
             // nonce errors
             Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(ExecutorError::Nonce {
@@ -136,50 +121,11 @@ impl Evm {
             }
         };
 
-        // track metrics
-        #[cfg(feature = "metrics")]
-        {
-            metrics::inc_evm_execution(start.elapsed(), session_point_in_time, execution.is_ok());
-            metrics::inc_evm_execution_account_reads(session_metrics.account_reads);
-        }
-
-        execution.map(|execution| EvmExecutionResult {
-            execution,
-            metrics: session_metrics,
-        })
+        execution.map(|execution| (execution, session_metrics))
     }
+}
 
-    fn create_evm<DB: Database>(chain_id: u64, spec: SpecId, db: DB, kind: EvmKind) -> GeneralRevm<DB> {
-        let ctx = Context::new(db, spec)
-            .modify_cfg_chained(|cfg_env| {
-                cfg_env.chain_id = chain_id;
-                cfg_env.spec = spec;
-                cfg_env.tx_chain_id_check = kind.is_transaction();
-                cfg_env.limit_contract_initcode_size = None;
-                cfg_env.disable_nonce_check = kind.is_call();
-                cfg_env.max_blobs_per_tx = None;
-                cfg_env.tx_gas_limit_cap = None;
-                cfg_env.blob_base_fee_update_fraction = None;
-                cfg_env.disable_eip3607 = kind.is_call();
-                cfg_env.limit_contract_code_size = Some(usize::MAX);
-                cfg_env.memory_limit = (1 << 32) - 1;
-                cfg_env.disable_balance_check = false;
-                cfg_env.disable_block_gas_limit = false;
-                cfg_env.disable_eip3541 = false;
-                cfg_env.disable_eip7623 = false;
-                cfg_env.disable_base_fee = false;
-                cfg_env.disable_fee_charge = false;
-            })
-            .modify_block_chained(|block_env: &mut BlockEnv| {
-                block_env.beneficiary = Address::COINBASE.into();
-            })
-            .modify_tx_chained(|tx_env: &mut TxEnv| {
-                tx_env.gas_priority_fee = None;
-            });
-
-        RevmEvm::new(ctx, EthInstructions::new_mainnet_with_spec(spec), EthPrecompiles::new(spec))
-    }
-
+impl Evm<TransactionExecutionInput> {
     /// Execute a transaction using a tracer.
     pub fn inspect(&mut self, input: InspectorInput) -> Result<GethTrace, StratusError> {
         let InspectorInput {
@@ -203,8 +149,7 @@ impl Evm {
             .into();
 
         // CREATE transactions need to be traced for blockscout to work correctly
-        if tx.result.execution.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.result.execution.result, ExecutionResult::Success)
-        {
+        if tx.result.deployed_contract_address.is_none() && trace_unsuccessful_only && matches!(tx.result.result, ExecutionResult::Success) {
             return Ok(default_trace(tracer_type, tx));
         }
 
@@ -228,23 +173,21 @@ impl Evm {
             block_number: Some(block.number().as_u64()),
             base_fee: None,
         };
-        let inspect_input: EvmInput = tx.evm_input;
-        self.evm.journaled_state.database.reset(EvmInput {
-            point_in_time: PointInTime::MinedPast(inspect_input.block_number.prev().unwrap_or_default()),
-            ..Default::default()
-        });
+        let inspect_input: TransactionExecutionInput = tx.evm_input;
+        let target = inspect_input.block_number.prev().unwrap_or_default();
+        self.evm.journaled_state.database.reset(ExecutionKind::CallPast(target));
 
         let spec = self.evm.cfg.spec;
 
         let mut cache_db = CacheDB::new(&self.evm.journaled_state.database);
-        let mut evm = Self::create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db, self.kind);
+        let mut evm = create_evm(inspect_input.chain_id.unwrap_or_default().into(), spec, &mut cache_db, self.kind);
 
         // Execute all transactions before target tx_hash
         for tx in block.transactions.into_iter() {
             if tx.info.hash == tx_hash {
                 break;
             }
-            let tx_input: EvmInput = tx.execution.evm_input;
+            let tx_input: TransactionExecutionInput = tx.execution.evm_input;
 
             // Configure EVM state
             evm.fill_env(tx_input);
@@ -314,8 +257,8 @@ impl Evm {
                 let res = evm_with_inspector.inspect_tx(tx.clone())?;
                 GethTrace::JS(inspector.json_result(res, &tx, &block, &cache_db).map_err(|e| anyhow!(e.to_string()))?)
             }
-            GethDebugTracerType::BuiltInTracer(unimplemented) => {
-                return Err(anyhow!("{unimplemented:?} not implemented").into());
+            GethDebugTracerType::BuiltInTracer(tracer) => {
+                return Err(anyhow!("tracer {tracer:?} is not implemented").into());
             }
         };
 

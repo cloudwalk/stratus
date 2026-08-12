@@ -9,25 +9,20 @@ use revm::state::AccountInfo;
 
 use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
-use crate::eth::executor::EvmInput;
-use crate::eth::executor::ExecutorConfig;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::EvmExecutionMetrics;
-use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
+use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 pub struct RevmSession {
-    /// Executor configuration.
-    config: ExecutorConfig,
-
     /// Service to communicate with the storage.
     pub storage: Arc<StratusStorage>,
 
     /// Input passed to EVM to execute the transaction.
-    pub input: EvmInput,
+    pub kind: ExecutionKind,
 
     /// Metrics collected during EVM execution.
     pub metrics: EvmExecutionMetrics,
@@ -35,18 +30,17 @@ pub struct RevmSession {
 
 impl RevmSession {
     /// Creates the base session to be used with REVM.
-    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
+    pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self {
-            config,
             storage,
-            input: EvmInput::default(),
+            kind: ExecutionKind::default(),
             metrics: EvmExecutionMetrics::default(),
         }
     }
 
     /// Resets the session to be used with a new transaction.
-    pub fn reset(&mut self, input: EvmInput) {
-        self.input = input;
+    pub fn reset(&mut self, kind: ExecutionKind) {
+        self.kind = kind;
         self.metrics = EvmExecutionMetrics::default();
     }
 }
@@ -56,25 +50,7 @@ impl Database for RevmSession {
 
     fn basic(&mut self, revm_address: RevmAddress) -> Result<Option<AccountInfo>, StratusError> {
         self.metrics.account_reads += 1;
-
-        // retrieve account
-        let address: Address = revm_address.into();
-        let account = self.storage.read_account(address, self.input.point_in_time, self.input.kind)?;
-
-        // warn if the loaded account is the `to` account and it does not have a bytecode
-        if let Some(to_address) = self.input.to
-            && account.bytecode.is_none()
-            && address == to_address
-            && self.input.is_contract_call()
-        {
-            if self.config.executor_reject_not_contract {
-                return Err(ExecutorError::AccountNotContract { address: to_address }.into());
-            } else {
-                tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
-            }
-        }
-
-        Ok(Some(account.into()))
+        self.basic_ref(revm_address)
     }
 
     fn code_by_hash(&mut self, _: B256) -> Result<RevmBytecode, StratusError> {
@@ -97,7 +73,7 @@ impl DatabaseRef for RevmSession {
     fn basic_ref(&self, address: revm::primitives::Address) -> Result<Option<AccountInfo>, Self::Error> {
         // retrieve account
         let address: Address = address.into();
-        let account = self.storage.read_account(address, self.input.point_in_time, self.input.kind)?;
+        let account = self.storage.read_account(address, self.kind)?;
         Ok(Some(account.into()))
     }
 
@@ -107,7 +83,7 @@ impl DatabaseRef for RevmSession {
         let index: SlotIndex = index.into();
 
         // load slot from storage
-        let slot = self.storage.read_slot(address, index, self.input.point_in_time, self.input.kind)?;
+        let slot = self.storage.read_slot(address, index, self.kind)?;
 
         Ok(slot.value.into())
     }

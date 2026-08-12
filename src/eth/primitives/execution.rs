@@ -19,7 +19,6 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::SlotValue;
-use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::ext::OptionExt;
@@ -153,10 +152,7 @@ impl ExecutionChanges<Complete> {
 /// Output of a transaction executed in the EVM.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[cfg_attr(test, derive(fake::Dummy))]
-pub struct EvmExecution {
-    /// Assumed block timestamp during the execution.
-    pub block_timestamp: UnixTime, // TODO: remove this
-
+pub struct TransactionExecutionOutput {
     /// Status of the execution.
     pub result: ExecutionResult,
 
@@ -176,9 +172,9 @@ pub struct EvmExecution {
     pub deployed_contract_address: Option<Address>,
 }
 
-impl EvmExecution {
+impl TransactionExecutionOutput {
     /// Creates an execution from an external transaction that failed.
-    pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt, block_timestamp: UnixTime) -> anyhow::Result<Self> {
+    pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt) -> anyhow::Result<Self> {
         if receipt.is_success() {
             return log_and_err!("cannot create failed execution for successful transaction");
         }
@@ -198,7 +194,6 @@ impl EvmExecution {
 
         // crete execution and apply costs
         let mut execution = Self {
-            block_timestamp,
             result: ExecutionResult::new_reverted("reverted externally".into()), // assume it reverted
             output: Bytes::default(),                                            // we cannot really know without performing an eth_call to the external system
             logs: Vec::new(),
@@ -406,14 +401,10 @@ mod tests {
         inner_receipt.from = sender_address.into();
         receipt.0 = inner_receipt;
 
-        // Set timestamp
-        let timestamp = UnixTime::now();
-
         // Test the method
-        let execution = EvmExecution::from_failed_external_transaction(sender.clone(), &receipt, timestamp).unwrap();
+        let execution = TransactionExecutionOutput::from_failed_external_transaction(sender.clone(), &receipt).unwrap();
 
         // Verify execution state
-        assert_eq!(execution.block_timestamp, timestamp);
         assert!(execution.is_failure());
         assert_eq!(execution.output, Bytes::default());
         assert!(execution.logs.is_empty());
@@ -436,7 +427,7 @@ mod tests {
     #[test]
     fn test_compare_with_receipt_success_status_mismatch() {
         // Create a mock execution (success)
-        let mut execution: EvmExecution = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
 
         // Create a mock receipt (failed)
@@ -454,7 +445,7 @@ mod tests {
     #[test]
     fn test_compare_with_receipt_logs_length_mismatch() {
         // Create a mock execution with logs
-        let mut execution: EvmExecution = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
         execution.logs = vec![Faker.fake(), Faker.fake()]; // Two logs
 
@@ -481,7 +472,7 @@ mod tests {
         log1.topic3 = None;
 
         // Create a mock execution with that log
-        let mut execution: EvmExecution = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
         execution.logs = vec![log1];
 
@@ -519,7 +510,7 @@ mod tests {
         log1.data = vec![].into();
 
         // Create execution with that log
-        let mut execution: EvmExecution = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
         execution.logs = vec![log1];
 
@@ -550,7 +541,7 @@ mod tests {
         log1.data = vec![1, 2, 3, 4].into();
 
         // Create execution with that log
-        let mut execution: EvmExecution = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
         execution.logs = vec![log1];
 
@@ -580,7 +571,7 @@ mod tests {
         const BALANCE_TRACKER_TRACE_HASH: [u8; 32] = hex!("63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9");
 
         // Create a mock execution with logs that have gasLeft value we want to override
-        let mut execution: EvmExecution = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
 
         // Create an ERC20 Trace log with mock gasLeft value
@@ -663,7 +654,7 @@ mod tests {
         };
 
         // Create a mock execution
-        let mut execution: EvmExecution = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
 
         // Set up execution with sender account
         let mut sender_changes = ExecutionAccountChanges::default();

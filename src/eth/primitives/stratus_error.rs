@@ -10,7 +10,7 @@ use stratus_macros::ErrorCode;
 
 use super::execution_result::RevertReason;
 use crate::alias::JsonValue;
-use crate::eth::executor::EvmInput;
+use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockFilter;
 use crate::eth::primitives::BlockNumber;
@@ -143,7 +143,10 @@ pub enum StorageError {
     // TransactionConflict(Box<ExecutionConflicts>),
     #[error("transaction input does not match block header")]
     #[error_code = 4]
-    EvmInputMismatch { expected: Box<EvmInput>, actual: Box<EvmInput> },
+    EvmInputMismatch {
+        expected: Box<TransactionExecutionInput>,
+        actual: Box<TransactionExecutionInput>,
+    },
 
     #[error("pending number conflict between new block number ({new}) and pending block number ({pending}).")]
     #[error_code = 5]
@@ -350,6 +353,12 @@ impl StratusError {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
+
+impl<T> From<crossbeam_channel::SendError<T>> for StratusError {
+    fn from(_: crossbeam_channel::SendError<T>) -> Self {
+        Self::Unexpected(UnexpectedError::ChannelClosed { channel: "unkown" })
+    }
+}
 
 impl From<anyhow::Error> for StratusError {
     fn from(value: anyhow::Error) -> Self {
