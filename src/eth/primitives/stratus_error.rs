@@ -74,12 +74,16 @@ pub enum RpcError {
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 8000]
 pub enum MulticallError {
-    #[error("invalid multicall ABI: {source}")]
+    #[error("failed to decode multicall ABI: {source}")]
     #[error_code = 1]
-    InvalidInput {
+    DecodeError {
         #[from]
         source: alloy_sol_types::Error,
     },
+
+    #[error("unsupported multicall function")]
+    #[error_code = 2]
+    UnsupportedMulticallFunction,
 }
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
