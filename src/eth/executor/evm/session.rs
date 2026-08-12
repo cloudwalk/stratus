@@ -9,11 +9,8 @@ use revm::state::AccountInfo;
 
 use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
-use crate::eth::executor::ExecutorConfig;
-use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::EvmExecutionMetrics;
-use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
 use crate::eth::storage::ExecutionKind;
@@ -21,9 +18,6 @@ use crate::eth::storage::StratusStorage;
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 pub struct RevmSession {
-    /// Executor configuration.
-    config: ExecutorConfig,
-
     /// Service to communicate with the storage.
     pub storage: Arc<StratusStorage>,
 
@@ -36,9 +30,8 @@ pub struct RevmSession {
 
 impl RevmSession {
     /// Creates the base session to be used with REVM.
-    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
+    pub fn new(storage: Arc<StratusStorage>) -> Self {
         Self {
-            config,
             storage,
             kind: ExecutionKind::default(),
             metrics: EvmExecutionMetrics::default(),
@@ -49,26 +42,6 @@ impl RevmSession {
     pub fn reset(&mut self, kind: ExecutionKind) {
         self.kind = kind;
         self.metrics = EvmExecutionMetrics::default();
-    }
-
-    /// Validates that the `to` account of the input is a contract when the input is a contract call.
-    ///
-    /// Reads the `to` account from storage upfront so that calls to non-contract accounts are rejected
-    /// before EVM execution, rather than relying on `basic` being called for the `to` address during `transact`.
-    pub fn validate_to_is_contract<Input: EvmInput>(&self, kind: &Input) -> Result<(), StratusError> {
-        if let Some(to_address) = kind.to()
-            && kind.is_contract_call()
-        {
-            let account = self.storage.read_account(*to_address, kind.kind())?;
-            if account.bytecode.is_none() {
-                if self.config.executor_reject_not_contract {
-                    return Err(ExecutorError::AccountNotContract { address: *to_address }.into());
-                } else {
-                    tracing::warn!(%to_address, "evm to_account is not a contract because does not have bytecode");
-                }
-            }
-        }
-        Ok(())
     }
 }
 

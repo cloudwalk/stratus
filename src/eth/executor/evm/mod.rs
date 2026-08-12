@@ -58,14 +58,14 @@ pub struct Evm<Input: EvmInput> {
 
 impl<Input: EvmInput> Evm<Input> {
     /// Creates a new instance of the Evm.
-    pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig, kind: EvmKind) -> Self {
+    pub fn new(storage: Arc<StratusStorage>, config: &ExecutorConfig, kind: EvmKind) -> Self {
         tracing::info!(?config, "creating revm");
 
         // configure revm
         let chain_id = config.executor_chain_id;
 
         Self {
-            evm: create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage, config.clone()), kind),
+            evm: create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage), kind),
             kind,
             _input_type: PhantomData,
         }
@@ -75,7 +75,6 @@ impl<Input: EvmInput> Evm<Input> {
     pub fn execute(&mut self, input: Input) -> Result<(TransactionExecutionOutput, EvmExecutionMetrics), StratusError> {
         // configure session
         self.evm.journaled_state.database.reset(input.kind());
-        self.evm.journaled_state.database.validate_to_is_contract(&input)?;
         input.fill_env(&mut self.evm);
 
         if log_enabled!(log::Level::Debug) {

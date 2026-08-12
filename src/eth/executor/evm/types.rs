@@ -33,7 +33,6 @@ use crate::eth::primitives::Wei;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::TxCount;
 use crate::ext::OptionExt;
-use crate::ext::not;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
 #[cfg(feature = "dev")]
@@ -232,14 +231,7 @@ impl CallExecutionInput {
 }
 
 pub trait EvmInput: Default + Clone {
-    /// Checks if the input is a contract call.
-    ///
-    /// It is when there is a `to` address and the `data` field is also populated.
-    fn is_contract_call(&self) -> bool;
-
     fn kind(&self) -> ExecutionKind;
-
-    fn to(&self) -> &Option<Address>;
 
     fn fill_tx_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>);
 
@@ -273,16 +265,8 @@ impl EvmInput for CallExecutionInput {
         evm.tx.gas_priority_fee = None;
     }
 
-    fn to(&self) -> &Option<Address> {
-        &self.to
-    }
-
     fn kind(&self) -> ExecutionKind {
         self.kind
-    }
-
-    fn is_contract_call(&self) -> bool {
-        self.to.is_some() && not(self.data.is_empty())
     }
 }
 
@@ -308,15 +292,7 @@ impl EvmInput for TransactionExecutionInput {
         evm.tx.gas_priority_fee = None;
     }
 
-    fn to(&self) -> &Option<Address> {
-        &self.to
-    }
-
     fn kind(&self) -> ExecutionKind {
         self.kind
-    }
-
-    fn is_contract_call(&self) -> bool {
-        self.to.is_some() && not(self.data.is_empty())
     }
 }

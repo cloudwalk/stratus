@@ -50,7 +50,7 @@ impl EvmWorkerPool {
             task_rx: crossbeam_channel::Receiver<EvmTask<T>>,
             kind: EvmKind,
         ) {
-            let mut evm = Evm::new(Arc::clone(&storage), config.clone(), kind);
+            let mut evm = Evm::new(Arc::clone(&storage), &config, kind);
 
             // keep executing transactions until the channel is closed
             while let Ok(task) = task_rx.recv() {
@@ -61,7 +61,7 @@ impl EvmWorkerPool {
                 let _guard = kind.mark_executor_pool_busy();
                 if let Err(StratusError::Executor(ExecutorError::Panic { err: panic_err })) = task.execute(&mut evm) {
                     tracing::error!(?panic_err, "executor panicked; recreating EVM");
-                    evm = Evm::new(Arc::clone(&storage), config.clone(), kind);
+                    evm = Evm::new(Arc::clone(&storage), &config, kind);
                 }
             }
             warn_task_tx_closed(task_name);

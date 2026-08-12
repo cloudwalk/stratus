@@ -27,6 +27,7 @@ use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::types::EvmRoute;
 use crate::eth::miner::Miner;
+use crate::eth::primitives::Address;
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::CallInput;
 use crate::eth::primitives::EvmExecutionMetrics;
@@ -75,17 +76,22 @@ pub struct Executor {
 
     /// Shared storage backend for persisting blockchain state.
     storage: Arc<StratusStorage>,
+
+    /// Whether to reject transactions and calls targeting accounts that are not contracts.
+    reject_not_contract: bool,
 }
 
 impl Executor {
     pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating executor");
+        let reject_not_contract = config.executor_reject_not_contract;
         let evms = EvmWorkerPool::spawn(Arc::clone(&storage), &config);
         Self {
             locks: ExecutorLocks::default(),
             evms,
             miner,
             storage,
+            reject_not_contract,
         }
     }
 
@@ -233,6 +239,19 @@ impl Executor {
     // -------------------------------------------------------------------------
     // Local transactions
     // -------------------------------------------------------------------------
+
+    /// Validates that the target account is a contract, reading it from storage at the given point in time.
+    pub fn validate_to_is_contract(&self, to_address: Address, kind: ExecutionKind) -> Result<(), StratusError> {
+        let account = self.storage.read_account(to_address, kind)?;
+        if account.bytecode.is_none() {
+            if self.reject_not_contract {
+                return Err(ExecutorError::AccountNotContract { address: to_address }.into());
+            } else {
+                tracing::warn!(%to_address, "evm to_account is not a contract because does not have bytecode");
+            }
+        }
+        Ok(())
+    }
 
     /// Executes a transaction persisting state changes.
     #[tracing::instrument(name = "executor::local_transaction", skip_all, fields(tx_hash, tx_from, tx_to, tx_nonce))]

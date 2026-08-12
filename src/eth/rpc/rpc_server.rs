@@ -1134,6 +1134,13 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
     tracing::info!("executing eth_estimateGas");
 
     // execute
+    if let Some(to_address) = call.to
+        && !call.data.is_empty()
+    {
+        ctx.server
+            .executor
+            .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
+    }
     match ctx.server.executor.execute_local_call(call, PointInTime::Latest) {
         // result is success
         Ok(result) if result.is_success() => {
@@ -1171,6 +1178,11 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<TransactionExecu
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
+    if let Some(to_address) = call.to
+        && !call.data.is_empty()
+    {
+        ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::RPC(point_in_time))?;
+    }
     ctx.server.executor.execute_local_call(call, point_in_time)
 }
 
@@ -1299,6 +1311,14 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
         tracing::warn!(%tx_hash, "rejecting unsuported transaction type");
         return Err(RpcError::ParameterInvalid.into());
     }
+
+    // validate that the target account is a contract before acquiring the executor lock or forwarding to the
+    // leader, so calls to non-contract accounts are rejected early
+    if let Some(to_address) = tx.execution_info.to
+        && !tx.execution_info.input.is_empty()
+    {
+        ctx.server.executor.validate_to_is_contract(to_address, ExecutionKind::Transaction)?;
+    };
 
     // execute locally or forward to leader
     match GlobalState::get_node_mode() {
