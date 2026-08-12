@@ -64,7 +64,7 @@ pub use execution::AccountOriginalsReader;
 pub use execution::Complete;
 pub use execution::ExecutionChanges;
 pub use execution::Incomplete;
-pub use execution::TransactionExecutionOutcome;
+pub use execution::TransactionExecutionOutput;
 pub use execution_account_changes::AccountChangeValue;
 pub use execution_account_changes::ExecutionAccountChanges;
 pub use execution_metrics::EvmExecutionMetrics;

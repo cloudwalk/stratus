@@ -120,25 +120,33 @@ impl PartialOrd for TxCount {
 
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Default, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
-pub enum ReadKind {
-    Call((BlockNumber, TxCount, PointInTime)),
+pub enum ExecutionKind {
+    Call(BlockNumber, TxCount, PointInTime),
     #[default]
     Transaction,
     RPC(PointInTime),
 }
 
-impl ReadKind {
+impl ExecutionKind {
     fn point_in_time(&self) -> PointInTime {
         self.into()
     }
+
+    fn mined_past_number(&self) -> Option<&BlockNumber> {
+        match self {
+            ExecutionKind::RPC(PointInTime::Past(number)) => Some(number),
+            ExecutionKind::Call(_, _, PointInTime::Past(number)) => Some(number),
+            ExecutionKind::Transaction | ExecutionKind::RPC(_) | ExecutionKind::Call(_, _, _) => None,
+        }
+    }
 }
 
-impl From<&ReadKind> for PointInTime {
-    fn from(value: &ReadKind) -> Self {
+impl From<&ExecutionKind> for PointInTime {
+    fn from(value: &ExecutionKind) -> Self {
         match value {
-            ReadKind::RPC(pit) => *pit,
-            ReadKind::Transaction => PointInTime::Pending,
-            ReadKind::Call((_, _, pit)) => *pit,
+            ExecutionKind::RPC(pit) => *pit,
+            ExecutionKind::Transaction => PointInTime::Pending,
+            ExecutionKind::Call(_, _, pit) => *pit,
         }
     }
 }

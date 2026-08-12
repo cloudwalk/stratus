@@ -17,7 +17,7 @@ use crate::eth::executor::types::Task;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionExecutionOutcome;
+use crate::eth::primitives::TransactionExecutionOutput;
 use crate::eth::primitives::UnexpectedError;
 use crate::eth::storage::StratusStorage;
 use crate::ext::spawn_thread;
@@ -105,8 +105,8 @@ impl EvmWorkerPool {
     }
 
     /// Executes a transaction in the specified route.
-    pub fn execute(&self, route: EvmRoute) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
-        let (execution_tx, execution_rx) = oneshot::channel::<Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError>>();
+    pub fn execute(&self, route: EvmRoute) -> Result<(TransactionExecutionOutput, EvmExecutionMetrics), StratusError> {
+        let (execution_tx, execution_rx) = oneshot::channel::<Result<(TransactionExecutionOutput, EvmExecutionMetrics), StratusError>>();
 
         match route {
             EvmRoute::Transaction(input) => {

@@ -2,7 +2,7 @@ use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionOutcome;
+use crate::eth::primitives::TransactionExecutionOutput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::primitives::transaction_mined::MinedData;
 use crate::ext::to_json_value;
@@ -24,7 +24,7 @@ impl TransactionStage {
         to_json_value(AlloyTransaction::from(self))
     }
 
-    pub fn to_result(self) -> TransactionExecutionOutcome {
+    pub fn to_result(self) -> TransactionExecutionOutput {
         match self {
             TransactionStage::Mined(tx) => tx.execution.result,
             TransactionStage::Pending(tx) => tx.result,

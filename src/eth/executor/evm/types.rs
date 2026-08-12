@@ -28,7 +28,7 @@ use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
-use crate::eth::storage::ReadKind;
+use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::TxCount;
 use crate::ext::OptionExt;
 use crate::ext::not;
@@ -99,7 +99,7 @@ pub struct TransactionExecutionInput {
     /// If not specified, it will not be validated.
     pub chain_id: Option<ChainId>,
 
-    pub kind: ReadKind,
+    pub kind: ExecutionKind,
 }
 
 impl TransactionExecutionInput {
@@ -116,7 +116,7 @@ impl TransactionExecutionInput {
             block_number,
             block_timestamp,
             chain_id: input.execution_info.chain_id,
-            kind: ReadKind::Transaction,
+            kind: ExecutionKind::Transaction,
         }
     }
 }
@@ -193,7 +193,7 @@ pub struct CallExecutionInput {
     /// Timestamp of the block where the transaction will be or was included.
     pub block_timestamp: UnixTime,
 
-    pub kind: ReadKind,
+    pub kind: ExecutionKind,
 }
 
 impl CallExecutionInput {
@@ -206,7 +206,7 @@ impl CallExecutionInput {
             data: input.data,
             block_number: pending_header.number,
             block_timestamp: *pending_header.timestamp,
-            kind: ReadKind::Call((pending_header.number, tx_count, PointInTime::Pending)),
+            kind: ExecutionKind::Call(pending_header.number, tx_count, PointInTime::Pending),
         }
     }
 
@@ -219,7 +219,7 @@ impl CallExecutionInput {
             data: input.data,
             block_number: block.number(),
             block_timestamp: block.header.timestamp,
-            kind: ReadKind::Call((block.number(), TxCount::Full, point_in_time)),
+            kind: ExecutionKind::Call(block.number(), TxCount::Full, point_in_time),
         }
     }
 }
@@ -230,7 +230,7 @@ pub trait EvmInput: Default + Clone {
     /// It is when there is a `to` address and the `data` field is also populated.
     fn is_contract_call(&self) -> bool;
 
-    fn kind(&self) -> ReadKind;
+    fn kind(&self) -> ExecutionKind;
 
     fn to(&self) -> &Option<Address>;
 
@@ -270,7 +270,7 @@ impl EvmInput for CallExecutionInput {
         &self.to
     }
 
-    fn kind(&self) -> ReadKind {
+    fn kind(&self) -> ExecutionKind {
         self.kind
     }
 
@@ -305,7 +305,7 @@ impl EvmInput for TransactionExecutionInput {
         &self.to
     }
 
-    fn kind(&self) -> ReadKind {
+    fn kind(&self) -> ExecutionKind {
         self.kind
     }
 

@@ -5,7 +5,7 @@ use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::StorageError;
-use crate::eth::storage::ReadKind;
+use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::stratus_storage::EntityRead;
@@ -80,9 +80,9 @@ pub(super) enum Resolved<'a, T> {
 
 /// Pending-state resolution, generic over the entity being read.
 pub(super) trait Resolve: EntityRead {
-    fn resolve(s: &StratusStorage, key: Self::Key, kind: ReadKind) -> Result<Resolved<'_, Self>, StorageError> {
+    fn resolve(s: &StratusStorage, key: Self::Key, kind: ExecutionKind) -> Result<Resolved<'_, Self>, StorageError> {
         if kind.point_in_time() == PointInTime::Pending {
-            if matches!(kind, ReadKind::Transaction)
+            if matches!(kind, ExecutionKind::Transaction)
                 && let Some(value) = Self::read_pending_cache(s, key)
             {
                 return Ok(Resolved::PendingCache(value));
@@ -101,13 +101,13 @@ impl Resolve for Slot {}
 
 impl StratusStorage {
     /// Determines the mined point-in-time for a read.
-    fn resolve_mined_point(&self, kind: ReadKind) -> MinedPointInTime<'_> {
-        let pit = kind.point_in_time();
-        if let PointInTime::MinedPast(number) = pit {
-            return MinedPointInTime::mined_past(number);
+    fn resolve_mined_point(&self, kind: ExecutionKind) -> MinedPointInTime<'_> {
+        if let Some(number) = kind.mined_past_number() {
+            return MinedPointInTime::mined_past(*number);
         }
+
         match kind {
-            ReadKind::Call((block_number, tx_count, _)) => {
+            ExecutionKind::Call(block_number, tx_count, _) => {
                 let guard = self.transient_state_lock.read();
                 let mined = self.read_mined_block_number();
                 if (block_number, tx_count) >= (mined, TxCount::Full) {
@@ -121,7 +121,7 @@ impl StratusStorage {
                     MinedPointInTime::mined_past(target)
                 }
             }
-            ReadKind::Transaction | ReadKind::RPC(_) => MinedPointInTime::mined(None),
+            ExecutionKind::Transaction | ExecutionKind::RPC(_) => MinedPointInTime::mined(None),
         }
     }
 }
@@ -135,7 +135,7 @@ mod tests {
     use crate::eth::primitives::PointInTime;
     use crate::eth::primitives::Slot;
     use crate::eth::primitives::SlotIndex;
-    use crate::eth::storage::ReadKind;
+    use crate::eth::storage::ExecutionKind;
     use crate::eth::storage::TxCount;
 
     #[test]
@@ -150,7 +150,7 @@ mod tests {
         let pending_block_number = BlockNumber::from(mined_at_start + 1);
         storage.set_mined_block_number(BlockNumber::from(mined_at_start));
 
-        let kind = ReadKind::Call((pending_block_number, TxCount::Partial(0), PointInTime::Pending));
+        let kind = ExecutionKind::Call(pending_block_number, TxCount::Partial(0), PointInTime::Pending);
 
         // At call start: block 6 is still pending (mined=5). Latest (block 5) is a safe base.
         // resolve_slot should return Miss(Mined(Some(guard))).
@@ -202,7 +202,7 @@ mod tests {
         let call_block = BlockNumber::from(5u64);
         storage.set_mined_block_number(call_block);
 
-        let kind = ReadKind::Call((call_block, TxCount::Full, PointInTime::Mined));
+        let kind = ExecutionKind::Call(call_block, TxCount::Full, PointInTime::Latest);
 
         let resolved = Slot::resolve(&storage, (address, index), kind).expect("resolve_slot");
         match resolved {

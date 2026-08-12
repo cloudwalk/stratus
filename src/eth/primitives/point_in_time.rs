@@ -7,18 +7,18 @@ use crate::infra::metrics::MetricLabelValue;
 pub enum PointInTime {
     /// State of `Account` or `Slot` at the pending block being mined.
     ///
-    /// If state did not change, then it is the same as the `Mined` state.
+    /// If the pending state did not change, then it is the same as the `Mined` state.
     #[strum(to_string = "pending")]
     Pending,
 
     /// State of `Account` or `Slot` at the last mined block.
     #[default]
     #[strum(to_string = "mined")]
-    Mined,
+    Latest,
 
     /// State of `Account` or `Slot` at some specific mined block in the past.
     #[strum(to_string = "mined-past")]
-    MinedPast(BlockNumber),
+    Past(BlockNumber),
 }
 
 // -----------------------------------------------------------------------------

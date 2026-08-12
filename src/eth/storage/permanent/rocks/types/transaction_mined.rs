@@ -11,7 +11,7 @@ use crate::eth::primitives::ExecutionChanges;
 use crate::eth::primitives::Index;
 use crate::eth::primitives::MinedData;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionOutcome;
+use crate::eth::primitives::TransactionExecutionOutput;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
@@ -80,7 +80,7 @@ impl TransactionMined {
         let (result, output) = ExecutionResultBuilder((other.execution.result, other.execution.output)).build();
 
         let input = TransactionInput::from(other.input);
-        let evm_result = TransactionExecutionOutcome {
+        let evm_result = TransactionExecutionOutput {
             result,
             output,
             logs,

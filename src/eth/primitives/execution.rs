@@ -152,7 +152,7 @@ impl ExecutionChanges<Complete> {
 /// Output of a transaction executed in the EVM.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[cfg_attr(test, derive(fake::Dummy))]
-pub struct TransactionExecutionOutcome {
+pub struct TransactionExecutionOutput {
     /// Status of the execution.
     pub result: ExecutionResult,
 
@@ -172,7 +172,7 @@ pub struct TransactionExecutionOutcome {
     pub deployed_contract_address: Option<Address>,
 }
 
-impl TransactionExecutionOutcome {
+impl TransactionExecutionOutput {
     /// Creates an execution from an external transaction that failed.
     pub fn from_failed_external_transaction(sender: Account, receipt: &ExternalReceipt) -> anyhow::Result<Self> {
         if receipt.is_success() {
@@ -402,7 +402,7 @@ mod tests {
         receipt.0 = inner_receipt;
 
         // Test the method
-        let execution = TransactionExecutionOutcome::from_failed_external_transaction(sender.clone(), &receipt).unwrap();
+        let execution = TransactionExecutionOutput::from_failed_external_transaction(sender.clone(), &receipt).unwrap();
 
         // Verify execution state
         assert!(execution.is_failure());
@@ -427,7 +427,7 @@ mod tests {
     #[test]
     fn test_compare_with_receipt_success_status_mismatch() {
         // Create a mock execution (success)
-        let mut execution: TransactionExecutionOutcome = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
 
         // Create a mock receipt (failed)
@@ -445,7 +445,7 @@ mod tests {
     #[test]
     fn test_compare_with_receipt_logs_length_mismatch() {
         // Create a mock execution with logs
-        let mut execution: TransactionExecutionOutcome = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
         execution.logs = vec![Faker.fake(), Faker.fake()]; // Two logs
 
@@ -472,7 +472,7 @@ mod tests {
         log1.topic3 = None;
 
         // Create a mock execution with that log
-        let mut execution: TransactionExecutionOutcome = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
         execution.logs = vec![log1];
 
@@ -510,7 +510,7 @@ mod tests {
         log1.data = vec![].into();
 
         // Create execution with that log
-        let mut execution: TransactionExecutionOutcome = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
         execution.logs = vec![log1];
 
@@ -541,7 +541,7 @@ mod tests {
         log1.data = vec![1, 2, 3, 4].into();
 
         // Create execution with that log
-        let mut execution: TransactionExecutionOutcome = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
         execution.logs = vec![log1];
 
@@ -571,7 +571,7 @@ mod tests {
         const BALANCE_TRACKER_TRACE_HASH: [u8; 32] = hex!("63f1e32b72965e2be75e03024856287aff9e4cdbcec65869c51014fc2c1c95d9");
 
         // Create a mock execution with logs that have gasLeft value we want to override
-        let mut execution: TransactionExecutionOutcome = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
         execution.result = ExecutionResult::Success;
 
         // Create an ERC20 Trace log with mock gasLeft value
@@ -654,7 +654,7 @@ mod tests {
         };
 
         // Create a mock execution
-        let mut execution: TransactionExecutionOutcome = Faker.fake();
+        let mut execution: TransactionExecutionOutput = Faker.fake();
 
         // Set up execution with sender account
         let mut sender_changes = ExecutionAccountChanges::default();

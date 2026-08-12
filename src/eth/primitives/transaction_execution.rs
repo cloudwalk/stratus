@@ -13,7 +13,7 @@ use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::primitives::Log;
 use crate::eth::primitives::MinedData;
 use crate::eth::primitives::Signature;
-use crate::eth::primitives::TransactionExecutionOutcome;
+use crate::eth::primitives::TransactionExecutionOutput;
 use crate::eth::primitives::TransactionInfo;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::logs_bloom::LogsBloom;
@@ -26,7 +26,7 @@ pub struct TransactionExecution {
     pub info: TransactionInfo,
     pub signature: Signature,
     pub evm_input: TransactionExecutionInput,
-    pub result: TransactionExecutionOutcome,
+    pub result: TransactionExecutionOutput,
 }
 
 impl TransactionExecution {

@@ -801,7 +801,7 @@ mod tests {
     use crate::eth::executor::TransactionExecutionInput;
     use crate::eth::primitives::BlockHeader;
     use crate::eth::primitives::TransactionExecution;
-    use crate::eth::primitives::TransactionExecutionOutcome;
+    use crate::eth::primitives::TransactionExecutionOutput;
 
     #[test]
     #[cfg(feature = "dev")]
@@ -865,7 +865,7 @@ mod tests {
                             block_number: number.into(),
                             ..Faker.fake()
                         },
-                        result: TransactionExecutionOutcome {
+                        result: TransactionExecutionOutput {
                             logs: vec![Faker.fake(), Faker.fake()],
                             ..Faker.fake()
                         },

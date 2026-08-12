@@ -63,13 +63,13 @@ impl LogFilterInput {
         // translate point-in-time to block according to context
         let from = match from {
             PointInTime::Pending => storage.read_pending_block_header().0.number,
-            PointInTime::Mined => storage.read_mined_block_number(),
-            PointInTime::MinedPast(number) => number,
+            PointInTime::Latest => storage.read_mined_block_number(),
+            PointInTime::Past(number) => number,
         };
         let to = match to {
             PointInTime::Pending => None,
-            PointInTime::Mined => None,
-            PointInTime::MinedPast(number) => Some(number),
+            PointInTime::Latest => None,
+            PointInTime::Past(number) => Some(number),
         };
 
         if let Some(to_block) = to

@@ -38,15 +38,15 @@ use crate::eth::primitives::Log;
 use crate::eth::primitives::Slot;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionOutcome;
+use crate::eth::primitives::TransactionExecutionOutput;
 use crate::ext::OptionExt;
 
-pub fn parse_revm_result_and_state(revm_result: ResultAndState) -> Result<TransactionExecutionOutcome, StratusError> {
+pub fn parse_revm_result_and_state(revm_result: ResultAndState) -> Result<TransactionExecutionOutput, StratusError> {
     let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
     let (changes, deployed_contract_address) = parse_revm_state(revm_result.state)?;
     tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
 
-    Ok(TransactionExecutionOutcome {
+    Ok(TransactionExecutionOutput {
         result,
         output: tx_output,
         logs,

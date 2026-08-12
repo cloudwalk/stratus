@@ -13,7 +13,7 @@ use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionExecutionOutcome;
+use crate::eth::primitives::TransactionExecutionOutput;
 
 pub struct EvmTask<T: Task + Send> {
     pub span: Span,
@@ -23,7 +23,7 @@ pub struct EvmTask<T: Task + Send> {
 #[derive(derive_new::new)]
 pub struct ExecutionTask<Input: EvmInput> {
     pub input: Input,
-    pub response_tx: oneshot::Sender<Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError>>,
+    pub response_tx: oneshot::Sender<Result<(TransactionExecutionOutput, EvmExecutionMetrics), StratusError>>,
 }
 
 #[derive(derive_new::new)]

@@ -42,9 +42,9 @@ use crate::eth::primitives::RpcError;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionOutcome;
+use crate::eth::primitives::TransactionExecutionOutput;
 use crate::eth::primitives::TransactionInput;
-use crate::eth::storage::ReadKind;
+use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
 #[cfg(feature = "metrics")]
 use crate::ext::OptionExt;
@@ -207,7 +207,7 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let sender = self.storage.read_account(receipt.from.into(), ReadKind::Transaction)?;
+                let sender = self.storage.read_account(receipt.from.into(), ExecutionKind::Transaction)?;
                 if tx_input.execution_info.nonce != sender.nonce {
                     bail!(
                         "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",
@@ -216,7 +216,7 @@ impl Executor {
                         sender.nonce
                     );
                 }
-                let evm_result = TransactionExecutionOutcome::from_failed_external_transaction(sender, &receipt)?;
+                let evm_result = TransactionExecutionOutput::from_failed_external_transaction(sender, &receipt)?;
 
                 evm_input.gas_limit = tx_input.execution_info.gas_limit;
                 evm_input.gas_price = tx_input.execution_info.gas_price;
@@ -360,7 +360,7 @@ impl Executor {
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: PointInTime) -> Result<TransactionExecutionOutcome, StratusError> {
+    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: PointInTime) -> Result<TransactionExecutionOutput, StratusError> {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -394,8 +394,8 @@ impl Executor {
         };
 
         let evm_route = match point_in_time {
-            PointInTime::Pending | PointInTime::Mined => EvmRoute::CallPresent(evm_input),
-            PointInTime::MinedPast(_) => EvmRoute::CallPast(evm_input),
+            PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
+            PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
         };
         let evm_result = self.evms.execute(evm_route);
 

@@ -288,12 +288,12 @@ mod tests {
     use crate::eth::primitives::PointInTime;
     use crate::eth::primitives::Signature;
     use crate::eth::primitives::TransactionExecution;
-    use crate::eth::primitives::TransactionExecutionOutcome;
+    use crate::eth::primitives::TransactionExecutionOutput;
     use crate::eth::primitives::TransactionInfo;
     use crate::eth::primitives::TransactionInput;
     use crate::eth::primitives::UnixTime;
     use crate::eth::primitives::Wei;
-    use crate::eth::storage::ReadKind;
+    use crate::eth::storage::ExecutionKind;
     use crate::eth::storage::StratusStorage;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
@@ -316,7 +316,7 @@ mod tests {
         let (header, _) = storage.read_pending_block_header();
         let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
-        let result = TransactionExecutionOutcome {
+        let result = TransactionExecutionOutput {
             result: ExecutionResult::Success,
             changes,
             ..Default::default()
@@ -410,7 +410,7 @@ mod tests {
         // Block 3 did not change B.balance, so the committed value must equal block 3's pre-state
         // (block 2 = 200). Completing at import time (perm caught up) yields 200; completing at
         // post-process time (perm behind) would yield the stale 100.
-        let account = storage.read_account(address, ReadKind::RPC(PointInTime::Mined)).expect("read account");
+        let account = storage.read_account(address, ExecutionKind::RPC(PointInTime::Latest)).expect("read account");
         assert_eq!(
             account.balance,
             Wei::from(200u64),

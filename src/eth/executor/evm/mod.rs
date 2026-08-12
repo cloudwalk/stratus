@@ -46,8 +46,8 @@ use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionOutcome;
-use crate::eth::storage::ReadKind;
+use crate::eth::primitives::TransactionExecutionOutput;
+use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TxCount;
 
@@ -74,7 +74,7 @@ impl<Input: EvmInput> Evm<Input> {
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute(&mut self, input: Input) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
+    pub fn execute(&mut self, input: Input) -> Result<(TransactionExecutionOutput, EvmExecutionMetrics), StratusError> {
         // configure session
         self.evm.journaled_state.database.reset(input.kind());
         self.evm.journaled_state.database.validate_to_is_contract(&input)?;
@@ -181,7 +181,7 @@ impl Evm<TransactionExecutionInput> {
         self.evm
             .journaled_state
             .database
-            .reset(ReadKind::Call((target, TxCount::Full, PointInTime::MinedPast(target))));
+            .reset(ExecutionKind::Call(target, TxCount::Full, PointInTime::Past(target)));
 
         let spec = self.evm.cfg.spec;
 

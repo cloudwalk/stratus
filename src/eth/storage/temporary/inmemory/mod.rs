@@ -18,7 +18,7 @@ use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::primitives::Wei;
-use crate::eth::storage::ReadKind;
+use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::call::InMemoryCallTemporaryStorage;
 use crate::eth::storage::temporary::inmemory::transaction::InmemoryTransactionTemporaryStorage;
@@ -71,16 +71,16 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_execution(hash)
     }
 
-    pub fn read_account(&self, address: Address, kind: ReadKind) -> anyhow::Result<Option<Account>, StorageError> {
+    pub fn read_account(&self, address: Address, kind: ExecutionKind) -> anyhow::Result<Option<Account>, StorageError> {
         match kind {
-            ReadKind::Call((block_number, tx_count, _)) => Ok(self.call_storage.read_account(block_number, tx_count, address)),
+            ExecutionKind::Call(block_number, tx_count, _) => Ok(self.call_storage.read_account(block_number, tx_count, address)),
             _ => self.transaction_storage.read_account(address),
         }
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ReadKind) -> anyhow::Result<Option<Slot>, StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> anyhow::Result<Option<Slot>, StorageError> {
         match kind {
-            ReadKind::Call((block_number, tx_count, _)) => Ok(self.call_storage.read_slot(block_number, tx_count, address, index)),
+            ExecutionKind::Call(block_number, tx_count, _) => Ok(self.call_storage.read_slot(block_number, tx_count, address, index)),
             _ => self.transaction_storage.read_slot(address, index),
         }
     }
