@@ -1,14 +1,14 @@
 use parking_lot::RwLockReadGuard;
 
-use crate::eth::primitives::Account;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::StorageError;
 use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::stratus_storage::EntityRead;
+use crate::eth::types::Account;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::PointInTime;
+use crate::eth::types::Slot;
 use crate::infra::metrics::MetricLabelValue;
 
 /// Prevents construction of [`MinedPointInTime`] outside this module.
@@ -130,12 +130,12 @@ impl StratusStorage {
 mod tests {
     use super::super::StratusStorage;
     use super::Resolve;
-    use crate::eth::primitives::Address;
-    use crate::eth::primitives::BlockNumber;
-    use crate::eth::primitives::Slot;
-    use crate::eth::primitives::SlotIndex;
     use crate::eth::storage::ExecutionKind;
     use crate::eth::storage::TxCount;
+    use crate::eth::types::Address;
+    use crate::eth::types::BlockNumber;
+    use crate::eth::types::Slot;
+    use crate::eth::types::SlotIndex;
 
     #[test]
     fn pending_partial_call_latest_becomes_stale_once_block_is_mined() {

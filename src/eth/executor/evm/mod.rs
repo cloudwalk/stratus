@@ -31,23 +31,23 @@ use util::default_trace;
 use util::enhance_trace_with_decoded_errors;
 use util::parse_revm_result_and_state;
 
+use crate::eth::executor::EvmExecutionMetrics;
+use crate::eth::executor::ExecutionResult;
 use crate::eth::executor::ExecutorConfig;
+use crate::eth::executor::ExecutorError;
+use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::executor::TransactionExecutionOutput;
 use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm::util::EvmExt;
 use crate::eth::executor::evm::util::create_evm;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::EvmExecutionMetrics;
-use crate::eth::primitives::ExecutionResult;
-use crate::eth::primitives::ExecutorError;
-use crate::eth::primitives::MinedData;
-use crate::eth::primitives::StorageError;
-use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionOutput;
+use crate::eth::rpc::BlockFilter;
 use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
+use crate::eth::types::MinedData;
+use crate::eth::types::StratusError;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm<Input: EvmInput> {

@@ -19,14 +19,14 @@ use super::types::AccountRocksdb;
 use super::types::BlockNumberRocksdb;
 use super::types::BlockRocksdb;
 use super::types::SlotValueRocksdb;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::SlotValue;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 #[cfg(test)]
 use crate::eth::storage::permanent::rocks::test_utils::FakeEnum;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::types::Account;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::SlotValue;
 
 macro_rules! impl_single_version_cf_value {
     ($name:ident, $inner_type:ty, $non_rocks_equivalent: ty) => {

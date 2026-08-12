@@ -4,14 +4,14 @@ use std::collections::HashMap;
 
 use dashmap::DashMap;
 
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotValue;
-use crate::eth::primitives::TransactionExecution;
+use crate::eth::executor::TransactionExecution;
 use crate::eth::storage::temporary::inmemory::TxCount;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
 
 #[derive(Debug)]
 pub struct InMemoryCallTemporaryStorage {

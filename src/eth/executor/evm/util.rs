@@ -24,21 +24,21 @@ use revm::primitives::hardfork::SpecId;
 use revm::state::EvmState;
 
 use crate::eth::codegen;
+use crate::eth::executor::Complete;
 use crate::eth::executor::EvmKind;
+use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::ExecutionResult;
+use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::executor::TransactionExecutionOutput;
 use crate::eth::executor::evm::GeneralRevm;
 use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::Complete;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExecutionResult;
-use crate::eth::primitives::Gas;
-use crate::eth::primitives::Log;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionExecutionOutput;
+use crate::eth::types::Address;
+use crate::eth::types::Bytes;
+use crate::eth::types::Gas;
+use crate::eth::types::Log;
+use crate::eth::types::Slot;
+use crate::eth::types::StratusError;
 use crate::ext::OptionExt;
 
 pub fn parse_revm_result_and_state(revm_result: ResultAndState) -> Result<TransactionExecutionOutput, StratusError> {

@@ -15,12 +15,12 @@ use serde::Serialize;
 use serde::ser::SerializeStruct;
 use uuid::Uuid;
 
-use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogTopic;
-use crate::eth::primitives::TransactionMined;
-use crate::eth::primitives::UnixTime;
+use crate::eth::types::Address;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::Hash;
+use crate::eth::types::LogTopic;
+use crate::eth::types::TransactionMined;
+use crate::eth::types::UnixTime;
 use crate::if_else;
 
 /// Represents token transfers (debits and credits) associated with a specific Ethereum account within a single transaction.
@@ -315,14 +315,14 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::eth::primitives::Address;
-    use crate::eth::primitives::BlockNumber;
-    use crate::eth::primitives::Bytes;
-    use crate::eth::primitives::Hash;
-    use crate::eth::primitives::Log;
-    use crate::eth::primitives::TransactionMined;
-    use crate::eth::primitives::UnixTime;
-    use crate::eth::primitives::test_accounts;
+    use crate::eth::types::Address;
+    use crate::eth::types::BlockNumber;
+    use crate::eth::types::Bytes;
+    use crate::eth::types::Hash;
+    use crate::eth::types::Log;
+    use crate::eth::types::TransactionMined;
+    use crate::eth::types::UnixTime;
+    use crate::eth::types::primitives::test_accounts;
     use crate::ext::to_json_value;
     use crate::ledger::events::AccountTransfer;
     use crate::ledger::events::AccountTransferDirection;

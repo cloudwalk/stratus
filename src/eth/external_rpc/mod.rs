@@ -12,16 +12,14 @@ use clap::Parser;
 use display_json::DebugAsJson;
 
 use crate::alias::JsonValue;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalReceipt;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::Wei;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::ExternalBlockWithReceipts;
+use crate::eth::types::ExternalReceipt;
+use crate::eth::types::Hash;
+use crate::eth::types::Wei;
 use crate::ext::parse_duration;
-
-pub type ExternalBlockWithReceipts = (ExternalBlock, Vec<ExternalReceipt>);
 
 #[allow(async_fn_in_trait)]
 pub trait ExternalRpc: Send + Sync {

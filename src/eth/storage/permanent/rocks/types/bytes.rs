@@ -5,8 +5,8 @@ use std::ops::Deref;
 use revm::primitives::Bytes as RevmBytes;
 use rocksdb::WriteBatch;
 
-use crate::eth::primitives::Bytes;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::Bytes;
 
 #[derive(Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]

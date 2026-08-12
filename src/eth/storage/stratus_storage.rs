@@ -1,45 +1,45 @@
 use tracing::Span;
 
+use crate::eth::executor::AccountOriginalsReader;
+use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::TransactionExecution;
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::AccountOriginalsReader;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockNumber;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMessage;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::PendingBlock;
-use crate::eth::primitives::PendingBlockHeader;
-use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::SlotValue;
-use crate::eth::primitives::StorageError;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionStage;
-use crate::eth::primitives::UnixTime;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Wei;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::test_accounts;
+use crate::eth::rpc::BlockFilter;
+use crate::eth::rpc::LogFilter;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::InMemoryTemporaryStorage;
 use crate::eth::storage::RocksPermanentStorage;
 use crate::eth::storage::StorageCache;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
 use crate::eth::storage::resolve_pending;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::types::Bytes;
+use crate::eth::types::ExternalBlock;
+use crate::eth::types::Hash;
+use crate::eth::types::LogMessage;
+#[cfg(feature = "dev")]
+use crate::eth::types::Nonce;
+use crate::eth::types::PendingBlock;
+use crate::eth::types::PendingBlockHeader;
+use crate::eth::types::PointInTime;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+#[cfg(feature = "dev")]
+use crate::eth::types::SlotValue;
+use crate::eth::types::TransactionStage;
+use crate::eth::types::UnixTime;
+#[cfg(feature = "dev")]
+use crate::eth::types::Wei;
+#[cfg(feature = "dev")]
+use crate::eth::types::primitives::test_accounts;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;
@@ -849,15 +849,15 @@ impl StratusStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::eth::executor::ExecutionAccountChanges;
+    use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::primitives::ExecutionAccountChanges;
-    use crate::eth::primitives::ExecutionResult;
-    use crate::eth::primitives::Signature;
-    use crate::eth::primitives::SlotValue;
-    use crate::eth::primitives::TransactionExecutionOutput;
-    use crate::eth::primitives::TransactionInfo;
-    use crate::eth::primitives::TransactionInput;
-    use crate::eth::primitives::Wei;
+    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::types::Signature;
+    use crate::eth::types::SlotValue;
+    use crate::eth::types::TransactionInfo;
+    use crate::eth::types::TransactionInput;
+    use crate::eth::types::Wei;
 
     /// Mines a block applying `changes`
     fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) -> BlockNumber {

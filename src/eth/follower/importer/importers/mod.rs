@@ -5,7 +5,7 @@ use crate::GlobalState;
 use crate::eth::follower::importer::receive_with_timeout;
 use crate::eth::follower::importer::record_import_metrics;
 use crate::eth::follower::importer::should_shutdown;
-use crate::eth::primitives::BlockNumber;
+use crate::eth::types::BlockNumber;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::infra::metrics;
 use crate::infra::tracing::warn_task_tx_closed;
@@ -66,7 +66,7 @@ mod tests {
     use crate::GlobalState;
     use crate::eth::follower::importer::importers::ImportData;
     use crate::eth::follower::importer::importers::ImporterWorker;
-    use crate::eth::primitives::BlockNumber;
+    use crate::eth::types::BlockNumber;
 
     /// Minimal block-like datum: just carries a block number.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -1,0 +1,126 @@
+pub mod block;
+mod error;
+pub mod execution_kind;
+pub mod external;
+pub mod primitives;
+pub mod transaction;
+pub use block::Block;
+pub use block::BlockHeader;
+pub use block::PendingBlock;
+pub use block::PendingBlockHeader;
+pub use error::DecodeInputError;
+pub use error::ErrorCode;
+pub use error::StateError;
+pub use error::StratusError;
+pub use error::UnexpectedError;
+pub use execution_kind::ExecutionKind;
+pub use execution_kind::TxCount;
+pub use external::ExternalBlock;
+pub use external::ExternalBlockWithReceipts;
+pub use external::ExternalReceipt;
+pub use external::ExternalReceipts;
+pub use external::ExternalTransaction;
+pub use primitives::Account;
+pub use primitives::Address;
+pub use primitives::BlockNumber;
+pub use primitives::Bytes;
+pub use primitives::ChainId;
+pub use primitives::Difficulty;
+pub use primitives::EcdsaRs;
+pub use primitives::EcdsaV;
+pub use primitives::Gas;
+pub use primitives::Hash;
+pub use primitives::Index;
+pub use primitives::Log;
+pub use primitives::LogMessage;
+pub use primitives::LogTopic;
+pub use primitives::LogsBloom;
+pub use primitives::MinerNonce;
+pub use primitives::Nonce;
+pub use primitives::PointInTime;
+pub use primitives::SignatureComponent;
+pub use primitives::Size;
+pub use primitives::Slot;
+pub use primitives::SlotIndex;
+pub use primitives::SlotValue;
+pub use primitives::UnixTime;
+pub use primitives::UnixTimeNow;
+pub use primitives::Wei;
+pub use transaction::CallInput;
+pub use transaction::ExecutionInfo;
+pub use transaction::MinedData;
+pub use transaction::Signature;
+pub use transaction::Signer;
+pub use transaction::TransactionInfo;
+pub use transaction::TransactionInput;
+pub use transaction::TransactionMined;
+pub use transaction::TransactionStage;
+
+// -----------------------------------------------------------------------------
+// Tests
+// -----------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eth::executor::EvmExecutionMetrics;
+    use crate::eth::executor::ExecutionAccountChanges;
+    use crate::eth::executor::ExecutionResult;
+    use crate::eth::rpc::BlockFilter;
+    use crate::eth::rpc::LogFilter;
+    use crate::eth::rpc::LogFilterInput;
+    use crate::eth::rpc::LogFilterInputTopic;
+    use crate::gen_test_json;
+    use crate::gen_test_serde;
+
+    // TODO: Test external structs and internal structs that contain external strtucts that do no implement faker::Dummy
+    // gen_test_serde!(ExecutionConflicts);
+    // gen_test_serde!(ExecutionConflictsBuilder);
+    // gen_test_serde!(ExternalBlock);
+    // gen_test_serde!(ExternalReceipt);
+    // gen_test_serde!(ExternalReceipts);
+    // gen_test_serde!(ExternalTransaction);
+    // gen_test_serde!(ExternalTransactionExecution);
+    // gen_test_serde!(PendingBlock);
+    // gen_test_serde!(TransactionExecution);
+    // gen_test_serde!(TransactionStage);
+
+    gen_test_json!(ExternalBlock);
+    gen_test_json!(ExternalBlockWithReceipts);
+    gen_test_json!(ExternalReceipt);
+    gen_test_json!(ExternalReceipts);
+    gen_test_json!(ExternalTransaction);
+
+    gen_test_serde!(Account);
+    gen_test_serde!(Address);
+    gen_test_serde!(BlockFilter);
+    gen_test_serde!(BlockHeader);
+    gen_test_serde!(BlockNumber);
+    gen_test_serde!(Bytes);
+    gen_test_serde!(CallInput);
+    gen_test_serde!(ChainId);
+    gen_test_serde!(Difficulty);
+    gen_test_serde!(EcdsaRs);
+    gen_test_serde!(EcdsaV);
+    gen_test_serde!(EvmExecutionMetrics);
+    gen_test_serde!(ExecutionAccountChanges);
+    gen_test_serde!(ExecutionResult);
+    gen_test_serde!(Gas);
+    gen_test_serde!(Hash);
+    gen_test_serde!(Index);
+    gen_test_serde!(Log);
+    gen_test_serde!(LogFilter);
+    gen_test_serde!(LogFilterInput);
+    gen_test_serde!(LogFilterInputTopic);
+    gen_test_serde!(LogTopic);
+    gen_test_serde!(MinerNonce);
+    gen_test_serde!(Nonce);
+    gen_test_serde!(SignatureComponent);
+    gen_test_serde!(Size);
+    gen_test_serde!(Slot);
+    gen_test_serde!(SlotIndex);
+    gen_test_serde!(SlotValue);
+    gen_test_serde!(TransactionInput);
+    gen_test_serde!(UnixTime);
+    gen_test_serde!(UnixTimeNow);
+    gen_test_serde!(Wei);
+}
