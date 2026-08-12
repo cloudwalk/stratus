@@ -80,8 +80,8 @@ pub(super) enum Resolved<'a, T> {
 
 /// Pending-state resolution, generic over the entity being read.
 pub(super) trait Resolve: EntityRead {
-    fn resolve(s: &StratusStorage, pit: PointInTime, key: Self::Key, kind: ReadKind) -> Result<Resolved<'_, Self>, StorageError> {
-        if pit == PointInTime::Pending {
+    fn resolve(s: &StratusStorage, key: Self::Key, kind: ReadKind) -> Result<Resolved<'_, Self>, StorageError> {
+        if kind.point_in_time() == PointInTime::Pending {
             if matches!(kind, ReadKind::Transaction)
                 && let Some(value) = Self::read_pending_cache(s, key)
             {
@@ -91,7 +91,7 @@ pub(super) trait Resolve: EntityRead {
                 return Ok(Resolved::Temp(value));
             }
         }
-        Ok(Resolved::Miss(s.resolve_mined_point(pit, kind)))
+        Ok(Resolved::Miss(s.resolve_mined_point(kind)))
     }
 }
 
@@ -101,12 +101,13 @@ impl Resolve for Slot {}
 
 impl StratusStorage {
     /// Determines the mined point-in-time for a read.
-    fn resolve_mined_point(&self, pit: PointInTime, kind: ReadKind) -> MinedPointInTime<'_> {
+    fn resolve_mined_point(&self, kind: ReadKind) -> MinedPointInTime<'_> {
+        let pit = kind.point_in_time();
         if let PointInTime::MinedPast(number) = pit {
             return MinedPointInTime::mined_past(number);
         }
         match kind {
-            ReadKind::Call((block_number, tx_count)) => {
+            ReadKind::Call((block_number, tx_count, _)) => {
                 let guard = self.transient_state_lock.read();
                 let mined = self.read_mined_block_number();
                 if (block_number, tx_count) >= (mined, TxCount::Full) {
@@ -120,7 +121,7 @@ impl StratusStorage {
                     MinedPointInTime::mined_past(target)
                 }
             }
-            ReadKind::Transaction | ReadKind::RPC => MinedPointInTime::mined(None),
+            ReadKind::Transaction | ReadKind::RPC(_) => MinedPointInTime::mined(None),
         }
     }
 }
@@ -149,11 +150,11 @@ mod tests {
         let pending_block_number = BlockNumber::from(mined_at_start + 1);
         storage.set_mined_block_number(BlockNumber::from(mined_at_start));
 
-        let kind = ReadKind::Call((pending_block_number, TxCount::Partial(0)));
+        let kind = ReadKind::Call((pending_block_number, TxCount::Partial(0), PointInTime::Pending));
 
         // At call start: block 6 is still pending (mined=5). Latest (block 5) is a safe base.
         // resolve_slot should return Miss(Mined(Some(guard))).
-        let resolved = Slot::resolve(&storage, PointInTime::Pending, (address, index), kind).expect("resolve_slot");
+        let resolved = Slot::resolve(&storage, (address, index), kind).expect("resolve_slot");
         match resolved {
             super::Resolved::Miss(mut point) => {
                 assert!(
@@ -170,7 +171,7 @@ mod tests {
 
         // The call is now stale: reading "latest" would observe block 6's aggregate state,
         // not the tx-0 base. resolve_slot should downgrade to MinedPast(5) = b.prev() with no guard.
-        let resolved = Slot::resolve(&storage, PointInTime::Pending, (address, index), kind).expect("resolve_slot");
+        let resolved = Slot::resolve(&storage, (address, index), kind).expect("resolve_slot");
         match resolved {
             super::Resolved::Miss(mut point) => {
                 assert!(!matches!(point, super::MinedPointInTime::Latest(_, _)), "stale call should not read latest");
@@ -201,9 +202,9 @@ mod tests {
         let call_block = BlockNumber::from(5u64);
         storage.set_mined_block_number(call_block);
 
-        let kind = ReadKind::Call((call_block, TxCount::Full));
+        let kind = ReadKind::Call((call_block, TxCount::Full, PointInTime::Mined));
 
-        let resolved = Slot::resolve(&storage, PointInTime::Mined, (address, index), kind).expect("resolve_slot");
+        let resolved = Slot::resolve(&storage, (address, index), kind).expect("resolve_slot");
         match resolved {
             super::Resolved::Miss(mut point) => {
                 assert!(
@@ -219,7 +220,7 @@ mod tests {
         storage.set_mined_block_number(BlockNumber::from(6u64));
 
         // Stale: b=5 < mined=6. Full → MinedPast(5), NOT MinedPast(4).
-        let resolved = Slot::resolve(&storage, PointInTime::Mined, (address, index), kind).expect("resolve_slot");
+        let resolved = Slot::resolve(&storage, (address, index), kind).expect("resolve_slot");
         match resolved {
             super::Resolved::Miss(mut point) => {
                 assert!(!matches!(point, super::MinedPointInTime::Latest(_, _)), "stale call should not read latest");

@@ -207,7 +207,7 @@ impl Executor {
             //
             // failed external transaction, re-create from receipt without re-executing
             false => {
-                let sender = self.storage.read_account(receipt.from.into(), PointInTime::Pending, ReadKind::Transaction)?;
+                let sender = self.storage.read_account(receipt.from.into(), ReadKind::Transaction)?;
                 if tx_input.execution_info.nonce != sender.nonce {
                     bail!(
                         "reverted external transaction should have the correct nonce. address: {:?}, input: {:?}, sender: {:?}",

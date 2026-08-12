@@ -14,7 +14,6 @@ use revm::handler::EthPrecompiles;
 use revm::handler::instructions::EthInstructions;
 use revm::interpreter::interpreter::EthInterpreter;
 
-use crate::eth::executor::evm::session::RevmSession;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Block;
 use crate::eth::primitives::BlockNumber;
@@ -40,9 +39,8 @@ pub const GAS_MAX_LIMIT: u64 = 1_000_000_000;
 #[cfg(not(feature = "dev"))]
 pub const GAS_MAX_LIMIT: u64 = 100_000_000;
 
-pub type ContextWithDB<Input> = Context<BlockEnv, TxEnv, CfgEnv, RevmSession<Input>, Journal<RevmSession<Input>>>;
-pub type GeneralRevm<DB, I = ()> =
-    RevmEvm<Context<BlockEnv, TxEnv, CfgEnv, DB>, I, EthInstructions<EthInterpreter, Context<BlockEnv, TxEnv, CfgEnv, DB>>, EthPrecompiles, EthFrame>;
+pub type ContextWithDB<DB> = Context<BlockEnv, TxEnv, CfgEnv, DB, Journal<DB>>;
+pub type GeneralRevm<DB, I = ()> = RevmEvm<ContextWithDB<DB>, I, EthInstructions<EthInterpreter, ContextWithDB<DB>>, EthPrecompiles, EthFrame>;
 
 /// EVM input data. Usually derived from a transaction or call.
 #[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -96,9 +94,6 @@ pub struct TransactionExecutionInput {
     /// Timestamp of the block where the transaction will be or was included.
     pub block_timestamp: UnixTime,
 
-    /// Point-in-time from where accounts and slots will be read.
-    pub point_in_time: PointInTime,
-
     /// ID of the blockchain where the transaction will be or was included.
     ///
     /// If not specified, it will not be validated.
@@ -120,7 +115,6 @@ impl TransactionExecutionInput {
             nonce: input.execution_info.nonce,
             block_number,
             block_timestamp,
-            point_in_time: PointInTime::Pending,
             chain_id: input.execution_info.chain_id,
             kind: ReadKind::Transaction,
         }
@@ -199,9 +193,6 @@ pub struct CallExecutionInput {
     /// Timestamp of the block where the transaction will be or was included.
     pub block_timestamp: UnixTime,
 
-    /// Point-in-time from where accounts and slots will be read.
-    pub point_in_time: PointInTime,
-
     pub kind: ReadKind,
 }
 
@@ -215,8 +206,7 @@ impl CallExecutionInput {
             data: input.data,
             block_number: pending_header.number,
             block_timestamp: *pending_header.timestamp,
-            point_in_time: PointInTime::Pending,
-            kind: ReadKind::Call((pending_header.number, tx_count)),
+            kind: ReadKind::Call((pending_header.number, tx_count, PointInTime::Pending)),
         }
     }
 
@@ -229,8 +219,7 @@ impl CallExecutionInput {
             data: input.data,
             block_number: block.number(),
             block_timestamp: block.header.timestamp,
-            point_in_time,
-            kind: ReadKind::Call((block.number(), TxCount::Full)),
+            kind: ReadKind::Call((block.number(), TxCount::Full, point_in_time)),
         }
     }
 }
@@ -240,8 +229,6 @@ pub trait EvmInput: Default + Clone {
     ///
     /// It is when there is a `to` address and the `data` field is also populated.
     fn is_contract_call(&self) -> bool;
-
-    fn point_in_time(&self) -> PointInTime;
 
     fn kind(&self) -> ReadKind;
 
@@ -283,10 +270,6 @@ impl EvmInput for CallExecutionInput {
         &self.to
     }
 
-    fn point_in_time(&self) -> PointInTime {
-        self.point_in_time
-    }
-
     fn kind(&self) -> ReadKind {
         self.kind
     }
@@ -320,10 +303,6 @@ impl EvmInput for TransactionExecutionInput {
 
     fn to(&self) -> &Option<Address> {
         &self.to
-    }
-
-    fn point_in_time(&self) -> PointInTime {
-        self.point_in_time
     }
 
     fn kind(&self) -> ReadKind {

@@ -1407,7 +1407,7 @@ fn eth_get_transaction_count(params: Params<'_>, ctx: Arc<RpcContext>, ext: Exte
     tracing::info!(%address, %filter, "reading account nonce");
 
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let account = ctx.server.storage.read_account(address, point_in_time, ReadKind::RPC)?;
+    let account = ctx.server.storage.read_account(address, ReadKind::RPC(point_in_time))?;
     Ok(hex_num(account.nonce))
 }
 
@@ -1429,7 +1429,7 @@ fn eth_get_balance(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) ->
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let account = ctx.server.storage.read_account(address, point_in_time, ReadKind::RPC)?;
+    let account = ctx.server.storage.read_account(address, ReadKind::RPC(point_in_time))?;
     Ok(hex_num(account.balance))
 }
 
@@ -1450,7 +1450,7 @@ fn eth_get_code(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
-    let account = ctx.server.storage.read_account(address, point_in_time, ReadKind::RPC)?;
+    let account = ctx.server.storage.read_account(address, ReadKind::RPC(point_in_time))?;
 
     Ok(account.bytecode.map(|bytecode| hex_data(bytecode.original_bytes())).unwrap_or_else(hex_null))
 }
@@ -1542,7 +1542,7 @@ fn eth_get_storage_at(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions)
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(block_filter)?;
-    let slot = ctx.server.storage.read_slot(address, index, point_in_time, ReadKind::RPC)?;
+    let slot = ctx.server.storage.read_slot(address, index, ReadKind::RPC(point_in_time))?;
 
     // It must be padded, even if it is zero.
     Ok(hex_num_zero_padded(slot.value.as_u256()))

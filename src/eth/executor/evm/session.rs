@@ -16,10 +16,11 @@ use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::SlotIndex;
 use crate::eth::primitives::StratusError;
+use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
-pub struct RevmSession<Input: EvmInput> {
+pub struct RevmSession {
     /// Executor configuration.
     config: ExecutorConfig,
 
@@ -27,54 +28,56 @@ pub struct RevmSession<Input: EvmInput> {
     pub storage: Arc<StratusStorage>,
 
     /// Input passed to EVM to execute the transaction.
-    pub input: Input,
+    pub read_kind: ReadKind,
 
     /// Metrics collected during EVM execution.
     pub metrics: EvmExecutionMetrics,
 }
 
-impl<Input: EvmInput> RevmSession<Input> {
+impl RevmSession {
     /// Creates the base session to be used with REVM.
     pub fn new(storage: Arc<StratusStorage>, config: ExecutorConfig) -> Self {
         Self {
             config,
             storage,
-            input: Input::default(),
+            read_kind: ReadKind::default(),
             metrics: EvmExecutionMetrics::default(),
         }
     }
 
     /// Resets the session to be used with a new transaction.
-    pub fn reset(&mut self, input: Input) {
-        self.input = input;
+    pub fn reset(&mut self, read_kind: ReadKind) {
+        self.read_kind = read_kind;
         self.metrics = EvmExecutionMetrics::default();
+    }
+
+    /// Validates that the `to` account of the input is a contract when the input is a contract call.
+    ///
+    /// Reads the `to` account from storage upfront so that calls to non-contract accounts are rejected
+    /// before EVM execution, rather than relying on `basic` being called for the `to` address during `transact`.
+    pub fn validate_to_is_contract<Input: EvmInput>(&self, input: &Input) -> Result<(), StratusError> {
+        if let Some(to_address) = input.to()
+            && input.is_contract_call()
+        {
+            let account = self.storage.read_account(*to_address, input.kind())?;
+            if account.bytecode.is_none() {
+                if self.config.executor_reject_not_contract {
+                    return Err(ExecutorError::AccountNotContract { address: *to_address }.into());
+                } else {
+                    tracing::warn!(%to_address, "evm to_account is not a contract because does not have bytecode");
+                }
+            }
+        }
+        Ok(())
     }
 }
 
-impl<Input: EvmInput> Database for RevmSession<Input> {
+impl Database for RevmSession {
     type Error = StratusError;
 
     fn basic(&mut self, revm_address: RevmAddress) -> Result<Option<AccountInfo>, StratusError> {
         self.metrics.account_reads += 1;
-
-        // retrieve account
-        let address: Address = revm_address.into();
-        let account = self.storage.read_account(address, self.input.point_in_time(), self.input.kind())?;
-
-        // warn if the loaded account is the `to` account and it does not have a bytecode
-        if let Some(to_address) = self.input.to()
-            && account.bytecode.is_none()
-            && &address == to_address
-            && self.input.is_contract_call()
-        {
-            if self.config.executor_reject_not_contract {
-                return Err(ExecutorError::AccountNotContract { address: *to_address }.into());
-            } else {
-                tracing::warn!(%address, "evm to_account is not a contract because does not have bytecode");
-            }
-        }
-
-        Ok(Some(account.into()))
+        self.basic_ref(revm_address)
     }
 
     fn code_by_hash(&mut self, _: B256) -> Result<RevmBytecode, StratusError> {
@@ -91,13 +94,13 @@ impl<Input: EvmInput> Database for RevmSession<Input> {
     }
 }
 
-impl<Input: EvmInput> DatabaseRef for RevmSession<Input> {
+impl DatabaseRef for RevmSession {
     type Error = StratusError;
 
     fn basic_ref(&self, address: revm::primitives::Address) -> Result<Option<AccountInfo>, Self::Error> {
         // retrieve account
         let address: Address = address.into();
-        let account = self.storage.read_account(address, self.input.point_in_time(), self.input.kind())?;
+        let account = self.storage.read_account(address, self.read_kind)?;
         Ok(Some(account.into()))
     }
 
@@ -107,7 +110,7 @@ impl<Input: EvmInput> DatabaseRef for RevmSession<Input> {
         let index: SlotIndex = index.into();
 
         // load slot from storage
-        let slot = self.storage.read_slot(address, index, self.input.point_in_time(), self.input.kind())?;
+        let slot = self.storage.read_slot(address, index, self.read_kind)?;
 
         Ok(slot.value.into())
     }

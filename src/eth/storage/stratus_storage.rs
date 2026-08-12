@@ -394,9 +394,9 @@ impl StratusStorage {
     }
 
     /// Generic read algorithm shared by [`read_account`] and [`read_slot`].
-    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, target_point_in_time: PointInTime, kind: ReadKind) -> Result<E, StorageError> {
+    fn read<E: resolve_pending::Resolve>(&self, key: E::Key, kind: ReadKind) -> Result<E, StorageError> {
         let (value, found_at) = 'query: {
-            match E::resolve(self, target_point_in_time, key, kind)? {
+            match E::resolve(self, key, kind)? {
                 resolve_pending::Resolved::PendingCache(value) => break 'query (value, FoundAt::Cache),
                 resolve_pending::Resolved::Temp(value) => break 'query (value, FoundAt::Temp),
                 resolve_pending::Resolved::Miss(mined_point) => {
@@ -417,7 +417,7 @@ impl StratusStorage {
         };
 
         // Cache non-historical reads according to the point-in-time and where the value came from.
-        match (target_point_in_time, found_at) {
+        match (kind.point_in_time(), found_at) {
             // A pending read that hit perm (i.e. not in any cache/temp) is already mined, so cache in both.
             (PointInTime::Pending, FoundAt::PermLatest) => {
                 E::cache_if_missing(self, key, value.clone());
@@ -437,16 +437,16 @@ impl StratusStorage {
         Ok(value)
     }
 
-    pub fn read_account(&self, address: Address, point_in_time: PointInTime, kind: ReadKind) -> Result<Account, StorageError> {
+    pub fn read_account(&self, address: Address, kind: ReadKind) -> Result<Account, StorageError> {
         #[cfg(feature = "tracing")]
-        let _span = tracing::debug_span!("storage::read_account", %address, %point_in_time).entered();
-        self.read::<Account>(address, point_in_time, kind)
+        let _span = tracing::debug_span!("storage::read_account", %address).entered();
+        self.read::<Account>(address, kind)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime, kind: ReadKind) -> Result<Slot, StorageError> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ReadKind) -> Result<Slot, StorageError> {
         #[cfg(feature = "tracing")]
-        let _span = tracing::debug_span!("storage::read_slot", %address, %index, %point_in_time).entered();
-        self.read::<Slot>((address, index), point_in_time, kind)
+        let _span = tracing::debug_span!("storage::read_slot", %address, %index).entered();
+        self.read::<Slot>((address, index), kind)
     }
 
     // -------------------------------------------------------------------------
@@ -901,7 +901,7 @@ mod tests {
 
         // The in-flight call (pinned to the first block) reads the slot.
         let slot = storage
-            .read_slot(address, index, PointInTime::Mined, ReadKind::Call((call_block, TxCount::Full)))
+            .read_slot(address, index, ReadKind::Call((call_block, TxCount::Full, PointInTime::Mined)))
             .expect("read slot");
 
         // Must reflect the first block (100), not the freshly mined latest (200).
@@ -932,7 +932,7 @@ mod tests {
         assert_ne!(call_block, latest);
 
         let account = storage
-            .read_account(address, PointInTime::Mined, ReadKind::Call((call_block, TxCount::Full)))
+            .read_account(address, ReadKind::Call((call_block, TxCount::Full, PointInTime::Mined)))
             .expect("read account");
 
         // Must reflect the first block (100), not the freshly mined latest (200).

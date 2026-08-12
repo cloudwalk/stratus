@@ -73,14 +73,14 @@ impl InMemoryTemporaryStorage {
 
     pub fn read_account(&self, address: Address, kind: ReadKind) -> anyhow::Result<Option<Account>, StorageError> {
         match kind {
-            ReadKind::Call((block_number, tx_count)) => Ok(self.call_storage.read_account(block_number, tx_count, address)),
+            ReadKind::Call((block_number, tx_count, _)) => Ok(self.call_storage.read_account(block_number, tx_count, address)),
             _ => self.transaction_storage.read_account(address),
         }
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ReadKind) -> anyhow::Result<Option<Slot>, StorageError> {
         match kind {
-            ReadKind::Call((block_number, tx_count)) => Ok(self.call_storage.read_slot(block_number, tx_count, address, index)),
+            ReadKind::Call((block_number, tx_count, _)) => Ok(self.call_storage.read_slot(block_number, tx_count, address, index)),
             _ => self.transaction_storage.read_slot(address, index),
         }
     }

@@ -2,6 +2,7 @@ mod session;
 pub mod types;
 mod util;
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use alloy_consensus::transaction::TransactionInfo;
@@ -15,21 +16,15 @@ use log::log_enabled;
 use revm::ExecuteCommitEvm;
 use revm::ExecuteEvm;
 use revm::InspectEvm;
-use revm::context::Evm as RevmEvm;
 use revm::context::result::EVMError;
 use revm::context::result::InvalidTransaction;
 use revm::database::CacheDB;
-use revm::handler::EthFrame;
-use revm::handler::EthPrecompiles;
-use revm::handler::instructions::EthInstructions;
-use revm::interpreter::interpreter::EthInterpreter;
 use revm_inspectors::tracing::FourByteInspector;
 use revm_inspectors::tracing::MuxInspector;
 use revm_inspectors::tracing::TracingInspector;
 use revm_inspectors::tracing::TracingInspectorConfig;
 use revm_inspectors::tracing::js::JsInspector;
 use session::RevmSession;
-use types::ContextWithDB;
 pub use types::EvmKind;
 pub use types::GeneralRevm;
 use util::default_trace;
@@ -52,12 +47,15 @@ use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionExecutionOutcome;
+use crate::eth::storage::ReadKind;
 use crate::eth::storage::StratusStorage;
+use crate::eth::storage::TxCount;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm<Input: EvmInput> {
-    evm: RevmEvm<ContextWithDB<Input>, (), EthInstructions<EthInterpreter, ContextWithDB<Input>>, EthPrecompiles, EthFrame>,
+    evm: GeneralRevm<RevmSession>,
     kind: EvmKind,
+    _input_type: PhantomData<Input>,
 }
 
 impl<Input: EvmInput> Evm<Input> {
@@ -71,13 +69,15 @@ impl<Input: EvmInput> Evm<Input> {
         Self {
             evm: create_evm(chain_id, config.executor_evm_spec, RevmSession::new(storage, config.clone()), kind),
             kind,
+            _input_type: PhantomData,
         }
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
     pub fn execute(&mut self, input: Input) -> Result<(TransactionExecutionOutcome, EvmExecutionMetrics), StratusError> {
         // configure session
-        self.evm.journaled_state.database.reset(input.clone());
+        self.evm.journaled_state.database.reset(input.kind());
+        self.evm.journaled_state.database.validate_to_is_contract(&input)?;
         input.fill_env(&mut self.evm);
 
         if log_enabled!(log::Level::Debug) {
@@ -177,10 +177,11 @@ impl Evm<TransactionExecutionInput> {
             base_fee: None,
         };
         let inspect_input: TransactionExecutionInput = tx.evm_input;
-        self.evm.journaled_state.database.reset(TransactionExecutionInput {
-            point_in_time: PointInTime::MinedPast(inspect_input.block_number.prev().unwrap_or_default()),
-            ..Default::default()
-        });
+        let target = inspect_input.block_number.prev().unwrap_or_default();
+        self.evm
+            .journaled_state
+            .database
+            .reset(ReadKind::Call((target, TxCount::Full, PointInTime::MinedPast(target))));
 
         let spec = self.evm.cfg.spec;
 

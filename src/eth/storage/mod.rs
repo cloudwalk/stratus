@@ -24,6 +24,7 @@ pub use temporary::compute_pending_block_number;
 
 use crate::eth::primitives::BlockNumber;
 use crate::eth::primitives::Index;
+use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::StratusError;
 
 // -----------------------------------------------------------------------------
@@ -120,8 +121,24 @@ impl PartialOrd for TxCount {
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Default, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub enum ReadKind {
-    Call((BlockNumber, TxCount)),
+    Call((BlockNumber, TxCount, PointInTime)),
     #[default]
     Transaction,
-    RPC,
+    RPC(PointInTime),
+}
+
+impl ReadKind {
+    fn point_in_time(&self) -> PointInTime {
+        self.into()
+    }
+}
+
+impl From<&ReadKind> for PointInTime {
+    fn from(value: &ReadKind) -> Self {
+        match value {
+            ReadKind::RPC(pit) => *pit,
+            ReadKind::Transaction => PointInTime::Pending,
+            ReadKind::Call((_, _, pit)) => *pit,
+        }
+    }
 }
