@@ -11,6 +11,7 @@ use crate::eth::codegen;
 use crate::eth::codegen::ContractName;
 use crate::eth::primitives::Address;
 use crate::eth::primitives::Bytes;
+use crate::eth::primitives::MulticallError;
 #[cfg(feature = "metrics")]
 use crate::eth::rpc::RpcClientApp;
 #[cfg(feature = "metrics")]
@@ -32,16 +33,10 @@ pub struct MulticallInfo {
 
 impl MulticallInfo {
     pub fn decode_opt(to: Option<Address>, input: &Bytes) -> Option<Self> {
-        if !to.is_some_and(is_multicall_contract) {
-            return None;
-        }
-
-        let decoded = (|| -> anyhow::Result<Self> {
-            let decoded = Multicall::MulticallCalls::abi_decode(input.as_ref()).map_err(crate::eth::primitives::MulticallError::from)?;
-            decoded.try_into()
-        })();
-
-        decoded
+        to.is_some_and(is_multicall_contract)
+            .then(|| Multicall::MulticallCalls::abi_decode(input.as_ref()))?
+            .map_err(MulticallError::from)
+            .and_then(TryInto::try_into)
             .inspect_err(|err| tracing::warn!(reason = %err, "failed to decode multicall input"))
             .ok()
     }
@@ -94,7 +89,7 @@ impl MulticallInfo {
 }
 
 impl TryFrom<Multicall::MulticallCalls> for MulticallInfo {
-    type Error = anyhow::Error;
+    type Error = MulticallError;
 
     fn try_from(value: Multicall::MulticallCalls) -> Result<Self, Self::Error> {
         let (parent_function, subcalls) = match value {
@@ -110,7 +105,7 @@ impl TryFrom<Multicall::MulticallCalls> for MulticallInfo {
                 Multicall::tryBlockAndAggregateCall::SIGNATURE,
                 subcalls_from_calls(call.calls, Some(!call.requireSuccess)),
             ),
-            _ => anyhow::bail!("unsupported multicall function"),
+            _non_subcall_call => return Err(MulticallError::UnsupportedMulticallFunction),
         };
 
         Ok(Self::from_subcalls(parent_function, subcalls))
@@ -400,6 +395,28 @@ mod tests {
         let input = Bytes(Vec::from(Multicall::aggregateCall::SELECTOR));
 
         assert!(multicall_info(&input).is_none());
+    }
+
+    #[test]
+    fn unknown_selector_is_decode_error() {
+        let input = Bytes(vec![0xff; 4]);
+        let Err(err) = Multicall::MulticallCalls::abi_decode(input.as_ref()).map_err(MulticallError::from) else {
+            panic!("expected decode error");
+        };
+
+        assert!(matches!(
+            err,
+            MulticallError::DecodeError {
+                source: alloy_sol_types::Error::UnknownSelector { .. },
+            }
+        ));
+    }
+
+    #[test]
+    fn known_non_subcall_function_is_unsupported() {
+        let err = MulticallInfo::try_from(Multicall::MulticallCalls::getBasefee(Multicall::getBasefeeCall {})).unwrap_err();
+
+        assert!(matches!(err, MulticallError::UnsupportedMulticallFunction));
     }
 
     #[test]
