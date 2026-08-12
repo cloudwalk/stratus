@@ -82,6 +82,7 @@ impl From<Account> for RevmAccountInfo {
 // -----------------------------------------------------------------------------
 
 /// Accounts to be used only in development-mode.
+#[cfg(any(test, feature = "dev"))]
 pub fn test_accounts() -> Vec<Account> {
     use hex_literal::hex;
     [

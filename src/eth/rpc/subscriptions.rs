@@ -528,11 +528,11 @@ mod sub_metrics {
     use super::HashMap;
     use super::Itertools;
     use super::LogFilter;
-    use super::RpcClientApp;
     use super::Subscription;
     use super::SubscriptionWithFilter;
     use super::label;
     use super::metrics;
+    use crate::eth::rpc::RpcClientApp;
 
     pub fn update_new_pending_txs_subscription_metrics(subs: &HashMap<ConnectionId, Subscription>) {
         update_subscription_count(label::PENDING_TXS, subs.values());

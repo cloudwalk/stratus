@@ -311,7 +311,7 @@ impl Default for GenesisConfig {
         let mut alloc = BTreeMap::new();
 
         // Add test accounts
-        let test_accounts = crate::eth::types::test_accounts();
+        let test_accounts = crate::eth::types::primitives::test_accounts();
         for account in test_accounts {
             let address_str = format!("0x{}", hex::encode(account.address.as_slice()));
             let balance_hex = format!("0x{:x}", account.balance.0);
@@ -470,7 +470,7 @@ mod tests {
         #[cfg(feature = "dev")]
         {
             // In dev mode, we should have test accounts
-            let test_accounts = crate::eth::types::test_accounts();
+            let test_accounts = crate::eth::types::primitives::test_accounts();
             let stratus_accounts = default_genesis.to_stratus_accounts().unwrap();
 
             // Verify the number of accounts matches

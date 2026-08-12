@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use anyhow::bail;
 use clap::Parser;
 
-use super::RpcClientApp;
+use crate::eth::rpc::RpcClientApp;
 
 #[derive(Parser, Clone, serde::Serialize)]
 pub struct RpcServerConfig {

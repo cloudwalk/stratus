@@ -39,7 +39,7 @@ use crate::eth::types::UnixTime;
 #[cfg(feature = "dev")]
 use crate::eth::types::Wei;
 #[cfg(feature = "dev")]
-use crate::eth::types::test_accounts;
+use crate::eth::types::primitives::test_accounts;
 use crate::ext::not;
 use crate::infra::metrics;
 use crate::infra::metrics::timed;

@@ -1,3 +1,4 @@
+mod account;
 mod address;
 mod block_number;
 pub mod bytes;
@@ -24,6 +25,9 @@ mod unix_time;
 mod unix_time_now;
 mod wei;
 
+pub use account::Account;
+#[cfg(any(test, feature = "dev"))]
+pub use account::test_accounts;
 pub use address::Address;
 pub use block_number::BlockNumber;
 pub use bytes::Bytes;

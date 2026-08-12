@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::Server;
-use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsConnected;
+use crate::eth::rpc::subscriptions::RpcSubscriptionsConnected;
 
 pub struct RpcContext {
     pub server: Arc<Server>,

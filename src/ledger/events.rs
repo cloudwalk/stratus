@@ -322,7 +322,7 @@ mod tests {
     use crate::eth::types::Log;
     use crate::eth::types::TransactionMined;
     use crate::eth::types::UnixTime;
-    use crate::eth::types::test_accounts;
+    use crate::eth::types::primitives::test_accounts;
     use crate::ext::to_json_value;
     use crate::ledger::events::AccountTransfer;
     use crate::ledger::events::AccountTransferDirection;

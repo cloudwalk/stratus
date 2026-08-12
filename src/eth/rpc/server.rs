@@ -46,7 +46,6 @@ use crate::alias::JsonValue;
 use crate::config::StratusConfig;
 use crate::eth::codegen;
 use crate::eth::codegen::CONTRACTS;
-use crate::eth::decode;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorError;
 use crate::eth::executor::TransactionExecutionOutput;
@@ -66,10 +65,11 @@ use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
 use crate::eth::rpc::RpcSubscriptions;
+use crate::eth::rpc::middleware::decode_input_arguments;
 use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
-use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
-use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
+use crate::eth::rpc::parser::RpcExtensionsExt;
+use crate::eth::rpc::subscriptions::RpcSubscriptionsHandles;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
@@ -1637,7 +1637,7 @@ fn enhance_serialized_call_frame(json: &mut JsonValue) {
                     json_obj.insert("decodedFunctionSignature".to_string(), json!(signature));
                 }
 
-                match decode::decode_input_arguments(input) {
+                match decode_input_arguments(input) {
                     Ok(args) => {
                         json_obj.insert("decodedFunctionArguments".to_string(), json!(args));
                     }
