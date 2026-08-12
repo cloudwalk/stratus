@@ -2,7 +2,7 @@ use ethabi::ParamType;
 use ethabi::Token;
 
 use crate::eth::codegen::SIGNATURES_4_BYTES;
-use crate::eth::primitives::DecodeInputError;
+use crate::eth::types::DecodeInputError;
 
 /// Decodes the input arguments of a transaction.
 pub fn decode_input_arguments(input: impl AsRef<[u8]>) -> Result<String, DecodeInputError> {

@@ -12,9 +12,9 @@ use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use tower::Service;
 
-use crate::eth::primitives::StateError;
-use crate::eth::primitives::StratusError;
 use crate::eth::rpc::RpcClientApp;
+use crate::eth::types::StateError;
+use crate::eth::types::StratusError;
 use crate::ext::not;
 
 #[derive(Debug, Clone, derive_new::new)]

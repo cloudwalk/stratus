@@ -48,39 +48,20 @@ use crate::eth::codegen;
 use crate::eth::codegen::CONTRACTS;
 use crate::eth::decode;
 use crate::eth::executor::Executor;
+use crate::eth::executor::ExecutorError;
+use crate::eth::executor::TransactionExecutionOutput;
+use crate::eth::follower::ConsensusError;
+use crate::eth::follower::ImporterError;
 use crate::eth::follower::consensus::Consensus;
 use crate::eth::follower::importer::ImporterConfig;
 use crate::eth::follower::importer::ImporterConsensus;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::MinerMode;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::CallInput;
-use crate::eth::primitives::ChainId;
-use crate::eth::primitives::ConsensusError;
-use crate::eth::primitives::DecodeInputError;
-use crate::eth::primitives::ExecutorError;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::ImporterError;
-use crate::eth::primitives::LogFilterInput;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::RpcError;
-use crate::eth::primitives::SlotIndex;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::SlotValue;
-use crate::eth::primitives::StateError;
-use crate::eth::primitives::StorageError;
-use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionExecutionOutput;
-use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::TransactionStage;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Wei;
+use crate::eth::rpc::BlockFilter;
+use crate::eth::rpc::LogFilterInput;
 use crate::eth::rpc::RpcContext;
+use crate::eth::rpc::RpcError;
 use crate::eth::rpc::RpcHttpMiddleware;
 use crate::eth::rpc::RpcMiddleware;
 use crate::eth::rpc::RpcServerConfig;
@@ -90,7 +71,26 @@ use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::rpc_parser::RpcExtensionsExt;
 use crate::eth::rpc::rpc_subscriptions::RpcSubscriptionsHandles;
 use crate::eth::storage::ExecutionKind;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
+use crate::eth::types::Address;
+use crate::eth::types::Bytes;
+use crate::eth::types::CallInput;
+use crate::eth::types::ChainId;
+use crate::eth::types::DecodeInputError;
+use crate::eth::types::Hash;
+#[cfg(feature = "dev")]
+use crate::eth::types::Nonce;
+use crate::eth::types::PointInTime;
+use crate::eth::types::SlotIndex;
+#[cfg(feature = "dev")]
+use crate::eth::types::SlotValue;
+use crate::eth::types::StateError;
+use crate::eth::types::StratusError;
+use crate::eth::types::TransactionInput;
+use crate::eth::types::TransactionStage;
+#[cfg(feature = "dev")]
+use crate::eth::types::Wei;
 use crate::ext::InfallibleExt;
 use crate::ext::WatchReceiverExt;
 use crate::ext::not;
@@ -387,7 +387,7 @@ fn stratus_clear_cache(_params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions)
 
 #[cfg(feature = "dev")]
 fn evm_set_next_block_timestamp(params: Params<'_>, ctx: Arc<RpcContext>, _: Extensions) -> Result<JsonValue, StratusError> {
-    use crate::eth::primitives::UnixTime;
+    use crate::eth::types::UnixTime;
     use crate::log_and_err;
 
     let (_, timestamp) = next_rpc_param::<UnixTime>(params.sequence())?;

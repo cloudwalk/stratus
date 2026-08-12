@@ -6,7 +6,7 @@ use rlp::Decodable;
 use tracing::Span;
 
 use super::rpc_http_middleware::Authentication;
-use crate::eth::primitives::RpcError;
+use crate::eth::rpc::RpcError;
 use crate::eth::rpc::rpc_client_app::RpcClientApp;
 use crate::ext::type_basename;
 use crate::infra::tracing::EnteredWrap;

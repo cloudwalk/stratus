@@ -7,10 +7,10 @@ use async_trait::async_trait;
 
 use crate::eth::follower::importer::fetch_with_retry;
 use crate::eth::follower::importer::fetchers::DataFetcher;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalReceipt;
-use crate::infra::BlockchainClient;
+use crate::eth::rpc::BlockchainClient;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::ExternalBlock;
+use crate::eth::types::ExternalReceipt;
 
 pub struct BlockWithReceiptsFetcher {
     pub chain: Arc<BlockchainClient>,

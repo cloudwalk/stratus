@@ -9,12 +9,12 @@ use revm::state::AccountInfo;
 
 use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::EvmExecutionMetrics;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StratusError;
+use crate::eth::executor::EvmExecutionMetrics;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
+use crate::eth::types::Address;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::StratusError;
 
 /// Contextual data that is read or set durint the execution of a transaction in the EVM.
 pub struct RevmSession {

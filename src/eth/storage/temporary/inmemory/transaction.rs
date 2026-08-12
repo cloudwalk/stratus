@@ -5,30 +5,30 @@ use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
 use parking_lot::RwLockWriteGuard;
 
+use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Hash;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::PendingBlock;
-use crate::eth::primitives::PendingBlockHeader;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StorageError;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::UnixTime;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::UnixTimeNow;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Wei;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::types::Bytes;
+use crate::eth::types::Hash;
+#[cfg(feature = "dev")]
+use crate::eth::types::Nonce;
+use crate::eth::types::PendingBlock;
+use crate::eth::types::PendingBlockHeader;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::TransactionInput;
+use crate::eth::types::UnixTime;
+#[cfg(feature = "dev")]
+use crate::eth::types::UnixTimeNow;
+#[cfg(feature = "dev")]
+use crate::eth::types::Wei;
 
 #[derive(Debug)]
 pub struct InmemoryTransactionTemporaryStorage {

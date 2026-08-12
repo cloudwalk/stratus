@@ -13,17 +13,17 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::Span;
 
+use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::TransactionExecution;
 use crate::eth::miner::MinerMode;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockHeader;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogMessage;
-use crate::eth::primitives::StorageError;
-use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionExecution;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
+use crate::eth::types::Block;
+use crate::eth::types::BlockHeader;
+use crate::eth::types::ExternalBlock;
+use crate::eth::types::Hash;
+use crate::eth::types::LogMessage;
+use crate::eth::types::StratusError;
 use crate::ext::DisplayExt;
 use crate::ext::not;
 use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
@@ -382,10 +382,10 @@ pub mod interval_miner {
     use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
+    use crate::eth::executor::ExecutionChanges;
     use crate::eth::miner::Miner;
     use crate::eth::miner::miner::CommitItem;
-    use crate::eth::primitives::Block;
-    use crate::eth::primitives::ExecutionChanges;
+    use crate::eth::types::Block;
     use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
 

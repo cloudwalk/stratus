@@ -16,10 +16,10 @@ use stratus::GlobalState;
 use stratus::config::RpcDownloaderConfig;
 use stratus::eth::external_rpc::ExternalRpc;
 use stratus::eth::external_rpc::PostgresExternalRpc;
-use stratus::eth::primitives::Address;
-use stratus::eth::primitives::BlockNumber;
+use stratus::eth::rpc::BlockchainClient;
+use stratus::eth::types::Address;
+use stratus::eth::types::BlockNumber;
 use stratus::ext::not;
-use stratus::infra::BlockchainClient;
 use stratus::utils::DropTimer;
 #[cfg(all(not(target_env = "msvc"), any(feature = "jemalloc", feature = "jeprof")))]
 use tikv_jemallocator::Jemalloc;

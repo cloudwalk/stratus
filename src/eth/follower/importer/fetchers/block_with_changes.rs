@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::Incomplete;
 use crate::eth::follower::importer::fetch_with_retry;
 use crate::eth::follower::importer::fetchers::DataFetcher;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Incomplete;
+use crate::eth::rpc::BlockchainClient;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
-use crate::infra::BlockchainClient;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
 
 pub struct BlockWithChangesFetcher {
     pub chain: Arc<BlockchainClient>,

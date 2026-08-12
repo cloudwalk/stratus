@@ -8,21 +8,21 @@ use serde_json::json;
 use crate::GlobalState;
 use crate::NodeMode;
 use crate::eth::executor::Executor;
+use crate::eth::follower::ConsensusError;
+use crate::eth::follower::ImporterError;
 use crate::eth::follower::importer::ImporterMode;
 use crate::eth::follower::importer::importer_supervisor::ImporterConsensus;
 use crate::eth::follower::importer::importer_supervisor::start_importer;
 use crate::eth::miner::Miner;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ConsensusError;
-use crate::eth::primitives::ImporterError;
-use crate::eth::primitives::StateError;
-use crate::eth::primitives::StratusError;
+use crate::eth::rpc::BlockchainClient;
 use crate::eth::rpc::RpcContext;
 use crate::eth::storage::StratusStorage;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::StateError;
+use crate::eth::types::StratusError;
 use crate::ext::not;
 use crate::ext::parse_duration;
 use crate::ext::spawn;
-use crate::infra::BlockchainClient;
 use crate::infra::kafka::KafkaConnector;
 
 #[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]

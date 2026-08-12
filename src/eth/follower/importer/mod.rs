@@ -17,13 +17,13 @@ use tokio::time::timeout;
 use tracing::Span;
 
 use crate::GlobalState;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockNumber;
+use crate::eth::rpc::BlockchainClient;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
 use crate::ext::DisplayExt;
 use crate::ext::SleepReason;
 use crate::ext::traced_sleep;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
-use crate::infra::BlockchainClient;
 use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -270,36 +270,36 @@ mod tests {
 
     use hash_hasher::HashBuildHasher;
 
+    use crate::eth::executor::AccountChangeValue;
+    use crate::eth::executor::ExecutionAccountChanges;
+    use crate::eth::executor::ExecutionChanges;
+    use crate::eth::executor::ExecutionResult;
+    use crate::eth::executor::TransactionExecution;
     use crate::eth::executor::TransactionExecutionInput;
+    use crate::eth::executor::TransactionExecutionOutput;
     use crate::eth::follower::importer::fetchers::DataFetcher;
     use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
     use crate::eth::follower::importer::importers::ImporterWorker;
     use crate::eth::follower::importer::importers::replication::ReplicationWorker;
     use crate::eth::miner::Miner;
     use crate::eth::miner::MinerMode;
-    use crate::eth::primitives::Account;
-    use crate::eth::primitives::AccountChangeValue;
-    use crate::eth::primitives::Address;
-    use crate::eth::primitives::Block;
-    use crate::eth::primitives::BlockNumber;
-    use crate::eth::primitives::ExecutionAccountChanges;
-    use crate::eth::primitives::ExecutionChanges;
-    use crate::eth::primitives::ExecutionResult;
-    use crate::eth::primitives::PointInTime;
-    use crate::eth::primitives::Signature;
-    use crate::eth::primitives::TransactionExecution;
-    use crate::eth::primitives::TransactionExecutionOutput;
-    use crate::eth::primitives::TransactionInfo;
-    use crate::eth::primitives::TransactionInput;
-    use crate::eth::primitives::UnixTime;
-    use crate::eth::primitives::Wei;
+    use crate::eth::rpc::BlockchainClient;
     use crate::eth::storage::ExecutionKind;
     use crate::eth::storage::StratusStorage;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
     use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
-    use crate::infra::BlockchainClient;
+    use crate::eth::types::Account;
+    use crate::eth::types::Address;
+    use crate::eth::types::Block;
+    use crate::eth::types::BlockNumber;
+    use crate::eth::types::PointInTime;
+    use crate::eth::types::Signature;
+    use crate::eth::types::TransactionInfo;
+    use crate::eth::types::TransactionInput;
+    use crate::eth::types::UnixTime;
+    use crate::eth::types::Wei;
 
     impl ExecutionAccountChanges {
         pub fn from_changed(account: Account) -> Self {

@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotValue;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
 
 #[derive(Clone, Debug, Copy, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Deserialize, serde::Serialize)]
 #[cfg_attr(test, derive(fake::Dummy))]

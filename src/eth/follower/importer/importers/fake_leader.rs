@@ -4,7 +4,9 @@ use anyhow::bail;
 use async_trait::async_trait;
 
 use crate::GlobalState;
+use crate::eth::executor::ExecutionChanges;
 use crate::eth::executor::Executor;
+use crate::eth::executor::ExecutorError;
 use crate::eth::follower::importer::fetchers::DataFetcher;
 use crate::eth::follower::importer::fetchers::fake_leader::FakeLeaderFetcher;
 use crate::eth::follower::importer::importers::ImportData;
@@ -12,11 +14,9 @@ use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::interval_miner::commit_retry;
 use crate::eth::miner::miner::interval_miner::mine_local_retry;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExecutorError;
-use crate::eth::primitives::StratusError;
 use crate::eth::storage::StratusStorage;
+use crate::eth::types::Block;
+use crate::eth::types::StratusError;
 
 pub struct FakeLeaderWorker {
     pub executor: Arc<Executor>,
@@ -25,7 +25,7 @@ pub struct FakeLeaderWorker {
 }
 
 impl ImportData for <FakeLeaderWorker as ImporterWorker>::DataType {
-    fn block_number(&self) -> crate::eth::primitives::BlockNumber {
+    fn block_number(&self) -> crate::eth::types::BlockNumber {
         self.0.block_number()
     }
 }
