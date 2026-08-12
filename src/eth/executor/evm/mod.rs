@@ -42,14 +42,12 @@ use crate::eth::primitives::EvmExecutionMetrics;
 use crate::eth::primitives::ExecutionResult;
 use crate::eth::primitives::ExecutorError;
 use crate::eth::primitives::MinedData;
-use crate::eth::primitives::PointInTime;
 use crate::eth::primitives::StorageError;
 use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionExecution;
 use crate::eth::primitives::TransactionExecutionOutput;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
-use crate::eth::storage::TxCount;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm<Input: EvmInput> {
@@ -178,10 +176,7 @@ impl Evm<TransactionExecutionInput> {
         };
         let inspect_input: TransactionExecutionInput = tx.evm_input;
         let target = inspect_input.block_number.prev().unwrap_or_default();
-        self.evm
-            .journaled_state
-            .database
-            .reset(ExecutionKind::Call(target, TxCount::Full, PointInTime::Past(target)));
+        self.evm.journaled_state.database.reset(ExecutionKind::CallPast(target));
 
         let spec = self.evm.cfg.spec;
 

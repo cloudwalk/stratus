@@ -900,9 +900,7 @@ mod tests {
         assert_ne!(call_block, latest);
 
         // The in-flight call (pinned to the first block) reads the slot.
-        let slot = storage
-            .read_slot(address, index, ExecutionKind::Call(call_block, TxCount::Full, PointInTime::Latest))
-            .expect("read slot");
+        let slot = storage.read_slot(address, index, ExecutionKind::CallLatest(call_block)).expect("read slot");
 
         // Must reflect the first block (100), not the freshly mined latest (200).
         assert_eq!(slot.value, SlotValue::from([100u64, 0, 0, 0]));
@@ -931,9 +929,7 @@ mod tests {
         let latest = mine_block(&storage, changes2);
         assert_ne!(call_block, latest);
 
-        let account = storage
-            .read_account(address, ExecutionKind::Call(call_block, TxCount::Full, PointInTime::Latest))
-            .expect("read account");
+        let account = storage.read_account(address, ExecutionKind::CallLatest(call_block)).expect("read account");
 
         // Must reflect the first block (100), not the freshly mined latest (200).
         assert_eq!(account.balance, Wei::from(100u64));

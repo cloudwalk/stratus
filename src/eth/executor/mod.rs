@@ -384,12 +384,12 @@ impl Executor {
                 CallExecutionInput::from_pending_block(call_input.clone(), pending_header, tx_count)
             }
             point_in_time => {
-                // NOTE: this read is way more expensive that what we theoritaclly need, we only need to get the timestamp
+                // NOTE: this read is way more expensive that what we theoretically need, we only need to get the timestamp
                 // and block number, however this is not possible in the current rocksdb configuration.
                 let Some(block) = self.storage.read_block(point_in_time.into())? else {
                     return Err(RpcError::BlockFilterInvalid { filter: point_in_time.into() }.into());
                 };
-                CallExecutionInput::from_mined_block(call_input.clone(), block, point_in_time)
+                CallExecutionInput::try_from_mined_block(call_input.clone(), block, point_in_time)?
             }
         };
 

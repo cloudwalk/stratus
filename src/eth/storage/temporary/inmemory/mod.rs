@@ -73,14 +73,18 @@ impl InMemoryTemporaryStorage {
 
     pub fn read_account(&self, address: Address, kind: ExecutionKind) -> anyhow::Result<Option<Account>, StorageError> {
         match kind {
-            ExecutionKind::Call(block_number, tx_count, _) => Ok(self.call_storage.read_account(block_number, tx_count, address)),
+            ExecutionKind::CallPending(block_number, tx_count) => Ok(self.call_storage.read_account(block_number, tx_count, address)),
+            ExecutionKind::CallLatest(block_number) => Ok(self.call_storage.read_account(block_number, TxCount::Full, address)),
+            ExecutionKind::CallPast(block_number) => Ok(self.call_storage.read_account(block_number, TxCount::Full, address)),
             _ => self.transaction_storage.read_account(address),
         }
     }
 
     pub fn read_slot(&self, address: Address, index: SlotIndex, kind: ExecutionKind) -> anyhow::Result<Option<Slot>, StorageError> {
         match kind {
-            ExecutionKind::Call(block_number, tx_count, _) => Ok(self.call_storage.read_slot(block_number, tx_count, address, index)),
+            ExecutionKind::CallPending(block_number, tx_count) => Ok(self.call_storage.read_slot(block_number, tx_count, address, index)),
+            ExecutionKind::CallLatest(block_number) => Ok(self.call_storage.read_slot(block_number, TxCount::Full, address, index)),
+            ExecutionKind::CallPast(block_number) => Ok(self.call_storage.read_slot(block_number, TxCount::Full, address, index)),
             _ => self.transaction_storage.read_slot(address, index),
         }
     }

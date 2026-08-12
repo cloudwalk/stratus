@@ -100,28 +100,31 @@ impl Resolve for Account {}
 impl Resolve for Slot {}
 
 impl StratusStorage {
+    fn resolve_call_point(&self, block_number: BlockNumber, tx_count: TxCount) -> MinedPointInTime<'_> {
+        let guard = self.transient_state_lock.read();
+        let mined = self.read_mined_block_number();
+        if (block_number, tx_count) >= (mined, TxCount::Full) {
+            MinedPointInTime::mined(Some(guard))
+        } else {
+            drop(guard);
+            let target = match tx_count {
+                TxCount::Partial(_) => block_number.prev().unwrap_or_default(),
+                TxCount::Full => block_number,
+            };
+            MinedPointInTime::mined_past(target)
+        }
+    }
+
     /// Determines the mined point-in-time for a read.
     fn resolve_mined_point(&self, kind: ExecutionKind) -> MinedPointInTime<'_> {
-        if let Some(number) = kind.mined_past_number() {
+        if let Some(number) = kind.mined_past_number_opt() {
             return MinedPointInTime::mined_past(*number);
         }
 
         match kind {
-            ExecutionKind::Call(block_number, tx_count, _) => {
-                let guard = self.transient_state_lock.read();
-                let mined = self.read_mined_block_number();
-                if (block_number, tx_count) >= (mined, TxCount::Full) {
-                    MinedPointInTime::mined(Some(guard))
-                } else {
-                    drop(guard);
-                    let target = match tx_count {
-                        TxCount::Partial(_) => block_number.prev().unwrap_or_default(),
-                        TxCount::Full => block_number,
-                    };
-                    MinedPointInTime::mined_past(target)
-                }
-            }
-            ExecutionKind::Transaction | ExecutionKind::RPC(_) => MinedPointInTime::mined(None),
+            ExecutionKind::CallPending(block_number, tx_count) => self.resolve_call_point(block_number, tx_count),
+            ExecutionKind::CallLatest(block_number) => self.resolve_call_point(block_number, TxCount::Full),
+            ExecutionKind::Transaction | ExecutionKind::RPC(_) | ExecutionKind::CallPast(_) /* technically unreachable! */ => MinedPointInTime::mined(None),
         }
     }
 }
@@ -132,7 +135,6 @@ mod tests {
     use super::Resolve;
     use crate::eth::primitives::Address;
     use crate::eth::primitives::BlockNumber;
-    use crate::eth::primitives::PointInTime;
     use crate::eth::primitives::Slot;
     use crate::eth::primitives::SlotIndex;
     use crate::eth::storage::ExecutionKind;
@@ -150,7 +152,7 @@ mod tests {
         let pending_block_number = BlockNumber::from(mined_at_start + 1);
         storage.set_mined_block_number(BlockNumber::from(mined_at_start));
 
-        let kind = ExecutionKind::Call(pending_block_number, TxCount::Partial(0), PointInTime::Pending);
+        let kind = ExecutionKind::CallPending(pending_block_number, TxCount::Partial(0));
 
         // At call start: block 6 is still pending (mined=5). Latest (block 5) is a safe base.
         // resolve_slot should return Miss(Mined(Some(guard))).
@@ -202,7 +204,7 @@ mod tests {
         let call_block = BlockNumber::from(5u64);
         storage.set_mined_block_number(call_block);
 
-        let kind = ExecutionKind::Call(call_block, TxCount::Full, PointInTime::Latest);
+        let kind = ExecutionKind::CallLatest(call_block);
 
         let resolved = Slot::resolve(&storage, (address, index), kind).expect("resolve_slot");
         match resolved {

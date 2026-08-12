@@ -121,7 +121,9 @@ impl PartialOrd for TxCount {
 #[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Default, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub enum ExecutionKind {
-    Call(BlockNumber, TxCount, PointInTime),
+    CallPending(BlockNumber, TxCount),
+    CallLatest(BlockNumber),
+    CallPast(BlockNumber),
     #[default]
     Transaction,
     RPC(PointInTime),
@@ -132,11 +134,11 @@ impl ExecutionKind {
         self.into()
     }
 
-    fn mined_past_number(&self) -> Option<&BlockNumber> {
+    fn mined_past_number_opt(&self) -> Option<&BlockNumber> {
         match self {
             ExecutionKind::RPC(PointInTime::Past(number)) => Some(number),
-            ExecutionKind::Call(_, _, PointInTime::Past(number)) => Some(number),
-            ExecutionKind::Transaction | ExecutionKind::RPC(_) | ExecutionKind::Call(_, _, _) => None,
+            ExecutionKind::CallPast(number) => Some(number),
+            ExecutionKind::Transaction | ExecutionKind::RPC(_) | ExecutionKind::CallLatest(_) | ExecutionKind::CallPending(_, _) => None,
         }
     }
 }
@@ -146,7 +148,9 @@ impl From<&ExecutionKind> for PointInTime {
         match value {
             ExecutionKind::RPC(pit) => *pit,
             ExecutionKind::Transaction => PointInTime::Pending,
-            ExecutionKind::Call(_, _, pit) => *pit,
+            ExecutionKind::CallPast(number) => PointInTime::Past(*number),
+            ExecutionKind::CallLatest(_) => PointInTime::Latest,
+            ExecutionKind::CallPending(_, _) => PointInTime::Pending,
         }
     }
 }

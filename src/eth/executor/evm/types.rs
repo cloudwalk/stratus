@@ -1,5 +1,6 @@
 use alloy_primitives::U256;
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
+use anyhow::anyhow;
 use display_json::DebugAsJson;
 use revm::Context;
 use revm::Database;
@@ -25,6 +26,7 @@ use crate::eth::primitives::Hash;
 use crate::eth::primitives::Nonce;
 use crate::eth::primitives::PendingBlockHeader;
 use crate::eth::primitives::PointInTime;
+use crate::eth::primitives::StratusError;
 use crate::eth::primitives::TransactionInput;
 use crate::eth::primitives::UnixTime;
 use crate::eth::primitives::Wei;
@@ -206,21 +208,26 @@ impl CallExecutionInput {
             data: input.data,
             block_number: pending_header.number,
             block_timestamp: *pending_header.timestamp,
-            kind: ExecutionKind::Call(pending_header.number, tx_count, PointInTime::Pending),
+            kind: ExecutionKind::CallPending(pending_header.number, tx_count),
         }
     }
 
     /// Creates from a call that was sent directly to Stratus with `eth_call` or `eth_estimateGas` for a mined block.
-    pub fn from_mined_block(input: CallInput, block: Block, point_in_time: PointInTime) -> Self {
-        Self {
+    pub fn try_from_mined_block(input: CallInput, block: Block, point_in_time: PointInTime) -> anyhow::Result<Self, StratusError> {
+        let kind = match point_in_time {
+            PointInTime::Latest => ExecutionKind::CallLatest(block.number()),
+            PointInTime::Past(number) => ExecutionKind::CallPast(number),
+            PointInTime::Pending => return Err(anyhow!("call execution cannot be created on mined block with PointInTime::Pending").into()),
+        };
+        Ok(Self {
             from: input.from.unwrap_or(Address::ZERO),
             to: input.to.map_into(),
             value: input.value,
             data: input.data,
             block_number: block.number(),
             block_timestamp: block.header.timestamp,
-            kind: ExecutionKind::Call(block.number(), TxCount::Full, point_in_time),
-        }
+            kind,
+        })
     }
 }
 
