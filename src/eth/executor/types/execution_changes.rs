@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use serde_with::serde_as;
 
-use crate::eth::executor::ExecutionAccountChanges;
+use crate::eth::executor::AccountChanges;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
@@ -24,7 +24,7 @@ pub struct Complete;
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub struct ExecutionChanges<Stage = Complete> {
-    pub accounts: HashMap<Address, ExecutionAccountChanges, hash_hasher::HashBuildHasher>,
+    pub accounts: HashMap<Address, AccountChanges, hash_hasher::HashBuildHasher>,
     #[serde_as(as = "Vec<(_, _)>")]
     pub slots: HashMap<(Address, SlotIndex), SlotValue, hash_hasher::HashBuildHasher>,
     _stage: PhantomData<Stage>,
@@ -52,7 +52,7 @@ impl From<BlockChangesRocksdb> for ExecutionChanges<Incomplete> {
             .map(|(address, changes)| {
                 (
                     address.into(),
-                    ExecutionAccountChanges {
+                    AccountChanges {
                         nonce: changes.nonce.into(),
                         balance: changes.balance.into(),
                         bytecode: changes.bytecode.map(|inner| inner.map_into()).into(),
@@ -102,7 +102,7 @@ impl ExecutionChanges<Incomplete> {
 }
 
 impl ExecutionChanges<Complete> {
-    pub fn insert_account_changes(&mut self, address: Address, incoming_changes: ExecutionAccountChanges) {
+    pub fn insert_account_changes(&mut self, address: Address, incoming_changes: AccountChanges) {
         match self.accounts.entry(address) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
                 let existing_changes = entry.get_mut();

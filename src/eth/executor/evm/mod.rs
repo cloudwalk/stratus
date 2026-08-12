@@ -17,6 +17,8 @@ use revm::ExecuteCommitEvm;
 use revm::ExecuteEvm;
 use revm::InspectEvm;
 use revm::context::result::EVMError;
+use revm::context::result::ExecResultAndState;
+use revm::context::result::ExecutionResult as RevmExecResult;
 use revm::context::result::InvalidTransaction;
 use revm::database::CacheDB;
 use revm_inspectors::tracing::FourByteInspector;
@@ -29,7 +31,6 @@ pub use types::EvmKind;
 pub use types::GeneralRevm;
 use util::default_trace;
 use util::enhance_trace_with_decoded_errors;
-use util::parse_revm_result_and_state;
 
 use crate::eth::executor::EvmExecutionMetrics;
 use crate::eth::executor::ExecutionResult;
@@ -37,7 +38,6 @@ use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::ExecutorError;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
-use crate::eth::executor::TransactionExecutionOutput;
 use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm::util::EvmExt;
@@ -48,6 +48,8 @@ use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::MinedData;
 use crate::eth::types::StratusError;
+
+pub type RevmResultAndState = ExecResultAndState<RevmExecResult>;
 
 /// Implementation of EVM using [`revm`](https://crates.io/crates/revm).
 pub struct Evm<Input: EvmInput> {
@@ -72,7 +74,10 @@ impl<Input: EvmInput> Evm<Input> {
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute(&mut self, input: Input) -> Result<(TransactionExecutionOutput, EvmExecutionMetrics), StratusError> {
+    pub fn execute<Output>(&mut self, input: Input) -> Result<(Output, EvmExecutionMetrics), StratusError>
+    where
+        Output: TryFrom<RevmResultAndState, Error = StratusError>,
+    {
         // configure session
         self.evm.journaled_state.database.reset(input.kind());
         input.fill_env(&mut self.evm);
@@ -94,7 +99,7 @@ impl<Input: EvmInput> Evm<Input> {
         // parse result
         let execution = match evm_result {
             // executed
-            Ok(result_and_state) => parse_revm_result_and_state(result_and_state),
+            Ok(result_and_state) => Output::try_from(result_and_state),
 
             // nonce errors
             Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(ExecutorError::Nonce {

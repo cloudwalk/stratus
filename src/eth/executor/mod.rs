@@ -19,11 +19,11 @@ use tracing::Span;
 use tracing::debug_span;
 #[cfg(feature = "tracing")]
 use tracing::info_span;
-pub use types::AccountChangeValue;
+pub use types::AccountChanges;
 pub use types::AccountOriginalsReader;
+pub use types::ChangeValue;
 pub use types::Complete;
 pub use types::EvmExecutionMetrics;
-pub use types::ExecutionAccountChanges;
 pub use types::ExecutionChanges;
 pub use types::ExecutionResult;
 pub use types::ExecutorError;
