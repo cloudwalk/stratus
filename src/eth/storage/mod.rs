@@ -133,14 +133,6 @@ impl ExecutionKind {
     fn point_in_time(&self) -> PointInTime {
         self.into()
     }
-
-    fn mined_past_number_opt(&self) -> Option<&BlockNumber> {
-        match self {
-            ExecutionKind::RPC(PointInTime::Past(number)) => Some(number),
-            ExecutionKind::CallPast(number) => Some(number),
-            ExecutionKind::Transaction | ExecutionKind::RPC(_) | ExecutionKind::CallLatest(_) | ExecutionKind::CallPending(_, _) => None,
-        }
-    }
 }
 
 impl From<&ExecutionKind> for PointInTime {
