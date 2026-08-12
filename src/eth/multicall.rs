@@ -400,9 +400,8 @@ mod tests {
     #[test]
     fn unknown_selector_is_decode_error() {
         let input = Bytes(vec![0xff; 4]);
-        let err = match Multicall::MulticallCalls::abi_decode(input.as_ref()).map_err(MulticallError::from) {
-            Ok(_) => panic!("expected invalid input error"),
-            Err(err) => err,
+        let Err(err) = Multicall::MulticallCalls::abi_decode(input.as_ref()).map_err(MulticallError::from) else {
+            panic!("expected decode error");
         };
 
         assert!(matches!(
