@@ -1,19 +1,24 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use serde_with::serde_as;
 
+use crate::alias::RevmBytecode;
 use crate::eth::executor::AccountChanges;
+use crate::eth::executor::ChangeValue;
+use crate::eth::executor::Unset;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
+use crate::eth::types::Nonce;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::SlotValue;
+use crate::eth::types::Wei;
 use crate::ext::OptionExt;
 
-/// Stage marker: changes may still contain `Default` placeholders for fields the external block
-/// did not touch. Must be [`ExecutionChanges::complete`]-d before consumption. (eg. on Block replication)
+/// Stage marker: changes may be incomplete
 pub struct Incomplete;
 
 /// Stage marker: every value is final (either changed by the block or filled with the original
@@ -21,13 +26,30 @@ pub struct Incomplete;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Complete;
 
+pub trait Stage {
+    type Field<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize>: Clone + Debug + PartialEq + Eq + Default + serde::Serialize;
+}
+
+impl Stage for Incomplete {
+    type Field<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize> = Unset<T>;
+}
+
+impl Stage for Complete {
+    type Field<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize> = ChangeValue<T>;
+}
+
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Default)]
-pub struct ExecutionChanges<Stage = Complete> {
-    pub accounts: HashMap<Address, AccountChanges, hash_hasher::HashBuildHasher>,
+#[cfg_attr(test, derive(serde::Deserialize))]
+#[serde(bound(
+    serialize = "S::Field<Nonce>: serde::Serialize, S::Field<Wei>: serde::Serialize, S::Field<Option<RevmBytecode>>: serde::Serialize",
+    deserialize = "S::Field<Nonce>: serde::Deserialize<'de>, S::Field<Wei>: serde::Deserialize<'de>, S::Field<Option<RevmBytecode>>: serde::Deserialize<'de>"
+))]
+pub struct ExecutionChanges<S: Stage = Complete> {
+    pub accounts: HashMap<Address, AccountChanges<S>, hash_hasher::HashBuildHasher>,
     #[serde_as(as = "Vec<(_, _)>")]
     pub slots: HashMap<(Address, SlotIndex), SlotValue, hash_hasher::HashBuildHasher>,
-    _stage: PhantomData<Stage>,
+    _stage: PhantomData<S>,
 }
 
 #[cfg(test)]
@@ -81,18 +103,23 @@ pub trait AccountOriginalsReader {
 }
 
 impl ExecutionChanges<Incomplete> {
-    /// Reads the original account state from `storage` and fills every `Default` placeholder,
-    /// advancing to [`Complete`]. The only way to turn an `Incomplete` into `Complete`.
+    /// Reads the original account state from `storage` and resolves every unset field, advancing to
+    /// [`Complete`]. The only way to turn an `Incomplete` into `Complete`.
+    ///
+    /// Accounts not present in permanent storage (newly created by the block) resolve to
+    /// `Account::default()`, which is their correct pre-state.
     pub fn complete(self, storage: &impl AccountOriginalsReader) -> anyhow::Result<ExecutionChanges<Complete>> {
         let addresses = self.accounts.keys().copied().collect::<Vec<_>>();
         let originals = storage.read_accounts(addresses)?;
-        let mut accounts = self.accounts;
-        for (address, original) in originals {
-            match accounts.entry(address) {
-                std::collections::hash_map::Entry::Occupied(mut entry) => entry.get_mut().apply_original(original),
-                std::collections::hash_map::Entry::Vacant(_) => unreachable!("originals come from the changed accounts"),
-            }
-        }
+        let originals_by_address: HashMap<Address, Account> = originals.into_iter().collect();
+        let accounts = self
+            .accounts
+            .into_iter()
+            .map(|(address, changes)| {
+                let original = originals_by_address.get(&address).cloned().unwrap_or_default();
+                (address, changes.complete(original))
+            })
+            .collect();
         Ok(ExecutionChanges {
             accounts,
             slots: self.slots,
@@ -102,7 +129,7 @@ impl ExecutionChanges<Incomplete> {
 }
 
 impl ExecutionChanges<Complete> {
-    pub fn insert_account_changes(&mut self, address: Address, incoming_changes: AccountChanges) {
+    pub fn insert_account_changes(&mut self, address: Address, incoming_changes: AccountChanges<Complete>) {
         match self.accounts.entry(address) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
                 let existing_changes = entry.get_mut();

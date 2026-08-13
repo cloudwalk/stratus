@@ -1,13 +1,15 @@
 use std::ops::Deref;
 
-use display_json::DebugAsJson;
-
 use crate::alias::RevmBytecode;
+use crate::eth::executor::types::execution_changes::Complete;
+use crate::eth::executor::types::execution_changes::Incomplete;
+use crate::eth::executor::types::execution_changes::Stage;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Nonce;
 use crate::eth::types::Wei;
 
+/// Complete-stage field: a real value, either the original (untouched by the block) or changed by it.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub enum ChangeValue<T>
@@ -85,30 +87,61 @@ where
     }
 }
 
-impl<T, U> From<Option<U>> for ChangeValue<T>
+/// Incomplete-stage field: either the block changed this value, or the original is not yet known
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
+pub enum Unset<T> {
+    Changed(T),
+    #[default]
+    Unset,
+}
+
+impl<T> Unset<T> {
+    /// Resolves an incomplete field into a complete one, using `original` when the block did not touch it.
+    pub fn complete(self, original: T) -> ChangeValue<T>
+    where
+        T: PartialEq + Eq + Default,
+    {
+        match self {
+            Self::Changed(value) => ChangeValue::Changed(value),
+            Self::Unset => ChangeValue::Original(original),
+        }
+    }
+}
+
+impl<T, U> From<Option<U>> for Unset<T>
 where
-    T: PartialEq + Eq + Default,
     U: Into<T>,
 {
     fn from(value: Option<U>) -> Self {
         match value {
             Some(value) => Self::Changed(value.into()),
-            None => Self::Original(T::default()),
+            None => Self::Unset,
         }
     }
 }
 
 /// Changes that happened to an account during a transaction.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Default)]
-#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
-pub struct AccountChanges {
-    pub nonce: ChangeValue<Nonce>,
-    pub balance: ChangeValue<Wei>,
-    #[cfg_attr(test, dummy(default))]
-    pub bytecode: ChangeValue<Option<RevmBytecode>>,
+#[derive(Clone, PartialEq, Eq, serde::Serialize, Default)]
+#[cfg_attr(test, derive(serde::Deserialize))]
+pub struct AccountChanges<S: Stage = Complete> {
+    pub nonce: S::Field<Nonce>,
+    pub balance: S::Field<Wei>,
+    pub bytecode: S::Field<Option<RevmBytecode>>,
 }
 
-impl AccountChanges {
+impl AccountChanges<Incomplete> {
+    /// Fills every unset field with its real original value, advancing to [`Complete`].
+    pub fn complete(self, original: Account) -> AccountChanges<Complete> {
+        AccountChanges {
+            nonce: self.nonce.complete(original.nonce),
+            balance: self.balance.complete(original.balance),
+            bytecode: self.bytecode.complete(original.bytecode),
+        }
+    }
+}
+
+impl AccountChanges<Complete> {
     /// Updates an existing account state with changes that happened during the transaction.
     pub fn apply_modifications(&mut self, modified_account: Account) {
         self.nonce.apply(modified_account.nonce);
@@ -116,7 +149,7 @@ impl AccountChanges {
         self.bytecode.apply(modified_account.bytecode);
     }
 
-    pub fn merge(&mut self, other: AccountChanges) {
+    pub fn merge(&mut self, other: AccountChanges<Complete>) {
         if other.nonce.is_changed() {
             self.nonce = other.nonce;
         }
@@ -149,13 +182,13 @@ impl AccountChanges {
     }
 }
 
-impl From<(Address, AccountChanges)> for Account {
-    fn from((address, change): (Address, AccountChanges)) -> Self {
+impl From<(Address, AccountChanges<Complete>)> for Account {
+    fn from((address, change): (Address, AccountChanges<Complete>)) -> Self {
         change.to_account(address)
     }
 }
 
-impl From<revm_state::Account> for AccountChanges {
+impl From<revm_state::Account> for AccountChanges<Complete> {
     fn from(mut value: revm_state::Account) -> Self {
         let changed = std::mem::take(&mut value.info);
         let original = value.original_info_mut();
@@ -163,6 +196,23 @@ impl From<revm_state::Account> for AccountChanges {
             nonce: ChangeValue::from_diff(original.nonce.into(), changed.nonce.into()),
             balance: ChangeValue::from_diff(original.balance.into(), changed.balance.into()),
             bytecode: ChangeValue::from_diff(original.code.take(), changed.code),
+        }
+    }
+}
+
+impl<S: Stage> std::fmt::Debug for AccountChanges<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&serde_json::to_string(self).expect("AccountChanges must be serializable for Debug"))
+    }
+}
+
+#[cfg(test)]
+impl fake::Dummy<fake::Faker> for AccountChanges<Complete> {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &fake::Faker, rng: &mut R) -> Self {
+        Self {
+            nonce: fake::Dummy::dummy_with_rng(faker, rng),
+            balance: fake::Dummy::dummy_with_rng(faker, rng),
+            bytecode: ChangeValue::default(),
         }
     }
 }

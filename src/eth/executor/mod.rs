@@ -31,7 +31,9 @@ pub use types::ExecutionResult;
 pub use types::ExecutorError;
 pub use types::Incomplete;
 pub use types::RevertReason;
+pub use types::Stage;
 pub use types::TransactionExecution;
+pub use types::Unset;
 
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;

@@ -7,11 +7,13 @@ mod transaction_execution;
 
 pub use account_changes::AccountChanges;
 pub use account_changes::ChangeValue;
+pub use account_changes::Unset;
 pub use error::ExecutorError;
 pub use execution_changes::AccountOriginalsReader;
 pub use execution_changes::Complete;
 pub use execution_changes::ExecutionChanges;
 pub use execution_changes::Incomplete;
+pub use execution_changes::Stage;
 pub use execution_result::ExecutionResult;
 pub use execution_result::RevertReason;
 pub use task::EvmRoute;
