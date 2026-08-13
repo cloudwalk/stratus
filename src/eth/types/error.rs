@@ -5,7 +5,6 @@ use jsonrpsee::core::middleware::ResponseFuture;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Id;
 use revm::context::DBErrorMarker;
-use revm::context::result::EVMError;
 use stratus_macros::ErrorCode;
 
 use crate::alias::JsonValue;
@@ -186,15 +185,6 @@ impl From<anyhow::Error> for StratusError {
 impl From<serde_json::Error> for StratusError {
     fn from(value: serde_json::Error) -> Self {
         Self::Unexpected(UnexpectedError::Unexpected(anyhow::anyhow!(value)))
-    }
-}
-
-impl From<EVMError<StratusError>> for StratusError {
-    fn from(value: EVMError<StratusError>) -> Self {
-        match value {
-            EVMError::Database(err) => err,
-            err => ExecutorError::EvmFailed(err.to_string()).into(),
-        }
     }
 }
 

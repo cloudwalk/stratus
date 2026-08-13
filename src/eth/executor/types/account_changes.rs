@@ -10,7 +10,7 @@ use crate::eth::types::Wei;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
-pub enum AccountChangeValue<T>
+pub enum ChangeValue<T>
 where
     T: PartialEq + Eq + Default,
 {
@@ -18,13 +18,13 @@ where
     Changed(T),
 }
 
-impl<T: PartialEq + Eq + Default> Default for AccountChangeValue<T> {
+impl<T: PartialEq + Eq + Default> Default for ChangeValue<T> {
     fn default() -> Self {
         Self::Original(T::default())
     }
 }
 
-impl<T: PartialEq + Eq + Default> Deref for AccountChangeValue<T> {
+impl<T: PartialEq + Eq + Default> Deref for ChangeValue<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         match self {
@@ -34,7 +34,7 @@ impl<T: PartialEq + Eq + Default> Deref for AccountChangeValue<T> {
     }
 }
 
-impl<T> AccountChangeValue<T>
+impl<T> ChangeValue<T>
 where
     T: PartialEq + Eq + Default,
 {
@@ -85,7 +85,7 @@ where
     }
 }
 
-impl<T, U> From<Option<U>> for AccountChangeValue<T>
+impl<T, U> From<Option<U>> for ChangeValue<T>
 where
     T: PartialEq + Eq + Default,
     U: Into<T>,
@@ -101,14 +101,14 @@ where
 /// Changes that happened to an account during a transaction.
 #[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 #[cfg_attr(test, derive(fake::Dummy))]
-pub struct ExecutionAccountChanges {
-    pub nonce: AccountChangeValue<Nonce>,
-    pub balance: AccountChangeValue<Wei>,
+pub struct AccountChanges {
+    pub nonce: ChangeValue<Nonce>,
+    pub balance: ChangeValue<Wei>,
     #[cfg_attr(test, dummy(default))]
-    pub bytecode: AccountChangeValue<Option<RevmBytecode>>,
+    pub bytecode: ChangeValue<Option<RevmBytecode>>,
 }
 
-impl ExecutionAccountChanges {
+impl AccountChanges {
     /// Updates an existing account state with changes that happened during the transaction.
     pub fn apply_modifications(&mut self, modified_account: Account) {
         self.nonce.apply(modified_account.nonce);
@@ -116,7 +116,7 @@ impl ExecutionAccountChanges {
         self.bytecode.apply(modified_account.bytecode);
     }
 
-    pub fn merge(&mut self, other: ExecutionAccountChanges) {
+    pub fn merge(&mut self, other: AccountChanges) {
         if other.nonce.is_changed() {
             self.nonce = other.nonce;
         }
@@ -149,20 +149,20 @@ impl ExecutionAccountChanges {
     }
 }
 
-impl From<(Address, ExecutionAccountChanges)> for Account {
-    fn from((address, change): (Address, ExecutionAccountChanges)) -> Self {
+impl From<(Address, AccountChanges)> for Account {
+    fn from((address, change): (Address, AccountChanges)) -> Self {
         change.to_account(address)
     }
 }
 
-impl From<revm_state::Account> for ExecutionAccountChanges {
+impl From<revm_state::Account> for AccountChanges {
     fn from(mut value: revm_state::Account) -> Self {
         let changed = std::mem::take(&mut value.info);
         let original = value.original_info_mut();
         Self {
-            nonce: AccountChangeValue::from_diff(original.nonce.into(), changed.nonce.into()),
-            balance: AccountChangeValue::from_diff(original.balance.into(), changed.balance.into()),
-            bytecode: AccountChangeValue::from_diff(original.code.take(), changed.code),
+            nonce: ChangeValue::from_diff(original.nonce.into(), changed.nonce.into()),
+            balance: ChangeValue::from_diff(original.balance.into(), changed.balance.into()),
+            bytecode: ChangeValue::from_diff(original.code.take(), changed.code),
         }
     }
 }

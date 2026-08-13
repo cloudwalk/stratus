@@ -270,8 +270,8 @@ mod tests {
 
     use hash_hasher::HashBuildHasher;
 
-    use crate::eth::executor::AccountChangeValue;
-    use crate::eth::executor::ExecutionAccountChanges;
+    use crate::eth::executor::AccountChanges;
+    use crate::eth::executor::ChangeValue;
     use crate::eth::executor::ExecutionChanges;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::TransactionExecution;
@@ -301,12 +301,12 @@ mod tests {
     use crate::eth::types::UnixTime;
     use crate::eth::types::Wei;
 
-    impl ExecutionAccountChanges {
+    impl AccountChanges {
         pub fn from_changed(account: Account) -> Self {
             Self {
-                nonce: AccountChangeValue::Changed(account.nonce),
-                balance: AccountChangeValue::Changed(account.balance),
-                bytecode: AccountChangeValue::Changed(account.bytecode),
+                nonce: ChangeValue::Changed(account.nonce),
+                balance: ChangeValue::Changed(account.balance),
+                bytecode: ChangeValue::Changed(account.bytecode),
             }
         }
     }
@@ -334,7 +334,7 @@ mod tests {
         let mut changes = ExecutionChanges::default();
         changes
             .accounts
-            .insert(address, ExecutionAccountChanges::from_changed(Account::new_with_balance(address, balance)));
+            .insert(address, AccountChanges::from_changed(Account::new_with_balance(address, balance)));
         changes
     }
 

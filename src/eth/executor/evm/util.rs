@@ -1,5 +1,3 @@
-use std::mem;
-
 use alloy_primitives::U256;
 use alloy_rpc_types_trace::geth::CallFrame;
 use alloy_rpc_types_trace::geth::FourByteFrame;
@@ -9,123 +7,24 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::NoopFrame;
 use alloy_rpc_types_trace::geth::call::FlatCallFrame;
 use alloy_rpc_types_trace::geth::mux::MuxFrame;
-use itertools::Itertools;
 use revm::Context;
 use revm::Database;
 use revm::context::BlockEnv;
 use revm::context::Evm as RevmEvm;
 use revm::context::TransactTo;
 use revm::context::TxEnv;
-use revm::context::result::ExecutionResult as RevmExecutionResult;
-use revm::context::result::ResultAndState;
 use revm::handler::EthPrecompiles;
 use revm::handler::instructions::EthInstructions;
 use revm::primitives::hardfork::SpecId;
-use revm::state::EvmState;
 
 use crate::eth::codegen;
-use crate::eth::executor::Complete;
 use crate::eth::executor::EvmKind;
-use crate::eth::executor::ExecutionChanges;
-use crate::eth::executor::ExecutionResult;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
-use crate::eth::executor::TransactionExecutionOutput;
 use crate::eth::executor::evm::GeneralRevm;
 use crate::eth::executor::evm::types::GAS_MAX_LIMIT;
 use crate::eth::types::Address;
-use crate::eth::types::Bytes;
-use crate::eth::types::Gas;
-use crate::eth::types::Log;
-use crate::eth::types::Slot;
-use crate::eth::types::StratusError;
 use crate::ext::OptionExt;
-
-pub fn parse_revm_result_and_state(revm_result: ResultAndState) -> Result<TransactionExecutionOutput, StratusError> {
-    let (result, tx_output, logs, gas) = parse_revm_result(revm_result.result);
-    let (changes, deployed_contract_address) = parse_revm_state(revm_result.state)?;
-    tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
-
-    Ok(TransactionExecutionOutput {
-        result,
-        output: tx_output,
-        logs,
-        gas_used: gas,
-        changes,
-        deployed_contract_address,
-    })
-}
-
-fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
-    match result {
-        RevmExecutionResult::Success { output, gas, logs, .. } => {
-            let result = ExecutionResult::Success;
-            let output = Bytes::from(output);
-            let logs = logs.into_iter().map_into().collect();
-            let gas = Gas::from(gas);
-            (result, output, logs, gas)
-        }
-        RevmExecutionResult::Revert { output, gas, logs } => {
-            let output = Bytes::from(output);
-            let result = ExecutionResult::Reverted { reason: (&output).into() };
-            let gas = Gas::from(gas);
-            let logs = logs.into_iter().map_into().collect();
-            (result, output, logs, gas)
-        }
-        RevmExecutionResult::Halt { reason, gas, logs } => {
-            let result = ExecutionResult::new_halted(format!("{reason:?}"));
-            let output = Bytes::default();
-            let gas = Gas::from(gas);
-            let logs = logs.into_iter().map_into().collect();
-            (result, output, logs, gas)
-        }
-    }
-}
-
-fn parse_revm_state(revm_state: EvmState) -> Result<(ExecutionChanges, Option<Address>), StratusError> {
-    let mut deployed_contract_address = None;
-    let mut execution_changes: ExecutionChanges<Complete> = ExecutionChanges::default();
-
-    for (revm_address, mut revm_account) in revm_state {
-        let address: Address = revm_address.into();
-        if address.is_ignored() {
-            continue;
-        }
-
-        // apply changes according to account status
-        tracing::debug!(
-            %address,
-            status = ?revm_account.status,
-            balance = %revm_account.info.balance,
-            nonce = %revm_account.info.nonce,
-            slots = %revm_account.storage.len(),
-            "evm account"
-        );
-
-        if !(revm_account.is_created() || revm_account.is_touched()) {
-            continue;
-        }
-
-        if revm_account.is_created() && revm_account.info.code.is_some() {
-            deployed_contract_address = Some(address);
-        }
-
-        let storage = mem::take(&mut revm_account.storage);
-        let account_modified_slots: Vec<Slot> = storage
-            .into_iter()
-            .filter_map(|(index, value)| match value.is_changed() {
-                true => Some(Slot::new(index.into(), value.present_value.into())),
-                false => None,
-            })
-            .collect();
-
-        execution_changes.insert_slot_changes(address, account_modified_slots);
-        if revm_account.is_changed() {
-            execution_changes.insert_account_changes(address, revm_account.into());
-        }
-    }
-    Ok((execution_changes, deployed_contract_address))
-}
 
 pub fn default_trace(tracer_type: GethDebugTracerType, tx: TransactionExecution) -> GethTrace {
     match tracer_type {

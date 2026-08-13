@@ -7,9 +7,9 @@ use crate::eth::executor::EvmExecutionMetrics;
 use crate::eth::executor::ExecutorConfig;
 use crate::eth::executor::ExecutorError;
 use crate::eth::executor::TransactionExecutionInput;
-use crate::eth::executor::TransactionExecutionOutput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::EvmKind;
+use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::types::EvmRoute;
@@ -105,8 +105,11 @@ impl EvmWorkerPool {
     }
 
     /// Executes a transaction in the specified route.
-    pub fn execute(&self, route: EvmRoute) -> Result<(TransactionExecutionOutput, EvmExecutionMetrics), StratusError> {
-        let (execution_tx, execution_rx) = oneshot::channel::<Result<(TransactionExecutionOutput, EvmExecutionMetrics), StratusError>>();
+    pub fn execute<Output>(&self, route: EvmRoute) -> Result<(Output, EvmExecutionMetrics), StratusError>
+    where
+        Output: TryFrom<RevmResultAndState, Error = StratusError>,
+    {
+        let (execution_tx, execution_rx) = oneshot::channel::<Result<(RevmResultAndState, EvmExecutionMetrics), StratusError>>();
 
         match route {
             EvmRoute::Transaction(input) => {
@@ -124,7 +127,10 @@ impl EvmWorkerPool {
         };
 
         match execution_rx.recv() {
-            Ok(result) => result,
+            Ok(result) => {
+                let (result, metrics) = result?;
+                Ok((result.try_into()?, metrics))
+            }
             Err(_) => Err(UnexpectedError::ChannelClosed { channel: "evm" }.into()),
         }
     }
