@@ -9,7 +9,6 @@ use chrono::Utc;
 use parking_lot::Mutex;
 use parking_lot::RwLock;
 use sentry::ClientInitGuard;
-use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 use tokio::runtime::Runtime;
@@ -143,7 +142,7 @@ static HEALTH: LazyLock<Sender<bool>> = LazyLock::new(|| tokio::sync::watch::Sen
 /// Should stratus restart when unhealthy?
 static RESTART_ON_UNHEALTHY: AtomicBool = AtomicBool::new(true);
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Debug)]
 pub struct GlobalState;
 
 impl GlobalState {

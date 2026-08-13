@@ -31,15 +31,16 @@ use crate::eth::types::SignatureComponent;
 use crate::eth::types::Wei;
 use crate::ext::RuintExt;
 
-#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(test, derive(fake::Dummy))]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub struct TransactionInfo {
     #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_option_uint()"))]
     pub tx_type: Option<U64>,
     pub hash: Hash,
 }
 
-#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize, Default)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub enum Signer {
     Recovered(Address),
     #[default]
@@ -81,8 +82,8 @@ impl fake::Dummy<fake::Faker> for Signer {
     }
 }
 
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(test, derive(fake::Dummy))]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub struct ExecutionInfo {
     #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_option::<ChainId>()"))]
     pub chain_id: Option<ChainId>,
@@ -96,8 +97,8 @@ pub struct ExecutionInfo {
     pub gas_price: u128,
 }
 
-#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(test, derive(fake::Dummy))]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub struct Signature {
     #[cfg_attr(test, dummy(expr = "crate::utils::test_utils::fake_uint()"))]
     pub v: U64,
@@ -113,8 +114,8 @@ impl From<Signature> for AlloySignature {
     }
 }
 
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(test, derive(fake::Dummy))]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub struct TransactionInput {
     pub transaction_info: TransactionInfo,
     pub execution_info: ExecutionInfo,

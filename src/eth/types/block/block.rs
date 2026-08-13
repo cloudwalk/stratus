@@ -21,7 +21,7 @@ use crate::eth::types::TransactionMined;
 use crate::eth::types::UnixTime;
 use crate::ext::to_json_value;
 
-#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct Block {
     pub header: BlockHeader,

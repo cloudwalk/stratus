@@ -10,7 +10,6 @@ use alloy_primitives::U256;
 use alloy_primitives::hex;
 use anyhow::Result;
 use const_hex::FromHex;
-use serde::Deserialize;
 use serde::Serialize;
 
 use crate::alias::RevmBytecode;
@@ -27,7 +26,7 @@ pub type GenesisSlots = Vec<(Address, Slot)>;
 
 /// Represents the configuration of an Ethereum genesis.json file
 #[allow(non_snake_case)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct GenesisConfig {
     pub config: ChainConfig,
     pub nonce: String,
@@ -50,7 +49,7 @@ pub struct GenesisConfig {
 
 /// Chain configuration in genesis.json
 #[allow(non_snake_case)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct ChainConfig {
     pub chainId: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -82,7 +81,7 @@ pub struct ChainConfig {
 }
 
 /// Account in the genesis.json file
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct GenesisAccount {
     pub balance: String,
     #[serde(skip_serializing_if = "Option::is_none")]

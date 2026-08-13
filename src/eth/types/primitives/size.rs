@@ -9,8 +9,9 @@ use fake::Faker;
 
 use crate::ext::RuintExt;
 
-#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
 #[serde(transparent)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct Size(U64);
 
 #[cfg(test)]

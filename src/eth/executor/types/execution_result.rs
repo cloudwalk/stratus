@@ -8,8 +8,8 @@ use crate::eth::codegen::error_sig_opt;
 use crate::eth::types::Bytes;
 
 /// Indicates how a transaction execution was finished.
-#[derive(DebugAsJson, strum::Display, Clone, PartialEq, Eq, derive_new::new, serde::Serialize, serde::Deserialize, strum::EnumString, Default)]
-#[cfg_attr(test, derive(fake::Dummy))]
+#[derive(DebugAsJson, strum::Display, Clone, PartialEq, Eq, derive_new::new, serde::Serialize, strum::EnumString, Default)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionResult {
     /// Finished normally (RETURN opcode).
@@ -32,7 +32,8 @@ impl ExecutionResult {
     }
 }
 
-#[derive(Debug, thiserror::Error, serde::Serialize, serde::Deserialize, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error, serde::Serialize, Default, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct RevertReason(pub Cow<'static, str>);
 
 #[cfg(test)]

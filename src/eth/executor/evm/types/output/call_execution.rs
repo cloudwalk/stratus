@@ -7,7 +7,7 @@ use crate::eth::types::Gas;
 use crate::eth::types::StratusError;
 
 /// Output of a transaction executed in the EVM.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Default)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct CallExecutionOutput {
     /// Output returned by the function execution (can be the function output or an exception).

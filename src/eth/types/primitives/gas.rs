@@ -9,10 +9,9 @@ use revm::context::result::ResultGas;
 
 use crate::ext::RuintExt;
 
-#[derive(
-    DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_more::Add, derive_more::AddAssign,
-)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, derive_more::Add, derive_more::AddAssign)]
 #[serde(transparent)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct Gas(U64);
 
 impl Gas {

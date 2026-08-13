@@ -6,7 +6,8 @@ use alloy_primitives::BloomInput;
 
 use crate::eth::types::Log;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, Default)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[serde(transparent)]
 pub struct LogsBloom(pub Bloom);
 

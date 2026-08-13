@@ -10,7 +10,7 @@ use crate::eth::types::ExternalBlock;
 use crate::eth::types::ExternalReceipt;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize)]
 pub struct ExternalBlockWithReceipts {
     pub block: ExternalBlock,
     pub receipts: Vec<ExternalReceipt>,

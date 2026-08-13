@@ -10,7 +10,8 @@ use fake::Faker;
 
 use crate::ext::RuintExt;
 
-#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, Eq, PartialEq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct ChainId(pub U64);
 
 #[cfg(test)]

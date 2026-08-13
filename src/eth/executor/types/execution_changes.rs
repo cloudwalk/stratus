@@ -22,7 +22,7 @@ pub struct Incomplete;
 pub struct Complete;
 
 #[serde_as]
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Default)]
 pub struct ExecutionChanges<Stage = Complete> {
     pub accounts: HashMap<Address, AccountChanges, hash_hasher::HashBuildHasher>,
     #[serde_as(as = "Vec<(_, _)>")]

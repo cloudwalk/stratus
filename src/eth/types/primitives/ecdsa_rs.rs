@@ -6,7 +6,8 @@ use fake::Dummy;
 use fake::Faker;
 
 // Type representing `r` and `s` variables from the ECDSA signature.
-#[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct EcdsaRs(U256);
 
 #[cfg(test)]
