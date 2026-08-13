@@ -37,22 +37,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - name: Disk diagnostic - baseline + start sampler
-        # TEMPORARY: instrument disk/RAM to diagnose "No space left on device" on stratus-runner
-        run: |
-          echo "=== DISK: baseline (fresh stratus-runner image) ==="
-          df -h / "${{ github.workspace }}" 2>/dev/null
-          echo "--- top-level disk consumers ---"
-          du -sh /* 2>/dev/null | sort -rh | head -12
-          echo
-          echo "=== Starting background sampler (disk + RAM every 15s, log to /dev/shm to survive disk-full) ==="
-          ( while true; do
-              printf '%s  ' "$(date -u +%FT%TZ)"
-              df -h / 2>/dev/null | awk 'NR==2{printf "disk %s/%s used (%s avail)  ", $3, $2, $4}'
-              free -h 2>/dev/null | awk 'NR==2{printf "mem %s/%s used (%s avail)\n", $3, $2, $7}'
-              sleep 15
-            done ) > /dev/shm/disk-sampler.log 2>&1 &
-          echo "sampler pid: $!"
       - name: Set up Rust
         run: rustup show
       - name: Rust Cache - Restore shared key
@@ -61,13 +45,6 @@ jobs:
           path: ${{ env.CACHE_PATH }}
           restore-keys: ${{ env.CACHE_SHARED_KEY }}
           key: ${{ env.CACHE_SHARED_KEY }}
-      - name: Disk diagnostic - after cache restore
-        # TEMPORARY
-        run: |
-          echo "=== DISK: after cache restore ==="
-          df -h / 2>/dev/null
-          echo "--- restored footprint ---"
-          du -sh ~/.cargo/registry ~/.cargo/git "${{ github.workspace }}/target" 2>/dev/null
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
       - name: Set up Just
@@ -97,11 +74,6 @@ jobs:
           python-version: "3.12"
       - name: Install Poetry
         run: curl -sSL https://install.python-poetry.org | python3 -
-      - name: Disk diagnostic - before e2e run
-        # TEMPORARY
-        run: |
-          echo "=== DISK: before e2e run (post-installs) ==="
-          df -h / 2>/dev/null
       - name: Run e2e tests
         run: ${{ inputs.justfile_env }} just run-test ${{ inputs.justfile_recipe }} ${{ inputs.justfile_args }}
         env:
@@ -109,28 +81,3 @@ jobs:
           RUST_LOG: error
           RELEASE: 0
           RUST_BACKTRACE: 1
-      - name: Disk diagnostic - dump timeline + breakdown
-        # TEMPORARY: always runs, even on "No space left on device" failure
-        if: always()
-        run: |
-          pkill -f disk-sampler 2>/dev/null || true
-          echo "=== DISK + RAM SAMPLER TIMELINE (every 15s) ==="
-          cat /dev/shm/disk-sampler.log 2>/dev/null || echo "(no sampler log)"
-          echo
-          echo "=== FINAL df ==="
-          df -h / "${{ github.workspace }}" 2>/dev/null
-          echo
-          echo "=== TOP-LEVEL DISK CONSUMERS (/) ==="
-          du -sh /* 2>/dev/null | sort -rh | head -15
-          echo
-          echo "=== BUILD/RESTORE FOOTPRINT ==="
-          du -sh ~/.cargo/registry ~/.cargo/git "${{ github.workspace }}/target" /tmp 2>/dev/null | sort -rh
-          echo
-          echo "=== target/ breakdown (top) ==="
-          du -sh "${{ github.workspace }}/target"/* 2>/dev/null | sort -rh | head -10
-          echo
-          echo "=== /tmp breakdown (rocksdb SST/WAL, profraw, etc.) ==="
-          du -sh /tmp/* 2>/dev/null | sort -rh | head -10
-          echo
-          echo "=== .profraw count ==="
-          find "${{ github.workspace }}" /tmp -name '*.profraw' 2>/dev/null | wc -l
