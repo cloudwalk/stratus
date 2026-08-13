@@ -9,9 +9,12 @@ use revm::handler::EthPrecompiles;
 use revm::handler::instructions::EthInstructions;
 use revm::interpreter::interpreter::EthInterpreter;
 
+mod execution_metrics;
 mod input;
 mod output;
 
+pub use execution_metrics::EvmExecutionMetrics;
+pub use execution_metrics::SlotAccessMetrics;
 pub use input::EvmInput;
 pub use input::call_execution::CallExecutionInput;
 pub use input::inspector::InspectorInput;

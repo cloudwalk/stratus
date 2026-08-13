@@ -9,10 +9,10 @@ use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::Evm;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
+use crate::eth::executor::evm::types::EvmExecutionMetrics;
 use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::types::error::ExecutorError;
-use crate::eth::executor::types::execution_metrics::EvmExecutionMetrics;
 use crate::eth::types::StratusError;
 
 pub struct EvmTask<T: Task + Send> {

@@ -13,6 +13,7 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
 pub use config::ExecutorConfig;
 pub use evm::types::CallExecutionOutput;
+pub use evm::types::EvmExecutionMetrics;
 pub use evm::types::EvmKind;
 pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
@@ -25,7 +26,6 @@ pub use types::AccountChanges;
 pub use types::AccountOriginalsReader;
 pub use types::ChangeValue;
 pub use types::Complete;
-pub use types::EvmExecutionMetrics;
 pub use types::ExecutionChanges;
 pub use types::ExecutionResult;
 pub use types::ExecutorError;
@@ -38,10 +38,10 @@ use crate::eth::codegen;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
+#[cfg(feature = "metrics")]
+use crate::eth::executor::evm::types::SlotAccessMetrics;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::types::EvmRoute;
-#[cfg(feature = "metrics")]
-use crate::eth::executor::types::SlotAccessMetrics;
 use crate::eth::miner::Miner;
 use crate::eth::rpc::RpcError;
 use crate::eth::storage::ExecutionKind;

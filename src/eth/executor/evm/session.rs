@@ -9,7 +9,7 @@ use revm::state::AccountInfo;
 
 use crate::alias::RevmAddress;
 use crate::alias::RevmBytecode;
-use crate::eth::executor::types::SlotAccessMetrics;
+use crate::eth::executor::evm::types::SlotAccessMetrics;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Address;
