@@ -125,8 +125,7 @@ pub struct MulticallSubcall {
 }
 
 impl MulticallSubcall {
-    fn new(index: usize, to: Address, input: Vec<u8>, allow_failure: Option<bool>, value: Option<String>) -> Self {
-        let input = Bytes(input);
+    fn new(index: usize, to: Address, input: Bytes, allow_failure: Option<bool>, value: Option<String>) -> Self {
         Self {
             index,
             to,
@@ -154,7 +153,7 @@ pub fn is_multicall_contract(to: Address) -> bool {
 trait MulticallCall {
     fn target(&self) -> Address;
 
-    fn data(&self) -> &[u8];
+    fn data(self) -> Bytes;
 
     fn allow_failure(&self) -> Option<bool> {
         None
@@ -168,13 +167,10 @@ trait MulticallCall {
     where
         Self: Sized,
     {
-        MulticallSubcall::new(
-            index,
-            self.target(),
-            self.data().to_vec(),
-            allow_failure.or_else(|| self.allow_failure()),
-            self.value(),
-        )
+        let target = self.target();
+        let allow_failure = allow_failure.or_else(|| self.allow_failure());
+        let value = self.value();
+        MulticallSubcall::new(index, target, self.data(), allow_failure, value)
     }
 }
 
@@ -183,8 +179,8 @@ impl MulticallCall for Multicall3::Call {
         self.target.into()
     }
 
-    fn data(&self) -> &[u8] {
-        self.callData.as_ref()
+    fn data(self) -> Bytes {
+        self.callData.into()
     }
 }
 
@@ -193,8 +189,8 @@ impl MulticallCall for Multicall3::Call3 {
         self.target.into()
     }
 
-    fn data(&self) -> &[u8] {
-        self.callData.as_ref()
+    fn data(self) -> Bytes {
+        self.callData.into()
     }
 
     fn allow_failure(&self) -> Option<bool> {
@@ -207,8 +203,8 @@ impl MulticallCall for Multicall3::Call3Value {
         self.target.into()
     }
 
-    fn data(&self) -> &[u8] {
-        self.callData.as_ref()
+    fn data(self) -> Bytes {
+        self.callData.into()
     }
 
     fn allow_failure(&self) -> Option<bool> {
@@ -273,7 +269,7 @@ mod tests {
 
     #[test]
     fn decode_aggregate_with_one_call() {
-        let input = Bytes(
+        let input = Bytes::from(
             Multicall::aggregateCall {
                 calls: vec![Multicall3::Call {
                     target: alloy_address(brlc_address()),
@@ -300,7 +296,7 @@ mod tests {
 
     #[test]
     fn decode_try_aggregate_sets_global_allow_failure() {
-        let input = Bytes(
+        let input = Bytes::from(
             Multicall::tryAggregateCall {
                 requireSuccess: false,
                 calls: vec![Multicall3::Call {
@@ -318,7 +314,7 @@ mod tests {
 
     #[test]
     fn decode_aggregate3_sets_per_call_allow_failure() {
-        let input = Bytes(
+        let input = Bytes::from(
             Multicall::aggregate3Call {
                 calls: vec![Multicall3::Call3 {
                     target: alloy_address(brlc_address()),
@@ -336,7 +332,7 @@ mod tests {
 
     #[test]
     fn decode_aggregate3_value_sets_value() {
-        let input = Bytes(
+        let input = Bytes::from(
             Multicall::aggregate3ValueCall {
                 calls: vec![Multicall3::Call3Value {
                     target: alloy_address(brlc_address()),
@@ -356,7 +352,7 @@ mod tests {
 
     #[test]
     fn decode_block_and_aggregate_with_one_call() {
-        let input = Bytes(
+        let input = Bytes::from(
             Multicall::blockAndAggregateCall {
                 calls: vec![Multicall3::Call {
                     target: alloy_address(brlc_address()),
@@ -374,7 +370,7 @@ mod tests {
 
     #[test]
     fn decode_try_block_and_aggregate_sets_global_allow_failure() {
-        let input = Bytes(
+        let input = Bytes::from(
             Multicall::tryBlockAndAggregateCall {
                 requireSuccess: true,
                 calls: vec![Multicall3::Call {
@@ -392,14 +388,14 @@ mod tests {
 
     #[test]
     fn decode_opt_returns_none_for_malformed_known_selector() {
-        let input = Bytes(Vec::from(Multicall::aggregateCall::SELECTOR));
+        let input = Bytes::from(Vec::from(Multicall::aggregateCall::SELECTOR));
 
         assert!(multicall_info(&input).is_none());
     }
 
     #[test]
     fn unknown_selector_is_decode_error() {
-        let input = Bytes(vec![0xff; 4]);
+        let input = Bytes::from(vec![0xff; 4]);
         let Err(err) = Multicall::MulticallCalls::abi_decode(input.as_ref()).map_err(MulticallError::from) else {
             panic!("expected decode error");
         };
@@ -421,14 +417,14 @@ mod tests {
 
     #[test]
     fn decode_opt_returns_none_for_non_multicall_contract() {
-        let input = Bytes(Multicall::aggregateCall { calls: Vec::new() }.abi_encode());
+        let input = Bytes::from(Multicall::aggregateCall { calls: Vec::new() }.abi_encode());
 
         assert!(MulticallInfo::decode_opt(Some(brlc_address()), &input).is_none());
     }
 
     #[test]
     fn decode_unknown_target_and_empty_input_to_existing_labels() {
-        let input = Bytes(
+        let input = Bytes::from(
             Multicall::aggregateCall {
                 calls: vec![Multicall3::Call {
                     target: alloy_address(unknown_address()),
@@ -452,7 +448,7 @@ mod tests {
                 callData: transfer_input().into(),
             })
             .collect();
-        let input = Bytes(Multicall::aggregateCall { calls }.abi_encode());
+        let input = Bytes::from(Multicall::aggregateCall { calls }.abi_encode());
 
         let info = multicall_info(&input).unwrap();
 

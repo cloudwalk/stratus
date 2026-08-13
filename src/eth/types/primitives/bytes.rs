@@ -1,6 +1,5 @@
 use std::fmt::Display;
 use std::ops::Deref;
-use std::ops::DerefMut;
 
 use display_json::DebugAsJson;
 
@@ -8,8 +7,7 @@ use crate::alias::RevmBytes;
 use crate::alias::RevmOutput;
 
 #[derive(DebugAsJson, Clone, Default, Eq, PartialEq)]
-#[cfg_attr(test, derive(fake::Dummy))]
-pub struct Bytes(pub Vec<u8>);
+pub struct Bytes(pub bytes::Bytes);
 
 impl Display for Bytes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -40,7 +38,7 @@ impl<'de> serde::Deserialize<'de> for Bytes {
     {
         let value = String::deserialize(deserializer)?;
         match const_hex::decode(value) {
-            Ok(value) => Ok(Self(value)),
+            Ok(value) => Ok(Self::from(value)),
             Err(e) => {
                 tracing::warn!(reason = ?e, "failed to parse hex bytes");
                 Err(serde::de::Error::custom(e))
@@ -52,36 +50,35 @@ impl<'de> serde::Deserialize<'de> for Bytes {
 // -----------------------------------------------------------------------------
 // Conversions: Other -> Self
 // -----------------------------------------------------------------------------
-
 impl From<Vec<u8>> for Bytes {
     fn from(value: Vec<u8>) -> Self {
-        Self(value)
+        Self(value.into())
     }
 }
 
 impl From<&[u8]> for Bytes {
     fn from(value: &[u8]) -> Self {
-        Self(value.to_vec())
+        Self(bytes::Bytes::copy_from_slice(value))
     }
 }
 
 impl From<[u8; 32]> for Bytes {
     fn from(value: [u8; 32]) -> Self {
-        Self(value.to_vec())
+        Self(bytes::Bytes::copy_from_slice(&value))
     }
 }
 
 impl From<RevmBytes> for Bytes {
     fn from(value: RevmBytes) -> Self {
-        Self(value.0.into())
+        Self(value.0)
     }
 }
 
 impl From<RevmOutput> for Bytes {
     fn from(value: RevmOutput) -> Self {
         match value {
-            RevmOutput::Call(bytes) => Self(bytes.0.into()),
-            RevmOutput::Create(bytes, _) => Self(bytes.0.into()),
+            RevmOutput::Call(bytes) => Self(bytes.0),
+            RevmOutput::Create(bytes, _) => Self(bytes.0),
         }
     }
 }
@@ -91,26 +88,30 @@ impl From<RevmOutput> for Bytes {
 // -----------------------------------------------------------------------------
 impl AsRef<[u8]> for Bytes {
     fn as_ref(&self) -> &[u8] {
-        &self.0
+        self.0.as_ref()
     }
 }
 
 impl Deref for Bytes {
-    type Target = Vec<u8>;
+    type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for Bytes {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 impl From<Bytes> for RevmBytes {
     fn from(value: Bytes) -> Self {
         value.0.into()
+    }
+}
+
+#[cfg(test)]
+impl<U> fake::Dummy<U> for Bytes
+where
+    Vec<u8>: fake::Dummy<U>,
+{
+    fn dummy_with_rng<R: fake::Rng + ?Sized>(config: &U, rng: &mut R) -> Self {
+        Self::from(Vec::<u8>::dummy_with_rng(config, rng))
     }
 }
