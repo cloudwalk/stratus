@@ -25,7 +25,7 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
-  CACHE_PATH: |
+  CACHE_PATH: |  # canonical — stable-release restores must match these paths exactly, else the cache version hash diverges
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
     ~/.cargo/git/db/

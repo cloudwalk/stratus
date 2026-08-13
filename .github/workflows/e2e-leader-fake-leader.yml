@@ -35,7 +35,6 @@ env:
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
     ~/.cargo/git/db/
-    ~/.cargo/bin
     target/
 
 jobs:

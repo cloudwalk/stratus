@@ -30,7 +30,6 @@ on:
       - "rust-toolchain.toml"
 
 env:
-  CACHE_SHARED_KEY: stable-release
   CACHE_LINT_KEY: lint-nightly-2026-05-08  # gitleaks:allow - cache key, not a secret
   CACHE_PATH: |
     ~/.cargo/registry/index/
