@@ -38,13 +38,13 @@ impl Debug for BytesRocksdb {
 
 impl From<Bytes> for BytesRocksdb {
     fn from(value: Bytes) -> Self {
-        Self(value.0)
+        Self(value.0.to_vec())
     }
 }
 
 impl From<BytesRocksdb> for Bytes {
     fn from(value: BytesRocksdb) -> Self {
-        Self(value.0)
+        Self(value.0.into())
     }
 }
 
