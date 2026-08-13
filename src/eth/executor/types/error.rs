@@ -1,3 +1,5 @@
+use revm::context::result::EVMError;
+use revm::context::result::InvalidTransaction;
 use stratus_macros::ErrorCode;
 
 use crate::eth::executor::RevertReason;
@@ -5,6 +7,7 @@ use crate::eth::types::Address;
 use crate::eth::types::Bytes;
 use crate::eth::types::ErrorCode;
 use crate::eth::types::Nonce;
+use crate::eth::types::StratusError;
 
 #[derive(Debug, thiserror::Error, strum::EnumProperty, strum::IntoStaticStr, ErrorCode)]
 #[major_error_code = 2000]
@@ -44,4 +47,28 @@ pub enum ExecutorError {
     #[error("evm executor panicked, see logs for details")]
     #[error_code = 9]
     Panic { err: anyhow::Error },
+}
+
+impl From<EVMError<StratusError>> for StratusError {
+    fn from(value: EVMError<StratusError>) -> Self {
+        match value {
+            // nonce errors
+            EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state }) => ExecutorError::Nonce {
+                transaction: tx.into(),
+                account: state.into(),
+            }
+            .into(),
+            EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state }) => ExecutorError::Nonce {
+                transaction: tx.into(),
+                account: state.into(),
+            }
+            .into(),
+
+            // storage error
+            EVMError::Database(err) => err,
+
+            // unexpected errors
+            err => ExecutorError::EvmFailed(err.to_string()).into(),
+        }
+    }
 }

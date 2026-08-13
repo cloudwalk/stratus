@@ -7,12 +7,12 @@ use tracing::Span;
 
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::Evm;
+use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
+use crate::eth::executor::evm::types::EvmExecutionMetrics;
 use crate::eth::executor::evm::types::EvmInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::types::error::ExecutorError;
-use crate::eth::executor::types::execution_metrics::EvmExecutionMetrics;
-use crate::eth::executor::types::execution_output::TransactionExecutionOutput;
 use crate::eth::types::StratusError;
 
 pub struct EvmTask<T: Task + Send> {
@@ -23,7 +23,7 @@ pub struct EvmTask<T: Task + Send> {
 #[derive(derive_new::new)]
 pub struct ExecutionTask<Input: EvmInput> {
     pub input: Input,
-    pub response_tx: oneshot::Sender<Result<(TransactionExecutionOutput, EvmExecutionMetrics), StratusError>>,
+    pub response_tx: oneshot::Sender<Result<(RevmResultAndState, EvmExecutionMetrics), StratusError>>,
 }
 
 #[derive(derive_new::new)]

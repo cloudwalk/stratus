@@ -46,6 +46,7 @@ use crate::alias::JsonValue;
 use crate::config::StratusConfig;
 use crate::eth::codegen;
 use crate::eth::codegen::CONTRACTS;
+use crate::eth::executor::CallExecutionOutput;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorError;
 use crate::eth::executor::TransactionExecutionOutput;
@@ -1141,9 +1142,9 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
             .executor
             .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
     }
-    match ctx.server.executor.execute_local_call(call, PointInTime::Latest) {
+    match ctx.server.executor.execute_local_call::<CallExecutionOutput>(call, PointInTime::Latest) {
         // result is success
-        Ok(result) if result.is_success() => {
+        Ok(result) if result.success => {
             tracing::info!(tx_output = %result.output, "executed eth_estimateGas with success");
             let overestimated_gas = (result.gas_used.as_u64()) as f64 * 1.1;
             Ok(hex_num(U256::from(overestimated_gas as u64)))

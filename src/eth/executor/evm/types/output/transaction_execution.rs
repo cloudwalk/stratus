@@ -1,16 +1,22 @@
 use alloy_primitives::B256;
 use display_json::DebugAsJson;
 use hex_literal::hex;
+use itertools::Itertools;
+use revm::context::result::ExecutionResult as RevmExecutionResult;
+use revm_state::EvmState;
 
-use crate::eth::executor::ExecutionAccountChanges;
+use crate::eth::executor::AccountChanges;
 use crate::eth::executor::ExecutionChanges;
 use crate::eth::executor::ExecutionResult;
+use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
 use crate::eth::types::ExternalReceipt;
 use crate::eth::types::Gas;
 use crate::eth::types::Log;
+use crate::eth::types::Slot;
+use crate::eth::types::StratusError;
 use crate::eth::types::Wei;
 use crate::ext::not;
 use crate::log_and_err;
@@ -50,7 +56,7 @@ impl TransactionExecutionOutput {
 
         // generate sender changes incrementing the nonce
         let address = sender.address;
-        let mut sender_changes = ExecutionAccountChanges::default();
+        let mut sender_changes = AccountChanges::default();
         sender_changes.apply_original(sender);
         let sender_next_nonce = sender_changes.nonce.next_nonce();
 
@@ -229,6 +235,96 @@ impl TransactionExecutionOutput {
             };
             destination.copy_from_slice(source);
         }
+    }
+
+    fn parse_revm_result(result: RevmExecutionResult) -> (ExecutionResult, Bytes, Vec<Log>, Gas) {
+        match result {
+            RevmExecutionResult::Success { output, gas, logs, .. } => {
+                let result = ExecutionResult::Success;
+                let output = Bytes::from(output);
+                let logs = logs.into_iter().map_into().collect();
+                let gas = Gas::from(gas);
+                (result, output, logs, gas)
+            }
+            RevmExecutionResult::Revert { output, gas, logs } => {
+                let output = Bytes::from(output);
+                let result = ExecutionResult::Reverted { reason: (&output).into() };
+                let gas = Gas::from(gas);
+                let logs = logs.into_iter().map_into().collect();
+                (result, output, logs, gas)
+            }
+            RevmExecutionResult::Halt { reason, gas, logs } => {
+                let result = ExecutionResult::new_halted(format!("{reason:?}"));
+                let output = Bytes::default();
+                let gas = Gas::from(gas);
+                let logs = logs.into_iter().map_into().collect();
+                (result, output, logs, gas)
+            }
+        }
+    }
+
+    fn parse_revm_state(revm_state: EvmState) -> Result<(ExecutionChanges, Option<Address>), StratusError> {
+        let mut deployed_contract_address = None;
+        let mut execution_changes = ExecutionChanges::default();
+
+        for (revm_address, mut revm_account) in revm_state {
+            let address: Address = revm_address.into();
+            if address.is_ignored() {
+                continue;
+            }
+
+            // apply changes according to account status
+            tracing::debug!(
+                %address,
+                status = ?revm_account.status,
+                balance = %revm_account.info.balance,
+                nonce = %revm_account.info.nonce,
+                slots = %revm_account.storage.len(),
+                "evm account"
+            );
+
+            if !(revm_account.is_created() || revm_account.is_touched()) {
+                continue;
+            }
+
+            if revm_account.is_created() && revm_account.info.code.is_some() {
+                deployed_contract_address = Some(address);
+            }
+
+            let storage = std::mem::take(&mut revm_account.storage);
+            let account_modified_slots: Vec<Slot> = storage
+                .into_iter()
+                .filter_map(|(index, value)| match value.is_changed() {
+                    true => Some(Slot::new(index.into(), value.present_value.into())),
+                    false => None,
+                })
+                .collect();
+
+            execution_changes.insert_slot_changes(address, account_modified_slots);
+            if revm_account.is_changed() {
+                execution_changes.insert_account_changes(address, revm_account.into());
+            }
+        }
+        Ok((execution_changes, deployed_contract_address))
+    }
+}
+
+impl TryFrom<RevmResultAndState> for TransactionExecutionOutput {
+    type Error = StratusError;
+
+    fn try_from(value: RevmResultAndState) -> Result<Self, Self::Error> {
+        let (result, tx_output, logs, gas) = Self::parse_revm_result(value.result);
+        let (changes, deployed_contract_address) = Self::parse_revm_state(value.state)?;
+        tracing::debug!(?result, %gas, tx_output_len = %tx_output.len(), %tx_output, "evm executed");
+
+        Ok(TransactionExecutionOutput {
+            result,
+            output: tx_output,
+            logs,
+            gas_used: gas,
+            changes,
+            deployed_contract_address,
+        })
     }
 }
 
@@ -525,7 +621,7 @@ mod tests {
         let mut execution: TransactionExecutionOutput = Faker.fake();
 
         // Set up execution with sender account
-        let mut sender_changes = ExecutionAccountChanges::default();
+        let mut sender_changes = AccountChanges::default();
         sender_changes.apply_original(sender);
         let mut accounts = HashMap::with_hasher(hash_hasher::HashBuildHasher::default());
         accounts.insert(sender_address, sender_changes);

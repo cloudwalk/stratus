@@ -1,5 +1,4 @@
 use revm::Context;
-use revm::Database;
 use revm::Journal;
 use revm::context::BlockEnv;
 use revm::context::CfgEnv;
@@ -10,15 +9,18 @@ use revm::handler::EthPrecompiles;
 use revm::handler::instructions::EthInstructions;
 use revm::interpreter::interpreter::EthInterpreter;
 
-use crate::eth::storage::ExecutionKind;
+mod execution_metrics;
+mod input;
+mod output;
 
-mod call_execution_input;
-mod inspector_input;
-mod transaction_execution_input;
-
-pub use call_execution_input::CallExecutionInput;
-pub use inspector_input::InspectorInput;
-pub use transaction_execution_input::TransactionExecutionInput;
+pub use execution_metrics::EvmExecutionMetrics;
+pub use execution_metrics::SlotAccessMetrics;
+pub use input::EvmInput;
+pub use input::call_execution::CallExecutionInput;
+pub use input::inspector::InspectorInput;
+pub use input::transaction_execution::TransactionExecutionInput;
+pub use output::call_execution::CallExecutionOutput;
+pub use output::transaction_execution::TransactionExecutionOutput;
 
 /// Maximum gas limit allowed for a transaction. Prevents a transaction from consuming too many resources.
 #[cfg(feature = "dev")]
@@ -49,18 +51,5 @@ impl EvmKind {
 
     pub fn is_transaction(&self) -> bool {
         !self.is_call()
-    }
-}
-
-pub trait EvmInput: Default + Clone {
-    fn kind(&self) -> ExecutionKind;
-
-    fn fill_tx_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>);
-
-    fn fill_block_env<DB: Database, I>(&self, evm: &mut GeneralRevm<DB, I>);
-
-    fn fill_env<DB: Database, I>(self, evm: &mut GeneralRevm<DB, I>) {
-        self.fill_block_env(evm);
-        self.fill_tx_env(evm);
     }
 }
