@@ -14,6 +14,7 @@ pub use execution_changes::Complete;
 pub use execution_changes::ExecutionChanges;
 pub use execution_changes::Incomplete;
 pub use execution_metrics::EvmExecutionMetrics;
+pub use execution_metrics::SlotAccessMetrics;
 pub use execution_result::ExecutionResult;
 pub use execution_result::RevertReason;
 pub use task::EvmRoute;

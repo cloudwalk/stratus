@@ -16,10 +16,8 @@ use log::log_enabled;
 use revm::ExecuteCommitEvm;
 use revm::ExecuteEvm;
 use revm::InspectEvm;
-use revm::context::result::EVMError;
 use revm::context::result::ExecResultAndState;
 use revm::context::result::ExecutionResult as RevmExecResult;
-use revm::context::result::InvalidTransaction;
 use revm::database::CacheDB;
 use revm_inspectors::tracing::FourByteInspector;
 use revm_inspectors::tracing::MuxInspector;
@@ -35,7 +33,6 @@ use util::enhance_trace_with_decoded_errors;
 use crate::eth::executor::EvmExecutionMetrics;
 use crate::eth::executor::ExecutionResult;
 use crate::eth::executor::ExecutorConfig;
-use crate::eth::executor::ExecutorError;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::evm::types::EvmInput;
@@ -74,10 +71,7 @@ impl<Input: EvmInput> Evm<Input> {
     }
 
     /// Execute a transaction that deploys a contract or call a contract function.
-    pub fn execute<Output>(&mut self, input: Input) -> Result<(Output, EvmExecutionMetrics), StratusError>
-    where
-        Output: TryFrom<RevmResultAndState, Error = StratusError>,
-    {
+    pub fn execute(&mut self, input: Input) -> Result<(RevmResultAndState, EvmExecutionMetrics), StratusError> {
         // configure session
         self.evm.journaled_state.database.reset(input.kind());
         input.fill_env(&mut self.evm);
@@ -94,39 +88,19 @@ impl<Input: EvmInput> Evm<Input> {
 
         // extract results
         let session = &mut self.evm.journaled_state.database;
-        let session_metrics = std::mem::take(&mut session.metrics);
+        let slot_access_metrics = std::mem::take(&mut session.metrics);
 
-        // parse result
-        let execution = match evm_result {
-            // executed
-            Ok(result_and_state) => Output::try_from(result_and_state),
-
-            // nonce errors
-            Err(EVMError::Transaction(InvalidTransaction::NonceTooHigh { tx, state })) => Err(ExecutorError::Nonce {
-                transaction: tx.into(),
-                account: state.into(),
-            }
-            .into()),
-            Err(EVMError::Transaction(InvalidTransaction::NonceTooLow { tx, state })) => Err(ExecutorError::Nonce {
-                transaction: tx.into(),
-                account: state.into(),
-            }
-            .into()),
-
-            // storage error
-            Err(EVMError::Database(e)) => {
-                tracing::warn!(reason = ?e, "evm storage error");
-                Err(e)
-            }
-
-            // unexpected errors
-            Err(e) => {
-                tracing::warn!(reason = ?e, "evm transaction error");
-                Err(ExecutorError::EvmFailed(e.to_string()).into())
-            }
-        };
-
-        execution.map(|execution| (execution, session_metrics))
+        evm_result
+            .inspect_err(|err| tracing::warn!(?err, "evm error"))
+            .map_err(|err| err.into())
+            .map(|execution| {
+                let gas_used = (*execution.result.gas()).into();
+                let metrics = EvmExecutionMetrics {
+                    slot_access: slot_access_metrics,
+                    gas_used,
+                };
+                (execution, metrics)
+            })
     }
 }
 

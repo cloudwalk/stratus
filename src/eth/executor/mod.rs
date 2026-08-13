@@ -12,6 +12,7 @@ use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
 pub use config::ExecutorConfig;
+pub use evm::types::CallExecutionOutput;
 pub use evm::types::EvmKind;
 pub use evm::types::TransactionExecutionInput;
 pub use evm::types::TransactionExecutionOutput;
@@ -34,10 +35,13 @@ pub use types::TransactionExecution;
 
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;
+use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
 use crate::eth::executor::types::EvmRoute;
+#[cfg(feature = "metrics")]
+use crate::eth::executor::types::SlotAccessMetrics;
 use crate::eth::miner::Miner;
 use crate::eth::rpc::RpcError;
 use crate::eth::storage::ExecutionKind;
@@ -112,7 +116,7 @@ impl Executor {
     pub fn execute_external_block(&self, mut block: ExternalBlock, mut receipts: ExternalReceipts) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
-        let (start, mut block_metrics) = (metrics::now(), EvmExecutionMetrics::default());
+        let (start, mut block_metrics) = (metrics::now(), SlotAccessMetrics::default());
 
         #[cfg(feature = "tracing")]
         let _span = info_span!("executor::external_block", block_number = %block.number()).entered();
@@ -156,7 +160,7 @@ impl Executor {
         tx: ExternalTransaction,
         receipt: ExternalReceipt,
         block_number: BlockNumber,
-        #[cfg(feature = "metrics")] block_metrics: &mut EvmExecutionMetrics,
+        #[cfg(feature = "metrics")] block_metrics: &mut SlotAccessMetrics,
     ) -> anyhow::Result<()> {
         // track
         #[cfg(feature = "metrics")]
@@ -179,7 +183,7 @@ impl Executor {
             // successful external transaction, re-execute locally
             true => {
                 // re-execute transaction
-                let evm_execution = self.evms.execute(EvmRoute::Transaction(evm_input.clone()));
+                let evm_execution = self.evms.execute::<TransactionExecutionOutput>(EvmRoute::Transaction(evm_input.clone()));
 
                 // handle re-execution result
                 let (mut evm_result, evm_metrics) = match evm_execution {
@@ -207,11 +211,11 @@ impl Executor {
                 // track metrics
                 #[cfg(feature = "metrics")]
                 {
-                    *block_metrics += evm_metrics;
+                    *block_metrics += evm_metrics.slot_access;
 
                     metrics::inc_executor_external_transaction(start.elapsed(), tx_contract, tx_function);
-                    metrics::inc_executor_external_transaction_account_reads(evm_metrics.account_reads, tx_contract, tx_function);
-                    metrics::inc_executor_external_transaction_slot_reads(evm_metrics.slot_reads, tx_contract, tx_function);
+                    metrics::inc_executor_external_transaction_account_reads(evm_metrics.slot_access.account_reads, tx_contract, tx_function);
+                    metrics::inc_executor_external_transaction_slot_reads(evm_metrics.slot_access.slot_reads, tx_contract, tx_function);
                     metrics::inc_executor_external_transaction_gas(evm_result.gas_used.as_u64() as usize, tx_contract, tx_function);
                 }
 
@@ -364,8 +368,8 @@ impl Executor {
                     // track metrics
                     #[cfg(feature = "metrics")]
                     {
-                        metrics::inc_executor_local_transaction_account_reads(evm_metrics.account_reads, contract, function);
-                        metrics::inc_executor_local_transaction_slot_reads(evm_metrics.slot_reads, contract, function);
+                        metrics::inc_executor_local_transaction_account_reads(evm_metrics.slot_access.account_reads, contract, function);
+                        metrics::inc_executor_local_transaction_slot_reads(evm_metrics.slot_access.slot_reads, contract, function);
                         metrics::inc_executor_local_transaction_gas(gas_used.as_u64() as usize, true, contract, function);
                     }
                     return Ok(());
@@ -386,7 +390,10 @@ impl Executor {
 
     /// Executes a transaction without persisting state changes.
     #[tracing::instrument(name = "executor::local_call", skip_all, fields(from, to))]
-    pub fn execute_local_call(&self, call_input: CallInput, point_in_time: PointInTime) -> Result<TransactionExecutionOutput, StratusError> {
+    pub fn execute_local_call<Output>(&self, call_input: CallInput, point_in_time: PointInTime) -> Result<Output, StratusError>
+    where
+        Output: TryFrom<RevmResultAndState, Error = StratusError>,
+    {
         #[cfg(feature = "metrics")]
         let start = metrics::now();
 
@@ -423,7 +430,7 @@ impl Executor {
             PointInTime::Pending | PointInTime::Latest => EvmRoute::CallPresent(evm_input),
             PointInTime::Past(_) => EvmRoute::CallPast(evm_input),
         };
-        let evm_result = self.evms.execute(evm_route);
+        let evm_result = self.evms.execute::<Output>(evm_route);
 
         // track metrics
         #[cfg(feature = "metrics")]
@@ -432,11 +439,11 @@ impl Executor {
             let contract = codegen::contract_name(&call_input.to);
 
             match &evm_result {
-                Ok((evm_result, evm_metrics)) => {
+                Ok((_, evm_metrics)) => {
                     metrics::inc_executor_local_call(start.elapsed(), true, contract, function);
-                    metrics::inc_executor_local_call_account_reads(evm_metrics.account_reads, contract, function);
-                    metrics::inc_executor_local_call_slot_reads(evm_metrics.slot_reads, contract, function);
-                    metrics::inc_executor_local_call_gas(evm_result.gas_used.as_u64() as usize, contract, function);
+                    metrics::inc_executor_local_call_account_reads(evm_metrics.slot_access.account_reads, contract, function);
+                    metrics::inc_executor_local_call_slot_reads(evm_metrics.slot_access.slot_reads, contract, function);
+                    metrics::inc_executor_local_call_gas(evm_metrics.gas_used.as_u64() as usize, contract, function);
                 }
                 Err(_) => {
                     metrics::inc_executor_local_call(start.elapsed(), false, contract, function);

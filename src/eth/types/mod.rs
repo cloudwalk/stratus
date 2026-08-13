@@ -63,7 +63,6 @@ pub use transaction::TransactionStage;
 mod tests {
     use super::*;
     use crate::eth::executor::AccountChanges;
-    use crate::eth::executor::EvmExecutionMetrics;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::rpc::BlockFilter;
     use crate::eth::rpc::LogFilter;
@@ -101,7 +100,6 @@ mod tests {
     gen_test_serde!(Difficulty);
     gen_test_serde!(EcdsaRs);
     gen_test_serde!(EcdsaV);
-    gen_test_serde!(EvmExecutionMetrics);
     gen_test_serde!(AccountChanges);
     gen_test_serde!(ExecutionResult);
     gen_test_serde!(Gas);
