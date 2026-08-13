@@ -43,7 +43,7 @@ env:
 jobs:
   setup_cache:
     name: Setup Cache for E2E Leader & Follower tests
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     outputs:
       cache-key: ${{ steps.cache-key.outputs.key }}
     steps:
@@ -91,7 +91,7 @@ jobs:
         use_block_changes_replication: [false, true]
     name: "E2E Leader & Follower on ${{ matrix.test }} (Replication: ${{ matrix.use_block_changes_replication }})"
     needs: setup_cache
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 45
 
     concurrency:

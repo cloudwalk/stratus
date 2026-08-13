@@ -43,7 +43,7 @@ env:
 jobs:
   setup_cache:
     name: Setup Cache for E2E Rocks tests
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     outputs:
       cache-key: ${{ steps.cache-key.outputs.key }}
     steps:
@@ -92,7 +92,7 @@ jobs:
 
   get_contracts_matrix:
     name: Get Contracts Matrix
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 5
 
     outputs:
@@ -125,7 +125,7 @@ jobs:
     needs:
       - setup_cache
       - get_contracts_matrix
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 45
 
     concurrency:

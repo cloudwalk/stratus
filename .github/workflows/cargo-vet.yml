@@ -28,7 +28,7 @@ on:
 jobs:
   cargo-vet:
     name: Vet Dependencies
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     env:
       CARGO_VET_VERSION: 0.10.2
     steps:

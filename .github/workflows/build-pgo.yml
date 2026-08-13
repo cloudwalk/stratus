@@ -29,7 +29,7 @@ env:
 jobs:
   build_binaries:
     name: Build and upload
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 45
 
     concurrency:

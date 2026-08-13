@@ -40,7 +40,7 @@ env:
 jobs:
   run_lint:
     name: Lint and Style checks
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 25
 
     concurrency:
@@ -75,7 +75,7 @@ jobs:
 
   e2e_lint:
     name: E2E Lint
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 10
 
     concurrency:

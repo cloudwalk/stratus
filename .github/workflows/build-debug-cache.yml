@@ -34,7 +34,7 @@ env:
 jobs:
   build_debug_cache:
     name: Build Debug cache
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 45
 
     concurrency:

@@ -43,7 +43,7 @@ env:
 jobs:
   setup_cache:
     name: Setup Cache for E2E Leader & Fake Leader tests
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     outputs:
       cache-key: ${{ steps.cache-key.outputs.key }}
     steps:
@@ -85,7 +85,7 @@ jobs:
   leader_fake_leader_test:
     name: "E2E Leader & Fake Leader on fake-leader"
     needs: setup_cache
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 45
 
     concurrency:

@@ -32,7 +32,7 @@ env:
 jobs:
   doc_unit_tests:
     name: Documentation Unit Tests
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 25
 
     concurrency:

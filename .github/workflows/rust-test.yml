@@ -39,7 +39,7 @@ env:
 jobs:
   unit_tests:
     name: Rust Tests
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 25
 
     concurrency:
