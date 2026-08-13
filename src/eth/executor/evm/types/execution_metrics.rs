@@ -1,8 +1,6 @@
-use display_json::DebugAsJson;
-
 use crate::eth::types::Gas;
 
-#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, derive_more::Add, derive_more::AddAssign, serde::Serialize, serde::Deserialize)]
+#[derive(Default, derive_more::Add, derive_more::AddAssign, Clone, Copy)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct SlotAccessMetrics {
     /// Number of account reads during EVM execution.
