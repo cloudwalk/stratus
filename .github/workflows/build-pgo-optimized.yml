@@ -29,7 +29,7 @@ env:
 jobs:
   build_optimized:
     name: Build PGO optimized binary
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 300
 
     concurrency:

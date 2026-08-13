@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   outdated:
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 10
     steps:
       - name: Checkout code

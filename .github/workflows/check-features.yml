@@ -33,7 +33,7 @@ env:
 jobs:
   check_features:
     name: Check Features
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 35
 
     concurrency:
