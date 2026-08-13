@@ -230,10 +230,15 @@ impl TransactionExecutionOutput {
                 continue;
             }
 
-            let (Some(destination), Some(source)) = (execution_log.data.get_mut(0..32), receipt_log.data().data.get(0..32)) else {
+            let Some(source) = receipt_log.data().data.get(0..32) else {
+                continue;
+            };
+            let mut data = execution_log.data.0.to_vec();
+            let Some(destination) = data.get_mut(0..32) else {
                 continue;
             };
             destination.copy_from_slice(source);
+            execution_log.data = Bytes::from(data);
         }
     }
 

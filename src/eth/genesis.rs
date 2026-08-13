@@ -238,9 +238,9 @@ impl GenesisConfig {
         // Parse extra data
         let extra_data_str = self.extraData.trim_start_matches("0x");
         let extra_data = if let Ok(bytes) = hex::decode(extra_data_str) {
-            Bytes(bytes)
+            Bytes::from(bytes)
         } else {
-            Bytes(vec![])
+            Bytes::default()
         };
 
         // Parse parent hash (if present)
