@@ -9,8 +9,7 @@ use fake::Faker;
 
 use crate::ext::RuintExt;
 
-#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
-#[cfg_attr(test, derive(serde::Deserialize))]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Nonce(U64);
 
 impl Nonce {

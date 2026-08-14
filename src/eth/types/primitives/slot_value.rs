@@ -7,8 +7,7 @@ use fake::Dummy;
 #[cfg(test)]
 use fake::Faker;
 
-#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
-#[cfg_attr(test, derive(serde::Deserialize))]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SlotValue(pub U256);
 
 impl SlotValue {
