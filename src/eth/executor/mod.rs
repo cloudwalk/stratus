@@ -12,6 +12,7 @@ use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
 pub use config::ExecutorConfig;
+pub use evm::types::AccessListOutput;
 pub use evm::types::CallExecutionOutput;
 pub use evm::types::EvmExecutionMetrics;
 pub use evm::types::EvmKind;
