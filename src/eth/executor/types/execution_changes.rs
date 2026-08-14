@@ -4,47 +4,40 @@ use std::marker::PhantomData;
 
 use serde_with::serde_as;
 
-use crate::alias::RevmBytecode;
 use crate::eth::executor::AccountChanges;
-use crate::eth::executor::ChangeValue;
-use crate::eth::executor::Unset;
+use crate::eth::executor::ChangedOrOriginalValue;
+use crate::eth::executor::ChangedValue;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
-use crate::eth::types::Nonce;
 use crate::eth::types::Slot;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::SlotValue;
-use crate::eth::types::Wei;
 use crate::ext::OptionExt;
 
 /// Stage marker: changes may be incomplete
+#[derive(serde::Serialize)]
 pub struct Incomplete;
 
 /// Stage marker: every value is final (either changed by the block or filled with the original
 /// account from perm). Safe to consume.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
 pub struct Complete;
 
-pub trait Stage {
+pub trait Stage: serde::Serialize {
     type Field<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize>: Clone + Debug + PartialEq + Eq + Default + serde::Serialize;
 }
 
 impl Stage for Incomplete {
-    type Field<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize> = Unset<T>;
+    type Field<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize> = ChangedValue<T>;
 }
 
 impl Stage for Complete {
-    type Field<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize> = ChangeValue<T>;
+    type Field<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize> = ChangedOrOriginalValue<T>;
 }
 
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Default)]
-#[cfg_attr(test, derive(serde::Deserialize))]
-#[serde(bound(
-    serialize = "S::Field<Nonce>: serde::Serialize, S::Field<Wei>: serde::Serialize, S::Field<Option<RevmBytecode>>: serde::Serialize",
-    deserialize = "S::Field<Nonce>: serde::Deserialize<'de>, S::Field<Wei>: serde::Deserialize<'de>, S::Field<Option<RevmBytecode>>: serde::Deserialize<'de>"
-))]
 pub struct ExecutionChanges<S: Stage = Complete> {
     pub accounts: HashMap<Address, AccountChanges<S>, hash_hasher::HashBuildHasher>,
     #[serde_as(as = "Vec<(_, _)>")]
@@ -63,9 +56,7 @@ impl fake::Dummy<fake::Faker> for ExecutionChanges<Complete> {
     }
 }
 
-/// Creates the INCOMPLETE account changes. Since if the bytecode/nonce/balance was not changed for
-/// an account it is set to None, the resulting change is Self { changed: false, ..Default::default() }
-/// operations that rely on knowing the original value (eg. updating the "latest" cache) can give wrong results.
+/// Creates the INCOMPLETE account changes.
 impl From<BlockChangesRocksdb> for ExecutionChanges<Incomplete> {
     fn from(value: BlockChangesRocksdb) -> Self {
         let accounts = value

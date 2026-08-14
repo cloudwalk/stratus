@@ -8,11 +8,12 @@ use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Nonce;
 use crate::eth::types::Wei;
+use crate::ext::InfallibleExt;
 
 /// Complete-stage field: a real value, either the original (untouched by the block) or changed by it.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
-pub enum ChangeValue<T>
+#[cfg_attr(test, derive(fake::Dummy))]
+pub enum ChangedOrOriginalValue<T>
 where
     T: PartialEq + Eq + Default,
 {
@@ -20,13 +21,13 @@ where
     Changed(T),
 }
 
-impl<T: PartialEq + Eq + Default> Default for ChangeValue<T> {
+impl<T: PartialEq + Eq + Default> Default for ChangedOrOriginalValue<T> {
     fn default() -> Self {
         Self::Original(T::default())
     }
 }
 
-impl<T: PartialEq + Eq + Default> Deref for ChangeValue<T> {
+impl<T: PartialEq + Eq + Default> Deref for ChangedOrOriginalValue<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         match self {
@@ -36,7 +37,7 @@ impl<T: PartialEq + Eq + Default> Deref for ChangeValue<T> {
     }
 }
 
-impl<T> ChangeValue<T>
+impl<T> ChangedOrOriginalValue<T>
 where
     T: PartialEq + Eq + Default,
 {
@@ -89,27 +90,26 @@ where
 
 /// Incomplete-stage field: either the block changed this value, or the original is not yet known
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
-#[cfg_attr(test, derive(serde::Deserialize))]
-pub enum Unset<T> {
+pub enum ChangedValue<T> {
     Changed(T),
     #[default]
     Unset,
 }
 
-impl<T> Unset<T> {
+impl<T> ChangedValue<T> {
     /// Resolves an incomplete field into a complete one, using `original` when the block did not touch it.
-    pub fn complete(self, original: T) -> ChangeValue<T>
+    pub fn complete(self, original: T) -> ChangedOrOriginalValue<T>
     where
         T: PartialEq + Eq + Default,
     {
         match self {
-            Self::Changed(value) => ChangeValue::Changed(value),
-            Self::Unset => ChangeValue::Original(original),
+            Self::Changed(value) => ChangedOrOriginalValue::Changed(value),
+            Self::Unset => ChangedOrOriginalValue::Original(original),
         }
     }
 }
 
-impl<T, U> From<Option<U>> for Unset<T>
+impl<T, U> From<Option<U>> for ChangedValue<T>
 where
     U: Into<T>,
 {
@@ -123,7 +123,6 @@ where
 
 /// Changes that happened to an account during a transaction.
 #[derive(Clone, PartialEq, Eq, serde::Serialize, Default)]
-#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct AccountChanges<S: Stage = Complete> {
     pub nonce: S::Field<Nonce>,
     pub balance: S::Field<Wei>,
@@ -193,16 +192,16 @@ impl From<revm_state::Account> for AccountChanges<Complete> {
         let changed = std::mem::take(&mut value.info);
         let original = value.original_info_mut();
         Self {
-            nonce: ChangeValue::from_diff(original.nonce.into(), changed.nonce.into()),
-            balance: ChangeValue::from_diff(original.balance.into(), changed.balance.into()),
-            bytecode: ChangeValue::from_diff(original.code.take(), changed.code),
+            nonce: ChangedOrOriginalValue::from_diff(original.nonce.into(), changed.nonce.into()),
+            balance: ChangedOrOriginalValue::from_diff(original.balance.into(), changed.balance.into()),
+            bytecode: ChangedOrOriginalValue::from_diff(original.code.take(), changed.code),
         }
     }
 }
 
 impl<S: Stage> std::fmt::Debug for AccountChanges<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&serde_json::to_string(self).expect("AccountChanges must be serializable for Debug"))
+        f.write_str(&serde_json::to_string(self).expect_infallible())
     }
 }
 
@@ -212,7 +211,7 @@ impl fake::Dummy<fake::Faker> for AccountChanges<Complete> {
         Self {
             nonce: fake::Dummy::dummy_with_rng(faker, rng),
             balance: fake::Dummy::dummy_with_rng(faker, rng),
-            bytecode: ChangeValue::default(),
+            bytecode: ChangedOrOriginalValue::default(),
         }
     }
 }

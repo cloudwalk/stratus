@@ -24,7 +24,8 @@ use tracing::debug_span;
 use tracing::info_span;
 pub use types::AccountChanges;
 pub use types::AccountOriginalsReader;
-pub use types::ChangeValue;
+pub use types::ChangedOrOriginalValue;
+pub use types::ChangedValue;
 pub use types::Complete;
 pub use types::ExecutionChanges;
 pub use types::ExecutionResult;
@@ -33,7 +34,6 @@ pub use types::Incomplete;
 pub use types::RevertReason;
 pub use types::Stage;
 pub use types::TransactionExecution;
-pub use types::Unset;
 
 #[cfg(feature = "metrics")]
 use crate::eth::codegen;

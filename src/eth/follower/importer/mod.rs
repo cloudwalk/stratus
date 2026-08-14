@@ -271,7 +271,7 @@ mod tests {
     use hash_hasher::HashBuildHasher;
 
     use crate::eth::executor::AccountChanges;
-    use crate::eth::executor::ChangeValue;
+    use crate::eth::executor::ChangedOrOriginalValue;
     use crate::eth::executor::ExecutionChanges;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::TransactionExecution;
@@ -304,9 +304,9 @@ mod tests {
     impl AccountChanges {
         pub fn from_changed(account: Account) -> Self {
             Self {
-                nonce: ChangeValue::Changed(account.nonce),
-                balance: ChangeValue::Changed(account.balance),
-                bytecode: ChangeValue::Changed(account.bytecode),
+                nonce: ChangedOrOriginalValue::Changed(account.nonce),
+                balance: ChangedOrOriginalValue::Changed(account.balance),
+                bytecode: ChangedOrOriginalValue::Changed(account.bytecode),
             }
         }
     }

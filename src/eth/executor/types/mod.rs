@@ -6,8 +6,8 @@ mod task;
 mod transaction_execution;
 
 pub use account_changes::AccountChanges;
-pub use account_changes::ChangeValue;
-pub use account_changes::Unset;
+pub use account_changes::ChangedOrOriginalValue;
+pub use account_changes::ChangedValue;
 pub use error::ExecutorError;
 pub use execution_changes::AccountOriginalsReader;
 pub use execution_changes::Complete;
