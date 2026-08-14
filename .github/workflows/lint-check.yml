@@ -30,7 +30,7 @@ on:
       - "rust-toolchain.toml"
 
 env:
-  CACHE_SHARED_KEY: stable-release
+  CACHE_LINT_KEY: lint-nightly-2026-05-08  # gitleaks:allow - cache key, not a secret
   CACHE_PATH: |
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
@@ -40,7 +40,7 @@ env:
 jobs:
   run_lint:
     name: Lint and Style checks
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 25
 
     concurrency:
@@ -57,12 +57,12 @@ jobs:
           toolchain: nightly-2026-05-08
           components: rustfmt, clippy
 
-      - name: Rust Cache
+      - name: Rust Cache - Restore lint cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.CACHE_PATH }}
-          restore-keys: ${{ env.CACHE_SHARED_KEY }}
-          key: ${{ env.CACHE_SHARED_KEY }}
+          key: ${{ env.CACHE_LINT_KEY }}-${{ runner.os }}--${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ env.CACHE_LINT_KEY }}-${{ runner.os }}--
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
@@ -75,7 +75,7 @@ jobs:
 
   e2e_lint:
     name: E2E Lint
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 10
 
     concurrency:
