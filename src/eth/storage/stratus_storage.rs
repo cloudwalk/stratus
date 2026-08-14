@@ -1,7 +1,7 @@
 use tracing::Span;
 
 use crate::eth::executor::AccountOriginalsReader;
-use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::Changes;
 use crate::eth::executor::TransactionExecution;
 #[cfg(feature = "dev")]
 use crate::eth::genesis::GenesisConfig;
@@ -488,7 +488,7 @@ impl StratusStorage {
         self.temp.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self) -> Result<(PendingBlock, ExecutionChanges), StorageError> {
+    pub fn finish_pending_block(&self) -> Result<(PendingBlock, Changes), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = tracing::info_span!("storage::finish_pending_block", block_number = tracing::field::Empty).entered();
         tracing::debug!(storage = %label::TEMP, "finishing pending block");
@@ -507,7 +507,7 @@ impl StratusStorage {
         result
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, changes: ExecutionChanges) -> Result<(), StorageError> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, changes: Changes) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
@@ -523,7 +523,7 @@ impl StratusStorage {
         })
     }
 
-    pub fn save_block(&self, block: Block, changes: ExecutionChanges) -> Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, changes: Changes) -> Result<(), StorageError> {
         let block_number = block.number();
 
         #[cfg(feature = "tracing")]
@@ -808,7 +808,7 @@ impl StratusStorage {
             }
         };
         // Save the genesis block
-        self.save_block(genesis_block, ExecutionChanges::default())?;
+        self.save_block(genesis_block, Changes::default())?;
 
         // accounts
         self.save_accounts(genesis_accounts)?;
@@ -860,7 +860,7 @@ mod tests {
     use crate::eth::types::Wei;
 
     /// Mines a block applying `changes`
-    fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) -> BlockNumber {
+    fn mine_block(storage: &StratusStorage, changes: Changes) -> BlockNumber {
         let (header, _) = storage.read_pending_block_header();
         let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
@@ -889,12 +889,12 @@ mod tests {
         let index = SlotIndex::ZERO;
 
         // Mine a block setting slot S = 100. The eth_call captures this block.
-        let mut changes1 = ExecutionChanges::default();
+        let mut changes1 = Changes::default();
         changes1.slots.insert((address, index), SlotValue::from([100u64, 0, 0, 0]));
         let call_block = mine_block(&storage, changes1);
 
         // A new block is mined while the call is in flight, changing the slot to 200.
-        let mut changes2 = ExecutionChanges::default();
+        let mut changes2 = Changes::default();
         changes2.slots.insert((address, index), SlotValue::from([200u64, 0, 0, 0]));
         let latest = mine_block(&storage, changes2);
         assert_ne!(call_block, latest);
@@ -913,14 +913,14 @@ mod tests {
         let address = Address::new([0xBB; 20]);
 
         // Mine a block setting the account balance to 100. The eth_call captures this block.
-        let mut changes1 = ExecutionChanges::default();
+        let mut changes1 = Changes::default();
         changes1
             .accounts
             .insert(address, AccountChanges::from_changed(Account::new_with_balance(address, Wei::from(100u64))));
         let call_block = mine_block(&storage, changes1);
 
         // A new block is mined while the call is in flight, changing the balance to 200.
-        let mut changes2 = ExecutionChanges::default();
+        let mut changes2 = Changes::default();
         changes2
             .accounts
             .insert(address, AccountChanges::from_changed(Account::new_with_balance(address, Wei::from(200u64))));

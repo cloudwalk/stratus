@@ -5,7 +5,7 @@ use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
 use parking_lot::RwLockWriteGuard;
 
-use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::Changes;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::storage::StorageError;
@@ -41,7 +41,7 @@ impl InmemoryTransactionTemporaryStorage {
         Self {
             pending_block: RwLock::new(InMemoryTemporaryStorageState {
                 block: PendingBlock::new_at_now(block_number),
-                block_changes: ExecutionChanges::default(),
+                block_changes: Changes::default(),
             }),
             latest_block: RwLock::new(None),
         }
@@ -106,7 +106,7 @@ impl InmemoryTransactionTemporaryStorage {
         (*pending_block).clone()
     }
 
-    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
+    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, Changes), StorageError> {
         let pending_block = self.pending_block.upgradable_read();
         let changes = pending_block.block_changes.clone();
 

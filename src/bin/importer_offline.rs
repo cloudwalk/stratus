@@ -20,7 +20,7 @@ use itertools::Itertools;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use stratus::config::ImporterOfflineConfig;
-use stratus::eth::executor::ExecutionChanges;
+use stratus::eth::executor::Changes;
 use stratus::eth::executor::Executor;
 use stratus::eth::external_rpc::ExternalRpc;
 use stratus::eth::external_rpc::PostgresExternalRpc;
@@ -49,7 +49,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 const RPC_FETCHER_CHANNEL_CAPACITY: usize = 10;
 
 type BlocksToExecute = Vec<ExternalBlockWithReceipts>;
-type BlocksToSave = Vec<(Block, ExecutionChanges)>;
+type BlocksToSave = Vec<(Block, Changes)>;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<ImporterOfflineConfig>::init();
@@ -92,7 +92,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     if block_start.is_zero() && !storage.has_genesis()? {
         let genesis_block = Block::genesis();
-        storage.save_genesis_block(genesis_block, initial_accounts, ExecutionChanges::default())?;
+        storage.save_genesis_block(genesis_block, initial_accounts, Changes::default())?;
         storage.finish_pending_block()?;
         block_start = BlockNumber::from(1);
     }
