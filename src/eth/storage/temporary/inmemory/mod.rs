@@ -1,6 +1,6 @@
 //! In-memory storage implementations.
 
-use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::Changes;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
@@ -62,7 +62,7 @@ impl InMemoryTemporaryStorage {
         self.transaction_storage.read_pending_executions()
     }
 
-    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
+    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, Changes), StorageError> {
         self.call_storage.retain_recent_blocks();
         self.transaction_storage.finish_pending_block()
     }
@@ -125,19 +125,19 @@ pub struct InMemoryTemporaryStorageState {
     pub block: PendingBlock,
 
     /// Last state of accounts and slots. Can be recreated from the executions inside the pending block.
-    pub block_changes: ExecutionChanges,
+    pub block_changes: Changes,
 }
 
 impl InMemoryTemporaryStorageState {
     pub fn new(block_number: BlockNumber) -> Self {
         Self {
             block: PendingBlock::new_at_now(block_number),
-            block_changes: ExecutionChanges::default(),
+            block_changes: Changes::default(),
         }
     }
 
     pub fn reset(&mut self) {
         self.block = PendingBlock::new_at_now(1.into());
-        self.block_changes = ExecutionChanges::default();
+        self.block_changes = Changes::default();
     }
 }
