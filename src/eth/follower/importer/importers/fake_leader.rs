@@ -4,7 +4,7 @@ use anyhow::bail;
 use async_trait::async_trait;
 
 use crate::GlobalState;
-use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::Changes;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorError;
 use crate::eth::follower::importer::fetchers::DataFetcher;
@@ -85,7 +85,7 @@ impl ImporterWorker for FakeLeaderWorker {
 fn normalize_for_replication_compare(block: &Block) -> Block {
     let mut normalized = block.clone();
     for tx in &mut normalized.transactions {
-        tx.execution.result.changes = ExecutionChanges::default();
+        tx.execution.result.changes = Changes::default();
     }
     normalized
 }

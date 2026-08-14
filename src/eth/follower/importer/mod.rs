@@ -271,8 +271,8 @@ mod tests {
     use hash_hasher::HashBuildHasher;
 
     use crate::eth::executor::AccountChanges;
-    use crate::eth::executor::ChangeValue;
-    use crate::eth::executor::ExecutionChanges;
+    use crate::eth::executor::Changes;
+    use crate::eth::executor::CompleteValue;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::TransactionExecution;
     use crate::eth::executor::TransactionExecutionInput;
@@ -304,15 +304,15 @@ mod tests {
     impl AccountChanges {
         pub fn from_changed(account: Account) -> Self {
             Self {
-                nonce: ChangeValue::Changed(account.nonce),
-                balance: ChangeValue::Changed(account.balance),
-                bytecode: ChangeValue::Changed(account.bytecode),
+                nonce: CompleteValue::Changed(account.nonce),
+                balance: CompleteValue::Changed(account.balance),
+                bytecode: CompleteValue::Changed(account.bytecode),
             }
         }
     }
 
     /// Mines a block applying `changes` (mirrors the helper in `stratus_storage` tests).
-    fn mine_block(storage: &StratusStorage, changes: ExecutionChanges) {
+    fn mine_block(storage: &StratusStorage, changes: Changes) {
         let (header, _) = storage.read_pending_block_header();
         let evm_input = TransactionExecutionInput::from_eth_transaction(&TransactionInput::default(), header.number, *header.timestamp);
 
@@ -330,8 +330,8 @@ mod tests {
     }
 
     /// Builds `ExecutionChanges` that set `address`'s balance to `balance` (nonce/bytecode untouched).
-    fn balance_changes(address: Address, balance: Wei) -> ExecutionChanges {
-        let mut changes = ExecutionChanges::default();
+    fn balance_changes(address: Address, balance: Wei) -> Changes {
+        let mut changes = Changes::default();
         changes
             .accounts
             .insert(address, AccountChanges::from_changed(Account::new_with_balance(address, balance)));
