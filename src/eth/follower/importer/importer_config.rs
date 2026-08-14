@@ -25,7 +25,7 @@ use crate::ext::parse_duration;
 use crate::ext::spawn;
 use crate::infra::kafka::KafkaConnector;
 
-#[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Parser, DebugAsJson, Clone, serde::Serialize)]
 #[group(requires_all = ["external_rpc", "follower"])]
 pub struct ImporterConfig {
     /// External RPC HTTP endpoint to sync blocks with Stratus.

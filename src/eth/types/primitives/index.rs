@@ -15,7 +15,6 @@ use crate::ext::RuintExt;
     PartialEq,
     Eq,
     serde::Serialize,
-    serde::Deserialize,
     derive_more::Add,
     derive_more::AddAssign,
     Hash,
@@ -24,7 +23,7 @@ use crate::ext::RuintExt;
     Deref,
     Default,
 )]
-#[cfg_attr(test, derive(fake::Dummy))]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub struct Index(#[deref] pub u64);
 
 impl Index {

@@ -8,8 +8,8 @@ use crate::eth::types::Address;
 use crate::eth::types::Nonce;
 use crate::eth::types::Wei;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(test, derive(fake::Dummy))]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub enum ChangeValue<T>
 where
     T: PartialEq + Eq + Default,
@@ -99,8 +99,8 @@ where
 }
 
 /// Changes that happened to an account during a transaction.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
-#[cfg_attr(test, derive(fake::Dummy))]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Default)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub struct AccountChanges {
     pub nonce: ChangeValue<Nonce>,
     pub balance: ChangeValue<Wei>,

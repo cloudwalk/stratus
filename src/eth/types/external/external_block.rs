@@ -29,7 +29,7 @@ use crate::eth::types::Hash;
 use crate::eth::types::UnixTime;
 use crate::log_and_err;
 
-#[derive(Debug, Clone, PartialEq, derive_more::Deref, derive_more::DerefMut, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, derive_more::Deref, derive_more::DerefMut, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct ExternalBlock(#[deref] pub AlloyBlockExternalTransaction);
 

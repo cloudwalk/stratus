@@ -12,7 +12,7 @@ use crate::eth::types::Log;
 use crate::ext::to_json_value;
 
 /// Log that was emitted by the EVM and added to a block.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct LogMessage {
     /// Original log emitted by the EVM.

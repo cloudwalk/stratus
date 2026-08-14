@@ -16,7 +16,6 @@ use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
-use serde::Deserialize;
 use serde::Serialize;
 use sugars::btmap;
 
@@ -102,8 +101,8 @@ pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
 fn new_cf_ref<'a, K, V>(db: &'a Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, ColumnFamilyConfig>) -> Result<RocksCfRef<'a, K, V>>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
+    K: Serialize + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
+    V: Serialize + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 

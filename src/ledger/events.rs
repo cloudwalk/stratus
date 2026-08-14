@@ -10,7 +10,6 @@ use chrono::Utc;
 use display_json::DebugAsJson;
 use hex_literal::hex;
 use itertools::Itertools;
-use serde::Deserialize;
 use serde::Serialize;
 use serde::ser::SerializeStruct;
 use uuid::Uuid;
@@ -129,7 +128,7 @@ pub struct AccountTransfer {
 }
 
 /// Direction of a transfer relative to the primary account address.
-#[derive(DebugAsJson, strum::EnumIs, Serialize, Deserialize)]
+#[derive(DebugAsJson, strum::EnumIs, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AccountTransferDirection {
     /// `account_address` is being credited.

@@ -11,7 +11,7 @@ use crate::eth::types::Hash;
 use crate::eth::types::Index;
 use crate::eth::types::TransactionInput;
 
-#[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct MinedData {
     pub index: Index,
@@ -19,7 +19,7 @@ pub struct MinedData {
     pub block_hash: Hash,
 }
 
-#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Deref)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Deref)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct TransactionMined {
     #[deref]

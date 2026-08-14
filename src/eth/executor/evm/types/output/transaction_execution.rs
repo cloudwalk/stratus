@@ -22,7 +22,7 @@ use crate::ext::not;
 use crate::log_and_err;
 
 /// Output of a transaction executed in the EVM.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Default)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct TransactionExecutionOutput {
     /// Status of the execution.
