@@ -65,8 +65,10 @@ jobs:
         #      importer-offline) the e2e consumers require.
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
-          cargo test --no-run
-          cargo build --features dev
+          # --profile ci strips debug symbols from dependencies (stratus itself keeps
+          # full debug). Consumers run with STRATUS_PROFILE=ci so they hit this cache.
+          cargo test --no-run --profile ci
+          cargo build --features dev --profile ci
 
       - name: Check all features
         # Prime the cache with `.rmeta` artifacts for every feature combination the
