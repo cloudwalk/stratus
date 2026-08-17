@@ -10,6 +10,8 @@ use http::HeaderMap;
 use http::header::HeaderName;
 use http::header::HeaderValue;
 use itertools::Itertools;
+#[cfg(feature = "metrics")]
+use metrics_tracing_context::MetricsLayer as MetricsTracingFieldsLayer;
 use opentelemetry::KeyValue;
 use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::Protocol;
@@ -147,11 +149,25 @@ impl TracingConfig {
             }
         };
 
-        tracing_subscriber::registry()
-            .with(tracing_context_layer)
-            .with(stdout_layer)
-            .with(opentelemetry_layer)
-            .with(sentry_layer)
+        #[cfg(feature = "metrics")]
+        {
+            println!("tracing registry: enabling metrics tracing context recorder");
+            tracing_subscriber::registry()
+                .with(tracing_context_layer)
+                .with(MetricsTracingFieldsLayer::new())
+                .with(stdout_layer)
+                .with(opentelemetry_layer)
+                .with(sentry_layer)
+        }
+
+        #[cfg(not(feature = "metrics"))]
+        {
+            tracing_subscriber::registry()
+                .with(tracing_context_layer)
+                .with(stdout_layer)
+                .with(opentelemetry_layer)
+                .with(sentry_layer)
+        }
     }
 }
 

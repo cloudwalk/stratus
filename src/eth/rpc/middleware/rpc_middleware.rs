@@ -166,6 +166,7 @@ impl RpcServiceT for RpcMiddleware {
             parent: None,
             "rpc::request",
             cid = %new_cid(),
+            client = field::Empty,
             rpc_client = field::Empty,
             rpc_id = field::Empty,
             rpc_method = field::Empty,
@@ -219,6 +220,7 @@ impl RpcServiceT for RpcMiddleware {
 
         // trace event
         Span::with(|s| {
+            s.rec_str("client", &client);
             s.rec_str("rpc_id", &request.id);
             s.rec_str("rpc_client", &client);
             s.rec_str("rpc_method", &method);

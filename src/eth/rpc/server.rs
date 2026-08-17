@@ -1122,7 +1122,13 @@ fn stratus_get_transaction_result(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::eth_estimateGas", tx_from = field::Empty, tx_to = field::Empty).entered();
+    let _method_enter = info_span!(
+        "rpc::eth_estimateGas",
+        tx_from = field::Empty,
+        tx_to = field::Empty,
+        point_in_time = field::Empty
+    )
+    .entered();
 
     // parse params
     let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
@@ -1132,6 +1138,7 @@ fn eth_estimate_gas(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -
         s.rec_opt("tx_from", &call.from);
         s.rec_opt("tx_to", &call.to);
     });
+    Span::with(|s| s.rec_str("point_in_time", &PointInTime::Latest));
     tracing::info!("executing eth_estimateGas");
 
     // execute
@@ -1179,6 +1186,7 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<TransactionExecu
 
     // execute
     let point_in_time = ctx.server.storage.translate_to_point_in_time(filter)?;
+    Span::with(|s| s.rec_str("point_in_time", &point_in_time));
     if let Some(to_address) = call.to
         && !call.data.is_empty()
     {
@@ -1190,7 +1198,14 @@ fn rpc_call(params: Params<'_>, ctx: Arc<RpcContext>) -> Result<TransactionExecu
 fn eth_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
-    let _method_enter = info_span!("rpc::eth_call", tx_from = field::Empty, tx_to = field::Empty, filter = field::Empty).entered();
+    let _method_enter = info_span!(
+        "rpc::eth_call",
+        tx_from = field::Empty,
+        tx_to = field::Empty,
+        filter = field::Empty,
+        point_in_time = field::Empty
+    )
+    .entered();
 
     match rpc_call(params, ctx) {
         // result is success

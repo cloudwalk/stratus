@@ -98,6 +98,8 @@ bytes = "=1.11.1"
 log = "=0.4.29"
 metrics = "=0.24.2"
 metrics-exporter-prometheus = { version = "=0.17.2", optional = true }
+metrics-tracing-context = { version = "=0.18.1", optional = true }
+metrics-util = { version = "=0.20.0", optional = true }
 opentelemetry = "=0.31.0"
 opentelemetry_sdk = { version = "=0.31.0", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "=0.31.0", features = [
@@ -225,7 +227,7 @@ dev = []
 tools = ["dep:indicatif"]
 
 # Enable runtime metrics collection.
-metrics = ["dep:metrics-exporter-prometheus"]
+metrics = ["dep:metrics-exporter-prometheus", "dep:metrics-tracing-context", "dep:metrics-util"]
 
 # Enable runtime rocksdb metrics collection.
 rocks_metrics = ["metrics"]
