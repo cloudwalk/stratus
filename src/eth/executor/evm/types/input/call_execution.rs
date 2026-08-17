@@ -22,7 +22,7 @@ use crate::eth::types::Wei;
 use crate::ext::OptionExt;
 
 /// EVM input data. Usually derived from a transaction or call.
-#[derive(DebugAsJson, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(DebugAsJson, Clone, Default, serde::Serialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct CallExecutionInput {
     /// Operation party address.

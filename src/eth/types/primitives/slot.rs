@@ -3,8 +3,8 @@ use display_json::DebugAsJson;
 use crate::eth::types::SlotIndex;
 use crate::eth::types::SlotValue;
 
-#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(test, derive(fake::Dummy))]
+#[derive(DebugAsJson, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub struct Slot {
     pub index: SlotIndex,
     pub value: SlotValue,

@@ -8,7 +8,6 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
-use serde::Deserialize;
 use serde::Serialize;
 use stratus_macros::FakeEnum;
 use strum::EnumCount;
@@ -30,8 +29,8 @@ use crate::eth::types::SlotValue;
 
 macro_rules! impl_single_version_cf_value {
     ($name:ident, $inner_type:ty, $non_rocks_equivalent: ty) => {
-        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, EnumCount, VariantNames, IntoStaticStr, bincode::Encode, bincode::Decode, FakeEnum)]
-        #[cfg_attr(test, derive(fake::Dummy))]
+        #[derive(Debug, Clone, PartialEq, Serialize, EnumCount, VariantNames, IntoStaticStr, bincode::Encode, bincode::Decode, FakeEnum)]
+        #[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
         #[fake_enum(generate = "crate::utils::test_utils::fake_first")]
         pub enum $name {
             V1($inner_type),

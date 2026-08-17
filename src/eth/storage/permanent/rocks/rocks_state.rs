@@ -16,7 +16,6 @@ use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
-use serde::Deserialize;
 use serde::Serialize;
 use sugars::btmap;
 
@@ -41,7 +40,7 @@ use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
 use super::types::UnixTimeRocksdb;
-use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::Changes;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
@@ -102,8 +101,8 @@ pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
 fn new_cf_ref<'a, K, V>(db: &'a Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, ColumnFamilyConfig>) -> Result<RocksCfRef<'a, K, V>>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
+    K: Serialize + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
+    V: Serialize + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
@@ -218,7 +217,7 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    fn prepare_batch_with_execution_changes(&self, changes: ExecutionChanges, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
+    fn prepare_batch_with_execution_changes(&self, changes: Changes, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
         let mut block_changes = BlockChangesRocksdb::with_capacity(changes.accounts.len());
         let block_number = block_number.into();
 
@@ -459,7 +458,7 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: ExecutionChanges) -> Result<()> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: Changes) -> Result<()> {
         let mut batch = WriteBatch::default();
 
         let mut txs_batch = vec![];
@@ -502,13 +501,13 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn save_block(&self, block: Block, account_changes: ExecutionChanges) -> Result<()> {
+    pub fn save_block(&self, block: Block, account_changes: Changes) -> Result<()> {
         let mut batch = WriteBatch::default();
         self.prepare_block_insertion(block, account_changes, &mut batch)?;
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn prepare_block_insertion(&self, block: Block, account_changes: ExecutionChanges, batch: &mut WriteBatch) -> Result<()> {
+    pub fn prepare_block_insertion(&self, block: Block, account_changes: Changes, batch: &mut WriteBatch) -> Result<()> {
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
             txs_batch.push((transaction.info.hash.into(), transaction.evm_input.block_number.into()));
@@ -875,7 +874,7 @@ mod tests {
                 }],
             };
 
-            state.save_block(block, ExecutionChanges::default()).unwrap();
+            state.save_block(block, Changes::default()).unwrap();
         }
 
         let filter = LogFilter {

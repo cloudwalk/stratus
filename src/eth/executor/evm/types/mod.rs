@@ -19,6 +19,7 @@ pub use input::EvmInput;
 pub use input::call_execution::CallExecutionInput;
 pub use input::inspector::InspectorInput;
 pub use input::transaction_execution::TransactionExecutionInput;
+pub use output::access_list::AccessListOutput;
 pub use output::call_execution::CallExecutionOutput;
 pub use output::transaction_execution::TransactionExecutionOutput;
 

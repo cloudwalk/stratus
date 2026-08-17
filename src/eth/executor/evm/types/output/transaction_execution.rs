@@ -6,7 +6,7 @@ use revm::context::result::ExecutionResult as RevmExecutionResult;
 use revm_state::EvmState;
 
 use crate::eth::executor::AccountChanges;
-use crate::eth::executor::ExecutionChanges;
+use crate::eth::executor::Changes;
 use crate::eth::executor::ExecutionResult;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::types::Account;
@@ -22,7 +22,7 @@ use crate::ext::not;
 use crate::log_and_err;
 
 /// Output of a transaction executed in the EVM.
-#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(DebugAsJson, Clone, PartialEq, Eq, serde::Serialize, Default)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct TransactionExecutionOutput {
     /// Status of the execution.
@@ -38,7 +38,7 @@ pub struct TransactionExecutionOutput {
     pub gas_used: Gas,
 
     /// Storage changes that happened during the transaction execution.
-    pub changes: ExecutionChanges,
+    pub changes: Changes,
 
     /// The contract address if the executed transaction deploys a contract.
     pub deployed_contract_address: Option<Address>,
@@ -61,7 +61,7 @@ impl TransactionExecutionOutput {
         let sender_next_nonce = sender_changes.nonce.next_nonce();
 
         sender_changes.nonce.apply(sender_next_nonce);
-        let mut changes = ExecutionChanges::default();
+        let mut changes = Changes::default();
         changes.accounts.insert(address, sender_changes);
 
         // crete execution and apply costs
@@ -268,9 +268,9 @@ impl TransactionExecutionOutput {
         }
     }
 
-    fn parse_revm_state(revm_state: EvmState) -> Result<(ExecutionChanges, Option<Address>), StratusError> {
+    fn parse_revm_state(revm_state: EvmState) -> Result<(Changes, Option<Address>), StratusError> {
         let mut deployed_contract_address = None;
-        let mut execution_changes = ExecutionChanges::default();
+        let mut execution_changes = Changes::default();
 
         for (revm_address, mut revm_account) in revm_state {
             let address: Address = revm_address.into();
@@ -630,8 +630,10 @@ mod tests {
         sender_changes.apply_original(sender);
         let mut accounts = HashMap::with_hasher(hash_hasher::HashBuildHasher::default());
         accounts.insert(sender_address, sender_changes);
-        let mut changes = ExecutionChanges::default();
-        changes.accounts = accounts;
+        let changes = Changes::<crate::eth::executor::types::Complete> {
+            accounts,
+            ..Default::default()
+        };
         execution.changes = changes;
         execution.gas_used = Gas::from(100u64);
 

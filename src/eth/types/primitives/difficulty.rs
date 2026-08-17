@@ -5,8 +5,9 @@ use fake::Dummy;
 #[cfg(test)]
 use fake::Faker;
 
-#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(DebugAsJson, derive_more::Display, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
 #[serde(transparent)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct Difficulty(pub U256);
 
 #[cfg(test)]

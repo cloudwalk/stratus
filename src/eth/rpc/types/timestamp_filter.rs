@@ -1,8 +1,7 @@
-use serde::Deserialize;
 use serde::Serialize;
 
 use crate::eth::types::UnixTime;
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Default, strum::Display, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, serde::Deserialize, Eq, PartialEq, Default, strum::Display, Hash)]
 #[cfg_attr(test, derive(fake::Dummy))]
 #[serde(rename_all = "camelCase")]
 pub enum BlockTimestampSeekMode {
@@ -11,7 +10,7 @@ pub enum BlockTimestampSeekMode {
     ExactOrNext,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, serde::Deserialize, Hash)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct BlockTimestampFilter {
     pub timestamp: UnixTime,

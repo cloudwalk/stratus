@@ -2,7 +2,7 @@ use crate::eth::types::BlockNumber;
 use crate::eth::types::Index;
 use crate::eth::types::PointInTime;
 
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Default, Eq)]
+#[derive(Clone, Copy, serde::Serialize, PartialEq, Default, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub enum ExecutionKind {
     CallPending(BlockNumber, TxCount),
@@ -19,7 +19,7 @@ impl ExecutionKind {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize, Eq)]
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub enum TxCount {
     Full,

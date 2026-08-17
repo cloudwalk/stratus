@@ -13,8 +13,8 @@ use crate::eth::types::LogTopic;
 use crate::eth::types::UnixTime;
 
 /// Log is an event emitted by the EVM during contract execution.
-#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(test, derive(fake::Dummy))]
+#[derive(DebugAsJson, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize, fake::Dummy))]
 pub struct Log {
     /// Address that emitted the log.
     pub address: Address,

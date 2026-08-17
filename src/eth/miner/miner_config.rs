@@ -62,7 +62,7 @@ impl MinerConfig {
 // -----------------------------------------------------------------------------
 
 /// Indicates when the miner will mine new blocks.
-#[derive(Debug, Clone, Copy, PartialEq, strum::EnumIs, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, strum::EnumIs, serde::Serialize)]
 pub enum MinerMode {
     /// Mines a new block for each transaction execution.
     #[serde(rename = "automine")]

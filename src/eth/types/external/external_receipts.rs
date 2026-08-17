@@ -10,7 +10,8 @@ use crate::eth::types::ExternalReceipt;
 use crate::eth::types::Hash;
 
 /// A collection of [`ExternalReceipt`].
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[cfg_attr(test, derive(serde::Deserialize))]
 pub struct ExternalReceipts(HashMap<Hash, ExternalReceipt, hash_hasher::HashBuildHasher>);
 
 impl ExternalReceipts {

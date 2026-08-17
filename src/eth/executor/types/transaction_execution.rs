@@ -20,7 +20,7 @@ use crate::eth::types::TransactionInput;
 use crate::ext::OptionExt;
 use crate::ext::RuintExt;
 
-#[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(DebugAsJson, Clone, derive_new::new, serde::Serialize, PartialEq, Eq)]
 #[cfg_attr(test, derive(fake::Dummy))]
 pub struct TransactionExecution {
     pub info: TransactionInfo,

@@ -46,6 +46,7 @@ use crate::alias::JsonValue;
 use crate::config::StratusConfig;
 use crate::eth::codegen;
 use crate::eth::codegen::CONTRACTS;
+use crate::eth::executor::AccessListOutput;
 use crate::eth::executor::CallExecutionOutput;
 use crate::eth::executor::Executor;
 use crate::eth::executor::ExecutorError;
@@ -349,6 +350,7 @@ fn register_methods(mut module: RpcModule<RpcContext>) -> anyhow::Result<RpcModu
     module.register_blocking_method("eth_call", eth_call)?;
     module.register_blocking_method("eth_sendRawTransaction", eth_send_raw_transaction)?;
     module.register_blocking_method("stratus_call", stratus_call)?;
+    module.register_blocking_method("stratus_accessList", stratus_access_list)?;
     module.register_blocking_method("stratus_getTransactionResult", stratus_get_transaction_result)?;
     module.register_blocking_method("debug_traceTransaction", debug_trace_transaction)?;
 
@@ -1268,6 +1270,38 @@ fn stratus_call(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Re
     }
 }
 
+fn stratus_access_list(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<JsonValue, StratusError> {
+    // enter span
+    let _middleware_enter = ext.enter_middleware_span();
+    let _method_enter = info_span!("rpc::stratus_accessList", tx_from = field::Empty, tx_to = field::Empty).entered();
+
+    // parse params
+    let (_, call) = next_rpc_param::<CallInput>(params.sequence())?;
+
+    // track
+    Span::with(|s| {
+        s.rec_opt("tx_from", &call.from);
+        s.rec_opt("tx_to", &call.to);
+    });
+    tracing::info!("executing stratus_accessList");
+
+    // execute
+    if let Some(to_address) = call.to
+        && !call.data.is_empty()
+    {
+        ctx.server
+            .executor
+            .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
+    }
+
+    ctx.server
+        .executor
+        .execute_local_call::<AccessListOutput>(call, PointInTime::Latest)
+        .map(to_json_value)
+        .inspect(|_| tracing::info!("executed stratus_accessList with success"))
+        .inspect_err(|e| tracing::warn!(reason = ?e, "failed to execute stratus_accessList"))
+}
+
 fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
     // enter span
     let _middleware_enter = ext.enter_middleware_span();
@@ -1304,13 +1338,6 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
     if not(GlobalState::is_transactions_enabled()) {
         tracing::warn!(%tx_hash, "failed to execute eth_sendRawTransaction because transactions are disabled");
         return Err(StateError::TransactionsDisabled.into());
-    }
-
-    // HOTFIX: this is a temporary stopgap measure to prevent type 4 transactions which currently cause the followers to crash
-    #[cfg(not(feature = "dev"))]
-    if tx.transaction_info.tx_type.is_some_and(|t| t > 3) {
-        tracing::warn!(%tx_hash, "rejecting unsuported transaction type");
-        return Err(RpcError::ParameterInvalid.into());
     }
 
     // validate that the target account is a contract before acquiring the executor lock or forwarding to the
