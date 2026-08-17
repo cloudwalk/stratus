@@ -5,13 +5,13 @@ use super::block_header::BlockHeaderRocksdb;
 use super::block_number::BlockNumberRocksdb;
 use super::hash::HashRocksdb;
 use super::transaction_mined::TransactionMinedRocksdb;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockHeader;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::TransactionMined;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::Address;
+use crate::eth::types::Block;
+use crate::eth::types::BlockHeader;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::Hash;
+use crate::eth::types::TransactionMined;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]

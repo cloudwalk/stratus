@@ -6,7 +6,7 @@ use clap::Parser;
 use display_json::DebugAsJson;
 
 use super::RocksPermanentStorage;
-use crate::eth::primitives::BlockNumber;
+use crate::eth::types::BlockNumber;
 
 // -----------------------------------------------------------------------------
 // Config

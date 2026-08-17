@@ -16,7 +16,6 @@ use rocksdb::DBIteratorWithThreadMode;
 use rocksdb::IteratorMode;
 use rocksdb::ReadOptions;
 use rocksdb::WriteBatch;
-use serde::Deserialize;
 use serde::Serialize;
 
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
@@ -42,8 +41,8 @@ pub struct RocksCfRef<'a, K, V> {
 
 impl<'a, K, V> RocksCfRef<'a, K, V>
 where
-    K: bincode::Encode + bincode::Decode<()> + Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext,
-    V: bincode::Encode + bincode::Decode<()> + Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext,
+    K: bincode::Encode + bincode::Decode<()> + Serialize + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext,
+    V: bincode::Encode + bincode::Decode<()> + Serialize + Debug + Clone + SerializeDeserializeWithContext,
 {
     /// Create Column Family reference struct.
     pub fn new(db: &'a Arc<DB>, column_family: &str) -> Result<Self> {
@@ -162,12 +161,12 @@ where
     }
 
     #[allow(dead_code)]
-    pub fn iter_start(&self) -> RocksCfIter<K, V> {
+    pub fn iter_start(&self) -> RocksCfIter<'_, K, V> {
         let iter = self.db.iterator_cf(&self.column_family, IteratorMode::Start);
         RocksCfIter::new(iter, &self.column_family_name)
     }
 
-    pub fn iter_from(&self, start_key: K, direction: rocksdb::Direction) -> Result<RocksCfIter<K, V>> {
+    pub fn iter_from(&self, start_key: K, direction: rocksdb::Direction) -> Result<RocksCfIter<'_, K, V>> {
         let serialized_key = self.serialize_key_with_context(&start_key)?;
 
         let iter = self.db.iterator_cf(&self.column_family, IteratorMode::From(&serialized_key, direction));
@@ -303,8 +302,8 @@ pub struct RocksCfIter<'a, K, V> {
 
 impl<'a, K, V> RocksCfIter<'a, K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Decode<()>,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
+    K: Serialize + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Decode<()>,
+    V: Serialize + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
 {
     fn new(iter: DBIteratorWithThreadMode<'a, DB>, column_family: &'a str) -> Self {
         Self {
@@ -326,8 +325,8 @@ where
 
 impl<K, V> Iterator for RocksCfIter<'_, K, V>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Decode<()>,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
+    K: Serialize + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Decode<()>,
+    V: Serialize + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
 {
     type Item = Result<(K, V)>;
 
@@ -373,7 +372,7 @@ pub struct RocksCfKeysIter<'a, K> {
 
 impl<K> Iterator for RocksCfKeysIter<'_, K>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
+    K: Serialize + Debug + Clone + SerializeDeserializeWithContext + bincode::Decode<()>,
 {
     type Item = Result<K>;
 

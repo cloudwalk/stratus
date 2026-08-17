@@ -5,8 +5,8 @@ use std::str::FromStr;
 use alloy_primitives::Bloom;
 use anyhow::anyhow;
 
-use crate::eth::primitives::logs_bloom::LogsBloom;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::LogsBloom;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, PartialEq, Eq, bincode::Encode, bincode::Decode, serde_with::DeserializeFromStr, serde_with::SerializeDisplay)]

@@ -6,6 +6,8 @@ use metrics::describe_counter;
 use metrics::describe_gauge;
 use metrics::describe_histogram;
 
+use crate::eth::executor::EvmKind;
+
 pub type HistogramInt = u32;
 pub type Sum = u64;
 pub type Count = u64;
@@ -110,6 +112,24 @@ impl From<bool> for MetricLabelValue {
 impl From<i32> for MetricLabelValue {
     fn from(value: i32) -> Self {
         Self::Some(value.to_string())
+    }
+}
+
+impl From<u64> for MetricLabelValue {
+    fn from(value: u64) -> Self {
+        Self::Some(value.to_string())
+    }
+}
+
+impl From<EvmKind> for MetricLabelValue {
+    fn from(value: EvmKind) -> Self {
+        let label = match value {
+            EvmKind::Transaction => "transaction",
+            EvmKind::CallPresent => "call_present",
+            EvmKind::CallPast => "call_past",
+            EvmKind::Inspect => "inspector",
+        };
+        Self::Some(label.to_owned())
     }
 }
 

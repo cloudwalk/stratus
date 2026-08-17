@@ -1,0 +1,89 @@
+name: E2E Leader & Fake Leader
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches:
+      - "*"
+    paths-ignore:
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/docs-release.yml"
+      - ".github/workflows/outdated.yml"
+      - ".github/workflows/comment-tag-report.yml"
+      - ".github/workflows/pr-agent.yml"
+      - ".github/workflows/build-binary.yml"
+      - ".github/CODEOWNERS"
+      - "config/**"
+      - "README.md"
+      - "LICENSE"
+      - "CONTRIBUTING.md"
+      - "utils/slack-notifiers/**"
+  push: # Rebuild cache policy
+    branches:
+      - "main"
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+  workflow_dispatch:
+
+env:
+  CACHE_SHARED_KEY: stable-release
+  CACHE_PATH: |
+    ~/.cargo/registry/index/
+    ~/.cargo/registry/cache/
+    ~/.cargo/git/db/
+    target/
+
+jobs:
+  leader_fake_leader_test:
+    name: "E2E Leader & Fake Leader on fake-leader"
+    runs-on: stratus-runner
+    timeout-minutes: 45
+
+    concurrency:
+      group: ${{ github.workflow }}-fake-leader-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Set up Rust
+        run: rustup show
+      - name: Rust Cache - Restore shared key
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ env.CACHE_PATH }}
+          restore-keys: ${{ env.CACHE_SHARED_KEY }}
+          key: ${{ env.CACHE_SHARED_KEY }}
+      - name: Install libsasl2-dev libssl-dev
+        run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
+      - name: Set up Just
+        uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .tool-versions
+      - name: Install npm
+        run: npm install -g npm@10.8.2
+      - name: Install cargo tools
+        run: cargo install killport@1.1.0 wait-service@0.3.1 || true
+      - name: Set up dependencies
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2
+        with:
+          tool: cargo-llvm-cov@0.6.14
+      - name: Clone BRLCToken repository
+        run: just contracts-clone
+        env:
+          BRLC_MONOREPO_TOKEN: ${{ secrets.BRLC_MONOREPO_TOKEN }}
+      - name: Flatten BRLCToken contract
+        run: just contracts-flatten token BRLCToken
+      - name: Run e2e tests
+        run: just run-test e2e-leader-fake-leader-up fake-leader
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 0
+          RUST_LOG: error
+          RELEASE: 1
+          RUST_BACKTRACE: 1
