@@ -75,32 +75,8 @@ fn init_metrics_exporter(address: SocketAddr) {
 
 #[cfg(feature = "metrics")]
 fn install_metrics_tracing_recorder(builder: PrometheusBuilder) -> anyhow::Result<()> {
-    use std::thread;
-
-    use tokio::runtime;
-
-    let recorder = if let Ok(handle) = runtime::Handle::try_current() {
-        let (recorder, exporter) = {
-            let _guard = handle.enter();
-            builder.build()?
-        };
-
-        handle.spawn(exporter);
-        recorder
-    } else {
-        let runtime = runtime::Builder::new_current_thread().enable_all().build()?;
-
-        let (recorder, exporter) = {
-            let _guard = runtime.enter();
-            builder.build()?
-        };
-
-        thread::Builder::new()
-            .name("metrics::exporter".to_string())
-            .spawn(move || runtime.block_on(exporter))?;
-
-        recorder
-    };
+    let (recorder, exporter) = builder.build()?;
+    tokio::spawn(exporter);
 
     let recorder = MetricsTracingContextLayer::new(StratusMetricsLabelFilter).layer(recorder);
     metrics::set_global_recorder(recorder)?;

@@ -149,25 +149,15 @@ impl TracingConfig {
             }
         };
 
-        #[cfg(feature = "metrics")]
-        {
-            println!("tracing registry: enabling metrics tracing context recorder");
-            tracing_subscriber::registry()
-                .with(tracing_context_layer)
-                .with(MetricsTracingFieldsLayer::new())
-                .with(stdout_layer)
-                .with(opentelemetry_layer)
-                .with(sentry_layer)
-        }
+        let registry = tracing_subscriber::registry().with(tracing_context_layer);
 
-        #[cfg(not(feature = "metrics"))]
-        {
-            tracing_subscriber::registry()
-                .with(tracing_context_layer)
-                .with(stdout_layer)
-                .with(opentelemetry_layer)
-                .with(sentry_layer)
-        }
+        #[cfg(feature = "metrics")]
+        let registry = {
+            println!("tracing registry: enabling metrics tracing context recorder");
+            registry.with(MetricsTracingFieldsLayer::new())
+        };
+
+        registry.with(stdout_layer).with(opentelemetry_layer).with(sentry_layer)
     }
 }
 
