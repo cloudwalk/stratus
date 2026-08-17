@@ -1282,6 +1282,18 @@ criteria = "safe-to-deploy"
 version = "0.5.3"
 notes = "Safety: no new I/O or network; no build.rs or proc-macros; unsafe usage unchanged. Dependencies/features: feature table reshuffled (removes internal __common), slab bumped to 0.4.9; dev deps adjust futures/rand/tokio versions. Main change: adds ServiceBuilder::boxed_clone_sync and validates retry jitter isn’t NaN; behavior otherwise unchanged."
 
+[[audits.tower-http]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.6.8 -> 0.6.11"
+notes = "Spanning 0.6.9-0.6.11. Additive/benign: on-early-drop middleware, set-header multiple-headers API, classify::GrpcCode From impls, follow-redirect iri-string->url swap, fs fixes. Deployed library unsafe-free (forbid unsafe_code); single unsafe is Windows-only cfg(test) read-only GetFileType FFI. New is_reserved_dos_name Windows path-traversal guard (security improvement). No build script, no proc-macro, no crypto. Advisories RUSTSEC-2021-0135/2022-0043 patched in >=0.2.1. MSRV unchanged (1.64). stratus uses cors feature only (one-char doc typo fix in cors/mod.rs)."
+
+[[audits.tower-http]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.6.8 -> 0.7.0"
+notes = "Minor (breaking) release. Deployed library unsafe-free (deny unsafe_code; single unsafe is Windows-only cfg(test) GetFileType FFI not compiled into lib). New csrf module is pure Sec-Fetch-Site/Origin/Host header inspection (security-adding, no unsafe/fs/net/crypto). No build script, no proc-macro, no FFI in deployed code, no crypto. cargo audit clean; advisories patched in >=0.2.1. MSRV 1.64->1.65 (stratus 1.86). stratus cors-only: Vary header now derived from request-dependency (fixed Any origin -> no Vary, more correct caching, no security impact)."
+
 [[audits.tracing-opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
