@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use crate::eth::primitives::Difficulty;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::Difficulty;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]

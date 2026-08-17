@@ -2,22 +2,34 @@ use rocksdb::BlockBasedOptions;
 use rocksdb::Cache;
 use rocksdb::Options;
 
+#[derive(Debug, Clone, Copy)]
 pub enum CacheSetting {
     /// Enabled cache with the given size in bytes
     Enabled(usize),
     Disabled,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum DbConfig {
     OptimizedPointLookUp,
     HistoricalData,
+    #[default]
     Default,
 }
 
-impl Default for DbConfig {
-    fn default() -> Self {
-        Self::Default
+#[derive(Debug, Clone, Copy)]
+pub struct ColumnFamilyConfig {
+    pub db_config: DbConfig,
+    pub cache_setting: CacheSetting,
+}
+
+impl ColumnFamilyConfig {
+    pub fn new(db_config: DbConfig, cache_setting: CacheSetting) -> Self {
+        Self { cache_setting, db_config }
+    }
+
+    pub fn to_options(self) -> Options {
+        self.db_config.to_options(self.cache_setting)
     }
 }
 

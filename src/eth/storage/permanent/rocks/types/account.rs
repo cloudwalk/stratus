@@ -4,9 +4,9 @@ use super::address::AddressRocksdb;
 use super::bytecode::BytecodeRocksdb;
 use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
 use crate::ext::OptionExt;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]

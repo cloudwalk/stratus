@@ -52,6 +52,9 @@ export function updateProviderUrl(providerName: string) {
         case "stratus-follower":
             providerUrl = "http://localhost:3001?app=e2e";
             break;
+        case "stratus-fake-leader":
+            providerUrl = "http://localhost:3001?app=e2e";
+            break;
         case "stratus":
             providerUrl = "http://localhost:3000?app=e2e";
             break;

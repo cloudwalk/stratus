@@ -29,7 +29,7 @@ env:
 jobs:
   build_optimized:
     name: Build PGO optimized binary
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 300
 
     concurrency:
@@ -47,7 +47,7 @@ jobs:
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Rust
-        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88
+        run: rustup show
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
