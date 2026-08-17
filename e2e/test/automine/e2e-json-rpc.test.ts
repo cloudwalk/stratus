@@ -3,7 +3,7 @@ import { TransactionReceipt, keccak256 } from "ethers";
 import { JsonRpcProvider } from "ethers";
 import { Block, Bytes } from "web3-types";
 
-import { ALICE, BOB, CHARLIE } from "../helpers/account";
+import { ALICE, BOB, CHARLIE, randomAccounts } from "../helpers/account";
 import { isStratus } from "../helpers/network";
 import {
     CHAIN_ID,
@@ -657,8 +657,9 @@ describe("JSON-RPC", () => {
             it("rejects a call to an EOA with non-empty data (AccountNotContract)", async () => {
                 if (!isStratus) return;
 
+                const freshEoa = randomAccounts(1)[0].address;
                 const error = await sendAndGetError("stratus_accessList", [
-                    { from: ALICE.address, to: BOB.address, data: "0x1234" },
+                    { from: ALICE.address, to: freshEoa, data: "0x1234" },
                 ]);
                 expect(error.code).to.eq(2001);
             });
