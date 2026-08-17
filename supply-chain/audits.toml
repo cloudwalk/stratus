@@ -713,6 +713,12 @@ Dependencies/features: bumps windows-link to 0.2; dev-only bumps windows-bindgen
 Main change: repository moved to github.com/djc/hostname with doc badge updates; tests unwrap bindgen result; behavior remains the same.
 """
 
+[[audits.http]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "1.4.2"
+notes = "Reviewed 1.3.1->1.4.2 delta (1.3.1 was previously exempted, not audited). Pure HTTP message-types crate (Request/Response/HeaderMap/Uri, no I/O). Unsafe changes are net soundness improvements: IterMut/ValueIterMut refactored to stop reborrowing whole map (Stacked Borrows fix PR#837), IntoIter::drop guard fixes use-after-free on panic (PR#838), Extend reserve-clamp fixes overflow panic. FNV dep removed (vendored inline, identical constants). URI parsing tightened (rejects empty/non-slash-start/0x7F DEL). No build.rs, no proc-macro, fewer runtime deps (bytes+itoa). MSRV 1.57 (stratus 1.86). No advisory against http 1.4.x."
+
 [[audits.humantime]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
