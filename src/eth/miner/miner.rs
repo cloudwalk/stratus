@@ -13,17 +13,17 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::Span;
 
+use crate::eth::executor::Changes;
+use crate::eth::executor::TransactionExecution;
 use crate::eth::miner::MinerMode;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockHeader;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogMessage;
-use crate::eth::primitives::StorageError;
-use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionExecution;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
+use crate::eth::types::Block;
+use crate::eth::types::BlockHeader;
+use crate::eth::types::ExternalBlock;
+use crate::eth::types::Hash;
+use crate::eth::types::LogMessage;
+use crate::eth::types::StratusError;
 use crate::ext::DisplayExt;
 use crate::ext::not;
 use crate::globals::STRATUS_SHUTDOWN_SIGNAL;
@@ -228,7 +228,7 @@ impl Miner {
     /// Mines external block and external transactions.
     ///
     /// Local transactions are not allowed to be part of the block.
-    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<(Block, ExecutionChanges)> {
+    pub fn mine_external(&self, external_block: ExternalBlock) -> anyhow::Result<(Block, Changes)> {
         // track
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_external", block_number = field::Empty).entered();
@@ -269,7 +269,7 @@ impl Miner {
     /// Mines local transactions.
     ///
     /// External transactions are not allowed to be part of the block.
-    pub fn mine_local(&self) -> anyhow::Result<(Block, ExecutionChanges), StorageError> {
+    pub fn mine_local(&self) -> anyhow::Result<(Block, Changes), StorageError> {
         #[cfg(feature = "tracing")]
         let _span = info_span!("miner::mine_local", block_number = field::Empty).entered();
 
@@ -283,7 +283,7 @@ impl Miner {
         Ok((block.into(), changes))
     }
 
-    pub fn commit(&self, item: CommitItem, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
+    pub fn commit(&self, item: CommitItem, changes: Changes) -> anyhow::Result<(), StorageError> {
         match item {
             CommitItem::Block(block) => self.commit_block(block, changes),
             CommitItem::ReplicationBlock(block) => {
@@ -295,7 +295,7 @@ impl Miner {
     }
 
     /// Persists a mined block to permanent storage and prepares new block.
-    pub fn commit_block(&self, block: Block, changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
+    pub fn commit_block(&self, block: Block, changes: Changes) -> anyhow::Result<(), StorageError> {
         let block_number = block.number();
 
         // track
@@ -382,10 +382,10 @@ pub mod interval_miner {
     use tokio::time::Instant;
     use tokio_util::sync::CancellationToken;
 
+    use crate::eth::executor::Changes;
     use crate::eth::miner::Miner;
     use crate::eth::miner::miner::CommitItem;
-    use crate::eth::primitives::Block;
-    use crate::eth::primitives::ExecutionChanges;
+    use crate::eth::types::Block;
     use crate::infra::tracing::warn_task_cancellation;
     use crate::infra::tracing::warn_task_rx_closed;
 
@@ -420,7 +420,7 @@ pub mod interval_miner {
         warn_task_rx_closed(TASK_NAME);
     }
 
-    pub fn mine_local_retry(miner: &Miner) -> (Block, ExecutionChanges, MutexGuard<'_, ()>) {
+    pub fn mine_local_retry(miner: &Miner) -> (Block, Changes, MutexGuard<'_, ()>) {
         let guard = miner.locks.mine_and_commit.lock();
         loop {
             match miner.mine_local() {
@@ -432,7 +432,7 @@ pub mod interval_miner {
         }
     }
 
-    pub fn commit_retry(miner: &Miner, block: Block, changes: ExecutionChanges, _miner_guard: MutexGuard<()>) {
+    pub fn commit_retry(miner: &Miner, block: Block, changes: Changes, _miner_guard: MutexGuard<()>) {
         loop {
             match miner.commit(CommitItem::Block(block.clone()), changes.clone()) {
                 Ok(_) => break,

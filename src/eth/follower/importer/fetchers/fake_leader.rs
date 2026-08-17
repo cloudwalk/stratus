@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use super::block_with_changes::BlockWithChangesFetcher;
 use super::block_with_receipts::BlockWithReceiptsFetcher;
 use crate::eth::follower::importer::fetchers::DataFetcher;
-use crate::eth::primitives::BlockNumber;
+use crate::eth::types::BlockNumber;
 
 pub struct FakeLeaderFetcher {
     pub block_with_receipts_fetcher: BlockWithReceiptsFetcher,

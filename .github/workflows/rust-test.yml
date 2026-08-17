@@ -39,7 +39,7 @@ env:
 jobs:
   unit_tests:
     name: Rust Tests
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 25
 
     concurrency:
@@ -72,6 +72,11 @@ jobs:
 
       - name: Set up Just
         uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2
+
+      - name: Set up dependencies
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2
+        with:
+          tool: cargo-llvm-cov@0.6.14
 
       - name: Rust tests
         run: just test

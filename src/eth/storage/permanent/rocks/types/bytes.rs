@@ -5,8 +5,8 @@ use std::ops::Deref;
 use revm::primitives::Bytes as RevmBytes;
 use rocksdb::WriteBatch;
 
-use crate::eth::primitives::Bytes;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::Bytes;
 
 #[derive(Clone, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(fake::Dummy))]
@@ -38,13 +38,13 @@ impl Debug for BytesRocksdb {
 
 impl From<Bytes> for BytesRocksdb {
     fn from(value: Bytes) -> Self {
-        Self(value.0)
+        Self(value.0.to_vec())
     }
 }
 
 impl From<BytesRocksdb> for Bytes {
     fn from(value: BytesRocksdb) -> Self {
-        Self(value.0)
+        Self(value.0.into())
     }
 }
 

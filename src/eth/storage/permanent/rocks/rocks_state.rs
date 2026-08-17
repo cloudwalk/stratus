@@ -16,7 +16,6 @@ use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
-use serde::Deserialize;
 use serde::Serialize;
 use sugars::btmap;
 
@@ -41,29 +40,29 @@ use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
 use super::types::UnixTimeRocksdb;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockNumber;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMessage;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::TransactionMined;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Wei;
+use crate::eth::executor::Changes;
+use crate::eth::rpc::BlockFilter;
+use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::cf_versions::CfBlockChangesValue;
 use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::types::Bytes;
+use crate::eth::types::Hash;
+use crate::eth::types::LogMessage;
+#[cfg(feature = "dev")]
+use crate::eth::types::Nonce;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::TransactionMined;
+#[cfg(feature = "dev")]
+use crate::eth::types::Wei;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -102,8 +101,8 @@ pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
 fn new_cf_ref<'a, K, V>(db: &'a Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, ColumnFamilyConfig>) -> Result<RocksCfRef<'a, K, V>>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
+    K: Serialize + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
+    V: Serialize + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
@@ -218,7 +217,7 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    fn prepare_batch_with_execution_changes(&self, changes: ExecutionChanges, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
+    fn prepare_batch_with_execution_changes(&self, changes: Changes, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
         let mut block_changes = BlockChangesRocksdb::with_capacity(changes.accounts.len());
         let block_number = block_number.into();
 
@@ -459,7 +458,7 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: ExecutionChanges) -> Result<()> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: Changes) -> Result<()> {
         let mut batch = WriteBatch::default();
 
         let mut txs_batch = vec![];
@@ -502,13 +501,13 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn save_block(&self, block: Block, account_changes: ExecutionChanges) -> Result<()> {
+    pub fn save_block(&self, block: Block, account_changes: Changes) -> Result<()> {
         let mut batch = WriteBatch::default();
         self.prepare_block_insertion(block, account_changes, &mut batch)?;
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn prepare_block_insertion(&self, block: Block, account_changes: ExecutionChanges, batch: &mut WriteBatch) -> Result<()> {
+    pub fn prepare_block_insertion(&self, block: Block, account_changes: Changes, batch: &mut WriteBatch) -> Result<()> {
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
             txs_batch.push((transaction.info.hash.into(), transaction.evm_input.block_number.into()));
@@ -798,11 +797,10 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::eth::executor::EvmExecutionResult;
-    use crate::eth::executor::EvmInput;
-    use crate::eth::primitives::BlockHeader;
-    use crate::eth::primitives::EvmExecution;
-    use crate::eth::primitives::TransactionExecution;
+    use crate::eth::executor::TransactionExecution;
+    use crate::eth::executor::TransactionExecutionInput;
+    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::types::BlockHeader;
 
     #[test]
     #[cfg(feature = "dev")]
@@ -862,15 +860,12 @@ mod tests {
                 },
                 transactions: vec![TransactionMined {
                     execution: TransactionExecution {
-                        evm_input: EvmInput {
+                        evm_input: TransactionExecutionInput {
                             block_number: number.into(),
                             ..Faker.fake()
                         },
-                        result: EvmExecutionResult {
-                            execution: EvmExecution {
-                                logs: vec![Faker.fake(), Faker.fake()],
-                                ..Faker.fake()
-                            },
+                        result: TransactionExecutionOutput {
+                            logs: vec![Faker.fake(), Faker.fake()],
                             ..Faker.fake()
                         },
                         ..Faker.fake()
@@ -879,7 +874,7 @@ mod tests {
                 }],
             };
 
-            state.save_block(block, ExecutionChanges::default()).unwrap();
+            state.save_block(block, Changes::default()).unwrap();
         }
 
         let filter = LogFilter {

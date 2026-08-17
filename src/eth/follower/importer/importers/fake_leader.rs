@@ -4,7 +4,9 @@ use anyhow::bail;
 use async_trait::async_trait;
 
 use crate::GlobalState;
+use crate::eth::executor::Changes;
 use crate::eth::executor::Executor;
+use crate::eth::executor::ExecutorError;
 use crate::eth::follower::importer::fetchers::DataFetcher;
 use crate::eth::follower::importer::fetchers::fake_leader::FakeLeaderFetcher;
 use crate::eth::follower::importer::importers::ImportData;
@@ -12,12 +14,9 @@ use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::interval_miner::commit_retry;
 use crate::eth::miner::miner::interval_miner::mine_local_retry;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::EvmExecutionMetrics;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::StratusError;
-use crate::eth::primitives::TransactionError;
 use crate::eth::storage::StratusStorage;
+use crate::eth::types::Block;
+use crate::eth::types::StratusError;
 
 pub struct FakeLeaderWorker {
     pub executor: Arc<Executor>,
@@ -26,7 +25,7 @@ pub struct FakeLeaderWorker {
 }
 
 impl ImportData for <FakeLeaderWorker as ImporterWorker>::DataType {
-    fn block_number(&self) -> crate::eth::primitives::BlockNumber {
+    fn block_number(&self) -> crate::eth::types::BlockNumber {
         self.0.block_number()
     }
 }
@@ -42,7 +41,7 @@ impl ImporterWorker for FakeLeaderWorker {
             tracing::info!(?tx, "executing tx as fake miner");
             if let Err(e) = self.executor.execute_local_transaction(tx.try_into()?) {
                 match e {
-                    StratusError::Transaction(TransactionError::Nonce { transaction: _, account: _ }) => {
+                    StratusError::Executor(ExecutorError::Nonce { transaction: _, account: _ }) => {
                         tracing::warn!(reason = ?e, "transaction failed, was this node restarted?");
                     }
                     _ => {
@@ -86,8 +85,7 @@ impl ImporterWorker for FakeLeaderWorker {
 fn normalize_for_replication_compare(block: &Block) -> Block {
     let mut normalized = block.clone();
     for tx in &mut normalized.transactions {
-        tx.execution.result.execution.changes = ExecutionChanges::default();
-        tx.execution.result.metrics = EvmExecutionMetrics::default();
+        tx.execution.result.changes = Changes::default();
     }
     normalized
 }

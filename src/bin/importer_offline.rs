@@ -20,17 +20,17 @@ use itertools::Itertools;
 use stratus::GlobalServices;
 use stratus::GlobalState;
 use stratus::config::ImporterOfflineConfig;
+use stratus::eth::executor::Changes;
 use stratus::eth::executor::Executor;
-use stratus::eth::external_rpc::ExternalBlockWithReceipts;
 use stratus::eth::external_rpc::ExternalRpc;
 use stratus::eth::external_rpc::PostgresExternalRpc;
 use stratus::eth::miner::Miner;
 use stratus::eth::miner::MinerMode;
 use stratus::eth::miner::miner::CommitItem;
-use stratus::eth::primitives::Block;
-use stratus::eth::primitives::BlockNumber;
-use stratus::eth::primitives::ExecutionChanges;
-use stratus::eth::primitives::ExternalReceipts;
+use stratus::eth::types::Block;
+use stratus::eth::types::BlockNumber;
+use stratus::eth::types::ExternalBlockWithReceipts;
+use stratus::eth::types::ExternalReceipts;
 use stratus::ext::spawn;
 use stratus::ext::spawn_thread;
 use stratus::log_and_err;
@@ -49,7 +49,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 const RPC_FETCHER_CHANNEL_CAPACITY: usize = 10;
 
 type BlocksToExecute = Vec<ExternalBlockWithReceipts>;
-type BlocksToSave = Vec<(Block, ExecutionChanges)>;
+type BlocksToSave = Vec<(Block, Changes)>;
 
 fn main() -> anyhow::Result<()> {
     let global_services = GlobalServices::<ImporterOfflineConfig>::init();
@@ -92,7 +92,7 @@ async fn run(config: ImporterOfflineConfig) -> anyhow::Result<()> {
 
     if block_start.is_zero() && !storage.has_genesis()? {
         let genesis_block = Block::genesis();
-        storage.save_genesis_block(genesis_block, initial_accounts, ExecutionChanges::default())?;
+        storage.save_genesis_block(genesis_block, initial_accounts, Changes::default())?;
         storage.finish_pending_block()?;
         block_start = BlockNumber::from(1);
     }
@@ -208,14 +208,14 @@ fn run_external_block_executor(
             return Ok(());
         };
 
-        let (Some((block_start, _)), Some((block_end, _))) = (blocks.first(), blocks.last()) else {
+        let (Some(first), Some(last)) = (blocks.first(), blocks.last()) else {
             return log_and_err!(GlobalState::shutdown_from(TASK_NAME, "received empty block range to reexecute"));
         };
 
-        let block_start = block_start.number();
-        let block_end = block_end.number();
-        let receipts_count = blocks.iter().map(|(_, receipts)| receipts.len()).sum::<usize>();
-        let tx_count = blocks.iter().map(|(block, _)| block.transactions.len()).sum();
+        let block_start = first.block.number();
+        let block_end = last.block.number();
+        let receipts_count = blocks.iter().map(|entry| entry.receipts.len()).sum::<usize>();
+        let tx_count = blocks.iter().map(|entry| entry.block.transactions.len()).sum();
         let blocks_count = blocks.len();
 
         tracing::info!(parent: None, %block_start, %block_end, %tx_count, "executing blocks");
@@ -233,7 +233,7 @@ fn run_external_block_executor(
         for blocks in Itertools::chunks(blocks.into_iter(), batch_size).into_iter() {
             let mut executed_batch = Vec::with_capacity(batch_size);
 
-            for (block, receipts) in blocks {
+            for ExternalBlockWithReceipts { block, receipts } in blocks {
                 if GlobalState::is_shutdown_warn(TASK_NAME) {
                     return Ok(());
                 }
@@ -287,7 +287,7 @@ fn run_block_saver(miner: Arc<Miner>, from_executor_rx: mpsc::Receiver<BlocksToS
 async fn fetch_blocks_and_receipts(rpc_storage: Arc<PostgresExternalRpc>, block_start: BlockNumber, block_end: BlockNumber) -> anyhow::Result<BlocksToExecute> {
     tracing::info!(parent: None, %block_start, %block_end, "fetching blocks and receipts");
     let mut blocks = rpc_storage.read_block_and_receipts_in_range(block_start, block_end).await?;
-    for (block, receipts) in blocks.iter_mut() {
+    for ExternalBlockWithReceipts { block, receipts } in blocks.iter_mut() {
         let BlockTransactions::Full(transactions) = &mut block.transactions else {
             tracing::error!(
                 block_number = ?block.number(),

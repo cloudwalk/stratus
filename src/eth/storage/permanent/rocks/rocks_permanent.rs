@@ -10,27 +10,27 @@ use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
 use super::types::BlockRocksdb;
 use crate::GlobalState;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockNumber;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMessage;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StorageError;
-use crate::eth::primitives::TransactionMined;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Wei;
+use crate::eth::executor::Changes;
+use crate::eth::rpc::BlockFilter;
+use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::types::Bytes;
+use crate::eth::types::Hash;
+use crate::eth::types::LogMessage;
+#[cfg(feature = "dev")]
+use crate::eth::types::Nonce;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::TransactionMined;
+#[cfg(feature = "dev")]
+use crate::eth::types::Wei;
 use crate::ext::SleepReason;
 use crate::ext::spawn;
 use crate::ext::traced_sleep;
@@ -211,7 +211,7 @@ impl RocksPermanentStorage {
         })
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: Changes) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
@@ -227,7 +227,7 @@ impl RocksPermanentStorage {
             })
     }
 
-    pub fn save_block(&self, block: Block, account_changes: ExecutionChanges) -> anyhow::Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, account_changes: Changes) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {

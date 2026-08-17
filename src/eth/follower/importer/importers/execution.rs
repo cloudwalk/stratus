@@ -9,9 +9,9 @@ use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::follower::importer::send_block_to_kafka;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::CommitItem;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalReceipt;
-use crate::eth::primitives::ExternalReceipts;
+use crate::eth::types::ExternalBlock;
+use crate::eth::types::ExternalReceipt;
+use crate::eth::types::ExternalReceipts;
 use crate::infra::kafka::KafkaConnector;
 use crate::log_and_err;
 
@@ -22,7 +22,7 @@ pub struct ReexecutionWorker {
 }
 
 impl ImportData for <ReexecutionWorker as ImporterWorker>::DataType {
-    fn block_number(&self) -> crate::eth::primitives::BlockNumber {
+    fn block_number(&self) -> crate::eth::types::BlockNumber {
         self.0.number()
     }
 }

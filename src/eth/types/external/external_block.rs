@@ -1,0 +1,131 @@
+#[cfg(test)]
+use alloy_eips::eip4895::Withdrawals;
+#[cfg(test)]
+use alloy_primitives::B64;
+#[cfg(test)]
+use alloy_primitives::B256;
+#[cfg(test)]
+use alloy_primitives::Bloom;
+#[cfg(test)]
+use alloy_primitives::Bytes;
+#[cfg(test)]
+use alloy_primitives::U256;
+#[cfg(test)]
+use fake::Dummy;
+#[cfg(test)]
+use fake::Fake;
+#[cfg(test)]
+use fake::Faker;
+use serde::Deserialize;
+
+use crate::alias::AlloyBlockExternalTransaction;
+use crate::alias::JsonValue;
+use crate::eth::types::Address;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
+#[cfg(test)]
+use crate::eth::types::ExternalTransaction;
+use crate::eth::types::Hash;
+use crate::eth::types::UnixTime;
+use crate::log_and_err;
+
+#[derive(Debug, Clone, PartialEq, derive_more::Deref, derive_more::DerefMut, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct ExternalBlock(#[deref] pub AlloyBlockExternalTransaction);
+
+impl ExternalBlock {
+    /// Returns the block hash.
+    #[allow(clippy::expect_used)]
+    pub fn hash(&self) -> Hash {
+        Hash::from(self.0.header.hash)
+    }
+
+    /// Returns the block number.
+    #[allow(clippy::expect_used)]
+    pub fn number(&self) -> BlockNumber {
+        BlockNumber::from(self.0.header.inner.number)
+    }
+
+    /// Returns the block timestamp.
+    pub fn timestamp(&self) -> UnixTime {
+        self.0.header.inner.timestamp.into()
+    }
+
+    /// Returns the block author.
+    pub fn author(&self) -> Address {
+        self.0.header.inner.beneficiary.into()
+    }
+}
+
+impl PartialEq<Block> for ExternalBlock {
+    fn eq(&self, other: &Block) -> bool {
+        self.number() == other.number() && self.timestamp() == other.header.timestamp && self.hash() == other.header.hash
+    }
+}
+
+#[cfg(test)]
+impl Dummy<Faker> for ExternalBlock {
+    fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &Faker, rng: &mut R) -> Self {
+        let mut addr_bytes = [0u8; 20];
+        let mut hash_bytes = [0u8; 32];
+        let mut nonce_bytes = [0u8; 8];
+        rng.fill_bytes(&mut addr_bytes);
+        rng.fill_bytes(&mut hash_bytes);
+        rng.fill_bytes(&mut nonce_bytes);
+
+        let transaction: ExternalTransaction = faker.fake_with_rng(rng);
+
+        let block = alloy_rpc_types_eth::Block {
+            header: alloy_rpc_types_eth::Header {
+                hash: B256::from_slice(&hash_bytes),
+                inner: alloy_consensus::Header {
+                    parent_hash: B256::from_slice(&hash_bytes),
+                    ommers_hash: B256::from_slice(&hash_bytes),
+                    beneficiary: alloy_primitives::Address::from_slice(&addr_bytes),
+                    state_root: B256::from_slice(&hash_bytes),
+                    transactions_root: B256::from_slice(&hash_bytes),
+                    receipts_root: B256::from_slice(&hash_bytes),
+                    withdrawals_root: Some(B256::from_slice(&hash_bytes)),
+                    number: rng.next_u64(),
+                    gas_used: rng.next_u64(),
+                    gas_limit: rng.next_u64(),
+                    extra_data: Bytes::default(),
+                    logs_bloom: Bloom::default(),
+                    timestamp: rng.next_u64(),
+                    difficulty: U256::from(rng.next_u64()),
+                    mix_hash: B256::from_slice(&hash_bytes),
+                    nonce: B64::from_slice(&nonce_bytes),
+                    base_fee_per_gas: Some(rng.next_u64()),
+                    blob_gas_used: None,
+                    excess_blob_gas: None,
+                    parent_beacon_block_root: None,
+                    requests_hash: None,
+                    block_access_list_hash: None,
+                    slot_number: None,
+                },
+                total_difficulty: Some(U256::from(rng.next_u64())),
+                size: Some(U256::from(rng.next_u64())),
+            },
+            uncles: vec![B256::from_slice(&hash_bytes)],
+            transactions: alloy_rpc_types_eth::BlockTransactions::Full(vec![transaction]),
+            withdrawals: Some(Withdrawals::default()),
+        };
+
+        ExternalBlock(block)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Conversions: Other -> Self
+// -----------------------------------------------------------------------------
+
+impl TryFrom<JsonValue> for ExternalBlock {
+    type Error = anyhow::Error;
+
+    fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+        match ExternalBlock::deserialize(&value) {
+            Ok(v) => Ok(v),
+            Err(e) => log_and_err!(reason = e, payload = value, "failed to convert payload value to ExternalBlock"),
+        }
+    }
+}

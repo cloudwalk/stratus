@@ -23,10 +23,10 @@ use crate::eth::follower::importer::importers::fake_leader::FakeLeaderWorker;
 use crate::eth::follower::importer::importers::replication::ReplicationWorker;
 use crate::eth::follower::importer::start_number_fetcher;
 use crate::eth::miner::Miner;
-use crate::eth::primitives::BlockNumber;
+use crate::eth::rpc::BlockchainClient;
 use crate::eth::storage::StratusStorage;
+use crate::eth::types::BlockNumber;
 use crate::ext::spawn;
-use crate::infra::BlockchainClient;
 use crate::infra::kafka::KafkaConnector;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;

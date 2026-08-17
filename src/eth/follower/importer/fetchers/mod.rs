@@ -9,7 +9,7 @@ use tokio::task::yield_now;
 use crate::eth::follower::importer::EXTERNAL_RPC_CURRENT_BLOCK;
 use crate::eth::follower::importer::record_fetch_metrics;
 use crate::eth::follower::importer::should_shutdown;
-use crate::eth::primitives::BlockNumber;
+use crate::eth::types::BlockNumber;
 use crate::globals::IMPORTER_ONLINE_TASKS_SEMAPHORE;
 use crate::infra::tracing::warn_task_rx_closed;
 

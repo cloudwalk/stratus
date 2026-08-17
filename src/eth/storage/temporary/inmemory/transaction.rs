@@ -5,30 +5,30 @@ use parking_lot::RwLockUpgradableReadGuard;
 #[cfg(not(feature = "dev"))]
 use parking_lot::RwLockWriteGuard;
 
-use crate::eth::executor::EvmInput;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Hash;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::PendingBlock;
-use crate::eth::primitives::PendingBlockHeader;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::StorageError;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::UnixTime;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::UnixTimeNow;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Wei;
+use crate::eth::executor::Changes;
+use crate::eth::executor::TransactionExecution;
+use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::storage::StorageError;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::types::Bytes;
+use crate::eth::types::Hash;
+#[cfg(feature = "dev")]
+use crate::eth::types::Nonce;
+use crate::eth::types::PendingBlock;
+use crate::eth::types::PendingBlockHeader;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::TransactionInput;
+use crate::eth::types::UnixTime;
+#[cfg(feature = "dev")]
+use crate::eth::types::UnixTimeNow;
+#[cfg(feature = "dev")]
+use crate::eth::types::Wei;
 
 #[derive(Debug)]
 pub struct InmemoryTransactionTemporaryStorage {
@@ -41,7 +41,7 @@ impl InmemoryTransactionTemporaryStorage {
         Self {
             pending_block: RwLock::new(InMemoryTemporaryStorageState {
                 block: PendingBlock::new_at_now(block_number),
-                block_changes: ExecutionChanges::default(),
+                block_changes: Changes::default(),
             }),
             latest_block: RwLock::new(None),
         }
@@ -79,7 +79,8 @@ impl InmemoryTransactionTemporaryStorage {
         if tx.evm_input != &pending_block.block.header {
             let actual_input = tx.evm_input.clone();
             let tx_input: TransactionInput = tx.into();
-            let expected_input = EvmInput::from_eth_transaction(&tx_input, pending_block.block.header.number, *pending_block.block.header.timestamp);
+            let expected_input =
+                TransactionExecutionInput::from_eth_transaction(&tx_input, pending_block.block.header.number, *pending_block.block.header.timestamp);
             return Err(StorageError::EvmInputMismatch {
                 expected: Box::new(expected_input),
                 actual: Box::new(actual_input),
@@ -88,7 +89,7 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        pending_block.block_changes.merge(tx.result.execution.changes.clone()); // TODO: This clone can be removed by reworking the primitives
+        pending_block.block_changes.merge(tx.result.changes.clone()); // TODO: This clone can be removed by reworking the primitives
 
         // save execution
         pending_block.block.push_transaction(tx);
@@ -105,7 +106,7 @@ impl InmemoryTransactionTemporaryStorage {
         (*pending_block).clone()
     }
 
-    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, ExecutionChanges), StorageError> {
+    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, Changes), StorageError> {
         let pending_block = self.pending_block.upgradable_read();
         let changes = pending_block.block_changes.clone();
 

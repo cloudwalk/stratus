@@ -10,12 +10,12 @@ use super::gas::GasRocksdb;
 use super::hash::HashRocksdb;
 use super::nonce::NonceRocksdb;
 use super::wei::WeiRocksdb;
-use crate::eth::primitives::ExecutionInfo;
-use crate::eth::primitives::Signature;
-use crate::eth::primitives::Signer;
-use crate::eth::primitives::TransactionInfo;
-use crate::eth::primitives::TransactionInput;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::ExecutionInfo;
+use crate::eth::types::Signature;
+use crate::eth::types::Signer;
+use crate::eth::types::TransactionInfo;
+use crate::eth::types::TransactionInput;
 use crate::ext::OptionExt;
 use crate::ext::RuintExt;
 
