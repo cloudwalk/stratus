@@ -32,15 +32,13 @@ env:
 jobs:
   setup_and_test:
     name: Setup and Run E2E
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 35
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          toolchain: 1.88
+        run: rustup show
       - name: Rust Cache - Restore shared key
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -66,6 +64,10 @@ jobs:
         run: |
           cargo install killport
           cargo install wait-service
+      - name: Set up dependencies
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2
+        with:
+          tool: cargo-llvm-cov@0.6.14
       - name: Install Python 3.12
         uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c # v4
         with:

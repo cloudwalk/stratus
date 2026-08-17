@@ -7,7 +7,7 @@ on:
 
 jobs:
   merge-gatekeeper:
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     name: Merge Gatekeeper
     permissions:
       checks: read
@@ -20,4 +20,4 @@ jobs:
           self: Merge Gatekeeper
           interval: 5
           timeout: 1800
-          ignored: PR Agent
+          ignored: PR Agent, Check for unused dependencies

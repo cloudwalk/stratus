@@ -2,8 +2,8 @@
 
 use std::borrow::Cow;
 
-use crate::eth::primitives::Address;
-use crate::eth::primitives::LogFilter;
+use crate::eth::rpc::LogFilter;
+use crate::eth::types::Address;
 use crate::infra::metrics;
 
 include!(concat!(env!("OUT_DIR"), "/contracts.rs"));
@@ -94,10 +94,10 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::eth::primitives::LogFilterInput;
-    use crate::eth::primitives::LogFilterInputTopic;
-    use crate::eth::primitives::LogTopic;
+    use crate::eth::rpc::LogFilterInput;
+    use crate::eth::rpc::LogFilterInputTopic;
     use crate::eth::storage::StratusStorage;
+    use crate::eth::types::LogTopic;
 
     #[test]
     fn test_event_sig_with_empty_bytes() {

@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use strum::AsRefStr;
 
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::StratusError;
+use crate::eth::rpc::BlockchainClient;
 use crate::eth::rpc::RpcClientApp;
-use crate::infra::BlockchainClient;
+use crate::eth::types::Bytes;
+use crate::eth::types::Hash;
+use crate::eth::types::StratusError;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
 

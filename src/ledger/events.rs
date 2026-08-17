@@ -10,17 +10,16 @@ use chrono::Utc;
 use display_json::DebugAsJson;
 use hex_literal::hex;
 use itertools::Itertools;
-use serde::Deserialize;
 use serde::Serialize;
 use serde::ser::SerializeStruct;
 use uuid::Uuid;
 
-use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogTopic;
-use crate::eth::primitives::TransactionMined;
-use crate::eth::primitives::UnixTime;
+use crate::eth::types::Address;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::Hash;
+use crate::eth::types::LogTopic;
+use crate::eth::types::TransactionMined;
+use crate::eth::types::UnixTime;
 use crate::if_else;
 
 /// Represents token transfers (debits and credits) associated with a specific Ethereum account within a single transaction.
@@ -129,7 +128,7 @@ pub struct AccountTransfer {
 }
 
 /// Direction of a transfer relative to the primary account address.
-#[derive(DebugAsJson, strum::EnumIs, Serialize, Deserialize)]
+#[derive(DebugAsJson, strum::EnumIs, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AccountTransferDirection {
     /// `account_address` is being credited.
@@ -224,12 +223,11 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined
     let transfers = tx
         .as_ref()
         .result
-        .execution
         .logs
         .iter()
         .filter(|log| log.topic0.is_some_and(|topic0| topic0 == TRANSFER_EVENT))
         .filter_map(|log| {
-            let amount_bytes: [u8; 32] = match log.data.0.clone().try_into() {
+            let amount_bytes: [u8; 32] = match log.data.as_ref().try_into() {
                 Ok(amount_bytes) => amount_bytes,
                 Err(_) => {
                     tracing::error!(
@@ -316,14 +314,14 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::eth::primitives::Address;
-    use crate::eth::primitives::BlockNumber;
-    use crate::eth::primitives::Bytes;
-    use crate::eth::primitives::Hash;
-    use crate::eth::primitives::Log;
-    use crate::eth::primitives::TransactionMined;
-    use crate::eth::primitives::UnixTime;
-    use crate::eth::primitives::test_accounts;
+    use crate::eth::types::Address;
+    use crate::eth::types::BlockNumber;
+    use crate::eth::types::Bytes;
+    use crate::eth::types::Hash;
+    use crate::eth::types::Log;
+    use crate::eth::types::TransactionMined;
+    use crate::eth::types::UnixTime;
+    use crate::eth::types::primitives::test_accounts;
     use crate::ext::to_json_value;
     use crate::ledger::events::AccountTransfer;
     use crate::ledger::events::AccountTransferDirection;
@@ -400,27 +398,27 @@ mod tests {
         // 2. generate fake tx data
         let mut tx: TransactionMined = Fake::fake(&Faker);
         tx.execution.evm_input.to = Some(Faker::fake(&Faker));
-        tx.execution.evm_input.data = Bytes(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        tx.execution.evm_input.data = Bytes::from(vec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         let mut log_transfer1: Log = Fake::fake(&Faker);
         log_transfer1.address = token_address;
         log_transfer1.topic0 = Some(TRANSFER_EVENT);
         log_transfer1.topic1 = Some(alice.address.into());
         log_transfer1.topic2 = Some(bob.address.into());
-        log_transfer1.data = Bytes(amount_bytes.to_vec());
+        log_transfer1.data = Bytes::from(amount_bytes.to_vec());
 
         let mut log_transfer2: Log = Fake::fake(&Faker);
         log_transfer2.address = token_address;
         log_transfer2.topic0 = Some(TRANSFER_EVENT);
         log_transfer2.topic1 = Some(bob.address.into());
         log_transfer2.topic2 = Some(charlie.address.into());
-        log_transfer2.data = Bytes(amount_bytes.to_vec());
+        log_transfer2.data = Bytes::from(amount_bytes.to_vec());
 
         let log_random: Log = Fake::fake(&Faker);
 
-        tx.execution.result.execution.logs.push(log_transfer1);
-        tx.execution.result.execution.logs.push(log_random);
-        tx.execution.result.execution.logs.push(log_transfer2);
+        tx.execution.result.logs.push(log_transfer1);
+        tx.execution.result.logs.push(log_random);
+        tx.execution.result.logs.push(log_transfer2);
 
         // 3. parse events
         let events = transaction_to_events(block_timestamp, Cow::Borrowed(&tx));
@@ -430,7 +428,7 @@ mod tests {
         for event in events {
             assert_eq!(&event.transaction_hash, &tx.info.hash);
             assert_eq!(&event.contract_address, &tx.evm_input.to.unwrap());
-            assert_eq!(&event.function_id[0..], &tx.evm_input.data.0[0..4]);
+            assert_eq!(&event.function_id[0..], &tx.evm_input.data[0..4]);
             assert_eq!(&event.block_number, &tx.evm_input.block_number);
             assert_eq!(&event.block_datetime, &DateTime::<Utc>::from(block_timestamp));
 

@@ -23,7 +23,7 @@ on:
   workflow_dispatch:
 
 env:
-  CACHE_SHARED_KEY: stable-release
+  CACHE_CHECK_KEY: check-features-release
   CACHE_PATH: |
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
@@ -33,7 +33,7 @@ env:
 jobs:
   check_features:
     name: Check Features
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 35
 
     concurrency:
@@ -45,16 +45,14 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          toolchain: 1.88
+        run: rustup show
 
-      - name: Rust Cache - Restore shared key
+      - name: Rust Cache - Restore check-features cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.CACHE_PATH }}
-          restore-keys: ${{ env.CACHE_SHARED_KEY }}
-          key: ${{ env.CACHE_SHARED_KEY }}
+          key: ${{ env.CACHE_CHECK_KEY }}-${{ runner.os }}--${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ env.CACHE_CHECK_KEY }}-${{ runner.os }}--
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev

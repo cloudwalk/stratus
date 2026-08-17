@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use crate::eth::primitives::BlockNumber;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::BlockNumber;
 use crate::gen_newtype_from;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Ord, PartialOrd, Hash, derive_more::Display, bincode::Encode, bincode::Decode)]
