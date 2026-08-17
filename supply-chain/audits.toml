@@ -549,6 +549,24 @@ Supply-Chain Integrity Risk:
 Conclusion:
 Based on the available evidence, the update of 'chrono' from 0.4.42 to 0.4.43 does not introduce observable supply-chain or security risks within the evaluated scope."""
 
+[[audits.clap]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "4.5.51 -> 4.5.60"
+notes = "Thin facade crate re-exporting clap_builder/clap_derive. Diff is version+pin bumps and a CHANGELOG URL update. No unsafe, no logic, build=false, MSRV unchanged (1.74). cargo audit clean for clap. Backward-compatible PATCH releases."
+
+[[audits.clap_builder]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "4.5.51 -> 4.5.60"
+notes = "Parsing logic. Benign PATCH bug fixes: value_terminator/-- escape precedence, subcommand-error usage panic fix, ignore_errors no longer masks help/version on subcommands, empty default/possible values now quoted. Additive default_values_if/_ifs API. No unsafe, no build.rs, no fs/net/process/env. clap_lex dep bump transitive (already exempted). MSRV unchanged (1.74)."
+
+[[audits.clap_derive]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "4.5.49 -> 4.5.55"
+notes = "Proc-macro crate. Diff is exclusively error-message wording in args.rs/subcommand.rs/value_enum.rs/item.rs. Zero changes to generated code logic, no new unsafe in generated code, no token-stream construction changes. build=false, deps unchanged, MSRV unchanged (1.74). Error messages are not contractual API."
+
 [[audits.clap_lex]]
 who = "Droid (cargo-vet automation)"
 criteria = "safe-to-deploy"
