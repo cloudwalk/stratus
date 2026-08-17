@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use crate::eth::primitives::ChainId;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::ChainId;
 use crate::ext::RuintExt;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, bincode::Encode, bincode::Decode, serde::Serialize, serde::Deserialize)]

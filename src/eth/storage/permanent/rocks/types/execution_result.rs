@@ -1,9 +1,9 @@
 use super::bytes::BytesRocksdb;
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionResult;
+use crate::eth::executor::ExecutionResult;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 #[cfg(test)]
 use crate::eth::storage::permanent::rocks::test_utils::FakeEnum;
+use crate::eth::types::Bytes;
 
 #[derive(
     Debug,

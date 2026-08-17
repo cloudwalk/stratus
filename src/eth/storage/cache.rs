@@ -9,12 +9,12 @@ use quick_cache::sync::DefaultLifecycle;
 use quick_cache::sync::GuardResult;
 use rustc_hash::FxBuildHasher;
 
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotValue;
+use crate::eth::executor::Changes;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
 
 pub struct StorageCache {
     slot_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
@@ -98,7 +98,7 @@ impl StorageCache {
     }
 
     fn _cache_account_and_slots_from_changes_impl(
-        changes: ExecutionChanges,
+        changes: Changes,
         account_cache: &Cache<Address, Account, UnitWeighter, FxBuildHasher>,
         slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
     ) {
@@ -114,11 +114,11 @@ impl StorageCache {
         }
     }
 
-    pub fn cache_account_and_slots_from_changes(&self, changes: ExecutionChanges) {
+    pub fn cache_account_and_slots_from_changes(&self, changes: Changes) {
         Self::_cache_account_and_slots_from_changes_impl(changes, &self.account_cache, &self.slot_cache);
     }
 
-    pub fn cache_account_and_slots_latest_from_changes(&self, changes: ExecutionChanges) {
+    pub fn cache_account_and_slots_latest_from_changes(&self, changes: Changes) {
         Self::_cache_account_and_slots_from_changes_impl(changes, &self.account_latest_cache, &self.slot_latest_cache);
     }
 

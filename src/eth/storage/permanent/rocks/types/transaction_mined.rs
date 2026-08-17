@@ -6,18 +6,16 @@ use super::hash::HashRocksdb;
 use super::index::IndexRocksdb;
 use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
-use crate::eth::executor::EvmExecutionResult;
-use crate::eth::executor::EvmInput;
-use crate::eth::primitives::EvmExecution;
-use crate::eth::primitives::EvmExecutionMetrics;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Index;
-use crate::eth::primitives::MinedData;
-use crate::eth::primitives::TransactionExecution;
-use crate::eth::primitives::TransactionInput;
-use crate::eth::primitives::TransactionMined;
+use crate::eth::executor::Changes;
+use crate::eth::executor::TransactionExecution;
+use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::executor::TransactionExecutionOutput;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::types::execution_result::ExecutionResultBuilder;
+use crate::eth::types::Index;
+use crate::eth::types::MinedData;
+use crate::eth::types::TransactionInput;
+use crate::eth::types::TransactionMined;
 use crate::ext::OptionExt;
 use crate::ext::RuintExt;
 
@@ -38,7 +36,7 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
                 tx_type: execution.info.tx_type.map(|inner| inner.as_u64() as u8),
                 chain_id: execution.evm_input.chain_id.map_into(),
                 hash: execution.info.hash.into(),
-                nonce: execution.evm_input.nonce.unwrap_or_default().into(),
+                nonce: execution.evm_input.nonce.into(),
                 signer: execution.evm_input.from.into(),
                 from: execution.evm_input.from.into(),
                 to: execution.evm_input.to.map_into(),
@@ -52,14 +50,13 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
             },
             execution: ExecutionRocksdb::new(
                 execution.evm_input.block_timestamp.into(),
-                execution.result.execution.result.into(),
-                execution.result.execution.output.into(),
-                execution.result.execution.gas_used.into(),
-                execution.result.execution.deployed_contract_address.map_into(),
+                execution.result.result.into(),
+                execution.result.output.into(),
+                execution.result.gas_used.into(),
+                execution.result.deployed_contract_address.map_into(),
             ),
             logs: execution
                 .result
-                .execution
                 .logs
                 .into_iter()
                 .enumerate()
@@ -83,23 +80,20 @@ impl TransactionMined {
         let (result, output) = ExecutionResultBuilder((other.execution.result, other.execution.output)).build();
 
         let input = TransactionInput::from(other.input);
-        let evm_result = EvmExecutionResult {
-            execution: EvmExecution {
-                block_timestamp: other.execution.block_timestamp.into(),
-                result,
-                output,
-                logs,
-                gas_used: other.execution.gas.into(),
-                changes: ExecutionChanges::default(),
-                deployed_contract_address: other.execution.deployed_contract_address.map_into(),
-            },
-            metrics: EvmExecutionMetrics::default(),
+        let evm_result = TransactionExecutionOutput {
+            result,
+            output,
+            logs,
+            gas_used: other.execution.gas.into(),
+            changes: Changes::default(),
+            deployed_contract_address: other.execution.deployed_contract_address.map_into(),
         };
 
+        let evm_input = TransactionExecutionInput::from_eth_transaction(&input, block_number.into(), other.execution.block_timestamp.into());
         let execution = TransactionExecution {
             info: input.transaction_info,
             signature: input.signature,
-            evm_input: EvmInput::from_eth_transaction(&input.execution_info, block_number.into(), other.execution.block_timestamp.into()),
+            evm_input,
             result: evm_result,
         };
 
