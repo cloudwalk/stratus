@@ -76,6 +76,7 @@ fn init_metrics_exporter(address: SocketAddr) {
 #[cfg(feature = "metrics")]
 fn install_metrics_tracing_recorder(builder: PrometheusBuilder) -> anyhow::Result<()> {
     use std::thread;
+
     use tokio::runtime;
 
     let recorder = if let Ok(handle) = runtime::Handle::try_current() {
