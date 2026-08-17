@@ -1340,13 +1340,6 @@ fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
         return Err(StateError::TransactionsDisabled.into());
     }
 
-    // HOTFIX: this is a temporary stopgap measure to prevent type 4 transactions which currently cause the followers to crash
-    #[cfg(not(feature = "dev"))]
-    if tx.transaction_info.tx_type.is_some_and(|t| t > 3) {
-        tracing::warn!(%tx_hash, "rejecting unsuported transaction type");
-        return Err(RpcError::ParameterInvalid.into());
-    }
-
     // validate that the target account is a contract before acquiring the executor lock or forwarding to the
     // leader, so calls to non-contract accounts are rejected early
     if let Some(to_address) = tx.execution_info.to
