@@ -1294,19 +1294,12 @@ fn stratus_access_list(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
     }
 
-    match ctx.server.executor.execute_local_call::<AccessListOutput>(call, PointInTime::Latest) {
-        // result is success
-        Ok(result) => {
-            tracing::info!("executed stratus_accessList with success");
-            Ok(to_json_value(result))
-        }
-
-        // internal error
-        Err(e) => {
-            tracing::warn!(reason = ?e, "failed to execute stratus_accessList");
-            Err(e)
-        }
-    }
+    ctx
+        .server
+        .executor.execute_local_call::<AccessListOutput>(call, PointInTime::Latest)
+        .map(to_json_value)
+        .inspect(|_| tracing::info!("executed stratus_accessList with success"))
+        .inspect_err(|e| tracing::warn!(reason = ?e, "failed to execute stratus_accessList"))
 }
 
 fn eth_send_raw_transaction(_: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions) -> Result<String, StratusError> {
