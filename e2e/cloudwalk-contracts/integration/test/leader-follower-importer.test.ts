@@ -241,16 +241,22 @@ describe("Leader & Follower importer integration test", function () {
         console.log("Type 2 (EIP-1559) transaction hash:", eip1559Hash);
         await sendWithRetry("eth_sendRawTransaction", [eip1559Tx]);
 
+        // Wait for transactions to be mined on the leader before fetching them.
+        const getTransactionResult = async (txHash: string) => {
+            const response = await getTransactionByHashUntilConfirmed(txHash, 15);
+            return response.data.result;
+        };
+
         // Verify on Leader
-        const leaderLegacyTx = await sendWithRetry("eth_getTransactionByHash", [legacyHash]);
+        const leaderLegacyTx = await getTransactionResult(legacyHash);
         expect(leaderLegacyTx.from.toLowerCase()).to.equal(ALICE.address.toLowerCase());
         expect(leaderLegacyTx.type).to.equal("0x0");
 
-        const leaderEIP2930Tx = await sendWithRetry("eth_getTransactionByHash", [eip2930Hash]);
+        const leaderEIP2930Tx = await getTransactionResult(eip2930Hash);
         expect(leaderEIP2930Tx.from.toLowerCase()).to.equal(DAVE.address.toLowerCase());
         expect(leaderEIP2930Tx.type).to.equal("0x1");
 
-        const leaderEIP1559Tx = await sendWithRetry("eth_getTransactionByHash", [eip1559Hash]);
+        const leaderEIP1559Tx = await getTransactionResult(eip1559Hash);
         expect(leaderEIP1559Tx.from.toLowerCase()).to.equal(CHARLIE.address.toLowerCase());
         expect(leaderEIP1559Tx.type).to.equal("0x2");
 
@@ -259,15 +265,15 @@ describe("Leader & Follower importer integration test", function () {
 
         // Verify on Follower
         updateProviderUrl("stratus-follower");
-        const followerLegacyTx = await sendWithRetry("eth_getTransactionByHash", [legacyHash]);
+        const followerLegacyTx = await getTransactionResult(legacyHash);
         expect(followerLegacyTx.from.toLowerCase()).to.equal(ALICE.address.toLowerCase());
         expect(followerLegacyTx.type).to.equal("0x0");
 
-        const followerEIP2930Tx = await sendWithRetry("eth_getTransactionByHash", [eip2930Hash]);
+        const followerEIP2930Tx = await getTransactionResult(eip2930Hash);
         expect(followerEIP2930Tx.from.toLowerCase()).to.equal(DAVE.address.toLowerCase());
         expect(followerEIP2930Tx.type).to.equal("0x1");
 
-        const followerEIP1559Tx = await sendWithRetry("eth_getTransactionByHash", [eip1559Hash]);
+        const followerEIP1559Tx = await getTransactionResult(eip1559Hash);
         expect(followerEIP1559Tx.from.toLowerCase()).to.equal(CHARLIE.address.toLowerCase());
         expect(followerEIP1559Tx.type).to.equal("0x2");
 
@@ -275,29 +281,29 @@ describe("Leader & Follower importer integration test", function () {
         console.log("Verifying receipts on Leader...");
         updateProviderUrl("stratus");
         console.log("Getting receipt for Type 0 (Legacy) tx:", legacyHash);
-        const leaderLegacyReceipt = await sendWithRetry("eth_getTransactionReceipt", [legacyHash]);
+        const leaderLegacyReceipt = await sendWithRetry("eth_getTransactionReceipt", [legacyHash], 15, 1000);
         expect(leaderLegacyReceipt.from.toLowerCase()).to.equal(ALICE.address.toLowerCase());
 
         console.log("Getting receipt for Type 1 (EIP-2930) tx:", eip2930Hash);
-        const leaderEIP2930Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip2930Hash]);
+        const leaderEIP2930Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip2930Hash], 15, 1000);
         expect(leaderEIP2930Receipt.from.toLowerCase()).to.equal(DAVE.address.toLowerCase());
 
         console.log("Getting receipt for Type 2 (EIP-1559) tx:", eip1559Hash);
-        const leaderEIP1559Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip1559Hash]);
+        const leaderEIP1559Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip1559Hash], 15, 1000);
         expect(leaderEIP1559Receipt.from.toLowerCase()).to.equal(CHARLIE.address.toLowerCase());
 
         console.log("Verifying receipts on Follower...");
         updateProviderUrl("stratus-follower");
         console.log("Getting receipt for Type 0 (Legacy) tx:", legacyHash);
-        const followerLegacyReceipt = await sendWithRetry("eth_getTransactionReceipt", [legacyHash]);
+        const followerLegacyReceipt = await sendWithRetry("eth_getTransactionReceipt", [legacyHash], 15, 1000);
         expect(followerLegacyReceipt.from.toLowerCase()).to.equal(ALICE.address.toLowerCase());
 
         console.log("Getting receipt for Type 1 (EIP-2930) tx:", eip2930Hash);
-        const followerEIP2930Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip2930Hash]);
+        const followerEIP2930Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip2930Hash], 15, 1000);
         expect(followerEIP2930Receipt.from.toLowerCase()).to.equal(DAVE.address.toLowerCase());
 
         console.log("Getting receipt for Type 2 (EIP-1559) tx:", eip1559Hash);
-        const followerEIP1559Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip1559Hash]);
+        const followerEIP1559Receipt = await sendWithRetry("eth_getTransactionReceipt", [eip1559Hash], 15, 1000);
         expect(followerEIP1559Receipt.from.toLowerCase()).to.equal(CHARLIE.address.toLowerCase());
     });
 });

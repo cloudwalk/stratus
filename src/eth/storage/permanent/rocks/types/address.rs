@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use crate::eth::primitives::Address;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
+use crate::eth::types::Address;
 
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, fake::Dummy, serde::Serialize, serde::Deserialize, PartialOrd, Ord,

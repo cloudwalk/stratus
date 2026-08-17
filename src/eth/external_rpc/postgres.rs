@@ -10,15 +10,15 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::types::BigDecimal;
 
 use crate::alias::JsonValue;
-use crate::eth::external_rpc::ExternalBlockWithReceipts;
 use crate::eth::external_rpc::ExternalRpc;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::ExternalBlock;
-use crate::eth::primitives::ExternalReceipt;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::Wei;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::ExternalBlock;
+use crate::eth::types::ExternalBlockWithReceipts;
+use crate::eth::types::ExternalReceipt;
+use crate::eth::types::Hash;
+use crate::eth::types::Wei;
 use crate::ext::SleepReason;
 use crate::ext::to_json_value;
 use crate::ext::traced_sleep;
@@ -99,7 +99,7 @@ impl ExternalRpc for PostgresExternalRpc {
                     for row in rows {
                         let block: ExternalBlock = row.block.try_into()?;
                         let receipts: Vec<ExternalReceipt> = row.receipts.into_iter().map(TryInto::try_into).collect::<Result<_, _>>()?;
-                        blocks_with_receipts.push((block, receipts));
+                        blocks_with_receipts.push(ExternalBlockWithReceipts { block, receipts });
                     }
                     return Ok(blocks_with_receipts);
                 }

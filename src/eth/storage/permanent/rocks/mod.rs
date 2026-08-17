@@ -6,7 +6,6 @@ use anyhow::Context;
 pub use rocks_cf_cache_config::RocksCfCacheConfig;
 pub use rocks_permanent::RocksPermanentStorage;
 pub use rocks_state::RocksStorageState;
-use serde::Deserialize;
 use serde::Serialize;
 
 use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
@@ -49,7 +48,7 @@ impl SerializeDeserializeWithContext for (AddressRocksdb, SlotIndexRocksdb, Bloc
 pub trait SerializeDeserializeWithContext {
     fn deserialize_with_context(bytes: &[u8]) -> anyhow::Result<Self>
     where
-        Self: for<'de> Deserialize<'de> + bincode::Decode<()>,
+        Self: bincode::Decode<()>,
     {
         use crate::rocks_bincode_config;
         let (result, _) = bincode::decode_from_slice(bytes, rocks_bincode_config())

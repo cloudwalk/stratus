@@ -111,6 +111,66 @@ describe("JSON-RPC", () => {
         });
     });
 
+    describe("Blocked Clients", () => {
+        const blockedClient = "blocked-test-client";
+
+        before(async () => {
+            if (isStratus) {
+                await send("stratus_enableUnknownClients");
+                await send("stratus_clearBlockedClients");
+            }
+        });
+
+        after(async () => {
+            if (isStratus) {
+                await send("stratus_clearBlockedClients");
+                await send("stratus_enableUnknownClients");
+            }
+        });
+
+        it("blocking a client rejects its requests but allows others", async function () {
+            if (!isStratus) {
+                this.skip();
+                return;
+            }
+
+            const blockedList = await send("stratus_blockClient", [blockedClient]);
+            expect(blockedList).to.be.an("array").that.is.not.empty;
+
+            // request from the blocked client should fail
+            const error = await sendAndGetError("eth_blockNumber", [], { "x-app": blockedClient });
+            expect(error.code).eq(1011);
+
+            // request from a different client should succeed
+            const blockNumber = await send("eth_blockNumber", [], { "x-app": "other-client" });
+            expect(blockNumber).to.match(/^0x[0-9a-f]+$/);
+        });
+
+        it("unblocking a client allows its requests again", async function () {
+            if (!isStratus) {
+                this.skip();
+                return;
+            }
+
+            await send("stratus_blockClient", [blockedClient]);
+            await send("stratus_unblockClient", [blockedClient]);
+
+            const blockNumber = await send("eth_blockNumber", [], { "x-app": blockedClient });
+            expect(blockNumber).to.match(/^0x[0-9a-f]+$/);
+        });
+
+        it("stratus_state exposes blocked clients", async function () {
+            if (!isStratus) {
+                this.skip();
+                return;
+            }
+
+            await send("stratus_blockClient", [blockedClient]);
+            const state = await send("stratus_state");
+            expect(state.blocked_clients).to.be.an("array").that.is.not.empty;
+        });
+    });
+
     describe("Metadata", () => {
         it("eth_chainId", async () => {
             (await sendExpect("eth_chainId")).eq(CHAIN_ID);
