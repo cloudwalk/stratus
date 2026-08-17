@@ -1294,9 +1294,9 @@ fn stratus_access_list(params: Params<'_>, ctx: Arc<RpcContext>, ext: Extensions
             .validate_to_is_contract(to_address, ExecutionKind::RPC(PointInTime::Latest))?;
     }
 
-    ctx
-        .server
-        .executor.execute_local_call::<AccessListOutput>(call, PointInTime::Latest)
+    ctx.server
+        .executor
+        .execute_local_call::<AccessListOutput>(call, PointInTime::Latest)
         .map(to_json_value)
         .inspect(|_| tracing::info!("executed stratus_accessList with success"))
         .inspect_err(|e| tracing::warn!(reason = ?e, "failed to execute stratus_accessList"))
