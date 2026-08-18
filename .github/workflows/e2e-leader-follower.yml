@@ -31,6 +31,9 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
+  # Use the `ci` profile (deps stripped of debug symbols; stratus keeps full debug).
+  # See [profile.ci] in Cargo.toml and profile_flag in the justfile.
+  STRATUS_PROFILE: ci
   CACHE_PATH: |
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
