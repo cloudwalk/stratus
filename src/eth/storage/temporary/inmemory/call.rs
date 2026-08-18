@@ -4,14 +4,14 @@ use std::collections::HashMap;
 
 use dashmap::DashMap;
 
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::BlockNumber;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotValue;
-use crate::eth::primitives::TransactionExecution;
+use crate::eth::executor::TransactionExecution;
 use crate::eth::storage::temporary::inmemory::TxCount;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::BlockNumber;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
 
 #[derive(Debug)]
 pub struct InMemoryCallTemporaryStorage {
@@ -74,7 +74,7 @@ impl InMemoryCallTemporaryStorage {
         let current_tx_count = block_state.current_tx_count;
 
         // Process each account change from the transaction execution
-        for (address, change) in &tx.result.execution.changes.accounts {
+        for (address, change) in &tx.result.changes.accounts {
             if change.is_modified() {
                 // Build the account from the changes
                 let account = (*address, change.clone()).into();
@@ -83,7 +83,7 @@ impl InMemoryCallTemporaryStorage {
         }
 
         // Add slot changes
-        for ((address, slot_index), slot_value) in &tx.result.execution.changes.slots {
+        for ((address, slot_index), slot_value) in &tx.result.changes.slots {
             block_state
                 .slots
                 .entry((*address, *slot_index))

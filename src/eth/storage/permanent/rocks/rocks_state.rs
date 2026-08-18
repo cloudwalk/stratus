@@ -16,7 +16,6 @@ use rocksdb::Options;
 use rocksdb::WaitForCompactOptions;
 use rocksdb::WriteBatch;
 use rocksdb::WriteOptions;
-use serde::Deserialize;
 use serde::Serialize;
 use sugars::btmap;
 
@@ -30,38 +29,40 @@ use super::cf_versions::CfTransactionsValue;
 use super::rocks_cf::RocksCfRef;
 use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_config::CacheSetting;
+use super::rocks_config::ColumnFamilyConfig;
 use super::rocks_config::DbConfig;
 use super::rocks_db::create_or_open_db;
 use super::types::AccountRocksdb;
 use super::types::AddressRocksdb;
 use super::types::BlockNumberRocksdb;
+use super::types::BlockRocksdb;
 use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
 use super::types::UnixTimeRocksdb;
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::Block;
-use crate::eth::primitives::BlockFilter;
-use crate::eth::primitives::BlockNumber;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Bytes;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Hash;
-use crate::eth::primitives::LogFilter;
-use crate::eth::primitives::LogMessage;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Nonce;
-use crate::eth::primitives::PointInTime;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::TransactionMined;
-#[cfg(feature = "dev")]
-use crate::eth::primitives::Wei;
+use crate::eth::executor::Changes;
+use crate::eth::rpc::BlockFilter;
+use crate::eth::rpc::LogFilter;
+use crate::eth::storage::MinedPointInTime;
 use crate::eth::storage::permanent::rocks::SerializeDeserializeWithContext;
 use crate::eth::storage::permanent::rocks::cf_versions::CfBlockChangesValue;
 use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
 use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::Block;
+use crate::eth::types::BlockNumber;
+#[cfg(feature = "dev")]
+use crate::eth::types::Bytes;
+use crate::eth::types::Hash;
+use crate::eth::types::LogMessage;
+#[cfg(feature = "dev")]
+use crate::eth::types::Nonce;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::TransactionMined;
+#[cfg(feature = "dev")]
+use crate::eth::types::Wei;
 use crate::ext::OptionExt;
 #[cfg(feature = "metrics")]
 use crate::infra::metrics;
@@ -80,28 +81,28 @@ cfg_if::cfg_if! {
     }
 }
 
-pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap<&'static str, Options> {
+pub fn generate_cf_options_map(cf_cache_config: &RocksCfCacheConfig) -> BTreeMap<&'static str, ColumnFamilyConfig> {
     // Helper function to create cache setting from size
     let cache_setting_from_size = |size: usize| -> CacheSetting { CacheSetting::Enabled(size) };
 
     btmap! {
-        "accounts" => DbConfig::OptimizedPointLookUp.to_options(cache_setting_from_size(cf_cache_config.accounts)),
-        "accounts_history" => DbConfig::HistoricalData.to_options(cache_setting_from_size(cf_cache_config.accounts_history)),
-        "account_slots" => DbConfig::OptimizedPointLookUp.to_options(cache_setting_from_size(cf_cache_config.account_slots)),
-        "account_slots_history" => DbConfig::HistoricalData.to_options(cache_setting_from_size(cf_cache_config.account_slots_history)),
-        "transactions" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.transactions)),
-        "blocks_by_number" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_number)),
-        "blocks_by_hash" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_hash)),
-        "blocks_by_timestamp" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.blocks_by_timestamp)),
-        "block_changes" => DbConfig::Default.to_options(cache_setting_from_size(cf_cache_config.block_changes)),
+        "accounts" => ColumnFamilyConfig::new(DbConfig::OptimizedPointLookUp, cache_setting_from_size(cf_cache_config.accounts)),
+        "accounts_history" => ColumnFamilyConfig::new(DbConfig::HistoricalData, cache_setting_from_size(cf_cache_config.accounts_history)),
+        "account_slots" => ColumnFamilyConfig::new(DbConfig::OptimizedPointLookUp, cache_setting_from_size(cf_cache_config.account_slots)),
+        "account_slots_history" => ColumnFamilyConfig::new(DbConfig::HistoricalData, cache_setting_from_size(cf_cache_config.account_slots_history)),
+        "transactions" => ColumnFamilyConfig::new(DbConfig::Default, cache_setting_from_size(cf_cache_config.transactions)),
+        "blocks_by_number" => ColumnFamilyConfig::new(DbConfig::Default, cache_setting_from_size(cf_cache_config.blocks_by_number)),
+        "blocks_by_hash" => ColumnFamilyConfig::new(DbConfig::Default, cache_setting_from_size(cf_cache_config.blocks_by_hash)),
+        "blocks_by_timestamp" => ColumnFamilyConfig::new(DbConfig::Default, cache_setting_from_size(cf_cache_config.blocks_by_timestamp)),
+        "block_changes" => ColumnFamilyConfig::new(DbConfig::Default, cache_setting_from_size(cf_cache_config.block_changes)),
     }
 }
 
 /// Helper for creating a `RocksCfRef`, aborting if it wasn't declared in our option presets.
-fn new_cf_ref<'a, K, V>(db: &'a Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, Options>) -> Result<RocksCfRef<'a, K, V>>
+fn new_cf_ref<'a, K, V>(db: &'a Arc<DB>, column_family: &str, cf_options_map: &BTreeMap<&str, ColumnFamilyConfig>) -> Result<RocksCfRef<'a, K, V>>
 where
-    K: Serialize + for<'de> Deserialize<'de> + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
-    V: Serialize + for<'de> Deserialize<'de> + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
+    K: Serialize + Debug + std::hash::Hash + Eq + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
+    V: Serialize + Debug + Clone + SerializeDeserializeWithContext + bincode::Encode + bincode::Decode<()>,
 {
     tracing::debug!(column_family = column_family, "creating new column family");
 
@@ -216,7 +217,7 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    fn prepare_batch_with_execution_changes(&self, changes: ExecutionChanges, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
+    fn prepare_batch_with_execution_changes(&self, changes: Changes, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
         let mut block_changes = BlockChangesRocksdb::with_capacity(changes.accounts.len());
         let block_number = block_number.into();
 
@@ -323,13 +324,13 @@ impl RocksStorageState {
         Ok(logs_result)
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex, point_in_time: PointInTime) -> Result<Option<Slot>> {
+    pub fn read_slot(&self, address: Address, index: SlotIndex, point: &MinedPointInTime<'_>) -> Result<Option<Slot>> {
         if address.is_coinbase() {
             return Ok(None);
         }
 
-        match point_in_time {
-            PointInTime::Mined | PointInTime::Pending => {
+        match point {
+            MinedPointInTime::Latest(_, _) => {
                 let query_params = (address.into(), index.into());
 
                 let Some(account_slot_value) = self.account_slots.get(&query_params)? else {
@@ -341,7 +342,8 @@ impl RocksStorageState {
                     value: account_slot_value.into_inner().into(),
                 }))
             }
-            PointInTime::MinedPast(block_number) => {
+            MinedPointInTime::Past(_, block_number) => {
+                let block_number = *block_number;
                 tracing::debug!(?address, ?index, ?block_number, "searching slot");
 
                 let key = (address.into(), (index).into(), block_number.into());
@@ -361,13 +363,13 @@ impl RocksStorageState {
         }
     }
 
-    pub fn read_account(&self, address: Address, point_in_time: PointInTime) -> Result<Option<Account>> {
+    pub fn read_account(&self, address: Address, point: &MinedPointInTime<'_>) -> Result<Option<Account>> {
         if address.is_coinbase() || address.is_zero() {
             return Ok(None);
         }
 
-        match point_in_time {
-            PointInTime::Mined | PointInTime::Pending => {
+        match point {
+            MinedPointInTime::Latest(_, _) => {
                 let Some(inner_account) = self.accounts.get(&address.into())? else {
                     tracing::trace!(%address, "account not found");
                     return Ok(None);
@@ -377,7 +379,8 @@ impl RocksStorageState {
                 tracing::trace!(%address, ?account, "account found");
                 Ok(Some(account))
             }
-            PointInTime::MinedPast(block_number) => {
+            MinedPointInTime::Past(_, block_number) => {
+                let block_number = *block_number;
                 tracing::debug!(?address, ?block_number, "searching account");
 
                 let key = (address.into(), block_number.into());
@@ -402,6 +405,13 @@ impl RocksStorageState {
     pub fn read_block(&self, selection: BlockFilter) -> Result<Option<Block>> {
         tracing::debug!(?selection, "reading block");
 
+        let block = self.read_block_rocks(selection);
+        block.map(|block_option| block_option.map(|block| block.into()))
+    }
+
+    pub fn read_block_rocks(&self, selection: BlockFilter) -> Result<Option<BlockRocksdb>> {
+        tracing::debug!(?selection, "reading block");
+
         let block = match selection {
             BlockFilter::Latest | BlockFilter::Pending => self.blocks_by_number.last_value(),
             BlockFilter::Earliest => self.blocks_by_number.first_value(),
@@ -421,7 +431,7 @@ impl RocksStorageState {
                 .transpose()
                 .map(|nested_opt| nested_opt.flatten()),
         };
-        block.map(|block_option| block_option.map(|block| block.into_inner().into()))
+        block.map(|block_option| block_option.map(|block| block.into_inner()))
     }
 
     pub fn save_accounts(&self, accounts: Vec<Account>) -> Result<()> {
@@ -448,7 +458,7 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: ExecutionChanges) -> Result<()> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: Changes) -> Result<()> {
         let mut batch = WriteBatch::default();
 
         let mut txs_batch = vec![];
@@ -491,13 +501,13 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn save_block(&self, block: Block, account_changes: ExecutionChanges) -> Result<()> {
+    pub fn save_block(&self, block: Block, account_changes: Changes) -> Result<()> {
         let mut batch = WriteBatch::default();
         self.prepare_block_insertion(block, account_changes, &mut batch)?;
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn prepare_block_insertion(&self, block: Block, account_changes: ExecutionChanges, batch: &mut WriteBatch) -> Result<()> {
+    pub fn prepare_block_insertion(&self, block: Block, account_changes: Changes, batch: &mut WriteBatch) -> Result<()> {
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
             txs_batch.push((transaction.info.hash.into(), transaction.evm_input.block_number.into()));
@@ -628,11 +638,11 @@ impl RocksStorageState {
         Ok(())
     }
 
-    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(Block, BlockChangesRocksdb)>> {
-        let Some(block_wo_changes) = self.read_block(selection)? else {
+    pub fn read_block_with_changes(&self, selection: BlockFilter) -> Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
+        let Some(block_wo_changes) = self.read_block_rocks(selection)? else {
             return Ok(None);
         };
-        let changes = self.block_changes.get(&block_wo_changes.number().into())?;
+        let changes = self.block_changes.get(&block_wo_changes.header.number)?;
         Ok(Some((block_wo_changes, changes.map(|changes| changes.into_inner()).unwrap_or_default())))
     }
 }
@@ -787,11 +797,10 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::eth::executor::EvmExecutionResult;
-    use crate::eth::executor::EvmInput;
-    use crate::eth::primitives::BlockHeader;
-    use crate::eth::primitives::EvmExecution;
-    use crate::eth::primitives::TransactionExecution;
+    use crate::eth::executor::TransactionExecution;
+    use crate::eth::executor::TransactionExecutionInput;
+    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::types::BlockHeader;
 
     #[test]
     #[cfg(feature = "dev")]
@@ -851,15 +860,12 @@ mod tests {
                 },
                 transactions: vec![TransactionMined {
                     execution: TransactionExecution {
-                        evm_input: EvmInput {
+                        evm_input: TransactionExecutionInput {
                             block_number: number.into(),
                             ..Faker.fake()
                         },
-                        result: EvmExecutionResult {
-                            execution: EvmExecution {
-                                logs: vec![Faker.fake(), Faker.fake()],
-                                ..Faker.fake()
-                            },
+                        result: TransactionExecutionOutput {
+                            logs: vec![Faker.fake(), Faker.fake()],
                             ..Faker.fake()
                         },
                         ..Faker.fake()
@@ -868,7 +874,7 @@ mod tests {
                 }],
             };
 
-            state.save_block(block, ExecutionChanges::default()).unwrap();
+            state.save_block(block, Changes::default()).unwrap();
         }
 
         let filter = LogFilter {

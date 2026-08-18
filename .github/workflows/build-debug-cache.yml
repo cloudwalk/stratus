@@ -25,7 +25,7 @@ on:
 
 env:
   CACHE_SHARED_KEY: stable-release
-  CACHE_PATH: |
+  CACHE_PATH: |  # canonical — stable-release restores must match these paths exactly, else the cache version hash diverges
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
     ~/.cargo/git/db/
@@ -34,7 +34,7 @@ env:
 jobs:
   build_debug_cache:
     name: Build Debug cache
-    runs-on: ubuntu-22.04
+    runs-on: stratus-runner
     timeout-minutes: 45
 
     concurrency:
@@ -46,9 +46,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
-        with:
-          toolchain: 1.88
+        run: rustup show
 
       - name: Install libsasl2-dev libssl-dev
         run: sudo apt-get update && sudo apt install -y build-essential pkg-config libssl-dev libsasl2-dev
@@ -59,9 +57,18 @@ jobs:
           tool: cargo-llvm-cov@0.6.14
 
       - name: Build Debug binaries for cache
+        # Prime the cache with exactly what consumers need:
+        #   1. `cargo test --no-run` compiles deps + dev-deps + test harnesses with the
+        #      same feature set and coverage flags rust-test uses, so PRs restore a
+        #      fully-relevant target/ instead of rebuilding dev-deps from scratch.
+        #   2. `cargo build --features dev` adds the dev-enabled binaries (stratus,
+        #      importer-offline) the e2e consumers require.
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
-          cargo build --features dev
+          # --profile ci strips debug symbols from dependencies (stratus itself keeps
+          # full debug). Consumers run with STRATUS_PROFILE=ci so they hit this cache.
+          cargo test --no-run --profile ci
+          cargo build --features dev --profile ci
 
       - name: Rust Cache - Save shared key
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
