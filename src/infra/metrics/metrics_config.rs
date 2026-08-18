@@ -42,7 +42,7 @@ impl MetricsConfig {
         metrics.extend(metrics_for_kafka());
 
         // init metric exporter
-        init_metrics_exporter(self.metrics_exporter_address);
+        init_metrics_exporter(self.metrics_exporter_address)?;
 
         // init metric description (always after provider started)
         for metric in &metrics {
@@ -54,7 +54,7 @@ impl MetricsConfig {
 }
 
 #[cfg(feature = "metrics")]
-fn init_metrics_exporter(address: SocketAddr) {
+fn init_metrics_exporter(address: SocketAddr) -> anyhow::Result<()> {
     tracing::info!(%address, "creating prometheus metrics exporter");
 
     let builder = PrometheusBuilder::new()
@@ -62,9 +62,12 @@ fn init_metrics_exporter(address: SocketAddr) {
         .add_global_label("version", crate::infra::build_info::version())
         .with_http_listener(address);
 
-    if let Err(e) = install_metrics_tracing_recorder(builder) {
+    install_metrics_tracing_recorder(builder).map_err(|e| {
         tracing::error!(reason = ?e, %address, "failed to create metrics exporter");
-    }
+        e
+    })?;
+
+    Ok(())
 }
 
 #[cfg(feature = "metrics")]
@@ -79,6 +82,7 @@ fn install_metrics_tracing_recorder(builder: PrometheusBuilder) -> anyhow::Resul
 }
 
 #[cfg(not(feature = "metrics"))]
-fn init_metrics_exporter(_: SocketAddr) {
+fn init_metrics_exporter(_: SocketAddr) -> anyhow::Result<()> {
     tracing::info!("creating noop metrics exporter");
+    Ok(())
 }
