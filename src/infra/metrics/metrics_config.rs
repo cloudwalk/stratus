@@ -62,10 +62,7 @@ fn init_metrics_exporter(address: SocketAddr) -> anyhow::Result<()> {
         .add_global_label("version", crate::infra::build_info::version())
         .with_http_listener(address);
 
-    install_metrics_tracing_recorder(builder).map_err(|e| {
-        tracing::error!(reason = ?e, %address, "failed to create metrics exporter");
-        e
-    })?;
+    install_metrics_tracing_recorder(builder)?;
 
     Ok(())
 }
