@@ -23,6 +23,7 @@ on:
         default: "stable-release"
 env:
   CACHE_SHARED_KEY: stable-release
+  STRATUS_PROFILE: ci
   CACHE_PATH: |
     ~/.cargo/registry/index/
     ~/.cargo/registry/cache/
