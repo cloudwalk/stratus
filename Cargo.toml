@@ -264,5 +264,13 @@ expect_used = "warn"
 panic = "warn"
 
 
+# CI-only profile: strips debug symbols from dependencies to keep the shared
+# `stable-release` cache small, while keeping full debug info for stratus itself.
+[profile.ci]
+inherits = "dev"
+
+[profile.ci.package."*"]
+debug = false
+
 [profile.release]
 lto = "fat"
