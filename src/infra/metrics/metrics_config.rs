@@ -72,7 +72,7 @@ fn install_metrics_tracing_recorder(builder: PrometheusBuilder) -> anyhow::Resul
     let (recorder, exporter) = builder.build()?;
     tokio::spawn(exporter);
 
-    let recorder = MetricsTracingContextLayer::only_allow(["client", "rpc_method", "point_in_time"]).layer(recorder);
+    let recorder = MetricsTracingContextLayer::only_allow(["rpc_client", "rpc_method", "point_in_time"]).layer(recorder);
     metrics::set_global_recorder(recorder)?;
 
     Ok(())
