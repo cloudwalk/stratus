@@ -99,7 +99,7 @@ mod tests {
 
         assert_eq!(
             result,
-            "(0xababababababababababababababababababababababababababababababab, \
+            "(0xabababababababababababababababababababababababababababababababab, \
              [0x1111111111111111111111111111111111111111, \
              0x2222222222222222222222222222222222222222])"
         );
