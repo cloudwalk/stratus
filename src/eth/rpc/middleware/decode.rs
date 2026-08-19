@@ -6,22 +6,21 @@ use crate::eth::types::DecodeInputError;
 
 /// Decodes the input arguments of a transaction.
 pub fn decode_input_arguments(input: impl AsRef<[u8]>) -> Result<String, DecodeInputError> {
-    let Some(selector) = input.as_ref().get(..4) else {
+    let input = input.as_ref();
+    let Some((selector, param_data)) = input.split_at_checked(4) else {
         return Err(DecodeInputError::InputTooShort {
-            message: format!("expected at least 4 bytes for function selector, got {} bytes", input.as_ref().len()),
+            message: format!("expected at least 4 bytes for function selector, got {} bytes", input.len()),
         });
     };
+
     let Some(signature) = SIGNATURES_4_BYTES.get(selector) else {
         return Err(DecodeInputError::FunctionUnknown {
             message: format!("selector 0x{} not found in signature mapping", const_hex::encode(selector)),
         });
     };
+
     let param_types = parse_to_param_types(signature)?;
-    let param_data = input.as_ref().get(4..).ok_or(DecodeInputError::InputTooShort {
-        message: "input data too short for parameters after function selector".to_string(),
-    })?;
-    let value = DynSolType::Tuple(param_types).abi_decode_params(param_data)?;
-    let DynSolValue::Tuple(tokens) = value else {
+    let DynSolValue::Tuple(tokens) = DynSolType::Tuple(param_types).abi_decode_params(param_data)? else {
         return Err(DecodeInputError::InvalidAbi {
             message: "decoded parameters did not form a tuple".to_string(),
         });
@@ -38,148 +37,14 @@ fn parse_to_param_types(signature: &str) -> Result<Vec<DynSolType>, DecodeInputE
     let end = signature.rfind(')').ok_or_else(|| DecodeInputError::InvalidAbi {
         message: format!("invalid signature format: {signature} (missing closing parenthesis)"),
     })?;
-    let params_str = &signature[start + 1..end];
-    if params_str.is_empty() {
-        return Ok(Vec::new());
-    }
-    tokenize_parameters(params_str)
-}
-
-/// Tokenizes parameter string while respecting nested parentheses for tuples.
-/// Example: "address,(uint32,uint32,uint64),bool" -> ["address", "(uint32,uint32,uint64)", "bool"]
-fn tokenize_parameters(params_str: &str) -> Result<Vec<DynSolType>, DecodeInputError> {
-    let mut tokens = Vec::new();
-    let mut current_token = String::new();
-    let mut paren_depth = 0;
-    let mut bracket_open = false;
-
-    for ch in params_str.chars() {
-        match ch {
-            '(' => {
-                paren_depth += 1;
-                current_token.push(ch);
-            }
-            ')' => {
-                paren_depth -= 1;
-                current_token.push(ch);
-                if paren_depth < 0 {
-                    return Err(DecodeInputError::InvalidAbi {
-                        message: "unmatched closing parenthesis".to_string(),
-                    });
-                }
-            }
-            '[' => {
-                if bracket_open {
-                    return Err(DecodeInputError::InvalidAbi {
-                        message: "nested brackets are not allowed".to_string(),
-                    });
-                }
-                bracket_open = true;
-                current_token.push(ch);
-            }
-            ']' => {
-                if !bracket_open {
-                    return Err(DecodeInputError::InvalidAbi {
-                        message: "unmatched closing bracket".to_string(),
-                    });
-                }
-                bracket_open = false;
-                current_token.push(ch);
-            }
-            ',' => {
-                if paren_depth == 0 && !bracket_open {
-                    // We're at the top level, this comma separates parameters
-                    tokens.push(parse_solidity_type(current_token.trim())?);
-                    current_token.clear();
-                } else {
-                    // We're inside parentheses or brackets, this comma is part of the current token
-                    current_token.push(ch);
-                }
-            }
-            _ => {
-                current_token.push(ch);
-            }
-        }
-    }
-
-    // Add the last token
-    if !current_token.trim().is_empty() {
-        tokens.push(parse_solidity_type(current_token.trim())?);
-    }
-
-    // Check for unmatched parentheses/brackets
-    if paren_depth != 0 {
-        return Err(DecodeInputError::InvalidAbi {
-            message: "unmatched parentheses".to_string(),
-        });
-    }
-    if bracket_open {
-        return Err(DecodeInputError::InvalidAbi {
-            message: "unmatched brackets".to_string(),
-        });
-    }
-
-    Ok(tokens)
-}
-
-fn parse_solidity_type(type_str: impl AsRef<str>) -> Result<DynSolType, DecodeInputError> {
-    let type_str = type_str.as_ref();
-    match type_str {
-        s if s.ends_with("[]") => {
-            let inner_type = parse_solidity_type(&s[..s.len() - 2])?;
-            Ok(DynSolType::Array(Box::new(inner_type)))
-        }
-        s if s.contains('[') && s.ends_with(']') => {
-            let bracket_pos = s.find('[').unwrap();
-            let inner_type = parse_solidity_type(&s[..bracket_pos])?;
-            let size_str = &s[bracket_pos + 1..s.len() - 1];
-            let size = size_str.parse::<usize>().map_err(|_| DecodeInputError::InvalidAbi {
-                message: format!("invalid array size in type: {s}"),
-            })?;
-            Ok(DynSolType::FixedArray(Box::new(inner_type), size))
-        }
-        s if s.starts_with('(') && s.ends_with(')') => {
-            // Parse tuple type: (uint32,uint32,uint64) -> DynSolType::Tuple
-            let inner_str = &s[1..s.len() - 1]; // Remove outer parentheses
-
-            if inner_str.is_empty() {
-                return Ok(DynSolType::Tuple(Vec::new()));
-            }
-
-            Ok(DynSolType::Tuple(tokenize_parameters(inner_str)?))
-        }
-        "address" => Ok(DynSolType::Address),
-        "bool" => Ok(DynSolType::Bool),
-        "string" => Ok(DynSolType::String),
-        "bytes" => Ok(DynSolType::Bytes),
-        s if s.starts_with("uint") => {
-            let size = if s == "uint" {
-                256
-            } else {
-                s[4..].parse::<usize>().map_err(|_| DecodeInputError::InvalidAbi {
-                    message: format!("invalid uint size in type: {s}"),
-                })?
-            };
-            Ok(DynSolType::Uint(size))
-        }
-        s if s.starts_with("int") => {
-            let size = if s == "int" {
-                256
-            } else {
-                s[3..].parse::<usize>().map_err(|_| DecodeInputError::InvalidAbi {
-                    message: format!("invalid int size in type: {s}"),
-                })?
-            };
-            Ok(DynSolType::Int(size))
-        }
-        s if s.starts_with("bytes") && s.len() > 5 => {
-            let size = s[5..].parse::<usize>().map_err(|_| DecodeInputError::InvalidAbi {
-                message: format!("invalid bytes size in type: {s}"),
-            })?;
-            Ok(DynSolType::FixedBytes(size))
-        }
-        _ => Err(DecodeInputError::InvalidAbi {
-            message: format!("unsupported Solidity type: {type_str}"),
+    let tuple_str = &signature[start..=end];
+    let ty = DynSolType::parse(tuple_str).map_err(|e| DecodeInputError::InvalidAbi {
+        message: format!("invalid signature format: {signature} ({e})"),
+    })?;
+    match ty {
+        DynSolType::Tuple(inner) => Ok(inner),
+        other => Err(DecodeInputError::InvalidAbi {
+            message: format!("invalid signature format: {signature} (expected parameter tuple, got {other})"),
         }),
     }
 }
