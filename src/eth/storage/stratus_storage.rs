@@ -851,8 +851,8 @@ mod tests {
     use super::*;
     use crate::eth::executor::AccountChanges;
     use crate::eth::executor::ExecutionResult;
-    use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::evm::types::TransactionExecutionInput;
+    use crate::eth::executor::evm::types::TransactionExecutionOutput;
     use crate::eth::types::Signature;
     use crate::eth::types::SlotValue;
     use crate::eth::types::TransactionInfo;

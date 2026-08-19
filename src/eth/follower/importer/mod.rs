@@ -275,8 +275,8 @@ mod tests {
     use crate::eth::executor::CompleteValue;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::TransactionExecution;
-    use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::evm::types::TransactionExecutionInput;
+    use crate::eth::executor::evm::types::TransactionExecutionOutput;
     use crate::eth::follower::importer::fetchers::DataFetcher;
     use crate::eth::follower::importer::fetchers::block_with_changes::BlockWithChangesFetcher;
     use crate::eth::follower::importer::importers::ImporterWorker;

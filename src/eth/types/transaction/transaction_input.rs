@@ -19,7 +19,7 @@ use display_json::DebugAsJson;
 use rlp::Decodable;
 
 use crate::alias::AlloyTransaction;
-use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::executor::evm::types::TransactionExecutionInput;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
 use crate::eth::types::ChainId;

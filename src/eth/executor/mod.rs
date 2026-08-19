@@ -1,5 +1,5 @@
 mod config;
-mod evm;
+pub mod evm;
 mod evm_worker_pool;
 mod types;
 
@@ -12,12 +12,10 @@ use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
 pub use config::ExecutorConfig;
-pub use evm::types::AccessListOutput;
-pub use evm::types::CallExecutionOutput;
-pub use evm::types::EvmExecutionMetrics;
-pub use evm::types::EvmKind;
-pub use evm::types::TransactionExecutionInput;
-pub use evm::types::TransactionExecutionOutput;
+use evm::types::EvmExecutionMetrics;
+use evm::types::EvmKind;
+use evm::types::TransactionExecutionInput;
+use evm::types::TransactionExecutionOutput;
 use parking_lot::Mutex;
 use tracing::Span;
 use tracing::debug_span;
