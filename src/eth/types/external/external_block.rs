@@ -10,6 +10,8 @@ use alloy_primitives::Bloom;
 use alloy_primitives::Bytes;
 #[cfg(test)]
 use alloy_primitives::U256;
+use alloy_rpc_types_eth::BlockTransactions;
+use anyhow::bail;
 #[cfg(test)]
 use fake::Dummy;
 #[cfg(test)]
@@ -54,6 +56,36 @@ impl ExternalBlock {
     /// Returns the block author.
     pub fn author(&self) -> Address {
         self.0.header.inner.beneficiary.into()
+    }
+
+    /// Returns the number of full transactions in the block.
+    pub fn full_transactions_len(&self) -> anyhow::Result<usize> {
+        let BlockTransactions::Full(transactions) = &self.0.transactions else {
+            bail!("expected full transactions, got hashes or uncle");
+        };
+
+        Ok(transactions.len())
+    }
+
+    /// Appends full transactions from another page of the same block.
+    pub fn extend_full_transactions_from(&mut self, other: Self) -> anyhow::Result<()> {
+        if self.hash() != other.hash() {
+            bail!(
+                "cannot extend external block transactions from block {} into block {}",
+                other.hash(),
+                self.hash()
+            );
+        }
+
+        let BlockTransactions::Full(other_transactions) = other.0.transactions else {
+            bail!("expected full transactions, got hashes or uncle");
+        };
+        let BlockTransactions::Full(transactions) = &mut self.0.transactions else {
+            bail!("expected full transactions, got hashes or uncle");
+        };
+
+        transactions.extend(other_transactions);
+        Ok(())
     }
 }
 

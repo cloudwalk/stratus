@@ -72,6 +72,7 @@ use crate::eth::rpc::next_rpc_param;
 use crate::eth::rpc::next_rpc_param_or_default;
 use crate::eth::rpc::parser::RpcExtensionsExt;
 use crate::eth::rpc::subscriptions::RpcSubscriptionsHandles;
+use crate::eth::rpc::types::ImporterPagination;
 use crate::eth::storage::ExecutionKind;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::StratusStorage;
@@ -897,10 +898,22 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     let _method_enter = info_span!("rpc::stratus_getBlockAndReceipts").entered();
 
     // parse params
-    let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let pagination = ImporterPagination::next(params, filter)?;
 
     // track
     tracing::info!(%filter, "reading block and receipts");
+
+    if let Some((filter, pagination)) = pagination {
+        let Some(block) = ctx.server.storage.read_block(filter)? else {
+            tracing::info!(%filter, "block not found");
+            return Ok(JsonValue::Null);
+        };
+
+        let response = pagination.block_and_receipts_response(block)?;
+        tracing::info!(%filter, returned = response.pagination.returned, total = response.pagination.total, "block with transactions page found");
+        return Ok(json!(response));
+    }
 
     let Some(block) = ctx.server.storage.read_block(filter)? else {
         tracing::info!(%filter, "block not found");
@@ -922,10 +935,22 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     let _method_enter = info_span!("rpc::stratus_getBlockWithChanges").entered();
 
     // parse params
-    let (_, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
+    let pagination = ImporterPagination::next(params, filter)?;
 
     // track
     tracing::info!(%filter, "reading block and changes");
+
+    if let Some((filter, pagination)) = pagination {
+        let Some((block, changes)) = ctx.server.storage.read_block_with_changes(filter)? else {
+            tracing::info!(%filter, "block not found");
+            return Ok(JsonValue::Null);
+        };
+
+        let response = pagination.block_with_changes_response(block, changes)?;
+        tracing::info!(%filter, returned = response.pagination.returned, total = response.pagination.total, "block with changes page found");
+        return Ok(json!(response));
+    }
 
     let Some(block) = ctx.server.storage.read_block_with_changes(filter)? else {
         tracing::info!(%filter, "block not found");
