@@ -1,5 +1,5 @@
-use ethabi::ParamType;
-use ethabi::Token;
+use alloy_dyn_abi::DynSolType;
+use alloy_dyn_abi::DynSolValue;
 
 use crate::eth::codegen::SIGNATURES_4_BYTES;
 use crate::eth::types::DecodeInputError;
@@ -20,13 +20,18 @@ pub fn decode_input_arguments(input: impl AsRef<[u8]>) -> Result<String, DecodeI
     let param_data = input.as_ref().get(4..).ok_or(DecodeInputError::InputTooShort {
         message: "input data too short for parameters after function selector".to_string(),
     })?;
-    let tokens = ethabi::decode(&param_types, param_data)?;
+    let value = DynSolType::Tuple(param_types).abi_decode_params(param_data)?;
+    let DynSolValue::Tuple(tokens) = value else {
+        return Err(DecodeInputError::InvalidAbi {
+            message: "decoded parameters did not form a tuple".to_string(),
+        });
+    };
     Ok(format_tokens_human_readable(&tokens))
 }
 
 /// Parses a Solidity function signature string into parameter types.
-/// Example: "transfer(address,uint256)" -> [ParamType::Address, ParamType::Uint(256)]
-fn parse_to_param_types(signature: &str) -> Result<Vec<ParamType>, DecodeInputError> {
+/// Example: "transfer(address,uint256)" -> [DynSolType::Address, DynSolType::Uint(256)]
+fn parse_to_param_types(signature: &str) -> Result<Vec<DynSolType>, DecodeInputError> {
     let start = signature.find('(').ok_or_else(|| DecodeInputError::InvalidAbi {
         message: format!("invalid signature format: {signature} (missing opening parenthesis)"),
     })?;
@@ -42,7 +47,7 @@ fn parse_to_param_types(signature: &str) -> Result<Vec<ParamType>, DecodeInputEr
 
 /// Tokenizes parameter string while respecting nested parentheses for tuples.
 /// Example: "address,(uint32,uint32,uint64),bool" -> ["address", "(uint32,uint32,uint64)", "bool"]
-fn tokenize_parameters(params_str: &str) -> Result<Vec<ParamType>, DecodeInputError> {
+fn tokenize_parameters(params_str: &str) -> Result<Vec<DynSolType>, DecodeInputError> {
     let mut tokens = Vec::new();
     let mut current_token = String::new();
     let mut paren_depth = 0;
@@ -117,12 +122,12 @@ fn tokenize_parameters(params_str: &str) -> Result<Vec<ParamType>, DecodeInputEr
     Ok(tokens)
 }
 
-fn parse_solidity_type(type_str: impl AsRef<str>) -> Result<ParamType, DecodeInputError> {
+fn parse_solidity_type(type_str: impl AsRef<str>) -> Result<DynSolType, DecodeInputError> {
     let type_str = type_str.as_ref();
     match type_str {
         s if s.ends_with("[]") => {
             let inner_type = parse_solidity_type(&s[..s.len() - 2])?;
-            Ok(ParamType::Array(Box::new(inner_type)))
+            Ok(DynSolType::Array(Box::new(inner_type)))
         }
         s if s.contains('[') && s.ends_with(']') => {
             let bracket_pos = s.find('[').unwrap();
@@ -131,22 +136,22 @@ fn parse_solidity_type(type_str: impl AsRef<str>) -> Result<ParamType, DecodeInp
             let size = size_str.parse::<usize>().map_err(|_| DecodeInputError::InvalidAbi {
                 message: format!("invalid array size in type: {s}"),
             })?;
-            Ok(ParamType::FixedArray(Box::new(inner_type), size))
+            Ok(DynSolType::FixedArray(Box::new(inner_type), size))
         }
         s if s.starts_with('(') && s.ends_with(')') => {
-            // Parse tuple type: (uint32,uint32,uint64) -> ParamType::Tuple
+            // Parse tuple type: (uint32,uint32,uint64) -> DynSolType::Tuple
             let inner_str = &s[1..s.len() - 1]; // Remove outer parentheses
 
             if inner_str.is_empty() {
-                return Ok(ParamType::Tuple(Vec::new()));
+                return Ok(DynSolType::Tuple(Vec::new()));
             }
 
-            Ok(ParamType::Tuple(tokenize_parameters(inner_str)?))
+            Ok(DynSolType::Tuple(tokenize_parameters(inner_str)?))
         }
-        "address" => Ok(ParamType::Address),
-        "bool" => Ok(ParamType::Bool),
-        "string" => Ok(ParamType::String),
-        "bytes" => Ok(ParamType::Bytes),
+        "address" => Ok(DynSolType::Address),
+        "bool" => Ok(DynSolType::Bool),
+        "string" => Ok(DynSolType::String),
+        "bytes" => Ok(DynSolType::Bytes),
         s if s.starts_with("uint") => {
             let size = if s == "uint" {
                 256
@@ -155,7 +160,7 @@ fn parse_solidity_type(type_str: impl AsRef<str>) -> Result<ParamType, DecodeInp
                     message: format!("invalid uint size in type: {s}"),
                 })?
             };
-            Ok(ParamType::Uint(size))
+            Ok(DynSolType::Uint(size))
         }
         s if s.starts_with("int") => {
             let size = if s == "int" {
@@ -165,13 +170,13 @@ fn parse_solidity_type(type_str: impl AsRef<str>) -> Result<ParamType, DecodeInp
                     message: format!("invalid int size in type: {s}"),
                 })?
             };
-            Ok(ParamType::Int(size))
+            Ok(DynSolType::Int(size))
         }
         s if s.starts_with("bytes") && s.len() > 5 => {
             let size = s[5..].parse::<usize>().map_err(|_| DecodeInputError::InvalidAbi {
                 message: format!("invalid bytes size in type: {s}"),
             })?;
-            Ok(ParamType::FixedBytes(size))
+            Ok(DynSolType::FixedBytes(size))
         }
         _ => Err(DecodeInputError::InvalidAbi {
             message: format!("unsupported Solidity type: {type_str}"),
@@ -180,34 +185,39 @@ fn parse_solidity_type(type_str: impl AsRef<str>) -> Result<ParamType, DecodeInp
 }
 
 // Formats decoded tokens into a human-readable string.
-fn format_tokens_human_readable(tokens: &[Token]) -> String {
+fn format_tokens_human_readable(tokens: &[DynSolValue]) -> String {
     let items: Vec<String> = tokens.iter().map(format_token).collect();
     format!("({})", items.join(", "))
 }
 
-fn format_token(token: &Token) -> String {
+fn format_token(token: &DynSolValue) -> String {
     match token {
-        Token::Address(addr) => format!("0x{addr:x}"),
-        Token::Uint(val) | Token::Int(val) => format!("{val}"),
-        Token::Bool(val) => val.to_string(),
-        Token::String(val) => format!("\"{val}\""),
-        Token::Bytes(val) => format!("0x{}", const_hex::encode(val)),
-        Token::FixedBytes(val) => format!("0x{}", const_hex::encode(val)),
-        Token::Array(arr) | Token::FixedArray(arr) => {
+        DynSolValue::Address(addr) => format!("0x{addr:x}"),
+        DynSolValue::Uint(val, _) => format!("{val}"),
+        DynSolValue::Int(val, _) => format!("{val}"),
+        DynSolValue::Bool(val) => val.to_string(),
+        DynSolValue::String(val) => format!("\"{val}\""),
+        DynSolValue::Bytes(val) => format!("0x{}", const_hex::encode(val)),
+        DynSolValue::FixedBytes(val, size) => format!("0x{}", const_hex::encode(&val.as_slice()[..*size])),
+        DynSolValue::Array(arr) | DynSolValue::FixedArray(arr) => {
             let items: Vec<String> = arr.iter().map(format_token).collect();
             format!("[{}]", items.join(", "))
         }
-        Token::Tuple(tuple) => {
+        DynSolValue::Tuple(tuple) => {
             let items: Vec<String> = tuple.iter().map(format_token).collect();
             format!("({})", items.join(", "))
         }
+        DynSolValue::Function(f) => format!("0x{}", const_hex::encode(f.as_slice())),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use ethabi::Address;
-    use ethabi::ParamType;
+    use alloy_dyn_abi::DynSolType;
+    use alloy_dyn_abi::DynSolValue;
+    use alloy_primitives::Address;
+    use alloy_primitives::I256;
+    use alloy_primitives::U256;
     use hex_literal::hex;
 
     use super::*;
@@ -216,10 +226,13 @@ mod tests {
     fn test_parse_transfer_transaction_input() {
         // Test transfer(address,uint256)
         let mut tx_transfer = Vec::from(hex!("a9059cbb"));
-        tx_transfer.extend_from_slice(&ethabi::encode(&[
-            Token::Address(Address::from(hex!("1234567890123456789012345678901234567890"))),
-            Token::Uint(1000000000000000000u64.into()),
-        ]));
+        tx_transfer.extend_from_slice(
+            &DynSolValue::Tuple(vec![
+                DynSolValue::Address(Address::from(hex!("1234567890123456789012345678901234567890"))),
+                DynSolValue::Uint(U256::from(1000000000000000000u64), 256),
+            ])
+            .abi_encode_params(),
+        );
         let result = decode_input_arguments(&tx_transfer).unwrap();
 
         assert_eq!(result, "(0x1234567890123456789012345678901234567890, 1000000000000000000)");
@@ -242,27 +255,33 @@ mod tests {
         assert_eq!(
             param_types,
             vec![
-                ParamType::Uint(256),
-                ParamType::Array(Box::new(ParamType::Tuple(vec![
-                    ParamType::String,
-                    ParamType::Bool,
-                    ParamType::Tuple(vec![ParamType::Int(256), ParamType::Array(Box::new(ParamType::Uint(256)))]),
+                DynSolType::Uint(256),
+                DynSolType::Array(Box::new(DynSolType::Tuple(vec![
+                    DynSolType::String,
+                    DynSolType::Bool,
+                    DynSolType::Tuple(vec![DynSolType::Int(256), DynSolType::Array(Box::new(DynSolType::Uint(256)))]),
                 ])))
             ]
         );
-        let param_data = ethabi::encode(&[
-            Token::Uint(1000000000000000000u64.into()),
-            Token::Array(vec![Token::Tuple(vec![
-                Token::String("test".to_string()),
-                Token::Bool(true),
-                Token::Tuple(vec![
-                    Token::Int(200000000000000000i128.into()),
-                    Token::Array(vec![Token::Uint(3000000000000000000u64.into())]),
+        let param_data = DynSolValue::Tuple(vec![
+            DynSolValue::Uint(U256::from(1000000000000000000u64), 256),
+            DynSolValue::Array(vec![DynSolValue::Tuple(vec![
+                DynSolValue::String("test".to_string()),
+                DynSolValue::Bool(true),
+                DynSolValue::Tuple(vec![
+                    DynSolValue::Int(I256::unchecked_from(200000000000000000i128), 256),
+                    DynSolValue::Array(vec![DynSolValue::Uint(U256::from(3000000000000000000u64), 256)]),
                 ]),
             ])]),
-        ]);
+        ])
+        .abi_encode_params();
 
-        let tokens = ethabi::decode(&param_types, &param_data).expect("failed to decode parameters");
+        let value = DynSolType::Tuple(param_types)
+            .abi_decode_params(&param_data)
+            .expect("failed to decode parameters");
+        let DynSolValue::Tuple(tokens) = value else {
+            panic!("expected decoded value to be a tuple");
+        };
         let result = format_tokens_human_readable(&tokens);
         assert_eq!(
             result,

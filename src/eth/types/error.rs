@@ -224,7 +224,7 @@ pub enum DecodeInputError {
     #[error("Invalid ABI: {source}")]
     InvalidInput {
         #[from]
-        source: ethabi::Error,
+        source: alloy_dyn_abi::Error,
     },
 }
 
