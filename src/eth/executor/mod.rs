@@ -294,7 +294,9 @@ impl Executor {
         const INFINITE_ATTEMPTS: usize = usize::MAX;
 
         if self.warmup_cache {
-            let _ = self.execute_local_call::<NoopOutput>(tx.clone().into(), PointInTime::Latest);
+            self.execute_local_call::<NoopOutput>(tx.clone().into(), PointInTime::Latest)
+                .inspect_err(|err| tracing::warn!(?err, "failed to warmup the cache"))
+                .ok();
         }
 
         // Executes transactions serially:
