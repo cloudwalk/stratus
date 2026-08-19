@@ -1,5 +1,6 @@
-use alloy_dyn_abi::DynSolType;
 use alloy_dyn_abi::DynSolValue;
+use alloy_dyn_abi::JsonAbiExt;
+use alloy_json_abi::Function;
 
 use crate::eth::codegen::SIGNATURES_4_BYTES;
 use crate::eth::types::DecodeInputError;
@@ -19,34 +20,11 @@ pub fn decode_input_arguments(input: impl AsRef<[u8]>) -> Result<String, DecodeI
         });
     };
 
-    let param_types = parse_to_param_types(signature)?;
-    let DynSolValue::Tuple(tokens) = DynSolType::Tuple(param_types).abi_decode_params(param_data)? else {
-        return Err(DecodeInputError::InvalidAbi {
-            message: "decoded parameters did not form a tuple".to_string(),
-        });
-    };
-    Ok(format_tokens_human_readable(&tokens))
-}
-
-/// Parses a Solidity function signature string into parameter types.
-/// Example: "transfer(address,uint256)" -> [DynSolType::Address, DynSolType::Uint(256)]
-fn parse_to_param_types(signature: &str) -> Result<Vec<DynSolType>, DecodeInputError> {
-    let start = signature.find('(').ok_or_else(|| DecodeInputError::InvalidAbi {
-        message: format!("invalid signature format: {signature} (missing opening parenthesis)"),
-    })?;
-    let end = signature.rfind(')').ok_or_else(|| DecodeInputError::InvalidAbi {
-        message: format!("invalid signature format: {signature} (missing closing parenthesis)"),
-    })?;
-    let tuple_str = &signature[start..=end];
-    let ty = DynSolType::parse(tuple_str).map_err(|e| DecodeInputError::InvalidAbi {
+    let func = Function::parse(signature).map_err(|e| DecodeInputError::InvalidAbi {
         message: format!("invalid signature format: {signature} ({e})"),
     })?;
-    match ty {
-        DynSolType::Tuple(inner) => Ok(inner),
-        other => Err(DecodeInputError::InvalidAbi {
-            message: format!("invalid signature format: {signature} (expected parameter tuple, got {other})"),
-        }),
-    }
+    let tokens = func.abi_decode_input(param_data)?;
+    Ok(format_tokens_human_readable(&tokens))
 }
 
 // Formats decoded tokens into a human-readable string.
@@ -78,8 +56,9 @@ fn format_token(token: &DynSolValue) -> String {
 
 #[cfg(test)]
 mod tests {
-    use alloy_dyn_abi::DynSolType;
     use alloy_dyn_abi::DynSolValue;
+    use alloy_dyn_abi::JsonAbiExt;
+    use alloy_json_abi::Function;
     use alloy_primitives::Address;
     use alloy_primitives::I256;
     use alloy_primitives::U256;
@@ -90,14 +69,13 @@ mod tests {
     #[test]
     fn test_parse_transfer_transaction_input() {
         // Test transfer(address,uint256)
-        let mut tx_transfer = Vec::from(hex!("a9059cbb"));
-        tx_transfer.extend_from_slice(
-            &DynSolValue::Tuple(vec![
+        let func = Function::parse("transfer(address,uint256)").unwrap();
+        let tx_transfer = func
+            .abi_encode_input(&[
                 DynSolValue::Address(Address::from(hex!("1234567890123456789012345678901234567890"))),
                 DynSolValue::Uint(U256::from(1000000000000000000u64), 256),
             ])
-            .abi_encode_params(),
-        );
+            .unwrap();
         let result = decode_input_arguments(&tx_transfer).unwrap();
 
         assert_eq!(result, "(0x1234567890123456789012345678901234567890, 1000000000000000000)");
@@ -116,37 +94,22 @@ mod tests {
     fn test_complex_input() {
         // Test test(uint256,(string,bool,(int256,uint256[]))[])
         let signature = "test(uint256,(string,bool,(int256,uint256[]))[])";
-        let param_types = parse_to_param_types(signature).unwrap();
-        assert_eq!(
-            param_types,
-            vec![
-                DynSolType::Uint(256),
-                DynSolType::Array(Box::new(DynSolType::Tuple(vec![
-                    DynSolType::String,
-                    DynSolType::Bool,
-                    DynSolType::Tuple(vec![DynSolType::Int(256), DynSolType::Array(Box::new(DynSolType::Uint(256)))]),
-                ])))
-            ]
-        );
-        let param_data = DynSolValue::Tuple(vec![
-            DynSolValue::Uint(U256::from(1000000000000000000u64), 256),
-            DynSolValue::Array(vec![DynSolValue::Tuple(vec![
-                DynSolValue::String("test".to_string()),
-                DynSolValue::Bool(true),
-                DynSolValue::Tuple(vec![
-                    DynSolValue::Int(I256::unchecked_from(200000000000000000i128), 256),
-                    DynSolValue::Array(vec![DynSolValue::Uint(U256::from(3000000000000000000u64), 256)]),
-                ]),
-            ])]),
-        ])
-        .abi_encode_params();
+        let func = Function::parse(signature).unwrap();
+        let param_data = func
+            .abi_encode_input_raw(&[
+                DynSolValue::Uint(U256::from(1000000000000000000u64), 256),
+                DynSolValue::Array(vec![DynSolValue::Tuple(vec![
+                    DynSolValue::String("test".to_string()),
+                    DynSolValue::Bool(true),
+                    DynSolValue::Tuple(vec![
+                        DynSolValue::Int(I256::unchecked_from(200000000000000000i128), 256),
+                        DynSolValue::Array(vec![DynSolValue::Uint(U256::from(3000000000000000000u64), 256)]),
+                    ]),
+                ])]),
+            ])
+            .unwrap();
 
-        let value = DynSolType::Tuple(param_types)
-            .abi_decode_params(&param_data)
-            .expect("failed to decode parameters");
-        let DynSolValue::Tuple(tokens) = value else {
-            panic!("expected decoded value to be a tuple");
-        };
+        let tokens = func.abi_decode_input(&param_data).unwrap();
         let result = format_tokens_human_readable(&tokens);
         assert_eq!(
             result,
