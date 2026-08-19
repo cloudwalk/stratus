@@ -60,6 +60,7 @@ mod tests {
     use alloy_dyn_abi::JsonAbiExt;
     use alloy_json_abi::Function;
     use alloy_primitives::Address;
+    use alloy_primitives::B256;
     use alloy_primitives::I256;
     use alloy_primitives::U256;
     use hex_literal::hex;
@@ -79,6 +80,29 @@ mod tests {
         let result = decode_input_arguments(&tx_transfer).unwrap();
 
         assert_eq!(result, "(0x1234567890123456789012345678901234567890, 1000000000000000000)");
+    }
+
+    #[test]
+    fn test_decode_input_arguments_with_dynamic_array() {
+        let func = Function::parse("grantRoleBatch(bytes32,address[])").unwrap();
+        let input = func
+            .abi_encode_input(&[
+                DynSolValue::FixedBytes(B256::repeat_byte(0xab), 32),
+                DynSolValue::Array(vec![
+                    DynSolValue::Address(Address::repeat_byte(0x11)),
+                    DynSolValue::Address(Address::repeat_byte(0x22)),
+                ]),
+            ])
+            .unwrap();
+
+        let result = decode_input_arguments(&input).unwrap();
+
+        assert_eq!(
+            result,
+            "(0xababababababababababababababababababababababababababababababab, \
+             [0x1111111111111111111111111111111111111111, \
+             0x2222222222222222222222222222222222222222])"
+        );
     }
 
     #[test]
