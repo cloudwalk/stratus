@@ -549,6 +549,30 @@ Supply-Chain Integrity Risk:
 Conclusion:
 Based on the available evidence, the update of 'chrono' from 0.4.42 to 0.4.43 does not introduce observable supply-chain or security risks within the evaluated scope."""
 
+[[audits.clap]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "4.5.51 -> 4.5.60"
+notes = "Thin facade crate re-exporting clap_builder/clap_derive. Diff is version+pin bumps and a CHANGELOG URL update. No unsafe, no logic, build=false, MSRV unchanged (1.74). cargo audit clean for clap. Backward-compatible PATCH releases."
+
+[[audits.clap_builder]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "4.5.51 -> 4.5.60"
+notes = "Parsing logic. Benign PATCH bug fixes: value_terminator/-- escape precedence, subcommand-error usage panic fix, ignore_errors no longer masks help/version on subcommands, empty default/possible values now quoted. Additive default_values_if/_ifs API. No unsafe, no build.rs, no fs/net/process/env. clap_lex dep bump transitive (already exempted). MSRV unchanged (1.74)."
+
+[[audits.clap_derive]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "4.5.49 -> 4.5.55"
+notes = "Proc-macro crate. Diff is exclusively error-message wording in args.rs/subcommand.rs/value_enum.rs/item.rs. Zero changes to generated code logic, no new unsafe in generated code, no token-stream construction changes. build=false, deps unchanged, MSRV unchanged (1.74). Error messages are not contractual API."
+
+[[audits.clap_lex]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.7.5 -> 1.1.0"
+notes = "Only runtime code change is explicit lifetime annotations in public API signatures, with zero runtime behavior change. No new unsafe, network, IO, crypto, build scripts, or proc-macros. No advisories."
+
 [[audits.console]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -712,6 +736,12 @@ Safety: no new I/O or network beyond existing hostname syscalls; no build.rs or 
 Dependencies/features: bumps windows-link to 0.2; dev-only bumps windows-bindgen to 0.65 and adds similar-asserts; dependabot config added. Optional features unchanged.
 Main change: repository moved to github.com/djc/hostname with doc badge updates; tests unwrap bindgen result; behavior remains the same.
 """
+
+[[audits.http]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "1.4.2"
+notes = "Reviewed 1.3.1->1.4.2 delta (1.3.1 was previously exempted, not audited). Pure HTTP message-types crate (Request/Response/HeaderMap/Uri, no I/O). Unsafe changes are net soundness improvements: IterMut/ValueIterMut refactored to stop reborrowing whole map (Stacked Borrows fix PR#837), IntoIter::drop guard fixes use-after-free on panic (PR#838), Extend reserve-clamp fixes overflow panic. FNV dep removed (vendored inline, identical constants). URI parsing tightened (rejects empty/non-slash-start/0x7F DEL). No build.rs, no proc-macro, fewer runtime deps (bytes+itoa). MSRV 1.57 (stratus 1.86). No advisory against http 1.4.x."
 
 [[audits.humantime]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
@@ -1281,6 +1311,18 @@ who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.5.3"
 notes = "Safety: no new I/O or network; no build.rs or proc-macros; unsafe usage unchanged. Dependencies/features: feature table reshuffled (removes internal __common), slab bumped to 0.4.9; dev deps adjust futures/rand/tokio versions. Main change: adds ServiceBuilder::boxed_clone_sync and validates retry jitter isn’t NaN; behavior otherwise unchanged."
+
+[[audits.tower-http]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.6.8 -> 0.6.11"
+notes = "Spanning 0.6.9-0.6.11. Additive/benign: on-early-drop middleware, set-header multiple-headers API, classify::GrpcCode From impls, follow-redirect iri-string->url swap, fs fixes. Deployed library unsafe-free (forbid unsafe_code); single unsafe is Windows-only cfg(test) read-only GetFileType FFI. New is_reserved_dos_name Windows path-traversal guard (security improvement). No build script, no proc-macro, no crypto. Advisories RUSTSEC-2021-0135/2022-0043 patched in >=0.2.1. MSRV unchanged (1.64). stratus uses cors feature only (one-char doc typo fix in cors/mod.rs)."
+
+[[audits.tower-http]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.6.8 -> 0.7.0"
+notes = "Minor (breaking) release. Deployed library unsafe-free (deny unsafe_code; single unsafe is Windows-only cfg(test) GetFileType FFI not compiled into lib). New csrf module is pure Sec-Fetch-Site/Origin/Host header inspection (security-adding, no unsafe/fs/net/crypto). No build script, no proc-macro, no FFI in deployed code, no crypto. cargo audit clean; advisories patched in >=0.2.1. MSRV 1.64->1.65 (stratus 1.86). stratus cors-only: Vary header now derived from request-dependency (fixed Any origin -> no Vary, more correct caching, no security impact)."
 
 [[audits.tracing-opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
