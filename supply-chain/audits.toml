@@ -515,6 +515,12 @@ criteria = "safe-to-deploy"
 delta = "2.1.1 -> 2.1.5"
 notes = "Reviewed 2.1.1->2.1.5: FK20 setup zero-inits, audit info, no new unsafe beyond existing C bindings."
 
+[[audits.c-kzg]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "2.1.5 -> 2.1.8"
+notes = "Only Rust change is ethereum_kzg_settings/mod.rs: 16 OnceBox statics -> one [OnceLock;16] array (std::sync::OnceLock or once_cell OnceBox), panic!->assert!. No new unsafe/extern C/transmute/pointers; build.rs unchanged; no network/fs/env access. C/blst diff is internal crypto refinement (g1_add/fr_* wrappers, 383->384 inverse-mod asm, batch affine, g1_ifft->g1_ifft_unscaled) with no new Rust FFI s"
+
 [[audits.cargo-platform]]
 who = "Droid (cargo-vet automation)"
 criteria = "safe-to-deploy"
@@ -526,12 +532,6 @@ who = "Droid (cargo-vet automation)"
 criteria = "safe-to-deploy"
 delta = "0.20.0 -> 0.23.1"
 notes = "Ergonomic improvements (newtype wrappers, env_remove helper), stabilization of build_directory metadata field, routine dependency bumps. No unsafe, no build scripts, no new network/IO. No advisories."
-
-[[audits.c-kzg]]
-who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
-criteria = "safe-to-deploy"
-delta = "2.1.5 -> 2.1.8"
-notes = "Only Rust change is ethereum_kzg_settings/mod.rs: 16 OnceBox statics -> one [OnceLock;16] array (std::sync::OnceLock or once_cell OnceBox), panic!->assert!. No new unsafe/extern C/transmute/pointers; build.rs unchanged; no network/fs/env access. C/blst diff is internal crypto refinement (g1_add/fr_* wrappers, 383->384 inverse-mod asm, batch affine, g1_ifft->g1_ifft_unscaled) with no new Rust FFI s"
 
 [[audits.chrono]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
@@ -1277,17 +1277,17 @@ criteria = "safe-to-deploy"
 delta = "1.3.0 -> 1.4.1"
 notes = "Reviewed 1.3.0->1.4.1: adds transient keyword support and doc cfg cleanup; no unsafe."
 
-[[audits.sysinfo]]
-who = "Droid (cargo-vet automation)"
-criteria = "safe-to-deploy"
-delta = "0.34.2 -> 0.37.2"
-notes = "Read-only system-information crate. Delta is bug fixes, new read-only APIs, and adoption of objc2-io-kit bindings. Unsafe footprint largely unchanged (mostly #[unsafe(no_mangle)] edition syntax changes). No advisories."
-
 [[audits.syn-solidity]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
 delta = "1.4.1 -> 1.6.1"
 notes = "Diff is minimal and confined to Cargo.toml (version bump only, build=false, no new deps) plus 3 source files: stmt/mod.rs adds a `delete` keyword parser branch (routes to Stmt::Expr, with cfg(test) tests), type/mod.rs removes a deprecated is_one_word method, variable/mod.rs refactors fmt_eip712 to recurse into Type::Array for EIP-712 formatting. No unsafe, FFI, transmute, build.rs, network, fs/env"
+
+[[audits.sysinfo]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.34.2 -> 0.37.2"
+notes = "Read-only system-information crate. Delta is bug fixes, new read-only APIs, and adoption of objc2-io-kit bindings. Unsafe footprint largely unchanged (mostly #[unsafe(no_mangle)] edition syntax changes). No advisories."
 
 [[audits.tag_ptr]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
@@ -1341,6 +1341,12 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "0.32.0"
 notes = "Reviewed 0.31.0->0.32.0: optional target attr, improved context activation/set_parent error handling, metrics layer retains provider; existing downcast unsafe unchanged."
+
+[[audits.uuid]]
+who = "Claude / cargo-vet auditor"
+criteria = "safe-to-deploy"
+delta = "1.18.1 -> 1.23.3"
+notes = "Reviewed uuid 1.18.1 -> 1.23.3 via cargo vet diff and upstream sources. Changes are maintenance/bug-fix release spanning 1.19.0-1.23.3: edition 2021, dependency updates (getrandom 0.3->0.4, rand 0.9->0.10, serde renamed to serde_core alias), v7 monotonicity/counter correctness fixes, parser panic fix, and removal of uuid-macro-internal proc-macro in favor of a declarative const macro. No new unsafe code; the existing unsafe is unchanged and limited to ASCII hex formatting transmutes. No network/filesystem/process I/O, build scripts, or crypto changes. No RustSec advisories. MSRV raised to 1.85.0; project uses Rust 1.88. Breaking changes (serde adapter strictness, deprecated Context/ContextV1, Timestamp::from_gregorian_time) are not used in stratus. Project only uses Uuid::now_v7() and Uuid::nil() via uuid v7 feature."
 
 [[audits.vergen]]
 who = "Droid (cargo-vet automation)"
@@ -1407,11 +1413,6 @@ who = "Droid (cargo-vet automation)"
 criteria = "safe-to-deploy"
 version = "0.1.0"
 notes = "Thin no_std wrapper over standard Windows thread pool APIs (kernel32.dll). All unsafe is tightly scoped to FFI calls. Safe public API enforces Send/Sync/'static. No build scripts, no proc macros. No advisories."
-[[audits.uuid]]
-who = "Claude / cargo-vet auditor"
-criteria = "safe-to-deploy"
-delta = "1.18.1 -> 1.23.3"
-notes = "Reviewed uuid 1.18.1 -> 1.23.3 via cargo vet diff and upstream sources. Changes are maintenance/bug-fix release spanning 1.19.0-1.23.3: edition 2021, dependency updates (getrandom 0.3->0.4, rand 0.9->0.10, serde renamed to serde_core alias), v7 monotonicity/counter correctness fixes, parser panic fix, and removal of uuid-macro-internal proc-macro in favor of a declarative const macro. No new unsafe code; the existing unsafe is unchanged and limited to ASCII hex formatting transmutes. No network/filesystem/process I/O, build scripts, or crypto changes. No RustSec advisories. MSRV raised to 1.85.0; project uses Rust 1.88. Breaking changes (serde adapter strictness, deprecated Context/ContextV1, Timestamp::from_gregorian_time) are not used in stratus. Project only uses Uuid::now_v7() and Uuid::nil() via uuid v7 feature."
 
 [[audits.winnow]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
