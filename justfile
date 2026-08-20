@@ -149,26 +149,6 @@ stratus-fake-leader-test *args="":
     LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
     just _wait_for_stratus 3001
 
-# Bin: Download external RPC blocks and receipts to temporary storage
-rpc-downloader *args="":
-    cargo {{nightly_flag}} run --bin rpc-downloader {{release_flag}} -- {{args}}
-
-rpc-downloader-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    cargo build {{profile_flag}}
-    cargo run {{profile_flag}} --bin rpc-downloader -- {{args}} > rpc-downloader.log
-
-# Bin: Import external RPC blocks from temporary storage to Stratus storage
-importer-offline *args="":
-    cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} --features dev -- {{args}}
-
-importer-offline-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    cargo build {{profile_flag}}
-    cargo run {{profile_flag}} --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
-
 # ------------------------------------------------------------------------------
 # Test tasks
 # ------------------------------------------------------------------------------
@@ -478,74 +458,6 @@ _e2e-leader-fake-leader-up-impl test="fake-leader":
 e2e-leader-fake-leader-up test="fake-leader":
     just _e2e-leader-fake-leader-up-impl {{test}}
     just e2e-leader-follower-down
-
-# E2E: RPC Downloader test
-e2e-rpc-downloader:
-    #!/bin/bash
-    mkdir e2e_logs
-
-    just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000
-
-    just _log "Starting PostgreSQL"
-    docker-compose up -d postgres
-
-    just _log "Running TestContractBalances tests"
-    just e2e stratus automine
-
-    just _log "Running RPC Downloader test"
-    just rpc-downloader-test --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
-    result_code_1=$?
-
-    just _log "Checking content of postgres"
-    pip install -r utils/check_rpc_downloader/requirements.txt
-    POSTGRES_DB=stratus POSTGRES_PASSWORD=123 ETH_RPC_URL=http://localhost:3000/ python utils/check_rpc_downloader/main.py --start 0
-    result_code_2=$?
-
-    just _log "Killing PostgreSQL"
-    docker-compose down postgres
-
-    just _log "Check result codes"
-    if [ $result_code_1 -ne 0 ] || [ $result_code_2 -ne 0 ]; then
-        exit 1
-    fi
-
-# E2E Importer Offline
-e2e-importer-offline:
-    #!/bin/bash
-    mkdir -p e2e_logs
-
-    rm -rf data/importer-offline-database-rocksdb
-
-    just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000
-
-    just _log "Running TestContractBalances tests"
-    just e2e stratus automine
-
-    just _log "Starting PostgreSQL"
-    docker-compose up -d postgres
-
-    just _log "Running rpc downloader"
-    just rpc-downloader-test --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001 --initial-accounts 0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
-
-    just _log "Run importer-offline"
-    just importer-offline-test --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
-
-    just _log "Stratus for importer-offline"
-    just stratus-test -a 0.0.0.0:3001 --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
-    just _wait_for_stratus 3001
-
-    just _log "Compare blocks of stratus and importer-offline"
-    cd utils/compare_block/
-    poetry install --no-root
-    poetry run python3 ./main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp
-    result_code=$?
-
-    just _log "Killing PostgreSQL"
-    docker-compose down postgres
-
-    exit $result_code
 
 # ------------------------------------------------------------------------------
 # Hive tests
