@@ -41,7 +41,7 @@ impl ImporterPageRequest {
         }
     }
 
-    fn limit(&self) -> usize {
+    pub(crate) fn limit(&self) -> usize {
         match self.limit {
             Some(0) | None => IMPORTER_PAGE_LIMIT_DEFAULT,
             Some(limit) => limit.min(IMPORTER_PAGE_LIMIT_MAX),
@@ -61,6 +61,18 @@ impl ImporterPagination {
         };
         let (filter, start) = Self::resolve_filter(filter, request.cursor.as_deref())?;
         Ok(Some((filter, Self { request, start })))
+    }
+
+    /// Test-only constructor that builds a pagination with the given start index and limit.
+    #[cfg(test)]
+    pub(crate) fn for_test(start: usize, limit: usize) -> Self {
+        Self {
+            request: ImporterPageRequest {
+                cursor: None,
+                limit: Some(limit),
+            },
+            start,
+        }
     }
 
     pub fn block_and_receipts_response(&self, block: Block) -> Result<BlockAndReceiptsPageResponse, RpcError> {
@@ -195,14 +207,43 @@ impl CursorCodec for BlockHashCursor {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use fake::Fake;
+    use fake::Faker;
+    use hash_hasher::HashBuildHasher;
+    use jsonrpsee::types::Params;
+
     use super::BlockHashCursor;
     use super::CursorCodec;
+    use super::IMPORTER_PAGE_LIMIT_DEFAULT;
+    use super::IMPORTER_PAGE_LIMIT_MAX;
+    use super::ImporterPageRequest;
+    use super::ImporterPagination;
     use super::RpcError;
+    use crate::eth::rpc::BlockFilter;
+    use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
+    use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
+    use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+    use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
+    use crate::eth::storage::permanent::rocks::types::SlotIndexRocksdb;
+    use crate::eth::storage::permanent::rocks::types::SlotValueRocksdb;
+    use crate::eth::types::Block;
+    use crate::eth::types::BlockNumber;
     use crate::eth::types::Hash;
+    use crate::eth::types::SlotIndex;
+    use crate::eth::types::SlotValue;
+    use crate::eth::types::UnixTime;
 
     fn codec(block_hash: &str) -> BlockHashCursor {
-        BlockHashCursor { block_hash: block_hash.parse().unwrap() }
+        BlockHashCursor {
+            block_hash: block_hash.parse().unwrap(),
+        }
     }
+
+    // -------------------------------------------------------------------------
+    // Cursor codec tests
+    // -------------------------------------------------------------------------
 
     #[test]
     fn cursor_roundtrip_preserves_hash_and_index() {
@@ -257,5 +298,191 @@ mod tests {
     #[test]
     fn hash_parses_for_test_fixture() {
         let _: Hash = "0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c".parse().unwrap();
+    }
+
+    // ImporterPageRequest::limit()
+
+    #[test]
+    fn limit_none_returns_default() {
+        let req = ImporterPageRequest { cursor: None, limit: None };
+        assert_eq!(req.limit(), IMPORTER_PAGE_LIMIT_DEFAULT);
+    }
+
+    #[test]
+    fn limit_zero_returns_default() {
+        let req = ImporterPageRequest { cursor: None, limit: Some(0) };
+        assert_eq!(req.limit(), IMPORTER_PAGE_LIMIT_DEFAULT);
+    }
+
+    #[test]
+    fn limit_small_value_passed_through() {
+        let req = ImporterPageRequest { cursor: None, limit: Some(50) };
+        assert_eq!(req.limit(), 50);
+    }
+
+    #[test]
+    fn limit_large_value_clamped_to_max() {
+        let req = ImporterPageRequest {
+            cursor: None,
+            limit: Some(10_000),
+        };
+        assert_eq!(req.limit(), IMPORTER_PAGE_LIMIT_MAX);
+    }
+
+    // ImporterPagination::from_params
+
+    #[test]
+    fn from_params_no_pagination_param_returns_none() {
+        let params = Params::new(Some("[]"));
+        let result = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest).expect("ok");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn from_params_with_cursor_resolves_hash_filter_and_start() {
+        let block_hash = "0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c";
+        let cursor = codec(block_hash).encode_cursor(5);
+        let json = format!(r#"[{{"cursor":"{cursor}","limit":10}}]"#);
+
+        let params = Params::new(Some(&json));
+        let (filter, pagination) = ImporterPagination::from_params(params.sequence(), BlockFilter::Latest)
+            .expect("ok")
+            .expect("pagination present");
+
+        assert!(matches!(filter, BlockFilter::Hash(h) if h == block_hash.parse::<Hash>().unwrap()));
+        assert_eq!(pagination.start, 5);
+    }
+
+    // block_and_receipts_response (server slicing)
+
+    fn block_with_txs(count: usize) -> Block {
+        let mut block = Block::new(BlockNumber::from(1u64), UnixTime::from(0u64));
+        block.transactions = std::iter::repeat_with(|| Faker.fake()).take(count).collect();
+        block
+    }
+
+    #[test]
+    fn block_and_receipts_single_page_returns_all() {
+        let block = block_with_txs(3);
+        let pagination = ImporterPagination::for_test(0, 10);
+        let response = pagination.block_and_receipts_response(block).expect("ok");
+
+        assert_eq!(response.pagination.returned, 3);
+        assert_eq!(response.pagination.total, 3);
+        assert_eq!(response.receipts.len(), 3);
+        assert!(response.pagination.next_cursor.is_none());
+    }
+
+    #[test]
+    fn block_and_receipts_multi_page_slices_correctly() {
+        let block = block_with_txs(5);
+
+        // page 1: start=0, limit=3
+        let pagination = ImporterPagination::for_test(0, 3);
+        let response = pagination.block_and_receipts_response(block.clone()).expect("ok");
+
+        assert_eq!(response.pagination.returned, 3);
+        assert_eq!(response.pagination.total, 5);
+        assert_eq!(response.receipts.len(), 3);
+        let cursor = response.pagination.next_cursor.expect("more pages");
+
+        // decode cursor -> start=3
+        let (_, start) = BlockHashCursor::decode_cursor(&cursor).expect("valid cursor");
+        assert_eq!(start, 3);
+
+        // page 2: start=3, limit=3
+        let pagination = ImporterPagination::for_test(start, 3);
+        let response = pagination.block_and_receipts_response(block).expect("ok");
+
+        assert_eq!(response.pagination.returned, 2);
+        assert_eq!(response.pagination.total, 5);
+        assert_eq!(response.receipts.len(), 2);
+        assert!(response.pagination.next_cursor.is_none());
+    }
+
+    // block_with_changes_response (3-section slicing)
+
+    fn changes_fixture() -> BlockChangesRocksdb {
+        let mut account_changes = HashMap::with_hasher(HashBuildHasher::default());
+        account_changes.insert(AddressRocksdb([0x01; 20]), AccountChangesRocksdb::default());
+        account_changes.insert(AddressRocksdb([0x02; 20]), AccountChangesRocksdb::default());
+        account_changes.insert(AddressRocksdb([0x03; 20]), AccountChangesRocksdb::default());
+
+        let mut slot_changes = HashMap::with_hasher(HashBuildHasher::default());
+        slot_changes.insert(
+            (AddressRocksdb([0x01; 20]), SlotIndexRocksdb::from(SlotIndex::from([0u64, 0, 0, 1]))),
+            SlotValueRocksdb::from(SlotValue::from([0u64, 0, 0, 1])),
+        );
+        slot_changes.insert(
+            (AddressRocksdb([0x01; 20]), SlotIndexRocksdb::from(SlotIndex::from([0u64, 0, 0, 2]))),
+            SlotValueRocksdb::from(SlotValue::from([0u64, 0, 0, 2])),
+        );
+
+        BlockChangesRocksdb { account_changes, slot_changes }
+    }
+
+    fn block_rocksdb_with_txs(count: usize) -> BlockRocksdb {
+        let mut block = Block::new(BlockNumber::from(1u64), UnixTime::from(0u64));
+        block.transactions = std::iter::repeat_with(|| Faker.fake()).take(count).collect();
+        BlockRocksdb::from(block)
+    }
+
+    #[test]
+    fn block_with_changes_multi_page_slices_three_sections() {
+        let block = block_rocksdb_with_txs(2);
+        let changes = changes_fixture();
+        // total = 2 txs + 3 accounts + 2 slots = 7
+
+        // page 1: start=0, limit=3 -> 2 txs + 1 account
+        let pagination = ImporterPagination::for_test(0, 3);
+        let response = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
+
+        assert_eq!(response.pagination.returned, 3);
+        assert_eq!(response.pagination.total, 7);
+        assert_eq!(response.block.transactions.len(), 2);
+        assert_eq!(response.changes.account_changes.len(), 1);
+        assert_eq!(response.changes.slot_changes.len(), 0);
+        let cursor = response.pagination.next_cursor.expect("more pages");
+        let (_, start) = BlockHashCursor::decode_cursor(&cursor).expect("valid cursor");
+        assert_eq!(start, 3);
+
+        // page 2: start=3, limit=3 -> 2 accounts + 1 slot
+        let pagination = ImporterPagination::for_test(3, 3);
+        let response = pagination.block_with_changes_response(block.clone(), changes.clone()).expect("ok");
+
+        assert_eq!(response.pagination.returned, 3);
+        assert_eq!(response.block.transactions.len(), 0);
+        assert_eq!(response.changes.account_changes.len(), 2);
+        assert_eq!(response.changes.slot_changes.len(), 1);
+        let cursor = response.pagination.next_cursor.expect("more pages");
+        let (_, start) = BlockHashCursor::decode_cursor(&cursor).expect("valid cursor");
+        assert_eq!(start, 6);
+
+        // page 3: start=6, limit=3 -> 1 slot
+        let pagination = ImporterPagination::for_test(6, 3);
+        let response = pagination.block_with_changes_response(block, changes).expect("ok");
+
+        assert_eq!(response.pagination.returned, 1);
+        assert_eq!(response.block.transactions.len(), 0);
+        assert_eq!(response.changes.account_changes.len(), 0);
+        assert_eq!(response.changes.slot_changes.len(), 1);
+        assert!(response.pagination.next_cursor.is_none());
+    }
+
+    #[test]
+    fn block_with_changes_single_page_returns_all() {
+        let block = block_rocksdb_with_txs(1);
+        let changes = changes_fixture();
+        // total = 1 + 3 + 2 = 6
+
+        let pagination = ImporterPagination::for_test(0, 10);
+        let response = pagination.block_with_changes_response(block, changes).expect("ok");
+
+        assert_eq!(response.pagination.returned, 6);
+        assert_eq!(response.pagination.total, 6);
+        assert_eq!(response.block.transactions.len(), 1);
+        assert_eq!(response.changes.account_changes.len(), 3);
+        assert_eq!(response.changes.slot_changes.len(), 2);
+        assert!(response.pagination.next_cursor.is_none());
     }
 }

@@ -246,3 +246,370 @@ impl PageReducer<BlockWithChangesPageResponse> for BlockWithChangesPages {
         Ok(Some((block, self.changes)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use fake::Fake;
+    use fake::Faker;
+    use hash_hasher::HashBuildHasher;
+
+    use super::BlockAndReceiptsPages;
+    use super::BlockWithChangesPages;
+    use super::validate_progress;
+    use crate::eth::rpc::types::BlockAndReceiptsPageResponse;
+    use crate::eth::rpc::types::BlockWithChangesPageResponse;
+    use crate::eth::rpc::types::ImporterPageInfo;
+    use crate::eth::rpc::types::PageReducer;
+    use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
+    use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
+    use crate::eth::storage::permanent::rocks::types::BlockChangesRocksdb;
+    use crate::eth::storage::permanent::rocks::types::BlockRocksdb;
+    use crate::eth::storage::permanent::rocks::types::SlotIndexRocksdb;
+    use crate::eth::storage::permanent::rocks::types::SlotValueRocksdb;
+    use crate::eth::types::Block;
+    use crate::eth::types::BlockNumber;
+    use crate::eth::types::ExternalBlock;
+    use crate::eth::types::ExternalReceipt;
+    use crate::eth::types::SlotIndex;
+    use crate::eth::types::SlotValue;
+    use crate::eth::types::UnixTime;
+    use crate::ext::to_json_value;
+
+    // helpers
+
+    fn page_info(returned: usize, total: usize, next_cursor: Option<&str>) -> ImporterPageInfo {
+        ImporterPageInfo {
+            limit: 256,
+            returned,
+            total,
+            next_cursor: next_cursor.map(String::from),
+        }
+    }
+
+    fn external_block_with_txs(count: usize) -> ExternalBlock {
+        let mut block: ExternalBlock = Faker.fake();
+        let txs: Vec<_> = std::iter::repeat_with(|| Faker.fake()).take(count).collect();
+        block.0.transactions = alloy_rpc_types_eth::BlockTransactions::Full(txs);
+        block
+    }
+
+    fn split_external_block(block: &ExternalBlock, at: usize) -> (ExternalBlock, ExternalBlock) {
+        let txs = match &block.0.transactions {
+            alloy_rpc_types_eth::BlockTransactions::Full(txs) => txs.clone(),
+            _ => unreachable!(),
+        };
+        let mut page1 = block.clone();
+        let mut page2 = block.clone();
+        page1.0.transactions = alloy_rpc_types_eth::BlockTransactions::Full(txs[..at].to_vec());
+        page2.0.transactions = alloy_rpc_types_eth::BlockTransactions::Full(txs[at..].to_vec());
+        (page1, page2)
+    }
+
+    fn receipts_page(block: ExternalBlock, receipts: Vec<ExternalReceipt>, pagination: ImporterPageInfo) -> BlockAndReceiptsPageResponse {
+        BlockAndReceiptsPageResponse {
+            block: to_json_value(block),
+            receipts,
+            pagination,
+        }
+    }
+
+    fn block_rocksdb_with_txs(number: u64, count: usize) -> BlockRocksdb {
+        let mut block = Block::new(BlockNumber::from(number), UnixTime::from(0u64));
+        block.transactions = std::iter::repeat_with(|| Faker.fake()).take(count).collect();
+        BlockRocksdb::from(block)
+    }
+
+    fn changes_with_accounts(addresses: &[[u8; 20]]) -> BlockChangesRocksdb {
+        let mut account_changes = HashMap::with_hasher(HashBuildHasher::default());
+        for addr in addresses {
+            account_changes.insert(AddressRocksdb(*addr), AccountChangesRocksdb::default());
+        }
+        BlockChangesRocksdb {
+            account_changes,
+            slot_changes: HashMap::with_hasher(HashBuildHasher::default()),
+        }
+    }
+
+    fn changes_with_slots(slots: &[(AddressRocksdb, SlotIndexRocksdb)]) -> BlockChangesRocksdb {
+        let mut slot_changes = HashMap::with_hasher(HashBuildHasher::default());
+        for (addr, idx) in slots {
+            slot_changes.insert((*addr, *idx), SlotValueRocksdb::default());
+        }
+        BlockChangesRocksdb {
+            account_changes: HashMap::with_hasher(HashBuildHasher::default()),
+            slot_changes,
+        }
+    }
+
+    fn slot_idx(a: u64, b: u64, c: u64, d: u64) -> SlotIndexRocksdb {
+        SlotIndexRocksdb::from(SlotIndex::from([a, b, c, d]))
+    }
+
+    fn slot_val(a: u64, b: u64, c: u64, d: u64) -> SlotValueRocksdb {
+        SlotValueRocksdb::from(SlotValue::from([a, b, c, d]))
+    }
+
+    // validate_progress
+
+    #[test]
+    fn validate_progress_first_page_sets_expected_total() {
+        let mut expected_total = None;
+        let info = page_info(3, 10, Some("cursor"));
+        let cursor = validate_progress(&info, &mut expected_total, "test").expect("ok");
+        assert_eq!(expected_total, Some(10));
+        assert_eq!(cursor, Some("cursor".to_string()));
+    }
+
+    #[test]
+    fn validate_progress_same_total_ok() {
+        let mut expected_total = Some(10);
+        let info = page_info(3, 10, Some("cursor"));
+        let cursor = validate_progress(&info, &mut expected_total, "test").expect("ok");
+        assert_eq!(cursor, Some("cursor".to_string()));
+    }
+
+    #[test]
+    fn validate_progress_different_total_errors() {
+        let mut expected_total = Some(10);
+        let info = page_info(3, 20, Some("cursor"));
+        assert!(validate_progress(&info, &mut expected_total, "test").is_err());
+    }
+
+    #[test]
+    fn validate_progress_zero_returned_with_cursor_errors() {
+        let mut expected_total = None;
+        let info = page_info(0, 10, Some("cursor"));
+        assert!(validate_progress(&info, &mut expected_total, "test").is_err());
+    }
+
+    // BlockAndReceiptsPages reducer
+
+    #[test]
+    fn receipts_reducer_two_pages_reassemble() {
+        let full_block = external_block_with_txs(5);
+        let (page1_block, page2_block) = split_external_block(&full_block, 3);
+        let block_number = full_block.number();
+
+        let mut reducer = BlockAndReceiptsPages::new(block_number);
+
+        let page1 = receipts_page(page1_block, vec![Faker.fake(); 3], page_info(3, 5, Some("cursor")));
+        let cursor = reducer.reduce(page1).expect("ok");
+        assert_eq!(cursor, Some("cursor".to_string()));
+
+        let page2 = receipts_page(page2_block, vec![Faker.fake(); 2], page_info(2, 5, None));
+        let cursor = reducer.reduce(page2).expect("ok");
+        assert!(cursor.is_none());
+
+        let result = reducer.finish().expect("ok").expect("some output");
+        assert_eq!(result.block.full_transactions_len().unwrap(), 5);
+        assert_eq!(result.receipts.len(), 5);
+    }
+
+    #[test]
+    fn receipts_reducer_wrong_block_number_errors() {
+        let block = external_block_with_txs(2);
+        let block_number = BlockNumber::from(999u64);
+
+        let mut reducer = BlockAndReceiptsPages::new(block_number);
+        let page = receipts_page(block, vec![], page_info(0, 0, None));
+        assert!(reducer.reduce(page).is_err());
+    }
+
+    #[test]
+    fn receipts_reducer_count_mismatch_errors() {
+        let block = external_block_with_txs(3);
+        let block_number = block.number();
+
+        let mut reducer = BlockAndReceiptsPages::new(block_number);
+        let page = receipts_page(block, vec![Faker.fake(); 2], page_info(3, 3, None));
+        reducer.reduce(page).expect("ok");
+
+        assert!(reducer.finish().is_err());
+    }
+
+    #[test]
+    fn receipts_reducer_finish_after_not_found_no_block_returns_none() {
+        let reducer = BlockAndReceiptsPages::new(BlockNumber::from(1u64));
+        assert!(reducer.finish_after_not_found().expect("ok").is_none());
+    }
+
+    #[test]
+    fn receipts_reducer_finish_after_not_found_with_partial_block_errors() {
+        let block = external_block_with_txs(1);
+        let mut reducer = BlockAndReceiptsPages::new(block.number());
+        let page = receipts_page(block, vec![Faker.fake()], page_info(1, 1, Some("cursor")));
+        reducer.reduce(page).expect("ok");
+
+        assert!(reducer.finish_after_not_found().is_err());
+    }
+
+    // BlockWithChangesPages reducer
+
+    #[test]
+    fn changes_reducer_two_pages_reassemble() {
+        let block_number = BlockNumber::from(1u64);
+        let full_block = block_rocksdb_with_txs(1, 3);
+        let (page1_block, page2_block) = {
+            let txs = full_block.transactions.clone();
+            let mut p1 = full_block.clone();
+            let mut p2 = full_block.clone();
+            p1.transactions = txs[..1].to_vec();
+            p2.transactions = txs[1..].to_vec();
+            (p1, p2)
+        };
+
+        let addr_a = AddressRocksdb([0x01; 20]);
+        let addr_b = AddressRocksdb([0x02; 20]);
+        let changes1 = changes_with_accounts(&[addr_a.0]);
+        let changes2 = changes_with_accounts(&[addr_b.0]);
+
+        let mut reducer = BlockWithChangesPages::new(block_number);
+
+        let page1 = BlockWithChangesPageResponse {
+            block: page1_block,
+            changes: changes1,
+            pagination: page_info(2, 5, Some("cursor")),
+        };
+        let cursor = reducer.reduce(page1).expect("ok");
+        assert_eq!(cursor, Some("cursor".to_string()));
+
+        let page2 = BlockWithChangesPageResponse {
+            block: page2_block,
+            changes: changes2,
+            pagination: page_info(3, 5, None),
+        };
+        let cursor = reducer.reduce(page2).expect("ok");
+        assert!(cursor.is_none());
+
+        let (block, changes) = reducer.finish().expect("ok").expect("some output");
+        assert_eq!(block.transactions.len(), 3);
+        assert_eq!(changes.account_changes.len(), 2);
+    }
+
+    #[test]
+    fn changes_reducer_block_number_mismatch_errors() {
+        let block = block_rocksdb_with_txs(1, 1);
+        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(999u64));
+        let page = BlockWithChangesPageResponse {
+            block,
+            changes: BlockChangesRocksdb::default(),
+            pagination: page_info(1, 1, None),
+        };
+        assert!(reducer.reduce(page).is_err());
+    }
+
+    #[test]
+    fn changes_reducer_hash_changed_between_pages_errors() {
+        let block1 = block_rocksdb_with_txs(1, 1);
+        let mut block2 = block_rocksdb_with_txs(1, 1);
+        block2.header.hash = Faker.fake();
+
+        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+
+        let page1 = BlockWithChangesPageResponse {
+            block: block1,
+            changes: BlockChangesRocksdb::default(),
+            pagination: page_info(1, 2, Some("cursor")),
+        };
+        reducer.reduce(page1).expect("ok");
+
+        let page2 = BlockWithChangesPageResponse {
+            block: block2,
+            changes: BlockChangesRocksdb::default(),
+            pagination: page_info(1, 2, None),
+        };
+        assert!(reducer.reduce(page2).is_err());
+    }
+
+    #[test]
+    fn changes_reducer_duplicate_account_change_errors() {
+        let block = block_rocksdb_with_txs(1, 0);
+        let addr = [0x01; 20];
+        let changes = changes_with_accounts(&[addr]);
+
+        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+
+        let page1 = BlockWithChangesPageResponse {
+            block: block.clone(),
+            changes: changes.clone(),
+            pagination: page_info(1, 2, Some("cursor")),
+        };
+        reducer.reduce(page1).expect("ok");
+
+        let page2 = BlockWithChangesPageResponse {
+            block,
+            changes,
+            pagination: page_info(1, 2, None),
+        };
+        assert!(reducer.reduce(page2).is_err());
+    }
+
+    #[test]
+    fn changes_reducer_duplicate_slot_change_errors() {
+        let block = block_rocksdb_with_txs(1, 0);
+        let addr = AddressRocksdb([0x01; 20]);
+        let idx = slot_idx(0, 0, 0, 1);
+        let changes = changes_with_slots(&[(addr, idx)]);
+
+        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+
+        let page1 = BlockWithChangesPageResponse {
+            block: block.clone(),
+            changes: changes.clone(),
+            pagination: page_info(1, 2, Some("cursor")),
+        };
+        reducer.reduce(page1).expect("ok");
+
+        let page2 = BlockWithChangesPageResponse {
+            block,
+            changes,
+            pagination: page_info(1, 2, None),
+        };
+        assert!(reducer.reduce(page2).is_err());
+    }
+
+    #[test]
+    fn changes_reducer_total_mismatch_errors() {
+        let block = block_rocksdb_with_txs(1, 2);
+        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+
+        let page = BlockWithChangesPageResponse {
+            block,
+            changes: BlockChangesRocksdb::default(),
+            pagination: page_info(2, 10, None),
+        };
+        reducer.reduce(page).expect("ok");
+
+        assert!(reducer.finish().is_err());
+    }
+
+    #[test]
+    fn changes_reducer_finish_after_not_found_no_block_returns_none() {
+        let reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+        assert!(reducer.finish_after_not_found().expect("ok").is_none());
+    }
+
+    #[test]
+    fn changes_reducer_finish_after_not_found_with_partial_block_errors() {
+        let block = block_rocksdb_with_txs(1, 1);
+        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+        let page = BlockWithChangesPageResponse {
+            block,
+            changes: BlockChangesRocksdb::default(),
+            pagination: page_info(1, 1, Some("cursor")),
+        };
+        reducer.reduce(page).expect("ok");
+
+        assert!(reducer.finish_after_not_found().is_err());
+    }
+
+    // Slot helpers for completeness
+
+    #[test]
+    fn slot_helpers_construct_valid_values() {
+        let _ = slot_val(1, 2, 3, 4);
+        let _ = slot_idx(1, 2, 3, 4);
+    }
+}

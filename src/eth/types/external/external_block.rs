@@ -161,3 +161,107 @@ impl TryFrom<JsonValue> for ExternalBlock {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use alloy_primitives::B256;
+    use alloy_rpc_types_eth::BlockTransactions;
+    use fake::Fake;
+    use fake::Faker;
+
+    use super::ExternalBlock;
+    use crate::eth::types::ExternalTransaction;
+
+    // Builds an ExternalBlock with a fixed hash and `count` random full transactions.
+    fn block_with_txs(count: usize) -> ExternalBlock {
+        let mut block: ExternalBlock = Faker.fake();
+        block.0.header.hash = fixed_hash();
+        let txs: Vec<ExternalTransaction> = std::iter::repeat_with(|| Faker.fake()).take(count).collect();
+        block.0.transactions = BlockTransactions::Full(txs);
+        block
+    }
+
+    fn fixed_hash() -> B256 {
+        B256::from_slice(&[0xAA; 32])
+    }
+
+    fn as_full(block: &ExternalBlock) -> &Vec<ExternalTransaction> {
+        let BlockTransactions::Full(txs) = &block.0.transactions else {
+            unreachable!("expected full transactions");
+        };
+        txs
+    }
+
+    #[test]
+    fn full_transactions_len_with_full() {
+        let block = block_with_txs(3);
+        assert_eq!(block.full_transactions_len().expect("full transactions"), 3);
+    }
+
+    #[test]
+    fn full_transactions_len_with_hashes() {
+        let mut block = block_with_txs(0);
+        block.0.transactions = BlockTransactions::Hashes(vec![fixed_hash()]);
+        assert!(block.full_transactions_len().is_err());
+    }
+
+    #[test]
+    fn full_transactions_len_with_uncle() {
+        let mut block = block_with_txs(0);
+        block.0.transactions = BlockTransactions::Uncle;
+        assert!(block.full_transactions_len().is_err());
+    }
+
+    #[test]
+    fn extend_full_transactions_from_same_hash_merges() {
+        let mut target = block_with_txs(2);
+        let other = block_with_txs(1);
+
+        target.extend_full_transactions_from(other).expect("same hash merges");
+
+        assert_eq!(target.full_transactions_len().expect("full transactions"), 3);
+    }
+
+    #[test]
+    fn extend_full_transactions_from_different_hash_errors() {
+        let mut target = block_with_txs(1);
+        let mut other = block_with_txs(1);
+        other.0.header.hash = B256::from_slice(&[0xBB; 32]);
+
+        assert!(target.extend_full_transactions_from(other).is_err());
+    }
+
+    #[test]
+    fn extend_full_transactions_from_non_full_source_errors() {
+        let mut target = block_with_txs(1);
+        let mut other = block_with_txs(0);
+        other.0.transactions = BlockTransactions::Hashes(vec![fixed_hash()]);
+
+        assert!(target.extend_full_transactions_from(other).is_err());
+    }
+
+    #[test]
+    fn extend_full_transactions_into_non_full_target_errors() {
+        let mut target = block_with_txs(0);
+        target.0.transactions = BlockTransactions::Hashes(vec![fixed_hash()]);
+        let other = block_with_txs(1);
+
+        assert!(target.extend_full_transactions_from(other).is_err());
+    }
+
+    #[test]
+    fn extend_full_transactions_preserves_order() {
+        let mut target = block_with_txs(1);
+        let original = as_full(&target).clone();
+        let other = block_with_txs(2);
+        let other_txs = as_full(&other).clone();
+
+        target.extend_full_transactions_from(other).expect("same hash merges");
+
+        let merged = as_full(&target);
+        assert_eq!(merged.len(), 3);
+        assert_eq!(merged[0], original[0]);
+        assert_eq!(merged[1], other_txs[0]);
+        assert_eq!(merged[2], other_txs[1]);
+    }
+}
