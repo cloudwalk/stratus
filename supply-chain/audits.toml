@@ -534,10 +534,10 @@ delta = "0.1.9 -> 0.3.2"
 notes = "Benign feature additions (raw identifiers in cfg expressions, boolean cfg literals, keyword warnings) and a dependency optimization (serde -> serde_core). No unsafe code, no network/IO, no build scripts. No advisories."
 
 [[audits.cargo_metadata]]
-who = "Droid (cargo-vet automation)"
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
-delta = "0.20.0 -> 0.23.1"
-notes = "Ergonomic improvements (newtype wrappers, env_remove helper), stabilization of build_directory metadata field, routine dependency bumps. No unsafe, no build scripts, no new network/IO. No advisories."
+delta = "0.19.2 -> 0.23.1"
+notes = "Reviewed 0.19.2 -> 0.23.1 via cargo vet diff. Benign: newtype wrappers (FeatureName/PackageName) with Deref/AsRef/PartialEq, Metadata.build_directory field stabilization, env_remove helper, default-generic Result<T,E=Error>, inline format strings, re-export of cargo_platform, routine dep bumps (camino/cargo-platform/semver/serde/serde_json/thiserror). No unsafe, no build scripts, no proc-macros, no new network/IO; Command::new hits are pre-existing doc-examples/tests (the crate shells out to `cargo metadata` by design). delta_from 0.19.2 valid via bytecode-alliance foreign audit (imports.lock, delta 0.18.1 -> 0.19.2). MSRV bump 1.78 -> 1.86 (stratus toolchain 1.97). Breaking API type changes (Package.name->PackageName, Dependency.source Option<String>->Option<Source>) don't affect stratus (cargo_metadata is transitive via vergen build-dep only). No RustSec advisories."
 
 [[audits.chrono]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
@@ -1006,6 +1006,18 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "4.2.0"
 notes = "Inspected 4.2.0: pure hashing crate; default build keeps safety checks. Unsafe usage limited to guarded pointer reads in util::read with explicit length assertions; no I/O or syscalls."
+
+[[audits.regex]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "1.11.1 -> 1.12.3"
+notes = "Reviewed 1.11.1 -> 1.12.3 via cargo vet diff. Bug-fix/doc releases across 1.11.2-1.12.3: one additive method Captures::get_match(), lazy-DFA/sparse-DFA memory fixes (1.12.0), 1.12.0 yanked + lifetime fix in 1.12.1, archive/test-data cleanup. regex is entirely unsafe-free (no unsafe/extern/transmute/Command/net/fs in the src diff). MSRV unchanged 1.65. No RustSec advisories. stratus uses regex only transitively (sentry-backtrace, bindgen/vergen build-deps)."
+
+[[audits.regex-automata]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.4.9 -> 0.4.14"
+notes = "Reviewed 0.4.9 -> 0.4.14 via cargo vet diff. Unsafe footprint identical between versions (37 unsafe blocks, 12 unsafe fn, 7 unsafe impl, 3 transmute; 0 added unsafe/extern/transmute/Command/net/fs). Hardening: corrupted dense DFA deserialize now errors instead of panicking (#1295), shrink_to_fit memory trims, additive DFA::set_prefilter(), perf-literal-multisubstring no longer implies std. No new deps/IO/network/build scripts. MSRV unchanged 1.65. No RustSec advisories. stratus uses regex-automata only transitively (via regex)."
 
 [[audits.revm]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
