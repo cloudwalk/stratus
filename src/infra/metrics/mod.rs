@@ -9,7 +9,7 @@ pub use metrics_config::MetricsConfig;
 pub use metrics_definitions::*;
 pub use metrics_types::*;
 
-use crate::eth::executor::EvmKind;
+use crate::eth::executor::evm::types::EvmKind;
 
 /// Track metrics execution starting instant.
 pub fn now() -> Instant {

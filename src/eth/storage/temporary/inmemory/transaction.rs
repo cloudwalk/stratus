@@ -7,7 +7,7 @@ use parking_lot::RwLockWriteGuard;
 
 use crate::eth::executor::Changes;
 use crate::eth::executor::TransactionExecution;
-use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::executor::evm::types::TransactionExecutionInput;
 use crate::eth::storage::StorageError;
 use crate::eth::storage::TxCount;
 use crate::eth::storage::temporary::inmemory::InMemoryTemporaryStorageState;

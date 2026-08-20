@@ -798,8 +798,8 @@ mod tests {
 
     use super::*;
     use crate::eth::executor::TransactionExecution;
-    use crate::eth::executor::TransactionExecutionInput;
-    use crate::eth::executor::TransactionExecutionOutput;
+    use crate::eth::executor::evm::types::TransactionExecutionInput;
+    use crate::eth::executor::evm::types::TransactionExecutionOutput;
     use crate::eth::types::BlockHeader;
 
     #[test]

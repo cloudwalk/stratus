@@ -35,6 +35,11 @@ pub struct ExecutorConfig {
 
     #[arg(long = "executor-evm-spec", env = "EXECUTOR_EVM_SPEC", default_value = "Prague", value_parser = parse_evm_spec)]
     pub executor_evm_spec: SpecId,
+
+    /// Wether to execute the transaction as a call before acquiring the transaction lock to warm up the cache.
+    /// Increases throughput at the cost of added latency.
+    #[arg(long = "executor-warmup-cache", env = "EXECUTOR_WARMUP_CACHE", default_value_t = false)]
+    pub warmup_cache: bool,
 }
 
 fn parse_evm_spec(input: &str) -> anyhow::Result<SpecId> {

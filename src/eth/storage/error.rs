@@ -1,6 +1,6 @@
 use stratus_macros::ErrorCode;
 
-use crate::eth::executor::TransactionExecutionInput;
+use crate::eth::executor::evm::types::TransactionExecutionInput;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::types::BlockNumber;
 use crate::eth::types::ErrorCode;

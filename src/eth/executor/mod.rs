@@ -1,5 +1,5 @@
 mod config;
-mod evm;
+pub mod evm;
 mod evm_worker_pool;
 mod types;
 
@@ -12,12 +12,10 @@ use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use anyhow::bail;
 pub use config::ExecutorConfig;
-pub use evm::types::AccessListOutput;
-pub use evm::types::CallExecutionOutput;
-pub use evm::types::EvmExecutionMetrics;
-pub use evm::types::EvmKind;
-pub use evm::types::TransactionExecutionInput;
-pub use evm::types::TransactionExecutionOutput;
+use evm::types::EvmExecutionMetrics;
+use evm::types::EvmKind;
+use evm::types::TransactionExecutionInput;
+use evm::types::TransactionExecutionOutput;
 use parking_lot::Mutex;
 use tracing::Span;
 use tracing::debug_span;
@@ -41,6 +39,7 @@ use crate::eth::codegen;
 use crate::eth::executor::evm::RevmResultAndState;
 use crate::eth::executor::evm::types::CallExecutionInput;
 use crate::eth::executor::evm::types::InspectorInput;
+use crate::eth::executor::evm::types::NoopOutput;
 #[cfg(feature = "metrics")]
 use crate::eth::executor::evm::types::SlotAccessMetrics;
 use crate::eth::executor::evm_worker_pool::EvmWorkerPool;
@@ -93,12 +92,17 @@ pub struct Executor {
 
     /// Whether to reject transactions and calls targeting accounts that are not contracts.
     reject_not_contract: bool,
+
+    /// Wether to warm up the cache before acquiring the execution lock.
+    warmup_cache: bool,
 }
 
 impl Executor {
     pub fn new(storage: Arc<StratusStorage>, miner: Arc<Miner>, config: ExecutorConfig) -> Self {
         tracing::info!(?config, "creating executor");
         let reject_not_contract = config.executor_reject_not_contract;
+        let warmup_cache = config.warmup_cache;
+
         let evms = EvmWorkerPool::spawn(Arc::clone(&storage), &config);
         Self {
             locks: ExecutorLocks::default(),
@@ -106,6 +110,7 @@ impl Executor {
             miner,
             storage,
             reject_not_contract,
+            warmup_cache,
         }
     }
 
@@ -287,6 +292,12 @@ impl Executor {
 
         // execute according to the strategy
         const INFINITE_ATTEMPTS: usize = usize::MAX;
+
+        if self.warmup_cache {
+            self.execute_local_call::<NoopOutput>(tx.clone().into(), PointInTime::Latest)
+                .inspect_err(|err| tracing::warn!(?err, "failed to warmup the cache"))
+                .ok();
+        }
 
         // Executes transactions serially:
         // * Uses a Mutex, so a new transactions starts executing only after the previous one is executed and persisted.

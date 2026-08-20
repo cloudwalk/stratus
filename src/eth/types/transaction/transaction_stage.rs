@@ -2,7 +2,7 @@ use crate::alias::AlloyReceipt;
 use crate::alias::AlloyTransaction;
 use crate::alias::JsonValue;
 use crate::eth::executor::TransactionExecution;
-use crate::eth::executor::TransactionExecutionOutput;
+use crate::eth::executor::evm::types::TransactionExecutionOutput;
 use crate::eth::types::MinedData;
 use crate::eth::types::TransactionMined;
 use crate::ext::to_json_value;

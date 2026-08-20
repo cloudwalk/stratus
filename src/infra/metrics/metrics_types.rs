@@ -6,7 +6,7 @@ use metrics::describe_counter;
 use metrics::describe_gauge;
 use metrics::describe_histogram;
 
-use crate::eth::executor::EvmKind;
+use crate::eth::executor::evm::types::EvmKind;
 
 pub type HistogramInt = u32;
 pub type Sum = u64;
