@@ -899,7 +899,7 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 
     // parse params
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
-    let pagination = ImporterPagination::next(params, filter)?;
+    let pagination = ImporterPagination::from_params(params, filter)?;
 
     // track
     tracing::info!(%filter, "reading block and receipts");
@@ -936,7 +936,7 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
 
     // parse params
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
-    let pagination = ImporterPagination::next(params, filter)?;
+    let pagination = ImporterPagination::from_params(params, filter)?;
 
     // track
     tracing::info!(%filter, "reading block and changes");

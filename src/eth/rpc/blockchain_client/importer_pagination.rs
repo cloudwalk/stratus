@@ -6,7 +6,6 @@ use super::blockchain_client::BlockchainClient;
 use crate::eth::rpc::types::BlockAndReceiptsPageResponse;
 use crate::eth::rpc::types::BlockWithChangesPageResponse;
 use crate::eth::rpc::types::IMPORTER_PAGE_LIMIT_DEFAULT;
-use crate::eth::rpc::types::ImporterCursorPaginator;
 use crate::eth::rpc::types::ImporterPageInfo;
 use crate::eth::rpc::types::ImporterPageRequest;
 use crate::eth::rpc::types::PageReducer;
@@ -117,7 +116,7 @@ impl BlockAndReceiptsPages {
 
 impl PageReducer<BlockAndReceiptsPageResponse> for BlockAndReceiptsPages {
     type Output = ExternalBlockWithReceipts;
-    type Paginator = ImporterCursorPaginator;
+    type NextPage = String;
 
     fn reduce(&mut self, page: BlockAndReceiptsPageResponse) -> anyhow::Result<Option<String>> {
         let cursor = validate_progress(&page.pagination, &mut self.expected_total, "block with receipts")?;
@@ -216,7 +215,7 @@ impl BlockWithChangesPages {
 
 impl PageReducer<BlockWithChangesPageResponse> for BlockWithChangesPages {
     type Output = (BlockRocksdb, BlockChangesRocksdb);
-    type Paginator = ImporterCursorPaginator;
+    type NextPage = String;
 
     fn reduce(&mut self, page: BlockWithChangesPageResponse) -> anyhow::Result<Option<String>> {
         let cursor = validate_progress(&page.pagination, &mut self.expected_total, "block with changes")?;

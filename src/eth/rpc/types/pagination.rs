@@ -1,18 +1,10 @@
 use std::future::Future;
-use std::marker::PhantomData;
 use std::ops::Range;
 
-// TODO: test module
-
-/// Immutable result produced by the pagination engine after a page is built.
-pub struct PageOutcome<NextPage> {
-    pub limit: usize,
-    pub returned: usize,
-    pub total: usize,
-    pub next_page: Option<NextPage>,
-}
-
 /// Generic interface exposed by pagination engines.
+///
+/// Kept as a trait so alternative slicing strategies (limit/offset, page number, etc.)
+/// can be slotted in later without touching call sites.
 pub trait Paginator {
     type Error;
     type NextPage;
@@ -22,25 +14,24 @@ pub trait Paginator {
     fn finish(self) -> Self::PageInfo;
 }
 
-/// Defines how a paginator validates requests and converts engine output into
-/// a domain-specific page-info response.
-pub trait PaginationPolicy {
+/// Converts a domain cursor value into the generic cursor-pagination behavior.
+///
+/// Domains implement only this codec; the paginator behavior is shared.
+pub trait CursorCodec: Sized {
     type Error;
-    type NextPage;
-    type PageInfo;
 
     fn invalid_start_error() -> Self::Error;
-    fn next_page(&self, next_index: usize) -> Self::NextPage;
-    fn page_info(&self, outcome: PageOutcome<Self::NextPage>) -> Self::PageInfo;
+    fn encode_cursor(&self, next_index: usize) -> String;
+    fn decode_cursor(cursor: &str) -> Result<(Self, usize), Self::Error>;
 }
 
-/// Generic pagination engine.
+/// Cursor-based paginator.
 ///
-/// The engine only knows how to slice a logical stream. The policy decides how
-/// invalid requests are reported and how the final page information is encoded
-/// (cursor, limit/offset, page number, etc.).
-pub struct PaginatorEngine<Policy> {
-    policy: Policy,
+/// Knows only how to slice a logical stream. The [`CursorCodec`] decides how
+/// cursors are encoded/decoded; the paginator reports the final page info via
+/// [`CursorPageInfo`].
+pub struct CursorPaginator<C> {
+    codec: C,
     start: usize,
     limit: usize,
     total: usize,
@@ -49,17 +40,17 @@ pub struct PaginatorEngine<Policy> {
     remaining: usize,
 }
 
-impl<Policy> PaginatorEngine<Policy>
+impl<C> CursorPaginator<C>
 where
-    Policy: PaginationPolicy,
+    C: CursorCodec,
 {
-    pub fn new(total: usize, start: usize, limit: usize, policy: Policy) -> Result<Self, Policy::Error> {
+    pub fn new(total: usize, start: usize, limit: usize, codec: C) -> Result<Self, C::Error> {
         if start > total || (start == total && total != 0) {
-            return Err(Policy::invalid_start_error());
+            return Err(C::invalid_start_error());
         }
 
         Ok(Self {
-            policy,
+            codec,
             start,
             limit,
             total,
@@ -75,92 +66,43 @@ where
     }
 }
 
-impl<Policy> Paginator for PaginatorEngine<Policy>
+impl<C> Paginator for CursorPaginator<C>
 where
-    Policy: PaginationPolicy,
+    C: CursorCodec,
 {
-    type Error = Policy::Error;
-    type NextPage = Policy::NextPage;
-    type PageInfo = Policy::PageInfo;
-
-    fn take(&mut self, section_len: usize) -> Range<usize> {
-        let range_start = self.skipped.min(section_len);
-
-        let range_end = if self.skipped < section_len {
-            range_start.saturating_add(self.remaining).min(section_len)
-        } else {
-            range_start
-        };
-
-        let returned = range_end.saturating_sub(range_start);
-
-        self.returned += returned;
-        self.remaining = self.remaining.saturating_sub(returned);
-        self.skipped = self.skipped.saturating_sub(section_len);
-
-        range_start..range_end
-    }
-
-    fn finish(self) -> Self::PageInfo {
-        let next_page = self.next_index().map(|next_index| self.policy.next_page(next_index));
-        self.policy.page_info(PageOutcome {
-            limit: self.limit,
-            returned: self.returned,
-            total: self.total,
-            next_page,
-        })
-    }
-}
-
-/// Converts a domain cursor value into the generic cursor-pagination policy.
-pub trait CursorCodec: Sized {
-    type Error;
-
-    fn invalid_start_error() -> Self::Error;
-    fn encode_cursor(&self, next_index: usize) -> String;
-    fn decode_cursor(cursor: &str) -> Result<(Self, usize), Self::Error>;
-}
-
-/// Reusable cursor pagination policy. Domains provide only the cursor payload
-/// codec; the paginator behavior remains shared.
-pub struct CursorPaginationPolicy<Cursor> {
-    cursor: Cursor,
-}
-
-impl<Cursor> CursorPaginationPolicy<Cursor> {
-    pub fn new(cursor: Cursor) -> Self {
-        Self { cursor }
-    }
-}
-
-impl<Cursor> PaginationPolicy for CursorPaginationPolicy<Cursor>
-where
-    Cursor: CursorCodec,
-{
-    type Error = Cursor::Error;
+    type Error = C::Error;
     type NextPage = String;
     type PageInfo = CursorPageInfo;
 
-    fn invalid_start_error() -> Self::Error {
-        Cursor::invalid_start_error()
+    fn take(&mut self, section_len: usize) -> Range<usize> {
+        // skip an entire section
+        if self.skipped >= section_len {
+            self.skipped -= section_len;
+            return section_len..section_len;
+        }
+
+        let start = self.skipped;
+        self.skipped = 0;
+
+        let end = (start + self.remaining).min(section_len);
+        let returned = end - start;
+
+        self.returned += returned;
+        self.remaining -= returned;
+
+        start..end
     }
 
-    fn next_page(&self, next_index: usize) -> Self::NextPage {
-        self.cursor.encode_cursor(next_index)
-    }
-
-    fn page_info(&self, outcome: PageOutcome<Self::NextPage>) -> Self::PageInfo {
+    fn finish(self) -> Self::PageInfo {
+        let next_cursor = self.next_index().map(|next_index| self.codec.encode_cursor(next_index));
         CursorPageInfo {
-            limit: outcome.limit,
-            returned: outcome.returned,
-            total: outcome.total,
-            next_cursor: outcome.next_page,
+            limit: self.limit,
+            returned: self.returned,
+            total: self.total,
+            next_cursor,
         }
     }
 }
-
-/// Generic cursor paginator for every domain-specific cursor payload.
-pub type CursorPaginator<Cursor> = PaginatorEngine<CursorPaginationPolicy<Cursor>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -177,9 +119,9 @@ pub struct CursorPageInfo {
 /// no next page, then the accumulator is finalized.
 pub trait PageReducer<Page> {
     type Output;
-    type Paginator: Paginator;
+    type NextPage;
 
-    fn reduce(&mut self, page: Page) -> anyhow::Result<Option<<Self::Paginator as Paginator>::NextPage>>;
+    fn reduce(&mut self, page: Page) -> anyhow::Result<Option<Self::NextPage>>;
     fn finish_after_not_found(self) -> anyhow::Result<Option<Self::Output>>;
     fn finish(self) -> anyhow::Result<Option<Self::Output>>;
 }
@@ -187,21 +129,17 @@ pub trait PageReducer<Page> {
 /// Client-side fetcher that repeatedly fetches pages and reduces them into a final output.
 pub struct PaginatedPageFetcher<Reducer> {
     reducer: Reducer,
-    _paginator: PhantomData<Reducer>,
 }
 
 impl<Reducer> PaginatedPageFetcher<Reducer> {
     pub fn new(reducer: Reducer) -> Self {
-        Self {
-            reducer,
-            _paginator: PhantomData,
-        }
+        Self { reducer }
     }
 
     pub async fn collect<Page, FetchPage, FetchFuture>(mut self, mut fetch_page: FetchPage) -> anyhow::Result<Option<Reducer::Output>>
     where
         Reducer: PageReducer<Page>,
-        FetchPage: FnMut(Option<<Reducer::Paginator as Paginator>::NextPage>) -> FetchFuture,
+        FetchPage: FnMut(Option<Reducer::NextPage>) -> FetchFuture,
         FetchFuture: Future<Output = anyhow::Result<Option<Page>>>,
     {
         let mut next_page = None;
@@ -216,5 +154,124 @@ impl<Reducer> PaginatedPageFetcher<Reducer> {
                 return self.reducer.finish();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ops::Range;
+
+    use super::CursorCodec;
+    use super::CursorPageInfo;
+    use super::CursorPaginator;
+    use super::Paginator;
+
+    // A minimal codec for testing the paginator independently of any domain type.
+    struct IndexCodec;
+
+    impl CursorCodec for IndexCodec {
+        type Error = &'static str;
+
+        fn invalid_start_error() -> Self::Error {
+            "invalid start"
+        }
+
+        fn encode_cursor(&self, next_index: usize) -> String {
+            next_index.to_string()
+        }
+
+        fn decode_cursor(cursor: &str) -> Result<(Self, usize), Self::Error> {
+            Ok((IndexCodec, cursor.parse().map_err(|_| "bad cursor")?))
+        }
+    }
+
+    fn paginator(total: usize, start: usize, limit: usize) -> CursorPaginator<IndexCodec> {
+        CursorPaginator::new(total, start, limit, IndexCodec).expect("valid paginator")
+    }
+
+    fn take_all(mut p: CursorPaginator<IndexCodec>, sections: &[usize]) -> (Vec<Range<usize>>, CursorPageInfo) {
+        let mut ranges = Vec::new();
+        for &section_len in sections {
+            ranges.push(p.take(section_len));
+        }
+        let info = p.finish();
+        (ranges, info)
+    }
+
+    #[test]
+    fn empty_total_is_valid() {
+        let p = paginator(0, 0, 10);
+        let (_, info) = take_all(p, &[]);
+        assert_eq!(info, CursorPageInfo { limit: 10, returned: 0, total: 0, next_cursor: None });
+    }
+
+    #[test]
+    fn start_equal_to_total_is_invalid() {
+        assert!(CursorPaginator::new(5, 5, 10, IndexCodec).is_err());
+    }
+
+    #[test]
+    fn start_greater_than_total_is_invalid() {
+        assert!(CursorPaginator::new(5, 6, 10, IndexCodec).is_err());
+    }
+
+    #[test]
+    fn limit_smaller_than_one_section() {
+        let (ranges, info) = take_all(paginator(100, 0, 3), &[10]);
+        assert_eq!(ranges, vec![0..3]);
+        assert_eq!(info.returned, 3);
+        assert_eq!(info.next_cursor, Some("3".to_string()));
+    }
+
+    #[test]
+    fn limit_spanning_multiple_sections() {
+        let (ranges, info) = take_all(paginator(100, 0, 7), &[3, 3, 3]);
+        // first section fully taken (3), second fully taken (3), third partial (1)
+        assert_eq!(ranges, vec![0..3, 0..3, 0..1]);
+        assert_eq!(info.returned, 7);
+        assert_eq!(info.next_cursor, Some("7".to_string()));
+    }
+
+    #[test]
+    fn skip_across_section_boundary() {
+        // start=5, sections of length 3, 3, 3 -> skip 3 (section 1), skip 2 (section 2),
+        // then take 1 from section 2 and the remaining 3 from section 3.
+        let (ranges, info) = take_all(paginator(100, 5, 4), &[3, 3, 3]);
+        assert_eq!(ranges, vec![3..3, 2..3, 0..3]);
+        assert_eq!(info.returned, 4);
+        assert_eq!(info.next_cursor, Some("9".to_string()));
+    }
+
+    #[test]
+    fn fully_consumed_has_no_cursor() {
+        let (ranges, info) = take_all(paginator(5, 0, 5), &[3, 2]);
+        assert_eq!(ranges, vec![0..3, 0..2]);
+        assert_eq!(info.returned, 5);
+        assert_eq!(info.next_cursor, None);
+    }
+
+    #[test]
+    fn limit_larger_than_total_clamps_to_total() {
+        let (ranges, info) = take_all(paginator(4, 0, 100), &[2, 2]);
+        assert_eq!(ranges, vec![0..2, 0..2]);
+        assert_eq!(info.returned, 4);
+        assert_eq!(info.next_cursor, None);
+        assert_eq!(info.total, 4);
+    }
+
+    #[test]
+    fn section_larger_than_remaining_returns_partial() {
+        let (ranges, info) = take_all(paginator(100, 0, 2), &[10]);
+        assert_eq!(ranges, vec![0..2]);
+        assert_eq!(info.returned, 2);
+        assert_eq!(info.next_cursor, Some("2".to_string()));
+    }
+
+    #[test]
+    fn extra_sections_after_limit_are_empty() {
+        let (ranges, info) = take_all(paginator(100, 0, 2), &[2, 2, 2]);
+        assert_eq!(ranges, vec![0..2, 0..0, 0..0]);
+        assert_eq!(info.returned, 2);
+        assert_eq!(info.next_cursor, Some("2".to_string()));
     }
 }

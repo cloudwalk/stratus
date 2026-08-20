@@ -4,7 +4,6 @@ use super::BlockFilter;
 use super::RpcError;
 use super::pagination::CursorCodec;
 use super::pagination::CursorPageInfo;
-use super::pagination::CursorPaginationPolicy;
 use super::pagination::CursorPaginator;
 use super::pagination::Paginator;
 use crate::alias::AlloyReceipt;
@@ -56,7 +55,7 @@ pub struct ImporterPagination {
 }
 
 impl ImporterPagination {
-    pub fn next(params: ParamsSequence<'_>, filter: BlockFilter) -> Result<Option<(BlockFilter, Self)>, RpcError> {
+    pub fn from_params(params: ParamsSequence<'_>, filter: BlockFilter) -> Result<Option<(BlockFilter, Self)>, RpcError> {
         let Some(request) = ImporterPageRequest::parse_next(params)? else {
             return Ok(None);
         };
@@ -120,12 +119,7 @@ impl ImporterPagination {
     }
 
     fn cursor_paginator(&self, total: usize, block_hash: Hash) -> Result<ImporterCursorPaginator, RpcError> {
-        ImporterCursorPaginator::new(
-            total,
-            self.start,
-            self.request.limit(),
-            CursorPaginationPolicy::new(BlockHashCursor { block_hash }),
-        )
+        ImporterCursorPaginator::new(total, self.start, self.request.limit(), BlockHashCursor { block_hash })
     }
 }
 
@@ -163,7 +157,7 @@ fn sorted_slot_changes(changes: &BlockChangesRocksdb) -> Vec<((AddressRocksdb, S
     entries
 }
 
-pub(crate) type ImporterCursorPaginator = CursorPaginator<BlockHashCursor>;
+type ImporterCursorPaginator = CursorPaginator<BlockHashCursor>;
 
 pub(crate) struct BlockHashCursor {
     block_hash: Hash,
@@ -196,5 +190,72 @@ impl CursorCodec for BlockHashCursor {
             },
             next_index.parse().map_err(|_| RpcError::ParameterInvalid)?,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BlockHashCursor;
+    use super::CursorCodec;
+    use super::RpcError;
+    use crate::eth::types::Hash;
+
+    fn codec(block_hash: &str) -> BlockHashCursor {
+        BlockHashCursor { block_hash: block_hash.parse().unwrap() }
+    }
+
+    #[test]
+    fn cursor_roundtrip_preserves_hash_and_index() {
+        let original = codec("0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c");
+        let encoded = original.encode_cursor(42);
+        let (decoded, next_index) = BlockHashCursor::decode_cursor(&encoded).expect("decode succeeds");
+
+        assert_eq!(decoded.block_hash, original.block_hash);
+        assert_eq!(next_index, 42);
+    }
+
+    #[test]
+    fn cursor_decode_rejects_wrong_version() {
+        let bad = "v2:0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c:0";
+        let err = BlockHashCursor::decode_cursor(bad).err();
+        assert!(matches!(err, Some(RpcError::ParameterInvalid)));
+    }
+
+    #[test]
+    fn cursor_decode_rejects_missing_parts() {
+        assert!(BlockHashCursor::decode_cursor("v1:0xabc").is_err());
+        assert!(BlockHashCursor::decode_cursor("v1").is_err());
+    }
+
+    #[test]
+    fn cursor_decode_rejects_extra_parts() {
+        let extra = "v1:0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c:0:extra";
+        assert!(BlockHashCursor::decode_cursor(extra).is_err());
+    }
+
+    #[test]
+    fn cursor_decode_rejects_non_numeric_index() {
+        let bad = "v1:0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c:notanumber";
+        assert!(BlockHashCursor::decode_cursor(bad).is_err());
+    }
+
+    #[test]
+    fn cursor_decode_rejects_invalid_hash() {
+        let bad = "v1:0xnotahash:0";
+        assert!(BlockHashCursor::decode_cursor(bad).is_err());
+    }
+
+    #[test]
+    fn encode_uses_v1_format() {
+        let c = codec("0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c");
+        let encoded = c.encode_cursor(7);
+        assert!(encoded.starts_with("v1:"));
+        assert_eq!(encoded.split(':').count(), 3);
+    }
+
+    // ensure Hash parses from a 0x-prefixed hex string in tests
+    #[test]
+    fn hash_parses_for_test_fixture() {
+        let _: Hash = "0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c".parse().unwrap();
     }
 }

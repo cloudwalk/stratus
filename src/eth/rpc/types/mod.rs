@@ -13,7 +13,6 @@ pub use error::RpcError;
 pub use importer_pagination::BlockAndReceiptsPageResponse;
 pub use importer_pagination::BlockWithChangesPageResponse;
 pub use importer_pagination::IMPORTER_PAGE_LIMIT_DEFAULT;
-pub(crate) use importer_pagination::ImporterCursorPaginator;
 pub use importer_pagination::ImporterPageInfo;
 pub use importer_pagination::ImporterPageRequest;
 pub use importer_pagination::ImporterPagination;
