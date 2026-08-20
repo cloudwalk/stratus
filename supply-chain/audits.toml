@@ -55,6 +55,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.41 -> 2.3.0"
 notes = "Diff only touches header.rs (adds optional EIP-7928/7843 fields, a saturating base_fee_per_gas serde adapter clamping >u64::MAX) and receipt/envelope.rs (drops redundant Clone bound); Cargo.toml bumps alloy deps + MSRV 1.94.1, adds bincode dev-dep. No unsafe/FFI/transmute/pointers/build.rs/network/fs/env in the diff — pure domain-type and serde logic plus tests."
 
+[[audits.alloy-dyn-abi]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "1.6.1"
+notes = 'Full review of 1.6.1. Pure-Rust no-std ABI/EIP-712 encode/decode crate (~8.7k LOC). build=false (no build script), no C FFI (only `extern crate alloc` + a parser re-export alias), no env/fs/net/process IO. Stratus enables only default features = ["std"] (arbitrary/eip712/debug off). Unsafe is minimal and sound: token.rs:190 reuses a Box<T> allocation via the canonical `Vec::from_raw_parts(Box::into_raw(t),1,1)` (len1/cap1) idiom for array-token decoding; coerce.rs:167 slices `get_unchecked(..l)` on a `[char;2]` with l in {1,2} set in the same branch (always in-bounds); remaining `unwrap_unchecked` calls follow exhaustive matches that guarantee Some (value.rs/ty.rs). The sole `from_utf8_unchecked` is gated behind the unused `arbitrary` feature (fuzzing) and is not in the deployed build. Deps are alloy siblings + serde/itoa/winnow. No capability surface beyond in-memory ABI parsing.'
+
 [[audits.alloy-eip2930]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
