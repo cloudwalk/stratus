@@ -23,7 +23,7 @@ pub const IMPORTER_PAGE_LIMIT_MAX: usize = 5_000;
 
 const IMPORTER_CURSOR_VERSION: &str = "v1";
 
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImporterPageRequest {
     pub cursor: Option<String>,
@@ -31,7 +31,7 @@ pub struct ImporterPageRequest {
 }
 
 impl ImporterPageRequest {
-    fn parse_next(mut params: ParamsSequence<'_>) -> Result<Option<Self>, RpcError> {
+    fn parse_optional(mut params: ParamsSequence<'_>) -> Result<Option<Self>, RpcError> {
         match params.optional_next::<Self>() {
             Ok(page_request) => Ok(page_request),
             Err(e) => Err(RpcError::ParameterDecodeError {
@@ -56,7 +56,7 @@ pub struct ImporterPagination {
 
 impl ImporterPagination {
     pub fn from_params(params: ParamsSequence<'_>, filter: BlockFilter) -> Result<Option<(BlockFilter, Self)>, RpcError> {
-        let Some(request) = ImporterPageRequest::parse_next(params)? else {
+        let Some(request) = ImporterPageRequest::parse_optional(params)? else {
             return Ok(None);
         };
         let (filter, start) = Self::resolve_filter(filter, request.cursor.as_deref())?;
@@ -162,7 +162,7 @@ fn sorted_slot_changes(changes: &BlockChangesRocksdb) -> Vec<((AddressRocksdb, S
 
 type ImporterCursorPaginator = CursorPaginator<BlockHashCursor>;
 
-pub(crate) struct BlockHashCursor {
+struct BlockHashCursor {
     block_hash: Hash,
 }
 
@@ -251,8 +251,9 @@ mod tests {
 
     #[test]
     fn cursor_decode_rejects_missing_parts() {
-        assert!(BlockHashCursor::decode_cursor("v1:0xabc").is_err());
+        assert!(BlockHashCursor::decode_cursor("").is_err());
         assert!(BlockHashCursor::decode_cursor("v1").is_err());
+        assert!(BlockHashCursor::decode_cursor("v1:0xabc").is_err());
     }
 
     #[test]
@@ -269,8 +270,8 @@ mod tests {
 
     #[test]
     fn cursor_decode_rejects_invalid_hash() {
-        let bad = "v1:0xnotahash:0";
-        assert!(BlockHashCursor::decode_cursor(bad).is_err());
+        assert!(BlockHashCursor::decode_cursor("v1:0xnotahash:0").is_err());
+        assert!(BlockHashCursor::decode_cursor("v1:0x1234:0").is_err());
     }
 
     #[test]
@@ -280,14 +281,6 @@ mod tests {
         assert!(encoded.starts_with("v1:"));
         assert_eq!(encoded.split(':').count(), 3);
     }
-
-    // ensure Hash parses from a 0x-prefixed hex string in tests
-    #[test]
-    fn hash_parses_for_test_fixture() {
-        let _: Hash = "0x3355a48e6b3e3a3c9e9c4b3a3f3e3d3c3b3a393837363534333231302f2e2d2c".parse().unwrap();
-    }
-
-    // ImporterPageRequest::limit()
 
     #[test]
     fn limit_none_returns_default() {
