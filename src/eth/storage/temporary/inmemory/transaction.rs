@@ -6,6 +6,9 @@ use parking_lot::RwLockUpgradableReadGuard;
 use parking_lot::RwLockWriteGuard;
 
 use crate::eth::executor::Changes;
+#[cfg(feature = "dev")]
+use crate::eth::executor::CompleteValue;
+use crate::eth::executor::Full;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::storage::StorageError;
@@ -76,8 +79,8 @@ impl InmemoryTransactionTemporaryStorage {
     pub fn save_pending_execution(&self, tx: TransactionExecution) -> Result<(), StorageError> {
         // check conflicts
         let pending_block = self.pending_block.upgradable_read();
-        if tx.evm_input != &pending_block.block.header {
-            let actual_input = tx.evm_input.clone();
+        if tx.input != &pending_block.block.header {
+            let actual_input = tx.input.clone();
             let tx_input: TransactionInput = tx.into();
             let expected_input =
                 TransactionExecutionInput::from_eth_transaction(&tx_input, pending_block.block.header.number, *pending_block.block.header.timestamp);
@@ -89,7 +92,7 @@ impl InmemoryTransactionTemporaryStorage {
 
         let mut pending_block = RwLockUpgradableReadGuard::<InMemoryTemporaryStorageState>::upgrade(pending_block);
 
-        pending_block.block_changes.merge(tx.result.changes.clone()); // TODO: This clone can be removed by reworking the primitives
+        pending_block.block_changes.merge(tx.output.changes.clone()); // TODO: This clone can be removed by reworking the primitives
 
         // save execution
         pending_block.block.push_transaction(tx);
@@ -106,7 +109,7 @@ impl InmemoryTransactionTemporaryStorage {
         (*pending_block).clone()
     }
 
-    pub fn finish_pending_block(&self) -> anyhow::Result<(PendingBlock, Changes), StorageError> {
+    pub fn finish_pending_block(&self) -> (PendingBlock, Changes<Full>) {
         let pending_block = self.pending_block.upgradable_read();
         let changes = pending_block.block_changes.clone();
 
@@ -139,7 +142,7 @@ impl InmemoryTransactionTemporaryStorage {
             latest.as_ref().expect("latest should be Some after finishing the pending block").block.clone()
         };
 
-        Ok((finished_block, changes))
+        (finished_block, changes)
     }
 
     pub fn read_pending_execution(&self, hash: Hash) -> anyhow::Result<Option<TransactionExecution>, StorageError> {
@@ -154,8 +157,8 @@ impl InmemoryTransactionTemporaryStorage {
     // Accounts and Slots
     // -------------------------------------------------------------------------
 
-    pub fn read_account(&self, address: Address) -> anyhow::Result<Option<Account>, StorageError> {
-        Ok(match self.pending_block.read().block_changes.accounts.get(&address) {
+    pub fn read_account(&self, address: Address) -> Option<Account> {
+        match self.pending_block.read().block_changes.accounts.get(&address) {
             Some(pending_account) => Some(pending_account.clone().to_account(address)),
             None => self
                 .latest_block
@@ -163,18 +166,18 @@ impl InmemoryTransactionTemporaryStorage {
                 .as_ref()
                 .and_then(|latest| latest.block_changes.accounts.get(&address))
                 .map(|account| account.clone().to_account(address)),
-        })
+        }
     }
 
-    pub fn read_slot(&self, address: Address, index: SlotIndex) -> anyhow::Result<Option<Slot>, StorageError> {
-        Ok(match self.pending_block.read().block_changes.slots.get(&(address, index)) {
-            Some(pending_value) => Some(Slot::new(index, *pending_value)),
+    pub fn read_slot(&self, address: Address, index: SlotIndex) -> Option<Slot> {
+        match self.pending_block.read().block_changes.slots.get(&(address, index)) {
+            Some(pending_value) => Some(Slot::new(index, *pending_value.value())),
             None => self
                 .latest_block
                 .read()
                 .as_ref()
-                .and_then(|latest| latest.block_changes.slots.get(&(address, index)).map(|value| Slot::new(index, *value))),
-        })
+                .and_then(|latest| latest.block_changes.slots.get(&(address, index)).map(|value| Slot::new(index, *value.value()))),
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -184,7 +187,10 @@ impl InmemoryTransactionTemporaryStorage {
     #[cfg(feature = "dev")]
     pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
-        pending_block.block_changes.slots.insert((address, slot.index), slot.value);
+        pending_block
+            .block_changes
+            .slots
+            .insert((address, slot.index), CompleteValue::Changed(slot.value));
         Ok(())
     }
 

@@ -222,7 +222,7 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined
     // identify token transfers in transaction
     let transfers = tx
         .as_ref()
-        .result
+        .output
         .logs
         .iter()
         .filter(|log| log.topic0.is_some_and(|topic0| topic0 == TRANSFER_EVENT))
@@ -264,15 +264,15 @@ pub fn transaction_to_events(block_timestamp: UnixTime, tx: Cow<TransactionMined
             account_address: *account,
             transaction_hash: tx.info.hash,
             transaction_index: tx.mined_data.index.0,
-            contract_address: tx.evm_input.to.unwrap_or_else(|| {
+            contract_address: tx.input.to.unwrap_or_else(|| {
                 tracing::error!(?tx.info.hash, "bug: transaction emitting transfers must have the contract address");
                 Address::ZERO
             }),
-            function_id: tx.evm_input.data[0..4].try_into().unwrap_or_else(|_| {
+            function_id: tx.input.data[0..4].try_into().unwrap_or_else(|_| {
                 tracing::error!(?tx.info.hash, "bug: transaction emitting transfers must have the 4-byte signature");
                 [0; 4]
             }),
-            block_number: tx.evm_input.block_number,
+            block_number: tx.input.block_number,
             block_datetime: block_timestamp.into(),
             transfers: vec![],
         };
@@ -397,8 +397,8 @@ mod tests {
 
         // 2. generate fake tx data
         let mut tx: TransactionMined = Fake::fake(&Faker);
-        tx.execution.evm_input.to = Some(Faker::fake(&Faker));
-        tx.execution.evm_input.data = Bytes::from(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        tx.execution.input.to = Some(Faker::fake(&Faker));
+        tx.execution.input.data = Bytes::from(vec![1, 2, 3, 4, 5, 6, 7, 8]);
 
         let mut log_transfer1: Log = Fake::fake(&Faker);
         log_transfer1.address = token_address;
@@ -416,9 +416,9 @@ mod tests {
 
         let log_random: Log = Fake::fake(&Faker);
 
-        tx.execution.result.logs.push(log_transfer1);
-        tx.execution.result.logs.push(log_random);
-        tx.execution.result.logs.push(log_transfer2);
+        tx.execution.output.logs.push(log_transfer1);
+        tx.execution.output.logs.push(log_random);
+        tx.execution.output.logs.push(log_transfer2);
 
         // 3. parse events
         let events = transaction_to_events(block_timestamp, Cow::Borrowed(&tx));
@@ -427,9 +427,9 @@ mod tests {
         assert_eq!(events.len(), 3); // number of accounts involved in all transactions
         for event in events {
             assert_eq!(&event.transaction_hash, &tx.info.hash);
-            assert_eq!(&event.contract_address, &tx.evm_input.to.unwrap());
-            assert_eq!(&event.function_id[0..], &tx.evm_input.data[0..4]);
-            assert_eq!(&event.block_number, &tx.evm_input.block_number);
+            assert_eq!(&event.contract_address, &tx.input.to.unwrap());
+            assert_eq!(&event.function_id[0..], &tx.input.data[0..4]);
+            assert_eq!(&event.block_number, &tx.input.block_number);
             assert_eq!(&event.block_datetime, &DateTime::<Utc>::from(block_timestamp));
 
             // assert transfers

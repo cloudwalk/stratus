@@ -9,6 +9,7 @@ pub use changes::AccountOriginalsReader;
 pub use changes::Changes;
 pub use changes::Complete;
 pub use changes::CompleteValue;
+pub use changes::Full;
 pub use changes::Incomplete;
 pub use changes::IncompleteValue;
 pub use changes::Stage;

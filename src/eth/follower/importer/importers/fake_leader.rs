@@ -13,7 +13,6 @@ use crate::eth::follower::importer::importers::ImportData;
 use crate::eth::follower::importer::importers::ImporterWorker;
 use crate::eth::miner::Miner;
 use crate::eth::miner::miner::interval_miner::commit_retry;
-use crate::eth::miner::miner::interval_miner::mine_local_retry;
 use crate::eth::storage::StratusStorage;
 use crate::eth::types::Block;
 use crate::eth::types::StratusError;
@@ -52,15 +51,13 @@ impl ImporterWorker for FakeLeaderWorker {
                 }
             }
         }
-        let (mined_block, changes, miner_guard) = mine_local_retry(&self.miner);
+
+        let miner_guard = self.miner.locks.mine_and_commit.lock();
+        let (mined_block, changes) = self.miner.mine_local();
 
         let completed_expected_changes = expected_changes.complete(self.storage.as_ref())?;
         if changes != completed_expected_changes {
-            tracing::error!(
-                ?changes,
-                ?completed_expected_changes,
-                "execution changes result mismatch between leader and fake leader"
-            );
+            tracing::error!(?mined_block, "execution changes result mismatch between leader and fake leader");
             bail!("execution changes mismatch between leader and fake leader")
         }
 
@@ -85,7 +82,7 @@ impl ImporterWorker for FakeLeaderWorker {
 fn normalize_for_replication_compare(block: &Block) -> Block {
     let mut normalized = block.clone();
     for tx in &mut normalized.transactions {
-        tx.execution.result.changes = Changes::default();
+        tx.execution.output.changes = Changes::default();
     }
     normalized
 }
