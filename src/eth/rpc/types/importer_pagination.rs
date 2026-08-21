@@ -50,7 +50,7 @@ impl ImporterPageRequest {
 }
 
 pub struct ImporterPagination {
-    request: ImporterPageRequest,
+    limit: usize,
     start: usize,
 }
 
@@ -60,24 +60,17 @@ impl ImporterPagination {
             return Ok(None);
         };
         let (filter, start) = Self::resolve_filter(filter, request.cursor.as_deref())?;
-        Ok(Some((filter, Self { request, start })))
+        Ok(Some((filter, Self { limit: request.limit(), start })))
     }
 
     /// Test-only constructor that builds a pagination with the given start index and limit.
     #[cfg(test)]
     pub(crate) fn for_test(start: usize, limit: usize) -> Self {
-        Self {
-            request: ImporterPageRequest {
-                cursor: None,
-                limit: Some(limit),
-            },
-            start,
-        }
+        Self { limit, start }
     }
 
-    pub fn block_and_receipts_response(&self, block: Block) -> Result<BlockAndReceiptsPageResponse, RpcError> {
-        let mut block = block;
-        let mut paginator = self.cursor_paginator(block.transactions.len(), block.hash())?;
+    pub fn block_and_receipts_response(&self, mut block: Block) -> Result<BlockAndReceiptsPageResponse, RpcError> {
+        let mut paginator = self.build_paginator(block.transactions.len(), block.hash())?;
         let tx_range = paginator.take(block.transactions.len());
         let transactions = block.transactions[tx_range].to_vec();
         let receipts = transactions.iter().cloned().map(AlloyReceipt::from).map(ExternalReceipt).collect::<Vec<_>>();
@@ -94,7 +87,7 @@ impl ImporterPagination {
     pub fn block_with_changes_response(&self, block: BlockRocksdb, changes: BlockChangesRocksdb) -> Result<BlockWithChangesPageResponse, RpcError> {
         let BlockRocksdb { header, transactions } = block;
         let total = transactions.len() + changes.account_changes.len() + changes.slot_changes.len();
-        let mut paginator = self.cursor_paginator(total, header.hash.into())?;
+        let mut paginator = self.build_paginator(total, header.hash.into())?;
 
         let tx_range = paginator.take(transactions.len());
         let account_entries = sorted_account_changes(&changes);
@@ -130,19 +123,17 @@ impl ImporterPagination {
         }
     }
 
-    fn cursor_paginator(&self, total: usize, block_hash: Hash) -> Result<ImporterCursorPaginator, RpcError> {
-        ImporterCursorPaginator::new(total, self.start, self.request.limit(), BlockHashCursor { block_hash })
+    fn build_paginator(&self, total: usize, block_hash: Hash) -> Result<ImporterCursorPaginator, RpcError> {
+        ImporterCursorPaginator::new(total, self.start, self.limit, BlockHashCursor { block_hash }).ok_or(RpcError::ParameterInvalid)
     }
 }
-
-pub type ImporterPageInfo = CursorPageInfo;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BlockAndReceiptsPageResponse {
     pub block: JsonValue,
     pub receipts: Vec<ExternalReceipt>,
-    pub pagination: ImporterPageInfo,
+    pub pagination: CursorPageInfo,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -150,7 +141,7 @@ pub struct BlockAndReceiptsPageResponse {
 pub struct BlockWithChangesPageResponse {
     pub block: BlockRocksdb,
     pub changes: BlockChangesRocksdb,
-    pub pagination: ImporterPageInfo,
+    pub pagination: CursorPageInfo,
 }
 
 fn sorted_account_changes(changes: &BlockChangesRocksdb) -> Vec<(AddressRocksdb, AccountChangesRocksdb)> {
@@ -177,10 +168,6 @@ pub(crate) struct BlockHashCursor {
 
 impl CursorCodec for BlockHashCursor {
     type Error = RpcError;
-
-    fn invalid_start_error() -> Self::Error {
-        RpcError::ParameterInvalid
-    }
 
     fn encode_cursor(&self, next_index: usize) -> String {
         format!("{IMPORTER_CURSOR_VERSION}:{}:{next_index}", self.block_hash)

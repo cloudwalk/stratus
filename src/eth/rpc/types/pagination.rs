@@ -6,8 +6,6 @@ use std::ops::Range;
 /// Kept as a trait so alternative slicing strategies (limit/offset, page number, etc.)
 /// can be slotted in later without touching call sites.
 pub trait Paginator {
-    type Error;
-    type NextPage;
     type PageInfo;
 
     fn take(&mut self, section_len: usize) -> Range<usize>;
@@ -20,7 +18,6 @@ pub trait Paginator {
 pub trait CursorCodec: Sized {
     type Error;
 
-    fn invalid_start_error() -> Self::Error;
     fn encode_cursor(&self, next_index: usize) -> String;
     fn decode_cursor(cursor: &str) -> Result<(Self, usize), Self::Error>;
 }
@@ -44,12 +41,12 @@ impl<C> CursorPaginator<C>
 where
     C: CursorCodec,
 {
-    pub fn new(total: usize, start: usize, limit: usize, codec: C) -> Result<Self, C::Error> {
+    pub fn new(total: usize, start: usize, limit: usize, codec: C) -> Option<Self> {
         if start > total || (start == total && total != 0) {
-            return Err(C::invalid_start_error());
+            return None;
         }
 
-        Ok(Self {
+        Some(Self {
             codec,
             start,
             limit,
@@ -70,8 +67,6 @@ impl<C> Paginator for CursorPaginator<C>
 where
     C: CursorCodec,
 {
-    type Error = C::Error;
-    type NextPage = String;
     type PageInfo = CursorPageInfo;
 
     fn take(&mut self, section_len: usize) -> Range<usize> {
@@ -172,10 +167,6 @@ mod tests {
     impl CursorCodec for IndexCodec {
         type Error = &'static str;
 
-        fn invalid_start_error() -> Self::Error {
-            "invalid start"
-        }
-
         fn encode_cursor(&self, next_index: usize) -> String {
             next_index.to_string()
         }
@@ -215,12 +206,12 @@ mod tests {
 
     #[test]
     fn start_equal_to_total_is_invalid() {
-        assert!(CursorPaginator::new(5, 5, 10, IndexCodec).is_err());
+        assert!(CursorPaginator::new(5, 5, 10, IndexCodec).is_none());
     }
 
     #[test]
     fn start_greater_than_total_is_invalid() {
-        assert!(CursorPaginator::new(5, 6, 10, IndexCodec).is_err());
+        assert!(CursorPaginator::new(5, 6, 10, IndexCodec).is_none());
     }
 
     #[test]
@@ -296,11 +287,11 @@ mod tests {
     }
 
     /// Stub reducer that accumulates `StubPage` data into a single concatenated vec.
-    struct CountingReducer {
+    struct ConcatReducer {
         pages: Vec<Vec<u8>>,
     }
 
-    impl PageReducer<StubPage> for CountingReducer {
+    impl PageReducer<StubPage> for ConcatReducer {
         type Output = Vec<u8>;
         type NextPage = String;
 
@@ -325,7 +316,7 @@ mod tests {
 
     #[tokio::test]
     async fn collect_happy_path_two_pages() {
-        let fetcher = PaginatedPageFetcher::new(CountingReducer { pages: Vec::new() });
+        let fetcher = PaginatedPageFetcher::new(ConcatReducer { pages: Vec::new() });
         let pages = [
             StubPage {
                 data: vec![1, 2, 3],
@@ -353,14 +344,14 @@ mod tests {
 
     #[tokio::test]
     async fn collect_not_found_immediately_returns_none() {
-        let fetcher = PaginatedPageFetcher::new(CountingReducer { pages: Vec::new() });
+        let fetcher = PaginatedPageFetcher::new(ConcatReducer { pages: Vec::new() });
         let result = fetcher.collect(|_cursor: Option<String>| async { Ok(None) }).await.expect("ok");
         assert!(result.is_none());
     }
 
     #[tokio::test]
     async fn collect_not_found_after_partial_errors() {
-        let fetcher = PaginatedPageFetcher::new(CountingReducer { pages: Vec::new() });
+        let fetcher = PaginatedPageFetcher::new(ConcatReducer { pages: Vec::new() });
         let mut call_idx = 0;
         let result = fetcher
             .collect(|_cursor: Option<String>| {
@@ -383,14 +374,14 @@ mod tests {
 
     #[tokio::test]
     async fn collect_error_propagates() {
-        let fetcher = PaginatedPageFetcher::new(CountingReducer { pages: Vec::new() });
+        let fetcher = PaginatedPageFetcher::new(ConcatReducer { pages: Vec::new() });
         let result = fetcher.collect(|_cursor: Option<String>| async { Err(anyhow::anyhow!("network error")) }).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn collect_single_page_no_cursor() {
-        let fetcher = PaginatedPageFetcher::new(CountingReducer { pages: Vec::new() });
+        let fetcher = PaginatedPageFetcher::new(ConcatReducer { pages: Vec::new() });
         let result = fetcher
             .collect(|_cursor: Option<String>| async {
                 Ok(Some(StubPage {

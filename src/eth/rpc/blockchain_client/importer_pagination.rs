@@ -6,7 +6,7 @@ use super::blockchain_client::BlockchainClient;
 use crate::eth::rpc::types::BlockAndReceiptsPageResponse;
 use crate::eth::rpc::types::BlockWithChangesPageResponse;
 use crate::eth::rpc::types::IMPORTER_PAGE_LIMIT_DEFAULT;
-use crate::eth::rpc::types::ImporterPageInfo;
+use crate::eth::rpc::types::CursorPageInfo;
 use crate::eth::rpc::types::ImporterPageRequest;
 use crate::eth::rpc::types::PageReducer;
 use crate::eth::rpc::types::PaginatedPageFetcher;
@@ -32,13 +32,13 @@ impl<'a> ImporterPaginationClient<'a> {
     }
 
     pub(super) async fn fetch_block_and_receipts(&self, block_number: BlockNumber) -> anyhow::Result<Option<ExternalBlockWithReceipts>> {
-        PaginatedPageFetcher::new(BlockAndReceiptsPages::new(block_number))
+        PaginatedPageFetcher::new(BlockAndReceiptsReducer::new(block_number))
             .collect(|cursor| self.fetch_page(GET_BLOCK_AND_RECEIPTS, block_number, cursor, "failed to fetch block with receipts"))
             .await
     }
 
     pub(super) async fn fetch_block_with_changes(&self, block_number: BlockNumber) -> anyhow::Result<Option<(BlockRocksdb, BlockChangesRocksdb)>> {
-        PaginatedPageFetcher::new(BlockWithChangesPages::new(block_number))
+        PaginatedPageFetcher::new(BlockWithChangesReducer::new(block_number))
             .collect(|cursor| self.fetch_page(GET_BLOCK_WITH_CHANGES, block_number, cursor, "failed to fetch block with changes"))
             .await
     }
@@ -62,7 +62,7 @@ impl<'a> ImporterPaginationClient<'a> {
     }
 }
 
-fn validate_progress(page: &ImporterPageInfo, expected_total: &mut Option<usize>, context: &str) -> anyhow::Result<Option<String>> {
+fn validate_page(page: &CursorPageInfo, expected_total: &mut Option<usize>, context: &str) -> anyhow::Result<Option<String>> {
     if page.returned == 0 && page.next_cursor.is_some() {
         bail!("paginated {context} returned no items but provided a next cursor");
     }
@@ -78,14 +78,14 @@ fn validate_progress(page: &ImporterPageInfo, expected_total: &mut Option<usize>
     Ok(page.next_cursor.clone())
 }
 
-struct BlockAndReceiptsPages {
+struct BlockAndReceiptsReducer {
     block_number: BlockNumber,
     block: Option<ExternalBlock>,
     receipts: Vec<ExternalReceipt>,
     expected_total: Option<usize>,
 }
 
-impl BlockAndReceiptsPages {
+impl BlockAndReceiptsReducer {
     fn new(block_number: BlockNumber) -> Self {
         Self {
             block_number,
@@ -114,12 +114,12 @@ impl BlockAndReceiptsPages {
     }
 }
 
-impl PageReducer<BlockAndReceiptsPageResponse> for BlockAndReceiptsPages {
+impl PageReducer<BlockAndReceiptsPageResponse> for BlockAndReceiptsReducer {
     type Output = ExternalBlockWithReceipts;
     type NextPage = String;
 
     fn reduce(&mut self, page: BlockAndReceiptsPageResponse) -> anyhow::Result<Option<String>> {
-        let cursor = validate_progress(&page.pagination, &mut self.expected_total, "block with receipts")?;
+        let cursor = validate_page(&page.pagination, &mut self.expected_total, "block with receipts")?;
         let page_block = ExternalBlock::try_from(page.block)?;
         self.push_block(page_block)?;
         self.receipts.extend(page.receipts);
@@ -140,7 +140,7 @@ impl PageReducer<BlockAndReceiptsPageResponse> for BlockAndReceiptsPages {
         };
 
         let expected_total = self.expected_total.unwrap_or_default();
-        let transactions_len = block.full_transactions_len()?;
+        let transactions_len = block.try_full_transactions_len()?;
         if transactions_len != expected_total {
             bail!("paginated block with receipts assembled {transactions_len} transactions but expected {expected_total}");
         }
@@ -159,14 +159,14 @@ impl PageReducer<BlockAndReceiptsPageResponse> for BlockAndReceiptsPages {
     }
 }
 
-struct BlockWithChangesPages {
+struct BlockWithChangesReducer {
     block_number: BlockNumber,
     block: Option<BlockRocksdb>,
     changes: BlockChangesRocksdb,
     expected_total: Option<usize>,
 }
 
-impl BlockWithChangesPages {
+impl BlockWithChangesReducer {
     fn new(block_number: BlockNumber) -> Self {
         Self {
             block_number,
@@ -213,12 +213,12 @@ impl BlockWithChangesPages {
     }
 }
 
-impl PageReducer<BlockWithChangesPageResponse> for BlockWithChangesPages {
+impl PageReducer<BlockWithChangesPageResponse> for BlockWithChangesReducer {
     type Output = (BlockRocksdb, BlockChangesRocksdb);
     type NextPage = String;
 
     fn reduce(&mut self, page: BlockWithChangesPageResponse) -> anyhow::Result<Option<String>> {
-        let cursor = validate_progress(&page.pagination, &mut self.expected_total, "block with changes")?;
+        let cursor = validate_page(&page.pagination, &mut self.expected_total, "block with changes")?;
         self.push_block(page.block)?;
         self.push_changes(page.changes)?;
         Ok(cursor)
@@ -255,12 +255,12 @@ mod tests {
     use fake::Faker;
     use hash_hasher::HashBuildHasher;
 
-    use super::BlockAndReceiptsPages;
-    use super::BlockWithChangesPages;
-    use super::validate_progress;
+    use super::BlockAndReceiptsReducer;
+    use super::BlockWithChangesReducer;
+    use super::validate_page;
     use crate::eth::rpc::types::BlockAndReceiptsPageResponse;
     use crate::eth::rpc::types::BlockWithChangesPageResponse;
-    use crate::eth::rpc::types::ImporterPageInfo;
+use crate::eth::rpc::types::CursorPageInfo;
     use crate::eth::rpc::types::PageReducer;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::AddressRocksdb;
@@ -273,14 +273,13 @@ mod tests {
     use crate::eth::types::ExternalBlock;
     use crate::eth::types::ExternalReceipt;
     use crate::eth::types::SlotIndex;
-    use crate::eth::types::SlotValue;
     use crate::eth::types::UnixTime;
     use crate::ext::to_json_value;
 
     // helpers
 
-    fn page_info(returned: usize, total: usize, next_cursor: Option<&str>) -> ImporterPageInfo {
-        ImporterPageInfo {
+    fn page_info(returned: usize, total: usize, next_cursor: Option<&str>) -> CursorPageInfo {
+        CursorPageInfo {
             limit: 256,
             returned,
             total,
@@ -307,7 +306,7 @@ mod tests {
         (page1, page2)
     }
 
-    fn receipts_page(block: ExternalBlock, receipts: Vec<ExternalReceipt>, pagination: ImporterPageInfo) -> BlockAndReceiptsPageResponse {
+    fn receipts_page(block: ExternalBlock, receipts: Vec<ExternalReceipt>, pagination: CursorPageInfo) -> BlockAndReceiptsPageResponse {
         BlockAndReceiptsPageResponse {
             block: to_json_value(block),
             receipts,
@@ -347,44 +346,40 @@ mod tests {
         SlotIndexRocksdb::from(SlotIndex::from([a, b, c, d]))
     }
 
-    fn slot_val(a: u64, b: u64, c: u64, d: u64) -> SlotValueRocksdb {
-        SlotValueRocksdb::from(SlotValue::from([a, b, c, d]))
-    }
-
-    // validate_progress
+    // validate_page
 
     #[test]
-    fn validate_progress_first_page_sets_expected_total() {
+    fn validate_page_first_page_sets_expected_total() {
         let mut expected_total = None;
         let info = page_info(3, 10, Some("cursor"));
-        let cursor = validate_progress(&info, &mut expected_total, "test").expect("ok");
+        let cursor = validate_page(&info, &mut expected_total, "test").expect("ok");
         assert_eq!(expected_total, Some(10));
         assert_eq!(cursor, Some("cursor".to_string()));
     }
 
     #[test]
-    fn validate_progress_same_total_ok() {
+    fn validate_page_same_total_ok() {
         let mut expected_total = Some(10);
         let info = page_info(3, 10, Some("cursor"));
-        let cursor = validate_progress(&info, &mut expected_total, "test").expect("ok");
+        let cursor = validate_page(&info, &mut expected_total, "test").expect("ok");
         assert_eq!(cursor, Some("cursor".to_string()));
     }
 
     #[test]
-    fn validate_progress_different_total_errors() {
+    fn validate_page_different_total_errors() {
         let mut expected_total = Some(10);
         let info = page_info(3, 20, Some("cursor"));
-        assert!(validate_progress(&info, &mut expected_total, "test").is_err());
+        assert!(validate_page(&info, &mut expected_total, "test").is_err());
     }
 
     #[test]
-    fn validate_progress_zero_returned_with_cursor_errors() {
+    fn validate_page_zero_returned_with_cursor_errors() {
         let mut expected_total = None;
         let info = page_info(0, 10, Some("cursor"));
-        assert!(validate_progress(&info, &mut expected_total, "test").is_err());
+        assert!(validate_page(&info, &mut expected_total, "test").is_err());
     }
 
-    // BlockAndReceiptsPages reducer
+    // BlockAndReceiptsReducer reducer
 
     #[test]
     fn receipts_reducer_two_pages_reassemble() {
@@ -392,7 +387,7 @@ mod tests {
         let (page1_block, page2_block) = split_external_block(&full_block, 3);
         let block_number = full_block.number();
 
-        let mut reducer = BlockAndReceiptsPages::new(block_number);
+        let mut reducer = BlockAndReceiptsReducer::new(block_number);
 
         let page1 = receipts_page(page1_block, vec![Faker.fake(); 3], page_info(3, 5, Some("cursor")));
         let cursor = reducer.reduce(page1).expect("ok");
@@ -403,7 +398,7 @@ mod tests {
         assert!(cursor.is_none());
 
         let result = reducer.finish().expect("ok").expect("some output");
-        assert_eq!(result.block.full_transactions_len().unwrap(), 5);
+        assert_eq!(result.block.try_full_transactions_len().unwrap(), 5);
         assert_eq!(result.receipts.len(), 5);
     }
 
@@ -412,7 +407,7 @@ mod tests {
         let block = external_block_with_txs(2);
         let block_number = BlockNumber::from(999u64);
 
-        let mut reducer = BlockAndReceiptsPages::new(block_number);
+        let mut reducer = BlockAndReceiptsReducer::new(block_number);
         let page = receipts_page(block, vec![], page_info(0, 0, None));
         assert!(reducer.reduce(page).is_err());
     }
@@ -422,7 +417,7 @@ mod tests {
         let block = external_block_with_txs(3);
         let block_number = block.number();
 
-        let mut reducer = BlockAndReceiptsPages::new(block_number);
+        let mut reducer = BlockAndReceiptsReducer::new(block_number);
         let page = receipts_page(block, vec![Faker.fake(); 2], page_info(3, 3, None));
         reducer.reduce(page).expect("ok");
 
@@ -431,21 +426,21 @@ mod tests {
 
     #[test]
     fn receipts_reducer_finish_after_not_found_no_block_returns_none() {
-        let reducer = BlockAndReceiptsPages::new(BlockNumber::from(1u64));
+        let reducer = BlockAndReceiptsReducer::new(BlockNumber::from(1u64));
         assert!(reducer.finish_after_not_found().expect("ok").is_none());
     }
 
     #[test]
     fn receipts_reducer_finish_after_not_found_with_partial_block_errors() {
         let block = external_block_with_txs(1);
-        let mut reducer = BlockAndReceiptsPages::new(block.number());
+        let mut reducer = BlockAndReceiptsReducer::new(block.number());
         let page = receipts_page(block, vec![Faker.fake()], page_info(1, 1, Some("cursor")));
         reducer.reduce(page).expect("ok");
 
         assert!(reducer.finish_after_not_found().is_err());
     }
 
-    // BlockWithChangesPages reducer
+    // BlockWithChangesReducer reducer
 
     #[test]
     fn changes_reducer_two_pages_reassemble() {
@@ -465,7 +460,7 @@ mod tests {
         let changes1 = changes_with_accounts(&[addr_a.0]);
         let changes2 = changes_with_accounts(&[addr_b.0]);
 
-        let mut reducer = BlockWithChangesPages::new(block_number);
+        let mut reducer = BlockWithChangesReducer::new(block_number);
 
         let page1 = BlockWithChangesPageResponse {
             block: page1_block,
@@ -491,7 +486,7 @@ mod tests {
     #[test]
     fn changes_reducer_block_number_mismatch_errors() {
         let block = block_rocksdb_with_txs(1, 1);
-        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(999u64));
+        let mut reducer = BlockWithChangesReducer::new(BlockNumber::from(999u64));
         let page = BlockWithChangesPageResponse {
             block,
             changes: BlockChangesRocksdb::default(),
@@ -506,7 +501,7 @@ mod tests {
         let mut block2 = block_rocksdb_with_txs(1, 1);
         block2.header.hash = Faker.fake();
 
-        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+        let mut reducer = BlockWithChangesReducer::new(BlockNumber::from(1u64));
 
         let page1 = BlockWithChangesPageResponse {
             block: block1,
@@ -529,7 +524,7 @@ mod tests {
         let addr = [0x01; 20];
         let changes = changes_with_accounts(&[addr]);
 
-        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+        let mut reducer = BlockWithChangesReducer::new(BlockNumber::from(1u64));
 
         let page1 = BlockWithChangesPageResponse {
             block: block.clone(),
@@ -553,7 +548,7 @@ mod tests {
         let idx = slot_idx(0, 0, 0, 1);
         let changes = changes_with_slots(&[(addr, idx)]);
 
-        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+        let mut reducer = BlockWithChangesReducer::new(BlockNumber::from(1u64));
 
         let page1 = BlockWithChangesPageResponse {
             block: block.clone(),
@@ -573,7 +568,7 @@ mod tests {
     #[test]
     fn changes_reducer_total_mismatch_errors() {
         let block = block_rocksdb_with_txs(1, 2);
-        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+        let mut reducer = BlockWithChangesReducer::new(BlockNumber::from(1u64));
 
         let page = BlockWithChangesPageResponse {
             block,
@@ -587,14 +582,14 @@ mod tests {
 
     #[test]
     fn changes_reducer_finish_after_not_found_no_block_returns_none() {
-        let reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+        let reducer = BlockWithChangesReducer::new(BlockNumber::from(1u64));
         assert!(reducer.finish_after_not_found().expect("ok").is_none());
     }
 
     #[test]
     fn changes_reducer_finish_after_not_found_with_partial_block_errors() {
         let block = block_rocksdb_with_txs(1, 1);
-        let mut reducer = BlockWithChangesPages::new(BlockNumber::from(1u64));
+        let mut reducer = BlockWithChangesReducer::new(BlockNumber::from(1u64));
         let page = BlockWithChangesPageResponse {
             block,
             changes: BlockChangesRocksdb::default(),
@@ -603,13 +598,5 @@ mod tests {
         reducer.reduce(page).expect("ok");
 
         assert!(reducer.finish_after_not_found().is_err());
-    }
-
-    // Slot helpers for completeness
-
-    #[test]
-    fn slot_helpers_construct_valid_values() {
-        let _ = slot_val(1, 2, 3, 4);
-        let _ = slot_idx(1, 2, 3, 4);
     }
 }

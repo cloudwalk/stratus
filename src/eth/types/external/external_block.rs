@@ -59,7 +59,7 @@ impl ExternalBlock {
     }
 
     /// Returns the number of full transactions in the block.
-    pub fn full_transactions_len(&self) -> anyhow::Result<usize> {
+    pub fn try_full_transactions_len(&self) -> anyhow::Result<usize> {
         let BlockTransactions::Full(transactions) = &self.0.transactions else {
             bail!("expected full transactions, got hashes or uncle");
         };
@@ -193,23 +193,23 @@ mod tests {
     }
 
     #[test]
-    fn full_transactions_len_with_full() {
+    fn try_full_transactions_len_with_full() {
         let block = block_with_txs(3);
-        assert_eq!(block.full_transactions_len().expect("full transactions"), 3);
+        assert_eq!(block.try_full_transactions_len().expect("full transactions"), 3);
     }
 
     #[test]
-    fn full_transactions_len_with_hashes() {
+    fn try_full_transactions_len_with_hashes() {
         let mut block = block_with_txs(0);
         block.0.transactions = BlockTransactions::Hashes(vec![fixed_hash()]);
-        assert!(block.full_transactions_len().is_err());
+        assert!(block.try_full_transactions_len().is_err());
     }
 
     #[test]
-    fn full_transactions_len_with_uncle() {
+    fn try_full_transactions_len_with_uncle() {
         let mut block = block_with_txs(0);
         block.0.transactions = BlockTransactions::Uncle;
-        assert!(block.full_transactions_len().is_err());
+        assert!(block.try_full_transactions_len().is_err());
     }
 
     #[test]
@@ -219,7 +219,7 @@ mod tests {
 
         target.extend_full_transactions_from(other).expect("same hash merges");
 
-        assert_eq!(target.full_transactions_len().expect("full transactions"), 3);
+        assert_eq!(target.try_full_transactions_len().expect("full transactions"), 3);
     }
 
     #[test]
