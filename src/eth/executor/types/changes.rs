@@ -154,11 +154,11 @@ impl Changes<Full> {
 
 impl Changes<Incomplete> {
     /// Reads the original account state from `storage` and resolves every unset field, advancing to
-    /// [`Complete`]. The only way to turn an `Incomplete` into `Complete`.
+    /// [`Full`]. The only way to turn an `Incomplete` into `Full`.
     ///
     /// Accounts not present in permanent storage (newly created by the block) resolve to
     /// `Account::default()`, which is their correct pre-state.
-    pub fn complete(self, storage: &impl AccountOriginalsReader) -> anyhow::Result<Changes<Complete>> {
+    pub fn complete(self, storage: &impl AccountOriginalsReader) -> anyhow::Result<Changes<Full>> {
         let addresses = self.accounts.keys().copied().collect::<Vec<_>>();
         let original_accounts: HashMap<Address, Account> = storage.read_accounts(addresses)?.into_iter().collect();
 
@@ -170,7 +170,14 @@ impl Changes<Incomplete> {
                 (address, changes.complete(original))
             })
             .collect();
-        Ok(Changes { accounts, slots: self.slots })
+
+        let slots = self
+            .slots
+            .into_iter()
+            .map(|(slot_key, slot_value)| (slot_key, CompleteValue::Changed(slot_value)))
+            .collect();
+
+        Ok(Changes { accounts, slots })
     }
 }
 
@@ -310,8 +317,8 @@ pub struct AccountChanges<S: Stage> {
 }
 
 impl AccountChanges<Incomplete> {
-    /// Fills every unset field with its real original value, advancing to [`Complete`].
-    pub fn complete(self, original: Account) -> AccountChanges<Complete> {
+    /// Fills every unset field with its real original value, advancing to [`Full`].
+    pub fn complete(self, original: Account) -> AccountChanges<Full> {
         AccountChanges {
             nonce: self.nonce.complete(original.nonce),
             balance: self.balance.complete(original.balance),

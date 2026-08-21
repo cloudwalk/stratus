@@ -6,6 +6,8 @@ use parking_lot::RwLockUpgradableReadGuard;
 use parking_lot::RwLockWriteGuard;
 
 use crate::eth::executor::Changes;
+#[cfg(feature = "dev")]
+use crate::eth::executor::CompleteValue;
 use crate::eth::executor::Full;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
@@ -185,7 +187,10 @@ impl InmemoryTransactionTemporaryStorage {
     #[cfg(feature = "dev")]
     pub fn save_slot(&self, address: Address, slot: Slot) -> anyhow::Result<(), StorageError> {
         let mut pending_block = self.pending_block.write();
-        pending_block.block_changes.slots.insert((address, slot.index), slot.value);
+        pending_block
+            .block_changes
+            .slots
+            .insert((address, slot.index), CompleteValue::Changed(slot.value));
         Ok(())
     }
 

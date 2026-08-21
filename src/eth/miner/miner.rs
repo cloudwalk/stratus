@@ -385,7 +385,7 @@ pub mod interval_miner {
 
     use crate::eth::executor::Changes;
     use crate::eth::executor::Full;
-use crate::eth::miner::Miner;
+    use crate::eth::miner::Miner;
     use crate::eth::miner::miner::CommitItem;
     use crate::eth::types::Block;
     use crate::infra::tracing::warn_task_cancellation;

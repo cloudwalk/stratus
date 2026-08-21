@@ -797,6 +797,7 @@ impl StratusStorage {
 mod tests {
     use super::*;
     use crate::eth::executor::AccountChanges;
+    use crate::eth::executor::CompleteValue;
     use crate::eth::executor::ExecutionResult;
     use crate::eth::executor::TransactionExecutionInput;
     use crate::eth::executor::TransactionExecutionOutput;
@@ -820,7 +821,7 @@ mod tests {
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
         storage.save_execution(tx).expect("save execution");
 
-        let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
+        let (block, block_changes) = storage.finish_pending_block();
         storage.save_block(block.into(), block_changes).expect("save block");
 
         storage.read_mined_block_number()
@@ -837,12 +838,16 @@ mod tests {
 
         // Mine a block setting slot S = 100. The eth_call captures this block.
         let mut changes1 = Changes::default();
-        changes1.slots.insert((address, index), SlotValue::from([100u64, 0, 0, 0]));
+        changes1
+            .slots
+            .insert((address, index), CompleteValue::Changed(SlotValue::from([100u64, 0, 0, 0])));
         let call_block = mine_block(&storage, changes1);
 
         // A new block is mined while the call is in flight, changing the slot to 200.
         let mut changes2 = Changes::default();
-        changes2.slots.insert((address, index), SlotValue::from([200u64, 0, 0, 0]));
+        changes2
+            .slots
+            .insert((address, index), CompleteValue::Changed(SlotValue::from([200u64, 0, 0, 0])));
         let latest = mine_block(&storage, changes2);
         assert_ne!(call_block, latest);
 
