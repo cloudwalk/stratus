@@ -5,8 +5,8 @@ use serde::de::DeserializeOwned;
 use super::blockchain_client::BlockchainClient;
 use crate::eth::rpc::types::BlockAndReceiptsPageResponse;
 use crate::eth::rpc::types::BlockWithChangesPageResponse;
-use crate::eth::rpc::types::IMPORTER_PAGE_LIMIT_DEFAULT;
 use crate::eth::rpc::types::CursorPageInfo;
+use crate::eth::rpc::types::IMPORTER_PAGE_LIMIT_DEFAULT;
 use crate::eth::rpc::types::ImporterPageRequest;
 use crate::eth::rpc::types::PageReducer;
 use crate::eth::rpc::types::PaginatedPageFetcher;
@@ -260,7 +260,7 @@ mod tests {
     use super::validate_page;
     use crate::eth::rpc::types::BlockAndReceiptsPageResponse;
     use crate::eth::rpc::types::BlockWithChangesPageResponse;
-use crate::eth::rpc::types::CursorPageInfo;
+    use crate::eth::rpc::types::CursorPageInfo;
     use crate::eth::rpc::types::PageReducer;
     use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
     use crate::eth::storage::permanent::rocks::types::AddressRocksdb;

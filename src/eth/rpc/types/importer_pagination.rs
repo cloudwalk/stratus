@@ -41,7 +41,7 @@ impl ImporterPageRequest {
         }
     }
 
-    pub(crate) fn limit(&self) -> usize {
+    fn limit(&self) -> usize {
         match self.limit {
             Some(0) | None => IMPORTER_PAGE_LIMIT_DEFAULT,
             Some(limit) => limit.min(IMPORTER_PAGE_LIMIT_MAX),
