@@ -1,8 +1,13 @@
 use std::net::SocketAddr;
-use std::stringify;
 
 use clap::Parser;
 use display_json::DebugAsJson;
+#[cfg(feature = "metrics")]
+use metrics_exporter_prometheus::PrometheusBuilder;
+#[cfg(feature = "metrics")]
+use metrics_tracing_context::TracingContextLayer as MetricsTracingContextLayer;
+#[cfg(feature = "metrics")]
+use metrics_util::layers::Layer as MetricsLayerExt;
 
 use crate::infra::metrics::metrics_for_consensus;
 use crate::infra::metrics::metrics_for_executor;
@@ -37,7 +42,7 @@ impl MetricsConfig {
         metrics.extend(metrics_for_kafka());
 
         // init metric exporter
-        init_metrics_exporter(self.metrics_exporter_address);
+        init_metrics_exporter(self.metrics_exporter_address)?;
 
         // init metric description (always after provider started)
         for metric in &metrics {
@@ -49,19 +54,32 @@ impl MetricsConfig {
 }
 
 #[cfg(feature = "metrics")]
-fn init_metrics_exporter(address: SocketAddr) {
+fn init_metrics_exporter(address: SocketAddr) -> anyhow::Result<()> {
     tracing::info!(%address, "creating prometheus metrics exporter");
-    if let Err(e) = metrics_exporter_prometheus::PrometheusBuilder::new()
+
+    let builder = PrometheusBuilder::new()
         .add_global_label("service", crate::infra::build_info::service_name())
         .add_global_label("version", crate::infra::build_info::version())
-        .with_http_listener(address)
-        .install()
-    {
-        tracing::error!(reason = ?e, %address, "failed to create metrics exporter");
-    }
+        .with_http_listener(address);
+
+    install_metrics_tracing_recorder(builder)?;
+
+    Ok(())
+}
+
+#[cfg(feature = "metrics")]
+fn install_metrics_tracing_recorder(builder: PrometheusBuilder) -> anyhow::Result<()> {
+    let (recorder, exporter) = builder.build()?;
+    tokio::spawn(exporter);
+
+    let recorder = MetricsTracingContextLayer::only_allow(["rpc_client", "rpc_method", "point_in_time"]).layer(recorder);
+    metrics::set_global_recorder(recorder)?;
+
+    Ok(())
 }
 
 #[cfg(not(feature = "metrics"))]
-fn init_metrics_exporter(_: SocketAddr) {
+fn init_metrics_exporter(_: SocketAddr) -> anyhow::Result<()> {
     tracing::info!("creating noop metrics exporter");
+    Ok(())
 }

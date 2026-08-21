@@ -540,6 +540,10 @@ criteria = "safe-to-deploy"
 version = "1.0.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.endian-type]]
+version = "0.1.2"
+criteria = "safe-to-deploy"
+
 [[exemptions.enum-ordinalize]]
 version = "4.3.0"
 criteria = "safe-to-deploy"
@@ -864,6 +868,10 @@ criteria = "safe-to-deploy"
 version = "1.1.22"
 criteria = "safe-to-deploy"
 
+[[exemptions.lockfree-object-pool]]
+version = "0.1.6"
+criteria = "safe-to-deploy"
+
 [[exemptions.lru-slab]]
 version = "0.1.2"
 criteria = "safe-to-deploy"
@@ -896,6 +904,10 @@ criteria = "safe-to-deploy"
 version = "0.17.2"
 criteria = "safe-to-deploy"
 
+[[exemptions.metrics-tracing-context]]
+version = "0.18.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.metrics-util]]
 version = "0.20.0"
 criteria = "safe-to-deploy"
@@ -914,6 +926,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.nanoid]]
 version = "0.4.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.nibble_vec]]
+version = "0.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.nom]]
@@ -990,6 +1006,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.openssl-sys]]
 version = "0.9.109"
+criteria = "safe-to-deploy"
+
+[[exemptions.ordered-float]]
+version = "4.6.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.os_info]]
@@ -1106,6 +1126,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.radium]]
 version = "0.7.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.radix_trie]]
+version = "0.2.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.rand_xoshiro]]
