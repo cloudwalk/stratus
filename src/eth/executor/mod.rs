@@ -30,9 +30,8 @@ pub use types::Complete;
 pub use types::CompleteValue;
 pub use types::ExecutionResult;
 pub use types::ExecutorError;
-pub use types::Incomplete;
 pub use types::Full;
-
+pub use types::Incomplete;
 pub use types::IncompleteValue;
 pub use types::RevertReason;
 pub use types::Stage;

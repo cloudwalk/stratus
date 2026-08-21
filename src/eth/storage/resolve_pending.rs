@@ -78,10 +78,10 @@ pub(super) enum Resolved<'a, T> {
 /// Pending-state resolution, generic over the entity being read.
 pub(super) trait Resolve: EntityRead {
     fn resolve(s: &StratusStorage, key: Self::Key, kind: ExecutionKind) -> Resolved<'_, Self> {
-        if kind.point_in_time() == PointInTime::Pending {
-            if let Some(value) = Self::read_temp(s, key, kind) {
-                return Resolved::Temp(value);
-            }
+        if kind.point_in_time() == PointInTime::Pending
+            && let Some(value) = Self::read_temp(s, key, kind)
+        {
+            return Resolved::Temp(value);
         }
         Resolved::Miss(s.resolve_mined_point(kind))
     }
