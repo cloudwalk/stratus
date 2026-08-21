@@ -34,29 +34,29 @@ impl From<TransactionMined> for TransactionMinedRocksdb {
         Self {
             input: TransactionInputRocksdb {
                 tx_type: execution.info.tx_type.map(|inner| inner.as_u64() as u8),
-                chain_id: execution.evm_input.chain_id.map_into(),
+                chain_id: execution.input.chain_id.map_into(),
                 hash: execution.info.hash.into(),
-                nonce: execution.evm_input.nonce.into(),
-                signer: execution.evm_input.from.into(),
-                from: execution.evm_input.from.into(),
-                to: execution.evm_input.to.map_into(),
-                value: execution.evm_input.value.into(),
-                input: execution.evm_input.data.clone().into(),
-                gas_limit: execution.evm_input.gas_limit.into(),
-                gas_price: execution.evm_input.gas_price.into(),
+                nonce: execution.input.nonce.into(),
+                signer: execution.input.from.into(),
+                from: execution.input.from.into(),
+                to: execution.input.to.map_into(),
+                value: execution.input.value.into(),
+                input: execution.input.data.clone().into(),
+                gas_limit: execution.input.gas_limit.into(),
+                gas_price: execution.input.gas_price.into(),
                 v: execution.signature.v.as_u64(),
                 r: execution.signature.r.into_limbs(),
                 s: execution.signature.s.into_limbs(),
             },
             execution: ExecutionRocksdb::new(
-                execution.evm_input.block_timestamp.into(),
-                execution.result.result.into(),
-                execution.result.output.into(),
-                execution.result.gas_used.into(),
-                execution.result.deployed_contract_address.map_into(),
+                execution.input.block_timestamp.into(),
+                execution.output.result.into(),
+                execution.output.output.into(),
+                execution.output.gas_used.into(),
+                execution.output.deployed_contract_address.map_into(),
             ),
             logs: execution
-                .result
+                .output
                 .logs
                 .into_iter()
                 .enumerate()
@@ -93,8 +93,8 @@ impl TransactionMined {
         let execution = TransactionExecution {
             info: input.transaction_info,
             signature: input.signature,
-            evm_input,
-            result: evm_result,
+            input: evm_input,
+            output: evm_result,
         };
 
         Self { execution, mined_data }

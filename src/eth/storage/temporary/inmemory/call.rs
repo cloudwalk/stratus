@@ -66,7 +66,7 @@ impl InMemoryCallTemporaryStorage {
     /// This function takes a transaction execution and appends all account and slot changes
     /// to the corresponding BlockNumber in the call storage with the given transaction count.
     pub fn update_state_with_transaction(&self, tx: &TransactionExecution) {
-        let block_number = tx.evm_input.block_number;
+        let block_number = tx.input.block_number;
 
         // Get or create the block state
         let mut block_state = self.storage.entry(block_number).or_default();
@@ -74,21 +74,18 @@ impl InMemoryCallTemporaryStorage {
         let current_tx_count = block_state.current_tx_count;
 
         // Process each account change from the transaction execution
-        for (address, change) in &tx.result.changes.accounts {
-            if change.is_modified() {
-                // Build the account from the changes
-                let account = (*address, change.clone()).into();
-                block_state.accounts.entry(*address).or_default().push((account, current_tx_count));
-            }
+        for (address, change) in &tx.output.changes.accounts {
+            let account = change.clone().to_account(*address);
+            block_state.accounts.entry(*address).or_default().push((account, current_tx_count));
         }
 
         // Add slot changes
-        for ((address, slot_index), slot_value) in &tx.result.changes.slots {
+        for ((address, slot_index), slot_value) in &tx.output.changes.slots {
             block_state
                 .slots
                 .entry((*address, *slot_index))
                 .or_default()
-                .push((*slot_value, current_tx_count));
+                .push((*slot_value.value(), current_tx_count));
         }
     }
 

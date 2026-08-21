@@ -325,7 +325,7 @@ mod tests {
         let tx = TransactionExecution::new(TransactionInfo::default(), Signature::default(), evm_input, result);
         storage.save_execution(tx).expect("save execution");
 
-        let (block, block_changes) = storage.finish_pending_block().expect("finish pending block");
+        let (block, block_changes) = storage.finish_pending_block();
         storage.save_block(block.into(), block_changes).expect("save block");
     }
 
