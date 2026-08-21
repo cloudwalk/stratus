@@ -26,8 +26,8 @@ impl TransactionStage {
 
     pub fn to_result(self) -> TransactionExecutionOutput {
         match self {
-            TransactionStage::Mined(tx) => tx.execution.result,
-            TransactionStage::Pending(tx) => tx.result,
+            TransactionStage::Mined(tx) => tx.execution.output,
+            TransactionStage::Pending(tx) => tx.output,
         }
     }
 }
