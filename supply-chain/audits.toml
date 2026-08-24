@@ -55,6 +55,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.41 -> 2.3.0"
 notes = "Diff only touches header.rs (adds optional EIP-7928/7843 fields, a saturating base_fee_per_gas serde adapter clamping >u64::MAX) and receipt/envelope.rs (drops redundant Clone bound); Cargo.toml bumps alloy deps + MSRV 1.94.1, adds bincode dev-dep. No unsafe/FFI/transmute/pointers/build.rs/network/fs/env in the diff — pure domain-type and serde logic plus tests."
 
+[[audits.alloy-dyn-abi]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+version = "1.6.1"
+notes = 'Full review of 1.6.1. Pure-Rust no-std ABI/EIP-712 encode/decode crate (~8.7k LOC). build=false (no build script), no C FFI (only `extern crate alloc` + a parser re-export alias), no env/fs/net/process IO. Stratus enables only default features = ["std"] (arbitrary/eip712/debug off). Unsafe is minimal and sound: token.rs:190 reuses a Box<T> allocation via the canonical `Vec::from_raw_parts(Box::into_raw(t),1,1)` (len1/cap1) idiom for array-token decoding; coerce.rs:167 slices `get_unchecked(..l)` on a `[char;2]` with l in {1,2} set in the same branch (always in-bounds); remaining `unwrap_unchecked` calls follow exhaustive matches that guarantee Some (value.rs/ty.rs). The sole `from_utf8_unchecked` is gated behind the unused `arbitrary` feature (fuzzing) and is not in the deployed build. Deps are alloy siblings + serde/itoa/winnow. No capability surface beyond in-memory ABI parsing.'
+
 [[audits.alloy-eip2930]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
@@ -521,6 +527,18 @@ criteria = "safe-to-deploy"
 delta = "2.1.5 -> 2.1.8"
 notes = "Only Rust change is ethereum_kzg_settings/mod.rs: 16 OnceBox statics -> one [OnceLock;16] array (std::sync::OnceLock or once_cell OnceBox), panic!->assert!. No new unsafe/extern C/transmute/pointers; build.rs unchanged; no network/fs/env access. C/blst diff is internal crypto refinement (g1_add/fr_* wrappers, 383->384 inverse-mod asm, batch affine, g1_ifft->g1_ifft_unscaled) with no new Rust FFI s"
 
+[[audits.cargo-platform]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.1.9 -> 0.3.2"
+notes = "Benign feature additions (raw identifiers in cfg expressions, boolean cfg literals, keyword warnings) and a dependency optimization (serde -> serde_core). No unsafe code, no network/IO, no build scripts. No advisories."
+
+[[audits.cargo_metadata]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.19.2 -> 0.23.1"
+notes = "Reviewed 0.19.2 -> 0.23.1 via cargo vet diff. Benign: newtype wrappers (FeatureName/PackageName) with Deref/AsRef/PartialEq, Metadata.build_directory field stabilization, env_remove helper, default-generic Result<T,E=Error>, inline format strings, re-export of cargo_platform, routine dep bumps (camino/cargo-platform/semver/serde/serde_json/thiserror). No unsafe, no build scripts, no proc-macros, no new network/IO; Command::new hits are pre-existing doc-examples/tests (the crate shells out to `cargo metadata` by design). delta_from 0.19.2 valid via bytecode-alliance foreign audit (imports.lock, delta 0.18.1 -> 0.19.2). MSRV bump 1.78 -> 1.86 (stratus toolchain 1.97). Breaking API type changes (Package.name->PackageName, Dependency.source Option<String>->Option<Source>) don't affect stratus (cargo_metadata is transitive via vergen build-dep only). No RustSec advisories."
+
 [[audits.chrono]]
 who = "Rodrigo Bronzelle <rodrigo.bronzelle@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -818,6 +836,12 @@ criteria = "safe-to-deploy"
 delta = "0.2.0 -> 0.2.1"
 notes = "Reviewed local diff for security-sensitive behavior; no backdoors, suspicious code execution, network/process/filesystem exfiltration, or private data leakage found."
 
+[[audits.objc2-io-kit]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.3.1"
+notes = "Auto-generated FFI binding crate to Apple's IOKit framework from the well-known objc2 ecosystem. No build scripts, no proc macros. All unsafe code is standard FFI declarations and objc2 trait implementations. No advisories."
+
 [[audits.opentelemetry]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
@@ -982,6 +1006,18 @@ who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
 criteria = "safe-to-deploy"
 version = "4.2.0"
 notes = "Inspected 4.2.0: pure hashing crate; default build keeps safety checks. Unsafe usage limited to guarded pointer reads in util::read with explicit length assertions; no I/O or syscalls."
+
+[[audits.regex]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "1.11.1 -> 1.12.3"
+notes = "Reviewed 1.11.1 -> 1.12.3 via cargo vet diff. Bug-fix/doc releases across 1.11.2-1.12.3: one additive method Captures::get_match(), lazy-DFA/sparse-DFA memory fixes (1.12.0), 1.12.0 yanked + lifetime fix in 1.12.1, archive/test-data cleanup. regex is entirely unsafe-free (no unsafe/extern/transmute/Command/net/fs in the src diff). MSRV unchanged 1.65. No RustSec advisories. stratus uses regex only transitively (sentry-backtrace, bindgen/vergen build-deps)."
+
+[[audits.regex-automata]]
+who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
+criteria = "safe-to-deploy"
+delta = "0.4.9 -> 0.4.14"
+notes = "Reviewed 0.4.9 -> 0.4.14 via cargo vet diff. Unsafe footprint identical between versions (37 unsafe blocks, 12 unsafe fn, 7 unsafe impl, 3 transmute; 0 added unsafe/extern/transmute/Command/net/fs). Hardening: corrupted dense DFA deserialize now errors instead of panicking (#1295), shrink_to_fit memory trims, additive DFA::set_prefilter(), perf-literal-multisubstring no longer implies std. No new deps/IO/network/build scripts. MSRV unchanged 1.65. No RustSec advisories. stratus uses regex-automata only transitively (via regex)."
 
 [[audits.revm]]
 who = "gabriel-aranha-cw <gabriel.aranha@cloudwalk.io>"
@@ -1265,6 +1301,12 @@ criteria = "safe-to-deploy"
 delta = "1.4.1 -> 1.6.1"
 notes = "Diff is minimal and confined to Cargo.toml (version bump only, build=false, no new deps) plus 3 source files: stmt/mod.rs adds a `delete` keyword parser branch (routes to Stmt::Expr, with cfg(test) tests), type/mod.rs removes a deprecated is_one_word method, variable/mod.rs refactors fmt_eip712 to recurse into Type::Array for EIP-712 formatting. No unsafe, FFI, transmute, build.rs, network, fs/env"
 
+[[audits.sysinfo]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.34.2 -> 0.37.2"
+notes = "Read-only system-information crate. Delta is bug fixes, new read-only APIs, and adoption of objc2-io-kit bindings. Unsafe footprint largely unchanged (mostly #[unsafe(no_mangle)] edition syntax changes). No advisories."
+
 [[audits.tag_ptr]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"
 criteria = "safe-to-deploy"
@@ -1335,6 +1377,72 @@ who = "Claude / cargo-vet auditor"
 criteria = "safe-to-deploy"
 delta = "1.18.1 -> 1.23.3"
 notes = "Reviewed uuid 1.18.1 -> 1.23.3 via cargo vet diff and upstream sources. Changes are maintenance/bug-fix release spanning 1.19.0-1.23.3: edition 2021, dependency updates (getrandom 0.3->0.4, rand 0.9->0.10, serde renamed to serde_core alias), v7 monotonicity/counter correctness fixes, parser panic fix, and removal of uuid-macro-internal proc-macro in favor of a declarative const macro. No new unsafe code; the existing unsafe is unchanged and limited to ASCII hex formatting transmutes. No network/filesystem/process I/O, build scripts, or crypto changes. No RustSec advisories. MSRV raised to 1.85.0; project uses Rust 1.88. Breaking changes (serde adapter strictness, deprecated Context/ContextV1, Timestamp::from_gregorian_time) are not used in stratus. Project only uses Uuid::now_v7() and Uuid::nil() via uuid v7 feature."
+
+[[audits.vergen]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "9.0.6 -> 9.1.0"
+notes = "Workspace-wide version alignment and Rust 2024 edition migration. No logic changes to core functions. Unsafe usage is only env::set_var() wrapped in unsafe {} to comply with Rust 2024 semantics, behind a non-default feature. No advisories."
+
+[[audits.vergen-gitcl]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "1.0.8 -> 9.1.0"
+notes = "Workspace-wide version alignment, not a breaking API change. Zero logic changes to run_cmd, git entry computation, or dirty/local offset logic. Only import reordering, lint updates for Rust 2024, and build.rs simplification. No advisories."
+
+[[audits.vergen-lib]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.1.6 -> 9.1.0"
+notes = "Workspace-wide edition-2024 synchronization. Only meaningful delta is unsafe { env::set_var(...) } required by Rust 2024 semantics, behind a non-default feature. No new dependencies, no network/IO. No advisories."
+
+[[audits.windows]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.61.3"
+notes = "Massive diff is almost entirely auto-generated Windows API bindings from ECMA-335 metadata, which is the normal mode of operation. Manual code additions are small, safe convenience wrappers. Replaced windows-targets binary blobs with windows-link (native raw-dylib), a net security improvement. No advisories."
+
+[[audits.windows-collections]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = "Thin in-memory adapter bridging Rust collections to Windows Runtime interfaces. No manual unsafe blocks. Unsafe surface limited to standard auto-generated COM bindings. No build scripts, no network/IO. No advisories."
+
+[[audits.windows-core]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.61.2"
+notes = "Restructuring to adopt windows-link and eliminate windows-targets. Unsafe footprint dropped by ~50% (435 -> 223 occurrences). Removed unsafe wrappers (heap.rs, delay_load.rs, waiter.rs). event.rs refactored from manual unsafe memory management to safe Arc + RwLock. No advisories."
+
+[[audits.windows-future]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.2.1"
+notes = "Official Microsoft WinRT async interface wrappers. No build scripts, no proc macros. Unsafe code is limited to auto-generated COM vtables and well-documented Win32 sync API calls. No advisories."
+
+[[audits.windows-implement]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.60.2"
+notes = "Proc-macro crate refactoring: split monolithic lib.rs into gen.rs and tests.rs. Added opt-in Agile = true/false attribute for COM implementations. No new dependencies. No unsafe in the macro itself. No advisories."
+
+[[audits.windows-interface]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+delta = "0.57.0 -> 0.59.3"
+notes = "Proc-macro refactoring of COM vtable generation. Simplified dispatch logic by removing Impl associated type. No new unsafe in macro source, no new dependencies, no build scripts. No advisories."
+
+[[audits.windows-numerics]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = "Small math library with 3 localized FFI calls to documented Windows system DLLs (d2d1.dll). No build scripts, no proc macros, no network/IO, no crypto. No advisories."
+
+[[audits.windows-threading]]
+who = "Droid (cargo-vet automation)"
+criteria = "safe-to-deploy"
+version = "0.1.0"
+notes = "Thin no_std wrapper over standard Windows thread pool APIs (kernel32.dll). All unsafe is tightly scoped to FFI calls. Safe public API enforces Send/Sync/'static. No build scripts, no proc macros. No advisories."
 
 [[audits.winnow]]
 who = "Daniel Freire <daniel.freire@cloudwalk.io> (audited by pi with glm-5.2)"

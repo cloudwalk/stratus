@@ -79,7 +79,8 @@ alloy-rpc-types-eth = "=2.3.0"
 alloy-rpc-types-trace = "=2.3.0"
 alloy-sol-types = { version = "=1.6.1", features = ["json"] }
 alloy-trie = "=0.9.5"
-ethabi = "=18.0.0"
+alloy-dyn-abi = "=1.6.1"
+alloy-json-abi = "=1.6.1"
 revm-inspectors = { version = "=0.42.0", features = ["js-tracer"] }
 revm-state = "42.0.0"
 rlp = "=0.6.1"
@@ -117,12 +118,6 @@ tracing-serde = "=0.2.0"
 
 # storage
 rocksdb = { version = "=0.24.0", features = ["multi-threaded-cf", "jemalloc"] }
-sqlx = { version = "=0.8.6", features = [
-    "runtime-tokio",
-    "postgres",
-    "bigdecimal",
-    "time",
-] }
 dashmap = "=6.1.0"
 
 # test
@@ -130,7 +125,7 @@ fake = { version = "=4.4.0", features = ["chrono", "derive"] }
 rdkafka = {version = "=0.38.0", features = ["ssl", "sasl"] }
 sasl2-sys = { version = "=0.1.22", features = ["vendored"] }
 
-# Historic events processor tool
+# Data migration
 indicatif = { version = "=0.18.3", optional = true }
 
 # ------------------------------------------------------------------------------
@@ -187,24 +182,11 @@ glob = "=0.3.3"
 hostname = "=0.4.2"
 nom = "=8.0.0"
 phf_codegen = "=0.13.1"
-vergen-gitcl = { version = "=1.0.8", features = ["build", "cargo", "rustc", "si"] }
+vergen-gitcl = { version = "=9.1.0", features = ["build", "cargo", "rustc", "si"] }
 
 # ------------------------------------------------------------------------------
 # Binaries
 # ------------------------------------------------------------------------------
-
-[[bin]]
-name = "rpc-downloader"
-path = "src/bin/rpc_downloader.rs"
-
-[[bin]]
-name = "importer-offline"
-path = "src/bin/importer_offline.rs"
-
-[[bin]]
-name = "historic_events_processor"
-path = "src/bin/historic_events_processor.rs"
-required-features = ["tools"]
 
 [[bin]]
 name = "data_migration"
@@ -260,7 +242,6 @@ wildcard_imports = "warn"
 unwrap_used = "allow"
 expect_used = "warn"
 panic = "warn"
-
 
 # CI-only profile: strips debug symbols from dependencies to keep the shared
 # `stable-release` cache small, while keeping full debug info for stratus itself.
