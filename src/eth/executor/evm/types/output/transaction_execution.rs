@@ -6,10 +6,10 @@ use revm::context::result::ExecutionResult as RevmExecutionResult;
 use revm_state::EvmState;
 
 use crate::eth::executor::AccountChanges;
-use crate::eth::executor::Changes;
 use crate::eth::executor::ExecutionResult;
+use crate::eth::executor::State;
 use crate::eth::executor::evm::RevmResultAndState;
-use crate::eth::executor::types::Full;
+use crate::eth::executor::types::Complete;
 use crate::eth::types::Account;
 use crate::eth::types::Address;
 use crate::eth::types::Bytes;
@@ -38,7 +38,7 @@ pub struct TransactionExecutionOutput {
     pub gas_used: Gas,
 
     /// Storage changes that happened during the transaction execution.
-    pub changes: Changes<Full>,
+    pub changes: State<Complete>,
 
     /// The contract address if the executed transaction deploys a contract.
     pub deployed_contract_address: Option<Address>,
@@ -61,7 +61,7 @@ impl TransactionExecutionOutput {
         let sender_next_nonce = sender_changes.nonce.next_nonce();
 
         sender_changes.nonce.apply(sender_next_nonce);
-        let mut changes = Changes::default();
+        let mut changes = State::default();
         changes.accounts.insert(address, sender_changes);
 
         // crete execution and apply costs
@@ -268,9 +268,9 @@ impl TransactionExecutionOutput {
         }
     }
 
-    fn parse_revm_state(revm_state: EvmState) -> Result<(Changes<Full>, Option<Address>), StratusError> {
+    fn parse_revm_state(revm_state: EvmState) -> Result<(State<Complete>, Option<Address>), StratusError> {
         let mut deployed_contract_address = None;
-        let mut execution_changes = Changes::default();
+        let mut execution_changes = State::default();
 
         for (revm_address, mut revm_account) in revm_state {
             let address: Address = revm_address.into();
@@ -618,7 +618,7 @@ mod tests {
         sender_changes.apply_original(sender);
         let mut accounts = HashMap::with_hasher(hash_hasher::HashBuildHasher::default());
         accounts.insert(sender_address, sender_changes);
-        let changes = Changes::<crate::eth::executor::types::Full> {
+        let changes = State::<crate::eth::executor::types::Complete> {
             accounts,
             ..Default::default()
         };

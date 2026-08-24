@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::eth::executor::Changes;
 use crate::eth::executor::Incomplete;
+use crate::eth::executor::State;
 use crate::eth::follower::importer::fetch_with_retry;
 use crate::eth::follower::importer::fetchers::DataFetcher;
 use crate::eth::rpc::BlockchainClient;
@@ -21,7 +21,7 @@ impl DataFetcher for BlockWithChangesFetcher {
     type FetchedType = (BlockRocksdb, BlockChangesRocksdb);
     // If we complete the ExecutionChanges in the fetcher we risk completing with data that is altered by
     // a prior block.
-    type PostProcessType = (Block, Changes<Incomplete>);
+    type PostProcessType = (Block, State<Incomplete>);
 
     async fn fetch(&self, block_number: BlockNumber) -> Self::FetchedType {
         let fetch_fn = |bn| self.chain.fetch_block_with_changes(bn);

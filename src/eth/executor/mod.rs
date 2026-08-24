@@ -25,16 +25,16 @@ use tracing::debug_span;
 use tracing::info_span;
 pub use types::AccountChanges;
 pub use types::AccountOriginalsReader;
-pub use types::Changes;
 pub use types::Complete;
 pub use types::CompleteValue;
 pub use types::ExecutionResult;
 pub use types::ExecutorError;
-pub use types::Full;
+pub use types::Final;
 pub use types::Incomplete;
 pub use types::IncompleteValue;
 pub use types::RevertReason;
 pub use types::Stage;
+pub use types::State;
 pub use types::TransactionExecution;
 
 #[cfg(feature = "metrics")]

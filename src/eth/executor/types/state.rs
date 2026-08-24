@@ -24,11 +24,11 @@ pub struct Incomplete;
 /// Stage marker: every value is final (either changed by the block or filled with the original
 /// account from perm). Safe to consume.
 #[derive(serde::Serialize, PartialEq, Eq)]
-pub struct Complete;
+pub struct Final;
 
 /// Stage marker: may contain unchanged values
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
-pub struct Full;
+pub struct Complete;
 
 pub trait Stage: serde::Serialize {
     type AccountChangeField<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize>: Clone + Debug + PartialEq + Eq + Default + serde::Serialize;
@@ -40,26 +40,26 @@ impl Stage for Incomplete {
     type SlotChangeField = SlotValue;
 }
 
-impl Stage for Complete {
+impl Stage for Final {
     type AccountChangeField<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize> = CompleteValue<T>;
     type SlotChangeField = SlotValue;
 }
 
-impl Stage for Full {
+impl Stage for Complete {
     type AccountChangeField<T: Clone + Debug + PartialEq + Eq + Default + serde::Serialize> = CompleteValue<T>;
     type SlotChangeField = CompleteValue<SlotValue>;
 }
 
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Default)]
-pub struct Changes<S: Stage> {
+pub struct State<S: Stage> {
     pub accounts: HashMap<Address, AccountChanges<S>, hash_hasher::HashBuildHasher>,
     #[serde_as(as = "Vec<(_, _)>")]
     pub slots: HashMap<(Address, SlotIndex), S::SlotChangeField, hash_hasher::HashBuildHasher>,
 }
 
 #[cfg(test)]
-impl fake::Dummy<fake::Faker> for Changes<Full> {
+impl fake::Dummy<fake::Faker> for State<Complete> {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &fake::Faker, rng: &mut R) -> Self {
         Self {
             accounts: fake::Dummy::dummy_with_rng(faker, rng),
@@ -69,7 +69,7 @@ impl fake::Dummy<fake::Faker> for Changes<Full> {
 }
 
 /// Creates the INCOMPLETE account changes.
-impl From<BlockChangesRocksdb> for Changes<Incomplete> {
+impl From<BlockChangesRocksdb> for State<Incomplete> {
     fn from(value: BlockChangesRocksdb) -> Self {
         let accounts = value
             .account_changes
@@ -101,8 +101,8 @@ pub trait AccountOriginalsReader {
     fn read_accounts(&self, addresses: Vec<Address>) -> anyhow::Result<Vec<(Address, Account)>>;
 }
 
-impl Changes<Full> {
-    pub fn insert_account(&mut self, address: Address, incoming_changes: AccountChanges<Full>) {
+impl State<Complete> {
+    pub fn insert_account(&mut self, address: Address, incoming_changes: AccountChanges<Complete>) {
         match self.accounts.entry(address) {
             std::collections::hash_map::Entry::Occupied(mut entry) => {
                 let existing_changes = entry.get_mut();
@@ -127,7 +127,7 @@ impl Changes<Full> {
         slots.into_iter().for_each(|(index, change)| self.insert_slot(address, index, change));
     }
 
-    pub fn merge(&mut self, other: Changes<Full>) {
+    pub fn merge(&mut self, other: State<Complete>) {
         other.accounts.into_iter().for_each(|(address, changes)| self.insert_account(address, changes));
         other
             .slots
@@ -135,7 +135,7 @@ impl Changes<Full> {
             .for_each(|((address, index), changes)| self.insert_slot(address, index, changes));
     }
 
-    pub fn complete(self) -> Changes<Complete> {
+    pub fn finalize(self) -> State<Final> {
         let accounts = self
             .accounts
             .into_iter()
@@ -148,17 +148,17 @@ impl Changes<Full> {
             .filter(|(_, change)| change.is_changed())
             .map(|(slot_key, slot_value)| (slot_key, slot_value.take_value()))
             .collect();
-        Changes { accounts, slots }
+        State { accounts, slots }
     }
 }
 
-impl Changes<Incomplete> {
+impl State<Incomplete> {
     /// Reads the original account state from `storage` and resolves every unset field, advancing to
     /// [`Full`]. The only way to turn an `Incomplete` into `Full`.
     ///
     /// Accounts not present in permanent storage (newly created by the block) resolve to
     /// `Account::default()`, which is their correct pre-state.
-    pub fn complete(self, storage: &impl AccountOriginalsReader) -> anyhow::Result<Changes<Full>> {
+    pub fn complete(self, storage: &impl AccountOriginalsReader) -> anyhow::Result<State<Complete>> {
         let addresses = self.accounts.keys().copied().collect::<Vec<_>>();
         let original_accounts: HashMap<Address, Account> = storage.read_accounts(addresses)?.into_iter().collect();
 
@@ -177,7 +177,7 @@ impl Changes<Incomplete> {
             .map(|(slot_key, slot_value)| (slot_key, CompleteValue::Changed(slot_value)))
             .collect();
 
-        Ok(Changes { accounts, slots })
+        Ok(State { accounts, slots })
     }
 }
 
@@ -318,7 +318,7 @@ pub struct AccountChanges<S: Stage> {
 
 impl AccountChanges<Incomplete> {
     /// Fills every unset field with its real original value, advancing to [`Full`].
-    pub fn complete(self, original: Account) -> AccountChanges<Full> {
+    pub fn complete(self, original: Account) -> AccountChanges<Complete> {
         AccountChanges {
             nonce: self.nonce.complete(original.nonce),
             balance: self.balance.complete(original.balance),
@@ -327,27 +327,27 @@ impl AccountChanges<Incomplete> {
     }
 }
 
-impl AccountChanges<Complete> {
+impl AccountChanges<Final> {
     /// Checks if account nonce, balance or bytecode were modified.
     pub fn is_changed(&self) -> bool {
         self.nonce.is_changed() || self.balance.is_changed() || self.bytecode.is_changed()
     }
 }
 
-impl AccountChanges<Full> {
+impl AccountChanges<Complete> {
     /// Checks if account nonce, balance or bytecode were modified.
     pub fn is_changed(&self) -> bool {
         self.nonce.is_changed() || self.balance.is_changed() || self.bytecode.is_changed()
     }
 
-    pub fn complete(self) -> Option<AccountChanges<Complete>> {
+    pub fn complete(self) -> Option<AccountChanges<Final>> {
         self.is_changed().then(|| AccountChanges {
             nonce: self.nonce,
             balance: self.balance,
             bytecode: self.bytecode,
         })
     }
-    pub fn merge(&mut self, other: AccountChanges<Full>) {
+    pub fn merge(&mut self, other: AccountChanges<Complete>) {
         self.nonce.merge(other.nonce);
         self.balance.merge(other.balance);
         self.bytecode.merge(other.bytecode);
@@ -369,13 +369,13 @@ impl AccountChanges<Full> {
     }
 }
 
-impl From<(Address, AccountChanges<Full>)> for Account {
-    fn from((address, change): (Address, AccountChanges<Full>)) -> Self {
+impl From<(Address, AccountChanges<Complete>)> for Account {
+    fn from((address, change): (Address, AccountChanges<Complete>)) -> Self {
         change.to_account(address)
     }
 }
 
-impl From<revm_state::Account> for AccountChanges<Full> {
+impl From<revm_state::Account> for AccountChanges<Complete> {
     fn from(mut value: revm_state::Account) -> Self {
         let changed = std::mem::take(&mut value.info);
         let original = value.original_info_mut();
@@ -394,7 +394,7 @@ impl<S: Stage> std::fmt::Debug for AccountChanges<S> {
 }
 
 #[cfg(test)]
-impl fake::Dummy<fake::Faker> for AccountChanges<Full> {
+impl fake::Dummy<fake::Faker> for AccountChanges<Complete> {
     fn dummy_with_rng<R: rand::Rng + ?Sized>(faker: &fake::Faker, rng: &mut R) -> Self {
         Self {
             nonce: fake::Dummy::dummy_with_rng(faker, rng),

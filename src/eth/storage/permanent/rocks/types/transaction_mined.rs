@@ -6,7 +6,7 @@ use super::hash::HashRocksdb;
 use super::index::IndexRocksdb;
 use super::log_mined::LogMinedRocksdb;
 use super::transaction_input::TransactionInputRocksdb;
-use crate::eth::executor::Changes;
+use crate::eth::executor::State;
 use crate::eth::executor::TransactionExecution;
 use crate::eth::executor::TransactionExecutionInput;
 use crate::eth::executor::TransactionExecutionOutput;
@@ -85,7 +85,7 @@ impl TransactionMined {
             output,
             logs,
             gas_used: other.execution.gas.into(),
-            changes: Changes::default(),
+            changes: State::default(),
             deployed_contract_address: other.execution.deployed_contract_address.map_into(),
         };
 
