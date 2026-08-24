@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::ops::Range;
+
 use jsonrpsee::types::ParamsSequence;
 
 use super::BlockFilter;
@@ -6,6 +9,7 @@ use super::pagination::CursorCodec;
 use super::pagination::CursorPageInfo;
 use super::pagination::CursorPaginator;
 use super::pagination::Paginator;
+use super::pagination::PaginatorConfig;
 use crate::alias::AlloyReceipt;
 use crate::alias::JsonValue;
 use crate::eth::storage::permanent::rocks::types::AccountChangesRocksdb;
@@ -55,6 +59,13 @@ pub struct ImporterPagination {
 }
 
 impl ImporterPagination {
+    /// Parses optional pagination parameters from the RPC params sequence.
+    ///
+    /// Returns `None` if no pagination parameter was provided (non-paginated request).
+    /// Returns `Some((filter, pagination))` where `filter` is:
+    /// - The original `filter` if no cursor is present (first page).
+    /// - `BlockFilter::Hash(cursor.block_hash)` if a cursor is present (subsequent pages),
+    ///   overriding the original filter to ensure the same block is paginated.
     pub fn from_params(params: ParamsSequence<'_>, filter: BlockFilter) -> Result<Option<(BlockFilter, Self)>, RpcError> {
         let Some(request) = ImporterPageRequest::parse_optional(params)? else {
             return Ok(None);
@@ -95,13 +106,10 @@ impl ImporterPagination {
         let slot_entries = sorted_slot_changes(&changes);
         let slot_range = paginator.take(slot_entries.len());
 
-        let mut page_changes = BlockChangesRocksdb::with_capacity(account_range.len());
-        for (address, change) in account_entries[account_range].iter().cloned() {
-            page_changes.account_changes.insert(address, change);
-        }
-        for ((address, slot), value) in slot_entries[slot_range].iter().copied() {
-            page_changes.slot_changes.insert((address, slot), value);
-        }
+        let page_changes = BlockChangesRocksdb {
+            account_changes: slice_account_changes(&account_entries, account_range),
+            slot_changes: slice_slot_changes(&slot_entries, slot_range),
+        };
 
         Ok(BlockWithChangesPageResponse {
             block: BlockRocksdb {
@@ -124,7 +132,7 @@ impl ImporterPagination {
     }
 
     fn build_paginator(&self, total: usize, block_hash: Hash) -> Result<ImporterCursorPaginator, RpcError> {
-        ImporterCursorPaginator::new(total, self.start, self.limit, BlockHashCursor { block_hash }).ok_or(RpcError::ParameterInvalid)
+        ImporterCursorPaginator::new(PaginatorConfig { total, start: self.start, limit: self.limit }, BlockHashCursor { block_hash }).ok_or(RpcError::ParameterInvalid)
     }
 }
 
@@ -158,6 +166,28 @@ fn sorted_slot_changes(changes: &BlockChangesRocksdb) -> Vec<((AddressRocksdb, S
     let mut entries = changes.slot_changes.iter().map(|(key, value)| (*key, *value)).collect::<Vec<_>>();
     entries.sort_by_key(|(key, _)| *key);
     entries
+}
+
+fn slice_account_changes(
+    entries: &[(AddressRocksdb, AccountChangesRocksdb)],
+    range: Range<usize>,
+) -> HashMap<AddressRocksdb, AccountChangesRocksdb, hash_hasher::HashBuildHasher> {
+    let mut changes = HashMap::with_capacity_and_hasher(range.len(), hash_hasher::HashBuildHasher::default());
+    for (address, change) in entries[range].iter().cloned() {
+        changes.insert(address, change);
+    }
+    changes
+}
+
+fn slice_slot_changes(
+    entries: &[((AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb)],
+    range: Range<usize>,
+) -> HashMap<(AddressRocksdb, SlotIndexRocksdb), SlotValueRocksdb, hash_hasher::HashBuildHasher> {
+    let mut changes = HashMap::with_capacity_and_hasher(range.len(), hash_hasher::HashBuildHasher::default());
+    for ((address, slot), value) in entries[range].iter().copied() {
+        changes.insert((address, slot), value);
+    }
+    changes
 }
 
 type ImporterCursorPaginator = CursorPaginator<BlockHashCursor>;

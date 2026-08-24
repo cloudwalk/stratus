@@ -22,6 +22,16 @@ pub trait CursorCodec: Sized {
     fn decode_cursor(cursor: &str) -> Result<(Self, usize), Self::Error>;
 }
 
+/// Configuration for a [`CursorPaginator`].
+///
+/// Grouping `total`, `start`, and `limit` into a struct prevents call-site
+/// argument swaps (all three are `usize` with no type-level distinction).
+pub struct PaginatorConfig {
+    pub total: usize,
+    pub start: usize,
+    pub limit: usize,
+}
+
 /// Cursor-based paginator.
 ///
 /// Knows only how to slice a logical stream. The [`CursorCodec`] decides how
@@ -41,7 +51,8 @@ impl<C> CursorPaginator<C>
 where
     C: CursorCodec,
 {
-    pub fn new(total: usize, start: usize, limit: usize, codec: C) -> Option<Self> {
+    pub fn new(config: PaginatorConfig, codec: C) -> Option<Self> {
+        let PaginatorConfig { total, start, limit } = config;
         if start > total || (start == total && total != 0) {
             return None;
         }
@@ -160,6 +171,7 @@ mod tests {
     use super::CursorPageInfo;
     use super::CursorPaginator;
     use super::Paginator;
+    use super::PaginatorConfig;
 
     // A minimal codec for testing the paginator independently of any domain type.
     struct IndexCodec;
@@ -177,7 +189,7 @@ mod tests {
     }
 
     fn paginator(total: usize, start: usize, limit: usize) -> CursorPaginator<IndexCodec> {
-        CursorPaginator::new(total, start, limit, IndexCodec).expect("valid paginator")
+        CursorPaginator::new(PaginatorConfig { total, start, limit }, IndexCodec).expect("valid paginator")
     }
 
     fn take_all(mut p: CursorPaginator<IndexCodec>, sections: &[usize]) -> (Vec<Range<usize>>, CursorPageInfo) {
@@ -206,12 +218,12 @@ mod tests {
 
     #[test]
     fn start_equal_to_total_is_invalid() {
-        assert!(CursorPaginator::new(5, 5, 10, IndexCodec).is_none());
+        assert!(CursorPaginator::new(PaginatorConfig { total: 5, start: 5, limit: 10 }, IndexCodec).is_none());
     }
 
     #[test]
     fn start_greater_than_total_is_invalid() {
-        assert!(CursorPaginator::new(5, 6, 10, IndexCodec).is_none());
+        assert!(CursorPaginator::new(PaginatorConfig { total: 5, start: 6, limit: 10 }, IndexCodec).is_none());
     }
 
     #[test]

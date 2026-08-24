@@ -901,10 +901,9 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
     let pagination = ImporterPagination::from_params(params, filter)?;
 
-    // track
-    tracing::info!(%filter, "reading block and receipts");
-
     if let Some((filter, pagination)) = pagination {
+        tracing::info!(%filter, "reading block and receipts (paginated)");
+
         let Some(block) = ctx.server.storage.read_block(filter)? else {
             tracing::info!(%filter, "block not found");
             return Ok(JsonValue::Null);
@@ -914,6 +913,8 @@ fn stratus_get_block_and_receipts(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         tracing::info!(%filter, returned = response.pagination.returned, total = response.pagination.total, "block with transactions page found");
         return Ok(json!(response));
     }
+
+    tracing::info!(%filter, "reading block and receipts");
 
     let Some(block) = ctx.server.storage.read_block(filter)? else {
         tracing::info!(%filter, "block not found");
@@ -938,10 +939,9 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
     let (params, filter) = next_rpc_param::<BlockFilter>(params.sequence())?;
     let pagination = ImporterPagination::from_params(params, filter)?;
 
-    // track
-    tracing::info!(%filter, "reading block and changes");
-
     if let Some((filter, pagination)) = pagination {
+        tracing::info!(%filter, "reading block and changes (paginated)");
+
         let Some((block, changes)) = ctx.server.storage.read_block_with_changes(filter)? else {
             tracing::info!(%filter, "block not found");
             return Ok(JsonValue::Null);
@@ -951,6 +951,8 @@ fn stratus_get_block_with_changes(params: Params<'_>, ctx: Arc<RpcContext>, ext:
         tracing::info!(%filter, returned = response.pagination.returned, total = response.pagination.total, "block with changes page found");
         return Ok(json!(response));
     }
+
+    tracing::info!(%filter, "reading block and changes");
 
     let Some(block) = ctx.server.storage.read_block_with_changes(filter)? else {
         tracing::info!(%filter, "block not found");
