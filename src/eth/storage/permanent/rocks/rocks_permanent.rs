@@ -10,8 +10,8 @@ use super::rocks_cf_cache_config::RocksCfCacheConfig;
 use super::rocks_state::RocksStorageState;
 use super::types::BlockRocksdb;
 use crate::GlobalState;
-use crate::eth::executor::Changes;
-use crate::eth::executor::Complete;
+use crate::eth::executor::Final;
+use crate::eth::executor::State;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
@@ -212,7 +212,7 @@ impl RocksPermanentStorage {
         })
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: Changes<Complete>) -> anyhow::Result<(), StorageError> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: State<Final>) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {
@@ -228,7 +228,7 @@ impl RocksPermanentStorage {
             })
     }
 
-    pub fn save_block(&self, block: Block, account_changes: Changes<Complete>) -> anyhow::Result<(), StorageError> {
+    pub fn save_block(&self, block: Block, account_changes: State<Final>) -> anyhow::Result<(), StorageError> {
         #[cfg(feature = "rocks_metrics")]
         {
             self.state.export_metrics().map_err(|err| StorageError::RocksError { err }).inspect_err(|e| {

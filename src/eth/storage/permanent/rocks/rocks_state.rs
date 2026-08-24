@@ -40,8 +40,8 @@ use super::types::HashRocksdb;
 use super::types::SlotIndexRocksdb;
 use super::types::SlotValueRocksdb;
 use super::types::UnixTimeRocksdb;
-use crate::eth::executor::Changes;
-use crate::eth::executor::Complete;
+use crate::eth::executor::Final;
+use crate::eth::executor::State;
 use crate::eth::rpc::BlockFilter;
 use crate::eth::rpc::LogFilter;
 use crate::eth::storage::MinedPointInTime;
@@ -218,7 +218,7 @@ impl RocksStorageState {
     }
 
     /// Updates the in-memory state with changes from transaction execution
-    fn prepare_batch_with_execution_changes(&self, changes: Changes<Complete>, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
+    fn prepare_batch_with_execution_changes(&self, changes: State<Final>, block_number: BlockNumber, batch: &mut WriteBatch) -> Result<()> {
         let mut block_changes = BlockChangesRocksdb::with_capacity(changes.accounts.len());
         let block_number = block_number.into();
 
@@ -459,7 +459,7 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(write_batch)
     }
 
-    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: Changes<Complete>) -> Result<()> {
+    pub fn save_genesis_block(&self, block: Block, accounts: Vec<Account>, account_changes: State<Final>) -> Result<()> {
         let mut batch = WriteBatch::default();
 
         let mut txs_batch = vec![];
@@ -502,13 +502,13 @@ impl RocksStorageState {
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn save_block(&self, block: Block, account_changes: Changes<Complete>) -> Result<()> {
+    pub fn save_block(&self, block: Block, account_changes: State<Final>) -> Result<()> {
         let mut batch = WriteBatch::default();
         self.prepare_block_insertion(block, account_changes, &mut batch)?;
         self.write_in_batch_for_multiple_cfs(batch)
     }
 
-    pub fn prepare_block_insertion(&self, block: Block, account_changes: Changes<Complete>, batch: &mut WriteBatch) -> Result<()> {
+    pub fn prepare_block_insertion(&self, block: Block, account_changes: State<Final>, batch: &mut WriteBatch) -> Result<()> {
         let mut txs_batch = vec![];
         for transaction in block.transactions.iter().cloned() {
             txs_batch.push((transaction.info.hash.into(), transaction.input.block_number.into()));
@@ -798,7 +798,7 @@ mod tests {
     use fake::Faker;
 
     use super::*;
-    use crate::eth::executor::Full;
+    use crate::eth::executor::Complete;
     use crate::eth::executor::TransactionExecution;
     use crate::eth::executor::TransactionExecutionInput;
     use crate::eth::executor::TransactionExecutionOutput;
@@ -876,7 +876,7 @@ mod tests {
                 }],
             };
 
-            state.save_block(block, Changes::<Full>::default().complete()).unwrap();
+            state.save_block(block, State::<Complete>::default().finalize()).unwrap();
         }
 
         let filter = LogFilter {
