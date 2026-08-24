@@ -132,7 +132,15 @@ impl ImporterPagination {
     }
 
     fn build_paginator(&self, total: usize, block_hash: Hash) -> Result<ImporterCursorPaginator, RpcError> {
-        ImporterCursorPaginator::new(PaginatorConfig { total, start: self.start, limit: self.limit }, BlockHashCursor { block_hash }).ok_or(RpcError::ParameterInvalid)
+        ImporterCursorPaginator::new(
+            PaginatorConfig {
+                total,
+                start: self.start,
+                limit: self.limit,
+            },
+            BlockHashCursor { block_hash },
+        )
+        .ok_or(RpcError::ParameterInvalid)
     }
 }
 
