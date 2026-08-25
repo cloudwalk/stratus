@@ -616,7 +616,7 @@ mod tests {
         // Set up execution with sender account
         let mut sender_changes = AccountChanges::default();
         sender_changes.apply_original(sender);
-        let mut accounts = HashMap::with_hasher(hash_hasher::HashBuildHasher::default());
+        let mut accounts = HashMap::with_hasher(foldhash::fast::FixedState::default());
         accounts.insert(sender_address, sender_changes);
         let changes = State::<crate::eth::executor::types::Complete> {
             accounts,
