@@ -6,7 +6,7 @@ export RUST_BACKTRACE := env("RUST_BACKTRACE", "0")
 export CARGO_COMMAND := env("CARGO_COMMAND", "")
 
 # Global arguments that can be passed to receipts.
-nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
+nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly-2026-05-08" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
 profile_flag := if env("STRATUS_PROFILE", "") != "" { "--profile " + env("STRATUS_PROFILE", "") } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
@@ -62,7 +62,7 @@ doc nightly-version="":
 
 # Stratus: Lint and format code
 lint:
-    @just _lint
+    @just _lint -2026-05-08
 
 # Stratus: Lint and check code formatting
 lint-check nightly-version="" clippy-flags="-D warnings -A clippy::unwrap_used -A clippy::expect_used -A clippy::panic":
