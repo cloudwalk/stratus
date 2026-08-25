@@ -1,4 +1,5 @@
 use std::hash::Hash;
+use std::time::Duration;
 
 use clap::Parser;
 use display_json::DebugAsJson;
@@ -9,12 +10,12 @@ use quick_cache::sync::DefaultLifecycle;
 use quick_cache::sync::GuardResult;
 use rustc_hash::FxBuildHasher;
 
-use crate::eth::primitives::Account;
-use crate::eth::primitives::Address;
-use crate::eth::primitives::ExecutionChanges;
-use crate::eth::primitives::Slot;
-use crate::eth::primitives::SlotIndex;
-use crate::eth::primitives::SlotValue;
+use crate::eth::executor::Changes;
+use crate::eth::types::Account;
+use crate::eth::types::Address;
+use crate::eth::types::Slot;
+use crate::eth::types::SlotIndex;
+use crate::eth::types::SlotValue;
 
 pub struct StorageCache {
     slot_cache: Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
@@ -98,7 +99,7 @@ impl StorageCache {
     }
 
     fn _cache_account_and_slots_from_changes_impl(
-        changes: ExecutionChanges,
+        changes: Changes,
         account_cache: &Cache<Address, Account, UnitWeighter, FxBuildHasher>,
         slot_cache: &Cache<(Address, SlotIndex), SlotValue, UnitWeighter, FxBuildHasher>,
     ) {
@@ -114,11 +115,11 @@ impl StorageCache {
         }
     }
 
-    pub fn cache_account_and_slots_from_changes(&self, changes: ExecutionChanges) {
+    pub fn cache_account_and_slots_from_changes(&self, changes: Changes) {
         Self::_cache_account_and_slots_from_changes_impl(changes, &self.account_cache, &self.slot_cache);
     }
 
-    pub fn cache_account_and_slots_latest_from_changes(&self, changes: ExecutionChanges) {
+    pub fn cache_account_and_slots_latest_from_changes(&self, changes: Changes) {
         Self::_cache_account_and_slots_from_changes_impl(changes, &self.account_latest_cache, &self.slot_latest_cache);
     }
 
@@ -160,13 +161,16 @@ where
     L: quick_cache::Lifecycle<Key, Val> + Clone,
 {
     fn insert_if_missing(&self, key: Key, val: Val) {
-        match self.get_value_or_guard(&key, None) {
-            GuardResult::Value(_) => (),
+        // None means wait forever, if someone else has the guard it will block.
+        // Some(Duration::ZERO) means "if someone has the guard return immediately"
+        // since we're only inserting the value if it is not cached yet the latter
+        // is the desired behavior.
+        match self.get_value_or_guard(&key, Some(Duration::ZERO)) {
+            GuardResult::Value(_) | GuardResult::Timeout => (),
             GuardResult::Guard(g) => {
                 // this fails if an unguarded insert already inserted to this key
                 let _ = g.insert(val);
             }
-            GuardResult::Timeout => unreachable!(),
         }
     }
 }

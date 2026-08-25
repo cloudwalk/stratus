@@ -2,8 +2,10 @@
 
 use std::borrow::Cow;
 
-use crate::eth::primitives::Address;
-use crate::eth::primitives::LogFilter;
+use alloy_dyn_abi::DynSolType;
+
+use crate::eth::rpc::LogFilter;
+use crate::eth::types::Address;
 use crate::infra::metrics;
 
 include!(concat!(env!("OUT_DIR"), "/contracts.rs"));
@@ -48,10 +50,11 @@ pub fn error_sig_opt(bytes: impl AsRef<[u8]>) -> Option<Cow<'static, str>> {
         .map(Cow::Borrowed)
         .or_else(|| {
             bytes.as_ref().get(4..).and_then(|bytes| {
-                ethabi::decode(&[ethabi::ParamType::String], bytes)
+                DynSolType::Tuple(vec![DynSolType::String])
+                    .abi_decode_params(bytes)
                     .ok()
-                    .and_then(|res| res.first().cloned())
-                    .and_then(|token| token.into_string())
+                    .and_then(|value| value.as_tuple().and_then(|tuple| tuple.first()).cloned())
+                    .and_then(|token| token.as_str().map(str::to_string))
                     .map(Cow::Owned)
             })
         })
@@ -94,10 +97,10 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::eth::primitives::LogFilterInput;
-    use crate::eth::primitives::LogFilterInputTopic;
-    use crate::eth::primitives::LogTopic;
+    use crate::eth::rpc::LogFilterInput;
+    use crate::eth::rpc::LogFilterInputTopic;
     use crate::eth::storage::StratusStorage;
+    use crate::eth::types::LogTopic;
 
     #[test]
     fn test_event_sig_with_empty_bytes() {

@@ -8,6 +8,7 @@ export CARGO_COMMAND := env("CARGO_COMMAND", "")
 # Global arguments that can be passed to receipts.
 nightly_flag := if env("NIGHTLY", "") =~ "(true|1)" { "+nightly" } else { "" }
 release_flag := if env("RELEASE", "") =~ "(true|1)" { "--release" } else { "" }
+profile_flag := if env("STRATUS_PROFILE", "") != "" { "--profile " + env("STRATUS_PROFILE", "") } else { "" }
 database_url := env("DATABASE_URL", "postgres://postgres:123@0.0.0.0:5432/stratus")
 
 # Project: Show available tasks
@@ -110,8 +111,8 @@ stratus-test *args="":
         FEATURES="dev,replication"
     fi
     echo "leader features: " $FEATURES
-    cargo build --features $FEATURES
-    cargo run --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
+    cargo build {{profile_flag}} --features $FEATURES
+    cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --leader --rocks-cf-size-metrics-interval 30s {{args}} > stratus.log &
     just _wait_for_stratus
 
 # Bin: Stratus main service as leader while performing memory-profiling, producing a heap dump every 2^32 allocated bytes (~4gb)
@@ -134,29 +135,19 @@ stratus-follower-test *args="":
         FEATURES="dev,replication"
     fi
     echo "follower features: " $FEATURES
-    cargo build --features $FEATURES
-    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run --bin stratus --features $FEATURES -- --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
+    cargo build {{profile_flag}} --features $FEATURES
+    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --follower --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_follower.log &
     just _wait_for_stratus 3001
 
-# Bin: Download external RPC blocks and receipts to temporary storage
-rpc-downloader *args="":
-    cargo {{nightly_flag}} run --bin rpc-downloader {{release_flag}} -- {{args}}
-
-rpc-downloader-test *args="":
+# Bin: Stratus main service as fake leader (imports blocks like a follower, executes/mines locally like a leader)
+stratus-fake-leader-test *args="":
     #!/bin/bash
     source <(just coverage-env)
-    cargo build
-    cargo run --bin rpc-downloader -- {{args}} > rpc-downloader.log
-
-# Bin: Import external RPC blocks from temporary storage to Stratus storage
-importer-offline *args="":
-    cargo {{nightly_flag}} run --bin importer-offline {{release_flag}} --features dev -- {{args}}
-
-importer-offline-test *args="":
-    #!/bin/bash
-    source <(just coverage-env)
-    cargo build
-    cargo run --bin importer-offline -- {{args}} --rocks-file-descriptors-limit=65536 > importer-offline.log
+    FEATURES="dev"
+    echo "fake-leader features: " $FEATURES
+    cargo build {{profile_flag}} --features $FEATURES
+    LOCAL_ENV_PATH=config/stratus-follower.env.local cargo run {{profile_flag}} --bin stratus --features $FEATURES -- --fake-leader --rocks-cf-size-metrics-interval 30s {{args}} -a 0.0.0.0:3001 > stratus_fake_leader.log &
+    just _wait_for_stratus 3001
 
 # ------------------------------------------------------------------------------
 # Test tasks
@@ -165,11 +156,11 @@ importer-offline-test *args="":
 test:
     #!/bin/bash
     source <(just coverage-env)
-    cargo test
+    cargo test {{profile_flag}}
     if command -v cargo-llvm-cov >/dev/null 2>&1; then
         mkdir -p target/llvm-cov/reports
-        cargo llvm-cov report --html --ignore-filename-regex data_migration.rs
-        cargo llvm-cov report --lcov --output-path target/llvm-cov/reports/rust_tests.info --ignore-filename-regex data_migration.rs
+        cargo llvm-cov report {{profile_flag}} --html --ignore-filename-regex data_migration.rs
+        cargo llvm-cov report {{profile_flag}} --lcov --output-path target/llvm-cov/reports/rust_tests.info --ignore-filename-regex data_migration.rs
     fi
 
 
@@ -195,8 +186,8 @@ run-test recipe="" *args="":
     if command -v cargo-llvm-cov >/dev/null 2>&1; then
         echo "Generating reports"
         mkdir -p target/llvm-cov/reports
-        cargo llvm-cov report --html --ignore-filename-regex data_migration.rs
-        cargo llvm-cov report --lcov --output-path target/llvm-cov/reports/{{recipe}}.info --ignore-filename-regex data_migration.rs
+        cargo llvm-cov report {{profile_flag}} --html --ignore-filename-regex data_migration.rs
+        cargo llvm-cov report {{profile_flag}} --lcov --output-path target/llvm-cov/reports/{{recipe}}.info --ignore-filename-regex data_migration.rs
     fi
     exit $result_code
 
@@ -351,6 +342,10 @@ _e2e-leader-follower-up-impl test="brlc" use_block_changes_replication="false":
 
     mkdir e2e_logs
 
+    if [ "{{test}}" = "tx-types" ]; then
+        export EXECUTOR_REJECT_NOT_CONTRACT=false
+    fi
+
     # Start Stratus with leader flag
     just e2e-leader
 
@@ -428,73 +423,41 @@ e2e-leader-follower-down:
     # Delete zeppelin directory
     rm -rf ./e2e/cloudwalk-contracts/integration/.openzeppelin
 
-# E2E: RPC Downloader test
-e2e-rpc-downloader:
+# E2E: Fake Leader (imports from leader, executes/mines locally)
+e2e-fake-leader test="fake-leader":
     #!/bin/bash
+    RUST_BACKTRACE=1 RUST_LOG=info just stratus-fake-leader-test --rocks-path-prefix=temp_3001 -r http://0.0.0.0:3000/ -w ws://0.0.0.0:3000/
+
+_e2e-leader-fake-leader-up-impl test="fake-leader":
+    #!/bin/bash
+
     mkdir e2e_logs
 
-    just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000
+    # Start Stratus with leader flag
+    just e2e-leader
 
-    just _log "Starting PostgreSQL"
-    docker-compose up -d postgres
+    # Start Stratus with fake-leader flag (imports from leader, executes/mines locally)
+    just e2e-fake-leader {{test}}
 
-    just _log "Running TestContractBalances tests"
-    just e2e stratus automine
-
-    just _log "Running RPC Downloader test"
-    just rpc-downloader-test --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001
-    result_code_1=$?
-
-    just _log "Checking content of postgres"
-    pip install -r utils/check_rpc_downloader/requirements.txt
-    POSTGRES_DB=stratus POSTGRES_PASSWORD=123 ETH_RPC_URL=http://localhost:3000/ python utils/check_rpc_downloader/main.py --start 0
-    result_code_2=$?
-
-    just _log "Killing PostgreSQL"
-    docker-compose down postgres
-
-    just _log "Check result codes"
-    if [ $result_code_1 -ne 0 ] || [ $result_code_2 -ne 0 ]; then
-        exit 1
+    if [ -d e2e/cloudwalk-contracts ]; then
+    (
+        cd e2e/cloudwalk-contracts/integration
+        npm install
+        npx hardhat test test/leader-follower-{{test}}.test.ts --bail --network stratus --show-stack-traces
+        if [ $? -ne 0 ]; then
+            just _log "Tests failed"
+            exit 1
+        else
+            just _log "Tests passed successfully"
+            exit 0
+        fi
+    )
     fi
 
-# E2E Importer Offline
-e2e-importer-offline:
-    #!/bin/bash
-    mkdir -p e2e_logs
-
-    rm -rf data/importer-offline-database-rocksdb
-
-    just _log "Starting Stratus"
-    just stratus-test -a 0.0.0.0:3000
-
-    just _log "Running TestContractBalances tests"
-    just e2e stratus automine
-
-    just _log "Starting PostgreSQL"
-    docker-compose up -d postgres
-
-    just _log "Running rpc downloader"
-    just rpc-downloader-test --external-rpc http://localhost:3000/ --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --metrics-exporter-address 0.0.0.0:9001 --initial-accounts 0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266
-
-    just _log "Run importer-offline"
-    just importer-offline-test --external-rpc-storage postgres://postgres:123@localhost:5432/stratus --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
-
-    just _log "Stratus for importer-offline"
-    just stratus-test -a 0.0.0.0:3001 --rocks-path-prefix=data/importer-offline-database --metrics-exporter-address 0.0.0.0:9002
-    just _wait_for_stratus 3001
-
-    just _log "Compare blocks of stratus and importer-offline"
-    cd utils/compare_block/
-    poetry install --no-root
-    poetry run python3 ./main.py http://localhost:3000 http://localhost:3001 1 --ignore timestamp
-    result_code=$?
-
-    just _log "Killing PostgreSQL"
-    docker-compose down postgres
-
-    exit $result_code
+# E2E: Leader & Fake Leader Up
+e2e-leader-fake-leader-up test="fake-leader":
+    just _e2e-leader-fake-leader-up-impl {{test}}
+    just e2e-leader-follower-down
 
 # ------------------------------------------------------------------------------
 # Hive tests
