@@ -100,9 +100,10 @@ log = "=0.4.29"
 metrics = "=0.24.2"
 metrics-exporter-prometheus = { version = "=0.17.2", optional = true }
 opentelemetry = "=0.32.0"
-opentelemetry_sdk = { version = "=0.31.0", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "=0.31.0", features = [
+opentelemetry_sdk = { version = "=0.32.1", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "=0.32.0", features = [
     "http-proto",
+    "http-json",
     "reqwest-client",
     "reqwest-rustls",
     "tls",
@@ -111,9 +112,9 @@ opentelemetry-otlp = { version = "=0.31.0", features = [
 ] }
 sentry = "=0.48.0"
 sentry-tracing = "=0.48.0"
-tracing = { version = "=0.1.41", features = ["attributes"] }
-tracing-opentelemetry = "=0.32.0"
-tracing-subscriber = { version = "=0.3.20", features = ["env-filter", "json"] }
+tracing = { version = "=0.1.44", features = ["attributes"] }
+tracing-opentelemetry = "=0.33.0"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "json"] }
 tracing-serde = "=0.2.0"
 
 # storage
